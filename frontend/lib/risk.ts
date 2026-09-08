@@ -9,6 +9,7 @@ import type {
   TradeCardData,
   RiskCheckResult,
   MaxLossOverride,
+  StopCostOut,
 } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import { worstStatus, STATUS_LABEL } from '@/lib/status';
@@ -25,455 +26,211 @@ export function exposurePct(notional: number, portfolioValue: number): number {
 /* ── Stop-vs-premium gate ──────────────────────────────────────────────────
  *
  * How much of the premium a long option loses if the underlying reaches its
- * structural stop. The point of the gate: on a cheap, low-delta contract a
- * far-away structural stop is often BEYOND the point of total premium loss,
- * so the "stop" is not a risk control at all — it is a marker for a position
- * that was already worthless before it got there.
+ * stop. The point of the gate: on a cheap, low-delta contract a far-away
+ * structural stop is often BEYOND the point of total premium loss, so the
+ * "stop" is not a risk control at all — it is a marker for a position that
+ * was already worthless before it got there.
  *
- * This is deliberately the cheap delta-linear estimate (same basis as
- * TradeCard's `structuralRR`), not a Black-Scholes reprice: it must be
- * computable from the scan payload alone, with no "Check structure" /
- * "Estimate" / "Compute Arithmetic Plan" round-trip, or it cannot fire early
- * enough to be a gate. It answers "is this stop roughly a full-premium loss?",
- * a question a 5% error does not change — not "what exactly will I lose",
- * which is what the exit-plan pipeline's repriced `stop.contractPrice` is for.
+ * THIS MODULE NO LONGER COMPUTES THE GATE (B2, spec §3 of
+ * docs/superpowers/plans/2026-09-02-gate-basis-spec.md). It renders what the
+ * endpoint that produced the stop already priced.
+ *
+ * What was here before: `|stop − spot| × |delta|`, capped at the premium. Two
+ * reasons it is gone rather than kept as a fallback.
+ *
+ *   * It could not discriminate. On the spec's reference chain (stock $201.86,
+ *     stop $185.87, 45 DTE) the cap bound on four of eight strikes, pinning
+ *     them at exactly 100% — the gate could not tell a 220 call from a 240
+ *     call, and merely restated that a long option's maximum loss is its
+ *     premium.
+ *   * A fallback that quietly answers a DIFFERENT question is worse than no
+ *     answer. The straight line runs 17-29 points pessimistic against
+ *     Black-Scholes on the same contract, so the two bases need two sets of
+ *     thresholds; keeping both meant two rulers on one screen, which is the
+ *     defect Phase B round 1 found and `LINEAR_BASIS_FALLBACK` was the stopgap
+ *     for. Both are deleted together. Where no `stopCost` came back the badge
+ *     reads "not computed" — never a silent PASS.
+ *
+ * The arithmetic lives in backend/app/scoring/stop_cost.py, on the endpoints
+ * that produce a stop (`/contracts/structural-stop`, `/contracts/exit-plan`),
+ * because the gate is evaluated at a stop that MOVES — "Check structure" and
+ * "Compute Arithmetic Plan" each change it — so no scan-time precompute can
+ * serve it, and a Black-Scholes-plus-IV-solver in TypeScript would permanently
+ * duplicate the Python one (spec §2: "show the arithmetic, don't relocate it").
  */
 
-/** Last-resort threshold, used only when no caller supplies one. The live value
- *  is per-horizon and comes from scoring_rules.yaml via
- *  `stopPremiumThresholdsStore` (which can also carry a per-run override) — this
- *  mirrors the Swing default so a caller that forgets to pass one degrades to a
- *  sane gate rather than to no gate.
- *
- *  ONE threshold, not two, and the verdict is PASS or CAUTION — never REJECT.
- *  The gate exists to sort candidates into "the stop is survivable on this
- *  contract" and "it isn't", so a screener can surface the cheaper-to-be-wrong
- *  trades up front; it is not a verdict on the trade and it blocks nothing.
- *  REJECT is the red badge in this design system, and a red badge on a
- *  contract the user may perfectly well want to trade reads as a refusal. */
-// ROUND 1 finding 1. This is the default for `stopPremiumRisk`, which estimates
-// the loss at the stop DELTA-LINEARLY. Q7's 0.70 was re-derived for the
-// BLACK-SCHOLES basis (scoring/stop_cost.py), which reads 17-29 points lower on
-// the same contract, so applying it to a linear number condemns contracts the
-// new model passes. The linear estimator keeps the line it was calibrated with
-// until B2 replaces it; scoring_rules.yaml keeps 0.70 for the BS gate.
-export const STOP_PREMIUM_PASS_MAX_FRACTION = 0.8;
-
+/** The presenter's output. Same NAME and same role as the shape this file used
+ *  to compute, so `TradeCard` and its formatters keep their structure, but the
+ *  delta-linear members are gone: there is no `stockMove`/`delta`/`rawLoss`
+ *  because nothing multiplies any more, and no `capped` because Black-Scholes
+ *  cannot exceed the premium for a long option — there is nothing to cap and
+ *  nothing to disclose past the cap. */
 export interface StopPremiumRisk {
-  stockMove: number;   // $ from the underlying's price to the stop
-  delta:     number;   // |delta| actually used (floored, see below)
-  rawLoss:   number;   // stockMove x delta, per share — UNCAPPED, may exceed premium
-  loss:      number;   // min(rawLoss, premium) — the real per-share max loss
-  premium:   number;   // per share
-  fraction:  number;   // loss / premium, 0..1
-  capped:    boolean;  // rawLoss >= premium — the stop is at/beyond total loss
-  status:    Status;
+  premium:         number;   // per share, as the gate priced it
+  valueAtStop:     number;   // BS(stop, K, today's dte, r, iv), per share
+  loss:            number;   // premium − valueAtStop, per share
+  stopPrice:       number;   // the stop this was priced AT
+  fraction:        number;   // loss / premium, and what `status` was decided on
+  passMaxFraction: number;   // the threshold applied — echoed for auditability
+  status:          Status;
+  basis:           'bs_today';
 }
 
-/** Returns null when there is no meaningful answer: a non-positive premium, a
- *  stop sitting exactly at the current price (the card already renders that as
- *  "N/A (stop = price)"), or any non-finite input. */
-export function stopPremiumRisk(
-  stopPrice: number,
-  stockPrice: number,
-  delta: number,
-  premium: number,
-  thresholds?: { pass_max_fraction: number } | null,
-): StopPremiumRisk | null {
-  if (![stopPrice, stockPrice, delta, premium].every(Number.isFinite)) return null;
-  if (premium <= 0) return null;
-  // A premium that does not round to a whole cent has no printable card. Every
-  // figure in this gate is rendered from the pair rounded to cents, so a
-  // premium of $0.004 printed a badge of "0%" beside a tooltip calling the
-  // contract a total loss, above "$0 per contract — of the $0 premium, $0
-  // left" and "$10.00 away × Δ0.500 = $0.00 of $0.00 premium (uncapped
-  // $5.00)". Returning null puts it through the same "N/A" path the card
-  // already has for a stop sitting at the price, instead of printing four
-  // mutually contradictory zeroes. Guarding here rather than in each formatter
-  // keeps one definition of "there is no meaningful answer".
-  //
-  // BELOW ONE CENT, not below half a cent. `Number(premium.toFixed(2)) <= 0`
-  // only caught premiums under $0.005, so a $0.005 premium still rendered:
-  // "$1 per contract -- of the $1 premium, $0 left" for a contract that cost
-  // 50c, contradicting the CaR row three lines above it (mid x contracts x
-  // 100 = $0.50) by a factor of two -- the very reconciliation
-  // formatStopLossHeadline's doc comment promises.
-  // Tested on the RAW premium, not the rounded one: (0.005).toFixed(2) rounds
-  // UP to "0.01", so a guard on the rounded value never rejected the very case
-  // it was written for.
-  if (premium < 0.01) return null;
-
-  // A caller passing a non-finite or out-of-range threshold gets the default
-  // rather than a gate that silently passes everything. The per-run override in
-  // Step 3 is user-editable, so this is a reachable input, not a defensive
-  // nicety. Above 1.0 is meaningless (the loss caps at the premium, so nothing
-  // could ever exceed it) and would make CAUTION unreachable.
-  const passMax =
-    thresholds && Number.isFinite(thresholds.pass_max_fraction)
-      && thresholds.pass_max_fraction > 0 && thresholds.pass_max_fraction <= 1
-      ? thresholds.pass_max_fraction : STOP_PREMIUM_PASS_MAX_FRACTION;
-
-  const stockMove = Math.abs(stopPrice - stockPrice);
-  if (stockMove === 0) return null;
-
-  // Floored at 0.05 exactly as TradeCard's `structuralRR` does — a delta at or
-  // near zero would otherwise report a rounding artifact as "no risk at the
-  // stop", which is the most dangerous direction to be wrong in.
-  const usedDelta = Math.max(Math.abs(delta), 0.05);
-  const rawLoss = stockMove * usedDelta;
-  // A long option cannot lose more than it cost, however far the stop sits.
-  const loss = Math.min(rawLoss, premium);
-  const fraction = loss / premium;
-  // `capped` is a fact about the instrument, not a policy: the uncapped estimate
-  // has run past what the contract cost. Kept separate from the threshold (which
-  // moved to a single configurable pass line) because `fraction` is pinned at
-  // 1.0 for every capped case and so can never distinguish "exactly a total
-  // loss" from "twice a total loss" — the formatter surfaces that difference.
-  const capped = rawLoss >= premium;
-
-  // Two states by design — see STOP_PREMIUM_PASS_MAX_FRACTION. A contract whose
-  // stop costs 85% of premium and one whose stop is twice the premium both read
-  // CAUTION; the percentage in the badge and the "(uncapped $X)" tail carry the
-  // magnitude, so nothing is hidden by collapsing the verdict.
-  // THE VERDICT IS DECIDED ON THE PRINTED PAIR, for the same reason the
-  // percentage beside it is (see formatStopLossPct). Deciding the colour at
-  // full precision and the number at printed precision let them straddle the
-  // threshold in opposite directions: $1.77 away × Δ0.789 on a $2.00 premium
-  // is 0.69827 at full precision — PASS — while the printed pair is exactly
-  // $1.40 of $2.00, so the badge read "70% OF PREMIUM" in PASS green, under
-  // the PASS tooltip ("still holds meaningful value"), directly above an
-  // equation a reader resolves by hand to the CAUTION line. ~0.18% of ordinary
-  // inputs at the Swing 0.70 line, and more at 0.80.
-  //
-  // What this does and does NOT buy: the verdict now agrees with the EQUATION
-  // printed beneath it, always -- both are the printed pair. It does not make
-  // the badge's whole-percent figure unambiguous, because that figure is
-  // rounded and the verdict is not: $1.39 and $1.40 of a $2.00 premium both
-  // print "70%" at a 0.70 line and are legitimately PASS and CAUTION. That is
-  // why the badge leads with the VERDICT WORD (formatStopLossBadge) rather
-  // than the percentage alone -- the word, not the number, is what separates
-  // those two cards.
-  //
-  // `fraction` on the object stays full precision: it is the underlying
-  // quantity, and nothing on screen is scaled from it.
-  const printed = printedFrom(stockMove, usedDelta, premium);
-  // COMPARED IN INTEGER CENTS, not by dividing the two dollar doubles.
-  // `printed.loss / printed.premium` is a float quotient, and at the exact
-  // threshold it lands a hair BELOW it: 0.16 / 0.20 is 0.7999999999999999,
-  // while 16 / 20 is 0.8. So a card whose own printed equation reads
-  // "$0.16 of $0.20 premium" -- exactly the 0.80 pass line, i.e. CAUTION --
-  // was rendering PASS green under the PASS tooltip ("still holds meaningful
-  // value if this stop is hit"). 412 exact-boundary cent pairs do this at the
-  // 0.80 line, 161 at 0.75, 21 at 0.85, 3 at 0.70, and they include entirely
-  // ordinary premiums ($0.05, $0.10, $0.20, $0.40, $0.50).
-  //
-  // This is round 5's own finding surviving at the boundary: that round moved
-  // the verdict onto the printed pair, which was right, and then compared the
-  // pair with the one operation that reintroduces float error. Cross-multiply
-  // instead -- the same integer discipline `roundCentsOfProduct` two functions
-  // down already uses, and the reason it exists.
-  //
-  // Both operands are exact to the cent by construction (printedFrom rounds
-  // them), and `passMax` is a config fraction, so scaling by 1e6 keeps every
-  // product an exact integer far inside Number.MAX_SAFE_INTEGER.
-  const lossCents = Math.round(printed.loss * 100);
-  const premiumCents = Math.round(printed.premium * 100);
-  const passMaxScaled = Math.round(passMax * 1e6);
-  const status: Status =
-    lossCents * 1e6 < passMaxScaled * premiumCents ? 'PASS' : 'CAUTION';
-
-  return { stockMove, delta: usedDelta, rawLoss, loss, premium, fraction, capped, status };
+/** Renders a returned gate block. `null` in → `null` out (spec test 1).
+ *
+ *  The guard is not a second opinion on the server's arithmetic — it is the
+ *  same "there is no honest answer" rule `compute_stop_cost` applies, repeated
+ *  at the only place a block can arrive from somewhere other than a live
+ *  endpoint: a persisted `ExitPlan` restored from an older localStorage blob.
+ *  A sub-cent premium has no printable card (every figure here is rendered to
+ *  cents, so it would print a percentage beside "$0.00 of $0.00 premium"), and
+ *  a non-finite member has no printable anything. Both take the same "not
+ *  computed" path the card already has for an absent block. */
+export function stopPremiumRisk(c: StopCostOut | null): StopPremiumRisk | null {
+  if (!c) return null;
+  const nums = [c.lossDollar, c.valueAtStop, c.fraction, c.passMaxFraction, c.premium, c.stopPrice];
+  if (!nums.every(Number.isFinite)) return null;
+  if (c.premium < 0.01) return null;
+  return {
+    premium:         c.premium,
+    valueAtStop:     c.valueAtStop,
+    loss:            c.lossDollar,
+    stopPrice:       c.stopPrice,
+    fraction:        c.fraction,
+    passMaxFraction: c.passMaxFraction,
+    status:          c.status,
+    basis:           c.basis,
+  };
 }
 
-/** Half-up to cents on the EXACT product of the two printed factors.
+/** The two figures every readout below scales from, in whole cents.
  *
- *  `toFixed(2)` breaks a mathematical `x.xx5` according to the BINARY value,
- *  so the direction is effectively arbitrary — and the case this rework's own
- *  doc comment uses as its worked example is one of the losers: 8.01 x 0.500
- *  is exactly 4.005, whose double is 4.00499999..., so `toFixed(2)` gives
- *  "4.00" where a reader multiplying the two printed factors by hand gets
- *  $4.01.
- *
- *  Half-up matches what a person does on paper — but it has to be half-up on
- *  the value Kenneth's calculator shows, not on the double. The previous
- *  version was `Math.round(move * delta * 100 + Number.EPSILON) / 100`, and
- *  the EPSILON nudge in it was arithmetically inert wherever it mattered:
- *  EPSILON is 2.22e-16, while one ULP at a product of 994.5 (`$11.70 away x
- *  0.850` in cents) is 1.14e-13 — five hundred times larger. Adding EPSILON
- *  cannot move a double that is one ULP below the .5 split. Swept against a
- *  decimal-exact half-up over 4,995,000 ordinary pairs (move <= $50.00 by 1c,
- *  delta 0.001-0.999), that version disagreed on 2999 of them (0.060%) —
- *  three times the 0.02% error rate the rework was written to remove, and it
- *  moves the VERDICT too, since `status` is computed from
- *  `printed.loss / printed.premium`.
- *
- *  So do the multiplication in integers, where there is no binary split to
- *  lose. `move` is already rounded to 2dp and `delta` to 3dp by the caller, so
- *  `move x 100` and `delta x 1000` are exact integers, and their product is an
- *  exact integer count of 1e-5 dollars. Half-up on that is a comparison of
- *  integers: no double ever holds a value near the split.
- *
- *  Rounds half AWAY FROM ZERO rather than half-up-toward-positive, so a
- *  negative delta (a put quoted signed) would round by magnitude the way the
- *  hand check does. DEFENSIVE, not reachable from the one caller today:
- *  `stopPremiumRisk` passes `usedDelta = Math.max(Math.abs(delta), 0.05)`, so
- *  every delta arriving here is positive. Kept rather than asserted because
- *  the alternative on an unexpected sign is a silently wrong cent.
- *
- *  PRECONDITION, and it belongs to the caller rather than to this function:
- *  the integer scaling is exact only because `printedFrom` has already rounded
- *  `move` to 2dp and `delta` to 3dp. A future second caller passing raw
- *  full-precision values gets a DIFFERENT rule (its factors are silently
- *  re-rounded by the `Math.round` scaling), not a wrong one — but not the same
- *  one either. Hence the name: it rounds the product of two PRINTED factors,
- *  and there is exactly one place those exist. */
-function roundCentsOfProduct(move: number, delta: number): number {
-  // Exact: both factors arrive pre-rounded to 2dp / 3dp respectively, so
-  // scaling them to integers cannot lose anything.
-  const moveCents = Math.round(move * 100);
-  const deltaMilli = Math.round(delta * 1000);
-  // Units of 1e-5 dollars. Well inside Number.MAX_SAFE_INTEGER for any real
-  // stop distance: $50,000 away at delta 1.000 is 5e6 x 1e3 = 5e9.
-  const scaled = moveCents * deltaMilli;
-  const sign = scaled < 0 ? -1 : 1;
-  const cents = Math.floor((Math.abs(scaled) + 500) / 1000);
-  return (sign * cents) / 100;
-}
-
-function printedShare(r: StopPremiumRisk) {
-  return printedFrom(r.stockMove, r.delta, r.premium);
-}
-
-/** The figures EXACTLY as the card prints them, so every consumer scales from
- *  one rounded set instead of rounding full precision independently.
- *
- *  THE PRODUCT IS COMPUTED FROM THE PRINTED FACTORS, deliberately. Kenneth
- *  checks this line by multiplying the two numbers he can see, so the only
- *  version that survives a hand-check is the one those two numbers actually
- *  produce. Rounding the move to cents, the delta to 3dp and the loss to cents
- *  independently stacks three errors of up to half a unit each: over an
- *  ordinary sweep of stops and deltas about 6% of inputs printed a product a
- *  cent away from its own factors (e.g. `$0.58 away × Δ0.457 = $0.26`, where
- *  0.58 × 0.457 is 0.2651 and reads as $0.27). Moving from 2dp to 3dp on the
- *  delta narrowed that and could never close it: the move and the loss are
- *  rounded too, so no amount of delta precision makes the three agree.
- *
- *  THE VERDICT COMES FROM HERE TOO. This block used to end by claiming
- *  "`status` is unaffected — it still comes from full precision on the object",
- *  which had been false since the printed pair was introduced:
- *  `stopPremiumRisk` computes `status` from `printed.loss / printed.premium`,
- *  under a comment of its own shouting the opposite. The stale sentence
- *  survived because this block was ORPHANED — it sat above
- *  `roundCentsOfProduct`'s own doc rather than above the function it describes,
- *  so it documented nothing and nothing pointed at it. Both are fixed here:
- *  the block is attached to `printedFrom`, and the claim now matches the code.
- *  `fraction` on the object is the one thing that does stay full precision.
- *
- *  The single implementation of "what the card prints", shared by
- *  `printedShare` (which reads it off a finished object) and `stopPremiumRisk`
- *  (which needs it BEFORE the object exists, to decide the verdict on the same
- *  figures the badge will show). Two copies of this rounding is exactly the
- *  kind of drift the printed set was introduced to remove, so there is one. */
-function printedFrom(rawMove: number, rawDelta: number, rawPremium: number) {
-  const move = Number(rawMove.toFixed(2));
-  const delta = Number(rawDelta.toFixed(3));
-  const premium = Number(rawPremium.toFixed(2));
-  const product = roundCentsOfProduct(move, delta);
-  // WHETHER THE CAP BINDS IS DECIDED ON THE PRINTED PRODUCT, not on
-  // `r.capped`. `r.capped` is `rawLoss >= premium` at full precision, and
-  // rounding the delta to 3dp moves the product to the other side of the
-  // premium in both directions:
-  //
-  //   `r.capped` true, product below premium — $70.10 away × Δ0.5505 on a
-  //   $38.59 premium printed "= $38.59 of $38.59 premium (uncapped $38.55)",
-  //   an "uncapped" figure BELOW the capped one, which cannot happen by
-  //   construction (loss = min(rawLoss, premium)) and answers nothing.
-  //
-  //   `r.capped` false, product above premium — $70.02 away × Δ0.7495 on a
-  //   $52.48 premium printed "= $52.48 of $52.48 premium" with no tail, while
-  //   the printed factors give $52.52. The hand-check fails by 4c with nothing
-  //   on screen to explain it, and the headline above it reads "$0 left" for a
-  //   stop the code itself classifies as not a total loss.
-  //
-  // Both are the same defect: two different precisions deciding one printed
-  // line. Deciding it on `product` makes the line self-consistent either way —
-  // it multiplies out exactly when the cap does not bind, and carries the
-  // "(uncapped …)" tail that explains the difference when it does. Rare
-  // (~0.005% of inputs overall) but ~0.4% of the near-total-loss cards this
-  // gate exists to surface.
-  // Strictly greater: at product === premium the equation multiplies out to
-  // the printed loss exactly, so a "(uncapped $6.51)" tail repeating "$6.51 of
-  // $6.51 premium" would answer a question nobody asked. The tail exists only
-  // where the two figures genuinely differ.
-  const printedCapped = product > premium;
-  const loss = Math.min(product, premium);
-  return { move, delta, premium, product, loss, printedCapped };
+ *  The server hands these over already quantized, so this is a unit change and
+ *  not a rounding step — but it stays the single place the conversion happens,
+ *  because the defect this file spent five audit rounds removing was two
+ *  precisions deciding one printed line. Comparing and subtracting in integer
+ *  cents also keeps `$0.16 of $0.20` from turning into 0.7999999999999999 the
+ *  moment anything divides the two dollar doubles. */
+function cents(r: StopPremiumRisk) {
+  return { loss: Math.round(r.loss * 100), premium: Math.round(r.premium * 100) };
 }
 
 /** The gate's inputs on one line, so the verdict is auditable at a glance:
- *  "$11.50 away × Δ0.450 = $2.50 of $2.50 premium (uncapped $5.18)".
+ *  "$5.20 premium − $1.49 at $185.87 = $3.71 of $5.20 premium".
  *
  *  A formatter rather than inline JSX because interpolating this many values
  *  into markup splits it across text nodes — unreadable in the DOM and
  *  untestable by `getByText`. Same reasoning as
- *  `formatRecommendedContractSizeRaw`. The uncapped tail appears only when the
- *  cap actually bound, where it answers "how far past a total loss is this?" —
- *  a question `loss` alone cannot, since it is pinned to `premium`. */
+ *  `formatRecommendedContractSizeRaw`.
+ *
+ *  The basis suffix is not decoration. This line and the Barrier Race card's
+ *  repriced figures are both "what is this contract worth at the stop", and
+ *  they legitimately disagree: the race reprices AT THE HORIZON (theta
+ *  included) and drives sizing, this one prices at TODAY's remaining life and
+ *  drives only the verdict (spec §5). Naming the basis is what stops the pair
+ *  reading as a contradiction. */
 export function formatStopPremiumRisk(r: StopPremiumRisk): string {
-  const p = printedShare(r);
-  const base =
-    `$${p.move.toFixed(2)} away × Δ${p.delta.toFixed(3)} = ` +
-    `$${p.loss.toFixed(2)} of $${p.premium.toFixed(2)} premium`;
-  const basis = ' · delta-linear, priced today';
-  return p.printedCapped
-    ? `${base} (uncapped $${p.product.toFixed(2)})${basis}`
-    : `${base}${basis}`;
+  return (
+    `$${r.premium.toFixed(2)} premium − $${r.valueAtStop.toFixed(2)} ` +
+    `at $${r.stopPrice.toFixed(2)} = ` +
+    `$${r.loss.toFixed(2)} of $${r.premium.toFixed(2)} premium` +
+    ` · Black-Scholes, priced today`
+  );
 }
 
 /** Whether the stop is a TOTAL LOSS on the figures actually printed.
  *
- *  The badge's tooltip used `r.capped`, which is `rawLoss >= premium` at full
- *  precision, while the badge label and the headline beside it both come from
- *  `printedShare`. Two precisions deciding one readout is the exact defect
- *  `printedShare` was introduced to remove, and it was reachable with ordinary
- *  4dp deltas: $55.92 away x 0.1622 on a $9.07 premium reads "99% OF PREMIUM"
- *  and "$906 per contract — of the $907 premium, $1 left" under a tooltip
- *  saying the contract is a total loss. Exported so the tooltip can branch on
- *  the same figures as the words around it. */
+ *  Exported so the badge's tooltip branches on the same figures as the words
+ *  around it. It used to be possible for the tooltip to call a contract a
+ *  total loss while the money beside it read "$1 left", because the two came
+ *  from different precisions; both now come from `cents`. */
 export function stopLossIsTotalOnPrintedFigures(r: StopPremiumRisk): boolean {
-  const p = printedShare(r);
-  return p.loss >= p.premium;
+  const c = cents(r);
+  return c.loss >= c.premium;
 }
 
-/** The badge label: the percentage AND what survives the stop, per share.
+/** The badge label: the verdict, the percentage, AND what survives the stop,
+ *  per share.
  *
  *  Decision BADGE-SPEC-2026-09-05 (Kenneth). The schematic's card 03 puts the
  *  dollars-left on the badge itself and per SHARE — "Caution · 71% of premium
- *  · $1.49 left" — and what shipped through rounds 1-4 kept the badge
- *  percent-only with per-contract dollars on the headline below. Put to
- *  Kenneth as a spec deviation; he chose the schematic. The reason it matters
- *  beyond this card: the badge is what the ranking view will reuse, and there
- *  it would travel with only a percentage, which is the half that does not
- *  tell you whether being wrong costs $8 or $800.
+ *  · $1.49 left". The reason it matters beyond this card: the badge is what
+ *  the ranking view will reuse, and there it would travel with only a
+ *  percentage, which is the half that does not tell you whether being wrong
+ *  costs $8 or $800.
  *
- *  UNITS ARE NAMED ON BOTH LINES, deliberately. This card now shows the same
+ *  UNITS ARE NAMED ON BOTH LINES, deliberately. This card shows the same
  *  quantity twice a foot apart in two units — $1.49 per share here, $149 per
  *  contract on the headline. That is the schematic's layout, not an accident,
- *  so each string says which it is ("a share" / "per contract") rather than
- *  leaving a reader to conclude the card contradicts itself by a factor of a
- *  hundred. "/share" rather than "a share" because StatusBadge uppercases its
- *  label and is `white-space: nowrap` -- "$1.49/SHARE LEFT" sits in the space
- *  the badge has, "$1.49 A SHARE LEFT" does not. The schematic renders the
- *  badge in mixed case; the uppercase is StatusBadge's house style applied to
- *  every badge in the app, so the CONTENT follows the schematic and the
- *  casing follows the design system.
+ *  so each string says which it is rather than leaving a reader to conclude
+ *  the card contradicts itself by a factor of a hundred. "/share" rather than
+ *  "a share" because StatusBadge uppercases its label and is
+ *  `white-space: nowrap` — "$1.49/SHARE LEFT" sits in the space the badge has,
+ *  "$1.49 A SHARE LEFT" does not.
  *
- *  Scaled from the SAME rounded cents pair as `formatStopLossPct` and
- *  `formatStopLossHeadline`, and the dollars-left is subtracted in whole cents
- *  rather than computed in floats, so the badge cannot round to "$0.00 left"
- *  while the percentage beside it still reads 99%, and cannot read "$0.01
- *  left" under a 100%. */
+ *  THE VERDICT WORD LEADS, as the schematic has it. StatusBadge renders
+ *  `label ?? STATUS_LABEL[status]`, so supplying a label REPLACES the word —
+ *  and dropping it left colour as the only thing separating two badges that
+ *  print the same percentage. The percentage is rounded to a whole point and
+ *  the verdict is not, so a badge carrying only the percentage is genuinely
+ *  ambiguous near the line; the word is what settles it. */
 export function formatStopLossBadge(r: StopPremiumRisk): string {
-  const p = printedShare(r);
-  const lossCents = Math.round(p.loss * 100);
-  const premiumCents = Math.round(p.premium * 100);
-  const leftCents = premiumCents - lossCents;
-  // The VERDICT WORD leads, as the schematic has it. StatusBadge renders
-  // `label ?? STATUS_LABEL[status]`, so supplying a label REPLACES the word --
-  // and dropping it left colour as the only thing separating two badges that
-  // print the same percentage: at a 0.70 pass line, $2.78 away x 0.500 on a
-  // $2.00 premium ($1.39, PASS) and $2.80 away x 0.500 on the same premium
-  // ($1.40, CAUTION) both read "70% of premium". The percentage is rounded to
-  // a whole point and the verdict is not, so a badge that carries only the
-  // percentage is genuinely ambiguous near the line; the word is what settles
-  // it, which is presumably why the schematic put it there.
-  const verdict = STATUS_LABEL[r.status];
-  const pct = formatStopLossPct(r);
-  return `${verdict} · ${pct} of premium · $${(leftCents / 100).toFixed(2)}/share left`;
+  const c = cents(r);
+  const left = c.premium - c.loss;
+  return `${STATUS_LABEL[r.status]} · ${formatStopLossPct(r)} of premium · $${(left / 100).toFixed(2)}/share left`;
 }
 
-/** The badge's percentage, from the SAME rounded pair the headline prints.
+/** The badge's percentage.
  *
- *  MOVED HERE IN ROUND 8. This block described `formatStopLossPct` while
- *  sitting several functions above it, stacked on top of another doc comment —
- *  so it documented nothing, and a false sentence in it survived unnoticed for
- *  that reason (the same orphaning defect as `printedFrom`'s block, and the
- *  same one PROJECT_STATE records round 2 as having fixed elsewhere).
+ *  Taken from `fraction`, which is the number the SERVER decided the verdict
+ *  on, so the percentage and the colour beside it can never be read off two
+ *  different quantities — the failure mode that put "100% OF PREMIUM" next to
+ *  "of the $1,890 premium, $8 left" on this card before.
  *
- *  It used to be `(r.fraction * 100).toFixed(0)` in the badge's own JSX —
- *  full precision, while the headline two rows down was scaled from the
- *  printed pair. On ~1.4% of ordinary inputs the two disagreed by a point,
- *  and at the top of the range the disagreement was a flat contradiction:
- *  $35.24 away × Δ0.5342 on an $18.90 premium put "100% OF PREMIUM" beside
- *  "of the $1,890 premium, $8 left".
+ *  100% is reserved for an actual total loss on the printed cents. `fraction`
+ *  is rounded to hundredths server-side, so a contract with one cent of a
+ *  $5.20 premium left rounds to 1.00 and would otherwise assert a total loss
+ *  the money beside it contradicts; anything with a cent left reads at most
+ *  99%.
  *
- *  100% is therefore reserved for an actual total loss on the printed
- *  figures. Anything with a dollar left over reads at most 99%, so the badge
- *  cannot assert something the money beside it contradicts. (0% is NOT
- *  reserved in the same way — see the note on the return below for why the two
- *  ends are different.)
- *
- *  THE VERDICT COMES FROM THE PRINTED PAIR TOO. This block used to end
- *  "The PASS/CAUTION verdict is untouched: it is `status`, computed from full
- *  precision." False since the printed pair was introduced: `stopPremiumRisk`
- *  computes `status` from `printed.loss / printed.premium`. What stays at full
- *  precision is `fraction` on the object, which nothing on screen scales
- *  from. */
+ *  0% is NOT reserved in the same way, and the asymmetry is deliberate. The
+ *  two ends are different kinds of claim: "100% of premium" beside "$1.49/share
+ *  left" is IMPOSSIBLE, while "0% of premium" beside "$9.99/share left" is
+ *  merely a percentage rounded to the nearest whole point, which is what every
+ *  other figure on the badge is too. Forcing the bottom up to 1% would break
+ *  the stronger property — that the printed percentage is within half a point
+ *  of the true fraction. */
 export function formatStopLossPct(r: StopPremiumRisk): string {
-  const p = printedShare(r);
-  const perContract = Math.round(p.loss * 100);
-  const premiumTotal = Math.round(p.premium * 100);
-  if (premiumTotal <= 0) return '0%';
-  if (perContract >= premiumTotal) return '100%';
-  // THE TOP IS RESERVED, THE BOTTOM IS NOT, and the asymmetry is deliberate.
-  //
-  // Round 8 read the missing bottom clamp as the mirror of the top one and
-  // asked for `Math.max(1, ...)`. Building it showed why it is not: it breaks
-  // the stronger property this file's sweep test pins, that the printed
-  // percentage is within half a point of the true fraction (a 0.38% loss
-  // forced up to "1%" is off by 0.62). The two ends are different kinds of
-  // claim. "100% of premium" beside "$1.49/share left" is IMPOSSIBLE -- 100%
-  // means nothing is left -- so the top has to be reserved for a real total
-  // loss. "0% of premium" beside "$9.99/share left" is merely a percentage
-  // rounded to the nearest whole point, which is what every other figure on
-  // the badge is too, and it does not assert anything false.
-  return `${Math.min(99, Math.round((perContract / premiumTotal) * 100))}%`;
+  const c = cents(r);
+  if (c.premium <= 0) return '0%';
+  if (c.loss >= c.premium) return '100%';
+  return `${Math.min(99, Math.max(0, Math.round(r.fraction * 100)))}%`;
 }
 
 /** The headline the badge's percentage is a summary OF: what one contract
  *  actually loses at the stop, and what is left afterwards.
  *
  *  Dollars per CONTRACT, not per share, because that is the number being
- *  risked -- the arithmetic line below it stays per-share so it reconciles
- *  with the premium and delta printed there. `$824 of the $1,890 premium,
- *  $1,066 left`. The dollars-left half is deliberate: the schematic argues it
- *  is more actionable than a percentage when deciding whether to overrule the
- *  verdict.
+ *  risked — the arithmetic line below it stays per-share so it reconciles with
+ *  the premium printed there. `$824 of the $1,890 premium, $1,066 left`.
  *
- *  "of the $1,890 PREMIUM", never "you paid". `r.premium` is
- *  `contractDetails.mid`, the scan-time snapshot, and two figures on this very
- *  card disagree with "paid": the order strip's Limit is freely editable (set
- *  it to $22.00 on an $18.90 mid and nothing here moves), and CaR three rows
- *  up is `mid × contracts × 100`, so at Contracts=3 it reads $5,670 against
- *  this line's $1,890. Both halves of this sentence are per contract and at
- *  the mid; saying so is the difference between a figure that reconciles with
- *  CaR by division and one that looks like a contradiction. */
+ *  "of the $1,890 PREMIUM", never "you paid". Two figures on this very card
+ *  disagree with "paid": the order strip's Limit is freely editable, and CaR
+ *  three rows up is `mid × contracts × 100`, so at Contracts=3 it reads $5,670
+ *  against this line's $1,890. Both halves of this sentence are per contract
+ *  and at the premium the gate priced; saying so is the difference between a
+ *  figure that reconciles with CaR by division and one that looks like a
+ *  contradiction.
+ *
+ *  `left` is subtracted from the already-rounded pair rather than rounded on
+ *  its own, so the three figures cannot fail to add up. Rounding all three
+ *  independently is how this line once read "$401 per contract — of the $651
+ *  you paid, $251 left". */
 export function formatStopLossHeadline(r: StopPremiumRisk): string {
-  // Scaled from the SAME rounded per-share figures the line beneath prints, and
-  // `left` is subtracted from the already-rounded pair rather than rounded on
-  // its own. Rounding all three independently from full precision let the
-  // headline contradict itself and the line below it, two lines apart, on a
-  // card whose entire premise is arithmetic a non-coder can check by hand: at
-  // $8.01 away × Δ0.500 on a $6.51 premium it read "$401 per contract — of the
-  // $651 you paid, $251 left" (401 + 251 = 652) directly above "= $4.00", whose
-  // hundred is $400. This is the class of bug the notation rework was written
-  // to remove, so re-introducing it here was worse than leaving it alone.
-  const p = printedShare(r);
-  const perContract = Math.round(p.loss * 100);
-  const premiumTotal = Math.round(p.premium * 100);
-  const left = premiumTotal - perContract;
+  const c = cents(r);
+  const left = c.premium - c.loss;
   const usd = (n: number) => `$${n.toLocaleString('en-US')}`;
-  return `${usd(perContract)} per contract — of the ${usd(premiumTotal)} premium, ${usd(left)} left`;
+  return `${usd(c.loss)} per contract — of the ${usd(c.premium)} premium, ${usd(left)} left`;
 }
 
 export function checkInvalidation(invalidation: number | undefined): boolean {

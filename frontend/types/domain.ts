@@ -156,11 +156,45 @@ export interface WatchlistRow {
   confidenceText?: string | null;  // plain-English interpretation
 }
 
+/** The stop-vs-premium gate as the endpoints that produce a stop return it —
+ *  `/contracts/structural-stop` and `/contracts/exit-plan`. Mirrors
+ *  `StopCostOut` in backend/app/routers/contracts.py; rendered by
+ *  `stopPremiumRisk` in lib/risk.ts, which computes nothing.
+ *
+ *  Lives here rather than in lib/risk.ts because it is a WIRE shape, and
+ *  `StructuralStop` / `ExitPlan` below embed it. Every figure is per share and
+ *  quantized to cents server-side, so `premium − valueAtStop === lossDollar`
+ *  holds on the printed values.
+ *
+ *  ABSENT means "not computed" and must never render as a PASS: no contract
+ *  was sent, no structural level was found, the IV would not invert, or the
+ *  block predates B2 in a restored `ExitPlan`. */
+export interface StopCostOut {
+  /** premium − valueAtStop, per share. */
+  lossDollar:      number;
+  /** BS(stop, K, today's dte, r, iv), per share — printed, so the input shows. */
+  valueAtStop:     number;
+  /** lossDollar / premium, clamped to [0, 1]. The number `status` was decided on. */
+  fraction:        number;
+  status:          'PASS' | 'CAUTION';
+  /** The threshold applied, echoed for auditability — it moved with the basis. */
+  passMaxFraction: number;
+  /** Echoed input: the premium the gate priced, per share. */
+  premium:         number;
+  /** Echoed input: the stop it priced to. */
+  stopPrice:       number;
+  basis:           'bs_today';
+}
+
 export interface StructuralStop {
   price:       number;
   source:      'order_block' | 'swing_low' | 'swing_high';
   confidence:  number;
   distancePct: number;
+  /** What this stop costs the contract, when one was sent with the request.
+   *  Absent for the stocks-mode card, which calls the same endpoint with no
+   *  contract at all. */
+  stopCost?:   StopCostOut | null;
 }
 
 export interface FirstPassageTarget {
@@ -340,6 +374,16 @@ export interface ExitPlan {
     structuralPrice:      number | null;
     /** The ATR-floor price, whether or not it decided the final stop. */
     atrFloorPrice:        number;
+    /** The same gate as `StructuralStop.stopCost`, priced against THIS stop —
+     *  the wider of the structural level and the ATR floor. The two endpoints
+     *  disagreeing is the model working, not a bug: a wider stop costs more of
+     *  the premium (spec §2.2).
+     *
+     *  OPTIONAL because `ExitPlan` is persisted (`PortfolioPosition.exitPlan`,
+     *  `TradeCardData.exit.exitPlan`) and a plan computed before B2 carries no
+     *  block. That restores as "not computed", which is the honest reading —
+     *  so no store migration is needed to avoid a wrong number. */
+    stopCost?:            StopCostOut | null;
     /** |structuralPrice - atrFloorPrice|; null when no structural candidate
      *  was found at all. No toleranceDollar counterpart here — the stop
      *  comparison is a strict "whichever is further from entry wins", not a

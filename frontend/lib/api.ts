@@ -1,5 +1,5 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -411,6 +411,18 @@ export const api = {
     symbol: string;
     direction: 'Bullish' | 'Bearish';
     stock_price: number;
+    /** The contract, for the stop-vs-premium gate. ALL THREE OR NONE — the
+     *  endpoint 422s a partial set rather than silently skipping the gate,
+     *  because a contract with no verdict reads exactly like an unremarkable
+     *  one. Omitted entirely by the stocks-mode card, which has no contract.
+     *  The IV is solved from `premium` server-side, so it is not sent. */
+    strike?: number;
+    dte?: number;
+    premium?: number;
+    /** Picks the horizon whose pass_max_fraction applies. Omitted means Swing,
+     *  the app's own default preset — same convention as the first-passage and
+     *  exit-plan requests. */
+    horizon_preset?: string;
   }, signal?: AbortSignal) =>
     post<{
       available: boolean;
@@ -418,6 +430,9 @@ export const api = {
       source: 'order_block' | 'swing_low' | 'swing_high' | null;
       confidence: number | null;
       distancePct: number | null;
+      /** Null whenever the gate has no honest answer — no contract sent, no
+       *  level found, or the arithmetic refused. "Not computed", never PASS. */
+      stopCost?: StopCostOut | null;
     }>('/api/contracts/structural-stop', req, signal),
   /** On-demand Monte Carlo first-passage-time estimate — fired only by the
    *  trade card's "Estimate" button, never automatically. */
@@ -458,6 +473,9 @@ export const api = {
     dte: number;
     premium: number;
     trend_score: number;
+    /** Same meaning as on `getStructuralStop` — the stop-vs-premium gate is
+     *  per-horizon and this is where the line comes from. */
+    horizon_preset?: string;
   }, signal?: AbortSignal) =>
     // `computedAt` is a client-only field the caller stamps on receipt (see
     // ExitPlan's doc comment) — the endpoint itself is stateless and doesn't

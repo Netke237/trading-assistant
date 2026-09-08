@@ -411,6 +411,14 @@ class StopCostOut(BaseModel):
     fraction:        float    # lossDollar / premium, clamped to [0, 1]
     status:          Literal["PASS", "CAUTION"]
     passMaxFraction: float
+    # ECHOED INPUTS, both per share and quantized to cents. The presenter takes
+    # this block and nothing else (spec §3), so the premium the gate priced at
+    # and the stop it priced to have to travel with the verdict — otherwise the
+    # card composes its equation from `contractDetails.mid` and whatever
+    # `sharedStop` holds at render time, which are not necessarily the two
+    # numbers this block was computed from.
+    premium:         float
+    stopPrice:       float
     basis:           Literal["bs_today"]
 
 
@@ -426,6 +434,8 @@ def _stop_cost_out(cost) -> Optional[StopCostOut]:
         fraction=cost.fraction,
         status=cost.status,
         passMaxFraction=cost.pass_max_fraction,
+        premium=cost.premium,
+        stopPrice=cost.stop_price,
         basis=cost.basis,
     )
 

@@ -489,3 +489,82 @@ class TestExitPlanEndpoint:
         # so it must cost at least as much of the premium.
         assert ep_stop["price"] <= ss_stop + 1e-9
         assert ep_cost["fraction"] >= ss_cost["fraction"] - 1e-9
+
+
+# ── B2 — the block carries every figure the card prints, and they add up ──────
+
+class TestPrintedFiguresReconcile:
+    """The frontend presenter takes this block AND NOTHING ELSE (spec §3:
+    `stopPremiumRisk(c: StopCostOut | null)`), so the premium the gate priced
+    and the stop it priced to travel with the verdict. Without them the card
+    composes its equation from `contractDetails.mid` and whatever stop is in
+    state at render time — which are not necessarily the two numbers this block
+    was computed from.
+
+    And the three figures have to subtract EXACTLY as printed. The card's whole
+    premise is arithmetic a non-coder can check by hand, so a line reading
+    "$5.21 premium − $0.79 at $185.87 = $4.41" must not be off by the cent that
+    rounding `premium - value_at_stop` from a RAW premium introduces.
+    """
+
+    def _cost(self, premium: float, **over):
+        kwargs = dict(
+            stop_price=185.87, stock_price=201.86, strike=205, dte=45,
+            premium=premium, is_call=True, horizon_preset="Swing",
+        )
+        kwargs.update(over)
+        return compute_stop_cost(**kwargs)
+
+    def test_the_block_echoes_the_premium_and_the_stop_it_priced(self):
+        cost = self._cost(5.20)
+        assert cost is not None
+        assert cost.premium == 5.20
+        assert cost.stop_price == 185.87
+
+    def test_a_half_cent_mid_still_prints_a_line_that_subtracts(self):
+        # A mid is (bid + ask) / 2, so a half-cent premium is an ORDINARY quote,
+        # not a contrived one. Rounding the subtraction from the raw premium
+        # instead put the printed premium and the printed loss a cent apart.
+        #
+        # $0.015 is the smallest premium on this contract where the two
+        # arithmetics actually differ, and it is named rather than swept
+        # because a case that passes under BOTH versions pins nothing: the
+        # pre-fix code printed "$0.01 premium − $0.00 = $0.02", a line whose
+        # own two terms contradict its result.
+        cost = self._cost(0.015)
+        assert cost is not None
+        assert cost.premium == 0.01
+        assert cost.value_at_stop == 0.0
+        assert cost.loss_dollar == 0.01
+        assert round(cost.premium - cost.value_at_stop, 2) == cost.loss_dollar
+
+        # And the same property on an ordinary-sized quote.
+        rich = self._cost(5.205)
+        assert rich is not None
+        assert rich.premium == 5.21
+        assert round(rich.premium - rich.value_at_stop, 2) == rich.loss_dollar
+
+    def test_the_equation_subtracts_across_a_sweep_of_ordinary_premiums(self):
+        checked = 0
+        for hundredths in range(1, 2000):
+            for half in (0.0, 0.005):
+                premium = hundredths / 100 + half
+                cost = self._cost(premium)
+                if cost is None:
+                    continue
+                checked += 1
+                assert round(cost.premium - cost.value_at_stop, 2) == cost.loss_dollar, premium
+                # And the fraction is that same printed pair, so the verdict and
+                # the percentage beside it cannot be read off two quantities.
+                assert cost.fraction == round(
+                    min(max(cost.loss_dollar / cost.premium, 0.0), 1.0), 2
+                ), premium
+        assert checked > 3000
+
+    def test_the_premium_floor_is_still_tested_on_the_RAW_value(self):
+        # $0.0099 must be refused, not rounded up to a printable $0.01. Guarding
+        # after the quantization would have re-opened exactly the sub-cent card
+        # the floor exists to prevent.
+        assert self._cost(0.0099) is None
+        assert self._cost(0.005) is None
+        assert self._cost(0.01) is not None

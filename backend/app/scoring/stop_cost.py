@@ -102,19 +102,30 @@ MIN_PREMIUM = 0.01
 class StopCost:
     """What the stop costs, in the three forms the card prints.
 
-    `loss_dollar` and `value_at_stop` are per share and already quantized to
-    cents; `fraction` is derived FROM that quantized pair and rounded to
-    hundredths, and the status is decided on that same rounded number. One
-    number, printed and judged: deciding the colour at full precision and the
-    percentage at printed precision lets them straddle the threshold in
-    opposite directions, which is how the old card came to print "70% OF
-    PREMIUM" in PASS green (see the note in frontend/lib/risk.ts).
+    `premium`, `value_at_stop` and `loss_dollar` are per share and all three
+    are quantized to cents, so the card's equation adds up EXACTLY as printed:
+    "$5.20 premium - $1.49 at $185.87 = $3.71 of $5.20 premium". `fraction` is
+    derived FROM that quantized pair and rounded to hundredths, and the status
+    is decided on that same rounded number. One number, printed and judged:
+    deciding the colour at full precision and the percentage at printed
+    precision lets them straddle the threshold in opposite directions, which is
+    how the old card came to print "70% OF PREMIUM" in PASS green (see the note
+    in frontend/lib/risk.ts).
+
+    `premium` and `stop_price` are ECHOED INPUTS, not results, and they are
+    here because the frontend presenter takes this block and nothing else
+    (spec section 3: `stopPremiumRisk(c: StopCostOut | null)`). Every figure
+    the badge prints has to be reachable from one object, or the card is back
+    to composing a number out of two vintages -- the premium it was priced at
+    and whatever `contractDetails.mid` happens to hold at render time.
     """
     loss_dollar:       float
     value_at_stop:     float
     fraction:          float
     status:            Literal["PASS", "CAUTION"]
     pass_max_fraction: float
+    premium:           float
+    stop_price:        float
     basis:             Literal["bs_today"] = "bs_today"
 
 
@@ -212,8 +223,21 @@ def compute_stop_cost(
 
     raw_value = bs_price(stop_price, strike, dte / 365.0, RISK_FREE_RATE, iv_dec, is_call)
     value_at_stop = round(raw_value, 2)
-    loss_dollar = round(premium - value_at_stop, 2)
-    fraction = round(min(max(loss_dollar / premium, 0.0), 1.0), 2)
+    # THE PREMIUM IS QUANTIZED BEFORE THE SUBTRACTION, not after. The card
+    # prints all three figures to the cent and Kenneth checks the line by
+    # subtracting the two he can see, so the only version that survives a hand
+    # check is the one those two numbers actually produce. Rounding
+    # `premium - value_at_stop` from a RAW premium instead lets the printed
+    # premium and the printed loss disagree by a cent whenever the mid sits on
+    # a half-cent -- an ordinary quote, since a mid is (bid + ask) / 2.
+    # Quantized first, `premium_c - value_at_stop` is exact to the cent by
+    # construction and the round() below only clears binary dust.
+    #
+    # Guarded above by `premium < MIN_PREMIUM` on the RAW value, so this cannot
+    # be zero: 0.0099 is refused before it could round up to 0.01.
+    premium_c = round(premium, 2)
+    loss_dollar = round(premium_c - value_at_stop, 2)
+    fraction = round(min(max(loss_dollar / premium_c, 0.0), 1.0), 2)
 
     pass_max = pass_max_fraction_for(horizon_preset, cfg)
     # Epsilon so a fraction sitting exactly ON the line lands on CAUTION
@@ -226,4 +250,6 @@ def compute_stop_cost(
         fraction=fraction,
         status=status,
         pass_max_fraction=pass_max,
+        premium=premium_c,
+        stop_price=stop_price,
     )

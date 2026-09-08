@@ -63,27 +63,31 @@ describe('getStopPremiumThresholds resolution order', () => {
   });
 });
 
-describe('ROUND 1 finding 1 — the two bases keep separate lines', () => {
-  it('LINEAR_BASIS_FALLBACK is the pre-Q7 set, FALLBACK is Q7', async () => {
-    const { FALLBACK, LINEAR_BASIS_FALLBACK } = await import('../stopPremiumThresholdsStore');
+describe('B2 — one basis, one set of lines', () => {
+  it('FALLBACK carries Q7, and LINEAR_BASIS_FALLBACK is gone', async () => {
+    const mod = await import('../stopPremiumThresholdsStore');
     // The Black-Scholes gate's lines (scoring_rules.yaml, spec test 7).
-    expect(FALLBACK.Intraday.pass_max_fraction).toBe(0.80);
-    expect(FALLBACK.Swing.pass_max_fraction).toBe(0.70);
-    expect(FALLBACK.Position.pass_max_fraction).toBe(0.60);
-    // The delta-linear estimator's lines, which the TradeCard badge still uses.
-    expect(LINEAR_BASIS_FALLBACK.Intraday.pass_max_fraction).toBe(0.85);
-    expect(LINEAR_BASIS_FALLBACK.Swing.pass_max_fraction).toBe(0.80);
-    expect(LINEAR_BASIS_FALLBACK.Position.pass_max_fraction).toBe(0.70);
+    expect(mod.FALLBACK.Intraday.pass_max_fraction).toBe(0.80);
+    expect(mod.FALLBACK.Swing.pass_max_fraction).toBe(0.70);
+    expect(mod.FALLBACK.Position.pass_max_fraction).toBe(0.60);
+    // Round 1's stopgap second map. The card computed its loss delta-linearly
+    // and so needed the lines that estimator was calibrated with; B2 moved the
+    // badge onto the server's `stopCost`, which is graded server-side against
+    // the YAML, so a second set of lines on the client can only disagree with
+    // the one the verdict actually came from. Pinned as ABSENT rather than
+    // simply deleted: re-adding it is exactly how the two-ruler defect returns.
+    expect('LINEAR_BASIS_FALLBACK' in mod).toBe(false);
   });
 
-  it('the linear line is never TIGHTER than the BS line on any horizon', async () => {
-    const { FALLBACK, LINEAR_BASIS_FALLBACK } = await import('../stopPremiumThresholdsStore');
-    // The linear estimator reads HIGHER on the same contract (the spec measures
-    // 17-29 points), so its pass line must sit higher too. If these ever cross,
-    // the card condemns contracts the gate passes — the defect this pins.
-    for (const h of ['Intraday', 'Swing', 'Position']) {
-      expect(LINEAR_BASIS_FALLBACK[h]!.pass_max_fraction)
-        .toBeGreaterThan(FALLBACK[h]!.pass_max_fraction);
-    }
+  it('every tier of the resolution chain is the same ruler', async () => {
+    const { FALLBACK, getStopPremiumThresholds } = await import('../stopPremiumThresholdsStore');
+    // Round 2 recorded the hazard this replaces: with two maps in play, an
+    // unknown horizon key fell PAST the map it was handed onto FALLBACK.Swing,
+    // a line belonging to the other basis. With one map the tail can only pick
+    // a different NUMBER, never a different question — so an unrecognised key
+    // still lands on a Q7 line rather than on a pre-Q7 one.
+    const resolved = getStopPremiumThresholds('Weekly', {}, null);
+    expect(Object.values(FALLBACK)).toContainEqual(resolved);
+    expect(resolved).toEqual(FALLBACK.Swing);
   });
 });

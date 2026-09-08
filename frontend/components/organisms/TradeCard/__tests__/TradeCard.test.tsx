@@ -4,7 +4,7 @@ import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
-import type { TradeCardData } from '@/types/domain';
+import type { TradeCardData, StopCostOut } from '@/types/domain';
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -780,7 +780,16 @@ describe('TradeCard', () => {
     expect(api.getStockQuote).toHaveBeenCalledWith('AAPL', expect.any(AbortSignal));
     await waitFor(() => {
       expect(api.getStructuralStop).toHaveBeenCalledWith(
-        { symbol: 'AAPL', direction: 'Bullish', stock_price: 186.1 },
+        {
+          symbol: 'AAPL', direction: 'Bullish', stock_price: 186.1,
+          // The contract travels with the request so the response can carry the
+          // stop-vs-premium gate priced at THIS level (B2). All three or none —
+          // the endpoint 422s a partial set. The premium is the scan-time mid,
+          // not a fresh quote: this button fetches no contract quote, and the
+          // mid is what CaR and the headline reconcile against.
+          strike: 190, dte: 24, premium: 2.5,
+          horizon_preset: undefined,
+        },
         expect.any(AbortSignal),
       );
     });
@@ -802,7 +811,10 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     await waitFor(() => {
       expect(api.getStructuralStop).toHaveBeenCalledWith(
-        { symbol: 'AAPL', direction: 'Bullish', stock_price: 185.2 },
+        {
+          symbol: 'AAPL', direction: 'Bullish', stock_price: 185.2,
+          strike: 190, dte: 24, premium: 2.5, horizon_preset: undefined,
+        },
         expect.any(AbortSignal),
       );
     });
@@ -2539,12 +2551,27 @@ describe('TradeCard', () => {
   });
 });
 describe('TradeCard — stop-vs-premium gate', () => {
-  // The gate reads scan-time contractDetails (mid/delta) plus whatever
-  // structural stop is available, so it renders WITHOUT the user having run an
-  // Estimate or an Arithmetic plan. That early availability is the whole point:
-  // a gate that only speaks after two round-trips cannot warn anyone.
+  // B2: the card RENDERS this gate, it does not compute it. The block rides on
+  // whichever endpoint produced the stop (`/contracts/structural-stop` here,
+  // `/contracts/exit-plan` once an Arithmetic Plan exists), priced with
+  // Black-Scholes at today's remaining life. So these tests supply a server
+  // block rather than a delta and a mid, and the figures below are the
+  // server's, not arithmetic this component can be asked to reproduce.
+  //
+  // The gate still renders WITHOUT the user having run an Estimate or an
+  // Arithmetic plan — a structural stop obtained by "Check structure" carries
+  // its own verdict. That early availability is the whole point: a gate that
+  // only speaks after two round-trips cannot warn anyone.
+  function stopCost(over: Partial<StopCostOut> = {}): StopCostOut {
+    return {
+      premium: 2.50, valueAtStop: 0.00, lossDollar: 2.50, stopPrice: 178.5,
+      fraction: 1.00, status: 'CAUTION', passMaxFraction: 0.70, basis: 'bs_today',
+      ...over,
+    };
+  }
+
   function cardWithStop(
-    stop: { price: number; source: 'order_block' | 'swing_low' | 'swing_high'; confidence: number; distancePct: number },
+    stop: { price: number; source: 'order_block' | 'swing_low' | 'swing_high'; confidence: number; distancePct: number; stopCost?: StopCostOut | null },
     stockPrice: number,
     contractDetails?: Partial<NonNullable<TradeCardData['contractDetails']>>,
   ): TradeCardData {
@@ -2558,22 +2585,21 @@ describe('TradeCard — stop-vs-premium gate', () => {
   const ORDER_BLOCK = { price: 178.5, source: 'order_block' as const, confidence: 75, distancePct: 3.6 };
 
   it('flags a stop that costs the whole premium, and shows every input behind it', () => {
-    // 190.0 -> 178.5 is $11.50; x delta 0.45 = $5.175 against a $2.50 premium.
-    // You cannot lose $5.18 on a $2.50 option, so it caps at $2.50 = 100%.
-    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
+    // The contract is worthless at $178.50: nothing of the $2.50 premium
+    // survives the stop, so the stop is not a risk control on this contract.
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: stopCost() }, 190.0)} />);
 
     expect(screen.getByText('MAX LOSS IF THE STOP IS HIT')).toBeInTheDocument();
     expect(screen.getByText('CAUTION · 100% of premium · $0.00/share left')).toBeInTheDocument();
     // Inputs are on screen, not just the verdict — the complaint that produced
-    // this gate was a ratio whose inputs were invisible.
-    expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
-    // ...including the uncapped figure, so "how far past total loss" is visible.
-    // 11.50 * 0.45 === 5.175 exactly, and the printed product is rounded HALF-UP
-    // to $5.18 — what a reader multiplying the two printed factors gets.
-    // `toFixed(2)` used to render "5.17", because 5.175 is stored just below the
-    // exact value in IEEE754, and this assertion pinned that artefact.
-    expect(screen.getByText(/uncapped \$5\.18/)).toBeInTheDocument();
- 
+    // this gate was a ratio whose inputs were invisible. The premium, the value
+    // the contract still holds at the stop, and the stop it was priced at.
+    expect(screen.getByText(/\$2\.50 premium − \$0\.00 at \$178\.50 = \$2\.50 of \$2\.50 premium/))
+      .toBeInTheDocument();
+    // No "(uncapped …)" tail: Black-Scholes cannot exceed the premium for a
+    // long option, so there is nothing to cap and nothing to disclose past it.
+    expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
+
     // The gate sorts candidates, it never refuses one -- so even a total-loss
     // stop is framed as a sizing input, not a verdict. (The "never REJECT"
     // guarantee itself is asserted on the helper in risk.test.ts; CSS modules
@@ -2582,11 +2608,13 @@ describe('TradeCard — stop-vs-premium gate', () => {
   });
 
   it('PASSes a contract that keeps real value at the same stop', () => {
-    // Same $11.50 move and delta, but a $20 premium: $5.175 / $20 = 26%.
-    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
+    // Same stop, a $20 premium: $5.18 of it goes, $14.82 survives.
+    const kept = stopCost({ premium: 20.00, valueAtStop: 14.82, lossDollar: 5.18, fraction: 0.26, status: 'PASS' });
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: kept }, 190.0, { mid: 20 })} />);
 
     expect(screen.getByText('PASS · 26% of premium · $14.82/share left')).toBeInTheDocument();
-    expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$5.18 of \$20.00 premium/)).toBeInTheDocument();
+    expect(screen.getByText(/\$20\.00 premium − \$14\.82 at \$178\.50 = \$5\.18 of \$20\.00 premium/))
+      .toBeInTheDocument();
     expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
   });
 
@@ -2596,7 +2624,8 @@ describe('TradeCard — stop-vs-premium gate', () => {
     // BarrierRaceCard tells the reader to go and find, or that the per-contract
     // headline reaches the screen at all. A rename on either side would have
     // left the cross-reference pointing at a row that is nowhere on the page.
-    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
+    const kept = stopCost({ premium: 20.00, valueAtStop: 14.82, lossDollar: 5.18, fraction: 0.26, status: 'PASS' });
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: kept }, 190.0, { mid: 20 })} />);
     expandLadder();
     // Matches BarrierRaceCard's "Max loss if the stop is hit" cross-reference,
     // case-insensitively (the header is upper-cased in the markup).
@@ -2604,13 +2633,15 @@ describe('TradeCard — stop-vs-premium gate', () => {
     // And the headline itself: per-contract dollars plus what is left.
     expect(screen.getByText(/per contract — of the \$[\d,]+ premium, \$[\d,]+ left/))
       .toBeInTheDocument();
-    // The arithmetic line beneath it, carrying the basis qualifier.
-    expect(screen.getByText(/away × Δ[\d.]+ = .*delta-linear, priced today/))
+    // The arithmetic line beneath it, carrying the basis qualifier. Naming the
+    // basis is what stops this reading as a contradiction of the barrier race,
+    // which reprices the same contract AT THE HORIZON.
+    expect(screen.getByText(/premium − .* = .*Black-Scholes, priced today/))
       .toBeInTheDocument();
   });
 
   it('renders with no Estimate and no Arithmetic plan run', () => {
-    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: stopCost() }, 190.0)} />);
     // Neither of the two round-trip-gated blocks is present...
     expect(screen.queryByText('Structural level found')).not.toBeInTheDocument();
     expect(screen.queryByText('Bottom (final stop)')).not.toBeInTheDocument();
@@ -2624,8 +2655,27 @@ describe('TradeCard — stop-vs-premium gate', () => {
   });
 
   it('stays hidden when the stop sits exactly at the current price', () => {
-    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, price: 190.0, distancePct: 0 }, 190.0)} />);
+    // Not a stop, and the structural row above already says so. The server
+    // would happily price it (nothing is lost when the stop is where you
+    // already are), so the card has to decline rather than print a PASS on a
+    // level that controls nothing.
+    render(<TradeCard data={cardWithStop(
+      { ...ORDER_BLOCK, price: 190.0, distancePct: 0, stopCost: stopCost({ stopPrice: 190.0, valueAtStop: 2.50, lossDollar: 0, fraction: 0, status: 'PASS' }) },
+      190.0,
+    )} />);
     expect(screen.queryByText('MAX LOSS IF THE STOP IS HIT')).not.toBeInTheDocument();
+  });
+
+  it('reads "not computed" when the stop came back with no priced contract', () => {
+    // The gate's third state. An endpoint that found a level but could not
+    // price it — no contract on the card, an IV that would not invert, an
+    // expiring contract — must not leave a blank where the badge was: a
+    // contract with no verdict would then read exactly like an unremarkable
+    // one, which is the whole failure the third state exists to prevent.
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: null }, 190.0)} />);
+    expect(screen.getByText('MAX LOSS IF THE STOP IS HIT')).toBeInTheDocument();
+    expect(screen.getByText(/Not computed — no priced contract for this stop/)).toBeInTheDocument();
+    expect(screen.queryByText(/of premium/)).not.toBeInTheDocument();
   });
 });
 
@@ -2644,6 +2694,13 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 182.0 });
     (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
       available: true, price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92,
+      // Priced by the endpoint against ITS OWN stop ($178.50). Deliberately a
+      // different verdict from the exit-plan block below, so picking the wrong
+      // one is visible rather than a coincidence.
+      stopCost: {
+        premium: 2.50, valueAtStop: 0.92, lossDollar: 1.58, stopPrice: 178.5,
+        fraction: 0.63, status: 'PASS', passMaxFraction: 0.70, basis: 'bs_today',
+      },
     });
 
     render(<TradeCard data={mockTradeCard} />);
@@ -2652,9 +2709,9 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
 
-    // Before any Arithmetic Plan exists, the gate reads the raw structural
-    // pair: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
-    // premium = 63%. Sanity-checks the pre-fix baseline before it changes.
+    // Before any Arithmetic Plan exists, the gate reads the block that came
+    // back with the raw structural stop. Sanity-checks the baseline before it
+    // changes.
     expect(screen.getByText('PASS · 63% of premium · $0.92/share left')).toBeInTheDocument();
 
     // 2) Compute Arithmetic Plan — exit-plan stop at $170.00, a DIFFERENT
@@ -2668,6 +2725,14 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
         price: 170.0, source: 'structural' as const, contractPrice: 1.0,
         rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
         structuralPrice: 170.0, atrFloorPrice: 165.0, distanceDollar: 5.0,
+        // The SAME gate, priced against the exit plan's wider stop ($170.00)
+        // and its own fresh premium ($2.60). The two endpoints disagreeing is
+        // the model working, not a bug — a wider stop costs more of the
+        // premium (spec §2.2).
+        stopCost: {
+          premium: 2.60, valueAtStop: 0.00, lossDollar: 2.60, stopPrice: 170.0,
+          fraction: 1.00, status: 'CAUTION', passMaxFraction: 0.70, basis: 'bs_today',
+        },
       },
       targets: [],
       atr: 3.5,
@@ -2678,12 +2743,15 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
       expect(screen.getAllByText('Bottom (final stop)').length).toBeGreaterThanOrEqual(1);
     });
 
-    // The gate must now read the exit-plan pair, not the raw structural pair:
-    // |170.00 - 190.00| = 20.00 away x delta 0.45 = $9.00 (uncapped) against a
-    // $2.50 premium -> capped at 100%. If it had stayed on the raw pair this
+    // The gate must now read the block the EXIT-PLAN endpoint returned, priced
+    // against its own wider stop ($170.00) and its own fresh premium ($2.60):
+    // nothing survives, so 100%. If it had stayed on the structural block this
     // would still read 63%.
     expect(screen.getByText('CAUTION · 100% of premium · $0.00/share left')).toBeInTheDocument();
-    expect(screen.getByText(/\$20\.00 away × Δ0\.450 = \$2\.50 of \$2\.50 premium \(uncapped \$9\.00\)/)).toBeInTheDocument();
+    // The arithmetic line names the exit plan's stop and premium, so which
+    // block is on screen is legible without inferring it from the verdict.
+    expect(screen.getByText(/\$2\.60 premium − \$0\.00 at \$170\.00 = \$2\.60 of \$2\.60 premium/))
+      .toBeInTheDocument();
     expect(screen.queryByText('PASS · 63% of premium · $0.92/share left')).not.toBeInTheDocument();
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
@@ -2743,11 +2811,24 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
           price: 185.87, source: 'structural', contractPrice: 1.2,
           rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 80,
           structuralPrice: 183.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+          // Deliberately a DIFFERENT verdict from the structural block below,
+          // so the gate reading the wrong restored branch is visible rather
+          // than a coincidence of matching numbers.
+          stopCost: {
+            premium: 2.50, valueAtStop: 0.00, lossDollar: 2.50, stopPrice: 185.87,
+            fraction: 1.00, status: 'CAUTION', passMaxFraction: 0.70, basis: 'bs_today',
+          },
         },
         targets: [],
         atr: 3.5,
       },
-      structuralStop: { price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92 },
+      structuralStop: {
+        price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92,
+        stopCost: {
+          premium: 2.50, valueAtStop: 0.92, lossDollar: 1.58, stopPrice: 178.5,
+          fraction: 0.63, status: 'PASS', passMaxFraction: 0.70, basis: 'bs_today',
+        },
+      },
       structuralStopStockPrice: 182.0,
     },
   };
@@ -2787,10 +2868,37 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
 
   it('agrees with the gate on the same restored stop', () => {
     render(<TradeCard data={restoredCard} />);
-    // stopRisk: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
-    // premium = 63%. If the gate had instead picked up the restored exit-plan
-    // stop (185.87) it would read a different percentage here.
+    // `sharedStop` refuses a restored plan with no fresh stock price and falls
+    // back to the restored structural stop, so the gate must render THAT
+    // branch's block. The exit-plan block on the same card says CAUTION 100%
+    // at $185.87; reading it here would be the "two stops on one card"
+    // regression, now visible in the verdict AND in the printed stop price.
     expect(screen.getByText('PASS · 63% of premium · $0.92/share left')).toBeInTheDocument();
+    expect(screen.getByText(/\$2\.50 premium − \$0\.92 at \$178\.50 = \$1\.58 of \$2\.50 premium/))
+      .toBeInTheDocument();
+    expect(screen.queryByText('CAUTION · 100% of premium · $0.00/share left')).not.toBeInTheDocument();
+  });
+
+  it('reads "not computed" for a plan restored from before the gate moved server-side', () => {
+    // Spec test 9's case, on the exit-plan side. `ExitPlan` is persisted
+    // (portfolioStore, and the parent's per-contract cache), so a blob written
+    // before B2 carries no `stopCost` at all. That must surface as the third
+    // state and never as a PASS: a contract with no verdict reading like an
+    // unremarkable one is the whole failure the third state exists to prevent.
+    // No store migration is needed precisely because absence is already the
+    // honest answer here.
+    const preB2: TradeCardData = {
+      ...restoredCard,
+      exit: {
+        ...restoredCard.exit,
+        exitPlan: { ...restoredCard.exit.exitPlan!, stop: { ...restoredCard.exit.exitPlan!.stop, stopCost: undefined } },
+        structuralStop: { ...restoredCard.exit.structuralStop!, stopCost: undefined },
+      },
+    };
+    render(<TradeCard data={preB2} />);
+    expect(screen.getByText('MAX LOSS IF THE STOP IS HIT')).toBeInTheDocument();
+    expect(screen.getByText(/Not computed — no priced contract for this stop/)).toBeInTheDocument();
+    expect(screen.queryByText(/of premium ·/)).not.toBeInTheDocument();
   });
 });
 
