@@ -18,6 +18,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
+import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
 import { premiumStopDollarBounds } from '@/lib/premiumStop';
 import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
@@ -749,6 +750,33 @@ export function TradeCard({
   const holdMin = useScanStore((s) => s.context?.holdMin ?? null);
   const holdMax = useScanStore((s) => s.context?.holdMax ?? null);
 
+  // THE GATE'S horizon, which is NOT always the holding preset — the paragraph
+  // above is about the barrier race, and the two diverge on exactly one key.
+  //
+  // `Custom` carries no scoring horizon of its own; the app derives one from
+  // the hold range (`scoringHorizonForHold`: <=4 Intraday, <=20 Swing, else
+  // Position), and every other surface on the card is already reading that
+  // resolved value — `context.horizon`, the display string Step 3 writes, is
+  // built from it. The gate's pass line is per SCORING horizon, and the
+  // backend's `_PRESET_TO_HORIZON` has to map a bare `custom` to something:
+  // it picks `swing`, because the request carries no hold range to resolve
+  // with. So a Custom 60-185d scan — labelled "Position (60-185d)" on this
+  // very card, graded on Position's parameter row in Step 3 — was having its
+  // stop cost graded against Swing's 0.70 instead of Position's 0.60, and the
+  // badge echoed `passMaxFraction 0.70` beside it. Pre-B2 the card resolved
+  // this itself (`scoringHorizonFromLabel(context.horizon)`) and got it right;
+  // sending the raw key was the regression.
+  //
+  // `resolveParamsHorizon` collapses Custom and passes every other key through
+  // UNCHANGED, so Quarterly/SemiAnnual/Annual keep their own keys and the
+  // backend still maps all three to `position` — the reasoning above about not
+  // repricing a 200-day hold like a 20-day one is untouched. An absent
+  // `holdMax` falls back to the preset row's own bound rather than to 0, which
+  // `scoringHorizonForHold` would read as Intraday.
+  const gateHorizon = horizonPreset
+    ? resolveParamsHorizon(horizonPreset, holdMax ?? presetByKey(horizonPreset).holdMax)
+    : null;
+
   const computeExitPlan = useCallback(async () => {
     exitPlanRequestRef.current?.abort();
     const controller = new AbortController();
@@ -795,7 +823,7 @@ export function TradeCard({
         dte: cd.dte,
         premium,
         trend_score: data.stockBreakdown.trend,
-        horizon_preset: horizonPreset ?? undefined,
+        horizon_preset: gateHorizon ?? undefined,
       }, controller.signal);
       if (isFinished(controller)) {
         if (deadline.timedOut) failExitPlan();
@@ -815,7 +843,7 @@ export function TradeCard({
       clearTimeout(deadline.timer);
       if (isRealFailure(controller, deadline)) setExitPlanLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, horizonPreset]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, gateHorizon]);
 
   // Piece 2 (stop-model unification) — the stop level shared by the
   // stop-vs-premium gate, structuralPairing, and (below) the Monte Carlo request's
@@ -949,8 +977,16 @@ export function TradeCard({
           // priced at THIS level. All three or none — a partial set is a 422.
           strike: cd.strike,
           dte: cd.dte,
-          premium: cd.mid,
-          horizon_preset: horizonPreset ?? undefined,
+          // `premium`, the LIVE mid resolved above — not `cd.mid`. Both are in
+          // scope here and they are different numbers: cd.mid is the scan-time
+          // snapshot. B2 made this request price the gate, so the premium sent
+          // is the one the badge prints AND the one the server inverts the IV
+          // out of; sending the stale one against the fresh spot resolved two
+          // lines above is what let the same contract read "100% of premium,
+          // total loss" on this click and "64% of premium" after Compute
+          // Arithmetic Plan, which sends the live mid.
+          premium,
+          horizon_preset: gateHorizon ?? undefined,
         }, structuralController.signal)
           .then((res) => {
             if (isFinished(structuralController)) return;
@@ -1161,7 +1197,7 @@ export function TradeCard({
     // identity moved with them — an unstated coincidence that would break
     // silently the moment that memo is narrowed. `data.contract` is stamped
     // into raceBarriers for the freshness check.
-  }, [data.symbol, data.direction, data.price, data.contract, data.contractDetails, data.stockBreakdown.trend, overlay.invalidation, structuralStop, exitPlan, arithmeticLiveStockPrice, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, holdMin, holdMax]);
+  }, [data.symbol, data.direction, data.price, data.contract, data.contractDetails, data.stockBreakdown.trend, overlay.invalidation, structuralStop, exitPlan, arithmeticLiveStockPrice, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, gateHorizon, holdMin, holdMax]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -1288,7 +1324,25 @@ export function TradeCard({
       // snapshot that may be stale, especially for a contract the user never
       // overrode in Step 6, which has nothing else refreshing it). Falls back
       // to data.price only if the live quote fetch itself fails.
-      const stockQuote = await api.getStockQuote(data.symbol, controller.signal).catch(() => null);
+      //
+      // The CONTRACT quote is fetched alongside it, on the same click and for
+      // the same reason: `cd.mid` is a scan-time snapshot too. Before B2 that
+      // did not matter here, because this request carried no contract at all;
+      // now it prices the gate, so the premium sent is the one the badge
+      // prints and the one the server inverts the IV out of. Pairing a fresh
+      // spot with a stale mid is what made the same contract read one verdict
+      // after "Check structure" and another after "Compute Arithmetic Plan"
+      // (which has always sent the live mid), and could refuse to price an
+      // ordinary ITM contract outright once the spot rallied past the stale
+      // mid's intrinsic. Same `.catch(() => null)` fallback to `cd.mid` as
+      // computeExitPlan and estimateFirstPassage use.
+      const cd = data.contractDetails;
+      const [stockQuote, contractQuote] = await Promise.all([
+        api.getStockQuote(data.symbol, controller.signal).catch(() => null),
+        cd
+          ? api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null)
+          : Promise.resolve(null),
+      ]);
       // `.catch(() => null)` swallows the rejection, so our own deadline would
       // otherwise arrive at a bare early return and neither report nor clear.
       if (isFinished(controller)) {
@@ -1296,7 +1350,6 @@ export function TradeCard({
         return;
       }
       const referenceStockPrice = stockQuote?.price ?? data.price;
-      const cd = data.contractDetails;
       const res = await api.getStructuralStop({
         symbol: data.symbol,
         direction: data.direction,
@@ -1308,8 +1361,8 @@ export function TradeCard({
         ...(cd ? {
           strike: cd.strike,
           dte: cd.dte,
-          premium: cd.mid,
-          horizon_preset: horizonPreset ?? undefined,
+          premium: contractQuote?.price ?? cd.mid,
+          horizon_preset: gateHorizon ?? undefined,
         } : {}),
       }, controller.signal);
       if (controller.signal.aborted) return;
@@ -1332,7 +1385,7 @@ export function TradeCard({
       clearTimeout(deadline.timer);
       if (isRealFailure(controller, deadline)) setStructuralLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, horizonPreset]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, gateHorizon]);
 
   useEffect(() => {
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));

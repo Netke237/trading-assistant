@@ -3,6 +3,7 @@ import { render, screen, act, fireEvent, waitFor, within } from '@testing-librar
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
+import { useScanStore } from '@/lib/scanStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
 import type { TradeCardData, StopCostOut } from '@/types/domain';
 
@@ -748,6 +749,12 @@ describe('TradeCard', () => {
     // state (jsdom's window/localStorage persists across tests within one
     // file, unlike a real browser tab per test).
     window.localStorage.clear();
+    // The scan context is a module-level zustand store, so a context set by one
+    // test survives into the next one in this file (localStorage.clear() above
+    // does not touch the in-memory state). It decides the gate's horizon, so
+    // leaving it set would make a later test's `horizon_preset` depend on which
+    // tests ran before it.
+    useScanStore.getState().setContext(null);
     (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: mockTradeCard.price });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
       price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
@@ -772,6 +779,15 @@ describe('TradeCard', () => {
     // A price that deliberately differs from mockTradeCard.price (185.2), so the
     // assertion below proves the LIVE quote is used, not the scan-time snapshot.
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    // A premium that deliberately differs from contractDetails.mid (2.5), for
+    // the same reason as the stock price above: the assertion below has to be
+    // able to tell the live quote from the scan-time snapshot. The default mock
+    // in beforeEach returns 2.5, which is the same number as the mid — so it
+    // could not discriminate, and this test passed all the way through the
+    // window in which this call site sent the stale one.
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 3.4, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
     (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
       available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
     });
@@ -784,10 +800,11 @@ describe('TradeCard', () => {
           symbol: 'AAPL', direction: 'Bullish', stock_price: 186.1,
           // The contract travels with the request so the response can carry the
           // stop-vs-premium gate priced at THIS level (B2). All three or none —
-          // the endpoint 422s a partial set. The premium is the scan-time mid,
-          // not a fresh quote: this button fetches no contract quote, and the
-          // mid is what CaR and the headline reconcile against.
-          strike: 190, dte: 24, premium: 2.5,
+          // the endpoint 422s a partial set. The premium is the LIVE mid, in
+          // step with the live stock price beside it: this request prices the
+          // gate, so a stale premium here is the number the badge prints and
+          // the value the server inverts the IV out of.
+          strike: 190, dte: 24, premium: 3.4,
           horizon_preset: undefined,
         },
         expect.any(AbortSignal),
@@ -802,8 +819,9 @@ describe('TradeCard', () => {
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
   });
 
-  it('falls back to data.price when the live stock quote fetch fails', async () => {
+  it('falls back to data.price and contractDetails.mid when the live quotes fail', async () => {
     (api.getStockQuote as jest.Mock).mockRejectedValueOnce(new Error('quote unavailable'));
+    (api.getContractQuote as jest.Mock).mockRejectedValueOnce(new Error('quote unavailable'));
     (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
       available: false, price: null, source: null, confidence: null, distancePct: null,
     });
@@ -818,6 +836,118 @@ describe('TradeCard', () => {
         expect.any(AbortSignal),
       );
     });
+  });
+
+  // ---- The gate's two inputs that B2 got wrong, pinned. -------------------
+  //
+  // Both are "the badge prints a number that is not the one it claims", which
+  // is the only class of defect this project's audit gate treats as blocking,
+  // and neither had a test that could fail: the premium assertion could not
+  // discriminate (the default contract-quote mock returns the same 2.5 as the
+  // scan-time mid), and no test set a scan context at all.
+
+  it('sends the SAME premium to the gate from Check structure and Compute Arithmetic Plan', async () => {
+    // The defect: computeExitPlan had always sent the live mid, while both
+    // structural call sites sent the scan-time `cd.mid`. Same contract, same
+    // stop, same card — the badge read one premium, one loss and one verdict
+    // after "Check structure" and a different set after "Compute Arithmetic
+    // Plan", decided only by which button was pressed last. On a contract whose
+    // mid had moved 8.10 -> 12.96 that is CAUTION/"total loss" against PASS/64%.
+    const liveQuote = { price: 3.4, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100 };
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce(liveQuote).mockResolvedValueOnce(liveQuote);
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: {
+        price: 177.0, source: 'atr_floor' as const, contractPrice: 1.2,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 178.5, atrFloorPrice: 177.0, distanceDollar: 1.5,
+      },
+      targets: [],
+      atr: 3.5,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => expect(api.getStructuralStop).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    await waitFor(() => expect(api.getExitPlan).toHaveBeenCalled());
+
+    const structuralPremium = (api.getStructuralStop as jest.Mock).mock.calls.at(-1)![0].premium;
+    const exitPlanPremium   = (api.getExitPlan as jest.Mock).mock.calls.at(-1)![0].premium;
+    expect(structuralPremium).toBe(3.4);
+    expect(exitPlanPremium).toBe(3.4);
+    expect(structuralPremium).toBe(exitPlanPremium);
+  });
+
+  it('sends the live premium from the Estimate click\'s structural sub-fetch too', async () => {
+    // The third call site, and the one where the defect was most visible in the
+    // source: `estimateFirstPassage` resolved the live premium into a local and
+    // then sent `cd.mid` fifty lines later, so the gate disagreed with the
+    // Barrier Race card rendered directly beneath it off the same click.
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 3.4, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [], stopHitPct: null, medianDaysToStop: null, sampleSize: 0,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /estimate/i }));
+    await waitFor(() => expect(api.getStructuralStop).toHaveBeenCalled());
+    expect((api.getStructuralStop as jest.Mock).mock.calls.at(-1)![0].premium).toBe(3.4);
+    // The click's own Monte Carlo dispatch is awaited and then cleared: this
+    // file's mocks are never reset between tests (no clearMocks in
+    // jest.config.ts), so an in-flight estimate would otherwise land during a
+    // LATER test and break its `not.toHaveBeenCalled()` precondition.
+    await waitFor(() => expect(api.getFirstPassageEstimate).toHaveBeenCalled());
+    (api.getFirstPassageEstimate as jest.Mock).mockClear();
+  });
+
+  it('grades a Custom hold range at the horizon the rest of the card shows, not at Swing', async () => {
+    // The defect: B2 sent `context.horizonPreset` raw, and the backend's
+    // _PRESET_TO_HORIZON maps a bare `custom` to `swing` because the request
+    // carries no hold range to resolve with. A Custom 60-185d scan is labelled
+    // "Position (60-185d)" on this very card and uses Position's parameter row
+    // in Step 3, but its stop cost was graded against Swing's 0.70 instead of
+    // Position's 0.60 — and the badge echoed passMaxFraction 0.70 beside it.
+    // Pre-B2 the card resolved this itself and got it right.
+    useScanStore.getState().setContext({
+      universe: 'SP500', direction: 'Bullish',
+      horizon: 'Position (60–185d)', horizonPreset: 'Custom',
+      holdMin: 60, holdMax: 185,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => expect(api.getStructuralStop).toHaveBeenCalled());
+    expect((api.getStructuralStop as jest.Mock).mock.calls.at(-1)![0].horizon_preset).toBe('Position');
+  });
+
+  it('leaves every non-Custom preset key untouched, so Quarterly stays Quarterly', async () => {
+    // The guard on the fix. Quarterly/SemiAnnual/Annual all collapse to
+    // `position` server-side already, and the barrier race keys its repricing
+    // table on the SEVEN-key preset — repricing a 200-day hold like a 20-day
+    // one is the error that table exists to avoid. `resolveParamsHorizon`
+    // touches Custom and nothing else; if it ever starts collapsing the rest,
+    // this fails.
+    useScanStore.getState().setContext({
+      universe: 'SP500', direction: 'Bullish',
+      horizon: 'Position (45–60d)', horizonPreset: 'Quarterly',
+      holdMin: 45, holdMax: 60,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => expect(api.getStructuralStop).toHaveBeenCalled());
+    expect((api.getStructuralStop as jest.Mock).mock.calls.at(-1)![0].horizon_preset).toBe('Quarterly');
   });
 
   it('shows a not-found message when no structural level is available', async () => {
