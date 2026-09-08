@@ -490,6 +490,22 @@ export const useScanStore = create<ScanStoreState>()(
             previousRun: stripLegacyIvDetailsFromScanResult(s.previousRun),
           };
         }
+        // NO v15 BRANCH FOR PHASE B3, and that is a decision rather than an
+        // oversight. B3 adds `stopCostPct`/`stopCostStatus` to each persisted
+        // CANDIDATE, but the pair is purely additive and optional: a blob
+        // written before B3 simply lacks it, `cardToRow` collapses the absent
+        // value to null, and the ranking table renders "not computed — re-run
+        // the scan". That is the behaviour the spec asks for (gate-basis spec
+        // test 9), reached without touching the stored blob at all.
+        //
+        // The store's rule is to bump for a BREAKING shape change, and the two
+        // migrations above are the shape of one: v13/v14 both DELETE a field
+        // whose stored value had become a wrong number under a new reading.
+        // Nothing here is wrong on an old blob -- it is merely missing, and
+        // missing already renders honestly. Bumping anyway would push every
+        // user's store through a migration pass that changes nothing, and
+        // would put a no-op branch in this chain for the next reader to
+        // mistake for a real one.
         return s;
       },
       partialize: (state) => ({

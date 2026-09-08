@@ -43,5 +43,13 @@ export function cardToRow(
     nextEventLabel: c.nextEventLabel,
     confidence: c.confidence ?? null,
     confidenceText: c.confidenceText ?? null,
+    // Phase B3. Copied, never derived: the verdict was reached server-side
+    // against a stop this table does not have. `?? null` collapses `undefined`
+    // (a candidate from a scan session persisted before B3) onto the same
+    // "not computed" the backend sends for an unpriceable contract — the row
+    // renders one state for both, because there is nothing a user could do
+    // differently about them.
+    stopCostPct: c.stopCostPct ?? null,
+    stopCostStatus: c.stopCostStatus ?? null,
   };
 }

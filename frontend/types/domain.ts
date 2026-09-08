@@ -154,6 +154,12 @@ export interface WatchlistRow {
   nextEventLabel?: string | null;
   confidence?: number | null;      // signal confidence 0–100; null = thin history
   confidenceText?: string | null;  // plain-English interpretation
+  /** The scan-time stop-vs-premium gate (Phase B3). Copied verbatim from the
+   *  candidate by `cardToRow`; see `TradeCardData.stopCostPct` for why it is
+   *  two fields and what null means. Optional because a row rebuilt from a
+   *  scan session persisted before B3 has neither. */
+  stopCostPct?: number | null;
+  stopCostStatus?: 'PASS' | 'CAUTION' | null;
 }
 
 /** The stop-vs-premium gate as the endpoints that produce a stop return it —
@@ -608,6 +614,26 @@ export interface TradeCardData {
   maxProfit?:      number;
   maxLoss?:        number;
   breakeven?:      number;
+  /** The stop-vs-premium gate, priced at SCAN time against a structural/ATR
+   *  stop (Phase B3, gate-basis spec §2.3). Mirrors `TradeCardData.stopCostPct`
+   *  / `stopCostStatus` in backend/app/schemas.
+   *
+   *  TWO fields, not the whole `StopCostOut`. `WatchlistRow` carries no
+   *  contract data, and shipping strike/dte/premium/iv down so the ranking
+   *  table could price the gate itself would be the rejected
+   *  "Black-Scholes in TypeScript" decision arriving by the back door. The
+   *  card's own badge — which DOES render a full `StopCostOut` — is a
+   *  different, later reading against a stop the user has refreshed.
+   *
+   *  They describe the AUTO-PICKED contract. A Step 6 override replaces the
+   *  contract without recomputing these, so the ranking table must say what
+   *  they describe rather than implying they follow the pick.
+   *
+   *  null/absent means NOT COMPUTED and must never render as a PASS: no stop
+   *  could be formed, the IV would not invert, or the row was restored from a
+   *  scan session persisted before B3 shipped. */
+  stopCostPct?:    number | null;
+  stopCostStatus?: 'PASS' | 'CAUTION' | null;
   /**
    * Set locally (never sent by the backend) when the user has picked a
    * different contract than the scan's top recommendation via the contract

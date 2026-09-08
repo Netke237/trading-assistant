@@ -62,6 +62,10 @@ from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
+from app.scoring.exit_plan import compute_final_stop
+from app.scoring.stock_scorer import _atr
+from app.scoring.stop_cost import compute_stop_cost
+from app.services.config_loader import load_exit_plan_cfg
 from app.models.heston import calibrate_heston, HestonParams
 from types import SimpleNamespace
 from app.services.audit import new_rec_id, log_event
@@ -821,6 +825,83 @@ async def _process_symbol(
     _target_raw = _plan.target_price_raw
     _invalidation_raw = _plan.invalidation_price_raw
 
+    # ── Stop-vs-premium gate, priced at scan time (Phase B3) ──────────────────
+    # Spec §2.3, decision B3-SCOPED-STOP-2026-09-08. The ranking table is the
+    # last surface with no gate on it; this computes the verdict here, where
+    # the auto-picked contract and the candles are both already in hand, and
+    # sends down the two fields the row needs.
+    #
+    # The stop is `compute_final_stop`'s -- the wider of the structural level
+    # and an ATR floor -- and NOT `_plan.invalidation_price`, which trade_plan
+    # derives as a flat percentage move off the stock price. Grading a
+    # candidate at a fixed -3% would measure the same distance on every symbol
+    # in the universe regardless of where its structure actually sits, which is
+    # the stop this project is on record as replacing.
+    #
+    # SCOPED, deliberately: nothing downstream is repointed. `exit.invalidation`
+    # keeps its existing consumers and its existing basis until Phase C's piece
+    # 3 replaces it on purpose. This stop exists to price this badge.
+    stop_cost_pct: float | None = None
+    stop_cost_status: str | None = None
+    try:
+        # `_atr` returns 0.0 for a feed too short or too flat to form a true
+        # range. compute_final_stop would then hand back an ATR floor sitting
+        # exactly ON the entry price, and compute_stop_cost would price a
+        # zero-distance stop as a real reading. Refuse instead: "not computed"
+        # is an honest answer and a PASS is not. Same guard, same reason, as
+        # the exit-plan endpoint's (routers/contracts.py).
+        # `iv` is ABSOLUTE volatility in PERCENT (0-100) everywhere in this
+        # codebase -- market.py writes round(iv * 100, 1) and so does the
+        # Black-Scholes inversion above. A vendor sending the DECIMAL
+        # convention (0.35 for 35%) would otherwise be repriced at 0.35% vol,
+        # which reports almost the whole premium as lost at any stop: a
+        # confident, plausible, badly wrong CAUTION on every affected row.
+        # The structural-stop endpoint refuses that input outright (its field
+        # is gt=1.0, le=500.0); a scan cannot 422, so it drops the suspect
+        # number instead and lets compute_stop_cost invert the mid, which
+        # cannot disagree with the quote it came from.
+        _scan_iv_pct = opt_float(contract.get("iv"))
+        if _scan_iv_pct is not None and not (1.0 < _scan_iv_pct <= 500.0):
+            _log.warning(
+                "%s: ignoring out-of-band contract IV %r (expected absolute percent 1-500); "
+                "inverting the mid instead", symbol, _scan_iv_pct,
+            )
+            _scan_iv_pct = None
+
+        _scan_atr = _atr(candles, 14)
+        if _scan_atr > 0:
+            _scan_stop = compute_final_stop(
+                candles, direction, price, _scan_atr,
+                load_exit_plan_cfg()["stop"]["atr_multiplier"],
+            )
+            # Priced at the ROUNDED stop for the same reason the endpoint is:
+            # the figure graded has to be the figure a user can be shown.
+            _scan_cost = compute_stop_cost(
+                stop_price=round(_scan_stop.price, 2),
+                stock_price=price,
+                strike=strike,
+                dte=int(contract.get("dte", 30)),
+                premium=premium,
+                is_call=(direction == "Bullish"),
+                # The contract's OWN absolute IV when the chain carried one,
+                # else None, which makes compute_stop_cost invert the mid with
+                # the bracketed solver. Never `iv_rank`: that variable holds a
+                # PERCENTILE whenever iv_basis == "rank", and feeding a
+                # percentile to a function documented as taking absolute
+                # volatility is exactly the conflation Phase A existed to end.
+                iv_pct=_scan_iv_pct,
+                horizon_preset=horizon_preset,
+            )
+            if _scan_cost is not None:
+                stop_cost_pct = round(_scan_cost.fraction * 100, 1)
+                stop_cost_status = _scan_cost.status
+    except Exception as exc:
+        # A gate that cannot price itself must not take the candidate down with
+        # it. Every other per-symbol enrichment in this function (regime,
+        # Heston, confidence) degrades the same way, and this one carries less:
+        # the row simply reads "not computed".
+        _log.warning("Scan-time stop cost failed for %s: %s", symbol, exc)
+
     # ── Build TradeCardData ────────────────────────────────────────────────────
     from datetime import date as _date
     next_event_days = None
@@ -903,6 +984,8 @@ async def _process_symbol(
         confidence=(_conf_rule.detail.get("confidence") if (_conf_rule := next((r for r in card.rules if r.name == "confidence"), None)) else None),
         confidenceText=(_conf_rule.detail.get("interpretation") if _conf_rule else None),
         sentiment=SentimentData(**_regime_signal) if _regime_signal else None,
+        stopCostPct=stop_cost_pct,
+        stopCostStatus=stop_cost_status,
     )
 
     trade_card.fundamentals = FundamentalsOut(

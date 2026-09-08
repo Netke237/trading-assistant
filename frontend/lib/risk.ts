@@ -129,6 +129,58 @@ function cents(r: StopPremiumRisk) {
  *  included) and drives sizing, this one prices at TODAY's remaining life and
  *  drives only the verdict (spec §5). Naming the basis is what stops the pair
  *  reading as a contradiction. */
+/* ── The ranking table's gate (Phase B3) ───────────────────────────────────
+ *
+ * A DIFFERENT reading from the card badge above, deliberately, and the table
+ * has to say so. This one was priced at SCAN time, against a structural/ATR
+ * stop, for the contract the scan auto-picked. The card's is priced against
+ * whatever stop the user has since refreshed, for whatever contract they may
+ * have overridden in Step 6. The two can legitimately disagree; what they must
+ * never do is disagree silently, which is why the tooltip names the contract
+ * this figure describes rather than just quoting the number.
+ *
+ * The row carries a percentage and a verdict and nothing else (spec §2.3), so
+ * there is no arithmetic to show and none is invented here.
+ */
+export interface RankingStopCost {
+  /** Badge text. '—' when there is nothing honest to say. */
+  label:   string;
+  tooltip: string;
+  /** null renders as plain dim text, never as a badge: a verdict-shaped thing
+   *  with no verdict in it is how "not computed" comes to read as "fine". */
+  status:  'PASS' | 'CAUTION' | null;
+}
+
+export function rankingStopCost(
+  pct: number | null | undefined,
+  status: 'PASS' | 'CAUTION' | null | undefined,
+): RankingStopCost {
+  // BOTH must be present. One without the other is a half-computed gate, and
+  // rendering either half alone would put a number with no verdict, or a
+  // verdict with no number, in front of a user.
+  if (pct == null || status == null || !Number.isFinite(pct)) {
+    return {
+      label: '—',
+      tooltip:
+        'Stop cost not computed for this candidate — no structural stop could be '
+        + 'formed, the contract had no workable volatility, or this row came from a '
+        + 'scan run before the gate existed. Re-run the scan.',
+      status: null,
+    };
+  }
+  const rounded = Math.round(pct);
+  return {
+    label: `${rounded}%`,
+    tooltip:
+      `${rounded}% of the premium is gone by the time the underlying reaches its stop `
+      + `(${status}). Black-Scholes at today's date, priced at the scan's structural/ATR `
+      + `stop — for the contract the SCAN picked. Step 6 can pick a different contract, `
+      + `and the trade card re-prices against the stop you refresh there, so the two `
+      + `readings can differ. This gate sorts candidates; it never blocks a trade.`,
+    status,
+  };
+}
+
 export function formatStopPremiumRisk(r: StopPremiumRisk): string {
   return (
     `$${r.premium.toFixed(2)} premium − $${r.valueAtStop.toFixed(2)} ` +
