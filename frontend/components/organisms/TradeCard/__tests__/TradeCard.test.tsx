@@ -3844,3 +3844,92 @@ describe('TradeCard — the card-level edited indicator', () => {
     expect(badge()).not.toBeInTheDocument();
   });
 });
+
+// ── TARGET-VINTAGE-2026-09-04 — the Monte Carlo target rows are gated ───────
+//
+// `firstPassage` is restored from the parent's per-contract cache on mount and
+// `lastRunMethod` is derived from `computedAt` alone, so before this gate a
+// restored estimate reinstated the whole monte_carlo branch at whatever vintage
+// it was cached at. With the invalidation fallback removed, those rows are the
+// only numbers left in the branch — so an ungated vintage WAS the branch.
+describe('TradeCard — Final Recommendation target rows gate on freshness', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    // estimateFirstPassage awaits getStructuralStop before it ever reaches
+    // getFirstPassageEstimate, so leaving it unmocked fails the estimate and
+    // the branch never returns.
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: false, price: null, source: null, confidence: null, distancePct: null,
+    });
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+  });
+
+  const ESTIMATE = {
+    targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+    invalidation: { probability: 0.30, expectedDays: 4 },
+  };
+
+  // A card arriving with a cached estimate spliced into exit — exactly what
+  // withCachedEstimate does on a Prev/Next return, and the only way to reach
+  // lastRunMethod === 'monte_carlo' without clicking Estimate this mount.
+  const restored: TradeCardData = {
+    ...mockTradeCard,
+    exit: {
+      ...mockTradeCard.exit,
+      firstPassage: { ...ESTIMATE, race: null, computedAt: '2026-09-07T14:32:00.000Z' },
+    },
+  } as unknown as TradeCardData;
+
+  const staleNotice = () => screen.queryByText(/Not re-run this session/);
+  // SCOPED TO THE FINAL RECOMMENDATION, deliberately. The standalone Monte
+  // Carlo card above renders the same restored `firstPassage.targets` ungated —
+  // that is its own readout and outside TARGET-VINTAGE's scope — so a
+  // document-wide query for the option price matches THAT row and would pass
+  // whatever this branch does. `computed via:` is unique to this card.
+  const finalRec = () => within(
+    screen.getByText(/computed via: Monte Carlo/).closest('div') as HTMLElement,
+  );
+
+  it('names Monte Carlo as the last method but does NOT print its target numbers', () => {
+    render(<TradeCard data={restored} />);
+    // The branch is still selected — this is not a change to lastRunMethod.
+    expect(screen.getByText(/computed via: Monte Carlo/)).toBeInTheDocument();
+    // THE REGRESSION: yesterday's option price and probability, printed here as
+    // if they described the premium on screen today.
+    expect(finalRec().queryByText(/\$3\.30/)).not.toBeInTheDocument();
+    expect(finalRec().queryByText('T20%')).not.toBeInTheDocument();
+    expect(staleNotice()).toBeInTheDocument();
+  });
+
+  it('prints them once Estimate has actually been clicked this mount', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(ESTIMATE);
+    render(<TradeCard data={restored} />);
+    expect(staleNotice()).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    // The in-flight state clears `firstPassage`, so the branch unmounts and
+    // remounts — wait for it to come BACK before reading inside it.
+    await screen.findByText(/computed via: Monte Carlo/);
+    expect(finalRec().getByText('T20%')).toBeInTheDocument();
+    expect(staleNotice()).not.toBeInTheDocument();
+  });
+
+  it('goes back to withholding them when the user navigates to another candidate', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(ESTIMATE);
+    const { rerender } = render(<TradeCard data={restored} />);
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    await screen.findByText(/computed via: Monte Carlo/);
+    expect(finalRec().getByText('T20%')).toBeInTheDocument();
+
+    // Away to another candidate carrying ITS OWN cached estimate. Freshness is
+    // per-mount, so the incoming card starts stale however fresh this one was.
+    const other: TradeCardData = {
+      ...restored, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C',
+    };
+    rerender(<TradeCard data={other} />);
+    expect(finalRec().queryByText('T20%')).not.toBeInTheDocument();
+    expect(staleNotice()).toBeInTheDocument();
+  });
+});

@@ -1782,21 +1782,30 @@ export function TradeCard({
   // observable one. A guard no test can fail is not a guard. The ref remains
   // for its other consumers.
   //
-  // TWO SEPARATE THINGS, deliberately. `raceIsFresh` means "this race belongs
-  // to the contract on screen and was fetched this mount"; `raceIsShowable`
+  // TWO SEPARATE THINGS, deliberately. `estimateIsFresh` means "the estimate on
+  // screen was fetched this mount, for the contract on screen"; `raceIsShowable`
   // adds "and neither barrier has moved since". The card needs the first,
   // because it renders the "barriers changed — re-run" copy itself and would
   // otherwise be handed a prop it can never act on. Everything that prints race
   // NUMBERS needs the second.
+  //
+  // RENAMED from `raceIsFresh` when TARGET-VINTAGE-2026-09-04 put the Final
+  // Recommendation's `firstPassage.targets` rows behind it too. The value is
+  // unchanged and the new name is the accurate one: `setRaceBarriers` fires on
+  // EVERY successful estimate, including one the backend refused to run a race
+  // for (`race: null` at dte < 1), and is cleared at the estimate handler's
+  // entry and in the contract-change effect. So it never meant "a race came
+  // back" — it means "an estimate did", which is precisely the vintage question
+  // the target rows needed answered.
   // ONE term, not two. `firstPassageContext` was listed beside this and was
   // implied by it: setRaceBarriers is called on the line after
   // setFirstPassageContext, and both are cleared together at the handler's
   // entry and in the contract-change effect, so deleting it changed no test —
   // verbatim the criticism this comment levels at the ref it replaced. A guard
   // no test can fail is not a guard, and two of them are not better than one.
-  const raceIsFresh = raceBarriers?.contract === data.contract;
+  const estimateIsFresh = raceBarriers?.contract === data.contract;
 
-  const raceIsShowable = raceIsFresh && !raceBarriersMoved;
+  const raceIsShowable = estimateIsFresh && !raceBarriersMoved;
 
   // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
   // separately-timed method and deliberately does not get its own
@@ -2429,7 +2438,7 @@ export function TradeCard({
           // contract expires today" under the new contract's header whenever
           // the previous one was 0-DTE. The refusal copy depends on no live
           // BARRIER, but it does depend on which contract is on screen.
-          race={raceIsFresh ? firstPassage?.race : undefined}
+          race={estimateIsFresh ? firstPassage?.race : undefined}
           invalidation={firstPassage?.invalidation ?? null}
           // See stopCostShown's declaration: the race must not name a readout
           // the page is not showing.
@@ -2444,7 +2453,7 @@ export function TradeCard({
           // legs and dollar edge for the frame between commit and the reset
           // effect. Verified with a useLayoutEffect probe: bars leaked, the
           // Final Recommendation did not.
-          isFresh={raceIsFresh}
+          isFresh={estimateIsFresh}
           barriersChanged={raceBarriersMoved}
           stockStopMoved={stockStopMoved}
         />
@@ -2584,14 +2593,39 @@ export function TradeCard({
                 <Text size={11} tone="dim">
                   computed via: Monte Carlo{firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}
                 </Text>
-                {firstPassage.targets.map((t, i) => (
-                  <div className={styles.scoreRow} key={`${t.pct}-${i}`}>
-                    <Text size={12} tone="secondary">{`T${Math.round(t.pct * 100)}%`}</Text>
-                    <Data size={13} tone="primary">
-                      ${t.optionPrice.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)
-                    </Data>
-                  </div>
-                ))}
+                {/* TARGET-VINTAGE-2026-09-04 — GATED ON FRESHNESS, the same
+                     rule the Barrier Race already applies, and for the reason
+                     the comment below used to only NOTE: `firstPassage` is
+                     restored from the parent's per-contract cache on mount and
+                     `lastRunMethod` is derived from `computedAt` alone, so a
+                     restored estimate reinstated this whole branch at whatever
+                     vintage it was cached at. With the invalidation fallback
+                     gone these rows are the only numbers left in the branch,
+                     which made an ungated vintage the branch's entire content.
+
+                     Rendering nothing until Estimate is clicked is the accepted
+                     cost: consistency with how the rest of the card treats
+                     stale numbers wins. It is not rendered SILENTLY, though —
+                     a blank branch under a "computed via Monte Carlo" heading
+                     asserts a method ran and then shows no answer. The line
+                     below says which it is, matching the "Barriers changed —
+                     re-run the estimate" copy the race card paints for the
+                     same class of staleness. */}
+                {estimateIsFresh ? (
+                  firstPassage.targets.map((t, i) => (
+                    <div className={styles.scoreRow} key={`${t.pct}-${i}`}>
+                      <Text size={12} tone="secondary">{`T${Math.round(t.pct * 100)}%`}</Text>
+                      <Data size={13} tone="primary">
+                        ${t.optionPrice.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)
+                      </Data>
+                    </div>
+                  ))
+                ) : (
+                  <Text size={11} tone="caution">
+                    Not re-run this session — click Estimate to price these targets against the
+                    current premium.
+                  </Text>
+                )}
                 {/* The Barrier Race rides the SAME call and the same click as
                      the estimate above, so it is never a separately-timed
                      "most recent method" — when Monte Carlo is the most recent
@@ -2627,17 +2661,14 @@ export function TradeCard({
                      only thing `raceIsShowable` can now do is show or hide the
                      race's own numbers.
 
-                     SCOPED TO THE RACE NUMBERS, deliberately. It says nothing
-                     about the `firstPassage.targets` rows above, which are NOT
-                     behind `raceIsShowable` and never were: `firstPassage` is
-                     restored from the parent's per-contract cache on mount and
-                     `lastRunMethod` is derived from `computedAt` alone, so a
-                     restored estimate reinstates this whole branch at whatever
-                     vintage it was cached at. That is pre-existing and is not
-                     changed here — but with the fallback gone those rows are
-                     the only numbers left in the branch, so the question is
-                     recorded in PROJECT_STATE.json rather than left implied by
-                     a comment that sounds like it covers them. */}
+                     STILL SCOPED TO THE RACE NUMBERS. The `firstPassage.targets`
+                     rows above are now gated too, but on `estimateIsFresh`, NOT
+                     on this — the two ask different questions. `raceIsShowable`
+                     additionally requires that neither barrier has MOVED since
+                     the estimate, which is a race-specific concern: the target
+                     rows are priced off the premium alone and a moved stop does
+                     not invalidate them. Gating them on the stricter flag would
+                     blank honest numbers. */}
                 {firstPassage.race && raceIsShowable ? (
                   <>
                     <div className={styles.scoreRow}>
