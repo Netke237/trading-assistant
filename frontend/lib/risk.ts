@@ -51,7 +51,13 @@ export function exposurePct(notional: number, portfolioValue: number): number {
  *  trades up front; it is not a verdict on the trade and it blocks nothing.
  *  REJECT is the red badge in this design system, and a red badge on a
  *  contract the user may perfectly well want to trade reads as a refusal. */
-export const STOP_PREMIUM_PASS_MAX_FRACTION = 0.7;
+// ROUND 1 finding 1. This is the default for `stopPremiumRisk`, which estimates
+// the loss at the stop DELTA-LINEARLY. Q7's 0.70 was re-derived for the
+// BLACK-SCHOLES basis (scoring/stop_cost.py), which reads 17-29 points lower on
+// the same contract, so applying it to a linear number condemns contracts the
+// new model passes. The linear estimator keeps the line it was calibrated with
+// until B2 replaces it; scoring_rules.yaml keeps 0.70 for the BS gate.
+export const STOP_PREMIUM_PASS_MAX_FRACTION = 0.8;
 
 export interface StopPremiumRisk {
   stockMove: number;   // $ from the underlying's price to the stop

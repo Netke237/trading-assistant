@@ -62,3 +62,28 @@ describe('getStopPremiumThresholds resolution order', () => {
       .toEqual(FALLBACK.Position);
   });
 });
+
+describe('ROUND 1 finding 1 — the two bases keep separate lines', () => {
+  it('LINEAR_BASIS_FALLBACK is the pre-Q7 set, FALLBACK is Q7', async () => {
+    const { FALLBACK, LINEAR_BASIS_FALLBACK } = await import('../stopPremiumThresholdsStore');
+    // The Black-Scholes gate's lines (scoring_rules.yaml, spec test 7).
+    expect(FALLBACK.Intraday.pass_max_fraction).toBe(0.80);
+    expect(FALLBACK.Swing.pass_max_fraction).toBe(0.70);
+    expect(FALLBACK.Position.pass_max_fraction).toBe(0.60);
+    // The delta-linear estimator's lines, which the TradeCard badge still uses.
+    expect(LINEAR_BASIS_FALLBACK.Intraday.pass_max_fraction).toBe(0.85);
+    expect(LINEAR_BASIS_FALLBACK.Swing.pass_max_fraction).toBe(0.80);
+    expect(LINEAR_BASIS_FALLBACK.Position.pass_max_fraction).toBe(0.70);
+  });
+
+  it('the linear line is never TIGHTER than the BS line on any horizon', async () => {
+    const { FALLBACK, LINEAR_BASIS_FALLBACK } = await import('../stopPremiumThresholdsStore');
+    // The linear estimator reads HIGHER on the same contract (the spec measures
+    // 17-29 points), so its pass line must sit higher too. If these ever cross,
+    // the card condemns contracts the gate passes — the defect this pins.
+    for (const h of ['Intraday', 'Swing', 'Position']) {
+      expect(LINEAR_BASIS_FALLBACK[h]!.pass_max_fraction)
+        .toBeGreaterThan(FALLBACK[h]!.pass_max_fraction);
+    }
+  });
+});

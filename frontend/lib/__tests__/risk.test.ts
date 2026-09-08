@@ -419,14 +419,19 @@ describe('stopPremiumRisk', () => {
     expect(r.rawLoss).toBeCloseTo(0.7995, 4);
   });
 
-  it('lands CAUTION exactly at the 70% threshold, PASS just below', () => {
-    // The module default mirrors the Swing line, which Q7 moved from 0.80 to
-    // 0.70 with the gate's basis (2026-09-02-gate-basis-spec.md §1).
-    // stockMove * delta / premium == 0.70 exactly: 7.0 * 0.50 / 5.00
-    expect(stopPremiumRisk(93.0, 100.0, 0.50, 5.00)!.status).toBe('CAUTION');
-    // A CLOSER stop (93.1, not 92.9) is the cheaper one -- less distance to the
-    // stop means less loss: 6.9 * 0.50 / 5.00 = 0.69.
-    expect(stopPremiumRisk(93.1, 100.0, 0.50, 5.00)!.status).toBe('PASS');
+  it('lands CAUTION exactly at the 80% threshold, PASS just below', () => {
+    // ROUND 1 finding 1. This previously asserted 0.70 and explained it as
+    // "the module default mirrors the Swing line, which Q7 moved from 0.80 to
+    // 0.70 with the gate's basis" -- which is the defect, stated as a reason.
+    // Q7's 0.70 was re-derived for the BLACK-SCHOLES basis in
+    // scoring/stop_cost.py. `stopPremiumRisk` is the DELTA-LINEAR estimator,
+    // which the spec measures 17-29 points higher on the same contract, so it
+    // keeps the 0.80 line it was calibrated with until B2 retires it.
+    // stockMove * delta / premium == 0.80 exactly: 8.0 * 0.50 / 5.00
+    expect(stopPremiumRisk(92.0, 100.0, 0.50, 5.00)!.status).toBe('CAUTION');
+    // A CLOSER stop (92.1, not 91.9) is the cheaper one -- less distance to the
+    // stop means less loss: 7.9 * 0.50 / 5.00 = 0.79.
+    expect(stopPremiumRisk(92.1, 100.0, 0.50, 5.00)!.status).toBe('PASS');
   });
 
   it('never emits REJECT — the gate sorts candidates, it does not refuse them', () => {

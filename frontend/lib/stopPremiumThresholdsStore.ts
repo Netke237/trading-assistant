@@ -40,6 +40,26 @@ export const FALLBACK: Record<string, HorizonStopPremiumThresholds> = {
   Position: { pass_max_fraction: 0.60 },
 };
 
+/** ROUND 1 finding 1. The lines the DELTA-LINEAR estimator was calibrated with.
+ *
+ *  `FALLBACK` above carries Q7's re-derived numbers, which belong to the
+ *  Black-Scholes basis in `backend/app/scoring/stop_cost.py`. That gate is
+ *  correct and its thresholds are pinned by spec test 7. But the TradeCard
+ *  badge still computes its loss with `risk.ts`'s linear estimator, which the
+ *  spec measures as 17-29 points pessimistic on the same contract -- so grading
+ *  a linear figure against a BS line flips real verdicts: on the spec's own
+ *  reference chain a K=215 call at a $190 stop reads 78% linear (CAUTION at
+ *  0.70) where the BS gate reads 59% (PASS). Two bases need two sets of lines.
+ *
+ *  B2 replaces the badge with the server's `stopCost`, at which point this map
+ *  and `risk.ts`'s linear estimator are both deleted and everything reads
+ *  `FALLBACK`. Until then the card uses this. */
+export const LINEAR_BASIS_FALLBACK: Record<string, HorizonStopPremiumThresholds> = {
+  Intraday: { pass_max_fraction: 0.85 },
+  Swing:    { pass_max_fraction: 0.80 },
+  Position: { pass_max_fraction: 0.70 },
+};
+
 export const useStopPremiumThresholdsStore = create<StopPremiumThresholdsState>((set) => ({
   thresholds: FALLBACK,
   override:   null,

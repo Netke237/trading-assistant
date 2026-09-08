@@ -18,7 +18,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
-import { useStopPremiumThresholdsStore, getStopPremiumThresholds } from '@/lib/stopPremiumThresholdsStore';
+import { useStopPremiumThresholdsStore, getStopPremiumThresholds, LINEAR_BASIS_FALLBACK } from '@/lib/stopPremiumThresholdsStore';
 import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
 import { premiumStopDollarBounds } from '@/lib/premiumStop';
@@ -1154,7 +1154,9 @@ export function TradeCard({
   // override winning when set. Resolved here rather than inside `stopPremiumRisk`
   // so the helper stays a pure function of its arguments.
   const scanHorizon = useScanStore((s) => s.context?.horizon ?? null);
-  const stopPremiumThresholds = useStopPremiumThresholdsStore((s) => s.thresholds);
+  // NOTE: the served (Black-Scholes) thresholds are deliberately NOT subscribed
+  // here — see the gate call below. B2 restores this when the badge moves to
+  // the server's `stopCost`.
   const stopPremiumOverride = useStopPremiumThresholdsStore((s) => s.override);
 
   // Stop-vs-premium gate. Deliberately reads the SCAN-TIME `contractDetails`
@@ -1185,13 +1187,18 @@ export function TradeCard({
       sharedStop.stockPrice,
       cd.delta,
       cd.mid,
+      // ROUND 1 finding 1. LINEAR_BASIS_FALLBACK, not the fetched thresholds:
+      // `stopPremiumRisk` above computes the loss delta-linearly, and the
+      // served numbers are Q7's Black-Scholes lines. Pairing them prints
+      // CAUTION on contracts the new gate passes. Step 3's per-run override
+      // still wins -- it is a number the user chose, not a basis.
       getStopPremiumThresholds(
         scoringHorizonFromLabel(scanHorizon),
-        stopPremiumThresholds,
+        LINEAR_BASIS_FALLBACK,
         stopPremiumOverride,
       ),
     );
-  }, [sharedStop, data.contractDetails, scanHorizon, stopPremiumThresholds, stopPremiumOverride]);
+  }, [sharedStop, data.contractDetails, scanHorizon, stopPremiumOverride]);
 
   // The freshness pairing behind the "Structural level found" row.
   //
