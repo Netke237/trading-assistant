@@ -295,6 +295,20 @@ def main() -> int:
             print(f"\n  {BOLD}Open questions:{RESET}")
             for q in state["open_questions"]:
                 print(f"    · {q[:110]}")
+            # The 2026-09-08 triage moved two kinds of entry out of this list:
+            # settled ones (`closed_questions`) and round-finding dumps
+            # (`archived_round_records`). Neither is a decision anyone owes, so
+            # neither is printed in full — but they are NOT deleted, and a list
+            # that vanishes silently is how a session comes to believe the
+            # record is shorter than it is. One counted line keeps them findable.
+            filed = [
+                (len(state.get(k, {}).get("items", [])), label)
+                for k, label in (("closed_questions", "closed"),
+                                 ("archived_round_records", "archived round records"))
+            ]
+            if any(n for n, _ in filed):
+                print(f"    {DIM}(+ {', '.join(f'{n} {label}' for n, label in filed if n)} "
+                      f"— in PROJECT_STATE.json, not printed){RESET}")
         print(f"\n  {BOLD}Read first:{RESET}")
         for d in state["authoritative_documents"][:4]:
             print(f"    · {d['path']}")
