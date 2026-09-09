@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import * as React from 'react';
 import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
@@ -3672,5 +3673,263 @@ describe('the race gates, mutation-pinned', () => {
 
     expect(screen.getByText(/Barriers changed/)).toBeInTheDocument();
     expect(screen.queryByText(/unaffected by the premium stop/)).not.toBeInTheDocument();
+  });
+});
+
+// ── EDITED-FLAG-2026-09-04 — the card-level "edited" indicator ──────────────
+//
+// The rule itself is unit-tested in lib/__tests__/tradeCardEdits.test.ts, where
+// the mergePlan regression is pinned against a sabotaged value-only rule. These
+// tests pin the WIRING: that the card feeds that rule its real overlay, its
+// real plan, and a record of edits that patch() and revert() both maintain.
+describe('TradeCard — the card-level edited indicator', () => {
+  beforeEach(() => localStorage.clear());
+
+  const badge = () => screen.queryByText('Edited');
+  // The badge's OWN tooltip, by its own opening words — `getByRole('tooltip')`
+  // is ambiguous the moment the ladder is expanded and the card's other
+  // tooltips mount.
+  const badgeTip = () => screen.getByText(/^Edited on this card/);
+  const typeInto = (label: string, v: string) => {
+    fireEvent.click(screen.getByLabelText(`Edit ${label}`));
+    const input = screen.getByLabelText(`Edit ${label}`) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: v } });
+    fireEvent.blur(input);
+  };
+
+  it('does not render on a card nobody has touched', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('appears once a field is edited, and names that field', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    typeInto('Contracts', '3');
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Contracts');
+  });
+
+  it('names several edited fields at once, in card order', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
+    typeInto('Premium stop', '0.9');
+    typeInto('Limit', '2.1');
+    typeInto('Contracts', '4');
+    expect(badgeTip()).toHaveTextContent('Entry limit, Contracts, Premium stop');
+  });
+
+  it('does NOT appear when mergePlan moves the plan under an untouched card', () => {
+    // THE REGRESSION, through the card. Same contract, recomputed exit — the
+    // window the contract-change reset does not cover. Every one of these four
+    // fields lacks a follow-the-seed effect, so the overlay keeps its old seed
+    // while `data` moves; a value-only indicator would call this "Edited".
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    const merged: TradeCardData = {
+      ...mockTradeCard,
+      entry: { ...mockTradeCard.entry, limit: 3.4, maxFill: 3.6 },
+      exit: {
+        ...mockTradeCard.exit,
+        premiumStop: 0.8,
+        invalidation: 171.2,
+        timeStopDays: 21,
+        targets: [{ ...mockTradeCard.exit.targets[0], targetPrice: 211.5, stockPrice: 211.5 }],
+      },
+    };
+    rerender(<TradeCard data={merged} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('clears when the user clears the input back to inheriting the plan', () => {
+    // CLEAR-TO-INHERIT-2026-09-05's gesture, which this badge exists to make
+    // discoverable: an empty field means "follow the plan again".
+    render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
+    typeInto('Premium stop', '0.9');
+    expect(badge()).toBeInTheDocument();
+    typeInto('Premium stop', '');
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('clears when the user retypes the plan value by hand', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    typeInto('Contracts', '3');
+    expect(badge()).toBeInTheDocument();
+    typeInto('Contracts', '1');
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('appears on mount for an edit the parent restored from its cache', () => {
+    render(<TradeCard data={mockTradeCard} initialEntryLimit={2.71} />);
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Entry limit');
+  });
+
+  it('does not appear for a restored value that matches the plan anyway', () => {
+    // Restored-and-identical is inheriting, whatever the cache says.
+    render(<TradeCard data={mockTradeCard} initialEntryLimit={mockTradeCard.entry.limit} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('resets with the card when the user navigates to another candidate', () => {
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    typeInto('Contracts', '3');
+    expect(badge()).toBeInTheDocument();
+    const other: TradeCardData = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C' };
+    rerender(<TradeCard data={other} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  // ── ROUND 1 FINDING: the Contracts round-trip ───────────────────────────
+  //
+  // step-7-trade-card/page.tsx writes `orderContractsBySymbol` from
+  // `handleEditsChange` UNCONDITIONALLY and feeds it straight back as the
+  // card's `contracts` prop — unlike the three caches beside it, which write
+  // `null` unless `meta.touched` says the user typed. A baseline taken from
+  // that prop is therefore the user's own edit, and can never differ from
+  // itself: the badge stayed silent on the one field whose count reaches a
+  // broker order. `ParentHarness` reproduces that wiring; without it the
+  // gesture passes and the defect is invisible, which is exactly how it
+  // shipped past the first round of tests.
+  function ParentHarness({ data = mockTradeCard }: { data?: TradeCardData }) {
+    const [orderContractsBySymbol, setMap] = React.useState<Record<string, number>>({});
+    return (
+      <TradeCard
+        data={data}
+        contracts={orderContractsBySymbol[data.symbol] ?? 1}
+        onEditsChange={(overlay) => {
+          setMap((prev) => (prev[data.symbol] === overlay.contracts
+            ? prev
+            : { ...prev, [data.symbol]: overlay.contracts }));
+        }}
+      />
+    );
+  }
+
+  it('raises on a Contracts edit even when the parent echoes it back as the prop', () => {
+    render(<ParentHarness />);
+    expect(badge()).not.toBeInTheDocument();
+    typeInto('Contracts', '7');
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Contracts');
+  });
+
+  it('clears again when the user types the planned size back, echo and all', () => {
+    render(<ParentHarness />);
+    typeInto('Contracts', '7');
+    expect(badge()).toBeInTheDocument();
+    typeInto('Contracts', '1');
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('still raises for the threaded fields under the same wiring', () => {
+    // A control: the round-trip is specific to `contracts`, and fixing it must
+    // not have been a change to how the other fields are measured.
+    render(<ParentHarness />);
+    typeInto('Limit', '3.1');
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Entry limit');
+  });
+
+  it('treats a card mounted at a non-default size as resuming that edit', () => {
+    // The count reaches the card only through `orderContractsBySymbol`, whose
+    // sole writer is a user edit — so a restored 4 IS an edit, the same
+    // reading initialEntryLimit gets.
+    render(<TradeCard data={mockTradeCard} contracts={4} />);
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Contracts');
+  });
+
+  it('does not raise on a card mounted at the planned size', () => {
+    render(<TradeCard data={mockTradeCard} contracts={1} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+});
+
+// ── TARGET-VINTAGE-2026-09-04 — the Monte Carlo target rows are gated ───────
+//
+// `firstPassage` is restored from the parent's per-contract cache on mount and
+// `lastRunMethod` is derived from `computedAt` alone, so before this gate a
+// restored estimate reinstated the whole monte_carlo branch at whatever vintage
+// it was cached at. With the invalidation fallback removed, those rows are the
+// only numbers left in the branch — so an ungated vintage WAS the branch.
+describe('TradeCard — Final Recommendation target rows gate on freshness', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    // estimateFirstPassage awaits getStructuralStop before it ever reaches
+    // getFirstPassageEstimate, so leaving it unmocked fails the estimate and
+    // the branch never returns.
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: false, price: null, source: null, confidence: null, distancePct: null,
+    });
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+  });
+
+  const ESTIMATE = {
+    targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+    invalidation: { probability: 0.30, expectedDays: 4 },
+  };
+
+  // A card arriving with a cached estimate spliced into exit — exactly what
+  // withCachedEstimate does on a Prev/Next return, and the only way to reach
+  // lastRunMethod === 'monte_carlo' without clicking Estimate this mount.
+  const restored: TradeCardData = {
+    ...mockTradeCard,
+    exit: {
+      ...mockTradeCard.exit,
+      firstPassage: { ...ESTIMATE, race: null, computedAt: '2026-09-07T14:32:00.000Z' },
+    },
+  } as unknown as TradeCardData;
+
+  const staleNotice = () => screen.queryByText(/Not re-run this session/);
+  // SCOPED TO THE FINAL RECOMMENDATION, deliberately. The standalone Monte
+  // Carlo card above renders the same restored `firstPassage.targets` ungated —
+  // that is its own readout and outside TARGET-VINTAGE's scope — so a
+  // document-wide query for the option price matches THAT row and would pass
+  // whatever this branch does. `computed via:` is unique to this card.
+  const finalRec = () => within(
+    screen.getByText(/computed via: Monte Carlo/).closest('div') as HTMLElement,
+  );
+
+  it('names Monte Carlo as the last method but does NOT print its target numbers', () => {
+    render(<TradeCard data={restored} />);
+    // The branch is still selected — this is not a change to lastRunMethod.
+    expect(screen.getByText(/computed via: Monte Carlo/)).toBeInTheDocument();
+    // THE REGRESSION: yesterday's option price and probability, printed here as
+    // if they described the premium on screen today.
+    expect(finalRec().queryByText(/\$3\.30/)).not.toBeInTheDocument();
+    expect(finalRec().queryByText('T20%')).not.toBeInTheDocument();
+    expect(staleNotice()).toBeInTheDocument();
+  });
+
+  it('prints them once Estimate has actually been clicked this mount', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(ESTIMATE);
+    render(<TradeCard data={restored} />);
+    expect(staleNotice()).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    // The in-flight state clears `firstPassage`, so the branch unmounts and
+    // remounts — wait for it to come BACK before reading inside it.
+    await screen.findByText(/computed via: Monte Carlo/);
+    expect(finalRec().getByText('T20%')).toBeInTheDocument();
+    expect(staleNotice()).not.toBeInTheDocument();
+  });
+
+  it('goes back to withholding them when the user navigates to another candidate', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(ESTIMATE);
+    const { rerender } = render(<TradeCard data={restored} />);
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    await screen.findByText(/computed via: Monte Carlo/);
+    expect(finalRec().getByText('T20%')).toBeInTheDocument();
+
+    // Away to another candidate carrying ITS OWN cached estimate. Freshness is
+    // per-mount, so the incoming card starts stale however fresh this one was.
+    const other: TradeCardData = {
+      ...restored, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C',
+    };
+    rerender(<TradeCard data={other} />);
+    expect(finalRec().queryByText('T20%')).not.toBeInTheDocument();
+    expect(staleNotice()).toBeInTheDocument();
   });
 });

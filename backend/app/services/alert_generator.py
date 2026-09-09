@@ -335,6 +335,12 @@ async def generate_alerts(
                 alertType="PREMIUM_STOP",
                 price=opt_price,
                 referenceValue=threshold_price,
+                # The same resolved fraction the comparison and the event log
+                # above already use, now carried on the alert itself so a row
+                # reports the threshold it FIRED at rather than whatever the
+                # position resolves to when it is later looked at
+                # (ALERT-THRESHOLD-STAMP-2026-09-05).
+                premiumStopPct=resolved_premium_stop_pct,
                 direction=pos.direction,
                 contract=pos.contract,
             ))

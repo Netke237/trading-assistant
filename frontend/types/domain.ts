@@ -886,6 +886,24 @@ export interface ToastItem {
   direction?: Direction;
   contract?: string;
   note?: string;
+  /** PREMIUM_STOP only — the premium-stop fraction this alert ACTUALLY fired
+   *  at, stamped at fire time (ALERT-THRESHOLD-STAMP-2026-09-05).
+   *
+   *  The Alerts page used to resolve this live off the position on every
+   *  render, so editing a position's stop afterwards silently relabelled its
+   *  historical rows with a threshold those alerts never used: a row reading
+   *  "Premium stop (-60%)" for an alert that fired at 30%. `referenceValue`
+   *  already stamped the threshold PRICE; this is the percentage beside it.
+   *
+   *  OPTIONAL, and absent is meaningful: rows persisted before this field
+   *  existed carry no stamp and the page falls back to live resolution for
+   *  them, which is the best answer available for a row that was never
+   *  stamped. That is also why this needs no store migration -- there is no
+   *  shape to convert, and bumping ALERT_STORE_VERSION would re-fire
+   *  migrateAlerts' one-time enabledTypes backfill (see the comment above that
+   *  constant). A FRACTION (0.30), not a percentage (30), matching
+   *  `resolvePremiumStopPct` and the backend's `thresholdPct`. */
+  premiumStopPct?: number;
 }
 
 // --- Risk management ---

@@ -721,3 +721,63 @@ describe('scanPortfolio — a zero resolved TP price is not a target', () => {
     expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
   });
 });
+
+// ── ALERT-THRESHOLD-STAMP-2026-09-05 ────────────────────────────────────────
+//
+// The Alerts page used to resolve a fired row's percentage live off the
+// position on every render, so editing a position's stop afterwards silently
+// relabelled its history with a threshold those alerts never used. The engine
+// stamps the fraction it actually fired at.
+describe('PREMIUM_STOP stamps the threshold it fired at', () => {
+  const fired = (position: AlertPosition, globalPct: number) =>
+    scanPortfolio([position], { premiumStopPct: globalPct })
+      .find((r) => r.alertType === 'PREMIUM_STOP');
+
+  it('stamps the GLOBAL fraction for a position that inherits it', () => {
+    const r = fired(makePosition({ entryPrice: 5, currentPrice: 1.75 }), 0.60);
+    expect(r?.premiumStopPct).toBe(0.60);
+  });
+
+  it("stamps the POSITION's own fraction, not the global, when it is pinned", () => {
+    // The whole point. entry $5 pinned at 30% fires at $3.50; the global 60%
+    // would have armed at $2.00 and is not what this alert used.
+    const r = fired(
+      makePosition({ entryPrice: 5, currentPrice: 3.50, premiumStopPct: 0.30 }),
+      0.60,
+    );
+    expect(r?.premiumStopPct).toBe(0.30);
+  });
+
+  it('agrees with the referenceValue beside it — one alert, one threshold', () => {
+    // referenceValue is the threshold PRICE, premiumStopPct the fraction. If
+    // they disagreed, the row's own two halves would describe different stops.
+    const r = fired(
+      makePosition({ entryPrice: 5, currentPrice: 3.50, premiumStopPct: 0.30 }),
+      0.60,
+    );
+    expect(r?.referenceValue).toBeCloseTo(5 * (1 - r!.premiumStopPct!), 4);
+  });
+
+  it('stamps an unrounded server-derived fraction without flattening it', () => {
+    // A per-position fraction is premiumStopDollar / entryPrice and almost
+    // never lands on a round number. The lossy Math.round on the old label was
+    // already fixed; storage must not reintroduce it.
+    const r = fired(
+      makePosition({ entryPrice: 5.2, currentPrice: 1.0, premiumStopPct: 0.7554 }),
+      0.60,
+    );
+    expect(r?.premiumStopPct).toBe(0.7554);
+  });
+
+  it('leaves the field off every other alert type', () => {
+    // Only PREMIUM_STOP has a threshold percentage; a stamp anywhere else
+    // would be a number with no meaning.
+    const results = scanPortfolio(
+      [makePosition({ entryPrice: 5, currentPrice: 1.75, stop: 95, currentStockPrice: 90 })],
+      { premiumStopPct: 0.60 },
+    );
+    for (const r of results.filter((x) => x.alertType !== 'PREMIUM_STOP')) {
+      expect(r.premiumStopPct).toBeUndefined();
+    }
+  });
+});

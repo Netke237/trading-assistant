@@ -66,18 +66,34 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
 // NOW; the settings list below passes the global, because that row IS the
 // global.
 //
-// "as it stands now", precisely: the threshold is not stamped on the toast when
-// the alert fires, so editing a position's stop afterwards silently relabels
-// its historical rows with a threshold those alerts did not use. Stamping it at
-// fire time needs a field on the toast, a persisted-store migration and the
-// same field from the backend generator's websocket path, so it is recorded as
-// an open question rather than half-done here.
+// "as it stands now" WAS the defect, and is now only the FALLBACK
+// (ALERT-THRESHOLD-STAMP-2026-09-05). The threshold is stamped on the toast at
+// fire time, so a row reports the fraction that actually fired and editing a
+// position's stop afterwards no longer relabels its history. Live resolution
+// survives for rows persisted before the field existed: they carry no stamp,
+// and what the position resolves to now is the best answer available for a row
+// that was never stamped.
 //
 // Trimmed to two decimals via the shared helper, NOT Math.round -- see
 // premiumStopPctLabel.
 function alertTypeLabel(type: AlertType, premiumStopPct: number): string {
   if (type === 'PREMIUM_STOP') return `Premium stop (–${premiumStopPctLabel(premiumStopPct)})`;
   return ALERT_TYPE_LABELS[type] ?? type;
+}
+
+/** The fraction to LABEL a fired alert with: the one it fired at when the row
+ *  carries a stamp, otherwise the position's current resolution.
+ *
+ *  `!= null` (loose), not `??` on a falsy test and not truthiness: 0 is not a
+ *  reachable stamp today (PREMIUM_STOP_MIN_PCT is 0.10, and the engine only
+ *  fires on `currentPrice > 0`) but it is a real fraction, and a label that
+ *  silently fell back to the live value for it would be the same class of
+ *  misreport this stamp exists to end. */
+export function labelPremiumStopPct(
+  stamped: number | null | undefined,
+  liveResolved: number,
+): number {
+  return stamped != null ? stamped : liveResolved;
 }
 
 /* ─── Alert row ─── */
@@ -90,7 +106,10 @@ function AlertRow({ toast }: { toast: ToastItem }) {
   // an alert older than the portfolio) resolves to the global, which is what
   // it would have inherited anyway.
   const position = usePortfolioStore((s) => s.positions.find((p) => p.recId === toast.recId));
-  const premiumStopPct = resolvePremiumStopPct(position?.premiumStopPct, globalPremiumStopPct);
+  const premiumStopPct = labelPremiumStopPct(
+    toast.premiumStopPct,
+    resolvePremiumStopPct(position?.premiumStopPct, globalPremiumStopPct),
+  );
   return (
     <div className={[styles.alertRow, toast.acknowledged ? styles.alertRowAck : ''].join(' ')}>
       <div className={styles.alertMeta}>
