@@ -19,9 +19,9 @@ jest.mock('@/components/molecules/FundamentalHealthCard', () => ({ FundamentalHe
 /** entry 150, stop 145 -> the CARD's risk is 5. The PLAN below deliberately
  *  resolves a different stop (144.00, risk 6.00) so every test that cares about
  *  the two disagreeing has something to see. */
-function makeCard(): PositionCardData {
+function makeCard(direction: 'Bullish' | 'Bearish' = 'Bullish'): PositionCardData {
   return {
-    symbol: 'AAPL', company: 'Apple Inc.', price: 150, direction: 'Bullish',
+    symbol: 'AAPL', company: 'Apple Inc.', price: 150, direction,
     strategy: {
       strategy: 'pullback_ema', entry_price: 150, stop_price: 145,
       target_price: 160, rr_ratio: 2, atr: 3, detail: {}, targets: [160, 165, 170],
@@ -97,11 +97,30 @@ function makePlan(overrides: Partial<StockExitPlan> = {}): StockExitPlan {
 
 const mockedApi = api as jest.Mocked<typeof api>;
 
-async function renderAndCompute(plan: StockExitPlan = makePlan()) {
+async function renderAndCompute(
+  plan: StockExitPlan = makePlan(),
+  direction: 'Bullish' | 'Bearish' = 'Bullish',
+) {
   (mockedApi.getStockExitPlan as jest.Mock).mockResolvedValue(plan);
-  render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+  render(<StockPositionCard card={makeCard(direction)} strategyKey="pullback_ema" />);
   fireEvent.click(screen.getByText('Arithmetic plan'));
   await waitFor(() => expect(screen.getByText('RISK/SHARE')).toBeTruthy());
+}
+
+/** The bearish mirror of makePlan: entry 150, stop 156 -> riskPerShare 6.00,
+ *  2R = 138.00, 3R = 132.00. Every sign below is the opposite of the bullish
+ *  fixture's, which is the point. */
+function makeBearishPlan(): StockExitPlan {
+  const base = makePlan();
+  return {
+    ...base,
+    stop: { ...base.stop, price: 156.0, structuralPrice: 153.0, atrFloorPrice: 156.0 },
+    targets: [
+      { ...base.targets[0], arithmeticPrice: 138.0, price: 138.0, structuralPrice: 130.0 },
+      { ...base.targets[1], arithmeticPrice: 132.0, price: 130.0, structuralPrice: 130.0 },
+    ],
+    race: null,
+  };
 }
 
 describe('StockPositionCard — arithmetic profit target (piece 6)', () => {
@@ -150,6 +169,34 @@ describe('StockPositionCard — arithmetic profit target (piece 6)', () => {
     await renderAndCompute();
     expect(screen.getByText('150.00 + 2 × 6.00 = 162.00')).toBeTruthy();
     expect(screen.getByText('150.00 + 3 × 6.00 = 168.00')).toBeTruthy();
+  });
+
+  it('prints a MINUS in the chain on a bearish candidate', async () => {
+    // Round 1 of the adversarial audit: the sign was hardcoded '+', so every
+    // row of every bearish scan rendered a false equation —
+    // "150.00 + 2 × 6.00 = 138.00" — on the one readout whose entire purpose
+    // is being checkable in the head. The backend was always correct; only the
+    // render was direction-blind, and no bearish case existed here to catch it.
+    await renderAndCompute(makeBearishPlan(), 'Bearish');
+    expect(screen.getByText('150.00 − 2 × 6.00 = 138.00')).toBeTruthy();
+    expect(screen.getByText('150.00 − 3 × 6.00 = 132.00')).toBeTruthy();
+    expect(screen.queryByText(/150\.00 \+ 2 ×/)).toBeNull();
+  });
+
+  it('sends the bearish direction through to the endpoint', async () => {
+    await renderAndCompute(makeBearishPlan(), 'Bearish');
+    expect((mockedApi.getStockExitPlan as jest.Mock).mock.calls[0][0])
+      .toMatchObject({ direction: 'Bearish' });
+  });
+
+  it('never offers an Apply button for a zero share count', async () => {
+    // Round 1: a risk budget too small for one share returned 0, not null, so
+    // the card printed "SHARES 0" and offered "Apply 0 shares" — which wrote
+    // shares: 0 past the SHARES field's own clamp, onto the order quantity and
+    // into the persisted position. The backend now returns null; this is the
+    // client half of the same guard.
+    await renderAndCompute(makePlan({ recommendedShares: 0, riskBudget: 2 }));
+    expect(screen.queryByText(/^Apply /)).toBeNull();
   });
 
   it('shows the sizing division, not just its answer', async () => {

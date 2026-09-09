@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import math
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -292,6 +293,58 @@ class TestRecommendedShares:
         from app.services import portfolio_risk
         with patch.object(portfolio_risk, "_load_config", return_value={}):
             body = _post().json()
+        assert body["recommendedShares"] is None
+
+    @pytest.mark.parametrize("portfolio_value,pct,band,expected", [
+        # Each row is a pair where FLOAT floor-division lands a share short,
+        # because neither cent-quantized operand is exactly representable in
+        # binary: int(2000.0 // 1.6) is 1249, not 1250. Round 1 of the
+        # adversarial audit found this; the general assertion below would have
+        # caught it and simply never saw an exact quotient.
+        #
+        # `band` is half the ATR: on a flat-close series the true range is
+        # high - low = 2 x band, so ATR(14) == 2 x band and the 2x ATR floor
+        # sits 4 x band from entry.
+        (50000.0,  0.04, 0.40, 1250),   # budget 2000.00 / risk 1.60
+        (100000.0, 0.02, 0.20, 2500),   # budget 2000.00 / risk 0.80
+        (100000.0, 0.03, 0.20, 3750),   # budget 3000.00 / risk 0.80
+    ])
+    def test_an_exact_quotient_is_not_a_share_short(
+        self, portfolio_value, pct, band, expected,
+    ):
+        from app.services import portfolio_risk
+        bars = [{"time": str(i), "open": 100.0, "high": 100.0 + band,
+                 "low": 100.0 - band, "close": 100.0, "volume": 1_000_000}
+                for i in range(60)]
+        with patch.object(
+            portfolio_risk, "_load_config",
+            return_value={"portfolio": {"portfolio_value": portfolio_value,
+                                        "max_loss_per_trade_pct": pct}},
+        ):
+            body = _post(candles=bars, entry_price=100.0).json()
+        # The quotient is exact by construction — that is the whole point of
+        # these three rows, so pin it rather than trusting the fixture. In
+        # Decimal, because `2000.0 % 1.6` is 1.59999999999995 in float: the
+        # very error this test exists to defend against would otherwise sit
+        # inside the assertion meant to prove the fixture is clean.
+        assert Decimal(str(body["riskBudget"])) % Decimal(str(body["stop"]["riskPerShare"])) == 0
+        assert body["recommendedShares"] == expected
+
+    def test_a_budget_too_small_for_one_share_is_none_not_zero(self):
+        """Zero is not a size — it is "the risk budget cannot buy one share at
+        this stop". Returning 0 let the card print a SHARES readout of 0 and
+        offer an "Apply 0 shares" button that wrote a 0-share position into the
+        portfolio, past the SHARES field's own clamp. Reachable on a small
+        account: a $2,000 portfolio at 0.1% per trade is a $2.00 budget."""
+        from app.services import portfolio_risk
+        with patch.object(
+            portfolio_risk, "_load_config",
+            return_value={"portfolio": {"portfolio_value": 2000.0,
+                                        "max_loss_per_trade_pct": 0.001}},
+        ):
+            body = _post().json()
+        assert body["riskBudget"] == 2.0
+        assert body["stop"]["riskPerShare"] > 2.0
         assert body["recommendedShares"] is None
 
     def test_the_share_count_never_rounds_up(self):

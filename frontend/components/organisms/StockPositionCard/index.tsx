@@ -860,8 +860,14 @@ export function StockPositionCard({
                   <Text size={10} tone="dim">
                     {/* The arithmetic the user checks in his head. The backend
                         quantizes the stop to cents before building the target
-                        off it, so this identity holds exactly on screen. */}
-                    {`${overlay.entry.toFixed(2)} + ${t.rrRatio} × ${plan.stop.riskPerShare.toFixed(2)} = ${t.arithmeticPrice.toFixed(2)}`}
+                        off it, so this identity holds exactly on screen.
+
+                        THE SIGN IS DIRECTION-DERIVED, never hardcoded: a
+                        Bearish target is entry MINUS rr x risk, and a '+' here
+                        printed '100.00 + 2 × 4.00 = 92.00' on every row of
+                        every bearish scan — a false equation on the one row
+                        whose entire purpose is being checkable. */}
+                    {`${overlay.entry.toFixed(2)} ${card.direction === 'Bullish' ? '+' : '−'} ${t.rrRatio} × ${plan.stop.riskPerShare.toFixed(2)} = ${t.arithmeticPrice.toFixed(2)}`}
                   </Text>
                   <Text size={10} tone="dim">
                     {t.structuralPrice != null
@@ -891,7 +897,13 @@ export function StockPositionCard({
                 </Text>
               )}
             </div>
-            {plan.recommendedShares != null && plan.recommendedShares !== overlay.shares && (
+            {/* `> 0` as well as non-null: the backend already refuses to call a
+                floor of zero a size, and this is the second half of that same
+                guard. Without it an "Apply 0 shares" button wrote shares: 0
+                straight past the SHARES field's own clamp, into the order
+                quantity and into the persisted position. */}
+            {plan.recommendedShares != null && plan.recommendedShares > 0
+              && plan.recommendedShares !== overlay.shares && (
               <div className={styles.actionRow}>
                 <button
                   type="button"

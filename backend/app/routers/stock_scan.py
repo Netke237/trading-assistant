@@ -10,6 +10,7 @@ import math
 import os
 import time
 from collections.abc import Callable
+from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path as _Path
 from typing import Any, Literal, Optional
@@ -1869,14 +1870,31 @@ async def stock_exit_plan(req: StockExitPlanRequest) -> StockExitPlanResponse:
     # shares = risk budget / risk per share. This IS the protective mechanism a
     # stocks stop-cost gate would have duplicated (spec section 1) — sizing off
     # the risk budget bounds the loss at the stop exactly, with no model.
-    # None, never a division by zero or an unbounded size, when either input is
-    # non-positive. risk_per_share > 0 is already guaranteed by the 422 above;
-    # the guard stays because this is arithmetic that must not depend on a
+    #
+    # DECIMAL, NOT FLOAT FLOOR-DIVISION. Both operands are cent-quantized
+    # decimals, and neither is exactly representable in binary: `2000.0 // 1.6`
+    # is 1249, not 1250, because 1.6 is stored fractionally below itself. The
+    # card prints this number as the answer to the division it shows right
+    # beside it, and Apply writes it onto a broker order and into a persisted
+    # position — so being one share light is a wrong number in three places at
+    # once. Decimal over the string forms is exact for values that are decimal
+    # by construction, where `math.floor(a / b)` merely moves the error.
+    #
+    # None, never a division by zero and never an unbounded size, when either
+    # input is non-positive. risk_per_share > 0 is already guaranteed by the 422
+    # above; the guard stays because this arithmetic must not depend on a
     # caller's guard staying where it is.
-    recommended_shares = (
-        int(risk_budget // risk_per_share)
-        if risk_budget > 0 and risk_per_share > 0 else None
-    )
+    #
+    # A floor of ZERO is also None, not 0. Zero is not a size — it is "the risk
+    # budget cannot buy one share at this stop" — and returning it let the card
+    # print a SHARES readout of 0 and offer an "Apply 0 shares" button that
+    # wrote a 0-share position into the portfolio. Reachable on a small account:
+    # a $2,000 portfolio at 0.1% per trade is a $2.00 budget against a $15.69
+    # stop.
+    recommended_shares: Optional[int] = None
+    if risk_budget > 0 and risk_per_share > 0:
+        floored = int(Decimal(str(risk_budget)) // Decimal(str(risk_per_share)))
+        recommended_shares = floored if floored > 0 else None
 
     race_out = None
     if fp.race is not None:
