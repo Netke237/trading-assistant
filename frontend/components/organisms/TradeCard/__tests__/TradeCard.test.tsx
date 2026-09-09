@@ -261,7 +261,7 @@ describe('TradeCard', () => {
     rerender(<TradeCard data={other} initialEntryLimit={null} initialInvalidation={null} />);
     expect(limit()).toBe(`$${mockTradeCard.entry.limit.toFixed(2)}`);
     expandLadder();
-    expect(invalidation()).toBe(`$${mockTradeCard.exit.invalidation.toFixed(2)}`);
+    expect(invalidation()).toBe(`$${mockTradeCard.exit.invalidation!.toFixed(2)}`);
 
     // ...and back.
     rerender(<TradeCard data={mockTradeCard} initialEntryLimit={2.71} initialInvalidation={175.5} />);
@@ -2159,11 +2159,90 @@ describe('TradeCard', () => {
   });
 
   describe('Arithmetic Profit Target (Feature 3) — additional coverage', () => {
-    it('renders placeholder rows for the stop and both target rows before either button is clicked', () => {
+    it('renders placeholder rows for both target rows before either button is clicked', () => {
+      // The TARGETS still need a plan -- they are arithmetic multiples of the
+      // stop distance repriced against a contract. The stop row no longer
+      // does; see the piece 3 block below.
       render(<TradeCard data={mockTradeCard} />);
-      expect(screen.getByText('Bottom (final stop) — not yet computed —')).toBeInTheDocument();
       expect(screen.getByText('2:1 target — not yet computed —')).toBeInTheDocument();
       expect(screen.getByText('3:1 target — not yet computed —')).toBeInTheDocument();
+    });
+
+    describe('the scan\'s own final stop (piece 3)', () => {
+      // The stop is resolved AT SCAN TIME now, so this row has something true
+      // to say before any button is pressed -- which is the point of piece 3:
+      // on a card where Compute Arithmetic Plan is never pressed (the default,
+      // since it is user-triggered), the stop used to be a flat percentage and
+      // this row read "not yet computed".
+      const FINAL_STOP = {
+        price: 169.0,
+        source: 'final_stop' as const,
+        stopSource: 'atr_widened' as const,
+        structuralSource: 'swing_low' as const,
+        structuralPrice: 182.0,
+        atrFloorPrice: 169.0,
+        distanceDollar: 13.0,
+        atr: 8.0,
+        computedAt: '2026-09-09T12:00:00+00:00',
+      };
+      const withStop = {
+        ...mockTradeCard,
+        exit: { ...mockTradeCard.exit, invalidation: 169.0, finalStop: FINAL_STOP },
+      };
+
+      it('renders the scan-resolved stop, both candidates and the gap, with no plan computed', () => {
+        render(<TradeCard data={withStop} />);
+        expect(screen.queryByText(/Bottom \(final stop\) — not/)).not.toBeInTheDocument();
+        expect(screen.getByText('Bottom (final stop)')).toBeInTheDocument();
+        // TWICE: once as "Price" and once as "ATR-floor price". They are the
+        // same number here precisely because the floor is what decided the
+        // stop, which is the case this fixture exists to render.
+        expect(screen.getAllByText('$169.00')).toHaveLength(2);
+        // The LOSING candidate rides along: the row prints both levels and the
+        // gap, so a reader can see the floor was what widened the stop.
+        expect(screen.getByText('Structural stop — Swing Low')).toBeInTheDocument();
+        expect(screen.getByText('$182.00')).toBeInTheDocument();
+        expect(screen.getByText('$13.00')).toBeInTheDocument();
+        expect(screen.getByText('$8.00')).toBeInTheDocument();
+        expect(screen.getByText(/widened to \$169\.00/)).toBeInTheDocument();
+      });
+
+      it('says "—" for the two figures the scan cannot answer, rather than omitting them', () => {
+        // Part 2 of the plan. What the stop COSTS needs a contract repriced at
+        // it, and the auto-pick does not settle that -- a Step 6 override
+        // replaces the contract without moving the stop. An absent row reads
+        // as "there is no such thing"; a dash reads as "not computed yet".
+        render(<TradeCard data={withStop} />);
+        expect(screen.getByText('Contract value at stop')).toBeInTheDocument();
+        expect(screen.getByText('Max loss if stopped')).toBeInTheDocument();
+        expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
+        // And the risk-derived size, which sizes off that contract price, is
+        // not offered either.
+        expect(screen.queryByText(/Risk-derived size/)).not.toBeInTheDocument();
+      });
+
+      it('falls back to "re-run the scan" for a card with no resolved stop', () => {
+        // A candidate restored from a scan session persisted before piece 3:
+        // the scanStore v15 migration stripped its flat percentage and it
+        // carries no provenance block. Never a blank, and never a number.
+        render(<TradeCard data={mockTradeCard} />);
+        expect(
+          screen.getByText('Bottom (final stop) — not computed — re-run the scan'),
+        ).toBeInTheDocument();
+      });
+
+      it('shows the stripped Invalidation field as not computed, not as zero', () => {
+        const stripped = {
+          ...mockTradeCard,
+          exit: { ...mockTradeCard.exit, invalidation: null },
+        };
+        render(<TradeCard data={stripped} />);
+        expandLadder();
+        expect(screen.getByText('not computed — re-run the scan')).toBeInTheDocument();
+        // Still editable: typing a stop is the one gesture that makes a
+        // restored card orderable without a re-scan.
+        expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
+      });
     });
 
     it('renders all 4 distinct target-comparison states, not collapsing "before" into "beyond"', async () => {

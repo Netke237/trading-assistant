@@ -322,7 +322,13 @@ export default function Step7Page() {
   // Falls back to the card's own value, which is what an untouched field means
   // -- and which stays live as `mergePlan` updates it, precisely because an
   // untouched field caches `null` rather than a snapshot of the seed.
-  const invalidationFor = (card: TradeCardData): number =>
+  // NULLABLE since piece 3: `card.exit.invalidation` is null on a candidate
+  // restored from a scan session persisted before it, whose stored flat
+  // percentage the scanStore v15 migration stripped. Every send path below
+  // refuses such a card (`missing_invalidation`), so the null never reaches a
+  // stored position -- and the user can clear the refusal by typing a stop,
+  // which lands in this same cache.
+  const invalidationFor = (card: TradeCardData): number | null =>
     invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
   // Whether the value `invalidationFor` just returned was TYPED or inherited.
   // The cache holds null for an untouched field precisely so these two can be
@@ -712,6 +718,10 @@ export default function Step7Page() {
           premium:     q?.price ?? liveQcd.mid,
           delta:       liveQcd.delta,
           spread:      q?.spread ?? 0,
+          // PIECE 3 — round-trip the stop this card already resolved. The
+          // endpoint echoes it and builds the plan around it, so an override
+          // changes the CONTRACT and nothing about where the stock stop sits.
+          final_stop:  pickedCard.exit.finalStop ?? null,
           ...rrOverridesFrom(useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
@@ -784,6 +794,7 @@ export default function Step7Page() {
         premium: cd.mid,
         delta: cd.delta,
         spread: 0,
+        final_stop: resolved.exit.finalStop ?? null,
         ...rrOverridesFrom(useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
@@ -1282,6 +1293,9 @@ export default function Step7Page() {
           cards={basketCards}
           contractsBySymbol={orderContractsBySymbol}
           overridesBySymbol={maxLossOverrideBySymbol}
+          invalidationBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, invalidationFor(c)]),
+          )}
           onClose={() => setDialogOpen(false)}
           onSubmit={handleSubmit}
         />

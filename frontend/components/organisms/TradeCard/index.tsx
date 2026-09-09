@@ -161,7 +161,12 @@ function normalizeStructuralStopResponse(res: {
  *  client-composed justification. Backend (exit_plan.py) only returns the raw
  *  numbers (structuralPrice/atrFloorPrice/distanceDollar/source); this is the
  *  three-case prose built from them, not a new backend text field. */
-function stopJustification(stop: ExitPlan['stop']): string {
+function stopJustification(stop: {
+  source: 'structural' | 'atr_widened';
+  structuralPrice: number | null;
+  atrFloorPrice: number;
+  distanceDollar: number | null;
+}): string {
   if (stop.structuralPrice == null) {
     return `No structural stop found nearby — stop set at the ATR floor of $${stop.atrFloorPrice.toFixed(2)}`;
   }
@@ -1118,6 +1123,29 @@ export function TradeCard({
         ? exitPlan.stop.price
         : (resolvedStructural?.price ?? overlay.invalidation);
 
+      // NO STOP, NO SIMULATION. `overlay.invalidation` is null only on a card
+      // restored from a scan session persisted before piece 3, whose stored
+      // stop the v15 migration stripped as a flat percentage wearing the
+      // resolved stop's name. Every other branch above is a real level.
+      //
+      // The engine would accept a 0 here and quietly answer a different
+      // question: `estimate_stock_first_passage` gates the stop leg on
+      // `invalidation_price > 0`, so a card with no stop would come back with
+      // a probability of invalidation of zero and a barrier race missing one
+      // of its barriers -- read on screen as "this trade cannot be stopped
+      // out". Fail the estimate instead; the card already renders that state.
+      //
+      // The BUTTON stays enabled, deliberately. This branch is reached only
+      // after the structural sub-fetch above has run, and a structural level
+      // is a perfectly good stop for a card whose stored one was stripped --
+      // so "Check structure, then Estimate" still works on a restored card.
+      // Disabling on `overlay.invalidation == null` would refuse it before
+      // finding out.
+      if (resolvedStockStop == null) {
+        failFirstPassage();
+        return;
+      }
+
       const res = await api.getFirstPassageEstimate({
         symbol: data.symbol,
         direction: data.direction,
@@ -1581,6 +1609,16 @@ export function TradeCard({
     const riskBudget = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride);
     return recommendedContractSize(riskBudget, riskPerContract);
   }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride]);
+
+  /** PIECE 3 — the stop the SCAN resolved, with its provenance.
+   *
+   *  Read only while no Arithmetic Plan exists for this card: once one does,
+   *  `exitPlan.stop` is the same levels recomputed against a fresh price and
+   *  a chosen contract, and showing both would put two "final stop" rows on
+   *  one screen. Absent means not computed — a card restored from a scan
+   *  session persisted before piece 3, a bar feed too thin to form one true
+   *  range, or a resolution that failed. */
+  const scanFinalStop = data.exit.finalStop ?? null;
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -2199,9 +2237,75 @@ export function TradeCard({
             )}
             {!exitPlan && (
               <div className={styles.targetsTable}>
+                {/* PIECE 3. The stop is resolved AT SCAN TIME now, so this row
+                    has something true to say before the user has pressed
+                    anything — which is the whole point: on a card where the
+                    Arithmetic Plan button is never pressed (the default), the
+                    stop used to be a flat percentage and this row read "not
+                    yet computed".
+
+                    The CONTRACT-PRICED sub-cells are absent here, and stay
+                    absent: what the stop costs needs a contract repriced AT
+                    it, and the scan's auto-pick does not settle that (a Step 6
+                    override replaces the contract without moving the stop).
+                    Same for the risk-derived size below, which sizes off
+                    `exitPlan.stop.contractPrice` and returns null without a
+                    plan. Compute Arithmetic Plan is what fills them in. */}
                 <div className={styles.targetRow}>
                   <div className={styles.targetMain}>
-                    <Text size={12} tone="dim">Bottom (final stop) — not yet computed —</Text>
+                    {scanFinalStop ? (
+                      <>
+                        <div className={styles.targetId}>
+                          <Text size={12} weight={600}>Bottom (final stop)</Text>
+                        </div>
+                        <div className={styles.targetValues}>
+                          <KV label="Price" value={`$${scanFinalStop.price.toFixed(2)}`} mono />
+                          <KV
+                            label={structuralStopSourceLabel(scanFinalStop.structuralSource ?? null)}
+                            value={scanFinalStop.structuralPrice != null
+                              ? `$${scanFinalStop.structuralPrice.toFixed(2)}`
+                              : 'No structural stop found'}
+                            mono
+                          />
+                          <KV
+                            label="ATR-floor price"
+                            value={scanFinalStop.atrFloorPrice != null
+                              ? `$${scanFinalStop.atrFloorPrice.toFixed(2)}` : '—'}
+                            mono
+                          />
+                          <KV label="ATR(14)" value={`$${scanFinalStop.atr.toFixed(2)}`} mono />
+                          <KV
+                            label="Structural ↔ ATR-floor distance"
+                            value={scanFinalStop.distanceDollar != null
+                              ? `$${scanFinalStop.distanceDollar.toFixed(2)}` : '—'}
+                            mono
+                          />
+                          {/* The two the scan cannot answer, said rather than
+                              omitted — an absent row reads as "there is no
+                              such thing", not "not computed yet". */}
+                          <KV label="Contract value at stop" value="—" mono />
+                          <KV label="Max loss if stopped" value="—" mono />
+                        </div>
+                        {scanFinalStop.stopSource != null && scanFinalStop.atrFloorPrice != null && (
+                          <Text size={10} tone="dim">
+                            {stopJustification({
+                              source: scanFinalStop.stopSource,
+                              structuralPrice: scanFinalStop.structuralPrice ?? null,
+                              atrFloorPrice: scanFinalStop.atrFloorPrice,
+                              distanceDollar: scanFinalStop.distanceDollar ?? null,
+                            })}
+                          </Text>
+                        )}
+                        <Text size={10} tone="dim">
+                          From the scan. Compute an Arithmetic Plan to price this stop
+                          against the contract and size the position.
+                        </Text>
+                      </>
+                    ) : (
+                      <Text size={12} tone="dim">
+                        Bottom (final stop) — not computed — re-run the scan
+                      </Text>
+                    )}
                   </div>
                 </div>
                 <div className={styles.targetRow}>
@@ -2481,6 +2585,13 @@ export function TradeCard({
                 min={invalidationBounds.min}
                 max={invalidationBounds.max}
                 mono
+                // NULL only after the scanStore v15 migration stripped a
+                // pre-piece-3 flat percentage from a restored card. Says
+                // exactly what to do about it, because "—" beside an editable
+                // dollar field reads as zero, and because the card is
+                // unorderable until it is filled (checkInvalidation ->
+                // missing_invalidation).
+                nullLabel="not computed — re-run the scan"
               />
               <EditableKV
                 label="Premium stop"
@@ -2922,9 +3033,14 @@ function EditableKV({
   prefix = '',
   suffix = '',
   decimals = 2,
+  nullLabel = 'not computed',
 }: {
   label: string;
-  value: number;
+  /** NULL renders `nullLabel` and starts the editor with an EMPTY draft, so a
+   *  field whose plan value is "not computed" can still be typed into. Only
+   *  the Invalidation field passes null today — see
+   *  `TradeCardData.exit.invalidation`. */
+  value: number | null;
   onChange: (v: number) => void;
   /** Optional "clear the field to go back to inheriting the plan's value".
    *  Only the three threaded fields pass it; for every other field an empty
@@ -2937,9 +3053,14 @@ function EditableKV({
   prefix?: string;
   suffix?: string;
   decimals?: number;
+  /** What to show in place of a number when `value` is null. Required in
+   *  practice for any field that can be null: the default is deliberately
+   *  wordy rather than a bare dash, because a dash beside an editable field
+   *  reads as zero. */
+  nullLabel?: string;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(value == null ? '' : String(value));
   // ROUND 9 finding 17 -- the out-of-range REJECT used to be entirely silent:
   // `setEditing(false)` and the field showed the old number again, so a user
   // who typed 1400 and looked away could not tell a refusal from an
@@ -2950,7 +3071,7 @@ function EditableKV({
   const [rejected, setRejected] = useState<string | null>(null);
 
   const startEdit = useCallback(() => {
-    setDraft(String(value));
+    setDraft(value == null ? '' : String(value));
     setRejected(null);
     setEditing(true);
   }, [value]);
@@ -3090,9 +3211,11 @@ function EditableKV({
     [save],
   );
 
-  const displayValue = decimals === 0
-    ? `${prefix}${value}${suffix}`
-    : `${prefix}${value.toFixed(decimals)}${suffix}`;
+  const displayValue = value == null
+    ? nullLabel
+    : decimals === 0
+      ? `${prefix}${value}${suffix}`
+      : `${prefix}${value.toFixed(decimals)}${suffix}`;
 
   return (
     <div className={`${styles.kvRow} ${styles.kvRowEditable}`}>
@@ -3143,9 +3266,11 @@ function EditableKV({
           }}
           aria-label={`Edit ${label}`}
         >
-          {mono
-            ? <Data size={13} weight={500} tone={tone}>{displayValue}</Data>
-            : <Text size={13} weight={500}>{displayValue}</Text>}
+          {value == null
+            ? <Text size={13} weight={400} tone="dim">{displayValue}</Text>
+            : mono
+              ? <Data size={13} weight={500} tone={tone}>{displayValue}</Data>
+              : <Text size={13} weight={500}>{displayValue}</Text>}
         </span>
       )}
       {/* The refusal, announced. `aria-live="polite"` rather than an alert

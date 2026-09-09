@@ -210,6 +210,41 @@ describe('risk helpers', () => {
       expect(result.reasons).toContain('missing_invalidation');
     });
 
+    it('rejects a card whose stop the v15 migration stripped', () => {
+      // PIECE 3. `exit.invalidation` is null on a candidate restored from a
+      // scan session persisted before it: the stored flat percentage was
+      // deleted rather than shown as a resolved stop. Before piece 3 the scan
+      // always sent a number and this branch was effectively unreachable — the
+      // migration is what makes it live, and an order must not go out against
+      // a stop the model never chose.
+      const card = makeCard({ exit: { invalidation: null, premiumStop: 1.5, timeStopDays: 10, target: 0, targets: [] } });
+      const result = checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('missing_invalidation');
+    });
+
+    it('accepts a stripped card once the user has typed a stop into it', () => {
+      // Typing a stop is the ONE gesture that makes a restored card orderable
+      // without a re-scan, so the check has to judge the level the card is
+      // actually showing — step 7 resolves that through `invalidationFor` and
+      // the dialog passes it in. Reading `card.exit.invalidation` alone would
+      // refuse the card forever.
+      const card = makeCard({ exit: { invalidation: null, premiumStop: 1.5, timeStopDays: 10, target: 0, targets: [] } });
+      const result = checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0, null, 172.5);
+      expect(result.reasons).not.toContain('missing_invalidation');
+    });
+
+    it('still refuses when the resolved stop is itself unusable', () => {
+      // A typed 0 is not an escape hatch. Same bar as the card's own value.
+      const card = makeCard();
+      expect(
+        checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0, null, 0).reasons,
+      ).toContain('missing_invalidation');
+      expect(
+        checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0, null, null).reasons,
+      ).not.toContain('missing_invalidation');   // null = "no override", falls back to the card
+    });
+
     it('rejects when daily recommendations reached', () => {
       const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 5);
       expect(result.approved).toBe(false);

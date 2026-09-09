@@ -73,9 +73,24 @@ export function contractKeyFor(card: TradeCardData | undefined): string | null {
 
 /** Merge a resolved plan into an overridden card's Entry/Exit/RR. Preserves
  *  `_userOverride` via the spread — the return type reflects that instead of
- *  narrowing it away. */
+ *  narrowing it away.
+ *
+ *  PIECE 3: `exit` is replaced WHOLESALE, which is what makes the stop worth
+ *  guarding here. The stop is a STOCK level — which contract is being traded
+ *  has no bearing on where structure sits — so a contract override must not
+ *  move it. The endpoint is sent the card's own `finalStop` and echoes it
+ *  back, so the merged plan normally already carries it; this keeps the card's
+ *  block anyway when a response arrives without one, which is what a stale
+ *  client, a proxy that dropped the field, or a rolled-back backend looks
+ *  like. Defence in depth, per the plan's part 3 — never the primary
+ *  mechanism, and the two must not disagree: when the plan DOES carry a block,
+ *  the plan wins, because it is the block the plan's `invalidation` was
+ *  computed against and a mismatched pair is worse than either half. */
 export function mergePlan(card: OverriddenCard, plan: RecomputedPlanShape): OverriddenCard {
-  return { ...card, entry: plan.entry, exit: plan.exit, rrRatio: plan.rrRatio, rrModel: plan.rrModel };
+  const exit = plan.exit.finalStop == null && card.exit.finalStop != null
+    ? { ...plan.exit, finalStop: card.exit.finalStop, invalidation: card.exit.invalidation }
+    : plan.exit;
+  return { ...card, entry: plan.entry, exit, rrRatio: plan.rrRatio, rrModel: plan.rrModel };
 }
 
 /**

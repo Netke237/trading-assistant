@@ -285,8 +285,14 @@ export function formatStopLossHeadline(r: StopPremiumRisk): string {
   return `${usd(c.loss)} per contract — of the ${usd(c.premium)} premium, ${usd(left)} left`;
 }
 
-export function checkInvalidation(invalidation: number | undefined): boolean {
-  return invalidation !== undefined && invalidation > 0;
+export function checkInvalidation(invalidation: number | null | undefined): boolean {
+  // `null` is piece 3's "not computed — re-run the scan" (see
+  // TradeCardData.exit.invalidation): a card whose stored stop was a
+  // pre-piece-3 flat percentage, stripped by the scanStore v15 migration.
+  // It fails here exactly as `undefined` does, so `missing_invalidation`
+  // blocks the send rather than an order going out against a stop the model
+  // never chose.
+  return invalidation != null && invalidation > 0;
 }
 
 export const hasInvalidation = checkInvalidation;
@@ -450,6 +456,18 @@ export function checkTradeRisk(
    *  Arithmetic card. `undefined`/`null` inherits the global
    *  `maxLossPerTradePct` default, same as no override at all. */
   maxLossOverride?: MaxLossOverride | null,
+  /** PIECE 3. The stop the card is actually SHOWING, when the caller has
+   *  resolved one — step 7's `invalidationFor`, i.e. the user's typed value
+   *  when the Invalidation field is touched, else the card's own.
+   *
+   *  It matters only now that `card.exit.invalidation` can be null. Before
+   *  piece 3 the scan always sent a number and `missing_invalidation` was
+   *  effectively unreachable; the v15 migration makes it live, and reading the
+   *  CARD alone would then refuse to send a restored candidate even after the
+   *  user typed a stop into it — the one gesture that fixes the card. Pass
+   *  `undefined` to fall back to the card, which is what every caller with no
+   *  overlay to consult should do. */
+  resolvedInvalidation?: number | null,
 ): RiskCheckResult {
   const reasons: string[] = [];
   let approved = true;
@@ -460,7 +478,7 @@ export function checkTradeRisk(
   const currentNotional = totalNotional(positions);
   const totalExposure = exposurePct(currentNotional + car, limits.portfolioValue);
 
-  if (!checkInvalidation(card.exit.invalidation)) {
+  if (!checkInvalidation(resolvedInvalidation ?? card.exit.invalidation)) {
     reasons.push('missing_invalidation');
     approved = false;
   }

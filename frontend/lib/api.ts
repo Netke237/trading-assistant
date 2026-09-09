@@ -1,5 +1,5 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -396,6 +396,12 @@ export const api = {
     horizon_preset?: string;
     hold_min?: number;
     hold_max?: number;
+    /** PIECE 3 — the stop the card already carries (`exit.finalStop`),
+     *  round-tripped so a Step 6 contract override cannot move it. The
+     *  endpoint uses its `price` as the plan's stop and echoes the block back;
+     *  omitting it makes the endpoint fall back to the flat percentage, which
+     *  is correct only for a card that genuinely has no resolved stop. */
+    final_stop?: FinalStop | null;
   }, signal?: AbortSignal) =>
     post<{
       entry: TradeCardData['entry'];
