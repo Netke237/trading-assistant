@@ -703,12 +703,70 @@ class StockTargetEstimate:
 
 
 @dataclass
+class StockRaceOutcome:
+    """One target's row of the STOCK barrier race — the two-barrier reduction of
+    RaceOutcome above.
+
+    A stock has TWO barriers, not three: there is no premium stop, because there
+    is no premium. That is the whole of the difference. The three probabilities
+    are an ATTRIBUTION over the same simulated paths — every path lands in
+    exactly one of them, so they sum to 1.0 by construction, unlike
+    StockTargetEstimate.probability and InvalidationEstimate.probability, which
+    are each measured on their own and can sum past 100%.
+
+    days_target / days_stop are CONDITIONAL medians: the median day of the paths
+    that resolved to that outcome, not of all paths. They therefore differ from
+    StockTargetEstimate.expected_days, which is unconditional (the median day of
+    every path that ever touched the level, whether or not it got there first).
+    """
+    target_price:   float
+
+    p_target_first: float
+    p_stop_first:   float
+    p_neither:      float
+
+    days_target:    Optional[float]
+    days_stop:      Optional[float]
+
+    # The three shares allocated to hundredths, summing to exactly 1.00 — the
+    # values the card prints and derives its whole-percent labels from, so a
+    # row can never render as 41% / 34% / 24% (99%). The raw p_* above stay
+    # raw; the bars are drawn from those. Same allocator as the option race,
+    # for the same reason: one rounding rule, one implementation.
+    weight_target:  float
+    weight_stop:    float
+    weight_neither: float
+
+    # Mean STOCK price at the end of the window over the p_neither paths, and
+    # the reason this bucket is not a throwaway here the way it is for an
+    # option. An option that reached no barrier by expiry is worth its payoff;
+    # a stock that reached no barrier is still worth whatever it is trading at,
+    # so "neither" is an open position at a knowable average price, not a
+    # write-off. None when no path landed in the bucket.
+    terminal_mean:  Optional[float]
+
+
+@dataclass
+class StockBarrierRaceResult:
+    outcomes:   list[StockRaceOutcome]   # one per target, same order as `targets`
+    stop_price: float                    # echo of the barrier actually used, for auditability
+    n_paths:    int
+
+
+@dataclass
 class StockFirstPassageResult:
     targets: list[StockTargetEstimate]
     invalidation: InvalidationEstimate
     sigma_stock: float
     mu: float
     horizon_days: int
+    # None means "no race here" and covers the same two cases as the option
+    # sibling's: the simulation was refused (a non-positive price or an empty
+    # window — deliberately NOT three zeroes, since a refusal is not a
+    # 100%-summing result), or the caller passed compute_race=False. A third,
+    # stock-only case joins them: no usable stop barrier (stop_price <= 0),
+    # where there is nothing for the targets to race against.
+    race: Optional["StockBarrierRaceResult"] = None
 
 
 def estimate_stock_first_passage(
@@ -725,6 +783,7 @@ def estimate_stock_first_passage(
     sigma_floor: float = 0.10,
     sigma_ceiling: float = 1.50,
     seed: int = 0,
+    compute_race: bool = False,
 ) -> StockFirstPassageResult:
     """Monte Carlo first-passage estimate for a STOCK position's exit ladder.
 
@@ -759,6 +818,13 @@ def estimate_stock_first_passage(
     by 252/365 (about 20% in vol terms). ``expected_days`` is therefore also in
     trading days; the endpoint and the card say so.
 
+    ``compute_race=True`` additionally attributes every path to exactly one of
+    target-first / stop-first / neither, per target — the two-barrier reduction
+    of the option barrier race (there is no premium stop because there is no
+    premium). It runs over the SAME simulated paths, adds no model and no second
+    simulation, and is off by default so ``/stocks/first-passage`` keeps its
+    existing response untouched.
+
     NOTE ON MODEL VALIDITY: a constant drift derived from a trend score is a poor
     generative model for the mean_reversion_* strategies, whose whole thesis is
     that the recent drift is transient. That caveat is surfaced to the user by
@@ -789,6 +855,9 @@ def estimate_stock_first_passage(
     # simulated. Return zero-probability rather than crashing on median() of an
     # empty array — the same guard the option version applies at dte < 1.
     if stock_price <= 0 or not math.isfinite(stock_price) or horizon_days < 1:
+        # race stays None, NOT three zeroes: a refusal to simulate is not a
+        # 100%-summing attribution, and three zeroes would read on the card as
+        # "every outcome is impossible" rather than "we could not simulate".
         return StockFirstPassageResult(
             targets=[StockTargetEstimate(price=t, probability=0.0, expected_days=None)
                      for t in clean_targets],
@@ -815,15 +884,69 @@ def estimate_stock_first_passage(
         prob, days = _barrier(stock_paths >= t if is_bullish else stock_paths <= t)
         target_estimates.append(StockTargetEstimate(price=t, probability=prob, expected_days=days))
 
-    if math.isfinite(stop_price) and stop_price > 0:
-        stop_prob, stop_days = _barrier(
-            stock_paths <= stop_price if is_bullish else stock_paths >= stop_price
-        )
+    stop_usable = bool(math.isfinite(stop_price) and stop_price > 0)
+    if stop_usable:
+        stop_mask = stock_paths <= stop_price if is_bullish else stock_paths >= stop_price
+        stop_prob, stop_days = _barrier(stop_mask)
     else:
+        stop_mask = None
         stop_prob, stop_days = 0.0, None
+
+    race: Optional[StockBarrierRaceResult] = None
+    if compute_race and stop_usable and clean_targets:
+        # A REFEREE, not a fourth target method: it proposes no level of its own
+        # and reuses the arrays already built above — no second simulation, no
+        # extra paths, no new model. `_first_day` (not a bare argmax) is what
+        # stops a never-hitting path from masquerading as a day-1 hit and
+        # winning outright; see its docstring.
+        d_stop = _first_day(stop_mask, horizon_days)
+        terminal = stock_paths[:, -1]
+
+        outcomes: list[StockRaceOutcome] = []
+        for t in clean_targets:
+            d_tgt = _first_day(
+                stock_paths >= t if is_bullish else stock_paths <= t, horizon_days,
+            )
+            best = np.minimum(d_tgt, d_stop)
+            neither = best == horizon_days
+            # TIE RULE: the simulation resolves to daily closes, so both barriers
+            # can be crossed on the same simulated day. Ties resolve
+            # PESSIMISTICALLY — the stop ahead of the target. Same rule, same
+            # reason, as the option race's `_attribute`: it never flatters the
+            # trade. Deliberate, not an accident of evaluation order.
+            stop_first = (d_stop == best) & ~neither
+            tgt_first = (d_tgt == best) & ~stop_first & ~neither
+
+            def _median_days(m: np.ndarray, _best: np.ndarray = best) -> Optional[float]:
+                # +1: column 0 is the end of day 1, matching `_barrier` above.
+                return float(np.median(_best[m]) + 1) if bool(m.any()) else None
+
+            p_target = float(tgt_first.mean())
+            p_stop = float(stop_first.mean())
+            p_none = float(neither.mean())
+            w_target, w_stop, w_none = _allocated_weights([p_target, p_stop, p_none])
+
+            outcomes.append(StockRaceOutcome(
+                target_price=t,
+                p_target_first=p_target,
+                p_stop_first=p_stop,
+                p_neither=p_none,
+                days_target=_median_days(tgt_first),
+                days_stop=_median_days(stop_first),
+                weight_target=w_target,
+                weight_stop=w_stop,
+                weight_neither=w_none,
+                terminal_mean=(
+                    float(terminal[neither].mean()) if bool(neither.any()) else None
+                ),
+            ))
+
+        race = StockBarrierRaceResult(
+            outcomes=outcomes, stop_price=stop_price, n_paths=n_paths,
+        )
 
     return StockFirstPassageResult(
         targets=target_estimates,
         invalidation=InvalidationEstimate(probability=stop_prob, expected_days=stop_days),
-        sigma_stock=sigma_stock, mu=mu, horizon_days=horizon_days,
+        sigma_stock=sigma_stock, mu=mu, horizon_days=horizon_days, race=race,
     )

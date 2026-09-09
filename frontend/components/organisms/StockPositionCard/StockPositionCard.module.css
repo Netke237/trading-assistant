@@ -79,3 +79,29 @@
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
 }
+
+/* Arithmetic profit target (piece 6). Same bordered, unshadowed treatment as
+   .estimateBlock — this codebase separates with `1px solid var(--border-subtle)`,
+   never a card shadow. */
+.planRow {
+  display: grid;
+  grid-template-columns: 90px 1fr 1.4fr 1.4fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.planTarget {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.planRace {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}

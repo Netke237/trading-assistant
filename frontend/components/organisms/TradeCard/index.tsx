@@ -13,6 +13,7 @@ import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
+import { stopJustification, targetCompareState, targetCompareLabel } from '@/lib/exitPlanLabels';
 import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossBadge, stopLossIsTotalOnPrintedFigures } from '@/lib/risk';
 import { resolveIv, formatIv } from '@/lib/ivBasis';
 import { useRiskStore } from '@/lib/riskStore';
@@ -157,49 +158,13 @@ function normalizeStructuralStopResponse(res: {
     : null;
 }
 
-/** Feature 3 (Arithmetic Profit Target card) — the stop row's one-sentence,
- *  client-composed justification. Backend (exit_plan.py) only returns the raw
- *  numbers (structuralPrice/atrFloorPrice/distanceDollar/source); this is the
- *  three-case prose built from them, not a new backend text field. */
-function stopJustification(stop: {
-  source: 'structural' | 'atr_widened';
-  structuralPrice: number | null;
-  atrFloorPrice: number;
-  distanceDollar: number | null;
-}): string {
-  if (stop.structuralPrice == null) {
-    return `No structural stop found nearby — stop set at the ATR floor of $${stop.atrFloorPrice.toFixed(2)}`;
-  }
-  if (stop.source === 'structural') {
-    const cleared = stop.distanceDollar != null ? stop.distanceDollar.toFixed(2) : '0.00';
-    return `Using structural — it already clears the ATR floor by $${cleared}, no widening needed`;
-  }
-  return `Structural stop $${stop.structuralPrice.toFixed(2)} was inside the ATR floor — widened to $${stop.atrFloorPrice.toFixed(2)} for a minimum-distance stop`;
-}
-
-/** Feature 3 — one of FOUR explicit states per target row (not three — the
- *  "outside tolerance but still short of the structural level" case gets its
- *  own label rather than folding into the "beyond" warning bucket). */
-type TargetCompareState = 'none' | 'within' | 'before' | 'beyond';
-
-function targetCompareState(t: ExitPlanTargetRow): TargetCompareState {
-  if (t.structuralPrice == null) return 'none';
-  if (t.tpSource === 'structural_snap') return 'within';
-  return t.qualityReasons.includes('target_beyond_structural') ? 'beyond' : 'before';
-}
-
-function targetCompareLabel(state: TargetCompareState): string {
-  switch (state) {
-    case 'none':
-      return 'No structural level found ahead — nothing to compare against.';
-    case 'within':
-      return 'Within tolerance — snapped onto the structural level.';
-    case 'before':
-      return 'Outside tolerance — using arithmetic price, sits before the next structural level.';
-    case 'beyond':
-      return 'Target sits beyond the next real structural level.';
-  }
-}
+/** Feature 3 (Arithmetic Profit Target card) — stopJustification,
+ *  targetCompareState and targetCompareLabel moved to lib/exitPlanLabels when
+ *  the stocks arithmetic plan arrived: it reports the same fields under the
+ *  same names, and two copies of this prose would eventually explain one card's
+ *  stop differently from the other's for identical numbers. `targetCompareState`
+ *  is called here with a full `ExitPlanTargetRow`, which structurally satisfies
+ *  the narrower parameter type. */
 
 /** Feature 8 — "computed via: <method>, HH:MM" timestamp label. */
 function formatHHMM(iso: string): string {

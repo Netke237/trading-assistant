@@ -1,6 +1,6 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop } from '@/types/domain';
-import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDomain';
+import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
@@ -502,6 +502,27 @@ export const api = {
     trend_score: number;
   }, signal?: AbortSignal) =>
     post<StockFirstPassageEstimate>('/api/stocks/first-passage', req, signal),
+  /** The stocks arithmetic plan — the options exit plan with the premium half
+   *  removed (piece 6). Its own endpoint because /api/contracts/exit-plan
+   *  requires strike, dte and premium, none of which a stock has.
+   *
+   *  Unlike getStockFirstPassage, this does NOT take a stop or a target ladder:
+   *  it DERIVES them (the wider of the structural level and an ATR floor, then
+   *  one target per R:R ratio), which is the whole point of the card. It takes
+   *  the entry price they are measured from.
+   *
+   *  `strategy` only decides whether the probabilities carry the GBM model
+   *  caveat; the plan itself does not depend on it, so it is optional. */
+  getStockExitPlan: (req: {
+    symbol: string;
+    direction: 'Bullish' | 'Bearish';
+    entry_price: number;
+    trend_score: number;
+    horizon: 'Intraday' | 'Swing' | 'Position';
+    strategy?: string;
+    rr_ratios?: number[];
+  }, signal?: AbortSignal) =>
+    post<StockExitPlan>('/api/stocks/exit-plan', req, signal),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getSymbolInfo: (symbol: string) =>
     get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),
