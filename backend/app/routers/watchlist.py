@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.watchlist import WatchlistSymbolModel
 from app.models.scan_session import ScanSession
-from app.schemas import WatchlistRow, ScanResult, ScoreBreakdown
+from app.schemas import WatchlistRow, ScanResult, ScoreBreakdown, SCAN_RESULT_SCHEMA_VERSION
 from app.data.market import fetch_price_async, fetch_company_name_async
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -45,7 +45,12 @@ async def get_watchlist(db: AsyncSession = Depends(get_db)) -> list[WatchlistRow
             # (PHASE-A-NULL-IVRANK-2026-09-06). Empty lookup degrades to the
             # live-fetch path below, which is what an un-scanned watchlist
             # already renders.
-            if scan.schema_version is not None:
+            # A COMPARISON, not `is not None` -- see SCAN_RESULT_SCHEMA_VERSION.
+            # Phase A's round 5 found this endpoint serving scores out of the
+            # very blob /scan/last and /api/tradecards had just refused; written
+            # as an absence test it would have gone on doing exactly that for
+            # piece 3's bump.
+            if (scan.schema_version or 0) >= SCAN_RESULT_SCHEMA_VERSION:
                 for c in scan.candidates:
                     scan_lookup[c.symbol] = c
         except Exception:

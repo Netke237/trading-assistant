@@ -1244,25 +1244,38 @@ async def restore_from_db() -> str | None:
         _refused = False
         if row.last_result_json:
             _restored = ScanResult.model_validate_json(row.last_result_json)
-            # A result stored before the IV basis split carries raw implied
-            # volatility x100 under `ivRank`, the name of a percentile, and
-            # nothing on the record says so. Serving it puts "IV rank 45" on the
-            # trade card for a 45% absolute IV -- the exact defect Phase A
-            # removes -- and the frontend cannot repair it either: its own
-            # migration only reaches localStorage, and StoreHydration re-persists
-            # whatever /scan/last returns at the CURRENT store version, so the
-            # bad figure would be stamped as migrated and never revisited.
+            # A result stored under an older schema carries at least one field
+            # whose name no longer describes what it holds, with nothing on the
+            # record saying so -- v0's `ivRank` held raw implied volatility
+            # under a percentile's name; v1's `exit.invalidation` held a flat
+            # percentage move under the resolved structural+2xATR stop's name.
+            # Serving either puts a wrong number on the card the user acts
+            # from, and the frontend cannot repair it: its own migrations only
+            # reach localStorage, and StoreHydration re-persists whatever
+            # /scan/last returns at the CURRENT store version, so the bad figure
+            # is stamped as migrated and never revisited.
             #
             # Dropped rather than relabelled, for the same reason
             # ivBasis.stripLegacyIvFields drops: the basis is not recoverable,
-            # and guessing "absolute" would be right for most rows and silently
-            # wrong for the rest. The cost is one re-scan of data that was stale
-            # market data anyway (PHASE-A-NULL-IVRANK-2026-09-06).
-            if _restored.schema_version is None:
+            # and guessing would be right for most rows and silently wrong for
+            # the rest. The cost is one re-scan of data that was stale market
+            # data anyway (PHASE-A-NULL-IVRANK-2026-09-06, PIECE-3-2026-09-09).
+            #
+            # A COMPARISON, not `is None`. This guard was written when exactly
+            # one bump existed and tested for its absence, so piece 3's bump was
+            # silently exempt and a v1 blob -- a flat -3% stop with no
+            # provenance block -- was served, re-persisted at the current store
+            # version, seeded into the editable Invalidation field, passed
+            # `checkInvalidation`, and stored as `PortfolioPosition.stop` for
+            # STOP_REACHED to fire against. Every future bump is now covered
+            # without touching this line.
+            if (_restored.schema_version or 0) < SCAN_RESULT_SCHEMA_VERSION:
                 _log.warning(
-                    "Discarding the persisted scan result: written before the IV "
-                    "basis split, so its ivRank values have no recoverable basis. "
-                    "Run a scan to repopulate."
+                    "Discarding the persisted scan result: written at schema "
+                    "version %s, below the current %s, so at least one of its "
+                    "fields no longer means what its name says. Run a scan to "
+                    "repopulate.",
+                    _restored.schema_version, SCAN_RESULT_SCHEMA_VERSION,
                 )
                 # ROUND 5 finding 11. The STATUS must go with the result. Left
                 # set, /scan/last-run reported COMPLETED at the old timestamp

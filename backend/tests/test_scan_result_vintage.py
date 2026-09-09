@@ -1,4 +1,4 @@
-"""A persisted scan result from before the IV basis split must not be re-served.
+"""A persisted scan result written under an OLDER SCHEMA must not be re-served.
 
 Round 3 finding 2. `scan_sessions.last_result_json` survives an upgrade, and
 `ivRank` in a blob written before PHASE-A-NULL-IVRANK-2026-09-06 holds raw
@@ -9,6 +9,15 @@ in the localStorage blobs round 1 addressed — so it is DROPPED, not relabelled
 This matters more than a stale-cache annoyance: the frontend re-persists whatever
 `/scan/last` returns at the CURRENT store version, so a bad figure served once is
 stamped as already-migrated and never revisited on that browser.
+
+PIECE 3 (2026-09-09) MADE THE SAME FILE COVER A SECOND BUMP, and found that the
+three guards could not. Each tested for the ABSENCE of a version (`is None`),
+which was equivalent to a comparison only while exactly one bump existed. Piece 3
+changed `exit.invalidation` from a flat percentage move to the resolved
+structural+2xATR stop without changing its name, bumping the version to 2 -- and
+every v1 blob sailed through all three guards. The tests below are therefore
+parametrized over EVERY stale version rather than over `None`, so the next bump
+is covered before it is written.
 """
 import json
 
@@ -24,12 +33,44 @@ def _blob(**kw) -> dict:
     return {**base, **kw}
 
 
+# Every version a stored blob can carry that is NOT trustworthy today: absent
+# (pre-Phase-A) plus every superseded stamp. Parametrizing over this rather than
+# over `None` is the point -- see the module docstring.
+#
+# `SCAN_RESULT_SCHEMA_VERSION - 1` IS IN THE LIST EXPLICITLY, and it is what
+# makes these tests measure the guards' SHAPE rather than today's constant.
+# Derived purely from `range(1, VERSION)`, the list collapses to `[None]` the
+# moment the constant is reverted or a bump is forgotten -- so every stale-blob
+# case would silently vanish and the suite would go green on exactly the defect
+# it exists to catch. The `- 1` entry is a stale version at every value of the
+# constant, so a guard written as `is None` fails here no matter what.
+STALE_VERSIONS = sorted(
+    {None, SCAN_RESULT_SCHEMA_VERSION - 1, *range(1, SCAN_RESULT_SCHEMA_VERSION)},
+    key=lambda v: (v is not None, v),
+)
+
+
 def test_a_result_with_no_version_is_recognised_as_pre_split():
     parsed = ScanResult.model_validate(_blob())
     assert parsed.schema_version is None, (
         "absence is the signal; defaulting it to the current version would make "
         "every pre-split blob claim to be post-split"
     )
+
+
+def test_the_version_actually_moved_for_piece_3():
+    """The bump itself, pinned.
+
+    `exit.invalidation` changed basis without changing name -- a flat percentage
+    move off the stock price became the resolved structural+2xATR stop -- and
+    `exit.finalStop`, the block that would say which, did not exist before. A v1
+    blob is indistinguishable from a piece-3 scan whose bar feed was too thin to
+    resolve a stop, so it cannot be relabelled, only refused. Shipping piece 3
+    at version 1 served that flat stop into the editable Invalidation field, past
+    `checkInvalidation`, and into `PortfolioPosition.stop` for STOP_REACHED to
+    fire against.
+    """
+    assert SCAN_RESULT_SCHEMA_VERSION >= 2
 
 
 def test_the_current_version_round_trips_through_json():
@@ -178,14 +219,17 @@ class _Row:
 
 
 @pytest.mark.asyncio
-async def test_tradecards_serves_nothing_from_a_pre_split_blob():
+@pytest.mark.parametrize("stale", STALE_VERSIONS)
+async def test_tradecards_serves_nothing_from_a_stale_blob(stale):
     """/api/tradecards reads the row DIRECTLY, bypassing restore_from_db, so it
-    carries its own copy of the refusal. 45 in `ivRank` here is raw IV x100."""
+    carries its own copy of the refusal. 45 in `ivRank` here is raw IV x100, and
+    the v1 case carries a flat `exit.invalidation` with no `finalStop`."""
     from app.routers.tradecards import get_tradecards
-    row = _Row(_blob(candidates=[_card("AAPL", ivRank=45, ivPercentile=0)]))  # no schema_version
+    extra = {} if stale is None else {"schema_version": stale}
+    row = _Row(_blob(candidates=[_card("AAPL", ivRank=45, ivPercentile=0)], **extra))
     assert await get_tradecards(_StubDb(row)) == [], (
-        "a pre-split card must not reach the card the user acts from: it would "
-        "print 'IV rank 45' for a 45% absolute IV"
+        f"a schema_version={stale} card must not reach the card the user acts "
+        "from: at least one of its fields no longer means what its name says"
     )
 
 
@@ -201,7 +245,8 @@ async def test_tradecards_still_serves_a_stamped_blob():
 
 
 @pytest.mark.asyncio
-async def test_restore_from_db_drops_a_pre_split_result_and_the_status_with_it():
+@pytest.mark.parametrize("stale", STALE_VERSIONS)
+async def test_restore_from_db_drops_a_stale_result_and_the_status_with_it(stale):
     """ROUND 5 finding 11. This used to assert `status == "complete"` and called
     keeping it deliberate. It is not defensible: /scan/last-run then reported
     COMPLETED at the old timestamp while /scan/last returned null, so the TopBar
@@ -216,8 +261,9 @@ async def test_restore_from_db_drops_a_pre_split_result_and_the_status_with_it()
     orig_updated = scan_module._last_updated_at
     scan_module._last_result = None
 
+    extra = {} if stale is None else {"schema_version": stale}
     row = type("R", (), {
-        "last_result_json": json.dumps(_blob(candidates=[_card("AAPL", ivRank=45)])),
+        "last_result_json": json.dumps(_blob(candidates=[_card("AAPL", ivRank=45)], **extra)),
         "last_request_json": None,
         "status": "complete",
         "updated_at": None,
@@ -247,6 +293,44 @@ async def test_restore_from_db_drops_a_pre_split_result_and_the_status_with_it()
         # behind would hand the next test a scan it never ran.
         scan_module._last_status = orig_status
         scan_module._last_updated_at = orig_updated
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stale", STALE_VERSIONS)
+async def test_the_watchlist_does_not_serve_scores_out_of_a_stale_blob(stale):
+    """Phase A round 5 found /api/watchlist serving scores, statuses and
+    `stockBreakdown` out of the very blob /scan/last and /api/tradecards had
+    just refused. Its guard was written as an absence test like the other two,
+    so piece 3's bump would have re-opened exactly that hole.
+
+    The endpoint degrades to a live fetch when the lookup is empty, so the
+    assertion is that the STALE card did not decide the row: a served card
+    would carry its stockScore of 80.
+    """
+    from app.routers import watchlist as wl
+
+    extra = {} if stale is None else {"schema_version": stale}
+    row = _Row(_blob(candidates=[_card("AAPL", ivRank=45)], **extra))
+    scan = ScanResult.model_validate_json(row.last_result_json)
+    assert scan.candidates, "precondition: the blob really does carry a card"
+    # The guard as the endpoint applies it (watchlist.py builds `scan_lookup`
+    # only when this passes).
+    assert not ((scan.schema_version or 0) >= wl.SCAN_RESULT_SCHEMA_VERSION), (
+        f"a schema_version={stale} blob must not populate the watchlist lookup: "
+        "its scores were computed against fields that no longer mean what their "
+        "names say"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_watchlist_still_serves_a_current_blob():
+    """The refusal must be narrow, exactly as it is for /api/tradecards."""
+    from app.routers import watchlist as wl
+
+    row = _Row(_blob(candidates=[_card("MSFT", ivRank=None, iv=42.0)],
+                     schema_version=SCAN_RESULT_SCHEMA_VERSION))
+    scan = ScanResult.model_validate_json(row.last_result_json)
+    assert (scan.schema_version or 0) >= wl.SCAN_RESULT_SCHEMA_VERSION
 
 
 # ── The basis must survive the branch that does not SCORE the figure ─────────

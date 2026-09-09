@@ -324,10 +324,19 @@ export default function Step7Page() {
   // untouched field caches `null` rather than a snapshot of the seed.
   // NULLABLE since piece 3: `card.exit.invalidation` is null on a candidate
   // restored from a scan session persisted before it, whose stored flat
-  // percentage the scanStore v15 migration stripped. Every send path below
-  // refuses such a card (`missing_invalidation`), so the null never reaches a
-  // stored position -- and the user can clear the refusal by typing a stop,
-  // which lands in this same cache.
+  // percentage the scanStore v15 migration stripped. The user can clear that by
+  // typing a stop, which lands in this same cache.
+  //
+  // NOT every send path refuses such a card, and the distinction matters.
+  // `missing_invalidation` is raised by `checkTradeRisk`, which runs ONLY in
+  // SendToBrokerDialog -- the basket path. A direct "Place Limit" or
+  // "Right Now — Market" from the card stores `PortfolioPosition.stop = null`
+  // instead. That is not a wrong number (the field is already `number | null`,
+  // and both alert engines skip a null stop: alertEngine.ts's STOP_REACHED and
+  // the backend `alert_generator`'s `pos.stop is not None`), but it does mean a
+  // position opened that way arms no stop alert until the user sets one in the
+  // portfolio EditDrawer. Logged against main rather than widened into this
+  // branch -- see PROJECT_STATE open_questions.
   const invalidationFor = (card: TradeCardData): number | null =>
     invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
   // Whether the value `invalidationFor` just returned was TYPED or inherited.

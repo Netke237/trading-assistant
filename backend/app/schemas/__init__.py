@@ -755,10 +755,25 @@ class DteWindow(BaseModel):
 
 
 # Bumped when a change makes a PERSISTED ScanResult unreadable by the current
-# code -- i.e. when a stored blob's fields no longer mean what they say. 1 is
-# post-PHASE-A-NULL-IVRANK-2026-09-06; a stored result with no version at all
-# predates it and cannot be trusted (see ScanResult.schema_version).
-SCAN_RESULT_SCHEMA_VERSION = 1
+# code -- i.e. when a stored blob's fields no longer mean what they say.
+#
+#   1  post-PHASE-A-NULL-IVRANK-2026-09-06. Before it, `ivRank` held raw
+#      implied volatility under a percentile's name.
+#   2  post-PIECE-3-2026-09-09. Before it, `exit.invalidation` held a flat
+#      percentage move off the stock price under the resolved structural+2xATR
+#      stop's name -- and `exit.finalStop`, the block that would say which,
+#      did not exist. A v1 blob is therefore indistinguishable from a piece-3
+#      scan whose bar feed was too thin to resolve a stop, so the basis is not
+#      recoverable and the blob is refused rather than relabelled.
+#
+# EVERY CONSUMER COMPARES, none tests `is None`. A stored result is trustworthy
+# only when its version is at least this one: `(blob.schema_version or 0) <
+# SCAN_RESULT_SCHEMA_VERSION` refuses it. Testing for None was what let piece 3
+# ship a v1 blob straight through three endpoints -- the guard only knew about
+# the ONE bump that existed when it was written, so the next one was silently
+# exempt. Written as a comparison, the next bump is honoured everywhere for
+# free.
+SCAN_RESULT_SCHEMA_VERSION = 2
 
 
 class ScanResult(BaseModel):
