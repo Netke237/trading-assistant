@@ -297,6 +297,23 @@ export function checkInvalidation(invalidation: number | null | undefined): bool
 
 export const hasInvalidation = checkInvalidation;
 
+/* ── The missing-invalidation refusal, said once ───────────────────────────
+ *
+ * DIRECT-SEND-STOP-GATE-2026-09-09. Three surfaces refuse a card whose
+ * resolved stop is null -- SendToBrokerDialog (the basket), and step 7's two
+ * DIRECT buttons "Place Limit" and "Right Now — Market" -- plus AutoTradeArm,
+ * which refuses to arm one. They are one refusal for one reason, so they read
+ * from one string rather than four copies that drift the first time anyone
+ * rewords it. The dialog's existing wording is what these are: this is an
+ * extraction, not a rewrite, so the copy on screen is unchanged where it
+ * already existed.
+ *
+ * "before submitting" covers all four: each is the gesture that submits an
+ * order to a broker. */
+export const MISSING_INVALIDATION_TITLE = 'Invalidation stop required';
+export const MISSING_INVALIDATION_MESSAGE =
+  'Invalidation stop required — define an invalidation level before submitting.';
+
 export function positionMultiplier(p: PortfolioPosition): number {
   return p.contract.endsWith('|STOCK') ? 1 : 100;
 }

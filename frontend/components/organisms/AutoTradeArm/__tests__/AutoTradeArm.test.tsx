@@ -144,3 +144,66 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     expect(screen.getByRole('button', { name: 'Disarm' })).toBeInTheDocument();
   });
 });
+
+/* DIRECT-SEND-STOP-GATE-2026-09-09.
+ *
+ * Gating step 7's two direct buttons and leaving Arm open beside them would
+ * not have closed the hole -- it would have relabelled it, and put the way
+ * around the refusal directly under the refusal. This path is the worse door
+ * of the two: an auto-trade fill creates no PortfolioPosition at all
+ * (auto_trader.fire), so a card with no stop armed here yields a filled order
+ * carrying no stop, no premium stop and no time stop.
+ *
+ * The arm REQUEST still sends no stop level; `resolvedInvalidation` is a gate,
+ * not a payload, and no assertion below expects it on the wire.
+ */
+describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () => {
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  const noStopCard = { ...mockCard, exit: { ...mockCard.exit, invalidation: null } } as TradeCardData;
+
+  it('disables Arm and posts NOTHING when the resolved stop is null', async () => {
+    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={null} />);
+    const arm = screen.getByText(/^Arm —/).closest('button')!;
+    expect(arm).toBeDisabled();
+
+    // Disabled is not the claim. A build that greys the button and still posts
+    // on click satisfies the line above and fails this one.
+    fireEvent.click(arm);
+    await Promise.resolve();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('arms normally once the user has typed a stop, even though the CARD still has none', async () => {
+    // The half that makes this a gate rather than a wall, and the one a
+    // `card.exit.invalidation` implementation fails: typing a stop is the
+    // single gesture that fixes a restored candidate, and the caller resolves
+    // it exactly as every send path does.
+    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={185} />);
+    const arm = screen.getByText(/^Arm —/).closest('button')!;
+    expect(arm).toBeEnabled();
+
+    fireEvent.click(arm);
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    // A gate, not a payload: the arm request still carries no stop level.
+    expect((api.armAutoTrade as jest.Mock).mock.calls[0][0]).not.toHaveProperty('invalidation');
+  });
+
+  it('falls back to the card when the prop is omitted, matching checkTradeRisk', async () => {
+    // `undefined` means "no overlay to consult", not "no gate" -- the same
+    // contract `checkTradeRisk.resolvedInvalidation` documents. A card with no
+    // stop is still refused; the ordinary card is still armable.
+    const { unmount } = render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" />);
+    expect(screen.getByText(/^Arm —/).closest('button')!).toBeDisabled();
+    unmount();
+
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    expect(screen.getByText(/^Arm —/).closest('button')!).toBeEnabled();
+  });
+});

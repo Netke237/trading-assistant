@@ -27,6 +27,7 @@ import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
+import { checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
@@ -327,16 +328,21 @@ export default function Step7Page() {
   // percentage the scanStore v15 migration stripped. The user can clear that by
   // typing a stop, which lands in this same cache.
   //
-  // NOT every send path refuses such a card, and the distinction matters.
-  // `missing_invalidation` is raised by `checkTradeRisk`, which runs ONLY in
-  // SendToBrokerDialog -- the basket path. A direct "Place Limit" or
-  // "Right Now — Market" from the card stores `PortfolioPosition.stop = null`
-  // instead. That is not a wrong number (the field is already `number | null`,
-  // and both alert engines skip a null stop: alertEngine.ts's STOP_REACHED and
-  // the backend `alert_generator`'s `pos.stop is not None`), but it does mean a
-  // position opened that way arms no stop alert until the user sets one in the
-  // portfolio EditDrawer. Logged against main rather than widened into this
-  // branch -- see PROJECT_STATE open_questions.
+  // EVERY send path refuses such a card as of DIRECT-SEND-STOP-GATE-2026-09-09,
+  // and it took a second build to get there. `missing_invalidation` is raised by
+  // `checkTradeRisk`, which runs ONLY in SendToBrokerDialog -- the basket path.
+  // The two DIRECT buttons ("Place Limit", "Right Now — Market") never called it
+  // and stored `PortfolioPosition.stop = null` instead. That was not a wrong
+  // number -- the field is already `number | null`, and both alert engines skip a
+  // null stop (alertEngine.ts's STOP_REACHED, the backend `alert_generator`'s
+  // `pos.stop is not None`) -- so it sat below the audit gate and was logged
+  // against main rather than widened into the piece-3 branch. What it DID mean is
+  // that a position opened that way armed no stop alert at all and looked
+  // entirely normal in the portfolio list, which is discovered at the worst
+  // possible moment. Kenneth chose the refusal over a marker on the position.
+  // `stopMissing` below is that gate, and AutoTradeArm takes the same check as a
+  // prop -- gating only these two would have moved the hole rather than closed
+  // it.
   const invalidationFor = (card: TradeCardData): number | null =>
     invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
   // Whether the value `invalidationFor` just returned was TYPED or inherited.
@@ -578,6 +584,25 @@ export default function Step7Page() {
 
   // Merge the recomputed Entry/Exit/RR into the overridden card once it arrives.
   const effectiveCard = pickedCard && planForThisContract ? mergePlan(pickedCard, planForThisContract) : pickedCard;
+
+  /* DIRECT-SEND-STOP-GATE-2026-09-09. The two direct buttons' half of the
+   * refusal `checkTradeRisk` already raises as `missing_invalidation` on the
+   * basket path -- see the long note on `invalidationFor` for what it is for.
+   *
+   * Read through `invalidationFor`, NOT `effectiveCard.exit.invalidation`, and
+   * that is the whole point of the gate rather than an implementation detail:
+   * a stop the user has TYPED into the Invalidation field lives in
+   * `invalidationBySymbol`, and typing one is the single gesture that fixes a
+   * restored card. Gating on the card alone would refuse it forever, which is
+   * exactly the defect C2 gave `checkTradeRisk` its `resolvedInvalidation`
+   * parameter to avoid -- the same mistake, one screen along.
+   *
+   * `checkInvalidation` rather than a local `!= null`, so the direct paths and
+   * the basket cannot disagree about what counts as a stop (it also refuses 0
+   * and negatives). Null-safe on `effectiveCard` because the buttons render
+   * inside its own guard but the send handlers do not. */
+  const resolvedInvalidationForCard = effectiveCard ? invalidationFor(effectiveCard) : null;
+  const stopMissing = !checkInvalidation(resolvedInvalidationForCard);
   const editKey = editKeyFor(effectiveCard);
 
   // The card actually handed to <TradeCard>, with any cached "Estimate" /
@@ -904,6 +929,17 @@ export default function Step7Page() {
   async function placeLimitPaper() {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
+    // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
+    // this handler closes over the same render's `invalidationFor` that
+    // `stopMissing` was derived from, so it cannot currently disagree with the
+    // `disabled` on the button -- it is an INVARIANT on the function that
+    // builds the position, not a second chance at a race. It is here because
+    // `disabled` protects the button and this protects the ORDER: anything that
+    // reaches this function by another route (a keyboard shortcut, a
+    // programmatic retry, a future caller) inherits the refusal instead of
+    // having to remember it. Exactly the shape SendToBrokerDialog.submit()
+    // already uses beside its own `disabled`, and for the same reason.
+    if (!checkInvalidation(invalidationFor(card))) return;
     // ROUND 10 finding 11 -- CLEAR THE NOTES PER ORDER. They are facts about
     // ONE save, and were only reset when the active candidate changed, so a
     // "Size reduced to 1 contract" from a previous fill sat under the next,
@@ -951,6 +987,17 @@ export default function Step7Page() {
   async function placeMarketNow() {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
+    // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
+    // this handler closes over the same render's `invalidationFor` that
+    // `stopMissing` was derived from, so it cannot currently disagree with the
+    // `disabled` on the button -- it is an INVARIANT on the function that
+    // builds the position, not a second chance at a race. It is here because
+    // `disabled` protects the button and this protects the ORDER: anything that
+    // reaches this function by another route (a keyboard shortcut, a
+    // programmatic retry, a future caller) inherits the refusal instead of
+    // having to remember it. Exactly the shape SendToBrokerDialog.submit()
+    // already uses beside its own `disabled`, and for the same reason.
+    if (!checkInvalidation(invalidationFor(card))) return;
     // See placeLimitPaper — notes describe this save only.
     setMarketPlacing(true); setOrderError(null); setSaveNotes([]);
     try {
@@ -1232,7 +1279,8 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing}
+                  title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}
                 >
                   {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
                 </button>
@@ -1240,7 +1288,8 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing}
+                  title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}
                 >
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
@@ -1248,6 +1297,19 @@ export default function Step7Page() {
               {!planReady && (
                 <Text size={11} tone="caution">
                   Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
+                </Text>
+              )}
+              {/* Said, not merely disabled. A greyed button with no reason
+                * beside it reads as a bug; the `title` above is a tooltip and
+                * a tooltip is not a disclosure. Rendered independently of
+                * `!planReady` rather than as its `else`, because the two are
+                * unrelated conditions and can hold at once -- an overridden
+                * contract still recomputing on a restored candidate -- and
+                * suppressing this one behind the other would hide the only
+                * refusal the user can actually act on. */}
+              {stopMissing && (
+                <Text size={11} tone="reject">
+                  {MISSING_INVALIDATION_MESSAGE}
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
@@ -1267,9 +1329,14 @@ export default function Step7Page() {
                   premiumStopDollar={premiumStopDollarFor(effectiveCard)}
                   // Same resolution as every other send path, for the same
                   // reason: an armed trade and a sent trade must not go out at
-                  // two different limit prices. No invalidation counterpart --
-                  // the arm request carries no stop level at all.
+                  // two different limit prices.
                   entryLimit={entryLimitFor(effectiveCard)}
+                  // DIRECT-SEND-STOP-GATE-2026-09-09. The arm REQUEST still
+                  // carries no stop level -- this is the gate, not a payload.
+                  // The same resolution `stopMissing` is derived from, passed
+                  // rather than recomputed, so Arm and the two direct buttons
+                  // cannot refuse on two different readings of one field.
+                  resolvedInvalidation={resolvedInvalidationForCard}
                 />
               )}
             </>
