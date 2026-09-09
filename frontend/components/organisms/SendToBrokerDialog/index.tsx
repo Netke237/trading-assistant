@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useRiskStore } from '@/lib/riskStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { checkTradeRisk } from '@/lib/risk';
+import { checkTradeRisk, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
 import type { TradeCardData, RiskCheckResult, MaxLossOverride } from '@/types/domain';
 import styles from './SendToBrokerDialog.module.css';
 
@@ -277,7 +277,7 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
               disabled={cards.length === 0 || hasMissingInvalidation}
-              title={hasMissingInvalidation ? 'Invalidation stop required' : undefined}
+              title={hasMissingInvalidation ? MISSING_INVALIDATION_TITLE : undefined}
             >
               {overrideReady && hasWarnings
                 ? 'Override & Submit'
@@ -306,7 +306,7 @@ function RiskSummary({
   if (hasMissingInvalidation) {
     return (
       <Text size={12} tone="reject">
-        Invalidation stop required — define an invalidation level before submitting.
+        {MISSING_INVALIDATION_MESSAGE}
       </Text>
     );
   }

@@ -7,6 +7,7 @@ import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
+import { checkInvalidation, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
 import type { TradeCardData } from '@/types/domain';
 import styles from './AutoTradeArm.module.css';
 
@@ -51,11 +52,33 @@ interface AutoTradeArmProps {
    *  the other would arm the trade at a fraction derived against a price the
    *  order was never placed at.
    *
-   *  There is no invalidation counterpart because the arm request carries no
-   *  stop level: `/auto-trade/arm` books entry, size and premium stop only, and
-   *  the auto-trader places no protective order (see the daily-loss-gate note
-   *  in PROJECT_STATE.json's open questions). */
+   *  There is no invalidation counterpart in the REQUEST because the arm
+   *  request carries no stop level: `/auto-trade/arm` books entry, size and
+   *  premium stop only, and the auto-trader places no protective order (see the
+   *  daily-loss-gate note in PROJECT_STATE.json's open questions). What the card
+   *  does have to say about its stop is `resolvedInvalidation` below, and that
+   *  is a GATE, not a payload. */
   entryLimit?: number | null;
+  /** DIRECT-SEND-STOP-GATE-2026-09-09 -- the stop the card is SHOWING, resolved
+   *  by the caller exactly as every send path resolves it (step 7's
+   *  `invalidationFor`: the user's typed value when the Invalidation field is
+   *  touched, else the card's own). Null means the card has no stop, and arming
+   *  is refused.
+   *
+   *  Why this control needs the check at all, given it sends no stop and books
+   *  no position: because the OTHER four paths now refuse such a card. A gate on
+   *  Place Limit, Right Now — Market and the basket, with Arm left open beside
+   *  them, does not close the hole -- it relabels it, and puts the way around
+   *  the refusal directly under the refusal. It is also the worse door of the
+   *  two: an auto-trade fill creates no PortfolioPosition at all, so a card with
+   *  no stop armed here yields a filled order carrying no stop, no premium stop
+   *  and no time stop, which is the caution already printed below this button.
+   *
+   *  `undefined` (the default) falls back to `card.exit.invalidation`, matching
+   *  `checkTradeRisk`'s `resolvedInvalidation` contract verbatim -- the same
+   *  meaning for the same word, so a caller with no overlay to consult can omit
+   *  it and still be gated on something real. */
+  resolvedInvalidation?: number | null;
   /** The live option mid, fetched by the page (`liveQuote?.price`) -- the same
    *  number it already hands TradeCard as `liveMid` and prints as "Live mid".
    *
@@ -81,7 +104,7 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -110,12 +133,36 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     (liveMid != null && liveMid > 0 ? liveMid : null)
     ?? card.contractDetails?.mid ?? entryLimit ?? card.entry.limit;
 
+  /* DIRECT-SEND-STOP-GATE-2026-09-09 -- see the `resolvedInvalidation` prop
+   * doc. `??` and not `!== undefined`, so this reads the card by the same rule
+   * `checkTradeRisk` does; both collapse to the same answer here (the caller's
+   * resolution already falls back to the card, so a null out of it means the
+   * card is null too) and matching the established idiom is worth more than a
+   * second, subtly different one. */
+  const stopMissing = !checkInvalidation(resolvedInvalidation ?? card.exit.invalidation);
+  /* NOTE: the disclosure is the CALLER'S, not this component's, and that is a
+   * choice rather than an omission. Rendering the refusal sentence here too put
+   * it on screen TWICE in one column -- step 7 already prints it a few rows
+   * above, under the two direct buttons it also gates, and this control sits
+   * inside that same panel. Two identical sentences stacked in one section make
+   * the refusal easier to skim past, not harder. What stays here is the part
+   * that cannot be delegated: the check itself, the `disabled`, and the
+   * `title`. A second call site that does not print the sentence would leave a
+   * greyed Arm button unexplained -- there is exactly one today, and it prints
+   * it. */
+
   const contractId = card.contract;
   // NOTE: option_symbol should be OCC format for real broker APIs; card.contract is
   // Bamendjou's display id. OCC conversion is a tracked follow-up — passed as-is for now.
 
   async function handleArm() {
     if (!broker) return;
+    // Belt and braces beside the button's own `disabled`, on the same reading
+    // of the same value -- an invariant on the function that submits the arm
+    // request, not a second chance at a race it could not lose. Same shape as
+    // step 7's two direct handlers and SendToBrokerDialog.submit(): `disabled`
+    // protects the button, this protects the REQUEST.
+    if (stopMissing) return;
     setWorking(true); setError(null);
     try {
       await api.armAutoTrade({
@@ -200,7 +247,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         <div className={styles.armRow}>
           {!armed ? (
             <button type="button" className={`${styles.btn} ${styles.btnArm}`}
-              onClick={handleArm} disabled={!broker || working}>
+              onClick={handleArm} disabled={!broker || working || stopMissing}
+              title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}>
               {working ? 'Arming…' : `Arm — ${card.symbol} ${card.direction}`}
             </button>
           ) : (
