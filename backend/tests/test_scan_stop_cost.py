@@ -8,10 +8,12 @@ things can go wrong here quietly, and each has a test below:
 
 1. The row loses its verdict. A missing gate reads exactly like an
    unremarkable candidate.
-2. The verdict is priced against the WRONG STOP -- the flat percentage
-   `exit.invalidation` rather than the structural/ATR level the decision
-   picked. No rendering test would ever catch this: both stops produce a
-   plausible-looking percentage.
+2. The verdict is priced against the WRONG STOP -- a flat percentage move off
+   the stock price rather than the structural/ATR level the decision picked.
+   No rendering test would ever catch this: both stops produce a
+   plausible-looking percentage. (`exit.invalidation` carried that flat
+   percentage until piece 3 repointed it at the resolved stop; it is no longer
+   a witness for the rejected basis.)
 3. The gate stops discriminating. The whole reason for the Black-Scholes
    basis is that the old delta-linear estimator pinned four of eight strikes
    on the spec's reference chain at exactly 100%, so it could not tell a 220
@@ -128,14 +130,26 @@ def test_every_candidate_carries_the_gate(client):
         assert 0.0 <= c["stopCostPct"] <= 100.0
 
 
-def test_gate_is_priced_at_the_structural_stop_not_the_flat_invalidation(client):
+def test_gate_is_priced_at_the_structural_stop_not_a_flat_percentage(client):
     """THE test of the decision, not of the plumbing.
 
-    `exit.invalidation` is a flat percentage move off the stock price
-    (trade_plan.py:119-121). B3 priced the badge at `compute_final_stop`'s
-    wider-of-structural-or-ATR level instead. Only reproducing the arithmetic
-    can tell which stop was used.
+    B3 priced the badge at `compute_final_stop`'s wider-of-structural-or-ATR
+    level rather than at a flat percentage move off the stock price. Only
+    reproducing the arithmetic can tell which stop was used: both produce a
+    plausible-looking percentage.
+
+    UPDATED BY PIECE 3. This used to read the flat stop off
+    `exit.invalidation`, which no longer holds one -- piece 3 repointed that
+    field at the same resolved stop, so the two now coincide BY DESIGN and
+    reading it back would compare the structural stop against itself and prove
+    nothing. The rejected stop is therefore reconstructed from
+    risk_rules.yaml's own `bullish_invalidation_pct`, which is what
+    `exit.invalidation` used to carry. The coincidence is asserted separately,
+    as a requirement, in
+    test_scan_endpoint.py::test_scan_badge_and_invalidation_grade_the_same_stop.
     """
+    from app.services.config_loader import load_reward_risk_cfg
+
     cands, price, candles = _candidates(client)
     c = cands[0]
     cd = c["contractDetails"]
@@ -145,7 +159,7 @@ def test_gate_is_priced_at_the_structural_stop_not_the_flat_invalidation(client)
     final = compute_final_stop(
         candles, "Bullish", price, atr, load_exit_plan_cfg()["stop"]["atr_multiplier"],
     )
-    flat = float(c["exit"]["invalidation"])
+    flat = round(price * (1 - load_reward_risk_cfg()["bullish_invalidation_pct"]), 2)
     assert abs(round(final.price, 2) - flat) > 0.01, (
         "the two stops coincide on this fixture, so it cannot distinguish them"
     )
@@ -169,7 +183,7 @@ def test_gate_is_priced_at_the_structural_stop_not_the_flat_invalidation(client)
         "the two stops price identically here, so this test cannot tell them apart"
     )
     assert c["stopCostPct"] != pytest.approx(round(wrong.fraction * 100, 1)), (
-        "badge was priced at exit.invalidation -- the flat percentage stop"
+        "badge was priced at the flat percentage stop"
     )
 
 
@@ -208,15 +222,27 @@ def test_unpriceable_atr_yields_not_computed_and_keeps_the_candidate(client):
         assert c["stopCostStatus"] is None
 
 
-def test_gate_failure_never_drops_a_candidate(client):
+def test_a_failed_stop_resolution_never_drops_a_candidate(client):
     """Every other per-symbol enrichment in _process_symbol degrades rather
-    than raises. This one carries less than any of them, so it must too."""
-    cands, _, _ = _candidates(client, extra_patches=[
-        patch("app.routers.scan.compute_final_stop", side_effect=RuntimeError("boom")),
+    than raises. The gate carries less than any of them, so it must too.
+
+    PIECE 3 WIDENED THIS. The badge and `exit.invalidation` now share one
+    resolution, so a throw here takes out both -- and the card still needs a
+    stop to print. The candidate must survive with the flat-percentage fallback
+    and NO provenance block, which is what "not computed" looks like on every
+    surface at once.
+    """
+    from app.services.config_loader import load_reward_risk_cfg
+
+    cands, price, _ = _candidates(client, extra_patches=[
+        patch("app.routers.scan.resolve_stock_stop", side_effect=RuntimeError("boom")),
     ])
+    expected_flat = round(price * (1 - load_reward_risk_cfg()["bullish_invalidation_pct"]), 2)
     for c in cands:
         assert c["stopCostPct"] is None
         assert c["stopCostStatus"] is None
+        assert c["exit"]["finalStop"] is None
+        assert c["exit"]["invalidation"] == expected_flat
 
 
 def test_verdict_and_percentage_agree_with_the_horizon_line(client):

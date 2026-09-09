@@ -466,13 +466,59 @@ class TradeEntry(BaseModel):
     orderType: OrderType
 
 
+class FinalStopOut(BaseModel):
+    """Provenance for the stock stop the scan already resolved (piece 3).
+
+    `TradeExit.invalidation` carries the NUMBER; this block says where it came
+    from, so the "Bottom (final stop)" row can render before the user has
+    pressed Compute Arithmetic Plan. Every field mirrors the corresponding one
+    on `ExitPlanStopOut`, which the endpoint version of this row already reads.
+
+    NOT PRESENT here, and deliberately: `contractPrice`, `rrModel` and
+    `structuralConfidence`. The first two need a contract repriced AT the stop,
+    which is a per-contract question the scan's auto-pick does not settle (a
+    Step 6 override replaces the contract without moving this stop); the
+    contract-priced sub-cells and the risk-derived size render "—" until an
+    Arithmetic Plan is computed. `structuralConfidence` is omitted because
+    nothing on the card reads it outside the endpoint's own block.
+    """
+    model_config = ConfigDict(populate_by_name=True)
+    price: float
+    source: Literal["final_stop", "flat_fallback"]
+    # 'final_stop' rows carry compute_final_stop's own source; 'flat_fallback'
+    # rows carry None, because no structural/ATR comparison was ever made.
+    stopSource: Optional[Literal["structural", "atr_widened"]] = None
+    structuralSource: Optional[Literal["order_block", "swing_low", "swing_high"]] = None
+    # The raw structural candidate, whether or not it decided `price`.
+    structuralPrice: Optional[float] = None
+    # The ATR floor, whether or not it decided `price`. None on flat_fallback.
+    atrFloorPrice: Optional[float] = None
+    # |structuralPrice - atrFloorPrice|; None when there was no structural
+    # candidate at all, or on the flat_fallback path.
+    distanceDollar: Optional[float] = None
+    # ATR(14) the floor was built on. 0.0 on the flat_fallback path — which is
+    # exactly why that path exists.
+    atr: float = 0.0
+    # ISO-8601 UTC. Server-set, unlike ExitPlan.computedAt (client-set on
+    # receipt), because this one rides on a scan result that IS persisted and
+    # replayed: a restored card must be able to say how old its stop is.
+    computedAt: str
+
+
 class TradeExit(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
+    # PIECE 3: the resolved stock stop — the wider of the structural level and
+    # a 2xATR floor — not a flat percentage move. See `finalStop` below for
+    # which branch produced it.
     invalidation: float
     premiumStop: float
     timeStopDays: int
     target: float                    # KEEP — first target stock price (backward compat)
     targets: list[TargetLevel] = []  # NEW — 3 graduated target levels
+    # ABSENT means "this card predates piece 3" — a scan session persisted
+    # before it shipped, replayed through /scan/last-run. It must never render
+    # as a computed stop; the card reads "not computed — re-run the scan".
+    finalStop: Optional[FinalStopOut] = None
 
 
 class OptionLeg(BaseModel):

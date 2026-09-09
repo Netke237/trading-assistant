@@ -63,6 +63,117 @@ def compute_final_stop(
     )
 
 
+StockStopSource = Literal["final_stop", "flat_fallback"]
+
+
+@dataclass
+class StockStopResult:
+    """The stock stop a trade card is built around (piece 3).
+
+    `price` is the number that becomes `TradeExit.invalidation` — the level the
+    Exit Plan's Invalidation field seeds from, the level `buildPaperPosition`
+    stores as `PortfolioPosition.stop`, and the last-resort barrier the Monte
+    Carlo card measures against. Before piece 3 it was a flat percentage move
+    off the stock price (risk_rules.yaml's `bullish_invalidation_pct`), which
+    measured the same distance on every symbol in the universe regardless of
+    where its structure actually sits.
+    """
+    price: float                            # unrounded; round at the display boundary
+    source: StockStopSource
+    final_stop: Optional[FinalStopResult]   # None on the flat_fallback path only
+    atr: float                              # the ATR(14) the floor was built on; 0.0 on the fallback path
+
+
+def resolve_stock_stop(
+    candles: list[dict],
+    direction: Literal["Bullish", "Bearish"],
+    entry_price: float,
+    atr: float,
+    atr_multiplier: float,
+    flat_fallback_pct: float,
+) -> StockStopResult:
+    """Resolve the stock stop for one candidate: the structural+ATR final stop
+    whenever the bar feed can form one, else a flat percentage move.
+
+    THE FALLBACK IS THE DEGENERATE PATH, NOT A CO-EQUAL BRANCH. `atr <= 0` means
+    `_atr` could not form even one true range — fewer than two bars, or a stale
+    feed repeating one bar — and `compute_final_stop` on such a feed hands back
+    an ATR floor sitting exactly ON `entry_price`, i.e. a zero-width stop that
+    every downstream consumer would read as a real level. That is the same guard,
+    for the same reason, as `/contracts/exit-plan`'s 422 and the scan-time gate's
+    `if _scan_atr > 0`. Any candidate that scored at all has hundreds of bars, so
+    in production this returns `final_stop` essentially always.
+
+    `flat_fallback_pct` is Step 3's "Bullish stop %" / "Bearish stop %"
+    execution parameter (risk_rules.yaml `reward_risk.bullish_invalidation_pct`
+    / `bearish_invalidation_pct`, per-request overridable). Deciding WHICH stop
+    applies lives here, with the candles, and deliberately NOT inside
+    `build_trade_plan` — that module does contract arithmetic and has never had
+    a bar feed to judge structure with.
+    """
+    is_bullish = direction == "Bullish"
+
+    if atr > 0:
+        final = compute_final_stop(candles, direction, entry_price, atr, atr_multiplier)
+        # A bullish ATR floor can be driven negative by a wide multiplier on a
+        # low-priced name (entry 3.00, ATR 2.00, multiplier 2.0 -> -1.00). Floor
+        # it at a cent, matching what the flat branch below has always done —
+        # a stop at or below zero is not a level, and `estimate_stock_first_passage`
+        # treats `invalidation_price > 0` as the switch for pricing the stop leg
+        # at all.
+        return StockStopResult(
+            price=max(final.price, 0.01) if is_bullish else final.price,
+            source="final_stop", final_stop=final, atr=atr,
+        )
+
+    pct = max(float(flat_fallback_pct), 0.0)
+    flat = (
+        max(entry_price * (1 - pct), 0.01) if is_bullish
+        else entry_price * (1 + pct)
+    )
+    return StockStopResult(price=flat, source="flat_fallback", final_stop=None, atr=0.0)
+
+
+def final_stop_out(stock_stop: Optional[StockStopResult], computed_at: str):
+    """Render a resolved stop as the wire block piece 3 puts on `TradeExit`.
+
+    ONE builder, used by both the scan and /contracts/recompute-plan, because
+    `mergePlan` on the client replaces `exit` wholesale: if the two endpoints
+    emitted different shapes for the same stop, a Step 6 contract override
+    would silently change what the "Bottom (final stop)" row reads.
+
+    Returns None -- "not computed" -- for a stop the structural/ATR model did
+    not actually choose. On the flat-percentage fallback there is no structural
+    level and no ATR floor to report, and a block full of nulls would read on
+    the card as "we looked and found nothing" rather than "we could not look at
+    all". Same for a resolution that raised (`stock_stop is None`).
+    """
+    from app.schemas import FinalStopOut
+
+    if stock_stop is None or stock_stop.final_stop is None:
+        return None
+
+    fs = stock_stop.final_stop
+    structural_price = round(fs.structural.price, 2) if fs.structural else None
+    atr_floor_price = round(fs.atr_floor_price, 2)
+    return FinalStopOut(
+        # Rounded to match `TradeExit.invalidation` exactly -- the provenance
+        # row and the Invalidation field must print the same number.
+        price=round(stock_stop.price, 2),
+        source=stock_stop.source,
+        stopSource=fs.source,
+        structuralSource=fs.structural.source if fs.structural else None,
+        structuralPrice=structural_price,
+        atrFloorPrice=atr_floor_price,
+        distanceDollar=(
+            round(abs(structural_price - atr_floor_price), 2)
+            if structural_price is not None else None
+        ),
+        atr=round(stock_stop.atr, 4),
+        computedAt=computed_at,
+    )
+
+
 @dataclass
 class TargetRowResult:
     rr_ratio: float

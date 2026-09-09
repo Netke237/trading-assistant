@@ -24,6 +24,11 @@ def _plan(**overrides):
     base = dict(
         direction="Bullish", stock_price=318.73, strike=375, dte=185,
         premium=7.47, entry_bid=7.34, entry_ask=7.59, rr_cfg=CFG,
+        # Piece 3: the stock stop is RECEIVED, never derived here. Pinned to
+        # what CFG's old flat 3% would have produced so every assertion in this
+        # module that is not ABOUT the stop keeps measuring the same numbers it
+        # always did.
+        final_stop_price=318.73 * (1 - 0.03),
     )
     base.update(overrides)
     base.setdefault("entry_mid", base["premium"])
@@ -39,22 +44,45 @@ def test_premium_stop_is_pct_of_selected_premium():
     assert len(p.targets) == 3
 
 
-def test_invalidation_is_stock_pct_move_not_delta_derived():
-    # Finding 1 fix: invalidation is a stock-price percentage move off
-    # bullish_invalidation_pct, mirroring target_price's own formula -- delta
-    # no longer plays any part in it (the old formula back-calculated a stock
-    # move from premium_stop_pct/delta; that was never what
-    # bullish_invalidation_pct/bearish_invalidation_pct in risk_rules.yaml
-    # actually documented).
-    p = _plan()
-    expected = 318.73 * (1 - 0.03)
-    assert round(p.invalidation_price_raw, 2) == round(expected, 2)
+def test_invalidation_is_the_stop_the_caller_passed():
+    """PIECE 3. `invalidation_price` is `final_stop_price`, full stop.
+
+    It used to be a flat percentage move off `stock_price` (rr_cfg's
+    bullish_invalidation_pct), which measured the same -3% on every symbol in
+    the universe regardless of where its structure sat. A value that is neither
+    3% below nor derived from delta, passed with an rr_cfg that still carries
+    the old keys, is what distinguishes "the stop is received" from "the stop
+    is derived and the caller's argument was ignored".
+    """
+    p = _plan(final_stop_price=291.40)
+    assert p.invalidation_price_raw == 291.40
+    assert p.invalidation_price == 291.40
+    # And nothing about it came from the config that still holds 0.03.
+    assert round(p.invalidation_price_raw, 2) != round(318.73 * (1 - 0.03), 2)
 
 
-def test_invalidation_uses_bearish_invalidation_pct_for_bearish():
-    p = _plan(direction="Bearish")
-    expected = 318.73 * (1 + 0.03)
-    assert round(p.invalidation_price_raw, 2) == round(expected, 2)
+def test_invalidation_ignores_rr_cfg_invalidation_pct_entirely():
+    """The flat keys are dead here even when the caller sets them absurdly.
+
+    A build_trade_plan that still read them would move the stop; this one
+    cannot. Both directions, because the old code had a separate branch each.
+    """
+    loud_cfg = {**CFG, "bullish_invalidation_pct": 0.50, "bearish_invalidation_pct": 0.50}
+    assert _plan(rr_cfg=loud_cfg, final_stop_price=291.40).invalidation_price == 291.40
+    assert _plan(
+        direction="Bearish", rr_cfg=loud_cfg, final_stop_price=340.10,
+    ).invalidation_price == 340.10
+
+
+def test_invalidation_is_floored_at_a_cent():
+    """A caller cannot install a zero or negative stop.
+
+    `estimate_stock_first_passage` switches on `invalidation_price > 0` to price
+    the stop leg at all, so a 0 here would silently drop that leg rather than
+    fail loudly.
+    """
+    assert _plan(final_stop_price=0.0).invalidation_price == 0.01
+    assert _plan(final_stop_price=-5.0).invalidation_price == 0.01
 
 
 def test_bearish_target_moves_down():
@@ -62,41 +90,20 @@ def test_bearish_target_moves_down():
     assert p.target_price < 318.73
 
 
-def test_default_rr_cfg_invalidation_matches_risk_rules_yaml():
-    # Uses the REAL load_reward_risk_cfg() (not the fixed CFG constant) so a
-    # future edit to risk_rules.yaml's bullish_invalidation_pct default is
-    # caught here rather than silently drifting from what's displayed.
-    from app.services.config_loader import load_reward_risk_cfg
-    rr_cfg = load_reward_risk_cfg()
-    p = build_trade_plan(
-        direction="Bullish", stock_price=318.73, strike=375, dte=185,
-        premium=7.47, entry_bid=7.34, entry_ask=7.59, entry_mid=7.47,
-        rr_cfg=rr_cfg,
-    )
-    expected = round(318.73 * (1 - rr_cfg["bullish_invalidation_pct"]), 2)
-    assert p.invalidation_price == expected
+def test_final_stop_price_is_required():
+    """Omitting the stop must be a TypeError, not a silent default.
 
-
-def test_merge_reward_risk_overrides_bullish_invalidation_pct_changes_plan():
-    # Mirrors the existing rr_bullish_target_pct override pattern -- an
-    # override to rr_bullish_invalidation_pct must actually change the
-    # computed invalidation_price, not just the merged config dict.
-    from app.services.config_loader import merge_reward_risk_overrides
-    default_cfg = merge_reward_risk_overrides(None)
-    overridden_cfg = merge_reward_risk_overrides({"rr_bullish_invalidation_pct": 0.10})
-
-    default_plan = build_trade_plan(
-        direction="Bullish", stock_price=318.73, strike=375, dte=185,
-        premium=7.47, entry_bid=7.34, entry_ask=7.59, entry_mid=7.47,
-        rr_cfg=default_cfg,
-    )
-    overridden_plan = build_trade_plan(
-        direction="Bullish", stock_price=318.73, strike=375, dte=185,
-        premium=7.47, entry_bid=7.34, entry_ask=7.59, entry_mid=7.47,
-        rr_cfg=overridden_cfg,
-    )
-    assert overridden_plan.invalidation_price != default_plan.invalidation_price
-    assert overridden_plan.invalidation_price == round(318.73 * (1 - 0.10), 2)
+    A default here -- of any kind -- would let a caller that forgot to resolve
+    a stop ship a plan built around a level nobody chose, which is exactly the
+    failure piece 3 exists to end, reintroduced quietly.
+    """
+    import pytest
+    with pytest.raises(TypeError):
+        build_trade_plan(
+            direction="Bullish", stock_price=318.73, strike=375, dte=185,
+            premium=7.47, entry_bid=7.34, entry_ask=7.59, entry_mid=7.47,
+            rr_cfg=CFG,
+        )
 
 
 def test_heston_params_flow_through_to_rr_and_targets():
@@ -165,11 +172,14 @@ def test_recompute_endpoint_matches_helper():
 
     premium, spread = 7.47, 0.25
     half = spread / 2
+    # No final_stop in the request below, so the endpoint falls back to the
+    # flat percentage -- reconstruct exactly that here.
     expected = build_trade_plan(
         direction="Bullish", stock_price=318.73, strike=375, dte=185,
         premium=premium,
         entry_bid=max(0.01, premium - half), entry_ask=premium + half,
         entry_mid=premium, rr_cfg=_rr_cfg(),
+        final_stop_price=318.73 * (1 - _rr_cfg()["bullish_invalidation_pct"]),
     )
 
     app = FastAPI()
@@ -190,11 +200,11 @@ def test_recompute_endpoint_matches_helper():
     assert len(body["exit"]["targets"]) == len(expected.targets) == 3
 
 
-def test_recompute_endpoint_uses_bullish_invalidation_pct_not_delta():
-    # delta no longer affects invalidation at all (see Finding 1 fix) -- the
-    # endpoint must still accept a request with no delta field (Pydantic
-    # default kicks in) and computes invalidation purely from
-    # bullish_invalidation_pct now, mirroring target_price's own formula.
+def test_recompute_endpoint_falls_back_to_the_flat_pct_with_no_final_stop():
+    # PIECE 3: a card with no resolved stop to round-trip (a scan session
+    # persisted before piece 3, or a symbol whose bar feed was too thin) falls
+    # back to the flat percentage. delta plays no part in it either way -- the
+    # endpoint must still accept a request with no delta field.
     from app.routers.contracts import router
     from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
     app = FastAPI()
@@ -256,6 +266,7 @@ def test_recompute_endpoint_horizon_preset_reaches_build_trade_plan():
         direction="Bullish", stock_price=318.73, strike=375, dte=185,
         premium=7.47, entry_bid=max(0.01, 7.47 - 0.125), entry_ask=7.47 + 0.125,
         entry_mid=7.47, rr_cfg=_rr_cfg(), horizon_preset="Annual",
+        final_stop_price=318.73 * (1 - _rr_cfg()["bullish_invalidation_pct"]),
     )
     assert annual_targets == [t.estimatedOptionPrice for t in expected_annual.targets]
 

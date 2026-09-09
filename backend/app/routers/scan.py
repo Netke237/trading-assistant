@@ -62,7 +62,7 @@ from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
-from app.scoring.exit_plan import compute_final_stop
+from app.scoring.exit_plan import resolve_stock_stop, final_stop_out
 from app.scoring.stock_scorer import _atr
 from app.scoring.stop_cost import compute_stop_cost
 from app.services.config_loader import load_exit_plan_cfg
@@ -799,6 +799,45 @@ async def _process_symbol(
             _log.warning("Heston calibration failed or timed out for %s: %s", symbol, exc)
             heston_params = None
 
+    # ── Piece 3: the stock stop, resolved ONCE per symbol, before the plan ────
+    # Everything below that says "the stop" -- `exit.invalidation`, the
+    # `exit.finalStop` provenance block, and the B3 ranking badge -- reads this
+    # one result. Two computations would be two stops on one card, which is the
+    # class of defect pieces 1 and 2 spent their rounds closing.
+    #
+    # `find_structural_stop` inside `resolve_stock_stop` is synchronous CPU work
+    # over the whole bar feed, so it runs in a thread the same way every other
+    # comparable per-symbol computation in this function does (_compute_dhmm,
+    # compute_confidence).
+    #
+    # A failure here must not take the candidate down: the plan still needs a
+    # stop, so fall back to the same flat percentage `resolve_stock_stop`'s own
+    # degenerate-feed branch uses, and send no `finalStop` block -- which reads
+    # as "not computed" on the card rather than as a structural level that was
+    # never found.
+    _ep_stop_cfg = load_exit_plan_cfg()["stop"]
+    _flat_fallback_pct = (
+        _rr["bullish_invalidation_pct"] if direction == "Bullish"
+        else _rr["bearish_invalidation_pct"]
+    )
+    _stock_stop = None
+    try:
+        _stock_stop = await asyncio.to_thread(
+            resolve_stock_stop,
+            candles, direction, price, _atr(candles, 14),
+            _ep_stop_cfg["atr_multiplier"], _flat_fallback_pct,
+        )
+    except Exception as exc:
+        _log.warning("Stock stop resolution failed for %s: %s", symbol, exc)
+
+    if _stock_stop is not None:
+        _stock_stop_price = _stock_stop.price
+    else:
+        _stock_stop_price = (
+            max(price * (1 - _flat_fallback_pct), 0.01) if direction == "Bullish"
+            else price * (1 + _flat_fallback_pct)
+        )
+
     _plan = build_trade_plan(
         direction=direction,
         stock_price=price,
@@ -813,6 +852,7 @@ async def _process_symbol(
         horizon_preset=horizon_preset,
         hold_min=hold_min_days,
         hold_max=hold_max_days,
+        final_stop_price=_stock_stop_price,
     )
     entry = _plan.entry
     target_price = _plan.target_price
@@ -831,35 +871,32 @@ async def _process_symbol(
     # the auto-picked contract and the candles are both already in hand, and
     # sends down the two fields the row needs.
     #
-    # The stop is `compute_final_stop`'s -- the wider of the structural level
-    # and an ATR floor -- and NOT `_plan.invalidation_price`, which trade_plan
-    # derives as a flat percentage move off the stock price. Grading a
+    # The stop is the wider of the structural level and an ATR floor. Grading a
     # candidate at a fixed -3% would measure the same distance on every symbol
     # in the universe regardless of where its structure actually sits, which is
     # the stop this project is on record as replacing.
     #
-    # SCOPED, deliberately: nothing downstream is repointed. `exit.invalidation`
-    # keeps its existing consumers and its existing basis until Phase C's piece
-    # 3 replaces it on purpose. This stop exists to price this badge.
+    # NO LONGER SCOPED. B3 shipped this badge against its own private
+    # `compute_final_stop` call while `exit.invalidation` kept the flat
+    # percentage; piece 3 has now repointed `exit.invalidation` at the same
+    # resolved stop, so this block reads `_stock_stop` above rather than
+    # computing a second one. The badge and the card's Invalidation field
+    # therefore grade the same level by construction.
     stop_cost_pct: float | None = None
     stop_cost_status: str | None = None
     try:
-        # `_atr` returns 0.0 for a feed too short or too flat to form a true
-        # range. compute_final_stop would then hand back an ATR floor sitting
-        # exactly ON the entry price, and compute_stop_cost would price a
-        # zero-distance stop as a real reading. Refuse instead: "not computed"
-        # is an honest answer and a PASS is not. Same guard, same reason, as
-        # the exit-plan endpoint's (routers/contracts.py).
-        _scan_atr = _atr(candles, 14)
-        if _scan_atr > 0:
-            _scan_stop = compute_final_stop(
-                candles, direction, price, _scan_atr,
-                load_exit_plan_cfg()["stop"]["atr_multiplier"],
-            )
+        # `source == "final_stop"` is exactly the old `_atr(candles, 14) > 0`
+        # guard, expressed once, in `resolve_stock_stop`. `_atr` returns 0.0 for
+        # a feed too short or too flat to form a true range; the resulting stop
+        # is a flat percentage, not a structural level, and pricing a badge
+        # against it would grade a number the model did not choose. Refuse
+        # instead: "not computed" is an honest answer and a PASS is not. Same
+        # guard, same reason, as the exit-plan endpoint's 422.
+        if _stock_stop is not None and _stock_stop.source == "final_stop":
             # Priced at the ROUNDED stop for the same reason the endpoint is:
             # the figure graded has to be the figure a user can be shown.
             _scan_cost = compute_stop_cost(
-                stop_price=round(_scan_stop.price, 2),
+                stop_price=round(_stock_stop.price, 2),
                 stock_price=price,
                 strike=strike,
                 dte=int(contract.get("dte", 30)),
@@ -914,6 +951,17 @@ async def _process_symbol(
 
     # Build a name → detail lookup for rich ScoreBreakdown fields
     rule_detail = {r.name: r.detail for r in card.rules}
+
+    # Piece 3's provenance block for the stop `invalidation_price` already
+    # carries. Sent ONLY for a stop the structural/ATR model actually chose:
+    # on the flat-percentage fallback (a degenerate bar feed) there is no
+    # structural level and no ATR floor to report, and a block full of nulls
+    # would read on the card as "we looked and found nothing" rather than "we
+    # could not look at all". Absent is the honest shape for both that case and
+    # a resolution that raised.
+    _final_stop_block = final_stop_out(
+        _stock_stop, datetime.now(timezone.utc).isoformat(),
+    )
 
     trade_card = TradeCardData(
         symbol=symbol,
@@ -975,6 +1023,7 @@ async def _process_symbol(
             timeStopDays=_plan.time_stop_days,
             target=target_price,
             targets=targets,
+            finalStop=_final_stop_block,
         ),
         rrRatio=rr.rr_ratio,
         rrModel=rr.model_used,

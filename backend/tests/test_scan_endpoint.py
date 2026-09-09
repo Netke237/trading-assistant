@@ -245,31 +245,122 @@ def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
     assert round(override_target, 2) == round(185.0 * 1.20, 2)
 
 
-def test_scan_rr_bullish_invalidation_pct_override_changes_invalidation_price(client):
-    """Finding 1 fix: rr_bullish_invalidation_pct actually reaches
-    build_trade_plan now. Without the override, invalidation = price * 0.97
-    (risk_rules.yaml default 3%). With rr_bullish_invalidation_pct=0.10,
-    invalidation = price * 0.90 instead."""
+# A feed that cannot form a single true range: 30 bars with open == high ==
+# low == close. `_atr` returns 0.0, `compute_final_stop`'s ATR floor would sit
+# exactly ON the entry price, and `resolve_stock_stop` therefore falls back to
+# the flat percentage. This is the ONLY path on which Step 3's "Bullish stop %"
+# still moves a number, so it needs a fixture of its own.
+_FLAT_CANDLES = [
+    {"time": f"2026-0{i//10+1}-{i%28+1:02d}", "open": 185.0, "high": 185.0,
+     "low": 185.0, "close": 185.0, "volume": 1_000_000}
+    for i in range(30)
+]
+
+
+def _scan_one(client, **overrides):
+    """POST one Bullish AAPL scan and return its first candidate."""
+    candles = overrides.pop("candles", _MOCK_CANDLES)
     fetch_quotes_patch, get_bars_patch = _no_db_leak()
-    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+    with _enter_mock_patches(price=185.0, candles=candles, chain=_rr_test_chain(),
                              company="Apple Inc."), \
          fetch_quotes_patch, get_bars_patch, _force_passing_stock_score():
-        r_default = client.post("/api/scan", json={
-            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
-        })
-        r_override = client.post("/api/scan", json={
+        r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
-            "overrides": {"rr_bullish_invalidation_pct": 0.10},
+            "overrides": overrides,
         })
-    default_candidates = r_default.json()["candidates"]
-    override_candidates = r_override.json()["candidates"]
-    assert default_candidates, "expected AAPL to score as a candidate for this fixture"
-    assert override_candidates, "expected AAPL to score as a candidate for this fixture"
-    default_inval = default_candidates[0]["exit"]["invalidation"]
-    override_inval = override_candidates[0]["exit"]["invalidation"]
-    assert override_inval < default_inval
-    assert round(default_inval, 2) == round(185.0 * 0.97, 2)
-    assert round(override_inval, 2) == round(185.0 * 0.90, 2)
+    assert r.status_code == 200, r.text
+    candidates = r.json()["candidates"]
+    assert candidates, "expected AAPL to score as a candidate for this fixture"
+    return candidates[0]
+
+
+def test_scan_invalidation_is_the_structural_atr_stop_not_a_flat_pct(client):
+    """PIECE 3, the whole point of it.
+
+    `exit.invalidation` used to be `price * (1 - 0.03)` -- 179.45 on this
+    fixture, the same -3% it would print on every symbol in the universe. It is
+    now `resolve_stock_stop`'s answer: `_MOCK_CANDLES` is 30 bars of
+    high 190 / low 182, so ATR(14) is 8.00 and the 2xATR floor sits at
+    185 - 16 = 169.00, well outside anything the flat percentage could reach.
+
+    Asserting the exact 169.00 rather than merely "not 179.45" is deliberate:
+    an implementation that resolved a stop and then quietly used the flat one
+    anyway would still differ from 179.45 by rounding alone under a weaker
+    assertion.
+    """
+    card = _scan_one(client)
+    assert card["exit"]["invalidation"] == 169.00
+    assert card["exit"]["invalidation"] != round(185.0 * 0.97, 2)
+
+
+def test_scan_attaches_the_final_stop_provenance_block(client):
+    """`exit.finalStop` says WHERE `exit.invalidation` came from, and the two
+    must print the same number -- the "Bottom (final stop)" row renders one and
+    the Invalidation field the other, on the same card, inches apart."""
+    fs = _scan_one(client)["exit"]["finalStop"]
+    assert fs is not None, "the scan must resolve a stop for a 30-bar feed"
+    assert fs["price"] == 169.00
+    assert fs["source"] == "final_stop"
+    # This fixture's bars are identical, so the ATR floor wins over whatever
+    # structure detection makes of them.
+    assert fs["stopSource"] == "atr_widened"
+    assert fs["atrFloorPrice"] == 169.00
+    assert fs["atr"] == 8.0
+    assert fs["computedAt"]
+    # The losing candidate rides along too — the row prints both levels and the
+    # gap between them. Structure detection finds a swing low at 182.00 here;
+    # it lost because 185 - 182 = 3.00 is narrower than 2 x ATR = 16.00.
+    assert fs["structuralSource"] == "swing_low"
+    assert fs["structuralPrice"] == 182.00
+    assert fs["distanceDollar"] == 13.00
+
+
+def test_scan_badge_and_invalidation_grade_the_same_stop(client):
+    """B3 priced its ranking badge against its own private `compute_final_stop`
+    call while `exit.invalidation` still carried the flat percentage -- two
+    stops on one card. Piece 3 resolves the stop once; if a future edit
+    reintroduces a second computation, the badge's stop and the card's stop
+    drift and this fails.
+
+    Pinned through `exit.finalStop.price`, which is the ROUNDED figure the
+    badge is priced at (`round(_stock_stop.price, 2)` in scan.py), so this
+    catches a drift in either direction rather than only in the resolver.
+    """
+    card = _scan_one(client)
+    assert card["stopCostPct"] is not None, (
+        "expected the scan-time gate to price this fixture -- without it this "
+        "test cannot tell the two stops apart"
+    )
+    assert card["exit"]["finalStop"]["price"] == card["exit"]["invalidation"]
+
+
+def test_scan_rr_bullish_invalidation_pct_override_bites_only_on_a_dead_feed(client):
+    """Step 3's "Bullish stop %" is now `resolve_stock_stop`'s FALLBACK.
+
+    On a real bar feed the structural/ATR stop wins and the parameter is inert
+    by design -- pinned here so nobody "fixes" that back into a live flat stop.
+    On a feed that cannot form one true range there is no structural answer to
+    prefer, and the parameter is the only thing left: it must still move the
+    number, or a user-visible execution parameter has gone silently dead.
+    """
+    # Real feed: the structural/ATR stop wins, the override changes nothing.
+    assert _scan_one(client)["exit"]["invalidation"] == 169.00
+    assert _scan_one(client, rr_bullish_invalidation_pct=0.10)["exit"]["invalidation"] == 169.00
+
+    # Dead feed: the flat percentage is all there is, and it is honoured.
+    flat_default = _scan_one(client, candles=_FLAT_CANDLES)
+    flat_override = _scan_one(client, candles=_FLAT_CANDLES, rr_bullish_invalidation_pct=0.10)
+    assert round(flat_default["exit"]["invalidation"], 2) == round(185.0 * 0.97, 2)
+    assert round(flat_override["exit"]["invalidation"], 2) == round(185.0 * 0.90, 2)
+    assert flat_override["exit"]["invalidation"] < flat_default["exit"]["invalidation"]
+
+    # And a fallback stop carries NO provenance block: there was no structural
+    # level and no ATR floor to report, so "not computed" is the honest shape.
+    # A block of nulls would read on the card as "we looked and found nothing".
+    assert flat_default["exit"]["finalStop"] is None
+    # The ranking badge refuses it for the same reason.
+    assert flat_default["stopCostPct"] is None
+    assert flat_default["stopCostStatus"] is None
 
 
 def test_scan_rr_negative_target_override_fails_fast_422(client):
