@@ -5,6 +5,7 @@ import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { useRiskStore } from '@/lib/riskStore';
 import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import { _horizonEnum } from '@/lib/analysisStore';
@@ -33,6 +34,54 @@ interface StockEditOverlay {
   sharesT1: number;
   sharesT2: number;
   sharesT3: number;
+}
+
+/** The single-position concentration check that stands beside the recommended
+ *  share count — Kenneth's decision SHARE-SIZING-CONCENTRATION-FLAG-2026-09-09.
+ *
+ *  The recommendation sizes off the RISK BUDGET (how much do I lose if I'm
+ *  wrong) and never consults the single-position cap (how much of the account
+ *  sits in one name). Those are different questions, and a TIGHTER stop makes
+ *  the gap WIDER: 239 shares of a $211 stock is a ~$50,570 position against a
+ *  5%-of-$100k cap of $5,000 — ~10x over, and ~23 shares by the cap.
+ *
+ *  It FLAGS, it never clamps. `recommendedShares` stays exactly the number the
+ *  piece-6 spec pins (floor(riskBudget / riskPerShare), spec test 6), Apply
+ *  stays enabled, and the trader makes the call with the conflict in front of
+ *  him. Capping would silently overrule a spec-mandated number and would make
+ *  the recommendation useless on any liquid large-cap with a tight stop.
+ *
+ *  `cap` and `portfolioValue` MUST arrive from riskStore — the same two numbers
+ *  RiskPanel and computeMetrics measure concentration against — never a second
+ *  copy of 0.05 that would drift from Settings the first time Kenneth edits it.
+ *
+ *  Returns null when there is nothing truthful to say: no recommendation, or a
+ *  portfolio value / cap that cannot produce a meaningful limit. A cap of 100%
+ *  is legal in Settings and simply never fires. */
+function concentrationFlag(
+  shares: number | null,
+  entry: number,
+  portfolioValue: number,
+  cap: number,
+): { positionDollar: number; capDollar: number; positionPct: number; capShares: number } | null {
+  if (shares == null || !Number.isFinite(shares) || shares <= 0) return null;
+  if (!Number.isFinite(entry) || entry <= 0) return null;
+  if (!Number.isFinite(portfolioValue) || portfolioValue <= 0) return null;
+  if (!Number.isFinite(cap) || cap <= 0) return null;
+
+  const positionDollar = shares * entry;
+  const capDollar      = portfolioValue * cap;
+  if (positionDollar <= capDollar) return null;
+
+  return {
+    positionDollar,
+    capDollar,
+    positionPct: (positionDollar / portfolioValue) * 100,
+    // What the cap WOULD allow, so the flag is actionable rather than merely
+    // disapproving. Floor for the same reason the backend floors: a share count
+    // rounded up is a position over the cap it was derived from.
+    capShares: Math.floor(capDollar / entry),
+  };
 }
 
 interface StockPositionCardProps {
@@ -158,6 +207,10 @@ export function StockPositionCard({
   onAfterScanToggle,
 }: StockPositionCardProps) {
   const [overlay, setOverlay] = useState<StockEditOverlay>(() => defaultOverlay(card));
+  // The concentration flag beside the recommended share count reads the SAME
+  // portfolio value and single-position cap the risk checks use, so editing
+  // either in Settings moves this warning with them.
+  const riskLimits = useRiskStore((s) => s.limits);
 
   // Reset overlay and per-symbol outcome state when the selected symbol changes.
   // The two on-demand results (estimate, structural stop) are per-SYMBOL and
@@ -897,6 +950,29 @@ export function StockPositionCard({
                 </Text>
               )}
             </div>
+
+            {/* Concentration flag (SHARE-SIZING-CONCENTRATION-FLAG-2026-09-09).
+                It sits directly under the SHARES row because the implied-notional
+                line above already ships and is easy to skim past next to a bold
+                share number. A FLAG, never a gate: Apply stays enabled below. */}
+            {(() => {
+              const c = concentrationFlag(
+                plan.recommendedShares,
+                overlay.entry,
+                riskLimits.portfolioValue,
+                riskLimits.maxSingleTradeExposurePct,
+              );
+              if (!c) return null;
+              return (
+                <Text size={10} tone="caution">
+                  Concentration: ≈${c.positionDollar.toFixed(0)} is{' '}
+                  {c.positionPct.toFixed(1)}% of your ${riskLimits.portfolioValue.toFixed(0)}{' '}
+                  account — over the {(riskLimits.maxSingleTradeExposurePct * 100).toFixed(0)}%
+                  {' '}single-position cap (${c.capDollar.toFixed(0)}, ≈{c.capShares} shares).
+                  Sized by risk budget, as the plan intends. Nothing is blocked — your call.
+                </Text>
+              );
+            })()}
             {/* `> 0` as well as non-null: the backend already refuses to call a
                 floor of zero a size, and this is the second half of that same
                 guard. Without it an "Apply 0 shares" button wrote shares: 0
