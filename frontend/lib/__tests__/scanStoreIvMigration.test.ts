@@ -46,7 +46,7 @@ function legacyBlob() {
 }
 
 describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () => {
-  it('is registered at v14, so a v12 blob actually reaches the branch', () => {
+  it('is registered past v14, so a v12 blob actually reaches the branch', () => {
     // Without the bump the branch is dead code and the defect ships intact.
     //
     // ROUND 5 finding 2: this pin is the ONLY assertion in this file that can
@@ -59,7 +59,15 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
     // version comparison that was the bug. They verify what the branch DOES;
     // this pin is what verifies the branch is REACHED. Any new migration step
     // needs a new version, and this assertion is what forces the pairing.
-    expect(migrate.version).toBe(14);
+    //
+    // GREATER-THAN, not equal, since piece 3 added v15. This file's subject is
+    // the Phase A IV split, and what it needs from the version is only that a
+    // v12/v13 blob still DIFFERS from the configured one and so still reaches
+    // these branches. Pinning equality here would make every later migration
+    // fail an assertion about a migration it has nothing to do with; the
+    // pairing this comment describes is enforced for v15 by
+    // scanStoreStopMigration.test.ts, which owns that branch.
+    expect(migrate.version).toBeGreaterThanOrEqual(15);
   });
 
   it('re-runs the score-detail strip for a blob ALREADY at v13', () => {

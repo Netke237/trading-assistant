@@ -115,6 +115,26 @@ function inferredBasisFor(candidate: Record<string, unknown>): IvBasis | undefin
   return undefined;                                       // post-split, no reading
 }
 
+function stripLegacyStopFromScanResult(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
+  return {
+    ...value,
+    candidates: value.candidates.map((candidate) => {
+      if (!isRecord(candidate) || !isRecord(candidate.exit)) return candidate;
+      // A blob written by piece 3 or later already carries a provenance block
+      // for the stop it stored, so its `invalidation` is the resolved level
+      // and must be left alone. Only a stop with no block behind it is the
+      // legacy flat percentage. Idempotent, which matters: v13's own history
+      // is that a branch was edited after shipping and had to be re-run under
+      // a new version, and this one has to survive that.
+      if (candidate.exit.finalStop != null) return candidate;
+      const exit: Record<string, unknown> = { ...candidate.exit };
+      exit.invalidation = null;
+      return { ...candidate, exit };
+    }),
+  };
+}
+
 function stripLegacyIvDetailsFromScanResult(value: unknown): unknown {
   if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
   return {
@@ -410,7 +430,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-       version: 14,
+       version: 15,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -490,7 +510,7 @@ export const useScanStore = create<ScanStoreState>()(
             previousRun: stripLegacyIvDetailsFromScanResult(s.previousRun),
           };
         }
-        // NO v15 BRANCH FOR PHASE B3, and that is a decision rather than an
+        // NO BRANCH FOR PHASE B3, and that is a decision rather than an
         // oversight. B3 adds `stopCostPct`/`stopCostStatus` to each persisted
         // CANDIDATE, but the pair is purely additive and optional: a blob
         // written before B3 simply lacks it, `cardToRow` collapses the absent
@@ -498,14 +518,39 @@ export const useScanStore = create<ScanStoreState>()(
         // the scan". That is the behaviour the spec asks for (gate-basis spec
         // test 9), reached without touching the stored blob at all.
         //
-        // The store's rule is to bump for a BREAKING shape change, and the two
+        // The store's rule is to bump for a BREAKING shape change, and the
         // migrations above are the shape of one: v13/v14 both DELETE a field
         // whose stored value had become a wrong number under a new reading.
-        // Nothing here is wrong on an old blob -- it is merely missing, and
-        // missing already renders honestly. Bumping anyway would push every
-        // user's store through a migration pass that changes nothing, and
-        // would put a no-op branch in this chain for the next reader to
-        // mistake for a real one.
+        // Nothing B3 added is wrong on an old blob -- it is merely missing,
+        // and missing already renders honestly.
+        if (version < 15) {
+          // PIECE 3. `exit.invalidation` USED to be a flat percentage move off
+          // the stock price -- the same -3% on every symbol in the universe.
+          // It is now the resolved structural+ATR stop, and the field did not
+          // change name. So a blob written before piece 3 holds a flat stop
+          // under the resolved one's name: the same v13/v14 shape, a stored
+          // value that became a wrong number under a new reading.
+          //
+          // NOT COSMETIC, and this is why it is deleted rather than left to
+          // render as stale-but-harmless. `buildPaperPosition` stores that
+          // field as `PortfolioPosition.stop` -- the level STOP_REACHED fires
+          // against and the position card displays -- so a user placing an
+          // order from a restored candidate would arm a -3% stop believing it
+          // to be structural, up to 3x tighter than the level the rest of the
+          // app now claims a position's stop is.
+          //
+          // Deleted, not guessed: the resolved stop needs a bar feed, which
+          // the client does not have. Null renders "not computed — re-run the
+          // scan" on the Invalidation field and fails `checkInvalidation`, so
+          // the card cannot be sent until a fresh scan refills it -- or until
+          // the user types a stop, which is threaded into the risk check for
+          // exactly that reason (lib/risk.ts `resolvedInvalidation`).
+          s = {
+            ...s,
+            scanResult: stripLegacyStopFromScanResult(s.scanResult),
+            previousRun: stripLegacyStopFromScanResult(s.previousRun),
+          };
+        }
         return s;
       },
       partialize: (state) => ({

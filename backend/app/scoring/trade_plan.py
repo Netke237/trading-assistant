@@ -21,7 +21,7 @@ from app.scoring.reward_risk import estimate_rr, estimate_targets
 @dataclass
 class TradePlan:
     entry: EntryAssessment
-    invalidation_price: float        # rounded — for display
+    invalidation_price: float        # rounded — for display; the resolved stock stop (piece 3)
     premium_stop: float
     time_stop_days: int
     target_price: float              # rounded — for display
@@ -51,6 +51,7 @@ def build_trade_plan(
     entry_ask: float,
     entry_mid: float,
     rr_cfg: dict,
+    final_stop_price: float,
     heston_params: HestonParams | None = None,
     horizon_preset: str | None = None,
     hold_min: float | None = None,
@@ -67,8 +68,18 @@ def build_trade_plan(
         premium:     the contract mid used as the risk/target basis (floored by caller).
         entry_bid/entry_ask/entry_mid: feed assess_entry for the Entry Plan.
         rr_cfg:      the reward_risk config block (bullish_target_pct,
-                     bearish_target_pct, bullish_invalidation_pct,
-                     bearish_invalidation_pct, premium_stop_pct).
+                     bearish_target_pct, premium_stop_pct). The
+                     bullish/bearish_invalidation_pct keys are NOT read here
+                     any more -- see final_stop_price.
+        final_stop_price: the stock stop this plan is built around, already
+                     resolved by the caller via
+                     `app.scoring.exit_plan.resolve_stock_stop` (the wider of
+                     the structural level and a 2xATR floor, or that helper's
+                     flat-percentage fallback on a degenerate bar feed).
+                     REQUIRED and positional-safe by keyword only: defaulting
+                     it would let a caller silently fall back to a stop nobody
+                     chose, which is the exact failure piece 3 exists to end.
+                     Floored at $0.01.
         heston_params: optional calibrated Heston params — when provided,
                      estimate_rr/estimate_targets reprice via Heston (with a
                      per-target delta-approximation fallback); defaults to
@@ -109,17 +120,20 @@ def build_trade_plan(
         horizon_preset, hold_min, hold_max, float(dte), reprice_cfg,
     )
 
-    # Invalidation is a stock-price percentage move, mirroring target_price's
-    # own formula -- NOT derived from premium_stop_pct/delta (that was a
-    # pre-existing bug: bullish_invalidation_pct/bearish_invalidation_pct are
-    # documented in risk_rules.yaml as "-3% stock = invalidation" but were
-    # never actually read anywhere). premium_stop_pct remains a separate,
-    # independent concept (the dollar premium_stop field below, and the
-    # risk basis inside estimate_rr/estimate_targets) -- unaffected by this fix.
-    invalidation_price = (
-        max(stock_price * (1 - rr_cfg["bullish_invalidation_pct"]), 0.01) if is_call
-        else stock_price * (1 + rr_cfg["bearish_invalidation_pct"])
-    )
+    # PIECE 3: the stock stop is RECEIVED, never derived here. It used to be a
+    # flat percentage move off `stock_price` (rr_cfg's bullish/bearish_
+    # invalidation_pct), which measured -3% on every symbol in the universe
+    # regardless of where its structure sat. `resolve_stock_stop`
+    # (scoring/exit_plan.py) now decides it from the bar feed -- the wider of
+    # the structural level and a 2xATR floor -- and that decision cannot live
+    # here, because this module does contract arithmetic and has never had
+    # candles to read structure from. The flat percentage survives only as
+    # `resolve_stock_stop`'s degenerate-feed fallback.
+    #
+    # premium_stop_pct remains a separate, independent concept (the dollar
+    # premium_stop field below, and the risk basis inside estimate_rr /
+    # estimate_targets) -- untouched by this.
+    invalidation_price = max(float(final_stop_price), 0.01)
 
     entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid)
 

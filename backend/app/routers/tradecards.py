@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.scan_session import ScanSession
-from app.schemas import ScanResult, TradeCardData
+from app.schemas import ScanResult, TradeCardData, SCAN_RESULT_SCHEMA_VERSION
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -28,6 +28,10 @@ async def get_tradecards(db: AsyncSession = Depends(get_db)) -> list[TradeCardDa
     # basis is not recoverable, so they are dropped rather than relabelled
     # (PHASE-A-NULL-IVRANK-2026-09-06). Empty here means "run a scan", which is
     # what the caller already renders when no scan has been run.
-    if scan.schema_version is None:
+    # A COMPARISON, not `is None` -- see SCAN_RESULT_SCHEMA_VERSION. This
+    # tested for the absence of the one bump that existed when it was written,
+    # so piece 3's bump was silently exempt and cards carrying a flat -3%
+    # `exit.invalidation` under the resolved stop's name were served here.
+    if (scan.schema_version or 0) < SCAN_RESULT_SCHEMA_VERSION:
         return []
     return scan.candidates

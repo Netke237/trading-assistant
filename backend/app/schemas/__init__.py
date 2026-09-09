@@ -466,13 +466,59 @@ class TradeEntry(BaseModel):
     orderType: OrderType
 
 
+class FinalStopOut(BaseModel):
+    """Provenance for the stock stop the scan already resolved (piece 3).
+
+    `TradeExit.invalidation` carries the NUMBER; this block says where it came
+    from, so the "Bottom (final stop)" row can render before the user has
+    pressed Compute Arithmetic Plan. Every field mirrors the corresponding one
+    on `ExitPlanStopOut`, which the endpoint version of this row already reads.
+
+    NOT PRESENT here, and deliberately: `contractPrice`, `rrModel` and
+    `structuralConfidence`. The first two need a contract repriced AT the stop,
+    which is a per-contract question the scan's auto-pick does not settle (a
+    Step 6 override replaces the contract without moving this stop); the
+    contract-priced sub-cells and the risk-derived size render "—" until an
+    Arithmetic Plan is computed. `structuralConfidence` is omitted because
+    nothing on the card reads it outside the endpoint's own block.
+    """
+    model_config = ConfigDict(populate_by_name=True)
+    price: float
+    source: Literal["final_stop", "flat_fallback"]
+    # 'final_stop' rows carry compute_final_stop's own source; 'flat_fallback'
+    # rows carry None, because no structural/ATR comparison was ever made.
+    stopSource: Optional[Literal["structural", "atr_widened"]] = None
+    structuralSource: Optional[Literal["order_block", "swing_low", "swing_high"]] = None
+    # The raw structural candidate, whether or not it decided `price`.
+    structuralPrice: Optional[float] = None
+    # The ATR floor, whether or not it decided `price`. None on flat_fallback.
+    atrFloorPrice: Optional[float] = None
+    # |structuralPrice - atrFloorPrice|; None when there was no structural
+    # candidate at all, or on the flat_fallback path.
+    distanceDollar: Optional[float] = None
+    # ATR(14) the floor was built on. 0.0 on the flat_fallback path — which is
+    # exactly why that path exists.
+    atr: float = 0.0
+    # ISO-8601 UTC. Server-set, unlike ExitPlan.computedAt (client-set on
+    # receipt), because this one rides on a scan result that IS persisted and
+    # replayed: a restored card must be able to say how old its stop is.
+    computedAt: str
+
+
 class TradeExit(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
+    # PIECE 3: the resolved stock stop — the wider of the structural level and
+    # a 2xATR floor — not a flat percentage move. See `finalStop` below for
+    # which branch produced it.
     invalidation: float
     premiumStop: float
     timeStopDays: int
     target: float                    # KEEP — first target stock price (backward compat)
     targets: list[TargetLevel] = []  # NEW — 3 graduated target levels
+    # ABSENT means "this card predates piece 3" — a scan session persisted
+    # before it shipped, replayed through /scan/last-run. It must never render
+    # as a computed stop; the card reads "not computed — re-run the scan".
+    finalStop: Optional[FinalStopOut] = None
 
 
 class OptionLeg(BaseModel):
@@ -709,10 +755,25 @@ class DteWindow(BaseModel):
 
 
 # Bumped when a change makes a PERSISTED ScanResult unreadable by the current
-# code -- i.e. when a stored blob's fields no longer mean what they say. 1 is
-# post-PHASE-A-NULL-IVRANK-2026-09-06; a stored result with no version at all
-# predates it and cannot be trusted (see ScanResult.schema_version).
-SCAN_RESULT_SCHEMA_VERSION = 1
+# code -- i.e. when a stored blob's fields no longer mean what they say.
+#
+#   1  post-PHASE-A-NULL-IVRANK-2026-09-06. Before it, `ivRank` held raw
+#      implied volatility under a percentile's name.
+#   2  post-PIECE-3-2026-09-09. Before it, `exit.invalidation` held a flat
+#      percentage move off the stock price under the resolved structural+2xATR
+#      stop's name -- and `exit.finalStop`, the block that would say which,
+#      did not exist. A v1 blob is therefore indistinguishable from a piece-3
+#      scan whose bar feed was too thin to resolve a stop, so the basis is not
+#      recoverable and the blob is refused rather than relabelled.
+#
+# EVERY CONSUMER COMPARES, none tests `is None`. A stored result is trustworthy
+# only when its version is at least this one: `(blob.schema_version or 0) <
+# SCAN_RESULT_SCHEMA_VERSION` refuses it. Testing for None was what let piece 3
+# ship a v1 blob straight through three endpoints -- the guard only knew about
+# the ONE bump that existed when it was written, so the next one was silently
+# exempt. Written as a comparison, the next bump is honoured everywhere for
+# free.
+SCAN_RESULT_SCHEMA_VERSION = 2
 
 
 class ScanResult(BaseModel):

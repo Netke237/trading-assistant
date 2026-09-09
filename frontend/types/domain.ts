@@ -357,6 +357,47 @@ export interface ExitPlanTargetRow {
   toleranceDollar: number;
 }
 
+/** The scan's own resolved stock stop, with its provenance. Mirrors
+ *  `FinalStopOut` in backend/app/schemas — see `TradeCardData.exit.finalStop`.
+ *
+ *  Deliberately NOT an `ExitPlan['stop']`, though it reports the same levels:
+ *  that block carries `contractPrice` and `rrModel`, which price the contract
+ *  AT the stop, and the scan cannot supply them. A stop is a question about the
+ *  STOCK; what it costs is a question about a contract, and the auto-pick does
+ *  not settle it (a Step 6 override replaces the contract without moving the
+ *  stop). The contract-priced sub-cells and the risk-derived size render "—"
+ *  until an Arithmetic Plan is computed. */
+export interface FinalStop {
+  /** The stop itself, in dollars. Always equal to `exit.invalidation` — the
+   *  provenance row and the Invalidation field sit inches apart on one card. */
+  price: number;
+  /** Which branch decided it. Always 'final_stop' on the wire today: the
+   *  backend sends no block at all on the flat-percentage fallback, because a
+   *  block of nulls would read as "we looked and found nothing" rather than
+   *  "we could not look at all". Kept explicit so a future fallback block
+   *  cannot arrive undetected. */
+  source: 'final_stop' | 'flat_fallback';
+  /** 'structural' = a real level that already cleared the ATR floor unassisted;
+   *  'atr_widened' = the level was tighter than the floor (or absent) and was
+   *  widened out to it. */
+  stopSource?: 'structural' | 'atr_widened' | null;
+  structuralSource?: 'order_block' | 'swing_low' | 'swing_high' | null;
+  /** The structural candidate's raw price, whether or not it decided `price`
+   *  (i.e. populated even when stopSource === 'atr_widened'). */
+  structuralPrice?: number | null;
+  /** The ATR-floor price, whether or not it decided `price`. */
+  atrFloorPrice?: number | null;
+  /** |structuralPrice - atrFloorPrice|; null when no structural candidate was
+   *  found at all. */
+  distanceDollar?: number | null;
+  /** ATR(14) the floor was built on. */
+  atr: number;
+  /** ISO-8601, SERVER-set — unlike `ExitPlan.computedAt`, which the client
+   *  stamps on receipt. This block rides on a scan result that IS persisted and
+   *  replayed, so a restored card has to be able to say how old its stop is. */
+  computedAt: string;
+}
+
 /** Result of POST /api/contracts/exit-plan — final stop (wider of the
  *  structural stop and an ATR floor) plus one target row per configured R:R
  *  ratio. Persisted verbatim as `PortfolioPosition.exitPlan`/
@@ -576,7 +617,31 @@ export interface TradeCardData {
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
   exit:   {
-    invalidation: number; premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[];
+    /** The stock stop this card is built around: the wider of the structural
+     *  level and a 2xATR floor, resolved server-side at scan time (piece 3).
+     *  It used to be a flat percentage move off the stock price -- the same
+     *  -3% on every symbol in the universe.
+     *
+     *  NULL means "not computed -- re-run the scan", and comes from exactly one
+     *  place: the scanStore v15 migration, which strips it from every candidate
+     *  persisted before piece 3 because that stored value is a flat percentage
+     *  wearing the resolved stop's name. It must never be seeded into the
+     *  editable field or sent: `checkInvalidation` in lib/risk.ts reports
+     *  `missing_invalidation` and the card cannot be ordered from until a fresh
+     *  scan refills it. The backend never sends null. */
+    invalidation: number | null;
+    premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[];
+    /** Where `invalidation` came from — rendered by the "Bottom (final stop)"
+     *  row before the user has pressed Compute Arithmetic Plan. Sent by the
+     *  scan and echoed by /contracts/recompute-plan so a Step 6 contract
+     *  override cannot drop it.
+     *
+     *  ABSENT means "not computed": the card predates piece 3, the bar feed
+     *  could not form a single true range (so the flat percentage fallback
+     *  decided the stop and there is no structural level or ATR floor to
+     *  report), or the resolution raised. Never render an absent block as a
+     *  computed stop. */
+    finalStop?: FinalStop | null;
     /** Populated only after the user presses "Check structure" — never set by the scan itself. */
     structuralStop?: StructuralStop | null;
     /** Populated only after the user presses "Estimate" — never set by the scan itself. */

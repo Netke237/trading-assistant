@@ -135,6 +135,61 @@ describe('mergePlan', () => {
     expect(merged.exit.premiumStop).toBe(4.48);   // matches the selected 375C's premium, not the auto-pick's
     expect(merged.contractDetails?.strike).toBe(375);   // unrelated fields preserved
   });
+
+  // PIECE 3. `exit` is replaced WHOLESALE, and the stop is a STOCK level:
+  // which contract is being traded has no bearing on where structure sits, so
+  // a contract override must not move it.
+  describe('the stock stop across a contract override', () => {
+    const FINAL_STOP = {
+      price: 169.0, source: 'final_stop' as const, stopSource: 'atr_widened' as const,
+      structuralSource: 'swing_low' as const, structuralPrice: 182.0, atrFloorPrice: 169.0,
+      distanceDollar: 13.0, atr: 8.0, computedAt: '2026-09-09T12:00:00+00:00',
+    };
+    const withStop = () => applyPickedContract(
+      makeCard({ exit: { invalidation: 169.0, premiumStop: 11.99, timeStopDays: 74, target: 344.23, targets: [], finalStop: FINAL_STOP } }),
+      makeOption(),
+    );
+    const planWith = (exit: Partial<TradeCardData['exit']>) => ({
+      entry: { limit: 7.47, maxFill: 7.69, orderType: 'Limit' as const },
+      exit: { invalidation: 169.0, premiumStop: 4.48, timeStopDays: 74, target: 344.23, targets: [], ...exit },
+      rrRatio: 1.71,
+      rrModel: 'BS repriced (IV-derived)' as const,
+    });
+
+    it('takes the block the endpoint echoed back', () => {
+      const merged = mergePlan(withStop(), planWith({ finalStop: FINAL_STOP }));
+      expect(merged.exit.finalStop).toEqual(FINAL_STOP);
+      expect(merged.exit.invalidation).toBe(169.0);
+    });
+
+    it('KEEPS the card\'s block when the response carries none', () => {
+      // Defence in depth, per the plan's part 3 — what a stale client, a proxy
+      // that dropped the field, or a rolled-back backend looks like. Without
+      // it the wholesale `exit` replacement drops the stop back to a flat
+      // percentage for exactly the cards a user hand-picked a contract on.
+      const merged = mergePlan(withStop(), planWith({ invalidation: 309.17 }));
+      expect(merged.exit.finalStop).toEqual(FINAL_STOP);
+      // The INVALIDATION comes back with it. Keeping the block while letting a
+      // flat-fallback number through would print a structural provenance row
+      // above a stop it does not describe.
+      expect(merged.exit.invalidation).toBe(169.0);
+    });
+
+    it('lets the plan win when BOTH carry a block, rather than mixing them', () => {
+      // A mismatched pair is worse than either half: the plan's own
+      // `invalidation` was computed against the plan's block.
+      const moved = { ...FINAL_STOP, price: 171.5, atrFloorPrice: 171.5 };
+      const merged = mergePlan(withStop(), planWith({ invalidation: 171.5, finalStop: moved }));
+      expect(merged.exit.finalStop).toEqual(moved);
+      expect(merged.exit.invalidation).toBe(171.5);
+    });
+
+    it('does not invent a block for a card that never had one', () => {
+      const merged = mergePlan(applyPickedContract(makeCard(), makeOption()), planWith({ invalidation: 309.17 }));
+      expect(merged.exit.finalStop ?? null).toBeNull();
+      expect(merged.exit.invalidation).toBe(309.17);
+    });
+  });
 });
 
 describe('resolveBasketCards', () => {

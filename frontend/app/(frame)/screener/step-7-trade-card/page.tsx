@@ -322,7 +322,22 @@ export default function Step7Page() {
   // Falls back to the card's own value, which is what an untouched field means
   // -- and which stays live as `mergePlan` updates it, precisely because an
   // untouched field caches `null` rather than a snapshot of the seed.
-  const invalidationFor = (card: TradeCardData): number =>
+  // NULLABLE since piece 3: `card.exit.invalidation` is null on a candidate
+  // restored from a scan session persisted before it, whose stored flat
+  // percentage the scanStore v15 migration stripped. The user can clear that by
+  // typing a stop, which lands in this same cache.
+  //
+  // NOT every send path refuses such a card, and the distinction matters.
+  // `missing_invalidation` is raised by `checkTradeRisk`, which runs ONLY in
+  // SendToBrokerDialog -- the basket path. A direct "Place Limit" or
+  // "Right Now — Market" from the card stores `PortfolioPosition.stop = null`
+  // instead. That is not a wrong number (the field is already `number | null`,
+  // and both alert engines skip a null stop: alertEngine.ts's STOP_REACHED and
+  // the backend `alert_generator`'s `pos.stop is not None`), but it does mean a
+  // position opened that way arms no stop alert until the user sets one in the
+  // portfolio EditDrawer. Logged against main rather than widened into this
+  // branch -- see PROJECT_STATE open_questions.
+  const invalidationFor = (card: TradeCardData): number | null =>
     invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
   // Whether the value `invalidationFor` just returned was TYPED or inherited.
   // The cache holds null for an untouched field precisely so these two can be
@@ -712,6 +727,10 @@ export default function Step7Page() {
           premium:     q?.price ?? liveQcd.mid,
           delta:       liveQcd.delta,
           spread:      q?.spread ?? 0,
+          // PIECE 3 — round-trip the stop this card already resolved. The
+          // endpoint echoes it and builds the plan around it, so an override
+          // changes the CONTRACT and nothing about where the stock stop sits.
+          final_stop:  pickedCard.exit.finalStop ?? null,
           ...rrOverridesFrom(useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
@@ -784,6 +803,7 @@ export default function Step7Page() {
         premium: cd.mid,
         delta: cd.delta,
         spread: 0,
+        final_stop: resolved.exit.finalStop ?? null,
         ...rrOverridesFrom(useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
@@ -1282,6 +1302,9 @@ export default function Step7Page() {
           cards={basketCards}
           contractsBySymbol={orderContractsBySymbol}
           overridesBySymbol={maxLossOverrideBySymbol}
+          invalidationBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, invalidationFor(c)]),
+          )}
           onClose={() => setDialogOpen(false)}
           onSubmit={handleSubmit}
         />

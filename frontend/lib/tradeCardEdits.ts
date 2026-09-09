@@ -52,7 +52,12 @@ import type { TradeCardData } from '@/types/domain';
 export interface EditOverlay {
   entryLimit: number;
   maxFill: number;
-  invalidation: number;
+  /** NULL means the card's stop is "not computed — re-run the scan": the
+   *  scanStore v15 migration stripped a pre-piece-3 flat percentage. The field
+   *  renders as not-computed and the card cannot be ordered from
+   *  (`checkInvalidation` in lib/risk.ts). A user can still type one in, which
+   *  is what makes the restored card usable without a re-scan. */
+  invalidation: number | null;
   premiumStop: number;
   timeStopDays: number;
   targets: number[];

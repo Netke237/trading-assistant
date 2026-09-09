@@ -39,6 +39,15 @@ interface Props {
    *  force a spurious extra confirmation click for a trade the user already
    *  explicitly sized up under a raised budget. */
   overridesBySymbol: Record<string, MaxLossOverride | null>;
+  /** PIECE 3 — the stop each card is actually SHOWING, resolved by the page
+   *  through `invalidationFor` (the user's typed value when the Invalidation
+   *  field is touched, else the card's own). Fed straight into
+   *  `checkTradeRisk` so `missing_invalidation` judges the level that would be
+   *  stored as `PortfolioPosition.stop`, not the card's stale one — which on a
+   *  candidate restored from a pre-piece-3 scan session is null, and which the
+   *  user can fix by typing. A symbol absent from the map falls back to the
+   *  card. */
+  invalidationBySymbol: Record<string, number | null>;
   onClose:  () => void;
   onSubmit: (orders: DraftOrder[], riskOverridden: boolean) => void;
 }
@@ -48,7 +57,7 @@ interface RowState {
   autoSend:  boolean;
 }
 
-export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol, onClose, onSubmit }: Props) {
+export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol, invalidationBySymbol, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(cards.map((c) => [c.symbol, { contracts: contractsBySymbol[c.symbol] ?? 1, autoSend: true }])),
   );
@@ -76,10 +85,11 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
       checks[c.symbol] = checkTradeRisk(
         c, Math.max(1, Math.round(r.contracts)), limits, positions, dailyRecommendations,
         overridesBySymbol[c.symbol] ?? null,
+        invalidationBySymbol[c.symbol] ?? c.exit.invalidation,
       );
     }
     return checks;
-  }, [cards, rows, limits, positions, dailyRecommendations, overridesBySymbol]);
+  }, [cards, rows, limits, positions, dailyRecommendations, overridesBySymbol, invalidationBySymbol]);
 
   const hasMissingInvalidation = useMemo(
     () => Object.values(riskChecks).some((rc) => rc.reasons.includes('missing_invalidation')),

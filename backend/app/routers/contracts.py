@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.schemas import (
     OptionContract, RrModel, TradeEntry, TradeExit, ContractScoreBreakdown,
+    FinalStopOut,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
 )
 from app.data.market import (
@@ -314,6 +315,11 @@ class RecomputePlanRequest(BaseModel):
     horizon_preset: str | None = None
     hold_min: float | None = Field(default=None, ge=0)
     hold_max: float | None = Field(default=None, ge=0)
+    # Piece 3: the stock stop the card already carries (`exit.finalStop`),
+    # round-tripped so a contract override cannot move it. See the endpoint
+    # body for why this is echoed rather than re-derived. None = the card has
+    # none, and the flat percentage applies.
+    final_stop: FinalStopOut | None = None
 
 
 class RecomputePlanResponse(BaseModel):
@@ -363,6 +369,40 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
+    _flat_fallback_pct = (
+        _rr_cfg_merged["bullish_invalidation_pct"] if req.direction == "Bullish"
+        else _rr_cfg_merged["bearish_invalidation_pct"]
+    )
+
+    # ── Piece 3: the stock stop survives a Step 6 contract override ───────────
+    # The stop is a STOCK level: which contract is being traded has no bearing
+    # on where the structure sits, so an override must not move it. The card
+    # sends back the block the scan already resolved and this endpoint uses its
+    # price and echoes it verbatim -- `mergePlan` replaces `exit` wholesale, so
+    # an endpoint returning no stop would wipe `finalStop` and drop
+    # `invalidation` to a flat percentage for exactly the cards a user
+    # hand-picked a contract on.
+    #
+    # DELIBERATELY NOT re-derived from a fresh candle fetch. That would add a
+    # network round trip to an interactive endpoint whose whole design (see the
+    # Heston note above) is "one contract's fields in the body, no chain", and
+    # a feed that has moved on since the scan would hand back a DIFFERENT stop
+    # -- the override silently moving the level, which is the failure this part
+    # exists to prevent.
+    #
+    # ABSENT means the card has no resolved stop to preserve: a scan session
+    # persisted before piece 3, or a symbol whose bar feed was too thin. Fall
+    # back to the same flat percentage `resolve_stock_stop` uses, and echo no
+    # block -- "not computed", never a structural level that was never found.
+    if req.final_stop is not None:
+        _stock_stop_price = req.final_stop.price
+    else:
+        _stock_stop_price = (
+            max(req.stock_price * (1 - _flat_fallback_pct), 0.01)
+            if req.direction == "Bullish"
+            else req.stock_price * (1 + _flat_fallback_pct)
+        )
+
     plan = build_trade_plan(
         direction=req.direction,
         stock_price=req.stock_price,
@@ -376,6 +416,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         horizon_preset=req.horizon_preset,
         hold_min=req.hold_min,
         hold_max=req.hold_max,
+        final_stop_price=_stock_stop_price,
     )
 
     return RecomputePlanResponse(
@@ -390,6 +431,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
             timeStopDays=plan.time_stop_days,
             target=plan.target_price,
             targets=plan.targets,
+            finalStop=req.final_stop,
         ),
         rrRatio=plan.rr_ratio,
         rrModel=plan.rr_model,
