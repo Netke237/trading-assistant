@@ -297,7 +297,16 @@ from your Downloads folder and one account.
 
 ---
 
-## 9. Two removals still pending your word
+## 9. Two removals — DONE 2026-09-09, this section is retained as history
+
+**BOTH ARE BUILT, APPROVED AND SHIPPED.** See `already_shipped` → "Schematic removals — Invalidation
+readout + Projected R/R" in `PROJECT_STATE.json`: Kenneth approved both, both shipped, and round 1
+came back clean. Verified in code 2026-09-09 — every surviving mention of either readout in
+`TradeCard/index.tsx` is inside a comment explaining its absence; nothing renders.
+
+This heading said "still pending your word" for several sessions after the work landed, and was read
+back to Kenneth as an open decision more than once. **Do not re-ask.** The table below is what was
+removed and why, kept as the record.
 
 The artifact flags four; two are done (half-life repricing, `structuralRR`). These two are still live:
 
