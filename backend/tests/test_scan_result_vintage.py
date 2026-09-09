@@ -295,42 +295,90 @@ async def test_restore_from_db_drops_a_stale_result_and_the_status_with_it(stale
         scan_module._last_updated_at = orig_updated
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("stale", STALE_VERSIONS)
-async def test_the_watchlist_does_not_serve_scores_out_of_a_stale_blob(stale):
-    """Phase A round 5 found /api/watchlist serving scores, statuses and
-    `stockBreakdown` out of the very blob /scan/last and /api/tradecards had
-    just refused. Its guard was written as an absence test like the other two,
-    so piece 3's bump would have re-opened exactly that hole.
+class _ScalarsResult:
+    def __init__(self, rows): self._rows = rows
+    def scalars(self): return self
+    def all(self): return self._rows
 
-    The endpoint degrades to a live fetch when the lookup is empty, so the
-    assertion is that the STALE card did not decide the row: a served card
-    would carry its stockScore of 80.
+
+class _WatchlistDb:
+    """Stand-in for the session /api/watchlist uses.
+
+    It runs TWO selects -- the watchlist symbols, then the scan session row --
+    so unlike `_StubDb` this one has to answer them differently. By ORDER, not
+    by inspecting the statement: the endpoint's two calls are fixed and
+    adjacent, and parsing the statement would couple the fixture to
+    SQLAlchemy's internals for no gain.
+    """
+    def __init__(self, symbols, session_row):
+        self._results = [
+            _ScalarsResult([type("W", (), {"symbol": sym})() for sym in symbols]),
+            _StubResult(session_row),
+        ]
+
+    async def execute(self, _stmt):
+        return self._results.pop(0)
+
+
+async def _watchlist_rows(symbols, session_row, monkeypatch):
+    """Drive the REAL endpoint and return what it served.
+
+    Calling `get_watchlist` rather than restating its guard is the whole point
+    of the two tests below. Written as
+    `assert (blob.schema_version or 0) >= SCAN_RESULT_SCHEMA_VERSION` against a
+    locally parsed blob they were TAUTOLOGICAL: reverting watchlist.py to
+    `is not None` left them green, so the endpoint's guard was still untested
+    and the next bump would have been caught for /scan/last and /api/tradecards
+    but not here -- the exact hole these tests were added to close. It is also
+    the same defect this file's docstring records rounds 4 and 5 catching in
+    the stamping test: a test asserting its own restatement of the code instead
+    of the code.
+
+    The live-fetch fallback is stubbed to return nothing, so a row it produces
+    is unmistakable (score 0 / NO_DATA) against one the scan blob decided
+    (score 80 / PASS).
     """
     from app.routers import watchlist as wl
 
+    async def _no_price(_client, _sym): return None
+    async def _no_company(_client, _sym): return None
+    monkeypatch.setattr(wl, "fetch_price_async", _no_price)
+    monkeypatch.setattr(wl, "fetch_company_name_async", _no_company)
+    return await wl.get_watchlist(_WatchlistDb(symbols, session_row))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stale", STALE_VERSIONS)
+async def test_the_watchlist_does_not_serve_scores_out_of_a_stale_blob(stale, monkeypatch):
+    """Phase A round 5 found /api/watchlist serving scores, statuses and
+    `stockBreakdown` out of the very blob /scan/last and /api/tradecards had
+    just refused. Its guard was written as an absence test like the other two,
+    so piece 3's bump would have re-opened exactly that hole."""
     extra = {} if stale is None else {"schema_version": stale}
     row = _Row(_blob(candidates=[_card("AAPL", ivRank=45)], **extra))
-    scan = ScanResult.model_validate_json(row.last_result_json)
-    assert scan.candidates, "precondition: the blob really does carry a card"
-    # The guard as the endpoint applies it (watchlist.py builds `scan_lookup`
-    # only when this passes).
-    assert not ((scan.schema_version or 0) >= wl.SCAN_RESULT_SCHEMA_VERSION), (
-        f"a schema_version={stale} blob must not populate the watchlist lookup: "
-        "its scores were computed against fields that no longer mean what their "
-        "names say"
+    rows = await _watchlist_rows(["AAPL"], row, monkeypatch)
+
+    assert len(rows) == 1
+    assert rows[0].score == 0 and rows[0].status == "NO_DATA", (
+        f"a schema_version={stale} blob decided this row (score {rows[0].score}, "
+        f"status {rows[0].status}): its scores were computed against fields that "
+        "no longer mean what their names say"
     )
 
 
 @pytest.mark.asyncio
-async def test_the_watchlist_still_serves_a_current_blob():
-    """The refusal must be narrow, exactly as it is for /api/tradecards."""
-    from app.routers import watchlist as wl
-
+async def test_the_watchlist_still_serves_a_current_blob(monkeypatch):
+    """The refusal must be narrow, exactly as it is for /api/tradecards -- or
+    the fix is not a guard, it is an outage."""
     row = _Row(_blob(candidates=[_card("MSFT", ivRank=None, iv=42.0)],
                      schema_version=SCAN_RESULT_SCHEMA_VERSION))
-    scan = ScanResult.model_validate_json(row.last_result_json)
-    assert (scan.schema_version or 0) >= wl.SCAN_RESULT_SCHEMA_VERSION
+    rows = await _watchlist_rows(["MSFT"], row, monkeypatch)
+
+    assert len(rows) == 1
+    assert rows[0].score == 80 and rows[0].status == "PASS", (
+        "a current blob must still decide the row; falling through to the live "
+        "fetch would blank every watchlist score after an upgrade"
+    )
 
 
 # ── The basis must survive the branch that does not SCORE the figure ─────────
