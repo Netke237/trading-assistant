@@ -6,9 +6,11 @@ import dataclasses
 import functools
 import hashlib
 import logging
+import math
 import os
 import time
 from collections.abc import Callable
+from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path as _Path
 from typing import Any, Literal, Optional
@@ -16,7 +18,7 @@ from typing import Any, Literal, Optional
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +40,10 @@ from app.data.market import (
     fetch_candles_async,
 )
 from app.services.historical_store import get_bars as get_historical_bars
-from app.scoring.stock_scorer import score_stock
+# _atr is the SAME ATR(14) /contracts/exit-plan uses (contracts.py imports it
+# from here too) -- not strategy_engine's same-named one, which is a different
+# implementation. The two endpoints must build their ATR floor on one number.
+from app.scoring.stock_scorer import score_stock, _atr
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
@@ -53,7 +58,20 @@ from app.services.strategy_param_store import get_active, get_costs, get_exit
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret, load_backtest_cfg
 from app.scoring.first_passage import estimate_stock_first_passage
-from app.services.config_loader import load_first_passage_cfg as _fp_cfg
+# compute_final_stop / compute_target_row take candles, a direction, a price
+# and config -- no contract input, and never had one. /stocks/exit-plan calls
+# the SAME two functions with the SAME arguments as /contracts/exit-plan; that
+# is what makes the stock plan the options plan minus the premium half rather
+# than a second implementation of it.
+from app.scoring.exit_plan import compute_final_stop, compute_target_row
+from app.services.config_loader import (
+    load_first_passage_cfg as _fp_cfg, load_exit_plan_cfg,
+)
+# _load_config is lru_cached AND cache_cleared by POST /settings/risk, so the
+# risk budget below follows a saved settings change without a restart. A
+# private-name import is deliberate: adding a public wrapper would be a second
+# door onto one cache that the settings route would then have to know about.
+from app.services import portfolio_risk
 # Reused rather than redeclared: the stock estimate's invalidation block is an
 # exact shape match for the option one, and two copies would drift apart.
 # No cycle — contracts.py does not import this module.
@@ -1413,6 +1431,25 @@ _INTRADAY_MEAN_REVERSION_CAVEAT = (
 )
 
 
+def _model_caveat_for(strategy: Optional[str]) -> Optional[str]:
+    """The one place the "is the GBM a fair model for this strategy?" rule lives.
+
+    Extracted when /stocks/exit-plan arrived, because it reports probabilities
+    from the SAME estimator over the SAME paths: two copies of this rule would
+    eventually caption one card and not the other for the same number, which is
+    worse than no caption at all. `None` strategy (the exit plan's request makes
+    it optional — the arithmetic plan stands on its own without one) returns no
+    caveat, same as any non-mean-reversion strategy.
+    """
+    if not strategy:
+        return None
+    if strategy in _INTRADAY_STRATEGIES:
+        return _INTRADAY_MEAN_REVERSION_CAVEAT
+    if strategy.startswith("mean_reversion"):
+        return _MEAN_REVERSION_CAVEAT
+    return None
+
+
 @router.post('/stocks/first-passage', response_model=StockFirstPassageResponse)
 async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassageResponse:
     """On-demand Monte Carlo first-passage estimate for a stock position's exit
@@ -1481,12 +1518,7 @@ async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassag
         )
     )
 
-    if req.strategy in _INTRADAY_STRATEGIES:
-        caveat = _INTRADAY_MEAN_REVERSION_CAVEAT
-    elif req.strategy.startswith("mean_reversion"):
-        caveat = _MEAN_REVERSION_CAVEAT
-    else:
-        caveat = None
+    caveat = _model_caveat_for(req.strategy)
 
     return StockFirstPassageResponse(
         targets=[
@@ -1503,4 +1535,396 @@ async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassag
         ),
         horizonDays=result.horizon_days,
         modelCaveat=caveat,
+    )
+
+
+# ── POST /stocks/exit-plan ────────────────────────────────────────────────────
+#
+# Piece 6, "the stocks arithmetic plan" (docs/superpowers/plans/
+# 2026-09-02-piece-6-stocks-arithmetic-plan-spec.md). The options exit-plan
+# pipeline with the whole premium half removed:
+#
+#   compute_final_stop   -> survives verbatim (it never took a contract)
+#   compute_target_row   -> survives verbatim (same)
+#   estimate_rr          -> DROPPED (it reprices a contract)
+#   estimate_first_passage -> replaced by estimate_stock_first_passage
+#   stop-vs-premium gate -> DROPPED
+#
+# THERE IS NO STOCKS STOP-COST GATE, and this is a decision, not an omission.
+# The options gate answers "what share of the premium does the stop cost?", a
+# question that exists only because an option can be near-worthless before the
+# stock reaches the stop. A stock has no such nonlinearity: a 5% stop costs 5%,
+# exactly, and `recommendedShares` below already turns that into the only
+# protection it needs. A badge that looked like the options one but answered a
+# different question is the specific thing spec section 1 forbids.
+#
+# Its own endpoint rather than a branch of /contracts/exit-plan because that one
+# requires strike > 0, dte and premium > 0 — none of which a stock has.
+
+
+class StockExitPlanRequest(BaseModel):
+    symbol:      str
+    direction:   Literal["Bullish", "Bearish"]
+    entry_price: float = Field(..., gt=0)
+    trend_score: float = Field(..., ge=0, le=100)
+    #: Picks the holding window the probabilities are measured over, via
+    #: scoring_rules.yaml's confidence_backtest.<horizon>.n_days.
+    horizon:     Literal["Intraday", "Swing", "Position"]
+    #: Only ever used to caption the probabilities with the GBM model caveat —
+    #: the arithmetic plan itself does not depend on which strategy found the
+    #: candidate, so it is optional.
+    strategy:    Optional[str] = None
+    #: None -> risk_rules.yaml's exit_plan.target.rr_ratios.
+    rr_ratios:   Optional[list[float]] = Field(default=None, min_length=1, max_length=5)
+
+    @field_validator("rr_ratios")
+    @classmethod
+    def _positive_finite_ratios(cls, v: Optional[list[float]]) -> Optional[list[float]]:
+        # An R:R of 0 puts the target ON the entry price and a negative one puts
+        # it on the losing side — both would render as a "profit target" that is
+        # nothing of the kind. Pydantic's gt= cannot reach inside a list.
+        if v is None:
+            return v
+        for r in v:
+            if not math.isfinite(r) or r <= 0:
+                raise ValueError("rr_ratios must all be finite and greater than 0")
+        return v
+
+
+class StockExitPlanStopOut(BaseModel):
+    price:                float
+    source:               Literal["structural", "atr_widened"]
+    structuralSource:     Optional[Literal["order_block", "swing_low", "swing_high"]] = None
+    structuralConfidence: Optional[int] = None
+    structuralPrice:      Optional[float] = None
+    atrFloorPrice:        float
+    distanceDollar:       Optional[float] = None
+    #: |entry - stop|. THE WHOLE "cost of the stop" for a stock, exactly and
+    #: without a model — which is why there is no gate above it.
+    riskPerShare:         float
+    probability:          float
+    expectedDays:         Optional[float] = None
+
+
+class StockExitPlanTargetRowOut(BaseModel):
+    rrRatio:         float
+    arithmeticPrice: float
+    price:           float
+    tpSource:        Literal["arithmetic", "structural_snap"]
+    structuralPrice: Optional[float] = None
+    distanceDollar:  Optional[float] = None   # |structural - arithmetic|
+    toleranceDollar: float                    # the snap band
+    rewardPerShare:  float                    # |target - entry|
+    probability:     float
+    expectedDays:    Optional[float] = None
+    qualityGood:     bool
+    qualityReasons:  list[str]
+
+
+class StockRaceOutcomeOut(BaseModel):
+    """One target's row of the two-barrier stock race (spec section 5).
+
+    Three probabilities that sum to exactly 100% because every simulated path is
+    assigned to exactly one of them — unlike `stop.probability` and
+    `targets[].probability`, which are each measured on their own and routinely
+    sum past 100% (a path can touch both barriers).
+    """
+    targetPrice:    float
+    pTargetFirst:   float
+    pStopFirst:     float
+    pNeither:       float
+    daysTarget:     Optional[float] = None   # CONDITIONAL median: paths where the target won
+    daysStop:       Optional[float] = None   # CONDITIONAL median: paths where the stop won
+    #: Allocated to hundredths so the three ALWAYS sum to exactly 1.00. The card
+    #: prints these; the raw p* above are what any bar is drawn from. One
+    #: rounding rule, one implementation — see _allocated_weights.
+    weightTarget:   float
+    weightStop:     float
+    weightNeither:  float
+    #: Mean price at the end of the window over the pNeither paths. A stock that
+    #: reached no barrier is still an open position at a knowable average price,
+    #: not a write-off — which is why this bucket carries a number here and the
+    #: option race's does not.
+    terminalMean:   Optional[float] = None
+
+
+class StockBarrierRaceOut(BaseModel):
+    outcomes:  list[StockRaceOutcomeOut]
+    stopPrice: float
+    nPaths:    int
+
+
+class StockExitPlanResponse(BaseModel):
+    stop:              StockExitPlanStopOut
+    targets:           list[StockExitPlanTargetRowOut]
+    atr:               float
+    #: floor(riskBudget / riskPerShare). None when either input is non-positive.
+    recommendedShares: Optional[int] = None
+    #: The numerator above, surfaced so the division is checkable on the card
+    #: rather than being a number the user has to trust. portfolio_value x
+    #: max_loss_per_trade_pct, from risk_rules.yaml — the same file and the same
+    #: keys the Settings > Risk form reads and writes.
+    riskBudget:        float
+    #: Spec section 3.2, the one real inconsistency, DISCLOSED rather than
+    #: unified: this engine counts TRADING days (its window is a bar count and
+    #: its sigma is annualized with sqrt(252)); the options card counts CALENDAR
+    #: days (its window is DTE). Both are internally consistent; silently making
+    #: them one number would break whichever card lost. The card renders the
+    #: word.
+    daysBasis:         Literal["trading"] = "trading"
+    horizonDays:       int
+    #: Non-null when the GBM is a poor generative model for the strategy that
+    #: found this candidate. Same rule, same text, same single implementation as
+    #: /stocks/first-passage — see _model_caveat_for.
+    modelCaveat:       Optional[str] = None
+    race:              Optional[StockBarrierRaceOut] = None
+
+
+@router.post('/stocks/exit-plan', response_model=StockExitPlanResponse)
+async def stock_exit_plan(req: StockExitPlanRequest) -> StockExitPlanResponse:
+    """The arithmetic profit plan for a STOCK: a structurally-grounded stop (the
+    wider of the structural level and an ATR floor), one target row per R:R
+    ratio (arithmetic, snapped onto a real structural level when one is close
+    enough), each with its probability and expected TRADING days, plus the
+    two-barrier race and a risk-budget share count.
+
+    Fired only by the stock position card's button, never by the scan — same
+    latency reasoning as /contracts/exit-plan and /stocks/first-passage.
+    """
+    ep_cfg = load_exit_plan_cfg()
+    fp_cfg = _fp_cfg()
+    is_bullish = req.direction == "Bullish"
+
+    try:
+        horizon_days = int(load_backtest_cfg(req.horizon)["n_days"])
+    except (KeyError, TypeError, ValueError):
+        horizon_days = 10   # Swing default; never fail the request over config shape
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        candles = await fetch_candles_async(client, req.symbol.upper())
+
+    # BOTH guards carried over from /contracts/exit-plan verbatim, same message,
+    # for the same reason. Fewer than 2 candles means _atr cannot form even one
+    # true range, and find_structural_stop's own len<10 guard also returns None:
+    # the ATR floor then collapses onto entry_price exactly, producing a
+    # zero-width "final stop" and every target row landing on the entry price
+    # too. That is a plan built on no data wearing the clothes of a computed
+    # one — refuse it rather than return it.
+    if len(candles) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="insufficient price history to compute an exit plan",
+        )
+
+    atr = _atr(candles, 14)
+
+    # A flat or duplicated candle feed (stale upstream data, one bar repeated)
+    # clears the guard above and still collapses the ATR floor to zero — the
+    # same outcome reached a different way.
+    if atr <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="insufficient price history to compute an exit plan",
+        )
+
+    # Identical arguments, identical function, as /contracts/exit-plan: this call
+    # IS the guarantee that the stock path is the options path with the premium
+    # half removed, rather than a second implementation that drifts.
+    raw_stop = compute_final_stop(
+        candles, req.direction, req.entry_price, atr,
+        ep_cfg["stop"]["atr_multiplier"],
+    )
+
+    # QUANTIZED TO CENTS BEFORE IT IS USED, not just before it is printed — and
+    # this is the one place the stock path deliberately does something the
+    # options path does not. This card's entire value is arithmetic the user can
+    # check in his head: "stop $96.00, risk $4.00, so 2R is $108.00". An
+    # atr_widened stop is entry - 2 x ATR, and ATR is a mean of true ranges, so
+    # it is sub-cent-irrational essentially always. Building the targets off the
+    # raw stop and printing the rounded one makes that check fail by a penny on
+    # most rows. Rounding first makes every printed number reconcile exactly.
+    #
+    # The cent FLOOR is the same guard, for the same reason, as
+    # resolve_stock_stop's: a wide multiplier on a low-priced name (entry 3.00,
+    # ATR 2.00, multiplier 2.0 -> -1.00) drives a bullish floor negative, and a
+    # stop at or below zero is not a level. atrFloorPrice below still reports
+    # the raw floor, so the card can show WHY the stop sits where it does.
+    stop_price = round(raw_stop.price, 2)
+    if is_bullish and stop_price < 0.01:
+        stop_price = 0.01
+    final_stop = dataclasses.replace(raw_stop, price=stop_price)
+
+    risk_per_share = round(abs(req.entry_price - stop_price), 2)
+
+    # The quantized stop landing ON the entry price is the collapsed-plan
+    # condition the two guards above exist to prevent, reached by a third route:
+    # an ATR small enough that 2 x ATR rounds to nothing at this price. Every
+    # target would land on entry and every R:R would be infinite. Refuse it with
+    # the same message rather than emit a plan of zeroes.
+    if risk_per_share <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="insufficient price history to compute an exit plan",
+        )
+
+    rr_ratios = req.rr_ratios if req.rr_ratios is not None else ep_cfg["target"]["rr_ratios"]
+    snap_mult = ep_cfg["target"]["structural_snap"]["atr_multiplier"]
+
+    rows = [
+        compute_target_row(
+            candles, req.direction, req.entry_price, final_stop, atr, float(rr), snap_mult,
+        )
+        for rr in rr_ratios
+    ]
+    target_prices = [round(row.price, 2) for row in rows]
+
+    # Deterministic per-request seed — same construction and same reasoning as
+    # /stocks/first-passage's and contracts.py's: identical inputs return an
+    # identical answer instead of visible Monte Carlo noise on repeated presses,
+    # while genuinely different inputs still draw independently. sha256, not
+    # hash(), which is salted per process and so unstable across workers.
+    seed_key = (
+        f"{req.symbol.upper()}|{req.direction}|{req.horizon}|"
+        f"{round(req.entry_price, 2)}|{stop_price}|"
+        f"{','.join(f'{t:.2f}' for t in target_prices)}"
+    )
+    seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
+
+    # CPU-bound NumPy; asyncio.to_thread keeps it off the event loop, exactly as
+    # /stocks/first-passage does. The barrier race rides on the SAME simulated
+    # paths — no second simulation and no extra work beyond the attribution.
+    fp = await asyncio.to_thread(
+        functools.partial(
+            estimate_stock_first_passage,
+            stock_price=req.entry_price,
+            direction=req.direction,
+            trend_score=req.trend_score,
+            stop_price=stop_price,
+            targets=target_prices,
+            candles=candles,
+            horizon_days=horizon_days,
+            max_drift_pct=fp_cfg["max_drift_pct"],
+            n_paths=fp_cfg["n_paths"],
+            sigma_floor=fp_cfg["sigma_floor"],
+            sigma_ceiling=fp_cfg["sigma_ceiling"],
+            seed=seed,
+            compute_race=True,
+        )
+    )
+
+    structural_price = round(raw_stop.structural.price, 2) if raw_stop.structural else None
+    atr_floor_price = round(raw_stop.atr_floor_price, 2)
+
+    stop_out = StockExitPlanStopOut(
+        price=stop_price,
+        source=raw_stop.source,
+        structuralSource=raw_stop.structural.source if raw_stop.structural else None,
+        structuralConfidence=raw_stop.structural.confidence if raw_stop.structural else None,
+        structuralPrice=structural_price,
+        atrFloorPrice=atr_floor_price,
+        distanceDollar=(
+            round(abs(structural_price - atr_floor_price), 2)
+            if structural_price is not None else None
+        ),
+        riskPerShare=risk_per_share,
+        # Spec section 3.3: the options endpoint never reports a probability for
+        # its stop row; this engine returns one in the same call, and "this stop
+        # is reached on 34% of paths, typically in 6 trading days" is the most
+        # decision-relevant number on the card.
+        probability=round(fp.invalidation.probability, 4),
+        expectedDays=fp.invalidation.expected_days,
+    )
+
+    targets_out = [
+        StockExitPlanTargetRowOut(
+            rrRatio=row.rr_ratio,
+            arithmeticPrice=round(row.arithmetic_price, 2),
+            price=price,
+            tpSource=row.tp_source,
+            structuralPrice=round(row.structural.price, 2) if row.structural else None,
+            distanceDollar=round(row.distance_dollar, 2) if row.distance_dollar is not None else None,
+            toleranceDollar=round(row.tolerance_dollar, 2),
+            rewardPerShare=round(abs(price - req.entry_price), 2),
+            probability=round(est.probability, 4),
+            expectedDays=est.expected_days,
+            qualityGood=row.quality_good,
+            qualityReasons=row.quality_reasons,
+        )
+        # zip over fp.targets rather than re-indexing: estimate_stock_first_passage
+        # drops non-finite/non-positive targets, so positions are only guaranteed
+        # to line up while the lists are the same length — asserted below.
+        for row, price, est in zip(rows, target_prices, fp.targets)
+    ]
+    if len(targets_out) != len(rows):
+        raise HTTPException(
+            status_code=422,
+            detail="insufficient price history to compute an exit plan",
+        )
+
+    portfolio_cfg = portfolio_risk._load_config().get("portfolio", {})
+    risk_budget = round(
+        float(portfolio_cfg.get("portfolio_value", 0.0))
+        * float(portfolio_cfg.get("max_loss_per_trade_pct", 0.0)),
+        2,
+    )
+    # shares = risk budget / risk per share. This IS the protective mechanism a
+    # stocks stop-cost gate would have duplicated (spec section 1) — sizing off
+    # the risk budget bounds the loss at the stop exactly, with no model.
+    #
+    # DECIMAL, NOT FLOAT FLOOR-DIVISION. Both operands are cent-quantized
+    # decimals, and neither is exactly representable in binary: `2000.0 // 1.6`
+    # is 1249, not 1250, because 1.6 is stored fractionally below itself. The
+    # card prints this number as the answer to the division it shows right
+    # beside it, and Apply writes it onto a broker order and into a persisted
+    # position — so being one share light is a wrong number in three places at
+    # once. Decimal over the string forms is exact for values that are decimal
+    # by construction, where `math.floor(a / b)` merely moves the error.
+    #
+    # None, never a division by zero and never an unbounded size, when either
+    # input is non-positive. risk_per_share > 0 is already guaranteed by the 422
+    # above; the guard stays because this arithmetic must not depend on a
+    # caller's guard staying where it is.
+    #
+    # A floor of ZERO is also None, not 0. Zero is not a size — it is "the risk
+    # budget cannot buy one share at this stop" — and returning it let the card
+    # print a SHARES readout of 0 and offer an "Apply 0 shares" button that
+    # wrote a 0-share position into the portfolio. Reachable on a small account:
+    # a $2,000 portfolio at 0.1% per trade is a $2.00 budget against a $15.69
+    # stop.
+    recommended_shares: Optional[int] = None
+    if risk_budget > 0 and risk_per_share > 0:
+        floored = int(Decimal(str(risk_budget)) // Decimal(str(risk_per_share)))
+        recommended_shares = floored if floored > 0 else None
+
+    race_out = None
+    if fp.race is not None:
+        race_out = StockBarrierRaceOut(
+            outcomes=[
+                StockRaceOutcomeOut(
+                    targetPrice=round(o.target_price, 2),
+                    pTargetFirst=round(o.p_target_first, 4),
+                    pStopFirst=round(o.p_stop_first, 4),
+                    pNeither=round(o.p_neither, 4),
+                    daysTarget=o.days_target,
+                    daysStop=o.days_stop,
+                    weightTarget=o.weight_target,
+                    weightStop=o.weight_stop,
+                    weightNeither=o.weight_neither,
+                    terminalMean=round(o.terminal_mean, 2) if o.terminal_mean is not None else None,
+                )
+                for o in fp.race.outcomes
+            ],
+            stopPrice=round(fp.race.stop_price, 2),
+            nPaths=fp.race.n_paths,
+        )
+
+    return StockExitPlanResponse(
+        stop=stop_out,
+        targets=targets_out,
+        atr=round(atr, 2),
+        recommendedShares=recommended_shares,
+        riskBudget=risk_budget,
+        horizonDays=fp.horizon_days,
+        modelCaveat=_model_caveat_for(req.strategy),
+        race=race_out,
     )

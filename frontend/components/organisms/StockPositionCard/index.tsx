@@ -9,7 +9,12 @@ import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from
 import { api } from '@/lib/api';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { winRateTooltip } from '@/lib/statusTooltips';
-import type { PositionCardData, StockFirstPassageEstimate } from '@/types/stockDomain';
+import type { PositionCardData, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+// The SAME prose the options card's Arithmetic Profit Target section uses.
+// The stocks plan is built from the same compute_final_stop /
+// compute_target_row and reports the same fields under the same names, so
+// there is one implementation of these sentences, not two.
+import { stopJustification, targetCompareState, targetCompareLabel } from '@/lib/exitPlanLabels';
 import type { Direction } from '@/types/domain';
 import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
@@ -171,6 +176,11 @@ export function StockPositionCard({
     estimateReq.current = null;
     structuralReq.current?.abort();
     structuralReq.current = null;
+    planReq.current?.abort();
+    planReq.current = null;
+    setPlan(null);
+    setPlanErr(null);
+    setPlanning(false);
     setEstimate(null);
     setEstimateErr(null);
     setEstimating(false);
@@ -246,6 +256,15 @@ export function StockPositionCard({
       structuralReq.current?.abort();
       setStructural(null);
       setStructuralErr(null);
+      // The arithmetic plan DERIVES its own stop and targets from the entry
+      // price alone — that is the whole point of it — so `entry` is its only
+      // overlay input, and the only edit that can strand it. Editing the stop
+      // must NOT clear it: the plan's stop is deliberately a second opinion
+      // standing beside the card's, and clearing it on a stop edit would
+      // destroy the comparison the moment the user acted on it.
+      planReq.current?.abort();
+      setPlan(null);
+      setPlanErr(null);
     }
   }, []);
 
@@ -284,14 +303,19 @@ export function StockPositionCard({
   const [structural, setStructural]         = useState<StructuralStopResult | null>(null);
   const [checkingStructure, setCheckingStructure] = useState(false);
   const [structuralErr, setStructuralErr]   = useState<string | null>(null);
+  const [plan, setPlan]                     = useState<StockExitPlan | null>(null);
+  const [planning, setPlanning]             = useState(false);
+  const [planErr, setPlanErr]               = useState<string | null>(null);
   const estimateReq   = useRef<AbortController | null>(null);
   const structuralReq = useRef<AbortController | null>(null);
+  const planReq       = useRef<AbortController | null>(null);
 
   // Abort anything still in flight when the card unmounts, so a late resolve
   // cannot setState on an unmounted component.
   useEffect(() => () => {
     estimateReq.current?.abort();
     structuralReq.current?.abort();
+    planReq.current?.abort();
   }, []);
 
   const pinned            = stockBasket.some((c) => c.symbol === card.symbol);
@@ -396,6 +420,42 @@ export function StockPositionCard({
       if (estimateReq.current === ctrl) {
         estimateReq.current = null;
         setEstimating(false);
+      }
+    }
+  }
+
+  async function onArithmeticPlan() {
+    if (planning) return;
+    planReq.current?.abort();
+    const ctrl = new AbortController();
+    planReq.current = ctrl;
+    setPlanning(true);
+    setPlanErr(null);
+    try {
+      const res = await api.getStockExitPlan({
+        symbol: card.symbol,
+        direction: card.direction as Direction,
+        // The EDITED entry, same as the other two fetches: the overlay is what
+        // the user intends to trade. Deliberately NOT overlay.stop — the plan
+        // derives its own stop, and feeding it the card's would make it echo
+        // the number it exists to offer an alternative to.
+        entry_price: overlay.entry,
+        horizon: _horizonEnum(scanHorizonLabel ?? undefined),
+        strategy: card.strategy.strategy,
+        // Same proxy, same caveat, as onEstimate's: the 5-rule composite is the
+        // only 0-100 conviction number this card has, and the estimator uses it
+        // solely as a drift scale.
+        trend_score: card.stock_score,
+      }, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      setPlan(res);
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      setPlanErr(String(e));
+    } finally {
+      if (planReq.current === ctrl) {
+        planReq.current = null;
+        setPlanning(false);
       }
     }
   }
@@ -703,6 +763,212 @@ export function StockPositionCard({
             <Text size={11} tone="dim">
               Reference level only — the risk basis stays your STOP. Saved with the
               position so STRUCTURAL STOP BREACHED can fire.
+            </Text>
+          </div>
+        )}
+      </div>
+
+      {/* Section 2c — ARITHMETIC PROFIT TARGET (piece 6, the stocks arithmetic
+          plan). The options card's section with every option row removed:
+          no contract price, no pricing model, no IV, no delta, no premium stop
+          and NO STOP-COST BADGE. A stock's stop cost is exact — riskPerShare,
+          times however many shares — so the options gate's question does not
+          arise, and a badge that looked like it would be answering a different
+          one. Sizing off the risk budget below is what serves that protective
+          role here.
+
+          Click-gated like the two fetches above, and for the same reason: a
+          candle fetch plus a Monte Carlo is not scan work. */}
+      <div className={styles.targetsSection}>
+        <div className={styles.targetsHeading}>
+          <Text size={11} tone="dim">ARITHMETIC PROFIT TARGET</Text>
+        </div>
+
+        <div className={styles.actionRow}>
+          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={onArithmeticPlan}
+            disabled={planning}
+          >
+            <Text size={12}>{planning ? 'Computing…' : 'Arithmetic plan'}</Text>
+          </button>
+        </div>
+
+        {planErr && <Text size={11} tone="reject">{planErr}</Text>}
+
+        {plan && (
+          <div className={styles.estimateBlock}>
+            {/* ── The stop row ─────────────────────────────────────────── */}
+            <div className={styles.planRow}>
+              <Text size={11} tone="dim">STOP</Text>
+              <Data size={13}>{plan.stop.price.toFixed(2)}</Data>
+              <Text size={11} tone="dim">
+                {plan.stop.source === 'structural'
+                  ? `structural — ${plan.stop.structuralSource ?? 'level'}`
+                  : 'widened to ATR floor'}
+              </Text>
+              <Data size={12} tone="dim">ATR(14) {plan.atr.toFixed(2)}</Data>
+            </div>
+            <Text size={10} tone="dim">{stopJustification(plan.stop)}</Text>
+
+            <div className={styles.planRow}>
+              <Text size={11} tone="dim">RISK/SHARE</Text>
+              <Data size={13} tone="reject">{plan.stop.riskPerShare.toFixed(2)}</Data>
+              {/* Spec 3.3 — the options card never reports this, and it is the
+                  most decision-relevant number here. */}
+              <Data size={12} tone={plan.stop.probability >= 0.5 ? 'reject' : 'caution'}>
+                {(plan.stop.probability * 100).toFixed(0)}% reached
+              </Data>
+              <Data size={12} tone="dim">
+                {plan.stop.expectedDays != null
+                  ? `~${plan.stop.expectedDays.toFixed(0)} trading days`
+                  : 'unlikely'}
+              </Data>
+            </div>
+
+            {/* This plan's stop is a SECOND OPINION standing beside the card's,
+                not a replacement for it — arming a stop per trade is piece 5,
+                which does not exist yet. Say so wherever the two differ, rather
+                than letting two stop prices sit on one card unexplained. */}
+            {Math.abs(plan.stop.price - overlay.stop) >= 0.01 && (
+              <Text size={10} tone="caution">
+                The card&apos;s stop is ${overlay.stop.toFixed(2)} — this plan is a
+                second opinion and does not change it. Risk and R:R above the fold
+                still measure against the card&apos;s stop.
+              </Text>
+            )}
+
+            {/* ── Target rows ──────────────────────────────────────────── */}
+            {plan.targets.map((t, i) => (
+              <div key={`plan-t-${i}`} className={styles.planTarget}>
+                <div className={styles.planRow}>
+                  <Text size={11} tone="dim">{t.rrRatio}R</Text>
+                  <Data size={13} tone="pass">{t.price.toFixed(2)}</Data>
+                  <Data size={12} tone={t.probability >= 0.5 ? 'pass' : t.probability >= 0.25 ? 'caution' : 'reject'}>
+                    {(t.probability * 100).toFixed(0)}% reached
+                  </Data>
+                  <Data size={12} tone="dim">
+                    {t.expectedDays != null
+                      ? `~${t.expectedDays.toFixed(0)} trading days`
+                      : 'unlikely'}
+                  </Data>
+                </div>
+                <div className={styles.planRow}>
+                  <Text size={10} tone="dim">reward/share</Text>
+                  <Data size={12}>{t.rewardPerShare.toFixed(2)}</Data>
+                  <Text size={10} tone="dim">
+                    {/* The arithmetic the user checks in his head. The backend
+                        quantizes the stop to cents before building the target
+                        off it, so this identity holds exactly on screen.
+
+                        THE SIGN IS DIRECTION-DERIVED, never hardcoded: a
+                        Bearish target is entry MINUS rr x risk, and a '+' here
+                        printed '100.00 + 2 × 4.00 = 92.00' on every row of
+                        every bearish scan — a false equation on the one row
+                        whose entire purpose is being checkable. */}
+                    {`${overlay.entry.toFixed(2)} ${card.direction === 'Bullish' ? '+' : '−'} ${t.rrRatio} × ${plan.stop.riskPerShare.toFixed(2)} = ${t.arithmeticPrice.toFixed(2)}`}
+                  </Text>
+                  <Text size={10} tone="dim">
+                    {t.structuralPrice != null
+                      ? `structure ${t.structuralPrice.toFixed(2)} · ${t.distanceDollar?.toFixed(2) ?? '—'} away · tol ${t.toleranceDollar.toFixed(2)}`
+                      : `tol ${t.toleranceDollar.toFixed(2)}`}
+                  </Text>
+                </div>
+                <Text size={10} tone={t.qualityGood ? 'dim' : 'caution'}>
+                  {targetCompareLabel(targetCompareState(t))}
+                  {!t.qualityGood && t.qualityReasons.includes('stop_widened')
+                    ? ' Stop needed ATR widening.'
+                    : ''}
+                </Text>
+              </div>
+            ))}
+
+            {/* ── Sizing ───────────────────────────────────────────────── */}
+            <div className={styles.planRow}>
+              <Text size={11} tone="dim">SHARES</Text>
+              <Data size={13}>{plan.recommendedShares ?? '—'}</Data>
+              <Text size={10} tone="dim">
+                {`risk budget $${plan.riskBudget.toFixed(2)} ÷ $${plan.stop.riskPerShare.toFixed(2)}`}
+              </Text>
+              {plan.recommendedShares != null && (
+                <Text size={10} tone="dim">
+                  {`≈ $${(plan.recommendedShares * overlay.entry).toFixed(0)} position`}
+                </Text>
+              )}
+            </div>
+            {/* `> 0` as well as non-null: the backend already refuses to call a
+                floor of zero a size, and this is the second half of that same
+                guard. Without it an "Apply 0 shares" button wrote shares: 0
+                straight past the SHARES field's own clamp, into the order
+                quantity and into the persisted position. */}
+            {plan.recommendedShares != null && plan.recommendedShares > 0
+              && plan.recommendedShares !== overlay.shares && (
+              <div className={styles.actionRow}>
+                <button
+                  type="button"
+                  className={styles.actionBtn}
+                  onClick={() => {
+                    // Narrowed inside the callback rather than asserted: the
+                    // enclosing guard does not survive into the closure.
+                    if (plan.recommendedShares != null) patch({ shares: plan.recommendedShares });
+                  }}
+                >
+                  <Text size={11}>Apply {plan.recommendedShares} shares</Text>
+                </button>
+                {/* Sized against THIS plan's stop. If the card's stop differs,
+                    the Risk figure above the fold will not equal the risk
+                    budget — say which stop the number came from rather than
+                    letting the two disagree silently. */}
+                {Math.abs(plan.stop.price - overlay.stop) >= 0.01 && (
+                  <Text size={10} tone="caution">
+                    Sized for the ${plan.stop.price.toFixed(2)} stop above, not the
+                    card&apos;s ${overlay.stop.toFixed(2)}.
+                  </Text>
+                )}
+              </div>
+            )}
+
+            {/* ── The two-barrier race ─────────────────────────────────── */}
+            {plan.race && (
+              <div className={styles.planRace}>
+                <Text size={10} tone="dim">
+                  Which comes first, over {plan.horizonDays} trading days
+                  ({plan.race.nPaths.toLocaleString()} simulated paths). These three
+                  add to 100% because every path is counted once — unlike the
+                  percentages above, which are each measured on their own.
+                </Text>
+                {plan.race.outcomes.map((o, i) => (
+                  <div key={`race-${i}`} className={styles.planRow}>
+                    <Data size={11} tone="dim">{o.targetPrice.toFixed(2)}</Data>
+                    {/* The ALLOCATED weights, never the raw p* — they are
+                        allocated to hundredths so the three always sum to
+                        exactly 100%. Re-rounding the raw values here is how a
+                        row ends up printing 18 / 40 / 42 and adding to 99. */}
+                    <Data size={12} tone="pass">
+                      target {(o.weightTarget * 100).toFixed(0)}%
+                      {o.daysTarget != null ? ` (~${o.daysTarget.toFixed(0)}d)` : ''}
+                    </Data>
+                    <Data size={12} tone="reject">
+                      stop {(o.weightStop * 100).toFixed(0)}%
+                      {o.daysStop != null ? ` (~${o.daysStop.toFixed(0)}d)` : ''}
+                    </Data>
+                    <Data size={12} tone="dim">
+                      neither {(o.weightNeither * 100).toFixed(0)}%
+                      {o.terminalMean != null ? ` (~$${o.terminalMean.toFixed(2)})` : ''}
+                    </Data>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {plan.modelCaveat && (
+              <Text size={11} tone="caution">{plan.modelCaveat}</Text>
+            )}
+
+            <Text size={10} tone="dim">
+              Independent of the other profit-target methods on this page; they can
+              disagree.
             </Text>
           </div>
         )}
