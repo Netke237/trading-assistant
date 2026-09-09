@@ -582,49 +582,98 @@ def report(rows: list[dict], thresholds: dict, args) -> None:
               f"{n} of {len(abs_rows)} ({100.0 * n / len(abs_rows):.1f}%) soft-penalised")
 
     # ── The spread line ──────────────────────────────────────────────────────
-    print(f"\n{BOLD}4. ivAbsThreshold -- THE SPREAD PICKER'S CREDIT/DEBIT LINE{RESET}")
+    # ONE decision, TWO thresholds, and which of them a row exercises is decided
+    # by that row's BASIS -- never by a setting anyone picked
+    # (PHASE-A-SPREAD-BASIS-2026-09-06). choose_primary reads
+    #     threshold = rank_threshold if iv_basis == "rank" else abs_threshold
+    # and scan.py sets the basis to "rank" whenever the ATM contract carried a
+    # vendor ivRank. So a rank source's COVERAGE decides which line each symbol
+    # measures, and one run can exercise a line thoroughly while leaving the
+    # other with zero rows -- which is how the 2026-09-07 attempt came back
+    # empty. The bearish rows are therefore split by basis BEFORE either line is
+    # reported: an empty half is the finding, and it used to be INVISIBLE here.
+    # With no absolute rows the whole split-and-sensitivity block simply did not
+    # print, under a heading that named ivAbsThreshold, while the cross-check
+    # below it still said "all N checkable rows match" in green.
+    print(f"\n{BOLD}4. THE SPREAD PICKER'S CREDIT/DEBIT LINE{RESET}"
+          f"  {DIM}(ivAbsThreshold / ivRankThreshold){RESET}")
     print("  choose_primary runs on BEARISH candidates only: at or above the line it sells")
     print("  premium (bear call, credit, assignment exposure), below it buys premium (bear")
-    print("  put, debit, defined risk). This is the one seeded number with real money on")
-    print("  the other side of it.")
+    print("  put, debit, defined risk). These are the seeded numbers with real money on the")
+    print("  other side of them.")
     bear = [r for r in rows if (r.get("direction") or "") == "Bearish"]
-    thr_vals = {r.get("iv_abs_threshold") for r in rows if r.get("iv_abs_threshold") is not None}
     if not bear:
-        print(f"  {YELLOW}NO BEARISH ROWS IN THE SAMPLE. choose_primary never ran, so nothing here is")
-        print(f"  measured. Run a Bearish scan -- the counterfactual below is arithmetic on the")
-        print(f"  absolute distribution, not evidence.{RESET}")
-    if not thr_vals:
-        print(f"  {YELLOW}The threshold in force is NOT RECORDED in this sample. Rows collected")
-        print(f"  over HTTP carry it only when /scan/last-run pairs a scan_id with the result")
-        print(f"  (older backends do not, and pre-2026-09-07 rows predate the field). Falling")
-        print(f"  back to the schema default of 50.0 for the split below -- re-collect against")
-        print(f"  an upgraded backend, or from the DB, to measure the real line.{RESET}")
-    in_force = sorted(thr_vals) if thr_vals else [50.0]
-    print(f"  threshold(s) {'recorded in the sample' if thr_vals else 'ASSUMED (schema default)'}: {in_force}")
-    if len(in_force) > 1:
-        print(f"  {YELLOW}More than one threshold is represented here; the split below uses"
-              f" {in_force[0]}. Filter with --horizon/--direction, or split the store.{RESET}")
+        print(f"  {YELLOW}NO BEARISH ROWS IN THE SAMPLE. choose_primary never ran, so NEITHER line")
+        print(f"  is measured. Run a Bearish scan -- what follows is arithmetic on the whole")
+        print(f"  sample, a counterfactual, not evidence.{RESET}")
 
-    split_rows = [r["stock_iv"] for r in (bear or rows)
-                  if r.get("stock_basis") == "absolute" and r.get("stock_iv") is not None]
-    label = "bearish absolute rows" if bear else "ALL absolute rows (counterfactual)"
-    t0 = in_force[0]
-    if split_rows:
-        credit = sum(1 for x in split_rows if x >= t0)
-        print(f"\n    at {t0}: {label}, n={len(split_rows)}")
-        print(f"      >= {t0}  -> bear_call (SELL premium)  {credit:5d} ({100.0 * credit / len(split_rows):5.1f}%)")
-        print(f"      <  {t0}  -> bear_put  (BUY  premium)  {len(split_rows) - credit:5d}"
-              f" ({100.0 * (len(split_rows) - credit) / len(split_rows):5.1f}%)")
+    pool = bear or rows
+    bmix = Counter(r.get("stock_basis") or "none" for r in pool)
+    print(f"\n  {BOLD}{'bearish' if bear else 'sample'} rows by basis{RESET}"
+          f"  {DIM}-- a row measures ONE line and says NOTHING about the other{RESET}")
+    for b in ("absolute", "rank", "none"):
+        print(f"    {b:<9} {bmix.get(b, 0):5d}")
+    if bmix.get("none"):
+        print(f"    {DIM}basis 'none' means no vol reading at all: choose_primary returns"
+              f" bear_put by deliberate default, judging no threshold.{RESET}")
 
-        print(f"\n    SENSITIVITY -- how many rows change structure if the line moves:")
+    # Each line gets its own block, against its OWN recorded threshold. Reading
+    # absolute rows against iv_rank_threshold (or the reverse) would measure a
+    # number the picker never applied to them.
+    for basis, thr_field, thr_label, empty_cause in (
+        ("absolute", "iv_abs_threshold", "ivAbsThreshold",
+         "Every bearish candidate carried a vendor percentile (IBKR or tastytrade\n"
+         "     answered for all of them), so choose_primary took the RANK branch on\n"
+         "     every one -- ivAbsThreshold decided nothing in this run."),
+        ("rank", "iv_rank_threshold", "ivRankThreshold",
+         "No bearish candidate carried a vendor percentile, so choose_primary took\n"
+         "     the ABSOLUTE branch on every one -- ivRankThreshold decided nothing in\n"
+         "     this run. Connect IBKR or tastytrade and collect again."),
+    ):
+        basis_rows = [r for r in pool if r.get("stock_basis") == basis]
+        xs = [r["stock_iv"] for r in basis_rows if r.get("stock_iv") is not None]
+        print(f"\n  {BOLD}{thr_label}{RESET}  {DIM}(rows on the {basis} basis){RESET}")
+        if not xs:
+            print(f"  {RED}   NO ROWS ON THIS BASIS -- {thr_label} IS UNMEASURED BY THIS SAMPLE.{RESET}")
+            # State the CAUSE only when there were bearish rows to observe it on.
+            # With none, the basis mix says nothing about which branch
+            # choose_primary took, because it never ran -- and asserting a cause
+            # off an empty pool is the same error the section exists to catch.
+            print(f"     {empty_cause}" if bear else
+                  "     There are no bearish rows at all, so this is not evidence about the\n"
+                  "     basis mix a Bearish scan would produce -- choose_primary never ran.")
+            continue
+
+        thr_vals = {r[thr_field] for r in basis_rows if r.get(thr_field) is not None}
+        if not thr_vals:
+            print(f"  {YELLOW}   The threshold in force is NOT RECORDED for these rows. Rows collected")
+            print(f"     over HTTP carry it only when /scan/last-run pairs a scan_id with the")
+            print(f"     result (older backends do not, and pre-2026-09-07 rows predate the")
+            print(f"     field). Falling back to the schema default of 50.0 -- re-collect against")
+            print(f"     an upgraded backend, or from the DB, to measure the real line.{RESET}")
+        in_force = sorted(thr_vals) if thr_vals else [50.0]
+        print(f"     threshold(s) {'recorded' if thr_vals else 'ASSUMED (schema default)'}: {in_force}")
+        if len(in_force) > 1:
+            print(f"  {YELLOW}   More than one threshold is represented here; the split below uses"
+                  f" {in_force[0]}. Filter with --horizon/--direction, or split the store.{RESET}")
+
+        t0 = in_force[0]
+        label = f"bearish {basis} rows" if bear else f"ALL {basis} rows (counterfactual)"
+        credit = sum(1 for x in xs if x >= t0)
+        print(f"\n     at {t0}: {label}, n={len(xs)}")
+        print(f"       >= {t0}  -> bear_call (SELL premium)  {credit:5d} ({100.0 * credit / len(xs):5.1f}%)")
+        print(f"       <  {t0}  -> bear_put  (BUY  premium)  {len(xs) - credit:5d}"
+              f" ({100.0 * (len(xs) - credit) / len(xs):5.1f}%)")
+
+        print(f"\n     SENSITIVITY -- how many rows change structure if the line moves:")
         for t in (30, 35, 40, 45, 50, 55, 60, 65, 70):
-            c = sum(1 for x in split_rows if x >= t)
+            c = sum(1 for x in xs if x >= t)
             flag = f"  {YELLOW}<- in force{RESET}" if float(t) == float(t0) else ""
-            print(f"      {t:3d}: {c:5d} credit ({100.0 * c / len(split_rows):5.1f}%){flag}")
-        near = [x for x in split_rows if abs(x - t0) <= 5]
-        razor = [x for x in split_rows if t0 - 0.5 <= x < t0]
-        print(f"\n      within +/-5 of the line: {len(near)} row(s) -- these flip on a 5-point edit")
-        print(f"      in [{t0 - 0.5}, {t0}):        {len(razor)} row(s) -- these flip on a half-point edit")
+            print(f"       {t:3d}: {c:5d} credit ({100.0 * c / len(xs):5.1f}%){flag}")
+        near = [x for x in xs if abs(x - t0) <= 5]
+        razor = [x for x in xs if t0 - 0.5 <= x < t0]
+        print(f"\n       within +/-5 of the line: {len(near)} row(s) -- these flip on a 5-point edit")
+        print(f"       in [{t0 - 0.5}, {t0}):        {len(razor)} row(s) -- these flip on a half-point edit")
 
     # Observed structure vs the structure the line implies. _build_spreads never
     # substitutes the other type: if the chosen one cannot be built it attaches
@@ -652,6 +701,9 @@ def report(rows: list[dict], thresholds: dict, args) -> None:
             for s in bad[:5]:
                 print(f"      {s[0]}: iv {s[1]} ({s[2]}) vs {s[3]} -> attached {s[4]}, expected {s[5]}")
         else:
+            # A green line here says the picker AGREED WITH ITSELF on the rows it
+            # judged -- it says nothing about whether either threshold sits in a
+            # sensible place, and nothing at all about a basis with no rows.
             print(f"    {GREEN}all {checked} checkable row(s) match choose_primary on the recorded figure{RESET}")
     n_unbuilt = sum(1 for r in bear if not r.get("spread_type"))
     if bear:

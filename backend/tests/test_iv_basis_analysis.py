@@ -182,3 +182,124 @@ def test_the_endpoint_and_the_instrument_actually_agree(mod, client, monkeypatch
         {**result, "candidates": [{"symbol": "ZZZ"}]}, request, "test",
     )
     assert meta_row[0]["iv_abs_threshold"] == 62.5
+
+
+# ── Section 4: the credit/debit line is TWO lines, split by basis ────────────
+#
+# choose_primary reads `threshold = rank_threshold if iv_basis == "rank" else
+# abs_threshold`, and scan.py sets the basis to "rank" whenever the ATM contract
+# carried a vendor ivRank. So a rank source's COVERAGE decides which line each
+# symbol exercises. A sample can therefore measure one line thoroughly and the
+# other not at all -- and before these tests the report said nothing when a half
+# was empty: it skipped the split silently under a heading naming ivAbsThreshold,
+# then printed a green "all N checkable rows match" underneath. That is a report
+# that looks healthy while answering nothing about the number it is named after.
+
+class _Args:
+    def __init__(self, **kw):
+        self.horizon = kw.get("horizon")
+        self.direction = kw.get("direction")
+        self.store = kw.get("store", "<test>")
+        self.include_alternatives = kw.get("include_alternatives", False)
+
+
+def _row(symbol, figure, basis, *, spread_type=None, abs_thr=50.0, rank_thr=50.0):
+    return {
+        "scan_id": "s1",
+        "scan_timestamp": "2026-09-09T14:00:00Z",
+        "collected_at": "test",
+        "direction": "Bearish",
+        "horizon": "Swing",
+        "row": "primary",
+        "symbol": symbol,
+        "stock_iv": figure,
+        "stock_basis": basis,
+        "contract_iv": figure,
+        "contract_basis": basis,
+        "iv_abs_threshold": abs_thr,
+        "iv_rank_threshold": rank_thr,
+        "spread_type": spread_type,
+        "scan_rejected_iv_too_high": 0,
+        "scan_rejected_iv_rank_too_high": 0,
+    }
+
+
+def _report(mod, rows, capsys, **kw):
+    mod.report(rows, mod.load_thresholds(), _Args(**kw))
+    return capsys.readouterr().out
+
+
+def test_an_all_rank_bearish_sample_declares_ivabsthreshold_unmeasured(mod, capsys):
+    """The tastytrade case: every symbol has a percentile, so the ABSOLUTE line
+    never ran. Saying so is the whole finding -- it must not be silence."""
+    out = _report(mod, [_row("AAPL", 62.0, "rank"), _row("MSFT", 41.0, "rank")], capsys)
+
+    assert "ivAbsThreshold" in out
+    assert "NO ROWS ON THIS BASIS -- ivAbsThreshold IS UNMEASURED BY THIS SAMPLE." in out
+    # and the basis split is stated in counts, before either line is reported
+    assert "rows by basis" in out
+    assert out.index("rows by basis") < out.index("ivAbsThreshold  (rows on the absolute basis)")
+
+
+def test_an_all_rank_sample_still_measures_the_rank_line(mod, capsys):
+    """The other half of the same run: ivRankThreshold IS measurable here, and
+    used to have no sensitivity table anywhere in the report."""
+    out = _report(mod, [_row("AAPL", 62.0, "rank"), _row("MSFT", 41.0, "rank")], capsys)
+
+    assert "ivRankThreshold" in out
+    assert "NO ROWS ON THIS BASIS -- ivRankThreshold" not in out
+    assert "at 50.0: bearish rank rows, n=2" in out
+    assert "SENSITIVITY" in out
+
+
+def test_an_all_absolute_bearish_sample_declares_ivrankthreshold_unmeasured(mod, capsys):
+    """The mirror image -- the 2026-09-07 shape, with no rank source connected."""
+    out = _report(mod, [_row("KO", 48.0, "absolute"), _row("XOM", 51.0, "absolute")], capsys)
+
+    assert "NO ROWS ON THIS BASIS -- ivRankThreshold IS UNMEASURED BY THIS SAMPLE." in out
+    assert "at 50.0: bearish absolute rows, n=2" in out
+
+
+def test_each_basis_is_cut_by_its_own_recorded_threshold(mod, capsys):
+    """The pairing itself. The two thresholds are given DIFFERENT values and the
+    rows sit between them, so the printed split can only come out right if each
+    basis was judged against the line choose_primary would actually apply to it.
+
+    abs=40, rank=70. The absolute row at 55 is credit under 40 and would be debit
+    under 70; the rank row at 55 is debit under 70 and would be credit under 40.
+    Swapping the two thresholds inverts both counts.
+    """
+    rows = [_row("KO", 55.0, "absolute", abs_thr=40.0, rank_thr=70.0),
+            _row("AAPL", 55.0, "rank", abs_thr=40.0, rank_thr=70.0)]
+    out = _report(mod, rows, capsys)
+
+    assert "at 40.0: bearish absolute rows, n=1" in out
+    assert "at 70.0: bearish rank rows, n=1" in out
+    # 55 >= 40 -> the absolute row sells premium; 55 < 70 -> the rank row buys it
+    assert ">= 40.0  -> bear_call (SELL premium)      1 (100.0%)" in out
+    assert ">= 70.0  -> bear_call (SELL premium)      0 (  0.0%)" in out
+    assert "<  70.0  -> bear_put  (BUY  premium)      1 (100.0%)" in out
+
+
+def test_a_basis_with_no_vol_reading_is_counted_not_judged(mod, capsys):
+    """basis 'none' takes choose_primary's deliberate bear_put default without
+    consulting either threshold, so it belongs in the counts and in neither
+    line's sample."""
+    rows = [_row("KO", 48.0, "absolute"), _row("PG", None, "none", spread_type="bear_put")]
+    out = _report(mod, rows, capsys)
+
+    assert "none          1" in out
+    assert "judging no threshold" in out
+    assert "at 50.0: bearish absolute rows, n=1" in out  # the 'none' row is excluded
+
+
+def test_an_empty_basis_asserts_a_cause_only_when_there_were_bearish_rows(mod, capsys):
+    """With no bearish rows, choose_primary never ran, so the basis mix is not
+    evidence about which branch it would have taken. Naming a cause off an empty
+    pool would be the same error the section exists to catch."""
+    bullish = dict(_row("AAPL", 62.0, "rank"), direction="Bullish")
+    out = _report(mod, [bullish], capsys)
+
+    assert "NO ROWS ON THIS BASIS -- ivAbsThreshold IS UNMEASURED BY THIS SAMPLE." in out
+    assert "choose_primary never ran" in out
+    assert "took the RANK branch on" not in out
