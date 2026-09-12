@@ -227,9 +227,19 @@ def estimate_targets(
             # correctly-priced option must be monotonically increasing ACROSS
             # THAT LADDER — a Heston price that comes out lower than the
             # previous level's TRUE Heston price is a numerical-integration
-            # artifact — a real, reproducible quirk of heston_price()'s
-            # integration for deep-OTM/long-dated inputs, not a real option
-            # value or a sign that Heston is unusable for this level. Floor it
+            # artifact, not a real option value or a sign that Heston is
+            # unusable for this level.
+            #
+            # HISTORY (Phase F1, 2026-09-12): this floor was written when the
+            # dip was believed to be an inherent quirk of heston_price()'s
+            # numerical integration for deep-OTM/long-dated inputs. It was
+            # not. It was a defect in heston_price's Fourier inversion —
+            # a doubled frequency, 2i*phi*ln(S/K) — which is now fixed; see
+            # docs/superpowers/plans/2026-09-12-heston-calibration-spec.md.
+            # The floor is DELIBERATELY RETAINED: it only ever raises a level,
+            # and "no artifact on the fixtures in this suite" is not "no
+            # artifact on every live chain". Removing it is its own change,
+            # to be made only after F1 has run against live chains. Floor it
             # against the true Heston reference rather than discarding the whole
             # Heston computation for a cruder model — this keeps the level
             # labelled "Heston repriced" and, critically, keeps

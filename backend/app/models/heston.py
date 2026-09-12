@@ -85,19 +85,29 @@ def heston_price(
         return 0.0
 
     def _integrand(phi: float, j: int) -> float:
-        phi_c = complex(phi)
-        char = _heston_char_fn(
-            phi_c - complex(0, j),
-            S, K, T, r, params
-        )
-        denom = complex(0, phi) * cmath.exp(complex(0, phi) * math.log(K))
-        if abs(denom) < 1e-15:
-            return 0.0
-        return (cmath.exp(complex(0, phi) * math.log(S)) * char / denom).real
+        if phi == 0.0:
+            phi = 1e-12
+        # _heston_char_fn already folds the strike in: it returns
+        #   g(phi) = f2(phi) * e^{-i phi lnK}
+        # where f2 is the log-price characteristic function. So neither P1 nor
+        # P2 may re-apply e^{-i phi lnK} or e^{i phi lnS} -- doing so doubles
+        # the Fourier frequency to 2i phi ln(S/K), which is invisible at
+        # K == S and diverges either side of it.
+        g = _heston_char_fn(complex(phi) - complex(0, j), S, K, T, r, params)
+        if j == 1:
+            # P1 = 1/2 + (1/pi) integral Re[ e^{-i phi lnK} f2(phi-i)
+            #                                / (i phi f2(-i)) ] dphi.
+            # g already carries e^{-i phi' lnK} at phi' = phi - i, so
+            #   e^{-i phi lnK} f2(phi-i) == K * g(phi-i),
+            # and the Bakshi-Madan normaliser is f2(-i) == S * e^{rT}.
+            return (K * g / (complex(0, phi) * S * math.exp(r * T))).real
+        # P2 = 1/2 + (1/pi) integral Re[ g(phi) / (i phi) ] dphi -- no extra
+        # factors at all.
+        return (g / complex(0, phi)).real
 
     try:
-        p1, _ = integrate.quad(lambda phi: _integrand(phi, 1), 0, 500, limit=100)
-        p2, _ = integrate.quad(lambda phi: _integrand(phi, 0), 0, 500, limit=100)
+        p1, _ = integrate.quad(lambda phi: _integrand(phi, 1), 1e-10, 500, limit=100)
+        p2, _ = integrate.quad(lambda phi: _integrand(phi, 0), 1e-10, 500, limit=100)
         P1 = 0.5 + p1 / math.pi
         P2 = 0.5 + p2 / math.pi
         call_price = S * P1 - K * math.exp(-r * T) * P2
