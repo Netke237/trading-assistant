@@ -13,6 +13,13 @@ orders in round 5 §6 and round 6 §5 only where §7 below records a conflict; o
 
 ## 1. Status ledger — verified against `dc051a5`, not taken from doc status lines
 
+> **This ledger is a snapshot of `dc051a5` on 2026-09-03 and is no longer current.** Phases A, B, C,
+> D and E have all shipped and merged since, so every `NOT BUILT` row below is stale. The status
+> source is `docs/superpowers/PROJECT_STATE.json` (`python3 scripts/state.py`), never this table —
+> that is the lesson this file has already cost two sessions. Rows are left as written rather than
+> patched one at a time, because a half-updated ledger reads as current and is worse than an openly
+> dated one.
+
 | Item | State | Evidence |
 |---|---|---|
 | Stop-vs-premium gate (PASS/CAUTION, D8) | **Shipped** | `risk.ts:70` `stopPremiumRisk`, `TradeCard:1606` |
@@ -26,7 +33,7 @@ orders in round 5 §6 and round 6 §5 only where §7 below records a conflict; o
 | **Piece 3 — scan-time `finalStop`** | **NOT BUILT** | `scan.py` never calls `compute_final_stop`; `scanStore` v12 |
 | **Piece 4 — per-position premium stop** | **NOT BUILT** | `PortfolioPositionModel` has `stop`/`structural_stop` only |
 | **Piece 6 — `/stocks/exit-plan`** | **NOT BUILT** | only `/contracts/exit-plan` exists |
-| **Heston calibration (Q8)** | **NOT SPEC'D** | decided paragraph only |
+| **Heston calibration (Q8)** | **SPEC'D 2026-09-12, not built** | `2026-09-12-heston-calibration-spec.md` — and it overturns §Phase F's premise below |
 | **Piece 5 — per-trade pick (D4/D5)** | **NOT SPEC'D** | needs a card→page channel that does not exist |
 | Removal: Invalidation row (MC card) | **Pending your OK** | still at `TradeCard:2057` |
 | Removal: Projected R/R (+8%) | **Pending your OK** | still at `TradeCard:2075` |
@@ -244,14 +251,29 @@ Follow `2026-09-02-piece-6-stocks-arithmetic-plan-spec.md`. Mostly assembly:
 - The spec's §5 recommends the two-barrier stock version of the Barrier Race. **Flagged as an
   addition, not assumed** — it needs your yes.
 
-### Phase F — Heston calibration (Q8) *(needs a spec first)*
+### Phase F — Heston calibration (Q8) *(SPEC'D 2026-09-12 — and this paragraph's premise was wrong)*
 
-Decided, never written up. The substance: `heston_cache.py:36` has `v0_grid = [0.04]` — one value,
-20% vol, hardcoded for every symbol on every scan, while the reference contract has 34.5% IV. **The
-pricer is fine; the calibration is the defect.** Seed `v0` from the chain's own ATM IV (the correct
-seed `v0_seed = (mean chain IV)²` already exists in the file and is used only in the fallback path),
-fit relative or vega-weighted error instead of absolute dollars, and **use Heston only when its
-measured RMSE beats the BS-own-IV baseline on the same chain.** Write the spec before building.
+**Superseded by `docs/superpowers/plans/2026-09-12-heston-calibration-spec.md`. Read that first;
+this paragraph is kept only so the correction is legible.**
+
+What stands: `heston_cache.py:36` has `v0_grid = [0.04]` — one value, 20% vol, hardcoded for every
+symbol on every scan, while the reference contract has 34.5% IV.
+
+~~**The pricer is fine; the calibration is the defect.**~~ **Measured false.** `heston_price`'s
+integrand double-applies the strike and spot on top of a characteristic function that already carries
+them, doubling the Fourier oscillation frequency: it is wrong by **+451% at 45 DTE** and **+2782% at
+180 DTE** on strikes inside the delta band the scanner actually ranks, and correct only exactly
+at-the-money. On a fixture already in this repo it prints R/R **+1.13** where the truth is **−0.82**.
+
+Two of the three prescriptions below also need restating, and the spec restates them:
+
+- Seeding `v0` from the chain **alone is a no-op**: with the broken pricer the fit goes from 9.009 to
+  9.051 — marginally *worse*. The pricer fix has to land first. Seed with the bracketed
+  `_compute_iv_bs`, not `bs_iv`, which solves only 6-8 of 15 strikes on this chain.
+- "Beats the **BS-own-IV** baseline" is degenerate: Black-Scholes at each contract's own IV
+  reproduces every mid by construction (measured RMSE 0.000005). The baseline is one **flat** vol,
+  fitted the same way. Today's calibration is seven times worse than that flat vol and ships anyway.
+- Relative error over absolute dollars: **unchanged, and correct.**
 
 ### Phase G — Piece 5, the per-trade method pick (D4/D5) *(needs a spec first)*
 
