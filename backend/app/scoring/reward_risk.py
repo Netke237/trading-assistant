@@ -225,20 +225,28 @@ def estimate_targets(
             floored_price = raw_price
             # T1/T2/T3 share dte_at_target and only differ in t_price, so a
             # correctly-priced option must be monotonically increasing ACROSS
-            # THAT LADDER — a Heston price that comes out lower than the
-            # previous level's TRUE Heston price is a numerical-integration
-            # artifact, not a real option value or a sign that Heston is
-            # unusable for this level.
+            # THAT LADDER. A Heston price that comes out lower than the
+            # previous level's Heston price therefore cannot be a real option
+            # value.
             #
-            # HISTORY (Phase F1, 2026-09-12): this floor was written when the
-            # dip was believed to be an inherent quirk of heston_price()'s
-            # numerical integration for deep-OTM/long-dated inputs. It was
-            # not. It was a defect in heston_price's Fourier inversion —
-            # a doubled frequency, 2i*phi*ln(S/K) — which is now fixed; see
-            # docs/superpowers/plans/2026-09-12-heston-calibration-spec.md.
-            # The floor is DELIBERATELY RETAINED: it only ever raises a level,
-            # and "no artifact on the fixtures in this suite" is not "no
-            # artifact on every live chain". Removing it is its own change,
+            # WHAT IT IS, HOWEVER, IS NOW UNKNOWN — read this before trusting
+            # the floor (Phase F1, 2026-09-12). This floor was written when
+            # the dip was believed to be an inherent quirk of heston_price()'s
+            # numerical integration for deep-OTM/long-dated inputs. That
+            # belief was wrong: the dip was a defect in heston_price's Fourier
+            # inversion (a doubled frequency, 2i*phi*ln(S/K)), now fixed --
+            # see docs/superpowers/plans/2026-09-12-heston-calibration-spec.md.
+            # No fixture in the suite produces a natural dip any more, so
+            # there is no longer a known mechanism that reaches this branch.
+            #
+            # The floor is DELIBERATELY RETAINED, with its cost stated: it
+            # only ever raises a level, and "no dip on the fixtures in this
+            # suite" is not "no dip on every live chain". But because the one
+            # mechanism it was built for is gone, a dip that DOES appear here
+            # now most likely means the pricer has regressed -- and this
+            # branch will quietly raise it instead of surfacing it. The two
+            # rewritten fixture tests assert STRICT increase for exactly that
+            # reason. Removing the floor, or making it log, is its own change,
             # to be made only after F1 has run against live chains. Floor it
             # against the true Heston reference rather than discarding the whole
             # Heston computation for a cruder model — this keeps the level

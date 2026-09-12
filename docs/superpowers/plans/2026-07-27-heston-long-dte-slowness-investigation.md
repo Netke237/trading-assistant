@@ -1,5 +1,22 @@
 # Investigation: 100% Heston Fallback Rate on Long-Dated (6-Month) Scans
 
+> **SUPERSEDED IN PART, 2026-09-12 (Phase F1).** This document's central
+> premise -- that `heston_price()`'s non-monotonic ladder and its
+> distance-from-at-the-money cost were inherent quirks of `scipy.integrate.quad`
+> on deep-OTM/long-dated inputs -- is **false**. The dip and the cost were both
+> a defect in `heston_price`'s Fourier inversion: `_integrand` re-applied
+> `exp(i*phi*lnS)/exp(i*phi*lnK)` on top of a characteristic function that
+> already carried `e^{i*phi*ln(S/K)}`, doubling the Fourier frequency to
+> `2i*phi*ln(S/K)`. The error was exactly zero at `K == S` and reached +451% at
+> 45 DTE / +2782% at 180 DTE in the delta band the scanner ranks. It is fixed;
+> see `docs/superpowers/plans/2026-09-12-heston-calibration-spec.md`.
+>
+> **Every Heston price quoted below is therefore wrong**, including the
+> 12.518866931556794 / 10.086141661385824 / 14.081229812545331 ladder (now
+> 3.7974 / 8.0361 / 14.2358, strictly monotonic). The decisions this document
+> records were reasonable on the evidence available then; do not reuse its
+> numbers or its explanation.
+
 > **Status: INVESTIGATION ONLY — no implementation authorized.** This document identifies
 > a root cause and lists remediation options with tradeoffs. It does not select one, and
 > no code has been changed as part of this investigation. Implementation requires an

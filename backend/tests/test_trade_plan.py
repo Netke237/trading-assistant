@@ -137,7 +137,11 @@ def test_heston_params_thread_through_to_a_clean_all_heston_ladder():
     and surface all three levels Heston-priced, unfloored and increasing, on
     _plan()'s own default (deep-OTM, long-dated) fixture.
 
-    RENAMED AND REWRITTEN BY PHASE F1 (2026-09-12). This was
+    RENAMED AND REWRITTEN BY PHASE F1 (2026-09-12). Like
+    test_estimate_rr_put_heston_path_uses_correct_model_label in
+    test_reward_risk.py, this test was NOT in the F1 spec's section 5.3 table,
+    which named four pinned tests; six actually pinned pricer output, and this
+    is the sixth. This was
     test_heston_params_floors_non_monotonic_target_instead_of_falling_back and
     asserted 12.47 / 12.47 / 15.34 — a T2 artifact dip floored up to T1. That
     dip was not an inherent property of heston_price()'s numerical

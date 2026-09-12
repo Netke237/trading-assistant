@@ -291,9 +291,9 @@ def test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching
     """T1/T2/T3 share dte_at_target and only differ in the hypothetical stock
     price, so a correctly-priced option must be monotonically increasing
     across the ladder. A Heston price that comes out lower than the previous
-    level's TRUE Heston price is a numerical artifact — it must be floored up
-    to that true Heston reference and stay labelled 'Heston repriced', NOT be
-    switched entirely
+    level's TRUE Heston price cannot be a real option value — it must be
+    floored up to that true Heston reference and stay labelled 'Heston
+    repriced', NOT be switched entirely
     to the cruder delta-approximation model. Switching models was the old
     behavior and is exactly what let a LATER level's legitimate Heston price
     get wrongly discarded too (see the next test): switching models replaces
@@ -320,6 +320,13 @@ def test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching
         heston_params=params,
     )
     assert len(targets) == 3
+    # The dip is FORCED by the monkeypatch above, deliberately: this fixture's
+    # real ladder is monotonic. It used to dip on its own, but that was a
+    # defect in heston_price's Fourier inversion (a doubled frequency,
+    # 2i*phi*ln(S/K)) and not a property of the integration -- fixed in Phase
+    # F1, see docs/superpowers/plans/2026-09-12-heston-calibration-spec.md.
+    # Forcing it is now the only way to reach the floor, and is the right way
+    # to test a floor regardless.
     # Raw ladder from the post-F1 pricer: 10.824772314194291 /
     # 17.96351814222973 / 25.399857193045563 (naturally monotonic; the
     # monkeypatch above is what forces T2's dip).
@@ -753,8 +760,15 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     not implicitly assumed to be T1. T1 itself fails here (raises), leaving
     prev_heston_price unset — T2 becomes the first real Heston reference.
 
-    T3's raw price (12.0) is deliberately chosen strictly between T1's
-    BS-fallback reprice (10.7388546688, real -- see below) and T2's true
+    NOTE ON THE NUMBERS: heston_price is fully STUBBED in this test (_fake
+    below returns hardcoded values), so 15.9 and 12.0 are stub constants, not
+    pricer output -- Phase F1 changed what the real pricer returns here
+    (10.82 at this ladder point) and deliberately did NOT touch these, because
+    this test is about which value prev_heston_price is anchored to, not about
+    any price being right.
+
+    T3's stub price (12.0) is deliberately chosen strictly between T1's
+    BS-fallback reprice (10.7388546688, real -- see below) and T2's stubbed
     Heston price (15.9), rather than below both, so this test can actually
     tell "anchored to T2" apart from "still anchored to T1's stale
     fallback": if prev_heston_price were incorrectly seeded from T1's
@@ -774,9 +788,9 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
         if call_count["n"] == 1:
             raise ValueError("integration failed")  # T1: genuinely unusable
         if call_count["n"] == 2:
-            return 15.9  # T2: first level to succeed
-        # T3: artifact relative to T2's true price, chosen strictly between
-        # T1's fallback (~10.74) and T2's true price (15.9) so this test can
+            return 15.9  # T2: first level to succeed (a stub, not a real price)
+        # T3: a dip relative to T2's stubbed price, chosen strictly between
+        # T1's fallback (~10.74) and T2's stub (15.9) so this test can
         # actually distinguish the two
         return 12.0
 

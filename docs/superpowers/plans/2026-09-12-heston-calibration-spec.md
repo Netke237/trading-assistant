@@ -1,9 +1,75 @@
 # Phase F — Heston: the pricer first, then the calibration (Q8)
 
-**Date:** 2026-09-12 · **Status:** specification, nothing built.
+**Date:** 2026-09-12 · **Status:** **F1 BUILT** (see §0a). F2 still spec-only.
 **Decision it implements:** Q8, recorded as a paragraph in
 `2026-09-03-remaining-stop-model-implementation-plan.md` §Phase F and never written up.
 **Build order:** F1 before F2. F2 alone is a no-op — measured below, not asserted.
+
+---
+
+## 0a. Addendum, 2026-09-12 — what building F1 changed about this document
+
+F1 shipped. Its core derivation (§2) held up exactly: against an independently written
+reference (the two-CF form reaching P1 via `b₁ = κ − ρσ`, `u₁ = +½` rather than the
+Bakshi–Madan shift), the corrected pricer agrees to **0.000000%** over 112 points. But an
+adversarial audit round falsified two of this document's own claims and sharpened three more:
+
+1. **§2.2's "the quadrature limits (`500`, `limit=100`) … are measured sufficient" is FALSE.**
+   The integrands decay as `exp(−½·v·T·φ²)`, so the frequency beyond which they are negligible
+   scales as `1/√(v·T)`. A fixed cutoff of 500 is ample at ordinary variance and expiry and
+   **0.769% wrong at `v0=0.01, θ=0.02`, 1 DTE, at the money** (0.432088 vs a true 0.435434).
+   That regime is reachable: `v0=0.01` is in the grid under `HESTON_FULL_CALIBRATION`,
+   `scan.py`'s `heston_chain` passes every expiry including weeklies, and **F2's chain seeding
+   will reach it by default on any low-IV underlying.** F1 as built therefore makes the cutoff
+   adaptive — `min(max(500, √(50/(v·T))), 20000)` at `v = min(v0, θ)`, `limit=200`. Worst error
+   over 324 cases falls from 0.769% to **0.00218%** at **1.00x latency** (at the production
+   default `v0=θ=0.04` the formula returns < 500 for every expiry, so nothing changes there).
+   This also cut the worst out-of-band below-forward-intrinsic shortfall from 0.127316 to
+   0.002235 — the two were the same defect.
+
+2. **§4's "worth shipping alone … corrects every number on every card" is MISLEADING, and this
+   is the most important line in this addendum.** F1 corrects the *pricer*. It does not correct
+   the *card*, because `v0_grid = [0.04]` is untouched until F2. Running the shipped reduced
+   grid through the **post-F1** pricer on this document's own reference chain:
+
+   | | post-F1 Heston rel-RMSE | flat-BS baseline | verdict |
+   |---|---|---|---|
+   | 45 DTE (10 in-band strikes) | 0.645 | 0.197 | **3.27x worse than one flat vol** |
+   | 180 DTE (35 in-band strikes) | 0.754 | 0.563 | **1.34x worse than one flat vol** |
+
+   Per-strike, post-F1 Heston sits **27% to 100% BELOW** the market mid across the whole band
+   (45 DTE: −40.7% at K=205 to −85.1% at K=180; 180 DTE: −27.2% at K=205 to −100.0% at K≥370),
+   and `scan.py` still accepts `method == "heston_grid"` and labels it "Heston repriced". So the
+   defect's *direction* flipped — the card was wrong HIGH (+1.13 R/R on a losing trade), it is
+   now wrong LOW — and F1 remains a large net improvement, because the pricer error it removes
+   (451%–2782%) dwarfs the calibration error it leaves. **But no "Heston repriced" number should
+   be trusted until F2 lands.** §3.3's baseline gate is precisely what makes shipping a fit
+   seven times worse than a flat vol impossible. F2 is not optional polish; it is the other half
+   of one defect.
+
+3. **§5.3's table listed four pinned tests; SIX pinned pricer output.** The two it missed:
+   `test_estimate_rr_put_heston_path_uses_correct_model_label` (exit premium 14.19 → 9.84, R/R
+   10.16 → 6.53) and, in another file,
+   `test_trade_plan.py::test_heston_params_floors_non_monotonic_target_instead_of_falling_back`
+   (12.47 / 12.47 / 15.34 → 4.57 / 9.10 / 15.48). Like §5.3's row 1, the latter lost its premise
+   entirely and is renamed. Reverting the integrand now fails exactly those six and nothing
+   else, so the set is closed.
+
+4. **§5.1's test 2 (put-call parity) tests nothing about this bug.** Called "independent of
+   check 1"; it is independent of nothing, because `heston_price` derives the put from the call
+   by parity, so parity holds by construction — the pre-F1 code passes it to 1.4e-14 while
+   being wrong by 83161%. The same is true of the no-arbitrage bounds check added during the
+   build. Both are retained as structural guards and both now say so in their own docstrings.
+   **Neither carries correctness.**
+
+5. **§5.1 as written was mutation-weak.** Tests 1 and 4 pin the pricer only where it degenerates
+   to Black-Scholes (`σ_v = 0.01, ρ = 0`) and test 3 constrains shape, not level — so
+   **inverting the sign of `ρ`, which destroys the entire skew and is the only reason Heston is
+   in this codebase, passed every test in §5.1.** F1 as built adds reference-pinned values at
+   `σ_v = 0.5, ρ = −0.7`, an explicit `ρ`-sensitivity test, and short-expiry/low-variance
+   coverage. A four-mutation battery (`ρ` flipped; `K*` dropped; the `S·e^{rT}` normaliser
+   dropped; the cutoff reverted to 500) now fails 4 / 13 / 13 / 1 cases; before these additions
+   the `ρ` flip failed none.
 
 ---
 
@@ -142,8 +208,12 @@ p2, _ = integrate.quad(lambda phi: _integrand(phi, 0), 1e-10, 500, limit=100)
 ```
 
 Everything else in `heston_price` — the degenerate-input guard, the `except` → `bs_price` fallback,
-the put-call parity tail — is unchanged. The quadrature limits (`500`, `limit=100`) are unchanged
-and are **measured sufficient** after the fix; see §2.2.
+the put-call parity tail — is unchanged.
+
+> ~~The quadrature limits (`500`, `limit=100`) are unchanged and are **measured sufficient**
+> after the fix; see §2.2.~~ **FALSE — corrected in §0a.1.** A fixed cutoff of 500 is 0.769%
+> wrong at `v0=0.01, θ=0.02`, 1 DTE, at the money. F1 as built makes the cutoff adaptive:
+> `min(max(500, √(50/(v·T))), 20000)` at `v = min(v0, θ)`, with `limit=200`.
 
 ### 2.2 The fix is exact, and it is faster
 
@@ -255,9 +325,14 @@ impossible to repeat.
 batches, both inside `backend/app/models/`.
 
 **F1 — the pricer.** `heston.py::heston_price::_integrand` and its two `quad` calls. Roughly 15 lines
-of source. Plus the golden tests in §5.1 and the rewrite of the ladder tests in §5.3. **Ships alone
-and is worth shipping alone**: it corrects every number on every card that says "Heston repriced",
-with no calibration change at all.
+of source. Plus the golden tests in §5.1 and the rewrite of the ladder tests in §5.3. **Ships alone**:
+a large net improvement with no calibration change at all, because the pricer error it removes
+(451%–2782%) dwarfs the calibration error it leaves.
+
+> ~~it corrects every number on every card that says "Heston repriced"~~ — **NO. See §0a.2.**
+> With `v0_grid = [0.04]` still in place the post-F1 fit is 3.27x (45 DTE) and 1.34x (180 DTE)
+> WORSE than a single flat volatility, and prices 27%–100% BELOW the market mid across the band.
+> The card's error changes direction, not existence. F2 is the other half of the defect.
 
 **F2 — the calibration.** `heston_cache.py`: the seed, the relative objective, the flat-BS baseline
 and the `bs_flat` method. Only after F1 is merged and clean.
@@ -300,8 +375,10 @@ close, and folding them in is exactly the over-fixing `audit_rule` v2 forbids.
    0.0132%) across at least `DTE ∈ {7, 45, 180, 365}` × `K/S ∈ {0.74, 0.89, 0.99, 1.02, 1.14, 1.36}`
    × both rights. **This is the test the shipped code fails by 560%**, and it needs no external
    reference data to state.
-2. **Put-call parity.** `C − P == S − K·e^{−rT}` for the same grid, to 1e-6. Independent of check 1
-   and cheap.
+2. **Put-call parity.** `C − P == S − K·e^{−rT}` for the same grid, to 1e-6. Cheap.
+   ~~Independent of check 1.~~ **Independent of nothing — see §0a.4.** `heston_price` derives
+   the put from the call by parity, so this holds by construction; the pre-F1 code passes it to
+   1.4e-14. A structural guard, not a correctness check.
 3. **Monotonicity in spot.** For fixed `K, T, params`, a call's price is non-decreasing in `S` and a
    put's non-increasing, over a spot ladder spanning 0.7x–1.4x. This is the invariant the ladder
    floor was written to fake; pin it at the source.
@@ -325,6 +402,8 @@ and a mismatched convention produces a test that is wrong in the same direction 
    only accepted label, so a `bs_flat` result can never be shown as "Heston repriced".
 
 ### 5.3 Existing tests that F1 must rewrite, not delete
+
+> **INCOMPLETE: six tests pinned pricer output, not four. See §0a.3.**
 
 These pin exact prices produced by the broken integrand. Each keeps its behavioural assertion; only
 the numbers change, and the docstrings that call the dip "a real, reproducible quirk of
