@@ -1,5 +1,7 @@
 """Unit tests for app.scoring.reward_risk.estimate_rr()."""
 
+import logging
+
 from app.scoring.reward_risk import estimate_rr, estimate_targets
 from app.models.heston import HestonParams
 
@@ -343,6 +345,80 @@ def test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching
     # legitimate, unfloored, unclamped Heston price.
     assert targets[2].pricingMethod == "Heston repriced"
     assert targets[2].estimatedOptionPrice == 25.4
+
+
+def test_ladder_floor_says_so_when_it_fires(monkeypatch, caplog):
+    """Decision LADDER-FLOOR-LOG-2026-09-13. The floor only ever RAISES a
+    level, so it cannot produce a too-low target and it stays. But F1 removed
+    the one mechanism it was built to catch — the Fourier-inversion defect —
+    so a dip reaching it now most likely means the pricer has REGRESSED, and a
+    silent floor would quietly raise the number instead of surfacing it. That
+    is a mask, not a guard.
+
+    Spec section 6.3 says remove the floor only once F1 has run against live
+    chains long enough to say the artifact never appears. This log line is the
+    mechanism by which that evidence accumulates; without it there is nothing
+    to read back off.
+
+    WARNING rather than INFO is measured, not stylistic: under uvicorn's
+    default logging config the root logger has no handler and sits at WARNING,
+    so an `app.*` INFO record is dropped outright — see
+    test_heston_calibration.py::
+    test_boundary_log_is_warning_because_info_is_dropped_under_uvicorn.
+    """
+    import app.scoring.reward_risk as rr_module
+
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    real_heston_price = rr_module.heston_price
+    call_count = {"n": 0}
+
+    def _flaky(S, K, T, r, p, is_call):
+        call_count["n"] += 1
+        price = real_heston_price(S, K, T, r, p, is_call)
+        if call_count["n"] == 2:
+            return price * 0.1
+        return price
+
+    monkeypatch.setattr(rr_module, "heston_price", _flaky)
+    with caplog.at_level(logging.WARNING, logger="app.scoring.reward_risk"):
+        targets = estimate_targets(
+            stock_price=185, base_target_price=200, strike=190,
+            expiry_years=30 / 365, current_premium=2.50, is_call=True,
+            heston_params=params,
+        )
+
+    assert targets[1].estimatedOptionPrice == 10.82, (
+        "fixture guard: the floor must actually have fired for this test to "
+        "be testing anything"
+    )
+    floor_logs = [rec.getMessage() for rec in caplog.records
+                  if "ladder dipped and was floored" in rec.getMessage()]
+    assert len(floor_logs) == 1, (
+        f"expected exactly one floor warning, got {len(floor_logs)}: {floor_logs}"
+    )
+    assert all(rec.levelno >= logging.WARNING for rec in caplog.records
+               if "ladder dipped" in rec.getMessage())
+    # The line has to identify WHICH contract and level dipped, or it cannot
+    # be acted on when it turns up in a log a week later.
+    assert "190.00 C" in floor_logs[0]
+    assert "10.8247" in floor_logs[0] or "10.82" in floor_logs[0]
+
+
+def test_clean_ladder_logs_nothing(monkeypatch, caplog):
+    """The other half: on the real fixture the post-F1 ladder is naturally
+    monotonic, so the floor must stay quiet. A line per clean ladder would
+    bury the one that matters."""
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    with caplog.at_level(logging.WARNING, logger="app.scoring.reward_risk"):
+        targets = estimate_targets(
+            stock_price=185, base_target_price=200, strike=190,
+            expiry_years=30 / 365, current_premium=2.50, is_call=True,
+            heston_params=params,
+        )
+
+    assert [t.pricingMethod for t in targets] == ["Heston repriced"] * 3
+    assert not [rec for rec in caplog.records
+                if "ladder dipped" in rec.getMessage()]
 
 
 def test_estimate_targets_clamps_delta_approx_fallback_to_prev_level(monkeypatch):

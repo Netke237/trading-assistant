@@ -22,8 +22,26 @@ class HestonParams:
 @dataclass
 class CalibrationResult:
     params: HestonParams
-    rmse: float             # root-mean-square error across chain
-    method: str             # "heston_grid" or "bs_fallback"
+    # Root-mean-square RELATIVE residual, `(model - mid) / mid`, across the
+    # chain -- NOT dollars. It was absolute dollars until Phase F2, which
+    # changed the calibration objective (spec section 3.2: dollars let one
+    # deep-ITM contract outweigh ten wing contracts, and the wings carry the
+    # smile). `inf` on both `bs_fallback` paths, which fit nothing.
+    rmse: float
+    # "heston_grid"  -- a real grid fit that BEAT a single flat volatility on
+    #                   the same chain and residual. The only label `scan.py`
+    #                   accepts, and so the only one that can reach a card as
+    #                   "Heston repriced".
+    # "bs_flat"      -- the grid fit lost to (or tied) one flat volatility, so
+    #                   the flat vol is returned instead as
+    #                   HestonParams(v0=sigma^2, ...). Phase F2's gate; see
+    #                   heston_cache._flat_bs_baseline.
+    # "bs_fallback"  -- no fit was attempted or none could be gated: fewer
+    #                   than 3 usable strikes, the inner calibration timeout,
+    #                   or a chain no flat volatility prices either.
+    # `scan.py` tests `== "heston_grid"`, so both bs_* labels are discarded
+    # there and fall through to the delta-approximation path.
+    method: str
 
 
 def _heston_char_fn(
@@ -134,11 +152,28 @@ def heston_price(
     # 0.005 yr (1.825 days). It is NOT below 500 under that: it returns 675.5
     # at 1 DTE and 1350.9 at the 1-DTE repricing horizon T=6.85e-4 that
     # trade_plan.py:119 can produce. There it buys accuracy at about 1.27x
-    # latency, and the worst measured full-grid calibration is 0.337s against
-    # _CALIBRATION_TIMEOUT = 1.0, so it cannot push a card off "Heston
-    # repriced" onto the bs_fallback path. (An earlier version of this comment
-    # claimed below-500 at EVERY expiry. F1 round 2 falsified that; the
-    # numbers here are the corrected measurement.)
+    # latency. (An earlier version of this comment claimed below-500 at EVERY
+    # expiry. F1 round 2 falsified that; the numbers here are the corrected
+    # measurement.)
+    #
+    # F1 ALSO CONCLUDED, from a worst measured calibration of 0.337s against
+    # _CALIBRATION_TIMEOUT = 1.0, that this "cannot push a card off 'Heston
+    # repriced' onto the bs_fallback path". F2 INVALIDATED THE MARGIN THAT
+    # CONCLUSION RESTED ON, so it is restated here rather than repeated:
+    # seeding v0 from the chain and fitting the flat-BS baseline add ~0.13-
+    # 0.19s per calibration, measured on the reduced production grid --
+    #
+    #     28 strikes, 180 DTE   0.517s -> 0.708s
+    #     29 strikes, 365 DTE   0.546s -> 0.725s
+    #     10 strikes,  45 DTE   0.131s -> 0.199s
+    #
+    # -- so the worst chain that still fits inside the timeout now sits at
+    # 0.725s, and a 1.27x short-horizon multiplier on top of that reaches
+    # ~0.92s. The headroom is real but thin. Separately, and NOT caused by
+    # either phase: a wide chain already blows the timeout outright (163
+    # strikes at 365 DTE measured 5.106s BEFORE F2 and 5.070s after), which is
+    # the `_CALIBRATION_TIMEOUT` item that decision F2-OUT-OF-SCOPE-THREE-
+    # 2026-09-13 deliberately left standing.
     #
     # The 20000 cap bounds latency for degenerate inputs and is NOT
     # sufficient below about T=1e-5 (at T=1e-6 the cutoff saturates and the
@@ -201,7 +236,14 @@ def calibrate_heston(
 ) -> CalibrationResult:
     """
     Calibrate Heston parameters to an observed option chain.
-    Delegates to cached implementation with 2-second timeout + BS fallback.
+
+    Delegates to the cached implementation, which seeds `v0` from the chain's
+    own implied vols, minimises a RELATIVE residual over the parameter grid,
+    and returns the fit only if it beats one flat volatility on the same chain
+    (`method="heston_grid"`). Otherwise `method` is `"bs_flat"` (the flat vol
+    won) or `"bs_fallback"` (too few strikes, or the 1s inner timeout fired).
+    Only `"heston_grid"` is honest to label "Heston repriced" downstream, and
+    `scan.py` accepts only that label. See `heston_cache` for the measurements.
     """
     from app.models.heston_cache import calibrate_cached
     return calibrate_cached(option_chain, S, r)

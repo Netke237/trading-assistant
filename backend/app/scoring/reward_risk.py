@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Literal, Optional
 
 from app.models.heston import HestonParams, heston_price
 from app.models.black_scholes import bs_iv, bs_price
+
+_log = logging.getLogger(__name__)
 
 RrModel = Literal["Heston repriced", "BS repriced (IV-derived)", "Delta approximation"]
 
@@ -243,18 +246,36 @@ def estimate_targets(
             # only ever raises a level, and "no dip on the fixtures in this
             # suite" is not "no dip on every live chain". But because the one
             # mechanism it was built for is gone, a dip that DOES appear here
-            # now most likely means the pricer has regressed -- and this
-            # branch will quietly raise it instead of surfacing it. The two
+            # now most likely means the pricer has regressed -- and a SILENT
+            # floor would quietly raise it instead of surfacing it. The two
             # rewritten fixture tests assert STRICT increase for exactly that
-            # reason. Removing the floor, or making it log, is its own change,
-            # to be made only after F1 has run against live chains. Floor it
-            # against the true Heston reference rather than discarding the whole
-            # Heston computation for a cruder model — this keeps the level
-            # labelled "Heston repriced" and, critically, keeps
-            # prev_heston_price anchored to real Heston output so a LATER
-            # level's own legitimate Heston price is never compared against
-            # an inflated fallback value.
+            # reason. Floor it against the true Heston reference rather than
+            # discarding the whole Heston computation for a cruder model —
+            # this keeps the level labelled "Heston repriced" and, critically,
+            # keeps prev_heston_price anchored to real Heston output so a
+            # LATER level's own legitimate Heston price is never compared
+            # against an inflated fallback value.
+            #
+            # AND IT NOW SAYS SO WHEN IT FIRES (decision LADDER-FLOOR-LOG-
+            # 2026-09-13). Keeping the floor silent is what made it a mask
+            # rather than a guard. This line is the mechanism by which the
+            # live evidence accumulates on its own -- spec section 6.3 says
+            # remove the floor "only after F1 has run against live chains
+            # long enough to say the artifact never appears", and without a
+            # log there is nothing to read that back off. WARNING, not INFO,
+            # and that is measured: under uvicorn's default logging config
+            # the root logger has no handler and sits at WARNING, so an
+            # `app.*` INFO record is dropped outright.
             if prev_heston_price is not None and floored_price < prev_heston_price:
+                _log.warning(
+                    "Heston target ladder dipped and was floored: strike %.2f %s, "
+                    "%.4fy to expiry, repriced at %.4fy, target spot %.2f — Heston "
+                    "returned %.4f against the previous level's %.4f, raised to match. "
+                    "F1 removed the only known cause of this (the Fourier-inversion "
+                    "defect); a dip here now most likely means the pricer has regressed.",
+                    strike, "C" if is_call else "P", expiry_years, dte_at_target,
+                    t_price, floored_price, prev_heston_price,
+                )
                 floored_price = prev_heston_price
             # Even after flooring against the TRUE Heston chain, this level
             # can still be lower than what's already on display, if an

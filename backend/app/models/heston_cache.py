@@ -1,16 +1,91 @@
+"""Heston calibration: seed, objective, and the baseline gate (Phase F2).
+
+Read `docs/superpowers/plans/2026-09-12-heston-calibration-spec.md` section 3
+before changing anything here. Three things in this file were defects, and all
+three fed the same number -- the exit premium in the target ladder and the
+numerator of the R/R ratio on any card labelled "Heston repriced":
+
+  1. `v0_grid = [0.04]` -- ONE hardcoded seed, 20% vol, every symbol, every
+     scan. `v0` is the INSTANTANEOUS variance and the chain states it
+     directly; on the spec's 45-DTE reference chain the chain's own IV says
+     0.1245 (35.28% vol) and no setting of the shipped code could reach it.
+     F2 solves it out of the chain's own mids instead (`_seed_v0`).
+  2. The objective was absolute dollars, so one $20 in-the-money contract
+     outweighed ten $1 wing contracts -- and the wings carry the smile that
+     the other four Heston parameters exist to fit. Now relative.
+  3. Nothing checked whether Heston was worth using at all. Post-F1 with the
+     hardcoded seed the fit was 3.27x (45 DTE) and 1.34x (180 DTE) WORSE than
+     a single flat volatility, and shipped to the card anyway. `_flat_bs_
+     baseline` is now the comparator and the gate returns `method="bs_flat"`
+     when Heston loses, which `scan.py` discards exactly as it discards
+     `bs_fallback`.
+
+Measured on the spec's section 7 reference chain, relative RMSE, post-F1
+pricer, in-band strikes only:
+
+    45 DTE (10 strikes)    shipped v0=[0.04]  0.6388   flat-BS  0.1969  REJECT
+                           chain seed 0.1245  0.0796   flat-BS  0.1969  ACCEPT
+    180 DTE (28 strikes)   shipped v0=[0.04]  0.6566   flat-BS  0.3965  REJECT
+                           chain seed 0.1645  0.3163   flat-BS  0.3965  ACCEPT
+"""
+
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import os
 import concurrent.futures
 from functools import lru_cache
+from typing import Optional
 
 from app.models.heston import HestonParams, CalibrationResult, heston_price
-from app.models.black_scholes import bs_iv
+from app.models.black_scholes import bs_iv, bs_price
+from app.data.market import _compute_iv_bs
+
+_log = logging.getLogger(__name__)
 
 _CALIBRATION_TIMEOUT = 1.0
 _USE_FULL_GRID = os.getenv("HESTON_FULL_CALIBRATION", "").lower() in ("1", "true")
+
+# The seed of last resort: used ONLY when not one strike on the chain inverts.
+# This is the value that used to be the whole v0 grid.
+_FALLBACK_V0 = 0.04
+
+# Bracket for the flat-BS baseline's single volatility, and the two-stage
+# search over it: a coarse sweep to find the basin, then a golden-section
+# contraction inside it. Deliberately not a scipy minimiser -- the global
+# sweep is what keeps this honest on a chain whose objective is not unimodal,
+# and an under-fitted baseline is the one error direction that MATTERS here:
+# it overstates the baseline's error and lets a bad Heston fit through the
+# gate. Erring the other way only costs Heston a fit it did not deserve.
+#
+# THE EVALUATION BUDGET IS LOAD-BEARING, not a micro-optimisation.
+# `bs_price` calls `scipy.stats.norm.cdf` twice per price, ~35us each, so the
+# baseline's cost is (evals x strikes x 70us). A first cut at 200 sweep steps
+# plus 40 ternary iterations came to 280 evals and took 0.608s on the 28-
+# strike 180-DTE reference chain -- 53% of the whole calibration, pushing it
+# from 0.547s to 1.156s and straight through `_CALIBRATION_TIMEOUT`, which
+# turns every long-dated fit into a discarded `bs_fallback`. F2 must not cost
+# Heston the chains it used to price. 24 sweep points + 2 + 20 golden-section
+# steps = 46 evals reaches the same sigma to ~1e-3 (the objective is
+# quadratic at its minimum, so that is ~1e-6 in rel-RMSE -- far below any
+# margin the gate decides on) for a sixth of the work.
+#
+# The sweep is GEOMETRIC, and the bracket is `_compute_iv_bs`'s own. A linear
+# sweep has to choose between resolution near a typical 30% vol and reach into
+# the wings: 24 linear steps to 300% are 12.5 vol points apart, and raising the
+# ceiling to the solver's 2000% would make them 83 points apart. Log spacing is
+# 1.38x per step everywhere, so the basin is bracketed as tightly at 15% vol as
+# at 1500%, and the ceiling costs nothing. It matters in one direction only,
+# which is the dangerous one: a baseline that could not reach the chain's true
+# best sigma would OVERSTATE the baseline's error and let a bad Heston fit
+# through the gate.
+_BASELINE_SIGMA_LO, _BASELINE_SIGMA_HI = 0.01, 20.0
+_BASELINE_COARSE_STEPS = 24
+_BASELINE_REFINE_ITERS = 20
+_BASELINE_SWEEP_RATIO = (_BASELINE_SIGMA_HI / _BASELINE_SIGMA_LO) ** (1.0 / _BASELINE_COARSE_STEPS)
+_INV_PHI = (math.sqrt(5.0) - 1.0) / 2.0
 
 
 def _iv_surface_key(option_chain: list[dict], S: float, r: float) -> str:
@@ -21,26 +96,196 @@ def _iv_surface_key(option_chain: list[dict], S: float, r: float) -> str:
     return hashlib.md5(payload.encode()).hexdigest()
 
 
+def _seed_v0(chain: list[dict], S: float, r: float) -> float:
+    """Solve `v0` out of the chain: the mean implied vol of every strike that
+    inverts, squared.
+
+    THE SOLVER IS NOT INTERCHANGEABLE. `_compute_iv_bs` is a BRACKETED solve
+    (scipy brentq); `bs_iv` is a Newton loop that returns None on most of a
+    realistically skewed chain -- measured 8/10 at 45 DTE and 18/28 at 180 DTE
+    on the spec's reference chains, and it is always the WINGS it drops, which
+    is exactly the part of the smile this seed is meant to see.
+    `_compute_iv_bs` solves 10/10 and 28/28 on the same two chains.
+
+    MEAN, NOT ATM -- and that is one measurement, not a law. The mean beat the
+    ATM strike on both reference chains (45 DTE rel-RMSE 0.0796 vs 0.0919;
+    180 DTE 0.3163 vs 0.3744), which is the OPPOSITE of what theory predicts,
+    because the 180-DTE delta band reaches far enough into the wings to pull
+    the mean up toward the smile. Decision F2-V0-SEED-2026-09-13 ships the
+    measured winner and records the ATM alternative as UNMEASURED on real
+    chains, in the same register as Phase A's seeded IV thresholds.
+
+    THE UNIT TRAP, pinned by `test_seed_rejects_the_expiry_years_unit_trap`:
+    `_compute_iv_bs` takes `dte` in DAYS. The chain dicts carry
+    `expiry_years`. Feeding one to the other yields a seed of v0 = 45.23
+    (672% vol) instead of 0.1245 on the 45-DTE reference chain -- measured,
+    not hypothesised. Hence the `* 365.0` below, and hence a float rather than
+    an int: rounding would lose sub-day expiries, and `_compute_iv_bs` only
+    ever divides `dte` by 365.0.
+    """
+    ivs: list[float] = []
+    for c in chain:
+        mid = c.get("mid_price", 0.0)
+        expiry_years = c.get("expiry_years", 0.0)
+        if mid <= 0 or expiry_years <= 0:
+            continue
+        iv = _compute_iv_bs(mid, S, c["strike"], expiry_years * 365.0,
+                            c.get("is_call", True), r)
+        if iv is not None and iv > 0:
+            ivs.append(iv)
+    if not ivs:
+        return _FALLBACK_V0
+    return (sum(ivs) / len(ivs)) ** 2
+
+
+def _rel_rmse(model_prices: list[float], mids: list[float]) -> float:
+    """Root-mean-square RELATIVE residual, `(model - mid) / mid`.
+
+    Absolute dollars let one deep in-the-money contract dominate the whole
+    objective; the wings, which carry the smile, contributed almost nothing.
+    See spec section 3.2 -- vega weighting was the other candidate and was
+    rejected there (it needs a per-strike IV solve inside the hot loop for a
+    weighting relative error already approximates on this chain shape).
+    """
+    n = len(mids)
+    return math.sqrt(sum(((p - m) / m) ** 2 for p, m in zip(model_prices, mids)) / n)
+
+
+def _flat_bs_baseline(
+    chain: list[dict], S: float, r: float,
+) -> tuple[Optional[float], Optional[float]]:
+    """The model Heston has to justify replacing: ONE flat volatility for the
+    whole chain, fitted on the same residual. Returns `(rel_rmse, sigma)`, or
+    `(None, None)` if not one strike prices.
+
+    NOT "BS at each contract's own IV" -- the phrase the standing plan used.
+    That reproduces every mid BY CONSTRUCTION (measured RMSE 0.000005), so
+    nothing can beat it and the gate would reject Heston always. It is also
+    not a model: it predicts nothing for a strike or a date nobody quoted,
+    which is exactly what repricing at a stop asks for.
+    """
+    mids = [c["mid_price"] for c in chain]
+    if not mids:
+        return None, None
+
+    def objective(sigma: float) -> float:
+        prices = []
+        for c in chain:
+            try:
+                prices.append(bs_price(S, c["strike"], c["expiry_years"], r, sigma,
+                                       c.get("is_call", True)))
+            except Exception:
+                return float("inf")
+        try:
+            return _rel_rmse(prices, mids)
+        except Exception:
+            return float("inf")
+
+    best_sigma, best_err = _BASELINE_SIGMA_LO, float("inf")
+    for i in range(_BASELINE_COARSE_STEPS + 1):
+        sigma = _BASELINE_SIGMA_LO * _BASELINE_SWEEP_RATIO ** i
+        err = objective(sigma)
+        if err < best_err:
+            best_err, best_sigma = err, sigma
+
+    if not math.isfinite(best_err):
+        return None, None
+
+    # Golden section inside the winning bracket -- one step of the sweep to
+    # either side. One new evaluation per iteration, against two for a ternary
+    # contraction at the same contraction rate.
+    lo = max(_BASELINE_SIGMA_LO, best_sigma / _BASELINE_SWEEP_RATIO)
+    hi = min(_BASELINE_SIGMA_HI, best_sigma * _BASELINE_SWEEP_RATIO)
+    c, d = hi - _INV_PHI * (hi - lo), lo + _INV_PHI * (hi - lo)
+    f_c, f_d = objective(c), objective(d)
+    for _ in range(_BASELINE_REFINE_ITERS):
+        if f_c < f_d:
+            hi, d, f_d = d, c, f_c
+            c = hi - _INV_PHI * (hi - lo)
+            f_c = objective(c)
+        else:
+            lo, c, f_c = c, d, f_d
+            d = lo + _INV_PHI * (hi - lo)
+            f_d = objective(d)
+
+    # Return the best sigma actually EVALUATED, never the bracket midpoint:
+    # the midpoint has not been priced, and the gate must compare Heston
+    # against a number the baseline really achieved.
+    for sigma, err in ((c, f_c), (d, f_d)):
+        if err < best_err:
+            best_err, best_sigma = err, sigma
+    return best_err, best_sigma
+
+
+def _boundary_hits(params: HestonParams, grids: dict[str, list[float]]) -> list[str]:
+    """Which of the winning parameters sit on an edge of their own grid.
+
+    A winner on a boundary is not a minimum -- it is the search hitting the
+    wall of the box. On the spec's reference chains FOUR of the four searched
+    parameters pin (kappa at its floor, theta at its ceiling, sigma_v at its
+    ceiling, rho at its floor), and the winning combination also violates the
+    Feller condition (2*kappa*theta = 0.08 < sigma_v**2 = 0.36), which says
+    the same thing a second way.
+
+    Decision F2-GRID-AND-EDGE-OF-BOX-2026-09-13 deliberately does NOT widen
+    the grid in F2 -- that is a latency decision and a separate change, and
+    the baseline gate below already makes a bad fit harmless. This function is
+    the one thing F2 does about it: it turns "three of five pinned on one
+    synthetic chain" into evidence that accumulates from Kenneth's real scans,
+    which is what the widening decision needs and does not have.
+
+    A grid of fewer than two rungs is skipped: `v0_grid` is a single solved
+    seed, so it is on its own boundary by definition and reporting it would be
+    noise, not evidence.
+    """
+    hits: list[str] = []
+    for name, grid in grids.items():
+        if len(grid) < 2:
+            continue
+        value = getattr(params, name)
+        if value == min(grid):
+            hits.append(f"{name}={value:g} (grid min)")
+        elif value == max(grid):
+            hits.append(f"{name}={value:g} (grid max)")
+    return hits
+
+
 @lru_cache(maxsize=256)
 def _run_calibration(iv_key: str, chain_repr: str, S: float, r: float) -> CalibrationResult:
     import json
     chain = json.loads(chain_repr)
 
+    # v0 is SOLVED, not searched: it is the instantaneous variance and the
+    # chain states it. The smile the chain also carries is not discarded --
+    # every strike of it is the calibration target below, and reproducing that
+    # smile out of this one scalar is precisely what the other four parameters
+    # are for. Giving each strike its own variance would not be a better
+    # Heston fit; it would be Black-Scholes at each contract's own IV, which
+    # is no model at all (see `_flat_bs_baseline`).
+    v0_seed = _seed_v0(chain, S, r)
+
     if _USE_FULL_GRID:
-        v0_grid      = [0.01, 0.04, 0.09]
         kappa_grid   = [0.5, 1.5, 3.0]
         theta_grid   = [0.02, 0.04, 0.08]
         sigma_v_grid = [0.2, 0.4, 0.6]
         rho_grid     = [-0.8, -0.5, -0.2]
     else:
-        v0_grid      = [0.04]          # single seed — BS fallback handles the rest if timeout
         kappa_grid   = [0.5, 3.0]
         theta_grid   = [0.02, 0.08]
         sigma_v_grid = [0.2, 0.6]
         rho_grid     = [-0.8, -0.2]
+    # One seed on BOTH paths. HESTON_FULL_CALIBRATION used to widen v0 to
+    # [0.01, 0.04, 0.09], whose top rung is still 30% vol -- so the "full"
+    # grid could not seed the reference chain either. A solved v0 does not
+    # want alternatives to search over; the other four dimensions still do.
+    v0_grid = [v0_seed]
+
+    grids = {"v0": v0_grid, "kappa": kappa_grid, "theta": theta_grid,
+             "sigma_v": sigma_v_grid, "rho": rho_grid}
 
     best_rmse = float("inf")
     best_params = None
+    best_chain: list[dict] = []
 
     for v0 in v0_grid:
         for kappa in kappa_grid:
@@ -50,27 +295,86 @@ def _run_calibration(iv_key: str, chain_repr: str, S: float, r: float) -> Calibr
                         params = HestonParams(v0=v0, kappa=kappa, theta=theta,
                                               sigma_v=sigma_v, rho=rho)
                         sse = 0.0
-                        valid = 0
+                        priced: list[dict] = []
                         for c in chain:
+                            mid = c.get("mid_price", 0.0)
+                            if mid <= 0:
+                                continue
                             try:
                                 model_p = heston_price(S, c["strike"], c["expiry_years"],
                                                        r, params, c.get("is_call", True))
-                                sse += (model_p - c["mid_price"]) ** 2
-                                valid += 1
+                                sse += ((model_p - mid) / mid) ** 2
+                                priced.append(c)
                             except Exception:
                                 continue
-                        if valid == 0:
+                        if not priced:
                             continue
-                        rmse = math.sqrt(sse / valid)
+                        rmse = math.sqrt(sse / len(priced))
                         if rmse < best_rmse:
                             best_rmse = rmse
                             best_params = params
+                            best_chain = priced
 
     if best_params is None:
-        fallback = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+        fallback = HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed, sigma_v=0.3, rho=-0.7)
         return CalibrationResult(params=fallback, rmse=float("inf"), method="bs_fallback")
 
-    return CalibrationResult(params=best_params, rmse=round(best_rmse, 6), method="heston_grid")
+    # The comparison runs on exactly the strikes the WINNING parameters
+    # priced, not on the whole chain. Heston is allowed to skip a strike its
+    # integration cannot handle; letting it skip the hard ones and then
+    # scoring the baseline on all of them would hand Heston a gate it did not
+    # pass.
+    baseline_rmse, baseline_sigma = _flat_bs_baseline(best_chain, S, r)
+
+    # Decide the verdict BEFORE logging it. The log line names the label this
+    # call actually returns; anything else would reintroduce, in the log, the
+    # very mislabelling this phase exists to remove.
+    if baseline_rmse is None:
+        # No flat volatility priced this chain at all, so the gate cannot be
+        # run -- and an ungated fit must never be labelled "Heston repriced".
+        # bs_fallback is this file's existing "no honest answer" signal and
+        # scan.py already discards it.
+        result = CalibrationResult(
+            params=HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed,
+                                sigma_v=0.3, rho=-0.7),
+            rmse=float("inf"), method="bs_fallback",
+        )
+    elif baseline_rmse <= best_rmse:
+        # Heston did not beat one flat volatility. Ties go to the baseline:
+        # four extra parameters have to EARN their place, not draw for it.
+        result = CalibrationResult(
+            params=HestonParams(v0=baseline_sigma ** 2, kappa=2.0,
+                                theta=baseline_sigma ** 2, sigma_v=0.3, rho=-0.7),
+            rmse=round(baseline_rmse, 6), method="bs_flat",
+        )
+    else:
+        result = CalibrationResult(params=best_params, rmse=round(best_rmse, 6),
+                                   method="heston_grid")
+
+    hits = _boundary_hits(best_params, grids)
+
+    # WARNING, not INFO, and that is measured rather than stylistic: the app
+    # runs under uvicorn's default logging config, which configures only the
+    # `uvicorn*` loggers and leaves the root logger handler-less at WARNING.
+    # An `app.*` INFO record is therefore DROPPED, and a silent diagnostic is
+    # the exact failure mode these two lines exist to end. Volume is one line
+    # per calibration whose chain has changed (`_run_calibration` is
+    # lru_cached), so roughly one per symbol per scan.
+    if hits or result.method != "heston_grid":
+        _log.warning(
+            "Heston calibration on %d strikes: rel-RMSE %.4f vs flat-BS baseline %s "
+            "-> %s; v0 seed %.4f (%.2f%% vol)%s",
+            len(best_chain), best_rmse,
+            f"{baseline_rmse:.4f}" if baseline_rmse is not None else "unavailable",
+            {"heston_grid": "accepted (heston_grid)",
+             "bs_flat": "REJECTED (bs_flat)",
+             "bs_fallback": "REJECTED (bs_fallback: no flat-BS baseline, "
+                            "so the fit could not be gated)"}[result.method],
+            v0_seed, math.sqrt(v0_seed) * 100.0,
+            f"; winner on grid boundary: {'; '.join(hits)}" if hits else "",
+        )
+
+    return result
 
 
 def calibrate_cached(
@@ -84,12 +388,8 @@ def calibrate_cached(
              if c.get("mid_price", 0) > 0 and c.get("expiry_years", 0) > 0]
 
     if len(chain) < 3:
-        ivs = [bs_iv(c["mid_price"], S, c["strike"], c["expiry_years"], r, c.get("is_call", True))
-               for c in chain if c.get("mid_price", 0) > 0]
-        ivs = [iv for iv in ivs if iv is not None]
-        v0_seed = (sum(ivs) / len(ivs)) ** 2 if ivs else 0.04
-        fallback = HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed, sigma_v=0.3, rho=-0.7)
-        return CalibrationResult(params=fallback, rmse=float("inf"), method="bs_fallback")
+        return CalibrationResult(params=_thin_chain_params(chain, S, r),
+                                 rmse=float("inf"), method="bs_fallback")
 
     iv_key = _iv_surface_key(chain, S, r)
     chain_repr = json.dumps(chain, sort_keys=True)
@@ -99,9 +399,23 @@ def calibrate_cached(
         try:
             return future.result(timeout=_CALIBRATION_TIMEOUT)
         except concurrent.futures.TimeoutError:
-            ivs = [bs_iv(c["mid_price"], S, c["strike"], c["expiry_years"], r, c.get("is_call", True))
-                   for c in chain if c.get("mid_price", 0) > 0]
-            ivs = [iv for iv in ivs if iv is not None]
-            v0_seed = (sum(ivs) / len(ivs)) ** 2 if ivs else 0.04
-            fallback = HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed, sigma_v=0.3, rho=-0.7)
-            return CalibrationResult(params=fallback, rmse=float("inf"), method="bs_fallback")
+            return CalibrationResult(params=_thin_chain_params(chain, S, r),
+                                     rmse=float("inf"), method="bs_fallback")
+
+
+def _thin_chain_params(chain: list[dict], S: float, r: float) -> HestonParams:
+    """The crude IV-seed guess behind both `bs_fallback` returns.
+
+    Deliberately still `bs_iv` and still `expiry_years`, i.e. UNCHANGED from
+    what shipped. Both call sites are discarded by `scan.py` before they can
+    reach a card (it accepts `method == "heston_grid"` only), so nothing this
+    returns is ever shown; rewriting it onto the bracketed solver would be
+    changing code that has no reachable output, which is the over-fixing the
+    audit rule forbids. It is a named function rather than the two duplicated
+    blocks it used to be so that the two paths cannot drift apart.
+    """
+    ivs = [bs_iv(c["mid_price"], S, c["strike"], c["expiry_years"], r, c.get("is_call", True))
+           for c in chain if c.get("mid_price", 0) > 0]
+    ivs = [iv for iv in ivs if iv is not None]
+    v0_seed = (sum(ivs) / len(ivs)) ** 2 if ivs else _FALLBACK_V0
+    return HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed, sigma_v=0.3, rho=-0.7)
