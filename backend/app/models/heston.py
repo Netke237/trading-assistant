@@ -37,8 +37,11 @@ class CalibrationResult:
     #                   HestonParams(v0=sigma^2, ...). Phase F2's gate; see
     #                   heston_cache._flat_bs_baseline.
     # "bs_fallback"  -- no fit was attempted or none could be gated: fewer
-    #                   than 3 usable strikes, the inner calibration timeout,
-    #                   or a chain no flat volatility prices either.
+    #                   than 3 usable strikes, a chain no grid combination
+    #                   priced at all, or a chain no flat volatility prices
+    #                   either. It ALSO meant "the inner 1s timeout fired on
+    #                   a fit that had already been computed" until
+    #                   TIMEOUT-DELETE-INNER-2026-09-13 deleted that timeout.
     # `scan.py` tests `== "heston_grid"`, so both bs_* labels are discarded
     # there and fall through to the delta-approximation path.
     method: str
@@ -157,23 +160,28 @@ def heston_price(
     # measurement.)
     #
     # F1 ALSO CONCLUDED, from a worst measured calibration of 0.337s against
-    # _CALIBRATION_TIMEOUT = 1.0, that this "cannot push a card off 'Heston
-    # repriced' onto the bs_fallback path". F2 INVALIDATED THE MARGIN THAT
-    # CONCLUSION RESTED ON, so it is restated here rather than repeated:
-    # seeding v0 from the chain and fitting the flat-BS baseline add ~0.13-
-    # 0.19s per calibration, measured on the reduced production grid --
+    # heston_cache's then-1.0s inner timeout, that this "cannot push a card
+    # off 'Heston repriced' onto the bs_fallback path". F2 INVALIDATED THE
+    # MARGIN THAT CONCLUSION RESTED ON, so it is restated here rather than
+    # repeated: seeding v0 from the chain and fitting the flat-BS baseline
+    # add ~0.13-0.19s per calibration, measured on the reduced production
+    # grid --
     #
     #     28 strikes, 180 DTE   0.517s -> 0.708s
     #     29 strikes, 365 DTE   0.546s -> 0.725s
     #     10 strikes,  45 DTE   0.131s -> 0.199s
     #
-    # -- so the worst chain that still fits inside the timeout now sits at
+    # -- so the worst chain that still fitted inside that 1.0s now sits at
     # 0.725s, and a 1.27x short-horizon multiplier on top of that reaches
-    # ~0.92s. The headroom is real but thin. Separately, and NOT caused by
-    # either phase: a wide chain already blows the timeout outright (163
-    # strikes at 365 DTE measured 5.106s BEFORE F2 and 5.070s after), which is
-    # the `_CALIBRATION_TIMEOUT` item that decision F2-OUT-OF-SCOPE-THREE-
-    # 2026-09-13 deliberately left standing.
+    # ~0.92s. THE BUDGET THIS COST IS NOW MEASURED AGAINST IS scan.py's outer
+    # 2.0s `asyncio.wait` ceiling: TIMEOUT-DELETE-INNER-2026-09-13 deleted the
+    # inner timeout, so this cutoff can no longer flip a label by itself, only
+    # spend more of that outer budget. The headroom against 2.0s looks wider
+    # than it is, because under scan concurrency the budget is spent on
+    # queueing rather than on this call -- see calibrate_cached. Separately,
+    # and NOT caused by either phase: a wide chain overruns even the outer
+    # ceiling outright (163 strikes at 365 DTE measured 5.106s BEFORE F2 and
+    # 5.070s after).
     #
     # The 20000 cap bounds latency for degenerate inputs and is NOT
     # sufficient below about T=1e-5 (at T=1e-6 the cutoff saturates and the
@@ -241,7 +249,8 @@ def calibrate_heston(
     own implied vols, minimises a RELATIVE residual over the parameter grid,
     and returns the fit only if it beats one flat volatility on the same chain
     (`method="heston_grid"`). Otherwise `method` is `"bs_flat"` (the flat vol
-    won) or `"bs_fallback"` (too few strikes, or the 1s inner timeout fired).
+    won) or `"bs_fallback"` (too few strikes -- the only way to reach it
+    since the 1s inner timeout was deleted).
     Only `"heston_grid"` is honest to label "Heston repriced" downstream, and
     `scan.py` accepts only that label. See `heston_cache` for the measurements.
     """

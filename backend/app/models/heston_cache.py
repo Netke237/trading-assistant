@@ -35,7 +35,6 @@ import hashlib
 import logging
 import math
 import os
-import concurrent.futures
 from functools import lru_cache
 from typing import Optional
 
@@ -45,7 +44,6 @@ from app.data.market import _compute_iv_bs
 
 _log = logging.getLogger(__name__)
 
-_CALIBRATION_TIMEOUT = 1.0
 _USE_FULL_GRID = os.getenv("HESTON_FULL_CALIBRATION", "").lower() in ("1", "true")
 
 # The seed of last resort: used ONLY when not one strike on the chain inverts.
@@ -65,9 +63,12 @@ _FALLBACK_V0 = 0.04
 # baseline's cost is (evals x strikes x 70us). A first cut at 200 sweep steps
 # plus 40 ternary iterations came to 280 evals and took 0.608s on the 28-
 # strike 180-DTE reference chain -- 53% of the whole calibration, pushing it
-# from 0.547s to 1.156s and straight through `_CALIBRATION_TIMEOUT`, which
-# turns every long-dated fit into a discarded `bs_fallback`. F2 must not cost
-# Heston the chains it used to price. 24 sweep points + 2 + 20 golden-section
+# from 0.547s to 1.156s -- which, while this file still had its own 1.0s
+# inner timeout, turned every long-dated fit into a discarded `bs_fallback`.
+# That timeout is gone (see `calibrate_cached`), so the budget no longer
+# decides a LABEL; it still decides how much of scan.py's outer 2.0s ceiling
+# one calibration spends, which is the same pressure one layer out. F2 must
+# not cost Heston the chains it used to price. 24 sweep points + 2 + 20 golden-section
 # steps = 46 evals reaches the same sigma to ~1e-3 (the objective is
 # quadratic at its minimum, so that is ~1e-6 in rel-RMSE -- far below any
 # margin the gate decides on) for a sixth of the work.
@@ -394,21 +395,57 @@ def calibrate_cached(
     iv_key = _iv_surface_key(chain, S, r)
     chain_repr = json.dumps(chain, sort_keys=True)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_run_calibration, iv_key, chain_repr, S, r)
-        try:
-            return future.result(timeout=_CALIBRATION_TIMEOUT)
-        except concurrent.futures.TimeoutError:
-            return CalibrationResult(params=_thin_chain_params(chain, S, r),
-                                     rmse=float("inf"), method="bs_fallback")
+    # CALLED DIRECTLY, ON THIS THREAD. There used to be a
+    # `ThreadPoolExecutor(max_workers=1)` here with a 1.0s
+    # `future.result(timeout=...)` on it. It bounded nothing and cost real
+    # fits, and BOTH halves of that are measured rather than argued:
+    #
+    #   IT NEVER BOUNDED LATENCY. Both returns sat inside the `with`, so
+    #   `pool.__exit__` -> `shutdown(wait=True)` ran before either reached the
+    #   caller, blocking for the whole grid search regardless. The timeout
+    #   changed the RESULT (`bs_fallback` instead of the fit that had just
+    #   been computed) and nothing else.
+    #
+    #   IT DISCARDED FITS IT HAD ALREADY COMPUTED. On a staggered 40-symbol
+    #   scan slice driven through scan.py's own machinery, with the outer
+    #   2.0s guard removed so that this timeout was the only thing in play:
+    #   BEFORE, 40 of 40 symbols returned `bs_fallback` (median wait 17.7s,
+    #   minimum 3.75s -- not one anywhere near 1.0s); AFTER, the same 40
+    #   return `heston_grid` (median 16.8s, minimum 3.66s). Same work, same
+    #   wall time, 40 fits kept instead of 40 thrown away. Both halves
+    #   measured with the SAME contention model, so this is a before/after
+    #   rather than two readings; `scripts/heston_latency_probe.py` is the
+    #   after half and the before half reconstructs this block verbatim.
+    #
+    # WHAT THIS DOES NOT DO, stated plainly because the measurement refused
+    # to support the more flattering version: on the box this was measured on
+    # it moves no card at all. With scan.py's real 2.0s outer guard in place,
+    # all 40 symbols are abandoned there BOTH before and after -- median wait
+    # 2.01s, none completing in time. The gain is conditional on hardware
+    # where a calibration finishes inside 2.0s under scan concurrency, and
+    # this box (4 cores, 2.1GHz Xeon) has none: calibration is GIL-bound, so
+    # `_HESTON_EXECUTOR` buys no parallelism (2 threads measured 2.58x one
+    # thread's wall time, 4 threads 5.52x, 8 threads 11.34x, on 4 IDLE cores)
+    # and the 2.0s is spent queueing rather than calibrating. Deleting this
+    # timeout is a precondition for fixing that, not the fix; the fix is
+    # logged against main as its own item. See TIMEOUT-DELETE-INNER-2026-09-13.
+    #
+    # What still bounds the scan is scan.py's `asyncio.wait` ceiling, which
+    # bounds the SCAN rather than this call: it does not cancel, so the
+    # calibration keeps running and populates the lru_cache for the next
+    # scan. A synchronous caller of `calibrate_heston` outside the scan
+    # pipeline has no ceiling at all -- it did not have one before either,
+    # for the `shutdown(wait=True)` reason above.
+    return _run_calibration(iv_key, chain_repr, S, r)
 
 
 def _thin_chain_params(chain: list[dict], S: float, r: float) -> HestonParams:
-    """The crude IV-seed guess behind both `bs_fallback` returns.
+    """The crude IV-seed guess behind `calibrate_cached`'s thin-chain return.
 
     Deliberately still `bs_iv` and still `expiry_years`, i.e. UNCHANGED from
-    what shipped. Both call sites are discarded by `scan.py` before they can
-    reach a card (it accepts `method == "heston_grid"` only), so nothing this
+    what shipped. It had a second caller until the inner timeout was deleted
+    -- the timeout branch returned this too. What it returns is discarded by
+    `scan.py` before it can reach a card (it accepts `method == "heston_grid"` only), so nothing this
     returns is ever shown; rewriting it onto the bracketed solver would be
     changing code that has no reachable output, which is the over-fixing the
     audit rule forbids. It is a named function rather than the two duplicated

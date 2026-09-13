@@ -239,12 +239,15 @@ def _compute_heston_concurrency(scan_concurrency: int, detected_cpu_count: int |
 _HESTON_CONCURRENCY = _compute_heston_concurrency(_SCAN_CONCURRENCY, _detect_cpu_count())
 
 # calibrate_heston (via heston_cache.calibrate_cached) is a synchronous call
-# that can block its calling thread far longer than its own internal 1s
-# "timeout" suggests (that timeout only picks which result gets returned — the
-# ThreadPoolExecutor context manager it runs in still blocks on
-# shutdown(wait=True) for the real grid-search duration; see this plan's
-# architecture notes). Safeguards against that, both scoped to this new call
-# site only — heston_cache.py itself is untouched:
+# of UNBOUNDED duration, and the safeguards below are the only thing that
+# bounds it. It used to carry its own internal 1s "timeout", which did not
+# bound it either: that timeout only picked which result got returned, because
+# the ThreadPoolExecutor context manager it sat in still blocked on
+# shutdown(wait=True) for the real grid-search duration. TIMEOUT-DELETE-INNER-
+# 2026-09-13 deleted it for exactly that reason, so heston_cache.py no longer
+# has a clock in it at all — which changes nothing for this call site, whose
+# safeguards never relied on that timeout and are scoped to this call site
+# only:
 #   1. A small dedicated pool, sized to _HESTON_CONCURRENCY, so a pile-up of
 #      slow calibrations can't starve asyncio's shared default executor (also
 #      used by compute_confidence and _compute_dhmm in this same function).
@@ -789,11 +792,14 @@ async def _process_symbol(
                 # a non-Heston number mislabelled as a real Heston fit:
                 #
                 #   "bs_fallback" — a crude single-point IV-seed guess:
-                #     calibrate_cached's own inner 1.0s timeout fired before
-                #     the grid search finished, or the chain had fewer than 3
-                #     usable strikes. See
+                #     the chain had fewer than 3 usable strikes, or no grid
+                #     combination priced a single one of them. It used to
+                #     ALSO mean calibrate_cached's own inner 1.0s timeout had
+                #     fired on a fit that was already computed; that timeout
+                #     was deleted by TIMEOUT-DELETE-INNER-2026-09-13, so this
+                #     label now means the chain, not the clock. See
                 #     docs/superpowers/plans/2026-07-27-heston-long-dte-slowness-investigation.md
-                #     finding #5.
+                #     finding #5 for the original behaviour.
                 #   "bs_flat" — Phase F2's baseline gate: the grid fit was no
                 #     better than a SINGLE flat volatility on the same chain,
                 #     so the flat vol is returned instead. Before F2 a fit
