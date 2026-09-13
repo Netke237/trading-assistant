@@ -232,8 +232,17 @@ def _boundary_hits(params: HestonParams, grids: dict[str, list[float]]) -> list[
     contradictory and are not. On a two-rung grid the COUNT is vacuous -- four
     of four always pin. What the reference chains actually observed, and what
     Feller corroborates, is the SIDE pattern: the winner ran to the extremes
-    in a consistent direction. The side is informative on two rungs; "is it on
-    a boundary" is not, and it is the latter this function reports.
+    in a consistent direction. The side IS informative on two rungs where the
+    count is not.
+
+    This function reports both -- the strings it returns name the side, e.g.
+    "kappa=0.5 (grid min)" -- and the gate below therefore suppresses both.
+    That is a deliberate cost, not an oversight: the problem being fixed was
+    per-symbol VOLUME, which a side-only line would not have reduced, and
+    BOUNDARY-LOG-GATE-ON-GRID-2026-09-13 explicitly refused the side-only
+    reshape as "more code for evidence nobody has asked a question of yet".
+    The side pattern is logged as lost in that decision's open question rather
+    than quietly preserved here.
 
     Decision F2-GRID-AND-EDGE-OF-BOX-2026-09-13 deliberately does NOT widen
     the grid in F2 -- that is a latency decision and a separate change, and
@@ -388,9 +397,12 @@ def _run_calibration(iv_key: str, chain_repr: str, S: float, r: float) -> Calibr
     # the exact failure mode these two lines exist to end.
     #
     # VOLUME, and it changed with BOUNDARY-LOG-GATE-ON-GRID-2026-09-13. This
-    # used to fire on EVERY calibration -- roughly one line per symbol per
-    # scan, ~500 per S&P 500 run -- because `_boundary_hits` was tautological
-    # on the two-rung grid and so `hits` was never empty. It is now empty on
+    # used to fire on every calibration THAT REACHED THIS LINE -- roughly one
+    # line per calibrated symbol per scan, and UP TO ~500 on an S&P 500 run
+    # rather than 500: `scan.py` only reaches the Heston block for symbols
+    # with a non-REJECT contract, and the `best_params is None` return above
+    # leaves before the log either way. It fired because `_boundary_hits` was
+    # tautological on the two-rung grid and so `hits` was never empty. It is now empty on
     # that grid by construction, which leaves this condition equal to
     # `result.method != "heston_grid"`: a line per REJECTED fit, and silence
     # while the gate is accepting. Rejections are the signal worth a WARNING;

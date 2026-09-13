@@ -445,9 +445,17 @@ def test_flat_bs_baseline_reaches_far_beyond_ordinary_volatility():
 # passed for the same reason it was worthless.
 # --------------------------------------------------------------------------
 
-# The grids `_run_calibration` builds, restated here so these tests fail loudly
-# if it changes one without revisiting the gate. `test_the_gate_matches_the_
-# grid_that_ships` pins them against the real thing.
+# Transcriptions of the two grids `_run_calibration` builds. A transcription
+# proves nothing on its own, so
+# `test_the_transcriptions_match_the_grids_the_source_really_builds` captures
+# the real dicts out of a live calibration and asserts these against them —
+# without it, widening the source grid would leave the tests below asserting a
+# distribution the source can no longer produce, and passing.
+#
+# `v0` is the one entry that is NOT a copy of a source literal: the source
+# builds `[_seed_v0(...)]`, solved out of the chain. Only `len() == 1` matters
+# to the gate, so a stand-in value is honest here and the pinning test checks
+# the length rather than the value.
 SHIPPED_GRID = {"v0": [0.09], "kappa": [0.5, 3.0], "theta": [0.02, 0.08],
                 "sigma_v": [0.2, 0.6], "rho": [-0.8, -0.2]}
 FULL_GRID = {"v0": [0.09], "kappa": [0.5, 1.5, 3.0], "theta": [0.02, 0.04, 0.08],
@@ -464,6 +472,65 @@ def _every_combo(grid: dict):
     names = list(grid)
     for values in itertools.product(*(grid[n] for n in names)):
         yield dict(zip(names, values))
+
+
+def _grids_the_source_builds(monkeypatch, full: bool) -> dict:
+    """The `grids` dict `_run_calibration` really constructs, captured out of a
+    live calibration rather than retyped.
+
+    `_run_calibration` builds the grids as locals and hands them to
+    `_boundary_hits`, so spying on that one call is the only seam that sees
+    them without reaching into the function's source."""
+    import app.models.heston_cache as hc
+
+    captured: dict = {}
+    real = hc._boundary_hits
+
+    def spy(params, grids):
+        captured.clear()
+        captured.update(grids)
+        return real(params, grids)
+
+    monkeypatch.setattr(hc, "_USE_FULL_GRID", full)
+    monkeypatch.setattr(hc, "_boundary_hits", spy)
+    _calibrate(_chain(45, _smile_iv))
+    assert captured, "_boundary_hits was never reached, so nothing was captured"
+    return dict(captured)
+
+
+def test_the_transcriptions_match_the_grids_the_source_really_builds(monkeypatch):
+    """SHIPPED_GRID and FULL_GRID are this module's copies of source literals,
+    and every test below reasons about the copies. Without this test the copies
+    could drift from the source silently — and the failure would be the
+    quietest kind: widen the real full grid and
+    `test_a_third_rung_makes_the_diagnostic_discriminate_again` would go on
+    asserting an 81-combination histogram the source can no longer produce,
+    and pass.
+
+    `v0` is checked by LENGTH only, deliberately: the source solves it out of
+    the chain (`[_seed_v0(...)]`), so its value is not a literal to match and
+    only its single rung is what the gate turns on."""
+    for full, transcription, label in ((False, SHIPPED_GRID, "shipped"),
+                                       (True, FULL_GRID, "HESTON_FULL_CALIBRATION")):
+        real = _grids_the_source_builds(monkeypatch, full)
+
+        assert set(real) == set(transcription), (
+            f"{label} grid: dimensions differ — source {sorted(real)} vs "
+            f"transcription {sorted(transcription)}"
+        )
+        assert {k: len(v) for k, v in real.items()} == \
+               {k: len(v) for k, v in transcription.items()}, (
+            f"{label} grid: rung COUNTS differ, which is exactly what the gate "
+            f"turns on — source { {k: len(v) for k, v in real.items()} }"
+        )
+        for name, rungs in real.items():
+            if name == "v0":
+                assert len(rungs) == 1, f"v0 must stay one solved rung, got {rungs}"
+                continue
+            assert rungs == transcription[name], (
+                f"{label} grid: {name} is {rungs} in the source but "
+                f"{transcription[name]} here"
+            )
 
 
 def test_two_rung_grid_reports_nothing_because_it_can_report_nothing_else():
@@ -492,8 +559,17 @@ def test_a_third_rung_makes_the_diagnostic_discriminate_again():
 
     On the three-rung grid the count genuinely varies — which is the whole
     difference between evidence and arithmetic. The exact distribution is
-    asserted, so tightening the gate to `len(grid) < 4` (or loosening it back
-    to `< 2`) fails here rather than passing quietly.
+    asserted, so tightening the gate to `len(grid) < 4` fails here rather than
+    passing quietly.
+
+    It does NOT catch the gate being loosened back to `len(grid) < 2`, and
+    saying otherwise would be the same empty claim this whole change exists to
+    remove: every dimension of the full grid has three rungs, so a `< 2`
+    threshold skips nothing a `< 3` threshold skipped and this test cannot
+    tell them apart. That direction is covered by
+    `test_two_rung_grid_reports_nothing_because_it_can_report_nothing_else`
+    and by `test_an_accepted_fit_on_the_shipped_grid_logs_nothing`, both of
+    which do fail under it.
     """
     from collections import Counter
 
