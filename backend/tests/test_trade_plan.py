@@ -132,25 +132,46 @@ def test_heston_params_default_none_preserves_delta_approx():
     assert p.rr_model == "BS repriced (IV-derived)"
 
 
-def test_heston_params_floors_non_monotonic_target_instead_of_falling_back():
-    """Using _plan()'s own default (deep-OTM, long-dated) fixture together
-    with heston_params: T1 is Heston-priced, T2's raw Heston price is a
-    numerical artifact and is floored up to T1's price rather than switched to
-    the delta approximation, and T3's own legitimate Heston price is preserved
-    unmodified — see backend/tests/test_reward_risk.py's
-    test_estimate_targets_real_fixture_preserves_t3_after_t2_artifact for the
-    reward_risk-level version of this same regression.
+def test_heston_params_thread_through_to_a_clean_all_heston_ladder():
+    """build_trade_plan must thread heston_params through to estimate_targets
+    and surface all three levels Heston-priced, unfloored and increasing, on
+    _plan()'s own default (deep-OTM, long-dated) fixture.
 
-    horizon_preset is pinned rather than left to default because the artifact
-    is a property of the REPRICING HORIZON, not just of the fixture. Before the
-    ladder was wired to the resolved holding horizon this priced at
-    expiry_years * 0.5 (92.5 days remaining) and the raw chain came out
-    12.518866931556794 / 10.086141661385824 / 14.081229812545331. "Annual" on
-    this 185-DTE contract reprices at 80 days elapsed, so 105 days remain, and
-    the raw chain is 12.4728 / 10.6959 / 15.3402 — same shape, same three
-    branches exercised (T1 genuine, T2 artifact floored, T3 genuine and above
-    T1), different numbers. Leaving the preset implicit would make this test
-    silently stop covering the flooring branch the day the default changes."""
+    RENAMED AND REWRITTEN BY PHASE F1 (2026-09-12). Like
+    test_estimate_rr_put_heston_path_uses_correct_model_label in
+    test_reward_risk.py, this test was NOT in the F1 spec's section 5.3 table,
+    which named four pinned tests; six actually pinned pricer output, and this
+    is the sixth. This was
+    test_heston_params_floors_non_monotonic_target_instead_of_falling_back and
+    asserted 12.47 / 12.47 / 15.34 — a T2 artifact dip floored up to T1. That
+    dip was not an inherent property of heston_price()'s numerical
+    integration, as this docstring used to claim; it was a defect in its
+    Fourier inversion (a doubled frequency, 2i*phi*ln(S/K)), fixed and
+    documented in
+    docs/superpowers/plans/2026-09-12-heston-calibration-spec.md. This
+    fixture's raw ladder is now 4.566571841077604 / 9.096729142615942 /
+    15.485088007191706 — strictly increasing, so no level is floored and the
+    old assertion was unstateable.
+
+    COVERAGE NOTE, read before assuming this still guards the floor: it does
+    not, and deliberately so. The flooring logic lives in
+    reward_risk.estimate_targets, not here, and it is covered where it lives
+    by the two monkeypatched tests in test_reward_risk.py
+    (test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching_models
+    and test_estimate_targets_put_floors_non_monotonic_heston_price), which
+    force the dip rather than relying on the pricer having a bug — the right
+    way to test a floor. See also
+    test_estimate_targets_real_fixture_ladder_is_clean_and_all_heston for the
+    reward_risk-level version of this clean-path assertion. What remains this
+    test's job is the plumbing: that heston_params and horizon_preset reach
+    the ladder at all.
+
+    horizon_preset stays pinned rather than left to default because the
+    ladder's prices are a property of the REPRICING HORIZON, not just of the
+    fixture: "Annual" on this 185-DTE contract reprices at 80 days elapsed, so
+    105 days remain, where the default (expiry_years * 0.5) would leave 92.5.
+    Pinning it keeps these numbers deterministic the day the default
+    changes."""
     from app.models.heston import HestonParams
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
     # default fixture: stock=318.73, strike=375, dte=185
@@ -159,7 +180,10 @@ def test_heston_params_floors_non_monotonic_target_instead_of_falling_back():
         "Heston repriced", "Heston repriced", "Heston repriced",
     ]
     prices = [t.estimatedOptionPrice for t in p.targets]
-    assert prices == [12.47, 12.47, 15.34]
+    assert prices == [4.57, 9.1, 15.48]
+    # Strictly increasing, not merely non-decreasing: an equality here would
+    # mean the floor fired, i.e. the pricer regressed.
+    assert prices[0] < prices[1] < prices[2]
 
 
 def test_recompute_endpoint_matches_helper():

@@ -10,7 +10,10 @@ def _max_abs_g(kappa, sigma_v, rho, j, n=400, phi_max=500):
     """Mirrors backend/app/models/heston.py's _heston_char_fn d/g formula
     (lines 45-47) for the SAME (phi - 1j*j) argument heston_price's own P1
     (j=1) and P2 (j=0) integrands evaluate it at (see heston.py's
-    _integrand, lines 87-96). Deliberately duplicated rather than imported,
+    _integrand). That argument is unchanged by Phase F1, which rewrote the
+    integrand around _heston_char_fn without touching _heston_char_fn itself
+    or the points it is evaluated at, so this test stays valid as written.
+    Deliberately duplicated rather than imported,
     since _heston_char_fn is a private module internal that returns the full
     characteristic function value, not d/g individually -- if that formula's
     d/g computation ever changes, this test's own copy must be updated to

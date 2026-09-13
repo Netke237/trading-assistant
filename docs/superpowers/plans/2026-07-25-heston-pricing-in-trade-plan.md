@@ -1,5 +1,22 @@
 # Heston Pricing in build_trade_plan — Implementation Plan
 
+> **SUPERSEDED IN PART, 2026-09-12 (Phase F1).** This document's central
+> premise -- that `heston_price()`'s non-monotonic ladder and its
+> distance-from-at-the-money cost were inherent quirks of `scipy.integrate.quad`
+> on deep-OTM/long-dated inputs -- is **false**. The dip and the cost were both
+> a defect in `heston_price`'s Fourier inversion: `_integrand` re-applied
+> `exp(i*phi*lnS)/exp(i*phi*lnK)` on top of a characteristic function that
+> already carried `e^{i*phi*ln(S/K)}`, doubling the Fourier frequency to
+> `2i*phi*ln(S/K)`. The error was exactly zero at `K == S` and reached +451% at
+> 45 DTE / +2782% at 180 DTE in the delta band the scanner ranks. It is fixed;
+> see `docs/superpowers/plans/2026-09-12-heston-calibration-spec.md`.
+>
+> **Every Heston price quoted below is therefore wrong**, including the
+> 12.518866931556794 / 10.086141661385824 / 14.081229812545331 ladder (now
+> 3.7974 / 8.0361 / 14.2358, strictly monotonic). The decisions this document
+> records were reasonable on the evidence available then; do not reuse its
+> numbers or its explanation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wire the existing Heston stochastic-vol pricer back into `build_trade_plan` so live scan trade cards' R/R ratio and T1/T2/T3 sell-to-close targets are priced with real options math (time decay + volatility) instead of a flat fixed-delta linear approximation, without regressing scan-loop performance.
