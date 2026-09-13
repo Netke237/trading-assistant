@@ -126,16 +126,29 @@ def heston_price(
     # limit=2000, cutoff 2000): over 324 cases spanning v0 0.01-0.1287, theta
     # 0.02-0.08 and 1-365 DTE, the old fixed 500 was wrong by up to 0.769%
     # (v0=0.01, theta=0.02, 1 DTE, at the money: 0.432088 vs a true 0.435434)
-    # while this cutoff is wrong by at most 0.00218%. It costs nothing at
-    # production defaults: at v0=theta=0.04 the formula returns less than 500
-    # for every expiry, so the cutoff stays 500 and latency is unchanged
-    # (measured 1.00x over 29 strikes at 45/180/365 DTE).
+    # while this cutoff is wrong by at most 0.00218%.
+    #
+    # COST AT PRODUCTION DEFAULTS: at v0=theta=0.04 the formula returns below
+    # 500 -- so the cutoff stays 500 and latency is unchanged, measured 1.00x
+    # over 29 strikes at 45/180/365 DTE -- for every expiry LONGER than
+    # 0.005 yr (1.825 days). It is NOT below 500 under that: it returns 675.5
+    # at 1 DTE and 1350.9 at the 1-DTE repricing horizon T=6.85e-4 that
+    # trade_plan.py:119 can produce. There it buys accuracy at about 1.27x
+    # latency, and the worst measured full-grid calibration is 0.337s against
+    # _CALIBRATION_TIMEOUT = 1.0, so it cannot push a card off "Heston
+    # repriced" onto the bs_fallback path. (An earlier version of this comment
+    # claimed below-500 at EVERY expiry. F1 round 2 falsified that; the
+    # numbers here are the corrected measurement.)
     #
     # The 20000 cap bounds latency for degenerate inputs and is NOT
     # sufficient below about T=1e-5 (at T=1e-6 the cutoff saturates and the
-    # price is still wrong). No caller reaches that: _default_reprice_years
-    # floors the repricing horizon at 7/365, and reprice_horizon's own floor
-    # is 1e-6 years but is not wired to any caller today.
+    # price is still under-integrated). THAT REGIME IS REACHABLE, contrary to
+    # what this comment used to say: _default_reprice_years does floor the
+    # repricing horizon at 7/365, but reprice_horizon.remaining_years_at_barrier
+    # (floor_years=1e-6, reprice_horizon.py:220) IS wired -- first_passage.py:515
+    # calls it. What makes the cap safe is therefore a MEASUREMENT, not
+    # unreachability: F1 round 2 swept T=1e-6, 1e-5, 1e-4 and 0.25/365 across
+    # both parameter grids and found a worst ABSOLUTE deviation of $0.00042.
     v_eff = max(min(params.v0, params.theta), 1e-12)
     upper = min(max(500.0, math.sqrt(50.0 / (v_eff * T))), 20000.0)
 
