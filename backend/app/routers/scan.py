@@ -782,14 +782,26 @@ async def _process_symbol(
                 # .result() re-raises if the (in-time) calibration failed —
                 # caught below, falling back to delta approximation. Only a
                 # genuine grid-search fit ("heston_grid") is honest to label
-                # "Heston repriced" downstream. A crude single-point IV-seed
-                # guess ("bs_fallback" — calibrate_cached's own inner 1.0s
-                # timeout fired before the grid search finished, see
-                # docs/superpowers/plans/2026-07-27-heston-long-dte-slowness-investigation.md
-                # finding #5) is discarded here so this symbol falls back to
-                # the same delta-approximation path as a genuine calibration
-                # failure, instead of silently displaying the crude guess
-                # mislabelled as a real Heston fit.
+                # "Heston repriced" downstream. TWO other labels exist and
+                # both are discarded by the equality test below, so this
+                # symbol falls back to the same delta-approximation path as a
+                # genuine calibration failure rather than silently displaying
+                # a non-Heston number mislabelled as a real Heston fit:
+                #
+                #   "bs_fallback" — a crude single-point IV-seed guess:
+                #     calibrate_cached's own inner 1.0s timeout fired before
+                #     the grid search finished, or the chain had fewer than 3
+                #     usable strikes. See
+                #     docs/superpowers/plans/2026-07-27-heston-long-dte-slowness-investigation.md
+                #     finding #5.
+                #   "bs_flat" — Phase F2's baseline gate: the grid fit was no
+                #     better than a SINGLE flat volatility on the same chain,
+                #     so the flat vol is returned instead. Before F2 a fit
+                #     3.27x worse than one flat vol still reached the card as
+                #     "Heston repriced" (spec section 3.3). No change was
+                #     needed here for the discard to work — the test is
+                #     `== "heston_grid"` — but the label is named so that
+                #     anyone widening this condition sees what it would admit.
                 _calibration_result = calibration_task.result()
                 if _calibration_result.method == "heston_grid":
                     heston_params = _calibration_result.params

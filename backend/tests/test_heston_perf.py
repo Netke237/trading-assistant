@@ -20,7 +20,12 @@ def test_first_calibration_under_500ms():
     elapsed = time.perf_counter() - start
     assert elapsed < 0.5, f"Calibration took {elapsed:.3f}s — must be < 500ms"
     assert result.params is not None
-    assert result.method in ("heston_grid", "bs_fallback")
+    # Every label calibrate_cached can return. "bs_flat" joined the set in
+    # Phase F2 (the fit lost to a single flat volatility on the same chain);
+    # this fixture currently lands on "heston_grid", but the assertion is
+    # about LATENCY, so it must not fail merely because the gate's verdict on
+    # this synthetic chain changes.
+    assert result.method in ("heston_grid", "bs_flat", "bs_fallback")
 
 
 def test_cache_hit_under_5ms():
