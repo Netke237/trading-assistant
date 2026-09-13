@@ -1,5 +1,4 @@
 import time
-import concurrent.futures
 from app.models.heston import calibrate_heston
 from app.models.heston_cache import _run_calibration
 
@@ -68,26 +67,44 @@ def test_realistic_single_expiry_chain_stays_within_call_site_timeout():
     assert result.params is not None
 
 
-def test_timeout_returns_fallback(monkeypatch):
-    """Force a 2-second timeout by returning a never-completing Future."""
-    import threading
-    import time as time_mod
+def test_a_slow_calibration_returns_its_fit_instead_of_a_fallback(monkeypatch):
+    """TIMEOUT-DELETE-INNER-2026-09-13 deleted `calibrate_cached`'s inner 1.0s
+    deadline, and this is the behaviour that replaced it: a calibration that
+    runs LONGER than that old budget now returns the fit it actually computed,
+    where before it computed the same fit and then threw it away as
+    `bs_fallback` (the `shutdown(wait=True)` in the executor block meant the
+    caller waited for the full search either way, so the timeout only ever
+    changed the RESULT).
+
+    This is the case that used to throw fits away: measured on a staggered
+    40-symbol scan slice with scan.py's outer guard removed so that only this
+    timeout was in play, ALL 40 symbols exceeded 1.0s (median 3.46s, minimum
+    1.65s) and so returned `bs_fallback`; after the deletion the same 40
+    return `heston_grid`.
+
+    Slowed deterministically by delaying each priced strike rather than by
+    finding a genuinely slow chain, so it does not depend on the box's speed.
+    """
     from app.models import heston_cache
 
     _run_calibration.cache_clear()
+    real_price = heston_cache.heston_price
 
-    class _NeverCompleteExecutor:
-        def __init__(self, **kwargs): pass
-        def __enter__(self): return self
-        def __exit__(self, *a): pass
-        def submit(self, fn, *args, **kwargs):
-            f = concurrent.futures.Future()
-            def _slow():
-                time_mod.sleep(4)
-                f.set_result(None)
-            threading.Thread(target=_slow, daemon=True).start()
-            return f
+    def _slow_price(*args, **kwargs):
+        time.sleep(0.02)
+        return real_price(*args, **kwargs)
 
-    monkeypatch.setattr(concurrent.futures, "ThreadPoolExecutor", _NeverCompleteExecutor)
+    monkeypatch.setattr(heston_cache, "heston_price", _slow_price)
+
+    start = time.perf_counter()
     result = calibrate_heston(CHAIN, S, r)
-    assert result.method == "bs_fallback"
+    elapsed = time.perf_counter() - start
+
+    assert elapsed > 1.0, (
+        f"this test is only meaningful past the deleted 1.0s budget; it took "
+        f"{elapsed:.3f}s, so raise the per-strike delay"
+    )
+    assert result.method != "bs_fallback", (
+        "a calibration that completed was discarded as bs_fallback -- the inner "
+        "deadline is back"
+    )

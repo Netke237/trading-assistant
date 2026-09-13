@@ -789,11 +789,14 @@ async def _process_symbol(
                 # a non-Heston number mislabelled as a real Heston fit:
                 #
                 #   "bs_fallback" — a crude single-point IV-seed guess:
-                #     calibrate_cached's own inner 1.0s timeout fired before
-                #     the grid search finished, or the chain had fewer than 3
-                #     usable strikes. See
+                #     the chain had fewer than 3 usable strikes, or no grid
+                #     combination priced a single one of them. It used to
+                #     ALSO mean calibrate_cached's own inner 1.0s timeout had
+                #     fired on a fit that was already computed; that timeout
+                #     was deleted by TIMEOUT-DELETE-INNER-2026-09-13, so this
+                #     label now means the chain, not the clock. See
                 #     docs/superpowers/plans/2026-07-27-heston-long-dte-slowness-investigation.md
-                #     finding #5.
+                #     finding #5 for the original behaviour.
                 #   "bs_flat" — Phase F2's baseline gate: the grid fit was no
                 #     better than a SINGLE flat volatility on the same chain,
                 #     so the flat vol is returned instead. Before F2 a fit

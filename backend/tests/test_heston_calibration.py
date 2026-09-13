@@ -55,10 +55,13 @@ def _chain(dte: int, iv_of_strike, lo: float = 180.0, hi: float = 225.0) -> list
 
 
 def _calibrate(chain: list[dict]):
-    """Call `_run_calibration` directly, past `calibrate_cached`'s 1s
-    ThreadPoolExecutor timeout — these tests are about WHAT is calibrated, and
-    a timeout would turn every one of them into a `bs_fallback` on a slow CI
-    box. `test_heston_perf.py` is where latency is pinned."""
+    """Call `_run_calibration` directly, past `calibrate_cached`'s chain
+    filtering and cache key — these tests are about WHAT is calibrated.
+    `test_heston_perf.py` is where latency is pinned. This used to also matter
+    for dodging `calibrate_cached`'s inner 1s ThreadPoolExecutor timeout, which
+    would have turned every one of these into a `bs_fallback` on a slow CI box;
+    TIMEOUT-DELETE-INNER-2026-09-13 deleted that timeout, so that hazard is
+    gone and this is now a directness convenience only."""
     _run_calibration.cache_clear()
     return _run_calibration("test-key", json.dumps(chain, sort_keys=True), S, R)
 
