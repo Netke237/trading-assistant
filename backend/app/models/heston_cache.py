@@ -409,10 +409,13 @@ def calibrate_cached(
     #   IT DISCARDED FITS IT HAD ALREADY COMPUTED. On a staggered 40-symbol
     #   scan slice driven through scan.py's own machinery, with the outer
     #   2.0s guard removed so that this timeout was the only thing in play:
-    #   BEFORE, 40 of 40 symbols returned `bs_fallback` (median true
-    #   calibration 3.46s, minimum 1.65s -- not one finished under 1.0s);
-    #   AFTER, the same 40 return `heston_grid`. Same work, same wall time,
-    #   40 fits kept instead of 40 thrown away.
+    #   BEFORE, 40 of 40 symbols returned `bs_fallback` (median wait 17.7s,
+    #   minimum 3.75s -- not one anywhere near 1.0s); AFTER, the same 40
+    #   return `heston_grid` (median 16.8s, minimum 3.66s). Same work, same
+    #   wall time, 40 fits kept instead of 40 thrown away. Both halves
+    #   measured with the SAME contention model, so this is a before/after
+    #   rather than two readings; `scripts/heston_latency_probe.py` is the
+    #   after half and the before half reconstructs this block verbatim.
     #
     # WHAT THIS DOES NOT DO, stated plainly because the measurement refused
     # to support the more flattering version: on the box this was measured on

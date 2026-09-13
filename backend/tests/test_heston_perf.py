@@ -78,9 +78,9 @@ def test_a_slow_calibration_returns_its_fit_instead_of_a_fallback(monkeypatch):
 
     This is the case that used to throw fits away: measured on a staggered
     40-symbol scan slice with scan.py's outer guard removed so that only this
-    timeout was in play, ALL 40 symbols exceeded 1.0s (median 3.46s, minimum
-    1.65s) and so returned `bs_fallback`; after the deletion the same 40
-    return `heston_grid`.
+    timeout was in play, ALL 40 symbols ran far past 1.0s (median wait 17.7s,
+    minimum 3.75s) and so returned `bs_fallback`; after the deletion the same
+    40 return `heston_grid`.
 
     Slowed deterministically by delaying each priced strike rather than by
     finding a genuinely slow chain, so it does not depend on the box's speed.

@@ -239,12 +239,15 @@ def _compute_heston_concurrency(scan_concurrency: int, detected_cpu_count: int |
 _HESTON_CONCURRENCY = _compute_heston_concurrency(_SCAN_CONCURRENCY, _detect_cpu_count())
 
 # calibrate_heston (via heston_cache.calibrate_cached) is a synchronous call
-# that can block its calling thread far longer than its own internal 1s
-# "timeout" suggests (that timeout only picks which result gets returned — the
-# ThreadPoolExecutor context manager it runs in still blocks on
-# shutdown(wait=True) for the real grid-search duration; see this plan's
-# architecture notes). Safeguards against that, both scoped to this new call
-# site only — heston_cache.py itself is untouched:
+# of UNBOUNDED duration, and the safeguards below are the only thing that
+# bounds it. It used to carry its own internal 1s "timeout", which did not
+# bound it either: that timeout only picked which result got returned, because
+# the ThreadPoolExecutor context manager it sat in still blocked on
+# shutdown(wait=True) for the real grid-search duration. TIMEOUT-DELETE-INNER-
+# 2026-09-13 deleted it for exactly that reason, so heston_cache.py no longer
+# has a clock in it at all — which changes nothing for this call site, whose
+# safeguards never relied on that timeout and are scoped to this call site
+# only:
 #   1. A small dedicated pool, sized to _HESTON_CONCURRENCY, so a pile-up of
 #      slow calibrations can't starve asyncio's shared default executor (also
 #      used by compute_confidence and _compute_dhmm in this same function).

@@ -24,8 +24,10 @@ questions, in the order they matter:
 
 MEASURED HERE (4 cores, 2.1GHz Xeon, CPython 3.11, after the inner timeout was
 deleted): solo 0.16-1.73s across the sweep; 4 threads 5.52x one thread's wall
-time on 4 IDLE cores; 40 of 40 symbols abandoned at the 2.0s guard. Numbers
-from any other box are the point of this script -- especially core count, and
+time on 4 IDLE cores; 40 of 40 symbols abandoned at the 2.0s guard, and with
+--no-guard a median true calibration wait of 18.3s and a maximum of 32.2s.
+Numbers from any other box are the point of this script -- especially core
+count, and
 especially whether the runtime is free-threaded (`sys._is_gil_enabled()`), in
 which case measurement 2 should come out near 1.0x and the whole picture with
 it.
@@ -153,28 +155,38 @@ async def measure_scan(n_symbols: int, guard: bool) -> None:
     scan_sem = asyncio.Semaphore(scan_mod._SCAN_CONCURRENCY)
 
     async def symbol(i: int) -> None:
+        spot = 80.0 + i * 3.7
+        # `sem` in _process_symbol wraps the chain FETCH and is released before
+        # the Heston block (`async with sem:` closes at scan.py:600; the
+        # calibration is at scan.py:728-816). So it staggers arrivals and does
+        # NOT cap how many symbols are in calibration at once -- only
+        # _HESTON_SEMAPHORE does. Holding it across the calibration here, as an
+        # earlier version of this script did, understates contention: it capped
+        # in-flight calibrations at _SCAN_CONCURRENCY and so measured GIL
+        # contention without the queueing behind it. Adversarial round 2 caught
+        # that; the `--no-guard` median went from 3.8s to 18.3s once the
+        # semaphore was released at the right point.
         async with scan_sem:
-            spot = 80.0 + i * 3.7
             # Stand in for the Tradier chain fetch. Async, so it yields the
             # GIL exactly as httpx does -- symbols reach calibration staggered,
             # not as one synchronised burst.
             await asyncio.sleep(random.uniform(0.15, 0.45))
-            c = chain(random.choice([30, 45, 60, 90, 180]),
-                      random.choice([15, 25, 40]), spot)
-            t0 = time.perf_counter()
-            task = asyncio.ensure_future(scan_mod._run_heston_calibration(c, spot))
-            done, _ = await asyncio.wait(
-                {task},
-                timeout=scan_mod._HESTON_CALIBRATION_TIMEOUT_S if guard else None,
-            )
-            dt = time.perf_counter() - t0
-            if task in done:
-                results.append((dt, task.result().method))
-            else:
-                # Exactly what scan.py does: leave it running, consume its
-                # exception, move on to the delta approximation.
-                task.add_done_callback(lambda f: f.exception())
-                results.append((dt, "abandoned"))
+        c = chain(random.choice([30, 45, 60, 90, 180]),
+                  random.choice([15, 25, 40]), spot)
+        t0 = time.perf_counter()
+        task = asyncio.ensure_future(scan_mod._run_heston_calibration(c, spot))
+        done, _ = await asyncio.wait(
+            {task},
+            timeout=scan_mod._HESTON_CALIBRATION_TIMEOUT_S if guard else None,
+        )
+        dt = time.perf_counter() - t0
+        if task in done:
+            results.append((dt, task.result().method))
+        else:
+            # Exactly what scan.py does: leave it running, consume its
+            # exception, move on to the delta approximation.
+            task.add_done_callback(lambda f: f.exception())
+            results.append((dt, "abandoned"))
 
     t0 = time.perf_counter()
     await asyncio.gather(*(symbol(i) for i in range(n_symbols)))
