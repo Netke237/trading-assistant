@@ -599,15 +599,24 @@ function ExitPlanEditor({
       // re-compute" rule the Monte Carlo path follows. Sent as ONE patch so the
       // plan and the snapshot derived from it can never be persisted apart.
       const active = position.activeTpMethod ?? 'ladder';
-      const rr = active === 'exit_plan_2r' ? 2 : active === 'exit_plan_3r' ? 3 : null;
-      const rawRowPrice = rr != null ? plan.targets.find((t) => t.rrRatio === rr)?.price ?? null : null;
+      // POSITIONAL, the same fix and the same reason as `tpMethodOptions`
+      // below — and this is the site that MATTERS more. This used to be
+      // `find((t) => t.rrRatio === rr)` with rr hardcoded to 2 / 3: under
+      // `rr_ratios: [1.5, 4.0]` with `exit_plan_2r` active it matched nothing,
+      // so `tpMethodPatch` was omitted from the patch while `exitPlan` in the
+      // SAME patch was replaced. The persisted `resolved_tp_price` then kept
+      // pointing at a row of the PREVIOUS plan and TP_HIT fired on a price no
+      // longer anywhere on screen — a stale number that still fires, which is
+      // worse than the read side's missing label.
+      const rowIndex = active === 'exit_plan_2r' ? 0 : active === 'exit_plan_3r' ? 1 : null;
+      const rawRowPrice = rowIndex != null ? plan.targets[rowIndex]?.price ?? null : null;
       // `> 0`, not just non-null — same rule as the Monte Carlo path's
       // restampIfActive: a 0 price would make the alert engine's `price >= 0`
       // comparison true forever, so leave the previous snapshot in place instead.
       const rowPrice = rawRowPrice != null && rawRowPrice > 0 ? rawRowPrice : null;
       onChange({
         exitPlan: plan,
-        ...(rr != null && rowPrice != null ? tpMethodPatch(active, rowPrice) : {}),
+        ...(rowIndex != null && rowPrice != null ? tpMethodPatch(active, rowPrice) : {}),
       });
     } catch {
       setError(true);
@@ -1308,8 +1317,36 @@ function tpMethodOptions(
   // one. Collapsing it to null renders the option disabled instead of offering
   // a "$0.00" method that would make TP_HIT fire on every tick.
   const usable = (p: number | null | undefined) => (p != null && p > 0 ? p : null);
-  const rowPrice = (rr: number) =>
-    usable(exitPlan?.targets.find((t) => t.rrRatio === rr)?.price);
+  // POSITIONAL, NOT BY LITERAL R MULTIPLE — spec §4.3, fixed in Phase G build
+  // step 3. `exit_plan_2r` / `exit_plan_3r` are row ORDINALS whose names
+  // predate `rr_ratios` being configurable; they are NOT the numbers 2 and 3.
+  // This used to be `targets.find((t) => t.rrRatio === rr)` with `rr` hardcoded
+  // to 2 and 3, and under `rr_ratios: [1.5, 4.0]` that found nothing: the
+  // backend seeds `exit_plan_2r` from the FIRST configured row (1.5R) and
+  // TP_HIT fires there, while this selector rendered "2R plan" as the active
+  // method with a null price beside it. The screen then named the active method
+  // and showed no price while a real level drove the alert.
+  //
+  // Reading `targets[i]` is exactly the backend's rule expressed against the
+  // plan on screen: `routers/contracts.py` builds `targets_out` by iterating
+  // `rr_ratios` in order and appends EVERY row (a row it cannot score still
+  // appends, with probability 0), so index i of `targets` is `rr_ratios[i]`.
+  // `picked_method.py::_seed_for_rr` maps by the same ordinal.
+  //
+  // It also reads the ratios off the PLAN rather than off config, which is the
+  // stronger choice for a drawer: a position's stored `exitPlan` was computed
+  // under whatever `rr_ratios` were configured at the time, and the label must
+  // match the row it is standing next to, not today's config.
+  const row = (i: number) => exitPlan?.targets[i];
+  // LABELLED FROM THE ROW'S OWN RATIO, so a 1.5R row reads "1.5R plan" instead
+  // of being mislabelled "2R". Falls back to the enum's historical name only
+  // when there is no row to read a ratio from — at which point the option is
+  // disabled anyway (`price == null`), so the fallback is never a claim about a
+  // number on screen.
+  const rrLabel = (i: number, fallback: string) => {
+    const rr = row(i)?.rrRatio;
+    return rr != null ? `${rr}R plan` : fallback;
+  };
   // mcTargetPrice comes from ephemeral component state (`mcResult`), which
   // starts null on every EditDrawer mount — it holds this SESSION's re-run,
   // not the persisted one. When Monte Carlo is the position's active method
@@ -1320,8 +1357,8 @@ function tpMethodOptions(
   return [
     { method: 'ladder',       label: 'Ladder',      price: usable(position.targets[0]?.stockPrice) },
     { method: 'monte_carlo',  label: 'Monte Carlo', price: mcPrice },
-    { method: 'exit_plan_2r', label: '2R plan',     price: rowPrice(2) },
-    { method: 'exit_plan_3r', label: '3R plan',     price: rowPrice(3) },
+    { method: 'exit_plan_2r', label: rrLabel(0, '2R plan'), price: usable(row(0)?.price) },
+    { method: 'exit_plan_3r', label: rrLabel(1, '3R plan'), price: usable(row(1)?.price) },
   ];
 }
 

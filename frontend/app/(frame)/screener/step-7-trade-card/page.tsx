@@ -22,7 +22,7 @@ import { selectCardEdits } from '@/lib/cardEdits';
 import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type {
-  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride,
+  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride, MethodPick,
 } from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
@@ -248,6 +248,7 @@ export default function Step7Page() {
   // exists to make impossible.
   const cardEdits = useScanStore((s) => selectCardEdits(s, 'options'));
   const setCardEdit = useScanStore((s) => s.setCardEdit);
+  const clearCardPick = useScanStore((s) => s.clearCardPick);
   const premiumStopByContract = cardEdits.premiumStop;
   // The card's editable INVALIDATION -- the underlying stock level that becomes
   // `PortfolioPosition.stop` and drives STOP_REACHED. Keyed by SYMBOL, like
@@ -394,6 +395,34 @@ export default function Step7Page() {
   const maxLossOverrideBySymbol = cardEdits.maxLossOverride;
   const handleMaxLossOverrideChange = (symbol: string, override: MaxLossOverride | null) => {
     setCardEdit('options', 'maxLossOverride', symbol, override);
+  };
+  /** Phase G piece 5 (§6.2) — the trader's explicit exit-method pick, in the
+   *  SAME stamped slice as the four caches above and keyed by CONTRACT through
+   *  `editKeyFor`, like the entry limit and the premium stop and unlike the
+   *  invalidation: a pick names one target row out of one contract's plan, and
+   *  is meaningless against another's numbers.
+   *
+   *  Absent means NO PICK, which is a real state the send gate (build step 4)
+   *  reads. Going through `selectCardEdits` above is what makes a pick from a
+   *  previous scan absent rather than merely old — §7.4 leans on exactly that:
+   *  a stale pick is gone, so the gate refuses the send instead of stamping
+   *  last scan's price onto this scan's position. */
+  const methodPickByContract = cardEdits.picks;
+  const methodPickFor = (card: TradeCardData | undefined): MethodPick | null => {
+    const key = editKeyFor(card);
+    return (key ? methodPickByContract[key] : null) ?? null;
+  };
+  const handleMethodPickChange = (card: TradeCardData, pick: MethodPick | null) => {
+    const key = editKeyFor(card);
+    // No key, no write — and unlike the three typed prices this cannot silently
+    // drop an edit the card still displays, because `editKeyFor`'s fallback
+    // (`SYMBOL|contract`) returns null only when the card has neither a symbol
+    // nor a contract label, which is not a card.
+    if (!key) return;
+    // `picks` holds no nulls: a present key means a human picked, so clearing
+    // is a DELETE, not a stored null. See `clearCardPick`.
+    if (pick) setCardEdit('options', 'picks', key, pick);
+    else clearCardPick('options', key);
   };
   // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
   // alongside the read side (withCachedEstimate) — the two rules they enforce are
@@ -1252,6 +1281,8 @@ export default function Step7Page() {
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
               initialMaxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
               onMaxLossOverrideChange={(v) => handleMaxLossOverrideChange(effectiveCard.symbol, v)}
+              initialMethodPick={methodPickFor(effectiveCard)}
+              onMethodPickChange={(pick) => handleMethodPickChange(effectiveCard, pick)}
             />
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (

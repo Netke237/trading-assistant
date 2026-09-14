@@ -2,7 +2,7 @@
 // The store-level spec tests (11, 11b, 12, 15) are in scanStoreCardEdits.test.ts.
 
 import {
-  EMPTY_CARD_EDITS, clearPicksForSymbol, currentScanIdFor, emptyCardEdits,
+  EMPTY_CARD_EDITS, clearCardPick, clearPicksForSymbol, currentScanIdFor, emptyCardEdits,
   normalizeCardEdits, selectCardEdits, writeCardEdit,
 } from '@/lib/cardEdits';
 import type { CardEditsHost, CardEditSlice } from '@/lib/cardEdits';
@@ -280,5 +280,45 @@ describe('normalizeCardEdits', () => {
 
   it('replaces a map that came back as a non-object', () => {
     expect(normalizeCardEdits({ scanId: 'A', entryLimit: 'x' }).entryLimit).toEqual({});
+  });
+});
+
+// ─── Build step 3 ──────────────────────────────────────────────────────────
+describe('clearCardPick', () => {
+  it('removes the KEY, so "present" and "picked" stay the same fact', () => {
+    const slice = stamped('s1', { picks: { A: pick(), B: pick('ladder') } });
+    const next = clearCardPick(slice, 's1', 'A');
+    // Not `picks.A === null`. `picks` is `Record<string, MethodPick>` and every
+    // reader is allowed to treat a present key as a human decision.
+    expect('A' in next.picks).toBe(false);
+    expect(next.picks.B).toEqual(pick('ladder'));
+  });
+
+  it('leaves the other four maps alone', () => {
+    const slice = stamped('s1', {
+      picks: { A: pick() },
+      entryLimit: { 'A|1|x|C': 2.71 },
+      invalidation: { A: 180 },
+    });
+    const next = clearCardPick(slice, 's1', 'A');
+    expect(next.entryLimit).toEqual({ 'A|1|x|C': 2.71 });
+    expect(next.invalidation).toEqual({ A: 180 });
+  });
+
+  it('returns the SAME object when the key is not there', () => {
+    // Identity guard. This fires from a render effect, so a fresh object on a
+    // no-op is a loop rather than merely churn.
+    const slice = stamped('s1', { picks: { A: pick() } });
+    expect(clearCardPick(slice, 's1', 'B')).toBe(slice);
+  });
+
+  it('is a NO-OP on a stamp mismatch, not a reset', () => {
+    // Deliberately the opposite of `writeCardEdit`'s rule 2. A write under a
+    // new scan must reset so the new edit cannot land beside old ones; a clear
+    // lands nothing, and everything it could clear is already unreadable.
+    // Resetting would discard the slice's other four maps as a side effect.
+    const slice = stamped('old', { picks: { A: pick() }, entryLimit: { X: 2.71 } });
+    expect(clearCardPick(slice, 'new', 'A')).toBe(slice);
+    expect(clearCardPick(slice, null, 'A')).toBe(slice);
   });
 });

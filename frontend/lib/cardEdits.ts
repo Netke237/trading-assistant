@@ -342,3 +342,34 @@ export function normalizeCardEdits(value: unknown): CardEditSlice {
     maxLossOverride: asRecord(raw.maxLossOverride) as Record<string, MaxLossOverride | null>,
   };
 }
+
+/** Remove ONE pick, by key. The counterpart to `writeCardEdit` for `picks`.
+ *
+ *  WHY THIS EXISTS RATHER THAN `writeCardEdit(..., 'picks', key, null)`.
+ *  `picks` is `Record<string, MethodPick>` and the header says why: a key is
+ *  present only if a human picked, which is a stronger statement than the three
+ *  number maps' "null means untouched". Widening the value to `MethodPick |
+ *  null` to express a clear would retire that invariant to save these fifteen
+ *  lines, and every reader would then have to remember that a present key can
+ *  still mean "no pick". Deleting the key keeps "present" and "picked" the same
+ *  fact.
+ *
+ *  A STAMP MISMATCH IS A NO-OP, NOT A RESET — deliberately different from
+ *  `writeCardEdit`'s rule 2, and the asymmetry is the point. A write under a new
+ *  scan must reset first so the new edit cannot land beside old ones. A clear
+ *  lands nothing, and everything it could be asked to clear is already
+ *  unreadable through `selectCardEdits`, so resetting here would discard the
+ *  slice's other four maps as a side effect of an operation the caller asked to
+ *  be narrow. Returning the slice untouched is both the smaller action and the
+ *  one the identity guard below wants. */
+export function clearCardPick(
+  slice: CardEditSlice,
+  scanId: string | null,
+  key: string,
+): CardEditSlice {
+  if (scanId == null || slice.scanId !== scanId) return slice;
+  if (!(key in slice.picks)) return slice;   // identity guard, as in writeCardEdit
+  const picks = { ...slice.picks };
+  delete picks[key];
+  return { ...slice, picks };
+}

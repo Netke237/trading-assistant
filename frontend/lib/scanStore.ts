@@ -11,8 +11,8 @@ import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsH
 import { stripLegacyIvFields, stripLegacyIvDetail } from './ivBasis';
 import type { IvBasis } from './ivBasis';
 import {
-  clearPicksForSymbol, currentScanIdFor, emptyCardEdits, normalizeCardEdits,
-  persistableCardEdits, writeCardEdit,
+  clearCardPick, clearPicksForSymbol, currentScanIdFor, emptyCardEdits,
+  normalizeCardEdits, persistableCardEdits, writeCardEdit,
 } from './cardEdits';
 import type { CardEditField, CardEditMode, CardEditSlice, CardEditValue } from './cardEdits';
 
@@ -295,6 +295,11 @@ interface ScanStoreState {
   setCardEdit: <F extends CardEditField>(
     mode: CardEditMode, field: F, key: string, value: CardEditValue<F>,
   ) => void;
+  /** Phase G piece 5, build step 3 — REMOVE one pick. `setCardEdit` cannot
+   *  express this: `picks` is `Record<string, MethodPick>` precisely so that a
+   *  present key means a human picked, so "no pick" is an absent key, not a
+   *  stored null. See `clearCardPick` in lib/cardEdits.ts. */
+  clearCardPick: (mode: CardEditMode, key: string) => void;
   setContractsBySymbol: (map: Record<string, OptionContract[]>) => void;
   screenerMode:        'options' | 'stocks' | 'prebreakout';
   setScreenerMode:     (m: 'options' | 'stocks' | 'prebreakout') => void;
@@ -424,6 +429,17 @@ export const useScanStore = create<ScanStoreState>()(
         // and re-render anything subscribing without a selector. The step-7 card
         // reports its whole overlay on every patch, so that is a render cascade
         // on every keystroke rather than a quiet store.
+        if (next === s[sliceKey]) return;
+        set({ [sliceKey]: next });
+      },
+      clearCardPick: (mode, key) => {
+        const s = get();
+        const sliceKey = mode === 'options' ? 'optionsCardEdits' : 'stocksCardEdits';
+        const next = clearCardPick(s[sliceKey], currentScanIdFor(s, mode), key);
+        // Same early return as `setCardEdit` above, for the same reason: a
+        // no-op clear must not churn a fresh top-level state. It fires from an
+        // effect (the card clearing a pick whose numbers left the screen), so
+        // a `set` on every render would be a loop, not merely churn.
         if (next === s[sliceKey]) return;
         set({ [sliceKey]: next });
       },

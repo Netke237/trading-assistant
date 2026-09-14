@@ -709,6 +709,16 @@ were added (`page.tsx:517-519`) — add it while you are there.
 
 ## 6. The card
 
+**BUILT 2026-09-14 (step 3).** What actually shipped differs from the text below in five places,
+each deliberate and each argued in the code it lives in. They are listed together in §12 step 3 so
+a reader arriving at that list does not have to reconstruct them from five files: the pick-clear is
+a key DELETE rather than a stored null; `stopBasis` is pre-selected at `'stock'` where the method
+deliberately is not; a method picked with no row is a complete pick (§7.4 already said so, but §6.1
+below reads as though a row were required); the "has the reset settled" guard §6.1's clear rule
+implies was written, mutation-tested, found unfalsifiable and removed from both cards; and the
+"don't offer rows for an unavailable method" rule lives in the shared control rather than in each
+card's row builder.
+
 ### 6.1 The control
 
 The Final Recommendation section (`TradeCard/index.tsx:2628-2810`) gains a four-option
@@ -1012,7 +1022,18 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 2. **D4/D6 arming semantics (§9.2).** G records the basis; it does not arm it. Whether "armed" should
    actually demote the other alerts is a Phase H question with its own blast radius across two alert
    engines. **Write the options down with the answer.**
-3. **The EditDrawer hardcodes `rrRatio === 2` / `=== 3` in TWO places (found in implementation,
+3. ~~**The EditDrawer hardcodes `rrRatio === 2` / `=== 3` in TWO places.**~~ **FIXED 2026-09-14 in
+   build step 3, both sites, each mutation-pinned** — reverting either literal fails two tests.
+   The read side now reads `exitPlan.targets[0]` / `[1]` and labels from the row's own `rrRatio`
+   ("1.5R plan", not a mislabelled "2R"); the write side reads `plan.targets[rowIndex]`. Both read
+   the ratios off the PLAN rather than off config, which is the stronger choice for a drawer: a
+   stored `exitPlan` was computed under whatever `rr_ratios` were configured at the time, and the
+   label must match the row standing next to it, not today's config. `routers/contracts.py` appends
+   EVERY row while iterating `rr_ratios` in order (an unscoreable row still appends, with
+   probability 0), so index i of `targets` IS `rr_ratios[i]` — the same ordinal
+   `picked_method.py::_seed_for_rr` maps by. The original text is kept below for the record.
+
+   **The EditDrawer hardcodes `rrRatio === 2` / `=== 3` in TWO places (found in implementation,
    §4.3; the second site found by that step's audit).** The read side (`:1310-1325`) shows the
    active method with a null price and a wrong label while a real level drives TP_HIT; the write
    side (`:602-603`, the recompute restamp) silently keeps the PREVIOUS plan's price. Unreachable today (config ships `[2.0, 3.0]` and no caller
@@ -1043,12 +1064,33 @@ Both suites must be green and `npm run typecheck` silent before this is called d
    `lib/__tests__/cardEdits.test.ts` (34). **Three deviations from §5/§5.1, all recorded there and
    in `PROJECT_STATE.json`.** NOT YET AUDITED — step 2 is not done until an adversarial round on it
    comes back clean at the gate.
-3. The card control and the channel (§6). Tests 13, 14. **Also fix BOTH of the EditDrawer's
-   hardcoded `rrRatio === 2` / `=== 3` sites here** (§11 item 3, found while building step 1 and
-   completed by its audit) — the read side, `tpMethodOptions` at `:1310-1325` with its "2R
-   plan"/"3R plan" labels, AND the write side, the recompute restamp at `:602-603`, which under a
-   non-default `rr_ratios` leaves `resolved_tp_price` pointing at the PREVIOUS plan's row while
-   replacing the plan. Changing only the first leaves the second writing the hardcode.
+3. ~~The card control and the channel (§6). Tests 13, 14. **Also fix BOTH of the EditDrawer's
+   hardcoded `rrRatio === 2` / `=== 3` sites here.**~~ **BUILT 2026-09-14** —
+   `components/molecules/MethodPickSelector/` (one control, both cards: four options on TradeCard,
+   three on StockPositionCard per §6.3), the fifth `initial*`/`on*Change` pair on `TradeCardProps`
+   wired at `step-7-trade-card/page.tsx` through `selectCardEdits`, the stocks card reading and
+   writing `stocksCardEdits.picks` directly, `clearCardPick` on `cardEdits.ts`/`scanStore`, and BOTH
+   EditDrawer sites read positionally. Tests 13 and 14 are
+   `TradeCard/__tests__/TradeCard.methodPick.test.tsx` (9) and
+   `StockPositionCard/__tests__/StockPositionCard.methodPick.test.tsx` (7), over
+   `MethodPickSelector/__tests__` (20), 4 added to `lib/__tests__/cardEdits.test.ts` and 6 added to
+   `portfolio/__tests__/EditDrawer.test.tsx` — 46 new, frontend 1479 → 1525.
+   **Five things worth carrying forward, all recorded in §6.1's notes and in `PROJECT_STATE.json`:**
+   (a) `picks` needed a DELETE, not a stored null, so `clearCardPick` exists beside `writeCardEdit`
+   and a stamp mismatch there is a NO-OP rather than a reset;
+   (b) `stopBasis` IS pre-selected at `'stock'` where the method deliberately is not — the type is
+   non-nullable, §9.2 makes it a record rather than a gate, and `'stock'` is what STOP_REACHED
+   actually fires on, so it is a truthful default rather than an unlooked-at one;
+   (c) picking a METHOD alone emits a complete pick with both prices null, per §7.4;
+   (d) a "has the reset settled" guard was written into both cards against the transition-commit
+   hazard and REMOVED from both — no mutation of it could fail a test. TradeCard is safe because the
+   pick is local state re-synced in the same `set` batch as the plan/estimate; StockPositionCard is
+   safe only because its reset nulls `plan` and `estimate` unconditionally, and its note says what
+   would bring the hazard back (caching either per symbol);
+   (e) `MethodPickSelector` refuses to offer rows for a method it renders as disabled, so the two
+   cards build their `rows:` unconditionally instead of restating the availability rule.
+   NOT YET AUDITED — and the audit round on it must also cover `8f9769a2` (persist-picks-only),
+   which rides with this step.
 4. The send gate, all eight gateable paths (§7). Tests 7–10, and 9b. **Unblocked** — §11 item 6 was
    answered 2026-09-14 (S5 is exempt, §7.3). The eight paths are gated; S5 is the ninth and is
    deliberately not.

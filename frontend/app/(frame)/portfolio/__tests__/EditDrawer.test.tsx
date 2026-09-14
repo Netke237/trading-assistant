@@ -1573,3 +1573,137 @@ describe('the drawer preview, the alert engine and the backend fire at one price
     expect(fires(3.72)).toBe(0);
   });
 });
+
+// ─── Phase G build step 3 — the two hardcoded `rrRatio` sites (spec §4.3) ───
+//
+// `exit_plan_2r` / `exit_plan_3r` are row ORDINALS. Their names predate
+// `rr_ratios` being configurable and are NOT the numbers 2 and 3. The backend
+// maps a pick onto them positionally (`picked_method.py::_seed_for_rr`), and
+// both of the drawer's sites used to look their row up with `find(t =>
+// t.rrRatio === 2 | 3)`. Every case below runs on a plan built from
+// `rr_ratios: [1.5, 4.0]`, which is exactly the config that made the literals
+// wrong. Under the default `[2.0, 3.0]` positional and literal agree, which is
+// why nothing in the suite above can fail on this.
+describe('EditDrawer under a non-default rr_ratios', () => {
+  const noop = () => {};
+
+  const stop = {
+    price: 180, source: 'structural' as const, contractPrice: 2.5,
+    rrModel: 'BS repriced (IV-derived)' as const, structuralSource: 'swing_low' as const,
+    structuralConfidence: 0.8, structuralPrice: 180, atrFloorPrice: 175, distanceDollar: 5,
+  };
+  const row = (rrRatio: number, price: number) => ({
+    rrRatio, arithmeticPrice: price, price, tpSource: 'arithmetic' as const,
+    structuralPrice: null, contractPrice: 7.2, rrModel: 'BS repriced (IV-derived)' as const,
+    probability: 0.55, expectedDays: 6, qualityGood: true, qualityReasons: [],
+    distanceDollar: null, toleranceDollar: 1.5,
+  });
+
+  it('READ SIDE — prices both rows positionally and labels them from their own ratios', () => {
+    const position = makeOptionPosition({
+      exitPlan: {
+        computedAt: '2026-08-27T00:00:00.000Z', atr: 3.1, stop,
+        targets: [row(1.5, 241), row(4, 268)],
+      },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    // With the old `rowPrice(2)` / `rowPrice(3)` these two were labelled "2R
+    // plan" / "3R plan", found no matching row, and rendered DISABLED with a
+    // "—" price — while the backend seeded `exit_plan_2r` from the 1.5R row and
+    // TP_HIT fired there. The screen named the active method and showed no
+    // price beside it while a real level drove the alert.
+    const first = screen.getByRole('radio', { name: '1.5R plan' });
+    expect(first).toBeEnabled();
+    expect(first).toHaveTextContent('$241.00');
+    const second = screen.getByRole('radio', { name: '4R plan' });
+    expect(second).toBeEnabled();
+    expect(second).toHaveTextContent('$268.00');
+    expect(screen.queryByRole('radio', { name: '2R plan' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: '3R plan' })).not.toBeInTheDocument();
+  });
+
+  it('READ SIDE — stamps exit_plan_2r for the FIRST row, whatever its ratio', () => {
+    const onChange = jest.fn();
+    const position = makeOptionPosition({
+      exitPlan: {
+        computedAt: '2026-08-27T00:00:00.000Z', atr: 3.1, stop,
+        targets: [row(1.5, 241), row(4, 268)],
+      },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByRole('radio', { name: '1.5R plan' }));
+    // The same ordinal the backend's `_seed_for_rr` uses, so drawer and
+    // database agree about which row `exit_plan_2r` names.
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      activeTpMethod: 'exit_plan_2r', resolvedTpPrice: 241,
+    }));
+  });
+
+  it('READ SIDE — falls back to the enum’s old name only when there is no row to read', () => {
+    // No plan at all: the option is disabled anyway, so "2R plan" here is not a
+    // claim about a number on screen.
+    render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('radio', { name: '2R plan' })).toBeDisabled();
+  });
+
+  it('WRITE SIDE — a recompute re-stamps the snapshot instead of stranding the previous plan’s price', async () => {
+    // THE WORSE OF THE TWO SITES. `exit_plan_2r` is active at 230 from an
+    // earlier plan. Recomputing used to run `find(t => t.rrRatio === 2)`,
+    // match nothing under [1.5, 4.0], omit `tpMethodPatch` from the patch —
+    // and replace `exitPlan` in that SAME patch. The persisted
+    // `resolved_tp_price` then kept pointing at a row of the PREVIOUS plan and
+    // TP_HIT fired on a price no longer anywhere on screen: a stale number
+    // that still fires.
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop, targets: [row(1.5, 241), row(4, 268)], atr: 3.1,
+    });
+    const position = makeOptionPosition({
+      contract: 'AAPL|220|2026-09-16|C',
+      activeTpMethod: 'exit_plan_2r',
+      resolvedTpPrice: 230,
+    });
+    const onChange = jest.fn();
+    render(<EditDrawer position={position} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Compute Exit Plan'));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const patch = onChange.mock.calls[0][0];
+    expect(patch.exitPlan.targets[0].price).toBe(241);
+    expect(patch.activeTpMethod).toBe('exit_plan_2r');
+    expect(patch.resolvedTpPrice).toBe(241);
+  });
+
+  it('WRITE SIDE — restamps the SECOND row for exit_plan_3r', async () => {
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop, targets: [row(1.5, 241), row(4, 268)], atr: 3.1,
+    });
+    const position = makeOptionPosition({
+      contract: 'AAPL|220|2026-09-16|C',
+      activeTpMethod: 'exit_plan_3r',
+      resolvedTpPrice: 230,
+    });
+    const onChange = jest.fn();
+    render(<EditDrawer position={position} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Compute Exit Plan'));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onChange.mock.calls[0][0].resolvedTpPrice).toBe(268);
+  });
+
+  it('WRITE SIDE — leaves the snapshot alone when the new plan has no such ordinal', async () => {
+    // A one-row plan has no second ordinal, so `exit_plan_3r` resolves to
+    // nothing. The pre-existing `> 0` rule then keeps the previous snapshot
+    // rather than stamping a null the alert engine would read as "unstamped".
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop, targets: [row(1.5, 241)], atr: 3.1,
+    });
+    const position = makeOptionPosition({
+      contract: 'AAPL|220|2026-09-16|C',
+      activeTpMethod: 'exit_plan_3r',
+      resolvedTpPrice: 230,
+    });
+    const onChange = jest.fn();
+    render(<EditDrawer position={position} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Compute Exit Plan'));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onChange.mock.calls[0][0]).not.toHaveProperty('resolvedTpPrice');
+  });
+});
