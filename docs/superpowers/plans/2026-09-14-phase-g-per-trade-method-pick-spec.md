@@ -578,6 +578,33 @@ and `maxLossOverrideBySymbol` are symbol-keyed because they are decisions about 
 **The siblings that move with it (Q3).** Into the same slice, same keying they have today:
 `invalidationBySymbol`, `premiumStopByContract`, `entryLimitByContract`, `maxLossOverrideBySymbol`.
 
+> **AMENDED 2026-09-14 BY KENNETH'S DECISION — ONLY THE PICK IS PERSISTED.**
+> (`PHASE-G-PERSIST-PICKS-ONLY-2026-09-14`, taken on step 2's audit finding G2-5.)
+>
+> `partialize` writes the STAMP and `picks` and nothing else; the three typed
+> price maps and `maxLossOverride` are dropped on the way out by
+> `persistableCardEdits` (`lib/cardEdits.ts`).
+>
+> **Why.** Moving these four caches off the step-7 page removed, without anyone
+> noticing, the thing that used to clear them: the page UNMOUNT. The stamp
+> replaces it for the case it was designed for — a NEW SCAN — but **a stamp
+> detects a new scan, not the passage of time.** So a typed entry limit survived
+> indefinitely under one `scan_id`: don't re-scan, reload tomorrow, and §5.1's
+> own quoted harm is back with the button still promising \$2.71 against a mid
+> that has moved. Q3 asked for the **pick** to survive a reload. It did not ask
+> that of the typed prices, and those are the ones that go stale against a
+> moving quote — a pick names a target ROW and carries `pickedAt`, so it can be
+> aged where a bare price cannot.
+>
+> **The stamp is kept even though the price maps are dropped.** Without it a
+> restored pick lands in a null-stamped slice and reads as empty, which is the
+> whole thing this persists for.
+>
+> **In-session behaviour is unchanged**: all four still live in the store for as
+> long as the tab is open, so a step-6 → step-7 round trip still keeps a typed
+> limit. What is dropped is survival across a RELOAD, which is where
+> "yesterday" gets in.
+
 Deliberately **not** moved: `exitPlanByContract`, `estimatesByContract`, `structuralBySymbol`,
 `plansBySymbol`. Those are *fetched results*, not user edits — they are re-fetchable, they are large,
 and persisting a Monte Carlo estimate across a reload reintroduces exactly the stale-vintage class

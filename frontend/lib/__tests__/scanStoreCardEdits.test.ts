@@ -230,6 +230,60 @@ describe('spec test 11b — restoration is not invalidation', () => {
     expect(useScanStore.getState().scanResult?.scan_id).toBe('A');
     expect(readEdits('options').picks[AAPL_190]).toEqual(pick());
   });
+
+  /* KENNETH'S CALL on step 2's audit finding G2-5
+   * (PHASE-G-PERSIST-PICKS-ONLY-2026-09-14). Moving these caches into a
+   * persisted store removed the page unmount that used to clear them, and the
+   * stamp does not replace it for the passage of TIME -- only for a new scan.
+   * So a typed entry limit could survive indefinitely under one scan_id and
+   * promise a price against a mid that had moved. Only the PICK persists now. */
+  it('does NOT carry a typed price or a max-loss override across a reload', async () => {
+    act(() => {
+      useScanStore.setState({ scanResult: optionsResult('A') });
+      const s = useScanStore.getState();
+      s.setCardEdit('options', 'picks', AAPL_190, pick());
+      s.setCardEdit('options', 'entryLimit', AAPL_190, 2.71);
+      s.setCardEdit('options', 'premiumStop', AAPL_190, 1.5);
+      s.setCardEdit('options', 'invalidation', 'AAPL', 132);
+      s.setCardEdit('options', 'maxLossOverride', 'AAPL', { mode: 'dollar', value: 250 });
+    });
+    // All five ARE readable in-session: this drops survival across a RELOAD,
+    // not the edits themselves. That is what keeps spec test 11's first half
+    // (a step-6 -> step-7 round trip) true.
+    expect(readEdits('options').entryLimit[AAPL_190]).toBe(2.71);
+
+    const written = localStorage.getItem('bamendjou-scan-store') as string;
+    // The evidence is in the blob, not only in what reads back: a price that
+    // was never written cannot be restored by any later change to `merge`.
+    expect(written).toContain(AAPL_190);          // the pick's key survives
+    expect(written).not.toContain('2.71');
+    expect(written).not.toContain('"invalidation":{"AAPL"');
+
+    act(() => {
+      useScanStore.setState({ scanResult: null, optionsCardEdits: emptyCardEdits() });
+    });
+    localStorage.setItem('bamendjou-scan-store', written);
+    await act(async () => { await useScanStore.persist.rehydrate(); });
+
+    const after = readEdits('options');
+    expect(after.picks[AAPL_190]).toEqual(pick());   // the pick came back
+    expect(after.entryLimit).toEqual({});
+    expect(after.premiumStop).toEqual({});
+    expect(after.invalidation).toEqual({});
+    expect(after.maxLossOverride).toEqual({});
+  });
+
+  it('keeps the STAMP when it drops the prices, or the restored pick would read as empty', async () => {
+    // Dropping `scanId` alongside the price maps would land the pick in a
+    // null-stamped slice, which reads EMPTY -- silently undoing the one thing
+    // this persists for.
+    act(() => {
+      useScanStore.setState({ scanResult: optionsResult('A') });
+      useScanStore.getState().setCardEdit('options', 'picks', AAPL_190, pick());
+    });
+    const written = localStorage.getItem('bamendjou-scan-store') as string;
+    expect(JSON.parse(written).state.optionsCardEdits.scanId).toBe('A');
+  });
 });
 
 // ---------------------------------------------------------------------------

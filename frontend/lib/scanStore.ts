@@ -11,7 +11,8 @@ import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsH
 import { stripLegacyIvFields, stripLegacyIvDetail } from './ivBasis';
 import type { IvBasis } from './ivBasis';
 import {
-  clearPicksForSymbol, currentScanIdFor, emptyCardEdits, normalizeCardEdits, writeCardEdit,
+  clearPicksForSymbol, currentScanIdFor, emptyCardEdits, normalizeCardEdits,
+  persistableCardEdits, writeCardEdit,
 } from './cardEdits';
 import type { CardEditField, CardEditMode, CardEditSlice, CardEditValue } from './cardEdits';
 
@@ -647,18 +648,24 @@ export const useScanStore = create<ScanStoreState>()(
         lastStockScanStatus:      state.lastStockScanStatus,
         lastStockScanUpdatedAt:   state.lastStockScanUpdatedAt,
         lastStockScanStrategy:    state.lastStockScanStrategy,
-        // Phase G piece 5. Persisted so a pick (and the typed levels beside it)
-        // survives a reload -- which is Q3's whole ask. Safe to persist ONLY
-        // because of the stamp: a restored slice is readable just while its
-        // `scanId` still matches the restored result, and StoreHydration
-        // restores that result. The fetched caches these sit next to on the
-        // page (`estimatesByContract`, `structuralBySymbol`, `exitPlanByContract`,
-        // `plansBySymbol`) are deliberately NOT here -- they are re-fetchable
-        // results rather than user edits, they are large, and a restored Monte
-        // Carlo estimate would reintroduce exactly the stale-vintage class that
-        // `estimateIsFresh` exists to suppress (spec §5).
-        optionsCardEdits:         state.optionsCardEdits,
-        stocksCardEdits:          state.stocksCardEdits,
+        // Phase G piece 5. THE STAMP AND THE PICKS ONLY -- `persistableCardEdits`
+        // drops the three typed price maps and the max-loss override on the way
+        // out. Kenneth's call on step 2's audit finding G2-5: the stamp detects
+        // a NEW SCAN, not the passage of TIME, so persisting a typed entry
+        // limit let it survive indefinitely under one `scan_id` and promise a
+        // price against a mid that had since moved. Q3 asked for the PICK to
+        // survive a reload, not the typed prices. In-session behaviour is
+        // unchanged -- all four still live in the store while the tab is open.
+        // Safe to persist at all ONLY because of the stamp: a restored slice is
+        // readable just while its `scanId` still matches the restored result,
+        // and StoreHydration restores that result. The fetched caches these sit
+        // next to on the page (`estimatesByContract`, `structuralBySymbol`,
+        // `exitPlanByContract`, `plansBySymbol`) are deliberately NOT here --
+        // they are re-fetchable results rather than user edits, they are large,
+        // and a restored Monte Carlo estimate would reintroduce exactly the
+        // stale-vintage class that `estimateIsFresh` exists to suppress (§5).
+        optionsCardEdits:         persistableCardEdits(state.optionsCardEdits),
+        stocksCardEdits:          persistableCardEdits(state.stocksCardEdits),
       }),
       merge: (persisted, current) => {
         // `persisted` is undefined on a first visit (nothing in localStorage yet)

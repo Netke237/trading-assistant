@@ -258,6 +258,35 @@ export function clearPicksForSymbol(
   return { ...slice, picks };
 }
 
+/** What actually gets written to localStorage: the STAMP and the PICKS, and
+ *  nothing else.
+ *
+ *  KENNETH'S CALL, 2026-09-14 (PHASE-G-PERSIST-PICKS-ONLY-2026-09-14), taken on
+ *  a finding from step 2's audit. Moving these four caches off the step-7 page
+ *  and into a persisted store quietly removed the thing that used to clear
+ *  them: the page UNMOUNT. The stamp replaced it for the case it was designed
+ *  for — a NEW SCAN — but a stamp detects a new scan, not the passage of time.
+ *  So a typed entry limit survived indefinitely under one `scan_id`: don't
+ *  re-scan, reload tomorrow, and §5.1's own quoted harm is back, with the
+ *  button promising $2.71 against a mid that has moved.
+ *
+ *  Q3 asked for the PICK to survive a reload. It did not ask that of the three
+ *  typed prices or the max-loss override, and those are the ones that go stale
+ *  against a moving quote. A pick names a target ROW and carries `pickedAt`, so
+ *  it can be aged where they cannot.
+ *
+ *  THE STAMP IS KEPT EVEN THOUGH THE PRICE MAPS ARE DROPPED, and that is not an
+ *  oversight: without it a restored pick would land in a null-stamped slice and
+ *  read as empty, which is the whole thing this persists FOR.
+ *
+ *  IN-SESSION BEHAVIOUR IS UNCHANGED. The four caches still live in the store
+ *  for as long as the tab is open, so a step-6 -> step-7 round trip still keeps
+ *  a typed limit (spec test 11's first half). What this drops is survival
+ *  across a RELOAD — which is where "yesterday" gets in. */
+export function persistableCardEdits(slice: CardEditSlice): CardEditSlice {
+  return { ...emptyCardEdits(), scanId: slice.scanId, picks: slice.picks };
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
