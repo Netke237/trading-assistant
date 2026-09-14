@@ -934,6 +934,63 @@ export type AlertOverrides = Partial<Record<PositionAlertType, boolean>>;
  *  Mirrors the backend `TpMethod` literal / `active_tp_method` column. */
 export type TpMethod = 'ladder' | 'monte_carlo' | 'exit_plan_2r' | 'exit_plan_3r';
 
+/** Phase G (piece 5, D4/D5) — which exit method the trader EXPLICITLY picked
+ *  for THIS trade.
+ *
+ *  Three names in this codebase sound alike and are not:
+ *    `rrModel`        — the PRICER (Heston / BS / delta). G does not touch it.
+ *    `lastRunMethod`  — "whichever ran most recently", which is what this
+ *                       replaces as the thing the card treats as chosen.
+ *    `PickedMethod`   — a decision a human made.
+ *
+ *  `barrier_race` has no `lastRunMethod` counterpart BY CONSTRUCTION: the race
+ *  shares Monte Carlo's `computedAt`, so no clock can tell the two apart. An
+ *  explicit pick can, which is the fourth value's whole reason for existing.
+ *
+ *  Named after `scanStore.pickedContracts` — the existing word here for "the
+ *  one the user chose over the auto-pick". */
+export type PickedMethod = 'arithmetic' | 'monte_carlo' | 'ladder' | 'barrier_race';
+
+/** Which stop the trade was judged on. A RECORD only — it does NOT re-point
+ *  any alert (spec §9.2). */
+export type PickedStopBasis = 'stock' | 'premium';
+
+export interface MethodPick {
+  method: PickedMethod;
+  /** D5's second leg, split across the next TWO fields — as PRICES, not a row
+   *  index, because a price survives an `rr_ratios` change and `exit_plan_2r`
+   *  does not.
+   *
+   *  THE SPLIT IS LOAD-BEARING; DO NOT COLLAPSE THESE INTO ONE `rowPrice`.
+   *  The four methods do not quote their target rows in the same space, and
+   *  the only thing this can seed — `resolved_tp_price` — is compared against
+   *  the UNDERLYING (`alertEngine.ts:152`, `alert_generator.py:181`):
+   *
+   *    Ladder       -> stock only  (`exit.targets[].targetPrice ?? stockPrice`)
+   *    Arithmetic   -> stock only  (`exitPlan.targets[].price`)
+   *    Monte Carlo  -> BOTH        (`FirstPassageTarget.stockPrice`, NULLABLE
+   *                                 and documented "display-only Stage-1
+   *                                 approximation; null if unreachable", plus
+   *                                 `optionPrice` = premium * (1 + pct), which
+   *                                 is what the card RENDERS)
+   *    Barrier Race -> option only (`BarrierRaceOutcome.targetOptionPrice`;
+   *                                 it carries no stock level at all)
+   *
+   *  One shared field would put a PREMIUM in a STOCK-price column. A $6.24
+   *  premium stamped as a stock target makes `price >= 6.24` true on the first
+   *  tick, so TP_HIT fires instantly on every bullish option position. The
+   *  codebase already knows this: `EditDrawer.tsx:287` maps these very rows
+   *  with `price: t.stockPrice ?? 0`, never `optionPrice`. */
+  rowStockPrice: number | null;   // underlying space. The ONLY field that may seed resolvedTpPrice.
+  rowOptionPrice: number | null;  // premium space. RECORD ONLY — never seeds, never alerts.
+  /** D5's third leg. See `PickedStopBasis` — a record, not a re-pointing. */
+  stopBasis: PickedStopBasis;
+  /** ISO. The vintage of the numbers the pick was made against, so a pick can
+   *  be told apart from a stale one the same way the card already tells a
+   *  stale estimate apart (`estimateIsFresh`). */
+  pickedAt: string;
+}
+
 export interface ToastItem {
   id: string;
   kind: AlertKind;

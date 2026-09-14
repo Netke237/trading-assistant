@@ -24,6 +24,14 @@ RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)', 'Delta approxim
 # Active take-profit method driving a position's TP_HIT alert — see
 # docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md, Feature D.
 TpMethod = Literal['ladder', 'monte_carlo', 'exit_plan_2r', 'exit_plan_3r']
+# Phase G (piece 5) — the method a trader EXPLICITLY picked for a trade, and
+# which stop it was judged on. NOT the same axis as TpMethod above: TpMethod is
+# method -> ALERT ROW and is post-trade (the EditDrawer writes it); PickedMethod
+# is the pre-trade human decision, and it SEEDS TpMethod at creation via
+# services.picked_method.seed_tp_from_pick. Also not RrModel, which is the
+# pricer. Three similar-sounding names, three different axes.
+PickedMethod = Literal['arithmetic', 'monte_carlo', 'ladder', 'barrier_race']
+PickedStopBasis = Literal['stock', 'premium']
 
 # ── Sentiment / regime ──────────────────────────────────────────────────────
 
@@ -906,6 +914,30 @@ class PortfolioPositionCreate(BaseModel):
     # existing client is unaffected. Only `stop` is exempted: structuralStop and
     # targets remain plan-derived and still move with the underlying.
     stopIsUserSet: Optional[bool] = Field(alias="stop_is_user_set", default=None)
+    # Phase G (piece 5) — the trader's explicit method pick, carried through AT
+    # CREATION for the same reason premiumStopPct is (see above): a trade sent
+    # from the card must not have to be re-picked in the drawer afterwards.
+    #
+    # All five are Optional and default to None, and NULL IS A REAL STATE, not a
+    # missing value: it means "opened before G, or opened by a path with no
+    # human in it". The after-scan auto-executor (S5) is deliberately exempt
+    # from G's send gate and sends exactly this shape — see the spec's §7.3 and
+    # PHASE-G-S5-EXEMPT-2026-09-14. The portfolio renders it as "—", never as
+    # 'ladder'.
+    pickedMethod: Optional[PickedMethod] = Field(alias="picked_method", default=None)
+    # THE UNITS ARE IN THE NAMES ON PURPOSE. Only the STOCK price may ever seed
+    # resolved_tp_price, which alert_generator.py:181 compares against the stock
+    # quote. A premium in that column makes `price >= 6.24` true on the first
+    # tick and fires TP_HIT instantly on every bullish option position. An
+    # un-suffixed `picked_row_price` cannot be checked by reading it.
+    #
+    # gt=0 on both for the reason entryPrice carries it and the reason
+    # alertEngine.ts:164-169 re-checks `> 0` at the far end: a `?? 0` fallback
+    # upstream can land a zero here, and zero is never a price.
+    pickedRowStockPrice: Optional[float] = Field(alias="picked_row_stock_price", default=None, gt=0)
+    pickedRowOptionPrice: Optional[float] = Field(alias="picked_row_option_price", default=None, gt=0)
+    pickedStopBasis: Optional[PickedStopBasis] = Field(alias="picked_stop_basis", default=None)
+    pickedAt: Optional[str] = Field(alias="picked_at", default=None)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -924,6 +956,14 @@ class PortfolioPositionCreate(BaseModel):
             "premium_stop_pct": "premiumStopPct",
             "premium_stop_dollar": "premiumStopDollar",
             "stop_is_user_set": "stopIsUserSet",
+            # Phase G. Omitting an alias here is SILENT -- the loop below passes
+            # unknown keys straight through, so a snake_case body would populate
+            # nothing and the pick would vanish with a 201.
+            "picked_method": "pickedMethod",
+            "picked_row_stock_price": "pickedRowStockPrice",
+            "picked_row_option_price": "pickedRowOptionPrice",
+            "picked_stop_basis": "pickedStopBasis",
+            "picked_at": "pickedAt",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v
@@ -1029,6 +1069,14 @@ class PortfolioPositionSchema(BaseModel):
     # frontend renders that difference ("60% (global)" vs "45%"), so it must
     # survive the round trip rather than being resolved server-side.
     premiumStopPct: Optional[float] = None
+    # Phase G — the trader's explicit pick, as recorded. These stay NULL when
+    # absent; unlike activeTpMethod below they are NOT coerced to a default,
+    # because "nobody picked" is the thing they exist to be able to say.
+    pickedMethod: Optional[PickedMethod] = None
+    pickedRowStockPrice: Optional[float] = None
+    pickedRowOptionPrice: Optional[float] = None
+    pickedStopBasis: Optional[PickedStopBasis] = None
+    pickedAt: Optional[str] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
@@ -1053,6 +1101,14 @@ class PortfolioPositionSchema(BaseModel):
             resolvedTpUpdatedAt=obj.resolved_tp_updated_at.isoformat() if obj.resolved_tp_updated_at else None,
             alertOverrides=obj.alert_overrides or {},
             premiumStopPct=obj.premium_stop_pct,
+            # NO `or` COERCION HERE, unlike activeTpMethod two lines up. A NULL
+            # pick must survive the round trip as NULL so the portfolio can
+            # render "—"; defaulting it to 'ladder' would invent a decision.
+            pickedMethod=obj.picked_method,
+            pickedRowStockPrice=obj.picked_row_stock_price,
+            pickedRowOptionPrice=obj.picked_row_option_price,
+            pickedStopBasis=obj.picked_stop_basis,
+            pickedAt=obj.picked_at,
         )
 
 

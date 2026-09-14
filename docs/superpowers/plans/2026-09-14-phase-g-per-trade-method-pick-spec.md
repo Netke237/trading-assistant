@@ -405,6 +405,39 @@ Three rows need their reasoning stated because each is a place a future reader w
 
 The three-way agreement above (alert, label, drawer) is the acceptance criterion for §10's tests.
 
+**FOUND IN IMPLEMENTATION, 2026-09-14 — the drawer does not hold up its end of that agreement
+under a non-default `rr_ratios`, and G is what makes it reachable.** `EditDrawer.tsx:1310-1325`'s
+`tpMethodOptions` looks its rows up with **hardcoded literals**:
+
+```ts
+const rowPrice = (rr: number) => usable(exitPlan?.targets.find((t) => t.rrRatio === rr)?.price);
+...
+{ method: 'exit_plan_2r', label: '2R plan', price: rowPrice(2) },
+{ method: 'exit_plan_3r', label: '3R plan', price: rowPrice(3) },
+```
+
+So with `rr_ratios: [1.5, 4.0]`, the backend mapping test 3 REQUIRES seeds `exit_plan_2r` with the
+1.5R row's price — correctly, and TP_HIT fires there — while the drawer's `rowPrice(2)` finds no row
+with `rrRatio === 2`, renders "2R plan" as selected with a **null price**, and mislabels a 1.5R row
+"2R" even when it does resolve. That is the §2.7 shape one step removed: the database pair is sound,
+but the SCREEN shows the active method with no price beside it while a real level drives the alert.
+
+**Why this is G's to record and not a pre-existing bug to ignore.** Before G, `active_tp_method` was
+written by the drawer alone, and the drawer only ever offered rows it could find at `rrRatio` 2 and
+3 — so the inconsistent state was unreachable. G adds the first writer that can produce it.
+
+**Why it is not blocking, measured rather than assumed.** Nothing reaches it today: the options exit
+plan is built only from config (`routers/contracts.py:1024`), `risk_rules.yaml` ships `[2.0, 3.0]`,
+and although `/api/stocks/exit-plan` accepts a per-request `rr_ratios` override
+(`stock_scan.py:1578`, 1-5 entries) **no frontend caller passes one** — `api.ts:523` declares the
+field and nothing sets it. It becomes reachable the moment either changes.
+
+**The fix belongs to build step 3 (§6, the card), not here**, because it is frontend work on the
+same surface that step touches: the drawer must read the configured ratios positionally, the way
+the backend mapping now does, and label the rows from those ratios instead of from the enum names.
+The backend must NOT be "fixed" to match the drawer by hardcoding 2.0/3.0 — that is precisely what
+test 3 exists to fail.
+
 ### 4.4 Migration
 
 One Alembic revision adding the four columns, modelled on `c7a1e9d4b820`, with `down_revision` set
@@ -853,11 +886,18 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 2. **D4/D6 arming semantics (§9.2).** G records the basis; it does not arm it. Whether "armed" should
    actually demote the other alerts is a Phase H question with its own blast radius across two alert
    engines. **Write the options down with the answer.**
-3. **Q6's original option list is unrecoverable.** §3.6 is this spec's reading of a one-word answer.
+3. **The EditDrawer hardcodes `rrRatio === 2` / `=== 3` (found in implementation, §4.3).** Under a
+   non-default `rr_ratios` the drawer shows the active method with a null price and a wrong label
+   while a real level drives TP_HIT. Unreachable today (config ships `[2.0, 3.0]` and no caller
+   passes the stocks override), so **not blocking** — but it is the one place the §4.3 three-way
+   agreement does not actually hold, and G is the first writer that can reach it. **Fix belongs to
+   build step 3**, in the drawer, by reading the configured ratios positionally. Do not "fix" the
+   backend to match by hardcoding 2.0/3.0; test 3 exists to fail that.
+4. **Q6's original option list is unrecoverable.** §3.6 is this spec's reading of a one-word answer.
    If "no cascade" meant something narrower, §9.2 and §4.3 are the two places it changes.
-4. **Stocks gets its first hard pre-send refusal (§7.2).** Worth seeing in the running app before it
+5. **Stocks gets its first hard pre-send refusal (§7.2).** Worth seeing in the running app before it
    is called done, not just in tests.
-5. ~~**S5, the after-scan auto-executor (§7.3) — BLOCKING for G's stocks half.**~~ **Answered
+6. ~~**S5, the after-scan auto-executor (§7.3) — BLOCKING for G's stocks half.**~~ **Answered
    2026-09-14: (a), S5 is exempt.** Auto-execute keeps working and its positions carry
    `picked_method = NULL`; §3.5's guarantee is narrowed in writing to human-initiated sends. §7.3
    carries the decision, what it costs, and why (b) and (c) were rejected. **The stocks half of build
@@ -871,8 +911,10 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 2. The two `scanStore` slices, the scan-id stamp and the sibling move (§5). Tests 11, 11b, 12, 15.
    **Build the stamp and its selector FIRST**, before any caller reads a slice: a direct slice read
    that skips the `scan_id` check is the whole defect this design exists to make impossible.
-3. The card control and the channel (§6). Tests 13, 14.
-4. The send gate, all eight gateable paths (§7). Tests 7–10, and 9b. **Unblocked** — §11 item 5 was
+3. The card control and the channel (§6). Tests 13, 14. **Also fix the EditDrawer's hardcoded
+   `rrRatio === 2` / `=== 3` row lookup and its "2R plan"/"3R plan" labels here** (§11 item 3,
+   found while building step 1) — it is the one place §4.3's three-way agreement does not hold.
+4. The send gate, all eight gateable paths (§7). Tests 7–10, and 9b. **Unblocked** — §11 item 6 was
    answered 2026-09-14 (S5 is exempt, §7.3). The eight paths are gated; S5 is the ninth and is
    deliberately not.
 5. Arming (§8). Test 6's second half.
