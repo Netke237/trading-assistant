@@ -625,6 +625,27 @@ export function TradeCard({
   const prevContractRef = useRef(data.contract);
   // Third identity the reset watches — see the `resetKey` prop's own note.
   const prevResetKeyRef = useRef(resetKey);
+  // Hand-off flag from the reset effect below to the pick-clearing effect
+  // further down. Round-1 audit finding (2026-09-14), CONFIRMED BY
+  // REPRODUCTION: on the commit that switches `data.contract`, this effect
+  // and the clearing effect BOTH run, in declaration order, off the SAME
+  // "mixed" render — new `data` prop, but `methodPick`/`raceBarriers` state
+  // still the OUTGOING candidate's, because state hasn't been reset yet.
+  // `estimateIsFresh` compares `raceBarriers.contract` (still old) against
+  // `data.contract` (already new) and is false in that one render purely
+  // from the mismatch, which can make `pickedMethodGone` true even though
+  // nothing is actually stale. If the outgoing `methodPick` was
+  // `monte_carlo`/`barrier_race`, the clearing effect's `setMethodPick(null)`
+  // — queued AFTER this effect's `setMethodPick(initialMethodPick)` in the
+  // same batch — wins, and its `onMethodPickChange(null)` fires through a
+  // closure already bound to the INCOMING candidate (`applyMethodPickRef`
+  // is kept current every render), deleting the incoming candidate's own,
+  // unrelated, valid persisted pick. Set true here and consumed (and reset)
+  // by the clearing effect so it skips exactly this one transitional
+  // render and lets the resync below stand; the very next render is
+  // settled (state matches `data.contract`) and the clearing effect is
+  // free to act on it normally.
+  const pickResyncPendingRef = useRef(false);
   // Single effect resetting BOTH structuralStop and firstPassage state on a
   // contract change — deliberately not two separate effects each comparing
   // against prevSymbolRef/prevContractRef: effects run in declaration order
@@ -706,6 +727,11 @@ export function TradeCard({
       // legitimately made on this contract a moment ago -- the same hazard
       // `initialPremiumStop`'s note describes for the typed fields.
       setMethodPick(initialMethodPick);
+      // See `pickResyncPendingRef`'s declaration: tells the clearing effect,
+      // which also runs in this commit, that this render's `pickedMethodGone`
+      // (if it read `true`) was computed against stale pre-reset state and
+      // must not be acted on.
+      pickResyncPendingRef.current = true;
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
       prevResetKeyRef.current = resetKey;
@@ -2005,21 +2031,35 @@ export function TradeCard({
    *  "gone" and clears every restored pick on mount. The two cases have to be
    *  separated explicitly.
    *
-   *  NO "HAS THE RESET SETTLED YET" GUARD, and that is measured rather than
-   *  assumed. The worry is real in shape: on the commit that switches contract,
-   *  `data` is already the new candidate's while `exitPlan`/`firstPassage`
-   *  state still holds the old one's, so a clear decided in that commit could
-   *  be measured against the wrong availability. It cannot fire wrongly HERE
-   *  because `methodPick` is LOCAL STATE, re-synced by the reset effect in the
-   *  SAME `set` batch as `setExitPlan`/`setFirstPassage`: the pick and the
-   *  availability it is judged against are always from the same commit, both
-   *  before the reset and after it. A `pickSettled` guard built on the identity
-   *  refs was written here, and no mutation of it could be made to fail a test
-   *  — which by this file's own standard (see `raceIsShowable`'s note) means it
-   *  was not a guard. It is gone; the invariant above is what replaces it.
-   *  WIRING THE PICK STRAIGHT FROM THE PROP INSTEAD OF THROUGH LOCAL STATE
-   *  WOULD BREAK THAT INVARIANT — StockPositionCard reads its pick from the
-   *  store and carries the resulting hazard knowingly (see its own note).
+   *  A "HAS THE RESET SETTLED YET" GUARD IS REQUIRED, and that is measured
+   *  rather than assumed — reversed from an earlier draft's claim. The worry
+   *  is real in shape: on the commit that switches contract, `data` is
+   *  already the new candidate's while `methodPick`/`raceBarriers` state
+   *  still holds the old one's, so a clear decided in THAT commit is judged
+   *  against the wrong availability. The earlier draft argued this cannot
+   *  fire wrongly because `methodPick` is re-synced by the reset effect in
+   *  the SAME `set` batch as `setFirstPassage`/`setRaceBarriers` — true for
+   *  `arithmetic` (whose availability never reads `data.contract`) and for
+   *  `StockPositionCard` (whose plan/estimate are never restored per-symbol,
+   *  so premature and settled availability always agree). It is FALSE for
+   *  `monte_carlo`/`barrier_race` HERE: `estimateIsFresh` compares
+   *  `raceBarriers.contract` (state, stale until the reset effect runs)
+   *  against `data.contract` (prop, already new), so the transitional render
+   *  disagrees with itself, `pickedMethodGone` reads `true` off that stale
+   *  mix, and — because this effect is declared AFTER the reset effect —
+   *  its `setMethodPick(null)` is the last write in the batch, overriding
+   *  the reset's `setMethodPick(initialMethodPick)`, and its
+   *  `onMethodPickChange(null)` deletes the INCOMING candidate's own,
+   *  unrelated, valid pick from the persisted store (reproduced by the
+   *  round-1 audit, 2026-09-14). `pickResyncPendingRef` (declared beside
+   *  `prevContractRef`) is the guard: set by the reset effect on exactly the
+   *  commit this effect must not act on, consumed and cleared below. The
+   *  very next render is settled — state matches `data.contract` — and
+   *  `pickedMethodGone` there is trustworthy again, including the case
+   *  where the incoming candidate's OWN restored pick is `monte_carlo`/
+   *  `barrier_race` and is correctly cleared per §6.1 (a restored estimate
+   *  is not "fresh this mount", same rule `firstPassageIsFreshRef` applies
+   *  elsewhere on this card).
    *
    *  A boolean, not the option object, so the effect does not re-fire on every
    *  render just because `methodPickOptions` is a fresh array. */
@@ -2032,6 +2072,14 @@ export function TradeCard({
   const applyMethodPickRef = useRef(applyMethodPick);
   useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
   useEffect(() => {
+    // See `pickResyncPendingRef`'s declaration. This commit's `pickedMethodGone`
+    // was computed against a contract switch that hasn't resynced state yet —
+    // skip it once and let the reset effect's own resync stand; the next
+    // render (ref now false) will re-evaluate against settled state.
+    if (pickResyncPendingRef.current) {
+      pickResyncPendingRef.current = false;
+      return;
+    }
     // Clearing sets `methodPick` to null, which makes `pickedMethodGone` false
     // on the next render, so this cannot loop.
     if (pickedMethodGone) applyMethodPickRef.current(null);

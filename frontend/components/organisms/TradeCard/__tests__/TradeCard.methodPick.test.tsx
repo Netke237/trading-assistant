@@ -198,6 +198,54 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     expect(onMethodPickChange).not.toHaveBeenCalledWith(null);
   });
 
+  it('an OUTGOING monte_carlo pick does not wipe the INCOMING candidate’s own pick', async () => {
+    // Round-1 audit finding (2026-09-14), CONFIRMED BY REPRODUCTION. Unlike the
+    // test above, the OUTGOING candidate here genuinely has a local
+    // `methodPick` of `monte_carlo` — set by actually clicking the radio, not
+    // left null. On the commit that switches contract, `estimateIsFresh`
+    // (`raceBarriers.contract === data.contract`) reads false purely because
+    // `data.contract` is already new while `raceBarriers` state is still the
+    // outgoing candidate's, which makes the stale `monte_carlo` pick look gone
+    // in that one transitional render. Without `pickResyncPendingRef`, the
+    // clearing effect's `setMethodPick(null)` — declared after, and so queued
+    // after, the reset effect's `setMethodPick(initialMethodPick)` — wins the
+    // batch, and its `onMethodPickChange(null)` fires bound to the INCOMING
+    // candidate, deleting that candidate's own unrelated, valid ladder pick
+    // from the persisted store.
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue({
+      targets: [{ pct: 0.2, stockPrice: 197.5, optionPrice: 6.24, probability: 0.4, expectedDays: 9 }],
+      invalidation: { probability: 0.3, expectedDays: 5 },
+      race: null,
+    });
+    const onMethodPickChange = jest.fn();
+    const { rerender } = render(
+      <TradeCard data={card} initialMethodPick={null} onMethodPickChange={onMethodPickChange} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    await waitFor(() => expect(radio('Monte Carlo')).toBeEnabled());
+    fireEvent.click(radio('Monte Carlo'));
+    fireEvent.click(screen.getByRole('radio', { name: 'T20%' }));
+    await waitFor(() => expect(radio('Monte Carlo')).toHaveAttribute('aria-checked', 'true'));
+
+    const incoming: TradeCardData = {
+      ...card,
+      contract: 'AAPL 195C 05/15',
+      exit: { ...card.exit, targets: [
+        { id: 'tp1', stockPrice: 211, targetPrice: 211, estimatedOptionPrice: 5.4, contractsToSell: 1, status: 'PENDING', rrContribution: 1.0 },
+      ] },
+    };
+    onMethodPickChange.mockClear();
+    rerender(
+      <TradeCard
+        data={incoming}
+        initialMethodPick={pick({ method: 'ladder', rowStockPrice: 211 })}
+        onMethodPickChange={onMethodPickChange}
+      />,
+    );
+    await waitFor(() => expect(radio('Ladder')).toHaveAttribute('aria-checked', 'true'));
+    expect(onMethodPickChange).not.toHaveBeenCalledWith(null);
+  });
+
   it('a Monte Carlo row records the UNDERLYING as rowStockPrice while rendering the PREMIUM', async () => {
     // §6.1's trap, end to end through the card. The row the trader clicks reads
     // $6.24 — the premium — and the field that may seed `resolved_tp_price` is
