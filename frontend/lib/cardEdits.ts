@@ -172,10 +172,29 @@ export function selectCardEdits(state: CardEditsHost, mode: CardEditMode): CardE
  *
  *  Three rules, in this order, and the order is load-bearing:
  *
- *  1. NO SCAN, NO WRITE. With no scan in the store there is no stamp to write
- *     under, and a null-stamped slice reads as empty — so storing the edit
- *     would be silent loss wearing the costume of a save. Dropping it is at
- *     least visible: the field reverts in front of the user.
+ *  1. NO SCAN, NO WRITE. With no stamp to write under, a stored edit would sit
+ *     in a null-stamped slice that reads as empty — silent loss wearing the
+ *     costume of a save.
+ *
+ *     AN EARLIER VERSION OF THIS COMMENT CLAIMED THE FIELD "REVERTS IN FRONT OF
+ *     THE USER", AND THAT IS FALSE. Step 2's audit proved it by experiment:
+ *     strip the stamp from the step-7 fixture and the card still reads $2.71
+ *     while the arm request carries `limit_price: 2.5`. TradeCard owns its own
+ *     `overlay` and re-syncs from the `initial*` props ONLY on a symbol,
+ *     contract or `resetKey` change (TradeCard/index.tsx:604-634) — a dropped
+ *     write changes none of those, so nothing reverts and the user is looking
+ *     at a number the order will not carry.
+ *
+ *     SO THE SAFETY HERE IS UNREACHABILITY, NOT VISIBILITY, and it must be kept
+ *     that way. `currentScanIdFor` returns null only for a result carrying
+ *     NEITHER `scan_id` NOR `timestamp`. Both are required on both result types
+ *     and emitted unconditionally by the backend (routers/scan.py,
+ *     routers/stock_scan.py); `normalizePersistedScanResult` and every
+ *     migration branch spread rather than rebuild, so no restored blob loses
+ *     them; and step 7's cards come only from `scanResult.candidates`, so there
+ *     is no card-on-screen-with-no-result state. If you are adding a path that
+ *     can render a card without a stamped result in the store, this rule stops
+ *     being latent and becomes a wrong number on a broker order.
  *  2. STAMP MISMATCH RESETS FIRST. A write under a new scan starts from an
  *     empty slice, so it cannot land beside edits from the old one.
  *  3. AN UNCHANGED WRITE RETURNS `slice` ITSELF. The step-7 card reports its
@@ -245,22 +264,52 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+/** One `Record<string, number | null>` map, with every entry that is not a
+ *  finite number forced to `null`.
+ *
+ *  THE THREE NUMBER MAPS ARE VALUE-CHECKED, NOT JUST SHAPE-CHECKED, and the
+ *  `??` at the far end is why. `entryLimitFor` and `invalidationFor`
+ *  (step-7-trade-card/page.tsx) fall back with `??`, which only catches null
+ *  and undefined — so a string that survived this boundary would reach the
+ *  broker order's `limit_price` and the position's `stop` AS A STRING. An
+ *  earlier version of this module shape-checked only and claimed in its own
+ *  comment that the worst a bad entry could do was "render as an untouched
+ *  field"; step 2's audit showed that was false. `null` IS "untouched", so
+ *  forcing it makes the claim true instead of retracting it.
+ *
+ *  Only reachable from an externally corrupted localStorage blob — JSON cannot
+ *  round-trip NaN or Infinity, so the app itself cannot write one. That is why
+ *  this is cheap insurance rather than a bug fix. */
+function normalizeNumberMap(value: unknown): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  for (const [key, entry] of Object.entries(asRecord(value))) {
+    out[key] = typeof entry === 'number' && Number.isFinite(entry) ? entry : null;
+  }
+  return out;
+}
+
 /** Coerce a persisted blob's slice back into a well-formed one.
  *
- *  SHAPE ONLY — this does not validate that a stored `MethodPick` is a real
- *  pick, and does not try to. What it guarantees is that the five maps are
- *  objects and `scanId` is a non-empty string or null, so `selectCardEdits`
- *  cannot throw and a corrupt stamp cannot read as "matches everything". A
- *  wrong-shaped entry that survives this is still gated by the stamp, and the
- *  worst it can do is render as an untouched field. */
+ *  What it guarantees: the five maps are objects, `scanId` is a non-empty
+ *  string or null (so a corrupt stamp cannot read as "matches everything" and
+ *  `selectCardEdits` cannot throw), and every entry in the three PRICE maps is
+ *  a finite number or null.
+ *
+ *  WHAT IT STILL DOES NOT GUARANTEE, said plainly rather than left to be
+ *  discovered: `picks` and `maxLossOverride` are SHAPE-ONLY. A stored
+ *  `MethodPick` is not validated as a real pick and a stored `MaxLossOverride`
+ *  is not validated as a real override. Both are objects rather than scalars,
+ *  so a useful check is a schema rather than a typeof, and both are still gated
+ *  by the stamp. `maxLossOverride` is the one that reaches a risk check, so it
+ *  is the one to validate first if this ever stops being enough. */
 export function normalizeCardEdits(value: unknown): CardEditSlice {
   const raw = asRecord(value);
   return {
     scanId: typeof raw.scanId === 'string' && raw.scanId.length > 0 ? raw.scanId : null,
     picks:           asRecord(raw.picks)           as Record<string, MethodPick>,
-    invalidation:    asRecord(raw.invalidation)    as Record<string, number | null>,
-    premiumStop:     asRecord(raw.premiumStop)     as Record<string, number | null>,
-    entryLimit:      asRecord(raw.entryLimit)      as Record<string, number | null>,
+    invalidation:    normalizeNumberMap(raw.invalidation),
+    premiumStop:     normalizeNumberMap(raw.premiumStop),
+    entryLimit:      normalizeNumberMap(raw.entryLimit),
     maxLossOverride: asRecord(raw.maxLossOverride) as Record<string, MaxLossOverride | null>,
   };
 }

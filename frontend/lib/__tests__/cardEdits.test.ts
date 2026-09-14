@@ -254,6 +254,30 @@ describe('normalizeCardEdits', () => {
     expect(normalizeCardEdits({ scanId: 7 }).scanId).toBeNull();
   });
 
+  it('forces a non-numeric price entry to null rather than letting it reach the order', () => {
+    /* `entryLimitFor` / `invalidationFor` fall back with `??`, which catches
+     * only null and undefined — so a string surviving this boundary would be
+     * posted as the broker order's `limit_price` and stored as the position's
+     * `stop`. `null` is the "untouched" state, which is what those readers are
+     * built to handle. Only reachable from an externally corrupted blob (JSON
+     * cannot round-trip NaN or Infinity), which is why it is cheap insurance. */
+    const out = normalizeCardEdits({
+      scanId: 's1',
+      entryLimit:   { a: 'abc', b: 2.71, c: null },
+      invalidation: { a: {}, b: 132 },
+      premiumStop:  { a: true, b: 1.5 },
+    });
+    expect(out.entryLimit).toEqual({ a: null, b: 2.71, c: null });
+    expect(out.invalidation).toEqual({ a: null, b: 132 });
+    expect(out.premiumStop).toEqual({ a: null, b: 1.5 });
+  });
+
+  it('keeps a real zero, which is a value and not an absence', () => {
+    // `Number.isFinite(0)` is true and 0 must survive: the readers use `??`,
+    // so coercing 0 to null here would silently re-inherit the plan's seed.
+    expect(normalizeCardEdits({ entryLimit: { a: 0 } }).entryLimit).toEqual({ a: 0 });
+  });
+
   it('replaces a map that came back as a non-object', () => {
     expect(normalizeCardEdits({ scanId: 'A', entryLimit: 'x' }).entryLimit).toEqual({});
   });

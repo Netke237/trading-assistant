@@ -173,6 +173,61 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     expect(pos.stop).not.toBe(CARD_INVALIDATION);
   });
 
+  it('a new scan empties the slice AND resets the card, so the two cannot disagree', async () => {
+    /* PHASE G piece 5, build step 2 — THE GUARD DEVIATION 3 RESTS ON.
+     *
+     * The `[scanResult]` effect no longer clears the edit caches; the scan
+     * stamp does that. What the effect still does is bump `scanEpoch`, which
+     * reaches TradeCard as `resetKey` and makes the card rebuild its overlay.
+     * Step 2's audit found that bump was pinned by NOTHING: deleting it left
+     * all 24 step-7 tests green.
+     *
+     * It sits directly on the display-vs-send axis. Without it the store's
+     * slice empties on the new scan while the card keeps rendering the value
+     * typed against the OLD one — the user reads $2.71, the order carries
+     * $2.50. That is the disagreement step 7 spent four rounds closing, and
+     * the reason this test asserts BOTH halves in one run: the number on the
+     * screen and the number on the wire, after the same scan lands.
+     *
+     * The second scan reuses the same candidates on purpose. A different card
+     * would reset the overlay through the `data.symbol`/`data.contract` branch
+     * and prove nothing about `resetKey`. */
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    editField('Limit', String(CARD_LIMIT), '2.71');
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71'));
+
+    // A NEW scan lands while the page is mounted — same candidates, new id, so
+    // only the stamp has moved.
+    act(() => {
+      useScanStore.setState({
+        scanResult: {
+          scan_id: 'test-scan-2',
+          timestamp: '2026-09-14T11:00:00',
+          candidates: [makeCard('AAA'), makeCard('BBB')],
+        } as any,
+      } as any);
+    });
+
+    // HALF ONE — the screen falls back with the store.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent(String(CARD_LIMIT)),
+    );
+    // The slice is still physically present; it is the STAMP that hides it.
+    expect(useScanStore.getState().optionsCardEdits.entryLimit).toEqual({ 'AAA|150|2026-05-15|C': 2.71 });
+
+    // HALF TWO — and so does the wire. The button label is a promise about
+    // what the click will do, so it has to move too.
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.50/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+
+    await waitFor(() => expect(api.postOptionOrder as jest.Mock).toHaveBeenCalled());
+    expect((api.postOptionOrder as jest.Mock).mock.calls[0][0].limit_price).toBe(CARD_LIMIT);
+  });
+
   it('leaves an UNTOUCHED invalidation on the card\'s own value', async () => {
     // The control. An untouched field caches null rather than a snapshot of the
     // seed, precisely so `mergePlan` moving `exit.invalidation` underneath it
