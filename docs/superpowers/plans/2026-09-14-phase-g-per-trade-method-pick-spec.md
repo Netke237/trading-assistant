@@ -436,7 +436,7 @@ makes stale edits unreadable:
 // scanStore.ts
 interface CardEditSlice {
   /** The `scan_id` these edits were made against. Both result types carry one:
-   *  `ScanResult.scan_id` (domain.ts:65) and `StockScanResult.scan_id`
+   *  `ScanResult.scan_id` (scanStore.ts:65 — NOT domain.ts, which has no scan_id) and `StockScanResult.scan_id`
    *  (stockDomain.ts:45). */
   scanId:          string | null;
   picks:           Record<string, MethodPick>;
