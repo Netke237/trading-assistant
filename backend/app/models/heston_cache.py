@@ -222,11 +222,27 @@ def _boundary_hits(params: HestonParams, grids: dict[str, list[float]]) -> list[
     """Which of the winning parameters sit on an edge of their own grid.
 
     A winner on a boundary is not a minimum -- it is the search hitting the
-    wall of the box. On the spec's reference chains FOUR of the four searched
+    wall of the box. On the spec's reference chains all four searched
     parameters pin (kappa at its floor, theta at its ceiling, sigma_v at its
     ceiling, rho at its floor), and the winning combination also violates the
     Feller condition (2*kappa*theta = 0.08 < sigma_v**2 = 0.36), which says
     the same thing a second way.
+
+    READ THAT CAREFULLY AGAINST THE PARAGRAPH BELOW, because the two look
+    contradictory and are not. On a two-rung grid the COUNT is vacuous -- four
+    of four always pin. What the reference chains actually observed, and what
+    Feller corroborates, is the SIDE pattern: the winner ran to the extremes
+    in a consistent direction. The side IS informative on two rungs where the
+    count is not.
+
+    This function reports both -- the strings it returns name the side, e.g.
+    "kappa=0.5 (grid min)" -- and the gate below therefore suppresses both.
+    That is a deliberate cost, not an oversight: the problem being fixed was
+    per-symbol VOLUME, which a side-only line would not have reduced, and
+    BOUNDARY-LOG-GATE-ON-GRID-2026-09-13 explicitly refused the side-only
+    reshape as "more code for evidence nobody has asked a question of yet".
+    The side pattern is logged as lost in that decision's open question rather
+    than quietly preserved here.
 
     Decision F2-GRID-AND-EDGE-OF-BOX-2026-09-13 deliberately does NOT widen
     the grid in F2 -- that is a latency decision and a separate change, and
@@ -235,13 +251,33 @@ def _boundary_hits(params: HestonParams, grids: dict[str, list[float]]) -> list[
     synthetic chain" into evidence that accumulates from Kenneth's real scans,
     which is what the widening decision needs and does not have.
 
-    A grid of fewer than two rungs is skipped: `v0_grid` is a single solved
-    seed, so it is on its own boundary by definition and reporting it would be
-    noise, not evidence.
+    A DIMENSION WITH FEWER THAN THREE RUNGS IS SKIPPED, and that threshold is
+    the whole of BOUNDARY-LOG-GATE-ON-GRID-2026-09-13. Two rungs have no
+    interior: EVERY value is simultaneously the min or the max, so a hit is
+    not a finding about the fit, it is arithmetic about the grid. Enumerated
+    on the grid that actually ships, all 16 combinations hit all four searched
+    dimensions -- the count is ALWAYS 4 and only the side ever varies, so the
+    line reports nothing that could have come out differently. That is also
+    why the threshold is a gate rather than a filter on the output: with two
+    rungs the diagnostic fired on every accepted fit, roughly 500 WARNING
+    lines per S&P 500 scan, in the same stream as the ladder-floor warning
+    that exists so a pricer regression gets NOTICED.
+
+    So on today's grid this returns [] and the diagnostic is silent -- which
+    is correct, because today's output carries no information. It wakes up by
+    itself the moment a dimension gains a third rung, which is exactly when
+    F2-GRID-AND-EDGE-OF-BOX wants the evidence. Under
+    HESTON_FULL_CALIBRATION=1 the count already discriminates: 80 of 81
+    combinations hit at least one boundary, 16 of 81 hit all four, and one
+    hits none.
+
+    `v0_grid` is skipped under the same rule without needing a special case:
+    it is a single solved seed, on its own boundary by definition, and
+    reporting it would be noise rather than evidence.
     """
     hits: list[str] = []
     for name, grid in grids.items():
-        if len(grid) < 2:
+        if len(grid) < 3:
             continue
         value = getattr(params, name)
         if value == min(grid):
@@ -358,9 +394,22 @@ def _run_calibration(iv_key: str, chain_repr: str, S: float, r: float) -> Calibr
     # runs under uvicorn's default logging config, which configures only the
     # `uvicorn*` loggers and leaves the root logger handler-less at WARNING.
     # An `app.*` INFO record is therefore DROPPED, and a silent diagnostic is
-    # the exact failure mode these two lines exist to end. Volume is one line
-    # per calibration whose chain has changed (`_run_calibration` is
-    # lru_cached), so roughly one per symbol per scan.
+    # the exact failure mode these two lines exist to end.
+    #
+    # VOLUME, and it changed with BOUNDARY-LOG-GATE-ON-GRID-2026-09-13. This
+    # used to fire on every calibration THAT REACHED THIS LINE -- roughly one
+    # line per calibrated symbol per scan, and UP TO ~500 on an S&P 500 run
+    # rather than 500: `scan.py` only reaches the Heston block for symbols
+    # with a non-REJECT contract, and the `best_params is None` return above
+    # leaves before the log either way. It fired because `_boundary_hits` was
+    # tautological on the two-rung grid and so `hits` was never empty. It is
+    # now empty on that grid by construction, which leaves this condition
+    # equal to `result.method != "heston_grid"`: a line per REJECTED fit,
+    # and silence while the gate is accepting. Rejections are the signal
+    # worth a WARNING; an accepted fit reporting a boundary it could not
+    # have avoided was not.
+    # The boundary half of the line returns on its own the day the grid gains
+    # a third rung anywhere -- see `_boundary_hits`.
     if hits or result.method != "heston_grid":
         _log.warning(
             "Heston calibration on %d strikes: rel-RMSE %.4f vs flat-BS baseline %s "

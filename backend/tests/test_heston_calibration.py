@@ -20,6 +20,7 @@ from app.models.black_scholes import bs_price, bs_iv
 from app.models.heston import HestonParams, heston_price
 from app.models.heston_cache import (
     _FALLBACK_V0,
+    _boundary_hits,
     _flat_bs_baseline,
     _run_calibration,
     _seed_v0,
@@ -434,31 +435,240 @@ def test_flat_bs_baseline_reaches_far_beyond_ordinary_volatility():
 
 
 # --------------------------------------------------------------------------
-# The grid-boundary log (decision F2-GRID-AND-EDGE-OF-BOX-2026-09-13)
+# The grid-boundary log — gated on rung count by
+# BOUNDARY-LOG-GATE-ON-GRID-2026-09-13, which superseded the logging half of
+# F2-GRID-AND-EDGE-OF-BOX-2026-09-13.
+#
+# The test these replace asserted that kappa, theta, sigma_v and rho were all
+# named in the boundary line. That assertion could not fail: on a two-rung
+# grid every value is both a min and a max, so all four are ALWAYS named. It
+# passed for the same reason it was worthless.
 # --------------------------------------------------------------------------
 
-def test_winner_on_a_grid_boundary_is_logged(caplog):
-    """Three of five parameters pinning at a boundary is a box that is too
-    small, not a fit. F2 deliberately does NOT widen the grid — it makes the
-    pinning visible so the widening decision later has evidence from real
-    scans instead of one synthetic re-run."""
+# Transcriptions of the two grids `_run_calibration` builds. A transcription
+# proves nothing on its own, so
+# `test_the_transcriptions_match_the_grids_the_source_really_builds` captures
+# the real dicts out of a live calibration and asserts these against them —
+# without it, widening the source grid would leave the tests below asserting a
+# distribution the source can no longer produce, and passing.
+#
+# `v0` is the one entry that is NOT a copy of a source literal: the source
+# builds `[_seed_v0(...)]`, solved out of the chain. Only `len() == 1` matters
+# to the gate, so a stand-in value is honest here and the pinning test checks
+# the length rather than the value.
+SHIPPED_GRID = {"v0": [0.09], "kappa": [0.5, 3.0], "theta": [0.02, 0.08],
+                "sigma_v": [0.2, 0.6], "rho": [-0.8, -0.2]}
+FULL_GRID = {"v0": [0.09], "kappa": [0.5, 1.5, 3.0], "theta": [0.02, 0.04, 0.08],
+             "sigma_v": [0.2, 0.4, 0.6], "rho": [-0.8, -0.5, -0.2]}
+
+
+def _params_from(combo: dict) -> HestonParams:
+    return HestonParams(v0=combo["v0"], kappa=combo["kappa"], theta=combo["theta"],
+                        sigma_v=combo["sigma_v"], rho=combo["rho"])
+
+
+def _every_combo(grid: dict):
+    import itertools
+    names = list(grid)
+    for values in itertools.product(*(grid[n] for n in names)):
+        yield dict(zip(names, values))
+
+
+def _grids_the_source_builds(monkeypatch, full: bool) -> dict:
+    """The `grids` dict `_run_calibration` really constructs, captured out of a
+    live calibration rather than retyped.
+
+    `_run_calibration` builds the grids as locals and hands them to
+    `_boundary_hits`, so spying on that one call is the only seam that sees
+    them without reaching into the function's source."""
+    import app.models.heston_cache as hc
+
+    captured: dict = {}
+    real = hc._boundary_hits
+
+    def spy(params, grids):
+        captured.clear()
+        captured.update(grids)
+        return real(params, grids)
+
+    monkeypatch.setattr(hc, "_USE_FULL_GRID", full)
+    monkeypatch.setattr(hc, "_boundary_hits", spy)
+    _calibrate(_chain(45, _smile_iv))
+    assert captured, "_boundary_hits was never reached, so nothing was captured"
+    return dict(captured)
+
+
+def test_the_transcriptions_match_the_grids_the_source_really_builds(monkeypatch):
+    """SHIPPED_GRID and FULL_GRID are this module's copies of source literals,
+    and every test below reasons about the copies. Without this test the copies
+    could drift from the source silently — and the failure would be the
+    quietest kind: widen the real full grid and
+    `test_a_third_rung_makes_the_diagnostic_discriminate_again` would go on
+    asserting an 81-combination histogram the source can no longer produce,
+    and pass.
+
+    `v0` is checked by LENGTH only, deliberately: the source solves it out of
+    the chain (`[_seed_v0(...)]`), so its value is not a literal to match and
+    only its single rung is what the gate turns on."""
+    for full, transcription, label in ((False, SHIPPED_GRID, "shipped"),
+                                       (True, FULL_GRID, "HESTON_FULL_CALIBRATION")):
+        real = _grids_the_source_builds(monkeypatch, full)
+
+        assert set(real) == set(transcription), (
+            f"{label} grid: dimensions differ — source {sorted(real)} vs "
+            f"transcription {sorted(transcription)}"
+        )
+        assert {k: len(v) for k, v in real.items()} == \
+               {k: len(v) for k, v in transcription.items()}, (
+            f"{label} grid: rung COUNTS differ, which is exactly what the gate "
+            f"turns on — source { {k: len(v) for k, v in real.items()} }"
+        )
+        for name, rungs in real.items():
+            if name == "v0":
+                assert len(rungs) == 1, f"v0 must stay one solved rung, got {rungs}"
+                continue
+            assert rungs == transcription[name], (
+                f"{label} grid: {name} is {rungs} in the source but "
+                f"{transcription[name]} here"
+            )
+
+
+def test_two_rung_grid_reports_nothing_because_it_can_report_nothing_else():
+    """The reason the gate exists, pinned by enumeration rather than argued.
+
+    Two rungs have no interior, so a boundary hit is arithmetic about the
+    grid and not a finding about the fit. Every one of the 16 combinations the
+    shipped grid can return is checked: if ANY of them produced a hit, the
+    diagnostic would be reporting something it decided before the chain was
+    seen. Reverting the gate to `len(grid) < 2` fails this on the first
+    combination.
+    """
+    combos = list(_every_combo(SHIPPED_GRID))
+    assert len(combos) == 16, "the shipped grid is 2**4 searched combinations"
+    for combo in combos:
+        hits = _boundary_hits(_params_from(combo), SHIPPED_GRID)
+        assert hits == [], (
+            f"{combo} reported {hits}; on a two-rung grid every value is both "
+            f"the min and the max, so this can only ever be noise"
+        )
+
+
+def test_a_third_rung_makes_the_diagnostic_discriminate_again():
+    """The other half: the gate must not be so tight that widening the grid
+    leaves it silent, because the widening decision is the log's only consumer.
+
+    On the three-rung grid the count genuinely varies — which is the whole
+    difference between evidence and arithmetic. The exact distribution is
+    asserted, so tightening the gate to `len(grid) < 4` fails here rather than
+    passing quietly.
+
+    It does NOT catch the gate being loosened back to `len(grid) < 2`, and
+    saying otherwise would be the same empty claim this whole change exists to
+    remove: every dimension of the full grid has three rungs, so a `< 2`
+    threshold skips nothing a `< 3` threshold skipped and this test cannot
+    tell them apart. That direction is covered by
+    `test_two_rung_grid_reports_nothing_because_it_can_report_nothing_else`
+    and by `test_an_accepted_fit_on_the_shipped_grid_logs_nothing`, both of
+    which do fail under it.
+    """
+    from collections import Counter
+
+    counts = Counter(len(_boundary_hits(_params_from(c), FULL_GRID))
+                     for c in _every_combo(FULL_GRID))
+    assert sum(counts.values()) == 81, "the full grid is 3**4 combinations"
+    assert counts == {0: 1, 1: 8, 2: 24, 3: 32, 4: 16}, (
+        f"the full grid must produce a SPREAD of hit counts, got {dict(counts)}"
+    )
+    assert sum(n for h, n in counts.items() if h >= 1) == 80
+    assert counts[4] == 16
+
+
+def test_an_interior_winner_is_not_a_boundary_and_an_edge_one_names_its_side():
+    """A hit has to mean the search reached the wall of the box. The middle
+    rung is the only value on the full grid that is neither edge, so it is the
+    one case that distinguishes a real check from `return everything`."""
+    interior = _boundary_hits(
+        _params_from({"v0": 0.09, "kappa": 1.5, "theta": 0.04,
+                      "sigma_v": 0.4, "rho": -0.5}), FULL_GRID)
+    assert interior == [], f"every value is a middle rung, got {interior}"
+
+    edges = _boundary_hits(
+        _params_from({"v0": 0.09, "kappa": 0.5, "theta": 0.08,
+                      "sigma_v": 0.4, "rho": -0.2}), FULL_GRID)
+    joined = "; ".join(edges)
+    assert "kappa=0.5 (grid min)" in joined, joined
+    assert "theta=0.08 (grid max)" in joined, joined
+    assert "rho=-0.2 (grid max)" in joined, joined
+    assert "sigma_v" not in joined, (
+        f"sigma_v sat on the middle rung and must not be reported: {joined}"
+    )
+
+
+def test_v0_is_never_reported_because_one_rung_is_its_own_boundary():
+    """v0 is solved, not searched. It is on its own boundary by definition, so
+    naming it would be noise under either threshold — and it stays skipped by
+    the same rule rather than by a special case."""
+    for grid in (SHIPPED_GRID, FULL_GRID):
+        hits = _boundary_hits(_params_from({"v0": 0.09, "kappa": 0.5, "theta": 0.08,
+                                            "sigma_v": 0.2, "rho": -0.8}), grid)
+        assert not any(h.startswith("v0") for h in hits), hits
+
+
+def test_an_accepted_fit_on_the_shipped_grid_logs_nothing(caplog):
+    """End-to-end on the grid `_run_calibration` actually builds, rather than
+    on this module's copy of it.
+
+    Note what this does and does not pin: it pins that NO searched dimension
+    of the shipped grid has three rungs (any that did would put a boundary
+    line on this accepted fit), not the grid's particular values — the gate
+    turns on rung COUNT, so the values are not what it depends on.
+
+    Before this change the same chain produced a boundary warning on every
+    accepted fit — roughly 500 per S&P 500 scan, in the stream where the
+    ladder-floor warning has to be noticed. Silence on an accepted fit IS the
+    shipped behaviour now; a WARNING here means the gate is off, or that the
+    grid grew a third rung without the volume question being reopened.
+    """
+    chain = _chain(45, _smile_iv)
+    with caplog.at_level(logging.WARNING, logger="app.models.heston_cache"):
+        result = _calibrate(chain)
+
+    assert result.method == "heston_grid", (
+        "this chain must be ACCEPTED, or the silence below would be the "
+        "rejection path rather than the boundary gate"
+    )
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert messages == [], (
+        f"an accepted fit on the shipped grid must log nothing: {messages}"
+    )
+
+
+def test_the_full_grid_really_does_wake_the_diagnostic(monkeypatch, caplog):
+    """`FULL_GRID` above is this module's transcription of the
+    HESTON_FULL_CALIBRATION branch, and a transcription proves nothing about
+    the code. This runs the real branch on the same chain.
+
+    It is the load-bearing test of the whole decision: the gate is only
+    defensible because the diagnostic RETURNS when the grid is widened. If
+    this passes for the wrong reason — silence — the gate is just a deletion
+    with extra steps.
+    """
+    import app.models.heston_cache as hc
+
+    monkeypatch.setattr(hc, "_USE_FULL_GRID", True)
     chain = _chain(45, _smile_iv)
     with caplog.at_level(logging.WARNING, logger="app.models.heston_cache"):
         result = _calibrate(chain)
 
     assert result.method == "heston_grid"
     messages = [rec.getMessage() for rec in caplog.records]
-    assert any("grid boundary" in m for m in messages), (
-        f"expected a boundary warning, got: {messages}"
+    boundary = [m for m in messages if "grid boundary" in m]
+    assert boundary, (
+        f"widening the grid must bring the diagnostic back, got: {messages}"
     )
-    boundary_line = next(m for m in messages if "grid boundary" in m)
-    for name in ("kappa", "theta", "sigma_v", "rho"):
-        assert name in boundary_line, (
-            f"{name} pins on this chain and must be named in the log line"
-        )
-    assert "v0" not in boundary_line.split("grid boundary")[1], (
-        "v0 is a single solved seed, so it is on its own boundary by "
-        "definition — reporting it would be noise, not evidence"
+    named = boundary[0].split("grid boundary")[1]
+    assert "v0" not in named, (
+        f"v0 is one solved rung and must stay unreported: {named}"
     )
 
 
