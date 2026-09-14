@@ -179,7 +179,15 @@ def _seed_for_rr(
     literal multiples is the mistake this indirection exists to prevent —
     they are row ORDINALS whose names predate the ratios being configurable.
     """
-    if not rr_ratios:
+    # The TYPE is checked, not just the truthiness, and the call site is the
+    # reason. `routers/portfolio.py` guards the config LOAD in a try/except
+    # because that endpoint persists AFTER the broker order has been placed, so
+    # an exception there loses the record of a trade that already happened. A
+    # malformed-but-loadable `rr_ratios` — a scalar or a mapping where a list
+    # belongs — sails through that guard and would then raise out of the slice
+    # below, producing the very 500 the guard exists to prevent. Degrading here
+    # is what makes that guard's promise true.
+    if not isinstance(rr_ratios, (list, tuple)) or not rr_ratios:
         return LADDER_SEED
     for index, configured in enumerate(rr_ratios[:len(_RR_ROW_METHODS)]):
         if not isinstance(configured, (int, float)) or isinstance(configured, bool):

@@ -956,9 +956,14 @@ class PortfolioPositionCreate(BaseModel):
             "premium_stop_pct": "premiumStopPct",
             "premium_stop_dollar": "premiumStopDollar",
             "stop_is_user_set": "stopIsUserSet",
-            # Phase G. Omitting an alias here is SILENT -- the loop below passes
-            # unknown keys straight through, so a snake_case body would populate
-            # nothing and the pick would vanish with a 201.
+            # Phase G. These five are REDUNDANT and are kept only for symmetry
+            # with the eleven above; do not read them as load-bearing. An
+            # earlier comment here claimed omitting one would silently drop the
+            # pick -- that is FALSE and was corrected by the step 1 audit.
+            # `model_config` sets `populate_by_name` (:856) and every field
+            # carries `Field(alias=...)`, so pydantic accepts BOTH conventions
+            # on its own; FastAPI validates via `model_validate`, which bypasses
+            # this `__init__` entirely. Verified by construction, both ways.
             "picked_method": "pickedMethod",
             "picked_row_stock_price": "pickedRowStockPrice",
             "picked_row_option_price": "pickedRowOptionPrice",

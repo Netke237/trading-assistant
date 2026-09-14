@@ -333,8 +333,17 @@ here, and zero is never a price.
 `picked_row_stock_price` next to `resolved_tp_price` can see in one glance whether the assignment is
 sound; an un-suffixed `picked_row_price` cannot be checked without chasing four call sites.
 
-All five aliases go in `PortfolioPositionCreate.__init__`'s `aliases` dict (`:912-926`) — omitting
-them is silent, since the loop passes unknown keys straight through.
+~~All five aliases go in `PortfolioPositionCreate.__init__`'s `aliases` dict (`:912-926`) — omitting
+them is silent, since the loop passes unknown keys straight through.~~
+
+**CORRECTED BY THE STEP 1 AUDIT, 2026-09-14 — the sentence above is false.** The `aliases` dict is
+not load-bearing for these five, and omitting one would not have dropped anything.
+`PortfolioPositionCreate` sets `model_config = ConfigDict(populate_by_name=True)` (`:856`) and every
+field carries `Field(alias=...)`, so pydantic accepts **both** naming conventions without the dict;
+and FastAPI validates request bodies with `model_validate`, which bypasses the custom `__init__`
+entirely. Verified by construction both ways, with the dict entries removed. The five entries were
+added anyway and are **kept for symmetry** with the eleven above them — but a future reader must not
+infer a mechanism from them. The real guarantee is the `Field(alias=...)` on each field.
 
 `backend/app/models/portfolio.py`:
 
@@ -431,6 +440,24 @@ plan is built only from config (`routers/contracts.py:1024`), `risk_rules.yaml` 
 and although `/api/stocks/exit-plan` accepts a per-request `rr_ratios` override
 (`stock_scan.py:1578`, 1-5 entries) **no frontend caller passes one** — `api.ts:523` declares the
 field and nothing sets it. It becomes reachable the moment either changes.
+
+**THERE ARE TWO SITES, NOT ONE — found by the step 1 audit, 2026-09-14.** The paragraphs above name
+only `tpMethodOptions` (`:1310-1325`), which is the READ side. The WRITE side hardcodes the same two
+literals, in the exit-plan recompute's restamp at `EditDrawer.tsx:602-603`:
+
+```ts
+const rr = active === 'exit_plan_2r' ? 2 : active === 'exit_plan_3r' ? 3 : null;
+const rawRowPrice = rr != null ? plan.targets.find((t) => t.rrRatio === rr)?.price ?? null : null;
+```
+
+Under `rr_ratios: [1.5, 4.0]` with `exit_plan_2r` active, `find(t => t.rrRatio === 2)` matches
+nothing, so `rowPrice` is null, so `tpMethodPatch` is **not** included in the patch — while
+`exitPlan` in the same patch IS replaced. The persisted `resolved_tp_price` then keeps pointing at a
+row of the PREVIOUS plan, and TP_HIT fires on a price no longer in the plan on screen. That is a
+worse failure than the read side's null label, because it is a stale number that still fires.
+
+A fix that changes only `:1310-1325` leaves this one writing the hardcode. **Build step 3 must
+change both.**
 
 **The fix belongs to build step 3 (§6, the card), not here**, because it is frontend work on the
 same surface that step touches: the drawer must read the configured ratios positionally, the way
@@ -886,9 +913,10 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 2. **D4/D6 arming semantics (§9.2).** G records the basis; it does not arm it. Whether "armed" should
    actually demote the other alerts is a Phase H question with its own blast radius across two alert
    engines. **Write the options down with the answer.**
-3. **The EditDrawer hardcodes `rrRatio === 2` / `=== 3` (found in implementation, §4.3).** Under a
-   non-default `rr_ratios` the drawer shows the active method with a null price and a wrong label
-   while a real level drives TP_HIT. Unreachable today (config ships `[2.0, 3.0]` and no caller
+3. **The EditDrawer hardcodes `rrRatio === 2` / `=== 3` in TWO places (found in implementation,
+   §4.3; the second site found by that step's audit).** The read side (`:1310-1325`) shows the
+   active method with a null price and a wrong label while a real level drives TP_HIT; the write
+   side (`:602-603`, the recompute restamp) silently keeps the PREVIOUS plan's price. Unreachable today (config ships `[2.0, 3.0]` and no caller
    passes the stocks override), so **not blocking** — but it is the one place the §4.3 three-way
    agreement does not actually hold, and G is the first writer that can reach it. **Fix belongs to
    build step 3**, in the drawer, by reading the configured ratios positionally. Do not "fix" the
@@ -911,9 +939,12 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 2. The two `scanStore` slices, the scan-id stamp and the sibling move (§5). Tests 11, 11b, 12, 15.
    **Build the stamp and its selector FIRST**, before any caller reads a slice: a direct slice read
    that skips the `scan_id` check is the whole defect this design exists to make impossible.
-3. The card control and the channel (§6). Tests 13, 14. **Also fix the EditDrawer's hardcoded
-   `rrRatio === 2` / `=== 3` row lookup and its "2R plan"/"3R plan" labels here** (§11 item 3,
-   found while building step 1) — it is the one place §4.3's three-way agreement does not hold.
+3. The card control and the channel (§6). Tests 13, 14. **Also fix BOTH of the EditDrawer's
+   hardcoded `rrRatio === 2` / `=== 3` sites here** (§11 item 3, found while building step 1 and
+   completed by its audit) — the read side, `tpMethodOptions` at `:1310-1325` with its "2R
+   plan"/"3R plan" labels, AND the write side, the recompute restamp at `:602-603`, which under a
+   non-default `rr_ratios` leaves `resolved_tp_price` pointing at the PREVIOUS plan's row while
+   replacing the plan. Changing only the first leaves the second writing the hardcode.
 4. The send gate, all eight gateable paths (§7). Tests 7–10, and 9b. **Unblocked** — §11 item 6 was
    answered 2026-09-14 (S5 is exempt, §7.3). The eight paths are gated; S5 is the ninth and is
    deliberately not.

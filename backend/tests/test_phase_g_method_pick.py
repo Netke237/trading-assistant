@@ -140,6 +140,56 @@ def test_no_pick_at_all_seeds_todays_default():
     ) == LADDER_SEED
 
 
+# ── Gaps the step 1 audit's mutation testing found, closed here ─────────────
+
+@pytest.mark.parametrize("bad_price", [0.0, -0.01, -197.50])
+def test_a_non_positive_stock_price_degrades_even_for_a_mappable_row(bad_price):
+    """The `<= 0` half of the gating precondition, pinned. Deleting it used to
+    leave every test in this file green.
+
+    Zero is the one value the far end cannot tell apart from "unset", which is
+    why `alertEngine.ts:164-169` re-checks it too; a negative is worse, because
+    `generate_alerts()` tests `resolved_tp_price or ladder_price` and Python
+    truthiness catches 0 but NOT a negative, so `price >= -1` is true on every
+    tick for a Bullish position. Both must reach the ladder, not the method."""
+    plan = _exit_plan([(2.0, bad_price), (3.0, 210.0)])
+    assert seed_tp_from_pick(
+        'arithmetic', bad_price, exit_plan=plan, rr_ratios=SHIPPED_RR,
+    ) == LADDER_SEED
+    assert seed_tp_from_pick(
+        'monte_carlo', bad_price, exit_plan=None, rr_ratios=SHIPPED_RR,
+    ) == LADDER_SEED
+
+
+def test_a_boolean_in_a_plan_row_is_not_read_as_a_number():
+    """`bool` is a subclass of `int`, so an `isinstance(x, (int, float))` check
+    admits `True` and `float(True)` is `1.0`. A JSON body can carry a boolean in
+    either cell. Without the guard a `rrRatio: True` row would answer as a 1.0R
+    row — which maps to a real method under `rr_ratios: [1.0, 3.0]` and would
+    stamp a method from a row that does not exist."""
+    plan = {"computedAt": "2026-09-14T00:00:00Z", "atr": 3.0, "targets": [
+        {"rrRatio": True, "price": 1.0},
+        {"rrRatio": 1.0, "price": True},
+    ]}
+    assert seed_tp_from_pick(
+        'arithmetic', 1.0, exit_plan=plan, rr_ratios=[1.0, 3.0],
+    ) == LADDER_SEED
+
+
+@pytest.mark.parametrize("malformed", [2.0, 3, {"first": 2.0}, "2.0", object()])
+def test_a_malformed_rr_ratios_degrades_instead_of_raising(malformed):
+    """The call site guards the config LOAD in a try/except because
+    `POST /api/portfolio` persists AFTER the broker order is placed, so raising
+    here does not prevent a trade — it loses the record of one that already
+    happened. A scalar or a mapping where a list belongs LOADS fine and would
+    then raise out of the slice, producing the exact 500 that guard exists to
+    prevent. This test is what makes the guard's promise true."""
+    plan = _exit_plan([(2.0, STOCK_TARGET), (3.0, 210.0)])
+    assert seed_tp_from_pick(
+        'arithmetic', STOCK_TARGET, exit_plan=plan, rr_ratios=malformed,
+    ) == LADDER_SEED
+
+
 # ── Test 2b: THE UNITS TEST ─────────────────────────────────────────────────
 
 def test_a_monte_carlo_pick_seeds_the_STOCK_price_never_the_premium():
