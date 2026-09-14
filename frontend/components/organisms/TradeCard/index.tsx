@@ -625,27 +625,6 @@ export function TradeCard({
   const prevContractRef = useRef(data.contract);
   // Third identity the reset watches — see the `resetKey` prop's own note.
   const prevResetKeyRef = useRef(resetKey);
-  // Hand-off flag from the reset effect below to the pick-clearing effect
-  // further down. Round-1 audit finding (2026-09-14), CONFIRMED BY
-  // REPRODUCTION: on the commit that switches `data.contract`, this effect
-  // and the clearing effect BOTH run, in declaration order, off the SAME
-  // "mixed" render — new `data` prop, but `methodPick`/`raceBarriers` state
-  // still the OUTGOING candidate's, because state hasn't been reset yet.
-  // `estimateIsFresh` compares `raceBarriers.contract` (still old) against
-  // `data.contract` (already new) and is false in that one render purely
-  // from the mismatch, which can make `pickedMethodGone` true even though
-  // nothing is actually stale. If the outgoing `methodPick` was
-  // `monte_carlo`/`barrier_race`, the clearing effect's `setMethodPick(null)`
-  // — queued AFTER this effect's `setMethodPick(initialMethodPick)` in the
-  // same batch — wins, and its `onMethodPickChange(null)` fires through a
-  // closure already bound to the INCOMING candidate (`applyMethodPickRef`
-  // is kept current every render), deleting the incoming candidate's own,
-  // unrelated, valid persisted pick. Set true here and consumed (and reset)
-  // by the clearing effect so it skips exactly this one transitional
-  // render and lets the resync below stand; the very next render is
-  // settled (state matches `data.contract`) and the clearing effect is
-  // free to act on it normally.
-  const pickResyncPendingRef = useRef(false);
   // Single effect resetting BOTH structuralStop and firstPassage state on a
   // contract change — deliberately not two separate effects each comparing
   // against prevSymbolRef/prevContractRef: effects run in declaration order
@@ -727,11 +706,6 @@ export function TradeCard({
       // legitimately made on this contract a moment ago -- the same hazard
       // `initialPremiumStop`'s note describes for the typed fields.
       setMethodPick(initialMethodPick);
-      // See `pickResyncPendingRef`'s declaration: tells the clearing effect,
-      // which also runs in this commit, that this render's `pickedMethodGone`
-      // (if it read `true`) was computed against stale pre-reset state and
-      // must not be acted on.
-      pickResyncPendingRef.current = true;
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
       prevResetKeyRef.current = resetKey;
@@ -1878,6 +1852,38 @@ export function TradeCard({
 
   const raceIsShowable = estimateIsFresh && !raceBarriersMoved;
 
+  // Phase G piece 5 — PICK-ONLY variants of the two flags above, compared
+  // against `prevContractRef.current` instead of the `data.contract` PROP.
+  // Round-1 audit finding (2026-09-14), CONFIRMED BY REPRODUCTION, then a
+  // round-2 finding against that fix's own hand-off-ref mechanism: on the
+  // commit that switches contract, `data.contract` is already the incoming
+  // candidate's while `raceBarriers` state is still the outgoing candidate's
+  // for one transitional render, before the reset effect (below) has run.
+  // `estimateIsFresh` above reads false in that one render purely from the
+  // prop/state mismatch — correct for its own consumers (Final
+  // Recommendation, BarrierRaceCard — TARGET-VINTAGE-2026-09-04, audited
+  // separately and untouched here), but wrong for the method-pick gate,
+  // where it can make a genuinely-fresh OUTGOING pick look gone and clear
+  // the WRONG candidate's entry (see `pickedMethodGone` below).
+  // `prevContractRef.current` is state, not a prop: it lags `data.contract`
+  // by exactly the same one render `raceBarriers` does, and the reset effect
+  // updates both together at its end — so on the transitional render they
+  // are BOTH still the outgoing candidate's (no spurious mismatch), and on
+  // every settled render (which is all of them, transitional or not, once
+  // effects have run) `prevContractRef.current === data.contract` exactly,
+  // so this behaves identically to `estimateIsFresh`/`raceIsShowable` there.
+  // A hand-off ref between two effects was tried first and rejected: it
+  // depends on `useEffect([pickedMethodGone])` re-firing only on a VALUE
+  // CHANGE, which a round-2 audit found leaves the ref stuck `true` when a
+  // reset doesn't change `pickedMethodGone` (swallowing a later, unrelated,
+  // genuinely-real clear) and skips the clearing effect entirely when the
+  // mixed and settled renders happen to agree (dropping a genuinely-stale
+  // restored pick instead of merely delaying it). Comparing against state
+  // instead of a prop removes the transitional render's bad reading at the
+  // source, so nothing needs to be handed off between effects at all.
+  const pickEstimateIsFresh = raceBarriers?.contract === prevContractRef.current;
+  const pickRaceIsShowable = pickEstimateIsFresh && !raceBarriersMoved;
+
   // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
   // separately-timed method and deliberately does not get its own
   // lastRunMethod value. It rides the same endpoint call, the same click and
@@ -1962,18 +1968,21 @@ export function TradeCard({
       })),
     },
     {
-      // GATED ON `estimateIsFresh`, the same flag the Final Recommendation's
-      // Monte Carlo rows are gated on (TARGET-VINTAGE-2026-09-04). When it is
-      // false those rows are replaced by "Not re-run this session", so there is
-      // nothing on screen to pick and the method must not be selectable. That
-      // flag is per-mount AND per-contract (`raceBarriers?.contract ===
-      // data.contract`), which is what makes a Monte Carlo pick unable to
-      // outlive a navigation or a reload — the clear effect below turns that
-      // into an actual clear rather than a merely-disabled button.
+      // GATED ON `pickEstimateIsFresh`, the PICK-ONLY sibling of the flag the
+      // Final Recommendation's Monte Carlo rows are gated on
+      // (TARGET-VINTAGE-2026-09-04's `estimateIsFresh`) — see its declaration
+      // for why the pick gate needs its own copy, compared against
+      // `prevContractRef.current` rather than the `data.contract` prop. When
+      // it is false those rows are (for the DISPLAY flag) replaced by "Not
+      // re-run this session", so there is nothing on screen to pick and the
+      // method must not be selectable. This flag being per-mount AND
+      // per-contract is what makes a Monte Carlo pick unable to outlive a
+      // navigation or a reload — the clear effect below turns that into an
+      // actual clear rather than a merely-disabled button.
       method: 'monte_carlo' as const,
       label: 'Monte Carlo',
       unavailable: firstPassage
-        ? (estimateIsFresh ? null : 'Estimate not re-run this session')
+        ? (pickEstimateIsFresh ? null : 'Estimate not re-run this session')
         : 'Run Monte Carlo Estimate first',
       rows: (firstPassage?.targets ?? []).map((t, i) => ({
         key: `mc-${t.pct}-${i}`,
@@ -1984,11 +1993,12 @@ export function TradeCard({
       })),
     },
     {
-      // GATED ON `raceIsShowable`, which is the STRICTER flag: it additionally
-      // requires that neither barrier has MOVED since the estimate. That is the
-      // same line the card draws when it decides whether to print the race's
-      // numbers at all, and picking a row that is not on screen is exactly what
-      // §6.1 forbids.
+      // GATED ON `pickRaceIsShowable`, the PICK-ONLY sibling of
+      // `raceIsShowable` — the STRICTER flag: it additionally requires that
+      // neither barrier has MOVED since the estimate. `raceBarriersMoved`
+      // itself never reads `data.contract`, only `sharedStop`/`overlay`
+      // against `raceBarriers`, so it needs no pick-only copy of its own;
+      // only the `estimateIsFresh` term inside it did.
       method: 'barrier_race' as const,
       label: 'Barrier Race',
       unavailable: firstPassage?.race
@@ -1996,7 +2006,7 @@ export function TradeCard({
         // re-run the estimate" on purpose: the two say the same thing in two
         // places on one screen, and identical strings make every `getByText`
         // in the suite ambiguous the moment this control is on the card.
-        ? (raceIsShowable ? null : 'Barriers moved since the estimate')
+        ? (pickRaceIsShowable ? null : 'Barriers moved since the estimate')
         : 'Run Monte Carlo Estimate first',
       rows: (firstPassage?.race?.outcomes ?? []).map((o) => ({
         key: `race-${o.targetPct}`,
@@ -2007,7 +2017,7 @@ export function TradeCard({
         rowOptionPrice: o.targetOptionPrice,
       })),
     },
-  ], [data.exit.targets, exitPlan, firstPassage, estimateIsFresh, raceIsShowable]);
+  ], [data.exit.targets, exitPlan, firstPassage, pickEstimateIsFresh, pickRaceIsShowable]);
 
   // Direct-call pattern, per the prop's doc comment: a pick is a synchronous
   // click, like the max-loss override and unlike the exit plan.
@@ -2031,35 +2041,33 @@ export function TradeCard({
    *  "gone" and clears every restored pick on mount. The two cases have to be
    *  separated explicitly.
    *
-   *  A "HAS THE RESET SETTLED YET" GUARD IS REQUIRED, and that is measured
-   *  rather than assumed — reversed from an earlier draft's claim. The worry
-   *  is real in shape: on the commit that switches contract, `data` is
-   *  already the new candidate's while `methodPick`/`raceBarriers` state
-   *  still holds the old one's, so a clear decided in THAT commit is judged
-   *  against the wrong availability. The earlier draft argued this cannot
-   *  fire wrongly because `methodPick` is re-synced by the reset effect in
-   *  the SAME `set` batch as `setFirstPassage`/`setRaceBarriers` — true for
-   *  `arithmetic` (whose availability never reads `data.contract`) and for
-   *  `StockPositionCard` (whose plan/estimate are never restored per-symbol,
-   *  so premature and settled availability always agree). It is FALSE for
-   *  `monte_carlo`/`barrier_race` HERE: `estimateIsFresh` compares
-   *  `raceBarriers.contract` (state, stale until the reset effect runs)
-   *  against `data.contract` (prop, already new), so the transitional render
-   *  disagrees with itself, `pickedMethodGone` reads `true` off that stale
-   *  mix, and — because this effect is declared AFTER the reset effect —
-   *  its `setMethodPick(null)` is the last write in the batch, overriding
-   *  the reset's `setMethodPick(initialMethodPick)`, and its
-   *  `onMethodPickChange(null)` deletes the INCOMING candidate's own,
-   *  unrelated, valid pick from the persisted store (reproduced by the
-   *  round-1 audit, 2026-09-14). `pickResyncPendingRef` (declared beside
-   *  `prevContractRef`) is the guard: set by the reset effect on exactly the
-   *  commit this effect must not act on, consumed and cleared below. The
-   *  very next render is settled — state matches `data.contract` — and
-   *  `pickedMethodGone` there is trustworthy again, including the case
-   *  where the incoming candidate's OWN restored pick is `monte_carlo`/
-   *  `barrier_race` and is correctly cleared per §6.1 (a restored estimate
-   *  is not "fresh this mount", same rule `firstPassageIsFreshRef` applies
-   *  elsewhere on this card).
+   *  NO "HAS THE RESET SETTLED YET" GUARD, and — after two rounds of getting
+   *  this wrong — the reason is now the right one. `pickedOption`/
+   *  `pickedMethodGone` are computed from `methodPickOptions`, which in turn
+   *  is built from `pickEstimateIsFresh`/`pickRaceIsShowable`, NOT from
+   *  `estimateIsFresh`/`raceIsShowable`. Those pick-only flags (declared
+   *  above, beside `estimateIsFresh`) compare `raceBarriers.contract` against
+   *  `prevContractRef.current` — STATE, not the `data.contract` PROP — so on
+   *  the one transitional render where `data` has already switched but
+   *  `raceBarriers`/`prevContractRef` haven't been reset yet, both sides of
+   *  that comparison are still the OUTGOING candidate's, and nothing looks
+   *  spuriously gone. `pickedMethodGone` can therefore only become `true` on
+   *  a SETTLED render, where `methodPick` and the flags it is judged against
+   *  are always from the same commit, transitional or not.
+   *
+   *  Two earlier guards were tried and rejected here, in order: an identity-
+   *  ref `pickSettled` guard (42e6c6c3) that no mutation could be made to
+   *  fail, and a boolean hand-off ref between this effect and the reset
+   *  effect (round-1 audit fix, 2026-09-14) that a round-2 audit found could
+   *  get stuck `true` and swallow a later, unrelated, genuinely-real clear —
+   *  or, when the mixed and settled renders happened to agree, never fire at
+   *  all and drop a genuinely-stale restored pick instead of merely delaying
+   *  it. Both failed because they tried to suppress this effect for one
+   *  render rather than removing the bad reading at its source. Comparing
+   *  against `prevContractRef.current` fixes the SOURCE, so this effect
+   *  needs no guard, no ref, and no memory between renders at all — it is
+   *  the same effect `estimateIsFresh`'s own comments already describe:
+   *  "a guard no test can fail is not a guard."
    *
    *  A boolean, not the option object, so the effect does not re-fire on every
    *  render just because `methodPickOptions` is a fresh array. */
@@ -2072,14 +2080,6 @@ export function TradeCard({
   const applyMethodPickRef = useRef(applyMethodPick);
   useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
   useEffect(() => {
-    // See `pickResyncPendingRef`'s declaration. This commit's `pickedMethodGone`
-    // was computed against a contract switch that hasn't resynced state yet —
-    // skip it once and let the reset effect's own resync stand; the next
-    // render (ref now false) will re-evaluate against settled state.
-    if (pickResyncPendingRef.current) {
-      pickResyncPendingRef.current = false;
-      return;
-    }
     // Clearing sets `methodPick` to null, which makes `pickedMethodGone` false
     // on the next render, so this cannot loop.
     if (pickedMethodGone) applyMethodPickRef.current(null);

@@ -202,16 +202,19 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     // Round-1 audit finding (2026-09-14), CONFIRMED BY REPRODUCTION. Unlike the
     // test above, the OUTGOING candidate here genuinely has a local
     // `methodPick` of `monte_carlo` — set by actually clicking the radio, not
-    // left null. On the commit that switches contract, `estimateIsFresh`
-    // (`raceBarriers.contract === data.contract`) reads false purely because
-    // `data.contract` is already new while `raceBarriers` state is still the
-    // outgoing candidate's, which makes the stale `monte_carlo` pick look gone
-    // in that one transitional render. Without `pickResyncPendingRef`, the
-    // clearing effect's `setMethodPick(null)` — declared after, and so queued
-    // after, the reset effect's `setMethodPick(initialMethodPick)` — wins the
-    // batch, and its `onMethodPickChange(null)` fires bound to the INCOMING
-    // candidate, deleting that candidate's own unrelated, valid ladder pick
-    // from the persisted store.
+    // left null. On the commit that switches contract, `pickEstimateIsFresh`
+    // (`raceBarriers.contract === prevContractRef.current`) would read false
+    // if it compared against the `data.contract` PROP instead of the ref:
+    // `data.contract` is already new on that render while `raceBarriers`
+    // state is still the outgoing candidate's, which would make the stale
+    // `monte_carlo` pick look gone in that one transitional render, and the
+    // clearing effect's `onMethodPickChange(null)` would fire bound to the
+    // INCOMING candidate, deleting that candidate's own unrelated, valid
+    // ladder pick from the persisted store. Comparing against
+    // `prevContractRef.current` (state, updated in lockstep with
+    // `raceBarriers` by the same reset effect) instead keeps both sides of
+    // that comparison mutually consistent on the transitional render, so
+    // nothing looks spuriously gone.
     (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue({
       targets: [{ pct: 0.2, stockPrice: 197.5, optionPrice: 6.24, probability: 0.4, expectedDays: 9 }],
       invalidation: { probability: 0.3, expectedDays: 5 },
@@ -244,6 +247,52 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     );
     await waitFor(() => expect(radio('Ladder')).toHaveAttribute('aria-checked', 'true'));
     expect(onMethodPickChange).not.toHaveBeenCalledWith(null);
+  });
+
+  it('DOES clear the INCOMING candidate’s own restored monte_carlo pick on a switch', async () => {
+    // Round-2 audit finding (2026-09-14) against the round-1 fix's first
+    // attempt (a hand-off ref between the reset effect and the clearing
+    // effect): that ref was set unconditionally on every reset, but the
+    // clearing effect only runs on `useEffect([pickedMethodGone])` actually
+    // CHANGING value between commits. When the outgoing candidate's own pick
+    // was already null (`pickedMethodGone` already false, as in THIS
+    // scenario), the clearing effect never fired on the transitional render,
+    // so the ref was never consumed — left stuck `true`, ready to wrongly
+    // swallow a LATER, unrelated, genuinely-real clear. The fix that replaced
+    // it (comparing `pickEstimateIsFresh` against `prevContractRef.current`
+    // instead of the `data.contract` prop) carries no such memory between
+    // renders, so this case — an outgoing pick of null, switching to a
+    // candidate whose OWN restored pick is `monte_carlo` and must still be
+    // cleared per §6.1 (a restored estimate is never "fresh this mount") —
+    // must keep working correctly on its own, not merely by accident of the
+    // previous test's outgoing-pick shape.
+    const onMethodPickChange = jest.fn();
+    const { rerender } = render(
+      <TradeCard data={card} initialMethodPick={null} onMethodPickChange={onMethodPickChange} />,
+    );
+
+    const incoming: TradeCardData = {
+      ...card,
+      contract: 'AAPL 195C 05/15',
+      exit: {
+        ...card.exit,
+        firstPassage: {
+          targets: [{ pct: 0.2, stockPrice: 197.5, optionPrice: 6.24, probability: 0.4, expectedDays: 9 }],
+          invalidation: { probability: 0.3, expectedDays: 5 },
+          computedAt: '2026-09-13T00:00:00.000Z',
+        },
+      },
+    };
+    onMethodPickChange.mockClear();
+    rerender(
+      <TradeCard
+        data={incoming}
+        initialMethodPick={pick({ method: 'monte_carlo', rowStockPrice: 197.5, rowOptionPrice: 6.24 })}
+        onMethodPickChange={onMethodPickChange}
+      />,
+    );
+    await waitFor(() => expect(onMethodPickChange).toHaveBeenCalledWith(null));
+    expect(radio('Monte Carlo')).toHaveAttribute('aria-checked', 'false');
   });
 
   it('a Monte Carlo row records the UNDERLYING as rowStockPrice while rendering the PREMIUM', async () => {
