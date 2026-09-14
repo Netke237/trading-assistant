@@ -96,7 +96,7 @@ claiming "Arithmetic, 2R row" against an invalidation, premium stop and entry li
 snapped back to their seeds — a recorded judgement about numbers that are no longer on screen.
 **Q3: the sibling caches move with the selection.** §5 specifies that move.
 
-### 2.5 The send paths — there are four in options, two in stocks
+### 2.5 The send paths — four in options, four in stocks, and two of the eight are not obvious
 
 `DIRECT-SEND-STOP-GATE-2026-09-09` already had to enumerate these, and the note it left at
 `step-7-trade-card/page.tsx:332-345` is the governing precedent for G's Q5 gate:
@@ -112,10 +112,31 @@ snapped back to their seeds — a recorded judgement about numbers that are no l
 | O2 | Direct "Place Limit" | `page.tsx:1282` | `stopMissing` (`page.tsx:605`) |
 | O3 | Direct "Right Now — Market" | `page.tsx:1291` | `stopMissing` |
 | O4 | Arm the auto-trader | `AutoTradeArm:250` | `stopMissing` (`AutoTradeArm:142,165`) |
-| S1 | Stock order + position | `StockPositionCard:393` → `:405` | **none today** |
-| S2 | Add position only | `StockPositionCard:579` | **none today** |
-| S3 | Stocks basket | `StockSendDialog:347` | **none today** |
-| S4 | Arm stock auto-trade | `StockAutoTradeArm:93` | **none today** |
+| S1 | Stock order + position, **step 4** | `StockPositionCard:393` → `:405` | **none today** |
+| S2 | Add position only, **step 4** | `StockPositionCard:579` | **none today** |
+| S3 | Stock order + position, **step 7** | `step-7-position-card/page.tsx:110` → `:120` → `:135` | **none today** |
+| S4 | Stocks basket | `StockSendDialog:347` | **none today** |
+
+Plus one that is not a button at all, and it is the reason this table had to be rebuilt:
+
+| # | Path | Entry point | Human in the loop? |
+|---|---|---|---|
+| S5 | **After-scan auto-execute** | `StockAutoTradeArm:77` arms a symbol; `step-4-stocks/page.tsx:196` turns it into a position on the *next* scan | **No** — the code says so itself |
+
+Two corrections to how this was first written, both of which would have left a hole:
+
+- `StockPositionCard` is the **step 4** card (imported only by `step-4-stocks/page.tsx:19`). The
+  Stocks path's step-7 card is a **separate component** with its own `submit()` and its own
+  `postStockOrder` → `addPosition` pair. Reviewing one and assuming it covered the other is exactly
+  how S3 went missing.
+- S5 is not a send button and cannot be gated like one. `step-4-stocks/page.tsx:190-196` says
+  *"Auto-execute fires with no human in the loop, so there is no overlay to prefer."* **§7.3 puts
+  that to Kenneth rather than settling it**, because requiring a pick there would disable the
+  feature outright.
+
+`ChartWorkspace/index.tsx:850` also creates positions. **Out of scope**: not a screener path, no card
+and no method to pick, and gating it would block a manual position entry that has nothing to do with
+piece 5.
 
 Stocks mode has no equivalent gate of any kind. Q1 puts stocks in scope, so G is the first thing to
 put a hard pre-send refusal on S1–S4. That is called out here rather than buried in §6 because it is
@@ -189,7 +210,8 @@ So the portfolio can later show which method a trade was judged on.
 
 ### 3.5 Q5 — An explicit pick is required before a trade can be sent
 
-Nothing goes out on a default nobody looked at. **All eight paths in §2.5**, per the
+Nothing goes out on a default nobody looked at. **All eight gateable paths in §2.5** — O1–O4 and
+S1–S4 — per the
 `DIRECT-SEND-STOP-GATE-2026-09-09` precedent quoted there — that precedent is why "does the gate
 cover the basket as well as single-send" is not an open question in this spec. It was settled in
 September and the answer was "every path, or the hole just moves."
@@ -239,8 +261,33 @@ export type PickedStopBasis = 'stock' | 'premium';
 export interface MethodPick {
   method:    PickedMethod;
   /** D5's second leg: the ONE price row the pick selects, as a price, not a row
-   *  index. A price survives an `rr_ratios` change; `exit_plan_2r` does not. */
-  rowPrice:  number | null;
+   *  index. A price survives an `rr_ratios` change; `exit_plan_2r` does not.
+   *
+   *  TWO FIELDS, NOT ONE, AND THE SPLIT IS LOAD-BEARING. The four methods do
+   *  not all quote their target rows in the same space, and `resolved_tp_price`
+   *  — the only thing this can seed — is compared against the UNDERLYING:
+   *  `alertEngine.ts:152` (`isStock ? currentPrice : currentStockPrice`) and
+   *  `alert_generator.py:181` (`target_stock_price`, against the stock quote).
+   *
+   *    Ladder       -> stock only  (`exit.targets[].targetPrice ?? stockPrice`)
+   *    Arithmetic   -> stock only  (`exitPlan.targets[].price`; exit_plan.py:213
+   *                                 builds it as entry +/- rr * stop distance)
+   *    Monte Carlo  -> BOTH        (`FirstPassageTarget.stockPrice`, NULLABLE and
+   *                                 documented "display-only Stage-1
+   *                                 approximation; null if unreachable" at
+   *                                 domain.ts:208 — and `optionPrice`, which is
+   *                                 `premium * (1 + pct)`, what the card RENDERS
+   *                                 at TradeCard:2694)
+   *    Barrier Race -> option only (`BarrierRaceOutcome.targetOptionPrice`;
+   *                                 domain.ts:222-224 carries no stock level at all)
+   *
+   *  Collapsing these into one `rowPrice` puts a PREMIUM in a STOCK-price field.
+   *  A $6.24 premium stamped as a stock target makes `price >= 6.24` true on the
+   *  first tick, so TP_HIT fires instantly on every bullish option position. The
+   *  codebase already knows this: EditDrawer.tsx:287 maps the very same
+   *  first-passage rows with `price: t.stockPrice ?? 0`, never `optionPrice`. */
+  rowStockPrice:  number | null;   // underlying space. The ONLY field that may seed resolved_tp_price.
+  rowOptionPrice: number | null;   // premium space. RECORD ONLY — never seeds, never alerts.
   /** D5's third leg. A RECORD of which stop the trade was judged on. It does
    *  NOT re-point any alert — see §9.2. */
   stopBasis: PickedStopBasis;
@@ -263,26 +310,32 @@ for the same reason `premiumStopPct` is on create — `:875-880`):
 PickedMethod    = Literal['arithmetic', 'monte_carlo', 'ladder', 'barrier_race']
 PickedStopBasis = Literal['stock', 'premium']
 
-    pickedMethod:    Optional[PickedMethod]    = Field(alias="picked_method", default=None)
-    pickedRowPrice:  Optional[float]           = Field(alias="picked_row_price", default=None, gt=0)
-    pickedStopBasis: Optional[PickedStopBasis] = Field(alias="picked_stop_basis", default=None)
-    pickedAt:        Optional[str]             = Field(alias="picked_at", default=None)
+    pickedMethod:         Optional[PickedMethod]    = Field(alias="picked_method", default=None)
+    pickedRowStockPrice:  Optional[float]           = Field(alias="picked_row_stock_price", default=None, gt=0)
+    pickedRowOptionPrice: Optional[float]           = Field(alias="picked_row_option_price", default=None, gt=0)
+    pickedStopBasis:      Optional[PickedStopBasis] = Field(alias="picked_stop_basis", default=None)
+    pickedAt:             Optional[str]             = Field(alias="picked_at", default=None)
 ```
 
-`gt=0` on `pickedRowPrice` for the reason `entryPrice` carries it and the reason
+`gt=0` on both price fields for the reason `entryPrice` carries it and the reason
 `alertEngine.ts:164-169` re-checks `> 0` at the far end: a `?? 0` upstream fallback can land a zero
 here, and zero is never a price.
 
-The four aliases go in `PortfolioPositionCreate.__init__`'s `aliases` dict (`:912-926`) — omitting
+**The field names carry their units on purpose.** A reviewer or an implementer looking at
+`picked_row_stock_price` next to `resolved_tp_price` can see in one glance whether the assignment is
+sound; an un-suffixed `picked_row_price` cannot be checked without chasing four call sites.
+
+All five aliases go in `PortfolioPositionCreate.__init__`'s `aliases` dict (`:912-926`) — omitting
 them is silent, since the loop passes unknown keys straight through.
 
 `backend/app/models/portfolio.py`:
 
 ```python
-    picked_method     = Column(String, nullable=True)
-    picked_row_price  = Column(Float,  nullable=True)
-    picked_stop_basis = Column(String, nullable=True)
-    picked_at         = Column(String, nullable=True)
+    picked_method           = Column(String, nullable=True)
+    picked_row_stock_price  = Column(Float,  nullable=True)
+    picked_row_option_price = Column(Float,  nullable=True)
+    picked_stop_basis       = Column(String, nullable=True)
+    picked_at               = Column(String, nullable=True)
 ```
 
 **Nullable, no server default, no backfill** — same shape and same reason as
@@ -290,7 +343,7 @@ them is silent, since the loop passes unknown keys straight through.
 picked", which is a real state and not a missing value. D11 ("existing open positions untouched")
 requires it. The portfolio must render NULL as "—", never as `'ladder'`.
 
-Also add all four to `PortfolioPositionSchema` (`:1024` region) and to `from_orm`'s mapping
+Also add all five to `PortfolioPositionSchema` (`:1024` region) and to `from_orm`'s mapping
 (`:1051` region) — `activeTpMethod` is coerced there with `or 'ladder'` and **these must not be**;
 they stay null.
 
@@ -299,22 +352,41 @@ they stay null.
 Per §2.7 the method and its price are always written together. `POST /api/portfolio` therefore
 derives both from the pick, applying `tpMethodPatch`'s exact rule rather than a second copy of it:
 
-| `picked_method` | `active_tp_method` | `resolved_tp_price` |
-|---|---|---|
-| `ladder` | `'ladder'` | `NULL` — the ladder tracks its target live; a snapshot goes stale the moment the user edits it in the drawer |
-| `monte_carlo` | `'monte_carlo'` | `picked_row_price` |
-| `barrier_race` | `'monte_carlo'` | `picked_row_price` |
-| `arithmetic`, row matches `rr_ratios[0]` | `'exit_plan_2r'` | `picked_row_price` |
-| `arithmetic`, row matches `rr_ratios[1]` | `'exit_plan_3r'` | `picked_row_price` |
-| `arithmetic`, any other row | `'ladder'` | `NULL` |
-| absent (pre-G client) | `'ladder'` (today's default) | `NULL` |
+**The gating precondition, applied before the table is read at all:** a row seeds
+`resolved_tp_price` only if `picked_row_stock_price` is present and `> 0`. **If it is NULL, the
+outcome is `('ladder', NULL)` regardless of the method.** This single rule is what keeps every
+method off the forbidden state in §2.7, and it is why the units had to be split in §4.1 — there is
+no path by which an option premium can reach this column.
+
+| `picked_method` | `picked_row_stock_price` | `active_tp_method` | `resolved_tp_price` |
+|---|---|---|---|
+| `ladder` | anything | `'ladder'` | `NULL` — the ladder tracks its target live; a snapshot goes stale the moment the user edits it in the drawer |
+| `monte_carlo` | present | `'monte_carlo'` | `picked_row_stock_price` |
+| `monte_carlo` | **NULL** | `'ladder'` | `NULL` |
+| `barrier_race` | **always NULL** | `'ladder'` | `NULL` |
+| `arithmetic`, row matches `rr_ratios[0]` | present | `'exit_plan_2r'` | `picked_row_stock_price` |
+| `arithmetic`, row matches `rr_ratios[1]` | present | `'exit_plan_3r'` | `picked_row_stock_price` |
+| `arithmetic`, any other row | anything | `'ladder'` | `NULL` |
+| absent (pre-G client) | — | `'ladder'` (today's default) | `NULL` |
+
+`picked_method` records the trader's real choice on **every** row, including the ones that seed
+`'ladder'`. The portfolio displays `picked_method`, never `active_tp_method`, so a degraded seed
+costs the *alert* its precision and costs the *record* nothing.
 
 Three rows need their reasoning stated because each is a place a future reader will want to "fix":
 
-- **`barrier_race` → `'monte_carlo'`.** `TpMethod` has no race value and G adds none (Q6 — widening a
-  persisted enum that four consumers read is a cascade). The race's targets **are** the first-passage
-  targets, so `'monte_carlo'` is not an approximation; it is where those numbers come from. The true
-  pick is in `picked_method`, which is the field the portfolio displays.
+- **`barrier_race` → `'ladder'` + NULL, always.** Not `'monte_carlo'`, which an earlier draft of
+  this table had. `BarrierRaceOutcome` (`domain.ts:222-224`) carries `targetOptionPrice` and **no
+  stock level at all**, so the race can never supply a `picked_row_stock_price` and the gating
+  precondition above always fires. Seeding `'monte_carlo'` with the race's option price would have
+  put a premium in a stock-price column; seeding `'monte_carlo'` with NULL would have produced the
+  §2.7 state. `picked_method = 'barrier_race'` still records the truth, and `picked_row_option_price`
+  still records the number that was on screen. `TpMethod` gains no race value (Q6 — widening a
+  persisted enum that four consumers read is a cascade).
+- **Monte Carlo with a NULL stock price.** `FirstPassageTarget.stockPrice` is `number | null` by
+  construction — `domain.ts:208` calls it a "display-only Stage-1 approximation; null if
+  unreachable". So this is a reachable everyday case, not a defensive branch, and it must degrade to
+  `('ladder', NULL)` rather than stamping the method alone.
 - **Arithmetic on an unmappable row → `'ladder'` + NULL.** This is the `rr_ratios`-is-configurable
   hole from §3.7(b), reached rather than argued about. Falling back to the pair the drawer treats as
   "unstamped" is the only option that does not lie: the label is suppressed by both consumers,
@@ -336,12 +408,21 @@ to whichever head the implementer branches from.
    *tables*; it **does not add columns to an existing one**. On Kenneth's live PostgreSQL, adding the
    column to the model alone changes nothing and every insert fails on the missing column. The
    migration is the only thing that makes G work against an existing database.
-2. `backend/migrations/versions/` currently has **five unlabelled heads** (`b4e91a2f7c33`,
-   `16febdf31dd2`, `c7a1e9d4b820`, `c157ce3cc141`, `b3f7a1c9d4e2`), so `alembic upgrade head` is
-   already ambiguous today. This is **pre-existing drift, and G does not fix it** — but G's revision
-   must not silently become a sixth head under the assumption that "upgrade head" will pick it up.
-   Either chain it onto a head and name that head in the docstring, or raise the merge as its own
-   piece of work. **Flagged for Kenneth in §11.**
+2. `backend/migrations/versions/` has **exactly one head: `c7a1e9d4b820`** (the piece-4 revision).
+   `alembic upgrade head` is unambiguous today and **G's revision must chain onto that head.**
+
+   Stated explicitly because it is easy to get wrong by inspection: four revisions *look* like heads
+   if you only parse `down_revision = '<string>'`. They are not — they are interior nodes already
+   merged by two merge revisions whose `down_revision` is a **tuple**:
+   `d92f6a1c8e37_merge_alert_state_and_audit_heads.py` merges `b3f7a1c9d4e2` and `b4e91a2f7c33`, and
+   `e510ee3042ad_merge_scan_sessions_and_persistence_.py` merges `16febdf31dd2` and `c157ce3cc141`.
+   **Chaining G's revision onto any of those four would genuinely create a second head**, at which
+   point `alembic upgrade head` refuses, the columns never land, and — by fact 1 above — nothing
+   else adds them. Every `POST /api/portfolio` then fails on the missing column *after* the broker
+   order has already been placed (all send paths order first and persist second:
+   `page.tsx:968,1017`, `StockPositionCard:393→405`), leaving a real filled position with no record,
+   no stop and no TP alert. Verify the head with `alembic heads` before writing the revision; do not
+   compute it by grepping.
 
 ---
 
@@ -372,10 +453,50 @@ and persisting a Monte Carlo estimate across a reload reintroduces exactly the s
 that `estimateIsFresh` (`TradeCard:1809`) and `raceIsShowable` exist to suppress. `pickedAt` is what
 lets a restored pick be aged; a restored *estimate* would have to be re-run anyway.
 
-**Invalidation.** Bump `scanStore`'s persist `version` and add a migration branch, per CLAUDE.md.
-`clearCardPicks()` must run wherever a new scan lands — a pick made against the previous scan's
-numbers must not survive into a new one. The existing reset path that clears `pickedContracts` is the
-place; if that path does not clear it too, the whole Q3 answer is defeated by one stale key.
+### 5.1 Invalidation — the part that is NOT already solved, and the trap in it
+
+Bump `scanStore`'s persist `version` and add a migration branch, per CLAUDE.md.
+
+**Persisting these caches REMOVES their real guard, and the spec must replace it.** Today the primary
+protection is the unmount, not any explicit reset. `step-7-trade-card/page.tsx:496-505` says so in as
+many words about its own `[scanResult]` effect:
+
+> In practice this line is belt-and-suspenders, not the primary guard: `setScanResult` has exactly
+> two production callers […] so the only way this effect ever runs with a genuinely NEW scanResult is
+> if the user leaves this page to reach RunScanButton — **which unmounts Step7Page and, with it,
+> these two useState caches**, independent of this call.
+
+Move those caches into a persisted store and the unmount stops clearing anything. What is left is the
+belt-and-suspenders effect — which clears six caches and **does not clear
+`maxLossOverrideBySymbol`** (declared `page.tsx:385`; the clear list at `:508-521` omits it). So
+`maxLossOverrideBySymbol` currently survives on the unmount alone, and persisting it without a
+replacement reset makes a stale max-loss override permanent across reloads.
+
+The consequence is the one that effect's own comment describes at `:510-519` — *"An entry limit typed
+against yesterday's \$2.50 mid would otherwise survive onto a card whose new mid is \$6.00, and the
+button would still promise \$2.71"* — except now permanent. And a stale `invalidationBySymbol` makes
+`invalidationIsUserSetFor` (`page.tsx:353-354`) report `stopIsUserSet: true` for a level from a
+previous scan, which tells the router to skip re-anchoring (`schemas/__init__.py:892-909`): the
+documented "\$180 typed at \$145 stored as \$235, above spot, Critical STOP_REACHED on the first
+scan" bug, resurrected.
+
+**The hook, named precisely.** An earlier draft said "the existing reset path that clears
+`pickedContracts` is the place." **There is no such path** — `clearPickedContracts` (`scanStore.ts:390`)
+has *zero* production callers; its only reference outside the store is
+`frontend/__tests__/pickOverride.test.tsx:13`. Naming a reset that does not run is how the whole Q3
+answer gets defeated by one stale key, so:
+
+- Clear `cardPicks` **and all four siblings** in `RunScanButton/index.tsx` at `:154`, immediately
+  beside `setScanResult(result)`. That is the one place a genuinely new scan lands, and it covers
+  both modes (the stocks branch at `:79` reaches the same call).
+- **Do NOT clear in `setScanResult` itself.** Its other caller is `StoreHydration/index.tsx:55`,
+  which *restores* a persisted scan on mount. Clearing there would wipe the picks on every page load
+  — the exact opposite of what Q3 asks for.
+- Keep the page's `[scanResult]` effect as it is. It becomes genuinely belt-and-suspenders rather
+  than the load-bearing guard it was.
+- While there: add `maxLossOverrideBySymbol` to that effect's clear list. Its omission was called an
+  omission rather than a decision when the other three were added (`page.tsx:517-519`); G is the
+  change that makes it matter.
 
 ---
 
@@ -396,8 +517,20 @@ two selectors on the two sides of a trade look and behave alike.
   **clears the pick**. The reset effect at `TradeCard:659-672` is where; `prevContractRef` is already
   the trigger.
 - The row selector (D5's second leg) is the target rows that method already renders, made
-  selectable. Ladder and Barrier Race have their own rows; Arithmetic has `exitPlan.targets`; Monte
-  Carlo has `firstPassage.targets`.
+  selectable. **Which field of the selected row goes into which of the two price slots is fixed by
+  §4.1 and is not the implementer's choice:**
+
+  | Method | `rowStockPrice` | `rowOptionPrice` |
+  |---|---|---|
+  | Ladder | `exit.targets[].targetPrice ?? stockPrice` | `null` |
+  | Arithmetic | `exitPlan.targets[].price` | `null` |
+  | Monte Carlo | `firstPassage.targets[].stockPrice` (may be `null`) | `firstPassage.targets[].optionPrice` |
+  | Barrier Race | `null` — none exists | `race.outcomes[].targetOptionPrice` |
+
+  The Monte Carlo row is the trap: the card **renders** `optionPrice` (`TradeCard:2694`), so the
+  number the user is looking at is the premium, while the field that may seed an alert is the
+  `stockPrice` beside it. Reading "the price on the row" and storing it once is the defect §4.1
+  exists to prevent.
 - The stop-basis selector is two options, stock or premium, with copy per §9.2.
 
 `lastRunMethod` stays exactly as it is and keeps driving which method's numbers are *displayed* when
@@ -470,19 +603,53 @@ Mirror `missing_invalidation` exactly, since §2.5's precedent is what governs:
 
 ### 7.2 Stocks — the first hard gate on that path
 
-S1–S4 get the same refusal. `StockSendDialog:347`'s `disabled` expression is already a four-term
-conjunction; the pick check joins it. `StockAutoTradeArm:93` and `StockPositionCard`'s two send
-handlers each get the guard and the title.
+S1–S4 get the same refusal:
+
+- S1, S2 — `StockPositionCard`'s two send handlers (`:393`, `:579`): the guard and the title.
+- S3 — the Stocks **step-7** card, `step-7-position-card/page.tsx:110`'s `submit()`: an early return
+  beside its existing `execMode === 'recommendation' || hasOrderForCurrent` guard, plus `disabled`
+  and `title` on both its order buttons. **This is a different component from S1/S2** (§2.5) and
+  needs its own wiring; it is not reached by fixing `StockPositionCard`.
+- S4 — `StockSendDialog:347`'s `disabled` expression is already a four-term conjunction; the pick
+  check joins it.
 
 Stocks mode having had **no** pre-send refusal until now (§2.5) means this is the first time a stocks
 trade can be blocked at the button. Kenneth should see it working before it is called done.
 
-### 7.3 What "an explicit pick" means, precisely
+### 7.3 S5, the after-scan auto-executor — OPEN, and Kenneth's
+
+`step-4-stocks/page.tsx:196` creates positions from armed symbols on the next scan with, in its own
+words, *"no human in the loop."* Q5 says an explicit pick is required before a trade can be sent.
+Those two cannot both hold as written, and the collision is structural rather than incidental: §5
+clears picks when a new scan lands, and S5 fires **on** a new scan, against candidates that did not
+exist when any pick was made. **A pick can never exist for an S5 trade.**
+
+So the options are, written down rather than assumed:
+
+- **(a) S5 is exempt, and says so.** Auto-execute keeps working; the positions it creates carry
+  `picked_method = NULL`, which the portfolio already renders as "—" (§4.2). Q5's guarantee narrows
+  to "nothing a human sends goes out on a default nobody looked at."
+- **(b) S5 is gated, which disables it.** Q5 holds literally. After-scan auto-execute stops creating
+  positions entirely, because its precondition can never be met.
+- **(c) S5 arms a method with the symbol.** `onAfterScanToggle` (`StockAutoTradeArm:77`) carries a
+  pick alongside the symbol, applied to whatever candidate that symbol produces next. Keeps the
+  feature and satisfies Q5's spirit, but it is a pick made against numbers that do not exist yet —
+  which is the thing §6.1's staleness reset exists to prevent.
+
+**This spec does not choose.** It is flagged in §11, and G must not ship S5 in a state that silently
+contradicts §3.5's "nothing goes out on a default nobody looked at."
+
+### 7.4 What "an explicit pick" means, precisely
 
 `checkMethodPick` returns true only when a `MethodPick` exists **for the key being sent** and its
 `method` is one of the four values. A pick made for a different contract, or cleared by a staleness
-reset (§6.1), is absent and blocks. `rowPrice: null` does **not** block — Ladder legitimately has no
-single resolved row until the user picks one, and blocking on it would make the Ladder unsendable.
+reset (§6.1), is absent and blocks.
+
+**Neither price field blocks.** Not `rowStockPrice` — Barrier Race never has one (§4.1) and blocking
+on it would make the race unpickable; not `rowOptionPrice` — Ladder and Arithmetic never have one.
+The gate is on the *method*, which is what Q5 asks for. A missing price is not a missing decision:
+it degrades the `active_tp_method` seed to `('ladder', NULL)` per §4.3's precondition, which is a
+state all three consumers already agree on.
 
 ---
 
@@ -522,9 +689,10 @@ Full D4/D6 arming semantics — one alert armed, the others demoted to advisory 
 across two alert engines that was never one of the six answers, and Q6 says no cascade. **It is a
 Phase H candidate and needs its own decision.** Recorded in §11 so it is not lost a third time.
 
-### 9.3 No `resolved_tp_price` divergence
+### 9.3 No `resolved_tp_price` divergence, and no premium in a stock-price column
 G writes `active_tp_method` and `resolved_tp_price` **together or not at all** (§4.3). It never
-writes one alone.
+writes one alone, and the only value it will write into `resolved_tp_price` is a
+`picked_row_stock_price` — never an option premium, from any method (§4.1).
 
 ### 9.4 No merge of `lastRunMethod` into `PickedMethod`
 They answer different questions ("what ran last" vs "what did the trader choose") and the first is
@@ -545,28 +713,41 @@ D11. Existing rows stay NULL and render "—".
 
 Backend (`backend/tests/`):
 
-1. `POST /api/portfolio` persists all four `picked_*` fields, both alias forms (camelCase and
+1. `POST /api/portfolio` persists all five `picked_*` fields, both alias forms (camelCase and
    snake_case), matching the `PortfolioPositionCreate.__init__` alias test style.
-2. **The §4.3 table, one test per row**, asserting the `(active_tp_method, resolved_tp_price)` pair.
-   The `barrier_race → monte_carlo` and the unmappable-arithmetic rows are the ones worth pinning —
-   they are the two a future reader will try to "fix".
+2. **The §4.3 table, one test per row (eight)**, asserting the
+   `(active_tp_method, resolved_tp_price)` pair. The three worth pinning hardest, because each is a
+   row a future reader will try to "fix": `barrier_race` → `('ladder', NULL)`, `monte_carlo` with a
+   NULL stock price → `('ladder', NULL)`, and unmappable-arithmetic → `('ladder', NULL)`.
+2b. **The units test, and it is the most important one in this list.** Build a position from a Monte
+   Carlo pick whose `rowOptionPrice` is a plausible premium (say 6.24) and whose `rowStockPrice` is a
+   plausible underlying (say 197.50), and assert `resolved_tp_price == 197.50`. Then assert that **no
+   code path can reach `resolved_tp_price` from `picked_row_option_price`** — a premium landing there
+   makes `price >= 6.24` true on the first tick and fires TP_HIT instantly on every bullish position
+   (`alert_generator.py:181`, `alertEngine.ts:152`).
 3. The arithmetic mapping reads `rr_ratios` from config: with `rr_ratios: [1.5, 4.0]`, a 1.5R pick
    maps to `exit_plan_2r` and a 2.0R pick falls through to `('ladder', NULL)`. **This test fails if
    anyone hardcodes 2.0/3.0**, which is its entire purpose.
 4. A pre-G body (no `picked_*` keys) still creates a position, with all four NULL and
    `active_tp_method = 'ladder'` — D11.
-5. `pickedRowPrice: 0` and `-1` are both 422.
+5. `pickedRowStockPrice: 0` / `-1` and `pickedRowOptionPrice: 0` / `-1` are all 422.
 6. `/auto-trade/arm` carries the four fields onto `ArmedStrategy`; `fire_now()` creates a position
    carrying the armed pick, not a live one.
 
 Frontend (`frontend/**/__tests__/`):
 
-7. `checkMethodPick` — null, undefined, a well-formed pick, and a pick whose `rowPrice` is null
-   (must pass, §7.3).
+7. `checkMethodPick` — null, undefined, a well-formed pick, a pick whose `rowStockPrice` is null and
+   a pick whose `rowOptionPrice` is null (both must pass, §7.4).
 8. `checkTradeRisk` pushes `missing_method_pick` and sets `approved = false`.
 9. **One test per send path, eight in total** (O1–O4, S1–S4), asserting the control is disabled and
    the handler early-returns with no network call. The precedent this gate inherits exists precisely
-   because two paths were missed the first time; a test that covers six of eight would repeat it.
+   because two paths were missed the first time, and an earlier draft of §2.5 then missed two more
+   (the Stocks step-7 card and S5) — so a test that covers six of eight would repeat the defect
+   twice over. S3 is a **separate component** from S1/S2 and needs its own test, not a shared one.
+9b. S5, once Kenneth has chosen in §7.3: under (a) a test that an auto-executed position is created
+   with `picked_method = NULL` and does **not** raise the gate; under (b) a test that it creates
+   nothing. There is no version of this that goes untested — S5 places real orders with no human
+   watching.
 10. `SendToBrokerDialog`: two cards, one picked and one not — submit is blocked.
 11. The pick survives a step-6 → step-7 round trip, and does **not** survive a new scan.
 12. Switching the contract in step 6 clears the pick for the old contract.
@@ -581,8 +762,9 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 
 ## 11. Open, and Kenneth's
 
-1. **The five Alembic heads (§4.4).** Pre-existing; G must not silently add a sixth. Merge them, or
-   accept that G's revision is applied by name. Not G's to decide.
+1. ~~The five Alembic heads.~~ **Withdrawn — the claim was false.** There is exactly one head,
+   `c7a1e9d4b820`, and G chains onto it. Nothing here needs a decision from Kenneth; §4.4 fact 2
+   carries the corrected detail and the reason the mistake was easy to make.
 2. **D4/D6 arming semantics (§9.2).** G records the basis; it does not arm it. Whether "armed" should
    actually demote the other alerts is a Phase H question with its own blast radius across two alert
    engines. **Write the options down with the answer.**
@@ -590,6 +772,10 @@ Both suites must be green and `npm run typecheck` silent before this is called d
    If "no cascade" meant something narrower, §9.2 and §4.3 are the two places it changes.
 4. **Stocks gets its first hard pre-send refusal (§7.2).** Worth seeing in the running app before it
    is called done, not just in tests.
+5. **S5, the after-scan auto-executor (§7.3) — BLOCKING for G's stocks half.** Q5 and S5 cannot both
+   hold as written: a pick can never exist for a trade S5 sends. Three options are written out in
+   §7.3 with what each costs. **G must not ship the stocks gate until this is answered**, because
+   (a) and (b) differ by whether a working feature stops working.
 
 ---
 
@@ -598,11 +784,12 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 1. Types + backend schema + column + migration (§4). Nothing user-visible; tests 1–6.
 2. The `scanStore` slice and the sibling move (§5). Tests 11, 12, 15.
 3. The card control and the channel (§6). Tests 13, 14.
-4. The send gate, all eight paths (§7). Tests 7–10.
+4. The send gate, all eight gateable paths (§7). Tests 7–10. **The stocks half of this step is
+   blocked on §11 item 5** (S5); the options half is not.
 5. Arming (§8). Test 6's second half.
 
 Steps 1 and 2 are independent of each other. Step 4 depends on 3; nothing can be gated on a pick the
-user has no way to make.
+user has no way to make. Step 1 must not begin without running `alembic heads` first (§4.4).
 
 **Nothing here is done until an adversarial round on it comes back clean at the gate.** This spec is
 the first target.
