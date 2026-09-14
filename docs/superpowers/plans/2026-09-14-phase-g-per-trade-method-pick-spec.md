@@ -428,14 +428,39 @@ to whichever head the implementer branches from.
 
 ## 5. Persistence — what moves, and where (Q3)
 
-A new slice on the existing `scanStore`, not a new store, and not `persist()` on the step-7 page:
+Two new slices on the existing `scanStore`, not a new store, and not `persist()` on the step-7 page.
+**Each slice is STAMPED WITH THE SCAN IT BELONGS TO**, and that stamp — not any reset call — is what
+makes stale edits unreadable:
 
 ```ts
 // scanStore.ts
-cardPicks:       Record<string, MethodPick>;   // keyed by CONTRACT for options
-setCardPick:     (key: string, pick: MethodPick) => void;
-clearCardPicks:  () => void;
+interface CardEditSlice {
+  /** The `scan_id` these edits were made against. Both result types carry one:
+   *  `ScanResult.scan_id` (domain.ts:65) and `StockScanResult.scan_id`
+   *  (stockDomain.ts:45). */
+  scanId:          string | null;
+  picks:           Record<string, MethodPick>;
+  invalidation:    Record<string, number | null>;
+  premiumStop:     Record<string, number | null>;
+  entryLimit:      Record<string, number | null>;
+  maxLossOverride: Record<string, MaxLossOverride | null>;
+}
+
+optionsCardEdits: CardEditSlice;   // keyed as noted below
+stocksCardEdits:  CardEditSlice;
+
+/** Writers stamp the current scan_id. If it differs from the slice's, the slice
+ *  is RESET first and then written — so a write under a new scan cannot land
+ *  beside edits from the old one. */
+setCardPick: (mode, scanId: string, key: string, pick: MethodPick) => void;
+/** Readers return EMPTY when the stamp does not match the scan currently in the
+ *  store. No caller ever sees a foreign scan's edits. */
+selectCardEdits: (state, mode) => CardEditSlice;   // empty slice on mismatch
 ```
+
+**Two slices, not one**, because options and stocks have independent results
+(`scanResult` / `stockScanResult`) and therefore independent `scan_id`s. A single stamped slice would
+reset on every mode toggle and throw away edits the user had not finished with.
 
 **Keying.** By contract (`contractId()`, `types/domain.ts`) in options mode, matching
 `premiumStopByContract` / `entryLimitByContract` / `exitPlanByContract`: a pick is a judgement about
@@ -453,7 +478,7 @@ and persisting a Monte Carlo estimate across a reload reintroduces exactly the s
 that `estimateIsFresh` (`TradeCard:1809`) and `raceIsShowable` exist to suppress. `pickedAt` is what
 lets a restored pick be aged; a restored *estimate* would have to be re-run anyway.
 
-### 5.1 Invalidation — the part that is NOT already solved, and the trap in it
+### 5.1 Invalidation — why this is a STAMP and not a reset call
 
 Bump `scanStore`'s persist `version` and add a migration branch, per CLAUDE.md.
 
@@ -480,23 +505,38 @@ previous scan, which tells the router to skip re-anchoring (`schemas/__init__.py
 documented "\$180 typed at \$145 stored as \$235, above spot, Critical STOP_REACHED on the first
 scan" bug, resurrected.
 
-**The hook, named precisely.** An earlier draft said "the existing reset path that clears
-`pickedContracts` is the place." **There is no such path** — `clearPickedContracts` (`scanStore.ts:390`)
-has *zero* production callers; its only reference outside the store is
-`frontend/__tests__/pickOverride.test.tsx:13`. Naming a reset that does not run is how the whole Q3
-answer gets defeated by one stale key, so:
+**Why there is no reset call in this design.** Two drafts of this section tried to name one and both
+were wrong, which is the evidence that naming one is the wrong shape:
 
-- Clear `cardPicks` **and all four siblings** in `RunScanButton/index.tsx` at `:154`, immediately
-  beside `setScanResult(result)`. That is the one place a genuinely new scan lands, and it covers
-  both modes (the stocks branch at `:79` reaches the same call).
-- **Do NOT clear in `setScanResult` itself.** Its other caller is `StoreHydration/index.tsx:55`,
-  which *restores* a persisted scan on mount. Clearing there would wipe the picks on every page load
-  — the exact opposite of what Q3 asks for.
-- Keep the page's `[scanResult]` effect as it is. It becomes genuinely belt-and-suspenders rather
-  than the load-bearing guard it was.
-- While there: add `maxLossOverrideBySymbol` to that effect's clear list. Its omission was called an
-  omission rather than a decision when the other three were added (`page.tsx:517-519`); G is the
-  change that makes it matter.
+- Draft 1 said "the existing reset path that clears `pickedContracts`". **There is no such path** —
+  `clearPickedContracts` (`scanStore.ts:390`) has zero production callers; its only reference outside
+  the store is `frontend/__tests__/pickOverride.test.tsx:13`.
+- Draft 2 said `RunScanButton/index.tsx:154`, "and it covers both modes (the stocks branch at `:79`
+  reaches the same call)." **The parenthetical is false.** `:79` opens
+  `if (screenerMode === 'stocks') {`, calls `runStockScan` at `:90` and **returns at `:91`**. Line
+  `:154` sits inside the options-only `api.postScanBody(...).then()` below that return and is
+  unreachable from stocks. Stock results land at three other places instead: `lib/stockScan.ts:100`
+  (reached from `RunScanButton:90` *and* `step-4-stocks/page.tsx:179`), and
+  `step-5-strategy/page.tsx:245`, which calls `api.postStockScan` directly and bypasses
+  `runStockScan` entirely.
+
+A reset that must be called from every scan-landing site is only ever as correct as the last
+enumeration of those sites, and this spec has now got that enumeration wrong twice. **So the design
+does not depend on one.** The stamp in §5 makes staleness structural:
+
+- A write stamps the current `scan_id`; a mismatched stamp resets the slice before writing.
+- A read returns an empty slice when the stamp does not match the scan in the store.
+- **A scan landing anywhere, by any path that exists today or is added later, invalidates the slice
+  by changing `scan_id`.** There is nothing to remember to call.
+- `StoreHydration` (`:55`, `:67`) restores a persisted result whose `scan_id` still matches, so
+  restored edits survive — which is what Q3 asked for, and what a blanket reset in the setter would
+  have destroyed.
+
+Keep the page's `[scanResult]` effect exactly as it is. Under this design it is genuinely
+belt-and-suspenders rather than the load-bearing guard it had quietly become. Its omission of
+`maxLossOverrideBySymbol` (`page.tsx:508-521` clears six caches, not that one) stops mattering once
+the stamp governs, but the omission was called *"an omission, not a decision"* when the other three
+were added (`page.tsx:517-519`) — add it while you are there.
 
 ---
 
@@ -515,7 +555,9 @@ two selectors on the two sides of a trade look and behave alike.
   `firstPassage.race && raceIsShowable`. Ladder is always available — it needs no run (§2.2).
 - Picking a method whose numbers then go stale (`estimateIsFresh` false, or the contract changes)
   **clears the pick**. The reset effect at `TradeCard:659-672` is where; `prevContractRef` is already
-  the trigger.
+  the trigger. **This is options-only** — `StockPositionCard` has no contract and no equivalent
+  effect — which is precisely why §5's scan stamp, not this effect, is what guarantees a stocks pick
+  cannot outlive its scan.
 - The row selector (D5's second leg) is the target rows that method already renders, made
   selectable. **Which field of the selected row goes into which of the two price slots is fixed by
   §4.1 and is not the implementer's choice:**
@@ -546,7 +588,8 @@ A fifth `initial*` / `on*Change` pair on `TradeCardProps`, per §2.3:
   onMethodPickChange?: (pick: MethodPick | null) => void;
 ```
 
-Wired at `step-7-trade-card/page.tsx` to `scanStore.cardPicks`, exactly as
+Wired at `step-7-trade-card/page.tsx` to `optionsCardEdits.picks` via §5's `selectCardEdits`
+selector (never by reading the slice directly — a direct read skips the `scan_id` check), exactly as
 `initialMaxLossOverride`/`onMaxLossOverrideChange` are wired to `maxLossOverrideBySymbol`
 (`:385-388`).
 
@@ -567,7 +610,8 @@ note at `page.tsx:386-405` explains what an always-new object does to the render
 ### 6.3 Stocks
 
 `StockPositionCard` holds its own state and sends from inside itself (`:393`, `:579`), so it needs no
-prop pair — it reads and writes `scanStore.cardPicks` directly, keyed by symbol. Its methods are
+prop pair — it reads and writes `stocksCardEdits.picks` through the same `selectCardEdits`
+selector, keyed by symbol. Its methods are
 Arithmetic (`getStockExitPlan`, `:488`), Monte Carlo (`getStockFirstPassage`, `:449`) and Ladder (the
 `t1/t2/t3` overlay). **It has no Barrier Race**, so it offers three options, not four.
 
@@ -643,7 +687,11 @@ contradicts §3.5's "nothing goes out on a default nobody looked at."
 
 `checkMethodPick` returns true only when a `MethodPick` exists **for the key being sent** and its
 `method` is one of the four values. A pick made for a different contract, or cleared by a staleness
-reset (§6.1), is absent and blocks.
+reset (§6.1), is absent and blocks. **So is a pick from a previous scan** — §5's reader returns an
+empty slice on a `scan_id` mismatch, so a stale pick is not "old", it is *gone*, and the gate refuses
+the send rather than stamping last scan's price onto this scan's position. That is the one property
+that makes the gate and the §4.3 seed safe in stocks mode, which has no contract-switch reset of its
+own (`TradeCard:659-672` is options-only).
 
 **Neither price field blocks.** Not `rowStockPrice` — Barrier Race never has one (§4.1) and blocking
 on it would make the race unpickable; not `rowOptionPrice` — Ladder and Arithmetic never have one.
@@ -749,12 +797,21 @@ Frontend (`frontend/**/__tests__/`):
    nothing. There is no version of this that goes untested — S5 places real orders with no human
    watching.
 10. `SendToBrokerDialog`: two cards, one picked and one not — submit is blocked.
-11. The pick survives a step-6 → step-7 round trip, and does **not** survive a new scan.
+11. The pick survives a step-6 → step-7 round trip, and does **not** survive a new scan. **Assert
+    this per mode and through each scan entry point**, because the entry points differ and an
+    earlier draft of §5.1 got them wrong: options via `RunScanButton:154`; stocks via
+    `lib/stockScan.ts:100` (reached from both `RunScanButton:90` and `step-4-stocks/page.tsx:179`)
+    **and** via `step-5-strategy/page.tsx:245`, which bypasses `runStockScan` entirely. Under §5's
+    stamp all four should pass without any per-site wiring — that is the property being tested.
+11b. A pick made under scan A is **not readable** after a result with a different `scan_id` lands,
+    and IS still readable after `StoreHydration` restores the same result (`:55`, `:67`). The second
+    half is what stops the fix from wiping picks on every page load.
 12. Switching the contract in step 6 clears the pick for the old contract.
 13. A pick on a stale estimate is cleared (`estimateIsFresh` false).
 14. The stocks card offers three options and no Barrier Race.
-15. `scanStore`'s persist migration: a v(N-1) payload rehydrates with `cardPicks: {}` and does not
-    throw.
+15. `scanStore`'s persist migration: a v(N-1) payload rehydrates with both slices empty and
+    `scanId: null`, and does not throw. A `scanId: null` slice must read as empty, never as
+    "matches everything".
 
 Both suites must be green and `npm run typecheck` silent before this is called done.
 
@@ -782,7 +839,9 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 ## 12. Build order
 
 1. Types + backend schema + column + migration (§4). Nothing user-visible; tests 1–6.
-2. The `scanStore` slice and the sibling move (§5). Tests 11, 12, 15.
+2. The two `scanStore` slices, the scan-id stamp and the sibling move (§5). Tests 11, 11b, 12, 15.
+   **Build the stamp and its selector FIRST**, before any caller reads a slice: a direct slice read
+   that skips the `scan_id` check is the whole defect this design exists to make impossible.
 3. The card control and the channel (§6). Tests 13, 14.
 4. The send gate, all eight gateable paths (§7). Tests 7–10. **The stocks half of this step is
    blocked on §11 item 5** (S5); the options half is not.
