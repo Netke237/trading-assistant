@@ -1062,8 +1062,9 @@ Both suites must be green and `npm run typecheck` silent before this is called d
    on `scanStore.ts`, and the four sibling caches moved off `step-7-trade-card/page.tsx`'s
    `useState`. Tests 11/11b/12/15 are `lib/__tests__/scanStoreCardEdits.test.ts` (20) over
    `lib/__tests__/cardEdits.test.ts` (34). **Three deviations from §5/§5.1, all recorded there and
-   in `PROJECT_STATE.json`.** NOT YET AUDITED — step 2 is not done until an adversarial round on it
-   comes back clean at the gate.
+   in `PROJECT_STATE.json`.** **AUDITED CLEAN, 2026-09-14** — one round, zero gate-level findings,
+   twelve below-gate (three fixed in-branch, nine logged against main). See
+   `phase_g_step2_followups` in `PROJECT_STATE.json`.
 3. ~~The card control and the channel (§6). Tests 13, 14. **Also fix BOTH of the EditDrawer's
    hardcoded `rrRatio === 2` / `=== 3` sites here.**~~ **BUILT 2026-09-14** —
    `components/molecules/MethodPickSelector/` (one control, both cards: four options on TradeCard,
@@ -1083,14 +1084,24 @@ Both suites must be green and `npm run typecheck` silent before this is called d
    actually fires on, so it is a truthful default rather than an unlooked-at one;
    (c) picking a METHOD alone emits a complete pick with both prices null, per §7.4;
    (d) a "has the reset settled" guard was written into both cards against the transition-commit
-   hazard and REMOVED from both — no mutation of it could fail a test. TradeCard is safe because the
-   pick is local state re-synced in the same `set` batch as the plan/estimate; StockPositionCard is
-   safe only because its reset nulls `plan` and `estimate` unconditionally, and its note says what
-   would bring the hazard back (caching either per symbol);
+   hazard and REMOVED from both — no mutation of it could fail a test **at the time this was
+   written. That claim was WRONG for TradeCard, and the audit trail below is the correction, kept
+   here rather than silently edited away.** StockPositionCard's half held: its reset nulls `plan`
+   and `estimate` unconditionally, so premature and settled availability always agree there.
    (e) `MethodPickSelector` refuses to offer rows for a method it renders as disabled, so the two
    cards build their `rows:` unconditionally instead of restating the availability rule.
-   NOT YET AUDITED — and the audit round on it must also cover `8f9769a2` (persist-picks-only),
-   which rides with this step.
+   **AUDITED, THREE ROUNDS, CLEAN 2026-09-14** — see `phase_g_step3_followups` in
+   `PROJECT_STATE.json` for the full trail. Round 1 (covering this step together with
+   `8f9769a2`, as required) found one gate-level finding IN (d) above: TradeCard's "local state,
+   same `set` batch" argument does not hold for `monte_carlo`/`barrier_race`, whose availability
+   reads `data.contract` — a PROP that updates one render before the reset effect resyncs state —
+   so a transitional render could make a genuinely-fresh OUTGOING pick look gone and clear the
+   WRONG (incoming) candidate's entry. Round 1's own fix (a hand-off ref between two effects) was
+   ITSELF gate-level-broken two more ways, found by round 2, and was replaced rather than patched
+   again: round 2's fix drops the ref entirely and instead compares against `prevContractRef.current`
+   (state, resynced in the same batch as `raceBarriers`) rather than the `data.contract` prop,
+   removing the transitional mismatch at its source. Round 3, scoped to that fix alone, came back
+   clean — zero gate-level, zero below-gate.
 4. The send gate, all eight gateable paths (§7). Tests 7–10, and 9b. **Unblocked** — §11 item 6 was
    answered 2026-09-14 (S5 is exempt, §7.3). The eight paths are gated; S5 is the ninth and is
    deliberately not.
