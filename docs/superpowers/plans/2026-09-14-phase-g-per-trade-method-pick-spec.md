@@ -526,6 +526,44 @@ setCardPick: (mode, scanId: string, key: string, pick: MethodPick) => void;
 selectCardEdits: (state, mode) => CardEditSlice;   // empty slice on mismatch
 ```
 
+**BUILT 2026-09-14 (step 2), with three deviations from the text above. Each is
+recorded here and in `PROJECT_STATE.json` rather than left for a reader to find
+by diffing.** The code is `frontend/lib/cardEdits.ts` (the rules, pure and unit
+tested) plus the wiring in `frontend/lib/scanStore.ts`.
+
+**Deviation 1 — the writer DERIVES the stamp; it is not a parameter**
+(`PHASE-G-STEP2-STAMP-DERIVED-2026-09-14`). The shipped signature is
+`setCardEdit(mode, field, key, value)`, and `currentScanIdFor(state, mode)` is
+the single derivation shared by writer and reader. A caller passing `scanId`
+could pass a stale one, and the result would be an edit written under a stamp
+the reader rejects — an edit that silently vanishes, which is the class of
+defect the stamp exists to prevent. No caller has a better source than the
+store either: `TradeCardData` carries no `scan_id`, so every call site would
+have read `scanResult?.scan_id` back out of the store anyway. The parameter
+bought nothing and cost a way to get it wrong.
+
+One generic writer covers all five maps, so `setCardPick(mode, key, pick)` is
+`setCardEdit(mode, 'picks', key, pick)`. Five near-identical setters is how a
+sixth gets added that forgets to stamp.
+
+**Deviation 2 — the stamp falls back to `timestamp`**
+(`PHASE-G-STEP2-TIMESTAMP-FALLBACK-2026-09-14`). §5 says the stamp is
+`scan_id`. It is, except when the result has none — which is REACHABLE, not
+hypothetical: `scan_id` entered the frontend's `ScanResult` on **2026-08-28
+(ac84e93d)** and no store migration backfills it, so a localStorage blob written
+before that date restores a result without one. With no stamp every card edit
+would be dropped **while the card still displayed it**: the user types \$2.71,
+the card shows \$2.71, the order carries the card's original \$2.50. That
+display-vs-send disagreement is the exact defect class step 7 spent four rounds
+closing, and it is strictly worse than the staleness the stamp prevents.
+`timestamp` is required on both result types, predates `scan_id`, and changes
+per scan — so it is a working stamp rather than a sentinel that matches
+everything. Null is left only for a result carrying neither, which is not a
+result.
+
+**Deviation 3 — see §5.1's own amendment below.** The page's `[scanResult]`
+effect does NOT gain a reset for these caches; it loses the three it had.
+
 **Two slices, not one**, because options and stocks have independent results
 (`scanResult` / `stockScanResult`) and therefore independent `scan_id`s. A single stamped slice would
 reset on every mode toggle and throw away edits the user had not finished with.
@@ -605,6 +643,40 @@ belt-and-suspenders rather than the load-bearing guard it had quietly become. It
 `maxLossOverrideBySymbol` (`page.tsx:508-521` clears six caches, not that one) stops mattering once
 the stamp governs, but the omission was called *"an omission, not a decision"* when the other three
 were added (`page.tsx:517-519`) — add it while you are there.
+
+> **AMENDED IN BUILD (2026-09-14) — the paragraph above is wrong, and the
+> instruction in its last clause would have introduced a bug.**
+> (`PHASE-G-STEP2-NO-EFFECT-RESET-2026-09-14`.)
+>
+> The four edit-cache clears were REMOVED from that effect, not kept and not
+> extended to the fifth. Once the caches move into the store there are no
+> `setState` hooks left for the effect to call, so "keep it exactly as it is" is
+> not available — the only way to honour it is a new store-level reset action,
+> **and that reset would be actively wrong**: the effect also runs on MOUNT,
+> where `scanResult` has not changed at all, and on mount the slice may
+> legitimately hold edits `StoreHydration` just restored alongside the very
+> result they were stamped against. A blanket reset there destroys a restored
+> pick on every page load — precisely what **test 11b's second half** exists to
+> catch. It would have passed the "does not survive a new scan" half of test 11
+> while failing the thing the design is for.
+>
+> So: the three FETCHED caches (`estimatesByContract`, `structuralBySymbol`,
+> `exitPlanByContract`) still clear there, because they are still local
+> `useState` and nothing stamps them. The four EDIT caches do not, because the
+> stamp already does that job by every path that lands a result rather than only
+> the ones someone remembered to wire — which is §5.1's own argument, applied to
+> §5.1's own last sentence.
+>
+> **`maxLossOverrideBySymbol`'s omission is fixed, structurally rather than by
+> adding a line.** It now shares ONE slice and ONE stamp with the other three,
+> so there is no longer a list it can be left off. That is a better answer to
+> *"an omission, not a decision"* than remembering to add it: the next person
+> cannot forget, because there is nothing to remember.
+>
+> No reset action is exported from `cardEdits.ts` at all. If you are adding one,
+> re-read the two failed drafts above — and note that `clearPickedContracts`,
+> this store's existing fossil of that approach, still has zero production
+> callers.
 
 ---
 
@@ -936,9 +1008,14 @@ Both suites must be green and `npm run typecheck` silent before this is called d
 ## 12. Build order
 
 1. Types + backend schema + column + migration (§4). Nothing user-visible; tests 1–6.
-2. The two `scanStore` slices, the scan-id stamp and the sibling move (§5). Tests 11, 11b, 12, 15.
-   **Build the stamp and its selector FIRST**, before any caller reads a slice: a direct slice read
-   that skips the `scan_id` check is the whole defect this design exists to make impossible.
+2. ~~The two `scanStore` slices, the scan-id stamp and the sibling move (§5). Tests 11, 11b, 12,
+   15.~~ **BUILT 2026-09-14** — `frontend/lib/cardEdits.ts` (the stamp, its selector and the write
+   rules, built first and unit-tested before any caller read a slice), the two slices + persist v16
+   on `scanStore.ts`, and the four sibling caches moved off `step-7-trade-card/page.tsx`'s
+   `useState`. Tests 11/11b/12/15 are `lib/__tests__/scanStoreCardEdits.test.ts` (20) over
+   `lib/__tests__/cardEdits.test.ts` (34). **Three deviations from §5/§5.1, all recorded there and
+   in `PROJECT_STATE.json`.** NOT YET AUDITED — step 2 is not done until an adversarial round on it
+   comes back clean at the gate.
 3. The card control and the channel (§6). Tests 13, 14. **Also fix BOTH of the EditDrawer's
    hardcoded `rrRatio === 2` / `=== 3` sites here** (§11 item 3, found while building step 1 and
    completed by its audit) — the read side, `tpMethodOptions` at `:1310-1325` with its "2R

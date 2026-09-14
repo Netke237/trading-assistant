@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
+import { emptyCardEdits } from '@/lib/cardEdits';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
@@ -89,7 +90,15 @@ function mount(invalidation: number | null) {
   localStorage.clear();
   act(() => {
     useScanStore.setState({
-      scanResult: { candidates: [makeCard(invalidation)] } as any,
+      scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard(invalidation)] } as any,
+      // Phase G piece 5: the three edit caches this file exercises now live in
+      // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
+      // has to carry the `scan_id` the real type has always declared required
+      // — without one there is no stamp, and every edit is dropped. The slices
+      // are reset here too: they used to die with the page's useState hooks on
+      // unmount, and a persisted store does not.
+      optionsCardEdits: emptyCardEdits(),
+      stocksCardEdits: emptyCardEdits(),
       pickedContracts: {},
       contractsBySymbol: {},
       scanOverrides: {},

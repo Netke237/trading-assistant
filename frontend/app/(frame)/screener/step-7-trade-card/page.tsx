@@ -18,6 +18,7 @@ import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/li
 import { useRiskStore } from '@/lib/riskStore';
 import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
+import { selectCardEdits } from '@/lib/cardEdits';
 import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type {
@@ -235,7 +236,19 @@ export default function Step7Page() {
   // whole overlay on every patch, and the seed itself moves under an untouched
   // field when `mergePlan` lands. Only the card knows which it is, so it tells
   // us -- see `onEditsChange`'s `meta.touched.premiumStop`.
-  const [premiumStopByContract, setPremiumStopByContract] = useState<Record<string, number | null>>({});
+  // PHASE G piece 5, build step 2 (spec §5). These four caches used to be
+  // `useState` on this page. They now live in ONE scan-stamped slice on
+  // scanStore, read through `selectCardEdits` -- which returns an EMPTY slice
+  // whenever the slice's `scan_id` stamp does not match the scan currently in
+  // the store, so a previous run's typed levels can never render on a card
+  // built from new prices.
+  //
+  // READ THE SLICE ONLY THROUGH THIS SELECTOR. `state.optionsCardEdits` read
+  // directly would skip the stamp check, which is the single defect this design
+  // exists to make impossible.
+  const cardEdits = useScanStore((s) => selectCardEdits(s, 'options'));
+  const setCardEdit = useScanStore((s) => s.setCardEdit);
+  const premiumStopByContract = cardEdits.premiumStop;
   // The card's editable INVALIDATION -- the underlying stock level that becomes
   // `PortfolioPosition.stop` and drives STOP_REACHED. Keyed by SYMBOL, like
   // `structuralBySymbol` and `maxLossOverrideBySymbol` beside it and unlike
@@ -247,11 +260,11 @@ export default function Step7Page() {
   // distinct state `premiumStopByContract` carries, for the same reason: the
   // seed moves under an untouched field when `mergePlan` lands, so a cached
   // seed would pin the stop to a level the plan has since replaced.
-  const [invalidationBySymbol, setInvalidationBySymbol] = useState<Record<string, number | null>>({});
+  const invalidationBySymbol = cardEdits.invalidation;
   // The card's editable ENTRY LIMIT -- the option premium posted as the broker
   // order's `limit_price`. Contract-keyed for the same reason the premium stop
   // is: it is a price for one contract, meaningless against another.
-  const [entryLimitByContract, setEntryLimitByContract] = useState<Record<string, number | null>>({});
+  const entryLimitByContract = cardEdits.entryLimit;
   /** Bumped in lockstep with clearing the three edit caches below, and handed
    *  to TradeCard as `resetKey`. Without it the parent dropped a cached edit
    *  while the card kept showing (and keeping touched) the same value -- the
@@ -266,26 +279,18 @@ export default function Step7Page() {
     setOrderContractsBySymbol((prev) =>
       prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
     );
-    // Same identity-preserving guard as above, on every cache: an unchanged
-    // write must return `prev` untouched or every TradeCard render re-triggers
-    // this cascade.
-    const invalidation = meta.touched.invalidation ? overlay.invalidation : null;
-    setInvalidationBySymbol((prev) =>
-      prev[symbol] === invalidation ? prev : { ...prev, [symbol]: invalidation },
-    );
+    // The identity-preserving guard these three carried inline now lives in
+    // `writeCardEdit` (lib/cardEdits.ts), for the same reason it existed here:
+    // the card reports its whole overlay on every patch, so an unchanged write
+    // must not produce a new object or every render re-triggers this cascade.
+    // `null` still means "untouched", which is why `meta.touched` gates each.
+    setCardEdit('options', 'invalidation', symbol,
+      meta.touched.invalidation ? overlay.invalidation : null);
     if (!cardContractKey) return;
-    const premiumStop = meta.touched.premiumStop ? overlay.premiumStop : null;
-    setPremiumStopByContract((prev) =>
-      prev[cardContractKey] === premiumStop
-        ? prev
-        : { ...prev, [cardContractKey]: premiumStop },
-    );
-    const entryLimit = meta.touched.entryLimit ? overlay.entryLimit : null;
-    setEntryLimitByContract((prev) =>
-      prev[cardContractKey] === entryLimit
-        ? prev
-        : { ...prev, [cardContractKey]: entryLimit },
-    );
+    setCardEdit('options', 'premiumStop', cardContractKey,
+      meta.touched.premiumStop ? overlay.premiumStop : null);
+    setCardEdit('options', 'entryLimit', cardContractKey,
+      meta.touched.entryLimit ? overlay.entryLimit : null);
   };
   /** The cache key for the two CONTRACT-keyed edits (entry limit, premium
    *  stop). `contractKeyFor` returns null whenever `contractDetails` is
@@ -382,9 +387,13 @@ export default function Step7Page() {
   // created PortfolioPosition) and SendToBrokerDialog (so its own risk check
   // knows about an active override and doesn't force a spurious extra
   // confirmation click).
-  const [maxLossOverrideBySymbol, setMaxLossOverrideBySymbol] = useState<Record<string, MaxLossOverride | null>>({});
+  // Phase G piece 5 -- in the same stamped slice as the three above. It was the
+  // one edit cache the `[scanResult]` effect below forgot to clear (spec §5.1
+  // calls that "an omission, not a decision"); sharing one slice with one stamp
+  // is what makes forgetting it again impossible rather than merely fixed.
+  const maxLossOverrideBySymbol = cardEdits.maxLossOverride;
   const handleMaxLossOverrideChange = (symbol: string, override: MaxLossOverride | null) => {
-    setMaxLossOverrideBySymbol((prev) => ({ ...prev, [symbol]: override }));
+    setCardEdit('options', 'maxLossOverride', symbol, override);
   };
   // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
   // alongside the read side (withCachedEstimate) — the two rules they enforce are
@@ -506,20 +515,22 @@ export default function Step7Page() {
     setEstimatesByContract({});
     setStructuralBySymbol({});
     setExitPlanByContract({});
-    // The three EDIT caches clear here too, for the reason the comment above
-    // gives for the estimate caches — and more urgently, because these two are
-    // keyed on things that RECUR across scans: `invalidationBySymbol` on the
-    // bare symbol, and `entryLimitByContract`/`premiumStopByContract` on
-    // `symbol|strike|expiry|right`, which is the same key when a new scan
-    // picks the same contract. An entry limit typed against yesterday's $2.50
-    // mid would otherwise survive onto a card whose new mid is $6.00, and the
-    // button would still promise $2.71. Leaving the newest three caches out of
-    // the same belt-and-suspenders the older three get was not a decision, it
-    // was an omission.
-    setPremiumStopByContract({});
-    setInvalidationBySymbol({});
-    setEntryLimitByContract({});
-    // Same commit, same statement group: the card must reset with them.
+    // THE FOUR EDIT CACHES ARE NOT CLEARED HERE, AND MUST NOT BE (Phase G piece
+    // 5, spec §5 / §5.1). They now live in one scan-stamped slice on scanStore,
+    // and the stamp already does this job: a new `scan_id` makes every older
+    // edit read as empty, by every path that lands a result rather than only
+    // the ones someone remembered to wire.
+    //
+    // Re-adding a reset call here would be worse than redundant -- it would be
+    // WRONG. This effect also runs on MOUNT, where `scanResult` has not changed
+    // at all, and on mount the slice may legitimately hold edits StoreHydration
+    // just restored alongside the very result they were stamped against. A
+    // blanket reset would destroy a restored pick on every page load, which is
+    // exactly what spec test 11b pins against.
+    //
+    // The three FETCHED caches above still clear, because they are still local
+    // `useState` and are not stamped by anything.
+    // The card must still reset with them:
     setScanEpoch((n) => n + 1);
     if (scanResult?.candidates?.length) {
       setCards(scanResult.candidates);

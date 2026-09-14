@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
+import { emptyCardEdits } from '@/lib/cardEdits';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
@@ -99,7 +100,15 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     localStorage.clear();
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        // Phase G piece 5: the three edit caches this file exercises now live in
+        // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
+        // has to carry the `scan_id` the real type has always declared required
+        // — without one there is no stamp, and every edit is dropped. The slices
+        // are reset here too: they used to die with the page's useState hooks on
+        // unmount, and a persisted store does not.
+        optionsCardEdits: emptyCardEdits(),
+        stocksCardEdits: emptyCardEdits(),
         pickedContracts: {},
         contractsBySymbol: {},
         scanOverrides: {},
@@ -419,7 +428,14 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     localStorage.clear();
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        // Phase G piece 5: the three edit caches this file exercises now live in
+        // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
+        // has to carry the `scan_id` the real type has always declared required
+        // — without one there is no stamp, and every edit is dropped. The slices
+        // are reset here too: they used to die with the page's useState hooks on
+        // unmount, and a persisted store does not.
+        optionsCardEdits: emptyCardEdits(), stocksCardEdits: emptyCardEdits(),
         pickedContracts: {}, contractsBySymbol: {}, scanOverrides: {},
       } as any);
       usePortfolioStore.setState({ positions: [], lastSyncError: null });
@@ -479,7 +495,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // premium-stop bounds. The quote is keyed to its contract now.
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
         // Both contracts USER-PICKED, which is what arms the dedup gate.
         // `pickedContracts` maps symbol -> contract ID and is resolved against
         // `contractsBySymbol`; the id must DIFFER from `card.contract` or

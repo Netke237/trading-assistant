@@ -10,6 +10,10 @@ import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
 import { stripLegacyIvFields, stripLegacyIvDetail } from './ivBasis';
 import type { IvBasis } from './ivBasis';
+import {
+  clearPicksForSymbol, currentScanIdFor, emptyCardEdits, normalizeCardEdits, writeCardEdit,
+} from './cardEdits';
+import type { CardEditField, CardEditMode, CardEditSlice, CardEditValue } from './cardEdits';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -272,6 +276,24 @@ interface ScanStoreState {
   setScanOverrides: (o: Record<string, number | boolean | string>) => void;
   setPickedContract:    (symbol: string, contractId: string) => void;
   clearPickedContracts: () => void;
+  /** Phase G piece 5 — the per-scan card-edit slices (spec §5). One per mode,
+   *  each stamped with the `scan_id` its edits belong to.
+   *
+   *  NEVER READ THESE TWO FIELDS DIRECTLY. Go through `selectCardEdits(state,
+   *  mode)` in lib/cardEdits.ts, which returns an EMPTY slice when the stamp
+   *  does not match the scan currently in this store. A direct read skips that
+   *  check and is the one defect this whole design exists to prevent — it would
+   *  show a previous scan's typed entry limit, premium stop, invalidation level
+   *  or picked target row on a card built from new prices. */
+  optionsCardEdits: CardEditSlice;
+  stocksCardEdits:  CardEditSlice;
+  /** Write one card edit, stamped with the scan currently in the store. The
+   *  stamp is derived here rather than passed in — see `currentScanIdFor`.
+   *  Covers all five maps including `picks`, so the spec's `setCardPick(mode,
+   *  key, pick)` is `setCardEdit(mode, 'picks', key, pick)`. */
+  setCardEdit: <F extends CardEditField>(
+    mode: CardEditMode, field: F, key: string, value: CardEditValue<F>,
+  ) => void;
   setContractsBySymbol: (map: Record<string, OptionContract[]>) => void;
   screenerMode:        'options' | 'stocks' | 'prebreakout';
   setScreenerMode:     (m: 'options' | 'stocks' | 'prebreakout') => void;
@@ -329,7 +351,7 @@ interface ScanStoreState {
 
 export const useScanStore = create<ScanStoreState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       scanState:       'IDLE',
       scanAt:          null,
       scanDurationMs:  null,
@@ -386,7 +408,42 @@ export const useScanStore = create<ScanStoreState>()(
       setConflictedSymbols: (symbols) => set({ conflictedSymbols: symbols }),
       setRejectedLog: (entries) => set({ rejectedLog: entries }),
       setScanOverrides: (o) => set({ scanOverrides: o }),
-      setPickedContract:    (symbol, contractId) => set(s => ({ pickedContracts: { ...s.pickedContracts, [symbol]: contractId } })),
+      optionsCardEdits: emptyCardEdits(),
+      stocksCardEdits:  emptyCardEdits(),
+      setCardEdit: (mode, field, key, value) => {
+        const s = get();
+        const sliceKey = mode === 'options' ? 'optionsCardEdits' : 'stocksCardEdits';
+        const next = writeCardEdit(s[sliceKey], currentScanIdFor(s, mode), field, key, value);
+        // `writeCardEdit` returns the SAME object when nothing changed, and an
+        // unchanged write then calls `set` NOT AT ALL. It matters that this
+        // returns early rather than setting an empty partial: zustand's setState
+        // notifies on every call whose argument is not the state object itself
+        // (vanilla.js -- `Object.assign({}, state, {})` is a NEW object and the
+        // listeners fire), so `set({})` would still churn a fresh top-level state
+        // and re-render anything subscribing without a selector. The step-7 card
+        // reports its whole overlay on every patch, so that is a render cascade
+        // on every keystroke rather than a quiet store.
+        if (next === s[sliceKey]) return;
+        set({ [sliceKey]: next });
+      },
+      setPickedContract:    (symbol, contractId) => set(s => {
+        // TEST 12. Switching the contract in step 6 drops the method pick made
+        // against the contract being left behind: the pick names one target row
+        // out of THAT contract's plan, and the card is about to show another
+        // one's. Keying alone would hide the stale pick but not remove it, so it
+        // would come back if the user switched back -- against numbers a
+        // recompute has since replaced. The two typed-price caches are
+        // deliberately NOT cleared here; see `clearPicksForSymbol`.
+        // OPTIONS SLICE UNCONDITIONALLY, not `screenerMode`'s slice: step 6 is
+        // an options-path route (the stocks path goes 4-stocks -> 5-strategy ->
+        // 6-backtest and has no contracts at all), so this action only ever
+        // fires under options. Reading `screenerMode` here would make the clear
+        // depend on a toggle that has no bearing on which slice owns the pick.
+        return {
+          pickedContracts:  { ...s.pickedContracts, [symbol]: contractId },
+          optionsCardEdits: clearPicksForSymbol(s.optionsCardEdits, symbol, contractId),
+        };
+      }),
       clearPickedContracts: () => set({ pickedContracts: {} }),
       setContractsBySymbol: (map) => set({ contractsBySymbol: map }),
       screenerMode:             'options',
@@ -430,7 +487,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-       version: 15,
+       version: 16,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -551,6 +608,21 @@ export const useScanStore = create<ScanStoreState>()(
             previousRun: stripLegacyStopFromScanResult(s.previousRun),
           };
         }
+        if (version < 16) {
+          // PHASE G piece 5, build step 2. The two card-edit slices are new
+          // fields, so an older blob simply has neither. Added EMPTY rather
+          // than left to `merge`'s spread, per CLAUDE.md's rule for a persisted
+          // shape change -- and because "left to the default merge" is how a
+          // field arrives as `undefined` on a store that declares it non-null.
+          //
+          // EMPTY, NOT MIGRATED, and there is nothing to migrate FROM. Before
+          // this version these edits lived in four `useState` hooks on
+          // step-7-trade-card/page.tsx and were never persisted at all, so no
+          // stored blob has ever carried one. The empty slices land with
+          // `scanId: null`, which reads as EMPTY and never as "matches
+          // everything" -- see selectCardEdits.
+          s = { ...s, optionsCardEdits: emptyCardEdits(), stocksCardEdits: emptyCardEdits() };
+        }
         return s;
       },
       partialize: (state) => ({
@@ -575,6 +647,18 @@ export const useScanStore = create<ScanStoreState>()(
         lastStockScanStatus:      state.lastStockScanStatus,
         lastStockScanUpdatedAt:   state.lastStockScanUpdatedAt,
         lastStockScanStrategy:    state.lastStockScanStrategy,
+        // Phase G piece 5. Persisted so a pick (and the typed levels beside it)
+        // survives a reload -- which is Q3's whole ask. Safe to persist ONLY
+        // because of the stamp: a restored slice is readable just while its
+        // `scanId` still matches the restored result, and StoreHydration
+        // restores that result. The fetched caches these sit next to on the
+        // page (`estimatesByContract`, `structuralBySymbol`, `exitPlanByContract`,
+        // `plansBySymbol`) are deliberately NOT here -- they are re-fetchable
+        // results rather than user edits, they are large, and a restored Monte
+        // Carlo estimate would reintroduce exactly the stale-vintage class that
+        // `estimateIsFresh` exists to suppress (spec §5).
+        optionsCardEdits:         state.optionsCardEdits,
+        stocksCardEdits:          state.stocksCardEdits,
       }),
       merge: (persisted, current) => {
         // `persisted` is undefined on a first visit (nothing in localStorage yet)
@@ -591,7 +675,19 @@ export const useScanStore = create<ScanStoreState>()(
           lastState === 'COMPLETED' || lastState === 'PARTIAL' || lastState === 'FAILED'
             ? lastState
             : 'IDLE';
-        return { ...current, ...p, scanState: restoredState };
+        // Phase G piece 5 -- coerce both slices at the boundary rather than
+        // trusting the blob. A slice that came back missing or malformed (an
+        // older build, a hand-edited or truncated localStorage entry) would
+        // otherwise reach `selectCardEdits` as `undefined` and throw, or reach
+        // it with a non-string stamp. `normalizeCardEdits` guarantees five
+        // objects and a string-or-null stamp; the stamp still gates every read.
+        return {
+          ...current,
+          ...p,
+          scanState: restoredState,
+          optionsCardEdits: normalizeCardEdits(p.optionsCardEdits),
+          stocksCardEdits:  normalizeCardEdits(p.stocksCardEdits),
+        };
       },
     },
   ),
