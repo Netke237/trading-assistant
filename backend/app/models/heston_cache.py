@@ -402,11 +402,12 @@ def _run_calibration(iv_key: str, chain_repr: str, S: float, r: float) -> Calibr
     # rather than 500: `scan.py` only reaches the Heston block for symbols
     # with a non-REJECT contract, and the `best_params is None` return above
     # leaves before the log either way. It fired because `_boundary_hits` was
-    # tautological on the two-rung grid and so `hits` was never empty. It is now empty on
-    # that grid by construction, which leaves this condition equal to
-    # `result.method != "heston_grid"`: a line per REJECTED fit, and silence
-    # while the gate is accepting. Rejections are the signal worth a WARNING;
-    # an accepted fit reporting a boundary it could not have avoided was not.
+    # tautological on the two-rung grid and so `hits` was never empty. It is
+    # now empty on that grid by construction, which leaves this condition
+    # equal to `result.method != "heston_grid"`: a line per REJECTED fit,
+    # and silence while the gate is accepting. Rejections are the signal
+    # worth a WARNING; an accepted fit reporting a boundary it could not
+    # have avoided was not.
     # The boundary half of the line returns on its own the day the grid gains
     # a third rung anywhere -- see `_boundary_hits`.
     if hits or result.method != "heston_grid":
