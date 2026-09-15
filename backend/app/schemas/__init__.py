@@ -752,7 +752,21 @@ class OptionsPipeline(BaseModel):
     no_chain:          int   # "no option chain"
     failed_score:      int   # Pass 2 score gate (reason starts with "Score gate:")
     failed_contracts:  int   # "all contracts rejected"
-    candidates:        int   # made it through everything
+    # Both defaulted because a PERSISTED v2 blob predates them. In such a blob
+    # `candidates` was snapshotted BEFORE the direction-conviction filter and
+    # the shortlist cap ran, so it can over-report; 0 here is the honest "not
+    # accounted for" reading rather than a claim that nothing was dropped.
+    #
+    # Deliberately NOT a SCAN_RESULT_SCHEMA_VERSION bump, though `candidates`
+    # does change meaning. The two bumps above were safety-critical: a stored
+    # price or stop silently denominated in something other than its name, with
+    # the basis unrecoverable. These are display counters for the Step-3 funnel
+    # -- nothing sizes, prices or gates a trade off them -- so the cost of a
+    # bump (the guard refuses EVERY stored v2 result, discarding real scan
+    # history) buys nothing a stale funnel count does not already cost.
+    failed_direction:  int = 0  # removed by the direction-conviction gate
+    failed_shortlist:  int = 0  # trimmed by the shortlist cap (see original_count)
+    candidates:        int   # made it through everything, after every filter
 
 
 class DteWindow(BaseModel):

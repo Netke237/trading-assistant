@@ -1531,23 +1531,6 @@ async def _execute_scan_core(
         elif isinstance(result, TradeCardData):
             candidates.append(result)
 
-    # ── Pipeline funnel counters ───────────────────────────────────────────────
-    _data_kw = ("no market data", "price filter", "cap filter")
-    _pipeline = OptionsPipeline(
-        scanned=len(symbols),
-        failed_data=sum(1 for r in rejected if any(k in r.reason for k in _data_kw)),
-        failed_pre_screen=sum(1 for r in rejected if r.reason.startswith("Pre-screen:")),
-        no_chain=sum(1 for r in rejected if r.reason == "no option chain"),
-        failed_score=sum(1 for r in rejected if r.reason.startswith("Score gate:")),
-        failed_contracts=sum(1 for r in rejected if "contracts rejected" in r.reason),
-        candidates=len(candidates),
-    )
-    _log.info(
-        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d candidates=%d",
-        scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
-        _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts, _pipeline.candidates,
-    )
-
     # ── Direction conviction filter ───────────────────────────────────────────
     # Removes candidates that show no actual directional structure — prevents
     # "least bad" stocks in an opposing trend from polluting the results.
@@ -1604,6 +1587,35 @@ async def _execute_scan_core(
     original_count: int = len(candidates)
     shortlist_truncated: bool = original_count > max_candidates
     candidates = candidates[:max_candidates]
+
+    # ── Pipeline funnel counters ───────────────────────────────────────────────
+    # Built HERE, after every filter, not straight after scoring. Snapshotting
+    # `candidates` before the direction-conviction gate made the funnel report a
+    # yield the ranking table never received: a Bearish/Position scan that scored
+    # 5 candidates and then had all 5 stripped for trend > 40 rendered
+    # "Candidates 5" above a table with no rows and, because step-4-ranking
+    # returns early when the list is empty, no banner explaining where they went.
+    # stock_scan.py has always built StockPipeline after its own filters; this is
+    # the options path catching up, so the invariant now holds in both modes:
+    # pipeline.candidates == len(result.candidates) == rows in the table.
+    _data_kw = ("no market data", "price filter", "cap filter")
+    _pipeline = OptionsPipeline(
+        scanned=len(symbols),
+        failed_data=sum(1 for r in rejected if any(k in r.reason for k in _data_kw)),
+        failed_pre_screen=sum(1 for r in rejected if r.reason.startswith("Pre-screen:")),
+        no_chain=sum(1 for r in rejected if r.reason == "no option chain"),
+        failed_score=sum(1 for r in rejected if r.reason.startswith("Score gate:")),
+        failed_contracts=sum(1 for r in rejected if "contracts rejected" in r.reason),
+        failed_direction=direction_filtered_count,
+        failed_shortlist=original_count - len(candidates),
+        candidates=len(candidates),
+    )
+    _log.info(
+        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d candidates=%d",
+        scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
+        _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts,
+        _pipeline.failed_direction, _pipeline.failed_shortlist, _pipeline.candidates,
+    )
 
     # Determine state: PARTIAL if some exceptions occurred but we still got candidates
     state: ScanState = 'COMPLETED'

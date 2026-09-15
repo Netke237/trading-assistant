@@ -63,6 +63,11 @@ export interface OptionsPipeline {
   no_chain:          number;
   failed_score:      number;
   failed_contracts:  number;
+  // Optional: a scan result persisted before these existed has no value for
+  // them, and its `candidates` was counted before the direction gate and the
+  // shortlist cap ran.
+  failed_direction?: number;
+  failed_shortlist?: number;
   candidates:        number;
 }
 

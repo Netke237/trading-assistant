@@ -64,9 +64,13 @@ export function ScanFunnel({ mode, pipeline }: Props) {
   }
 
   const p = pipeline as OptionsPipeline;
-  const afterData      = p.scanned - p.failed_data;
-  const afterPreScreen = afterData - p.failed_pre_screen;
-  const afterChain     = afterPreScreen - p.no_chain;
+  const afterData       = p.scanned - p.failed_data;
+  const afterPreScreen  = afterData - p.failed_pre_screen;
+  const afterChain      = afterPreScreen - p.no_chain;
+  const afterScored     = afterChain - p.failed_score - p.failed_contracts;
+  const failedDirection = p.failed_direction ?? 0;
+  const failedShortlist = p.failed_shortlist ?? 0;
+  const afterDirection  = afterScored - failedDirection;
   return (
     <div className={styles.funnel}>
       <div className={styles.header}>
@@ -76,7 +80,11 @@ export function ScanFunnel({ mode, pipeline }: Props) {
       <Stage wide label="Data / Filters (data/price/cap)" count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
       <Stage wide label="Pre-screen (setup score)"        count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
       <Stage wide label="Option chain (DTE window)"       count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />
-      <Stage wide label="Score + contracts (final + rules)" count={afterChain - p.failed_score - p.failed_contracts} rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
+      <Stage wide label="Score + contracts (final + rules)" count={afterScored} rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
+      <Stage wide label="Direction conviction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
+      {failedShortlist > 0 && (
+        <Stage wide label="Shortlist cap" count={afterDirection - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
+      )}
       <div className={styles.divider} />
       <div className={styles.finalStageWide}>
         <Text size={12} tone="pass" weight={500}>Candidates</Text>
