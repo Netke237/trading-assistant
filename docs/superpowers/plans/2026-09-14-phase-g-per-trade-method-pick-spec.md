@@ -1127,6 +1127,22 @@ Both suites must be green and `npm run typecheck` silent before this is called d
    pre-existing clearing effect — spec-compliant per §7.4, but this build step is what turns it
    from a one-click cosmetic annoyance into a genuine mid-session refusal with a message that
    doesn't distinguish "never picked" from "picked, then silently lost."
+
+   **A GAP FOUND AFTER THIS STEP, NOT A REGRESSION IN IT: the send-path VALUE wiring.** §7's text
+   above (and its own build) scoped step 4 to the REFUSAL only — `checkMethodPick`, `disabled`,
+   the belt-and-braces early return. Nothing in step 4 (or any earlier step) carried a MADE pick's
+   actual values into the `PortfolioPosition` a real send creates: `positionFromOrder`,
+   `buildPaperPosition` and every caller of `buildPaperStockPosition` built positions with none of
+   the five `picked_*` fields set, so a trader who passed the gate by picking a method still got
+   `picked_method = NULL` on send. §1's own promise ("G... persists it on the position") was
+   unfulfilled end to end for every one of O1–O3/S1–S4 despite the gate being audited clean.
+   **FOUND AND CLOSED 2026-09-15, AUDITED CLEAN IN ONE ROUND** — one pure mapping,
+   `pickedFieldsFrom` (`lib/cardEdits.ts`), spread into all 7 builders plus both ends of the
+   `PortfolioPosition` ↔ backend round trip (`toBackendPayload`/`fromBackend`). See
+   `phase_g_send_path_wiring_followups` in `PROJECT_STATE.json` for the full trail. Deliberately
+   does NOT touch O4 (auto-trade arm/fire, which creates no `PortfolioPosition` at all today — a
+   separate, pre-existing, already-documented limitation) or S5 (verified untouched, still
+   produces `picked_method = NULL` by omission per §7.3, exactly as intended).
 5. Arming (§8). Test 6's second half.
 
 Steps 1 and 2 are independent of each other. Step 4 depends on 3; nothing can be gated on a pick the
