@@ -1102,9 +1102,31 @@ Both suites must be green and `npm run typecheck` silent before this is called d
    (state, resynced in the same batch as `raceBarriers`) rather than the `data.contract` prop,
    removing the transitional mismatch at its source. Round 3, scoped to that fix alone, came back
    clean — zero gate-level, zero below-gate.
-4. The send gate, all eight gateable paths (§7). Tests 7–10, and 9b. **Unblocked** — §11 item 6 was
+4. ~~The send gate, all eight gateable paths (§7). Tests 7–10, and 9b. **Unblocked** — §11 item 6 was
    answered 2026-09-14 (S5 is exempt, §7.3). The eight paths are gated; S5 is the ninth and is
-   deliberately not.
+   deliberately not.~~ **BUILT 2026-09-15** — `checkMethodPick`/`MISSING_METHOD_PICK_TITLE`/
+   `MISSING_METHOD_PICK_MESSAGE` beside `checkInvalidation`'s own trio in `lib/risk.ts`, and
+   `checkTradeRisk` gained a trailing `methodPick` param pushing `missing_method_pick` on the same
+   nullable convention as `resolvedInvalidation`. All eight paths gated with the same three-part
+   shape `missing_invalidation` established: `disabled`, a `title`, and a belt-and-braces early
+   return inside the handler itself. O1 `SendToBrokerDialog`, O2/O3 step 7's two direct buttons,
+   O4 `AutoTradeArm`; S1/S2 `StockPositionCard`, S3 `step-7-position-card/page.tsx` (its own,
+   separate read of the stamped slice, per §2.5), S4 `StockSendDialog` — stocks' first hard
+   pre-send refusal of any kind, exactly as §7.2 called out. S5 verified untouched — no diff on
+   `step-4-stocks/page.tsx`. Tests 7–10 and 9b all present; every pre-existing send-path test this
+   touched needed a satisfied pick stamped into its fixture to stay isolated from the new gate,
+   which surfaced a real trap worth recording here: a `monte_carlo`/`barrier_race` pick with no
+   fetched estimate gets cleared by TradeCard's/StockPositionCard's own build-step-3 staleness
+   effect the instant the component mounts, so every fixture that actually renders a card had to
+   use `ladder` (the only method available with no run) instead — dialog-only tests that never
+   mount a card were unaffected. **AUDITED, ONE ROUND, 2026-09-15** — zero gate-level, one
+   below-gate finding logged against main (`phase_g_step4_followups` in `PROJECT_STATE.json`):
+   `StockPositionCard` caches no fetched `estimate`/`plan` per symbol the way step 7 caches
+   `estimatesByContract` for options, so collapsing and reopening a step-4 row (an ordinary
+   interaction) unmounts the card and silently clears a Monte Carlo/Arithmetic pick via the
+   pre-existing clearing effect — spec-compliant per §7.4, but this build step is what turns it
+   from a one-click cosmetic annoyance into a genuine mid-session refusal with a message that
+   doesn't distinguish "never picked" from "picked, then silently lost."
 5. Arming (§8). Test 6's second half.
 
 Steps 1 and 2 are independent of each other. Step 4 depends on 3; nothing can be gated on a pick the
