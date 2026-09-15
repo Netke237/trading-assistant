@@ -286,6 +286,21 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Derived from the holding horizon (hold × 2). Change the horizon to change this.' },
   { key: 'max_dte', label: 'Max DTE', type: 'display', section: 'options', subGroup: 'Contract', unit: 'days',
     hint: 'Derived from the holding horizon (hold × 2). Change the horizon to change this.' },
+  // OPTIONS — Preferred Liquidity. SOFT-RANK counterparts of the three
+  // Contract fields above (max_bid_ask_spread_pct / min_volume /
+  // min_open_interest): those REJECT a contract outright; these three only
+  // dock its score, but three or more soft misses on ANY axis (these three,
+  // plus delta/DTE/IV) reject it too, via the fixed max_soft_fail_count. A
+  // contract that only clears the hard Contract floor above but stays under
+  // these can still be rejected on liquidity/spread grounds it looks like it
+  // passed — move both together for a change to actually admit or exclude
+  // more contracts, not just relabel the ones that already would have.
+  { key: 'preferred_volume_min', label: 'Preferred min volume', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
+    hint: 'Daily contract volume below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged (fewer survive 3 misses) · ↓ Lower → fewer soft-flagged. Default: 200. Independent of the hard "Min option volume" floor above, which rejects outright rather than scoring.' },
+  { key: 'preferred_oi_min', label: 'Preferred min open interest', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
+    hint: 'Open interest below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged · ↓ Lower → fewer soft-flagged. Default: 1000. Independent of the hard "Min open interest" floor above.' },
+  { key: 'preferred_spread_pct_max', label: 'Preferred spread ceiling', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 1, step: 0.01,
+    hint: 'Spread (as a fraction of mid) above this docks the spread score and counts as one soft miss. ↑ Higher → wider spreads tolerated before scoring/rejecting on this axis · ↓ Lower → stricter. Default: 0.08. Independent of the hard "Bid-ask spread ceiling" above, which is far looser (0.20) by default — this preferred ceiling is usually the tighter, binding constraint in practice.' },
   // ALL — Regime Gate
   { key: 'regime_headwind_caution_pct', label: 'Headwind caution %', type: 'number', section: 'all', subGroup: 'Regime Gate', min: -100, max: 0, step: 5, unit: '%',
     hint: 'Sector underperformance vs benchmark below this % → CAUTION on candidate. ↑ Higher (closer to 0) → stricter, more candidates caught (fewer pass) · ↓ Lower → only severe laggards affected (more pass). Default: -15%' },

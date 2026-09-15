@@ -304,6 +304,21 @@ def validate_contract(
             elif key == "preferred_dte_min":    sr["preferred_dte_min"]      = int(val)
             elif key == "preferred_dte_max":    sr["preferred_dte_max"]      = int(val)
             elif key == "min_stock_score":      hr["min_stock_score"]        = int(val)
+            # Below: the SOFT-RANK counterparts of the hard-reject liquidity/
+            # spread keys above. Added so a caller can move both together, the
+            # same reason `widen_contract_overrides_for_dte` (dte_window.py)
+            # sets `preferred_dte_min`/`max` to the SAME widened value as
+            # `min_dte`/`max_dte` rather than leaving them at their fixed
+            # config default: a contract already forgiven by the hard-reject
+            # check must not then take a soft-fail penalty for the same
+            # reason, or the caller's "let more through" override is silently
+            # undone by a fixed preferred-band it has no way to reach.
+            # `_score_liquidity`/`_score_spread` read these from `sr` on every
+            # call, so raising or lowering them changes both the soft flag AND
+            # the 0-100 sub-score, not merely the reject/accept boundary.
+            elif key == "preferred_volume_min":     sr["preferred_volume_min"]     = float(val)
+            elif key == "preferred_oi_min":         sr["preferred_oi_min"]         = float(val)
+            elif key == "preferred_spread_pct_max": sr["preferred_spread_pct_max"] = float(val)
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)

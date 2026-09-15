@@ -138,6 +138,83 @@ def test_contract_override_does_not_mutate_cached_config():
     assert "dte_too_short" not in card_b.reject_reasons
 
 
+# ── soft-rank preferred-liquidity overrides ───────────────────────────────────
+# The options-scan-liquidity-profiles work: preferred_volume_min/preferred_oi_min/
+# preferred_spread_pct_max were previously fixed at their contract_rules.yaml
+# defaults with no override path, even though the matching HARD-reject keys
+# (min_volume/min_open_interest/max_bid_ask_spread_pct) have been overridable
+# all along. A caller widening only the hard floor left a contract that now
+# clears the reject/accept boundary still penalized by the untouched soft
+# floor — see widen_contract_overrides_for_dte's docstring for the identical
+# defect already fixed once for DTE.
+
+def test_preferred_volume_min_override_removes_soft_flag():
+    """volume=100 is above the hard default (50) but below the soft default
+    (200), so it passes but carries low_volume. Lowering preferred_volume_min
+    to 50 removes the flag without touching the hard floor."""
+    contract = _make_contract(volume=100, oi=2000)
+    card_default = validate_contract(contract, 70)
+    assert "volume_too_low" not in card_default.reject_reasons
+    assert "low_volume" in card_default.soft_flags
+    card_override = validate_contract(contract, 70, overrides={"preferred_volume_min": 50})
+    assert "low_volume" not in card_override.soft_flags
+
+
+def test_preferred_oi_min_override_removes_soft_flag():
+    """oi=500 is above the hard default (200) but below the soft default
+    (1000), so it passes but carries low_open_interest."""
+    contract = _make_contract(volume=2000, oi=500)
+    card_default = validate_contract(contract, 70)
+    assert "open_interest_too_low" not in card_default.reject_reasons
+    assert "low_open_interest" in card_default.soft_flags
+    card_override = validate_contract(contract, 70, overrides={"preferred_oi_min": 400})
+    assert "low_open_interest" not in card_override.soft_flags
+
+
+def test_preferred_spread_pct_max_override_removes_soft_flag():
+    """~10% spread is under the hard ceiling (20%) but over the soft one
+    (8%), so it passes but carries spread_elevated."""
+    contract = _make_contract(bid=1.0, ask=1.10, volume=2000, oi=2000)  # spread ~9.5%
+    card_default = validate_contract(contract, 70)
+    assert "spread_too_wide" not in card_default.reject_reasons
+    assert "spread_elevated" in card_default.soft_flags
+    card_override = validate_contract(contract, 70, overrides={"preferred_spread_pct_max": 0.15})
+    assert "spread_elevated" not in card_override.soft_flags
+
+
+def test_preferred_liquidity_overrides_do_not_mutate_cached_config():
+    """Same regression guard as the hard-reject overrides above, for the new keys."""
+    contract = _make_contract(volume=100, oi=500)
+    card_a = validate_contract(contract, 70, overrides={"preferred_volume_min": 50})
+    card_b = validate_contract(contract, 70, overrides={"preferred_volume_min": 5000})
+    assert "low_volume" not in card_a.soft_flags
+    assert "low_volume" in card_b.soft_flags
+
+
+def test_loose_tier_combined_override_clears_both_hard_and_soft_liquidity_gates():
+    """The actual fix this override set exists for: a thin-but-not-worthless
+    contract (volume=25, oi=90, spread~10%) that fails the DEFAULT hard floor
+    on two axes (volume<50, oi<200) must, under a 'Loose' profile moving both
+    the hard floor and its preferred counterpart to the same value per axis,
+    pass the hard reject AND carry none of the three liquidity/spread soft
+    flags -- not merely avoid outright rejection while still losing the
+    soft-score/soft-fail-count battle on the same axes."""
+    contract = _make_contract(bid=1.0, ask=1.11, volume=25, oi=90)  # spread ~10.4%
+    card_default = validate_contract(contract, 70)
+    assert "volume_too_low" in card_default.reject_reasons
+    assert "open_interest_too_low" in card_default.reject_reasons
+
+    loose_overrides = {
+        "min_volume": 20, "min_open_interest": 75, "max_bid_ask_spread_pct": 0.30,
+        "preferred_volume_min": 20, "preferred_oi_min": 75, "preferred_spread_pct_max": 0.30,
+    }
+    card_loose = validate_contract(contract, 70, overrides=loose_overrides)
+    assert card_loose.reject_reasons == []
+    assert "low_volume" not in card_loose.soft_flags
+    assert "low_open_interest" not in card_loose.soft_flags
+    assert "spread_elevated" not in card_loose.soft_flags
+
+
 # ── WI-12: off-hours null-data guard ─────────────────────────────────────────
 
 def test_zero_volume_with_adequate_oi_is_not_rejected():
