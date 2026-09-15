@@ -1707,3 +1707,151 @@ describe('EditDrawer under a non-default rr_ratios', () => {
     expect(onChange.mock.calls[0][0]).not.toHaveProperty('resolvedTpPrice');
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * Phase G (piece 5, D4/D5) — the per-trade method pick RECORD.
+ *
+ * Spec §4.3 discharges four of its eight mapping rows with one sentence: "The
+ * portfolio displays `picked_method`, never `active_tp_method`, so a degraded
+ * seed costs the ALERT its precision and costs the RECORD nothing." That
+ * sentence was FALSE until `PickedMethodRecord` existed — the drawer's only
+ * method on screen was `TpMethodSelector`, which renders
+ * `activeTpMethod ?? 'ladder'`, so a trader who picked the Barrier Race was
+ * shown "Ladder" and nothing anywhere told them otherwise.
+ *
+ * Every test below scopes itself to the record block via its "Picked at trade"
+ * heading rather than querying the drawer globally, because the selector
+ * directly beneath it renders the SAME four words as radio labels. A global
+ * `getByText('Ladder')` would pass while the record showed nothing at all.
+ * ------------------------------------------------------------------------- */
+describe('EditDrawer picked-method record (Phase G)', () => {
+  const noop = () => {};
+
+  /** The record block — `Text` renders a span, so its parent is the block. */
+  function recordBlock(): HTMLElement {
+    return screen.getByText('Picked at trade').parentElement as HTMLElement;
+  }
+
+  it('renders a null pick as an em dash and NEVER as "Ladder" (§4.2, D11)', () => {
+    // A pre-G position, or one opened by the S5 after-scan auto-executor: all
+    // five fields null. This is the single most important assertion in the
+    // block — §4.2 says in as many words that the portfolio "must render NULL
+    // as '—', never as 'ladder'", and the seductive wrong implementation
+    // (reusing `activeTpMethod ?? 'ladder'`, which every other method readout
+    // in this file does) renders exactly the forbidden string.
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(recordBlock()).toHaveTextContent('—');
+    expect(recordBlock()).not.toHaveTextContent('Ladder');
+    expect(recordBlock()).toHaveTextContent(/No pick recorded/);
+  });
+
+  it('shows the real pick when §4.3 degraded the active method to the ladder', () => {
+    // THE CASE THIS WHOLE BLOCK EXISTS FOR. `BarrierRaceOutcome` carries no
+    // stock level at all, so §4.3 maps EVERY race pick to ('ladder', NULL) —
+    // the selector below therefore shows "Ladder" as active, correctly. The
+    // record must still say Barrier Race, or the trader's actual choice is
+    // invisible on the only screen that could show it.
+    const position = makeOptionPosition({
+      pickedMethod: 'barrier_race',
+      pickedRowOptionPrice: 6.24,
+      pickedRowStockPrice: null,
+      pickedStopBasis: 'premium',
+      activeTpMethod: 'ladder',
+      resolvedTpPrice: null,
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(recordBlock()).toHaveTextContent('Barrier Race');
+    // …while the derived method below is still, correctly, the ladder.
+    expect(screen.getByRole('radio', { name: 'Ladder' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('reads pickedMethod and not activeTpMethod when the two differ', () => {
+    // The generalisation of the test above, with the two fields set to two
+    // DIFFERENT non-null methods so that neither can satisfy both assertions.
+    const position = makeOptionPosition({
+      pickedMethod: 'monte_carlo',
+      pickedRowStockPrice: 197.5,
+      activeTpMethod: 'exit_plan_2r',
+      resolvedTpPrice: 230,
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(recordBlock()).toHaveTextContent('Monte Carlo');
+    expect(recordBlock()).not.toHaveTextContent('2R plan');
+  });
+
+  it('labels the two picked prices with their spaces, stock separately from premium', () => {
+    // THE UNITS ASSERTION, the display-side sibling of backend test 2b.
+    // `pickedRowStockPrice` is underlying space and is the only one of the five
+    // that may ever seed `resolved_tp_price`; `pickedRowOptionPrice` is premium
+    // space and is record-only. A $6.24 premium read as a stock level makes
+    // `price >= 6.24` true on the first tick. Nothing here writes, so this
+    // screen cannot CAUSE that — but it is where a reader checks the two
+    // against each other, so each number must carry its own label.
+    const position = makeOptionPosition({
+      pickedMethod: 'monte_carlo',
+      pickedRowStockPrice: 197.5,
+      pickedRowOptionPrice: 6.24,
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    const stock = screen.getByText('Stock').parentElement as HTMLElement;
+    const premium = screen.getByText('Premium').parentElement as HTMLElement;
+    expect(stock).toHaveTextContent('$197.50');
+    expect(stock).not.toHaveTextContent('$6.24');
+    expect(premium).toHaveTextContent('$6.24');
+    expect(premium).not.toHaveTextContent('$197.50');
+  });
+
+  it('renders the stop basis and the vintage the pick was made against', () => {
+    const position = makeOptionPosition({
+      pickedMethod: 'arithmetic',
+      pickedRowStockPrice: 230,
+      pickedStopBasis: 'stock',
+      pickedAt: '2026-09-14T18:22:00.000Z',
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(recordBlock()).toHaveTextContent('Stock stop');
+    // The formatted timestamp is locale-dependent under jsdom, so this pins
+    // that a vintage is rendered at all rather than pinning its spelling —
+    // `toLocaleString()` output differs across CI locales and asserting the
+    // exact string would make this test fail for a reason that is not a bug.
+    expect(recordBlock()).toHaveTextContent(/picked \S/);
+  });
+
+  it('prints no price for a zero or negative one rather than showing it as $0.00', () => {
+    // The backend enforces `gt=0` on both fields, so a zero can only arrive
+    // from an upstream `?? 0` fallback — and zero is never a price. Matches
+    // the `usable()` guard `tpMethodOptions` applies to everything it renders.
+    const position = makeOptionPosition({
+      pickedMethod: 'monte_carlo',
+      pickedRowStockPrice: 0,
+      pickedRowOptionPrice: -1,
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(recordBlock()).toHaveTextContent('Monte Carlo');
+    expect(recordBlock()).not.toHaveTextContent('$0.00');
+    expect(recordBlock()).not.toHaveTextContent('$-1.00');
+    expect(screen.queryByText('Stock')).not.toBeInTheDocument();
+    expect(screen.queryByText('Premium')).not.toBeInTheDocument();
+  });
+
+  it('names every method the two picking cards can write', () => {
+    // `Record<PickedMethod, string>` already fails typecheck on an unhandled
+    // member; this pins the SPELLING, which typecheck cannot, so the record
+    // reads back as the button the trader actually pressed.
+    for (const [method, label] of [
+      ['ladder', 'Ladder'],
+      ['arithmetic', 'Arithmetic'],
+      ['monte_carlo', 'Monte Carlo'],
+      ['barrier_race', 'Barrier Race'],
+    ] as const) {
+      const { unmount } = render(
+        <EditDrawer
+          position={makeOptionPosition({ pickedMethod: method, pickedRowStockPrice: 200 })}
+          onClose={noop} onChange={noop} onRemove={noop}
+        />,
+      );
+      expect(recordBlock()).toHaveTextContent(label);
+      unmount();
+    }
+  });
+});

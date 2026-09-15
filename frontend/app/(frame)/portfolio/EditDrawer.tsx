@@ -24,7 +24,7 @@ import { _horizonEnum } from '@/lib/analysisStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { api } from '@/lib/api';
 import { POSITION_ALERT_TYPES } from '@/types/domain';
-import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
+import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod, PickedMethod, PickedStopBasis } from '@/types/domain';
 import styles from './page.module.css';
 import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopFiringPrice, formatPremiumStopPct, premiumStopPctLabel, PREMIUM_STOP_MIN_PCT, PREMIUM_STOP_MAX_PCT } from '@/lib/premiumStop';
 
@@ -377,6 +377,11 @@ export function EditDrawer({
         {!position.contract.endsWith('|STOCK') && (
           <MaxLossBanner position={position} onChange={onChange} />
         )}
+        {/* The RECORD (what was picked) sits directly above the SELECTOR (what
+            drives the alert today), because the whole point of §4.3's degraded
+            rows is that those two can legitimately disagree — and a trader can
+            only see that they disagree if both are on screen together. */}
+        <PickedMethodRecord position={position} />
         <TpMethodSelector
           position={position}
           mcTargetPrice={mcResult?.targets[0]?.price ?? null}
@@ -1380,6 +1385,118 @@ export function tpMethodPatch(
   return method === 'ladder'
     ? { activeTpMethod: 'ladder', resolvedTpPrice: null, resolvedTpUpdatedAt: now }
     : { activeTpMethod: method, resolvedTpPrice: price, resolvedTpUpdatedAt: now };
+}
+
+/** The four pick labels, spelled exactly as the two cards that WRITE the pick
+ *  spell them (`TradeCard`'s `methodPickOptions`, `StockPositionCard`'s
+ *  three-option subset) — a trader must be able to read this record back and
+ *  recognise the button they pressed. `Record<PickedMethod, string>` rather
+ *  than a partial map on purpose: adding a fifth method to the union then
+ *  fails typecheck here instead of silently rendering `undefined`. */
+const PICKED_METHOD_LABELS: Record<PickedMethod, string> = {
+  ladder:       'Ladder',
+  arithmetic:   'Arithmetic',
+  monte_carlo:  'Monte Carlo',
+  barrier_race: 'Barrier Race',
+};
+
+const PICKED_STOP_BASIS_LABELS: Record<PickedStopBasis, string> = {
+  stock:   'Stock',
+  premium: 'Premium',
+};
+
+/** Phase G (piece 5, D4/D5) — the RECORD of what the trader actually picked.
+ *
+ *  WHY THIS EXISTS AT ALL, because it renders no number the alert engine reads
+ *  and a future reader will be tempted to delete it as decoration. Spec §4.3
+ *  discharges four of its eight mapping rows with one sentence: "The portfolio
+ *  displays `picked_method`, never `active_tp_method`, so a degraded seed costs
+ *  the ALERT its precision and costs the RECORD nothing." Four rows of that
+ *  table deliberately degrade to `('ladder', NULL)` — every `barrier_race`
+ *  pick, a `monte_carlo` pick whose row carried no underlying level, and an
+ *  arithmetic pick on a row the configured `rr_ratios` cannot map. Until this
+ *  block existed the second half of that sentence was false: `TpMethodSelector`
+ *  below is the only method on screen, it renders `activeTpMethod ?? 'ladder'`,
+ *  and so a trader who picked the Barrier Race was shown "Ladder" with nothing
+ *  anywhere telling them otherwise. The record was being kept and never shown.
+ *
+ *  IT READS `pickedMethod` AND NEVER `activeTpMethod`. Those are different
+ *  questions — the pick is the input to §4.3's mapping, the active method is
+ *  its server-derived output — and showing the output here would reintroduce
+ *  exactly the lie this block was added to remove.
+ *
+ *  NULL RENDERS "—", NEVER "Ladder" (§4.2, and D11 via §9.7). A null pick is a
+ *  REAL state, not a missing value: the position predates Phase G, or it was
+ *  opened by the S5 after-scan auto-executor, which is exempt from the send
+ *  gate (§7.3) and creates positions with all five fields null. `fromBackend`
+ *  is already careful to pass these through with no `'ladder'`-style default
+ *  (portfolioStore.ts) — coercing one in here would throw that away at the last
+ *  step.
+ *
+ *  THE TWO PRICES ARE LABELLED WITH THEIR SPACES AND ARE NOT INTERCHANGEABLE.
+ *  `pickedRowStockPrice` is underlying space and is the only one of the five
+ *  that may ever seed `resolved_tp_price`; `pickedRowOptionPrice` is premium
+ *  space and is record-only. They are rendered as two separately labelled rows
+ *  rather than one "price" for the same reason §4.1 split the field names: a
+ *  $6.24 premium read as a stock level makes `price >= 6.24` true on the first
+ *  tick and fires TP_HIT instantly on every bullish position. Nothing here
+ *  writes, so this cannot cause that — but this is the one screen where a
+ *  reader checks the two against each other, and an un-suffixed label is what
+ *  would make a real mix-up invisible.
+ *
+ *  IT DOES NOT RE-DERIVE §4.3's MAPPING to say whether the pick and the active
+ *  method diverge. That rule lives server-side in `picked_method.py` and the
+ *  spec is explicit that it must not be copied; a second copy here would be a
+ *  third place to keep in sync and could state a divergence that isn't one
+ *  (`arithmetic` correctly maps to `exit_plan_2r`/`3r`, which is the same
+ *  choice under another name, not a degradation). The hint states the
+ *  relationship in words instead, which cannot drift out of sync. */
+function PickedMethodRecord({ position }: { position: PortfolioPosition }) {
+  const method = position.pickedMethod ?? null;
+  const basis = position.pickedStopBasis ?? null;
+  const pickedAt = position.pickedAt ?? null;
+  // Same `> 0` guard `tpMethodOptions` applies to every price it renders, and
+  // the same one the backend enforces with `gt=0` on both fields. A zero that
+  // slipped past an upstream `?? 0` is not a price and must not print as one.
+  const prices = ([
+    ['Stock', position.pickedRowStockPrice],
+    ['Premium', position.pickedRowOptionPrice],
+  ] as const).filter(([, p]) => p != null && p > 0);
+
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Picked at trade</Text>
+      <div className={styles.pickedRecordRow}>
+        {/* `Text`, not `Data` — a method NAME is a label, not a number, and
+            `TpMethodSelector` below spells its own labels the same way. The
+            prices further down are the only `Data` in this block. */}
+        <Text size={13} weight={500} tone={method ? 'primary' : 'dim'}>
+          {method ? PICKED_METHOD_LABELS[method] : '\u2014'}
+        </Text>
+        {basis && (
+          <Text size={11} tone="secondary">{PICKED_STOP_BASIS_LABELS[basis]} stop</Text>
+        )}
+        {pickedAt && (
+          <Text size={10} tone="dim">picked {new Date(pickedAt).toLocaleString()}</Text>
+        )}
+      </div>
+      {prices.length > 0 && (
+        <div className={styles.pickedRecordRow}>
+          {prices.map(([label, price]) => (
+            <span key={label} className={styles.pickedRecordPrice}>
+              <Text size={10} tone="dim">{label}</Text>
+              <Data size={11}>${price!.toFixed(2)}</Data>
+            </span>
+          ))}
+        </div>
+      )}
+      <Text size={10} tone="dim">
+        {method
+          ? 'The method you chose for this trade, frozen when it was sent. The active TP method below is derived from this pick and can differ \u2014 a pick carrying no underlying level falls back to the ladder for alerting. Only the alert degrades; this record keeps the choice.'
+          : 'No pick recorded \u2014 this position was opened before per-trade method picks existed, or by the after-scan auto-executor, which places orders with no human in the loop.'}
+      </Text>
+    </div>
+  );
 }
 
 function TpMethodSelector({

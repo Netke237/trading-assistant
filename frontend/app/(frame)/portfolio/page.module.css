@@ -592,3 +592,22 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* ---------- Phase G (piece 5): the per-trade method pick record ---------- */
+
+.pickedRecordRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.pickedRecordPrice {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
