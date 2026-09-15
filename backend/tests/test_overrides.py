@@ -215,6 +215,57 @@ def test_loose_tier_combined_override_clears_both_hard_and_soft_liquidity_gates(
     assert "spread_elevated" not in card_loose.soft_flags
 
 
+# ── round-1 audit fixes: 0 as a "no preference" value, not a crash ──────────
+# Both bugs below were reachable the moment preferred_volume_min/preferred_oi_min/
+# preferred_spread_pct_max became override-able (this file, above) with a UI
+# field whose own `min` bound is 0 -- before that commit, these three were
+# fixed at their contract_rules.yaml defaults and could never be 0.
+
+def test_preferred_volume_min_zero_does_not_raise_and_scores_full():
+    """A bare division by preferred_volume_min crashes at 0; the fix treats
+    0 as 'no preference on this axis' -- full score, no soft flag -- rather
+    than ZeroDivisionError propagating up through scan.py as a per-symbol
+    rejection reading the literal exception text."""
+    contract = _make_contract(volume=1, oi=2000)  # volume deliberately tiny
+    card = validate_contract(contract, 70, overrides={"preferred_volume_min": 0})
+    assert "low_volume" not in card.soft_flags
+    assert card.breakdown.liquidity_score == 100
+
+
+def test_preferred_oi_min_zero_does_not_raise_and_scores_full():
+    contract = _make_contract(volume=2000, oi=1)  # oi deliberately tiny
+    card = validate_contract(contract, 70, overrides={"preferred_oi_min": 0})
+    assert "low_open_interest" not in card.soft_flags
+    assert card.breakdown.oi_score == 100
+
+
+def test_preferred_spread_pct_max_zero_does_not_score_zero_or_always_flag():
+    """This one never raised (spread_pct is never negative, so the original
+    ternary happened to route max_pct<=0 into its `else 0` branch) but scored
+    0 and always flagged -- the opposite of what dragging the ceiling to
+    nothing should mean. Same fix as the two above: 0 means no preference."""
+    contract = _make_contract(bid=1.0, ask=1.10, volume=2000, oi=2000)
+    card = validate_contract(contract, 70, overrides={"preferred_spread_pct_max": 0})
+    assert "spread_elevated" not in card.soft_flags
+    assert card.breakdown.spread_score == 100
+
+
+def test_preferred_volume_min_override_survives_liquidity_detail_construction():
+    """int(), not float(): a fractional override used to reach the response
+    detail dict, where LiquidityDetail's `int` field raised on construction --
+    caught and swallowed by both callers (_safe() in routers/scan.py,
+    _safe_detail() in routers/contracts.py), silently dropping the whole
+    liquidityDetail block with no error anywhere. Constructing the model
+    directly from the returned detail, the way both real callers do, is what
+    would have caught this -- asserting only on contract_validator's own
+    output would not have."""
+    from app.schemas import LiquidityDetail
+    contract = _make_contract(volume=250, oi=2000)
+    card = validate_contract(contract, 70, overrides={"preferred_volume_min": 205.7})
+    assert isinstance(card.detail["liquidity"]["preferred_volume_min"], int)
+    LiquidityDetail(**card.detail["liquidity"])  # must not raise
+
+
 # ── WI-12: off-hours null-data guard ─────────────────────────────────────────
 
 def test_zero_volume_with_adequate_oi_is_not_rejected():

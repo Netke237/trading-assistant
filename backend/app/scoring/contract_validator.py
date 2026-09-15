@@ -121,19 +121,35 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
 
 
 def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
-    """Returns (liquidity_score, oi_score, flags)."""
+    """Returns (liquidity_score, oi_score, flags).
+
+    ROUND 1 AUDIT FINDING (options-scan-liquidity-profiles, 2026-09-15):
+    `preferred_volume_min`/`preferred_oi_min` became override-able in the same
+    commit that added this guard, and the new Execution Parameters field for
+    each allows 0 as its minimum -- a reachable UI value with no way to
+    disable the soft check otherwise. Before that commit both were fixed at
+    their contract_rules.yaml defaults (200/1000) and could never be 0, so an
+    unconditional division was safe by construction; it stopped being safe
+    the moment either became a live input. `<= 0` reads as "no preference on
+    this axis" -- the natural meaning of dragging the floor down to nothing --
+    and scores it as a full pass with no flag, rather than raising
+    ZeroDivisionError (which propagated all the way to a per-symbol scan
+    rejection reading the literal exception text) or silently keeping the
+    fixed value at a 0 boundary would otherwise imply."""
     sr = cfg["soft_rank"]
     flags = []
     volume = contract.get("volume") or 0
     oi = contract.get("open_interest") or 0
+    pref_volume_min = sr["preferred_volume_min"]
+    pref_oi_min = sr["preferred_oi_min"]
 
-    vol_score = min(100, int(volume / sr["preferred_volume_min"] * 60))
-    oi_score = min(100, int(oi / sr["preferred_oi_min"] * 60))
+    vol_score = 100 if pref_volume_min <= 0 else min(100, int(volume / pref_volume_min * 60))
+    oi_score = 100 if pref_oi_min <= 0 else min(100, int(oi / pref_oi_min * 60))
     score = (vol_score + oi_score) // 2
 
-    if volume < sr["preferred_volume_min"]:
+    if pref_volume_min > 0 and volume < pref_volume_min:
         flags.append("low_volume")
-    if oi < sr["preferred_oi_min"]:
+    if pref_oi_min > 0 and oi < pref_oi_min:
         flags.append("low_open_interest")
     return score, oi_score, flags
 
@@ -146,7 +162,17 @@ def _score_spread(contract: dict, cfg: dict) -> tuple[int, float, list[str]]:
     spread_pct = (ask - bid) / mid if mid > 0 else 1.0
     flags = []
 
+    # Same "<= 0 means no preference" rule _score_liquidity applies, for the
+    # same reason: preferred_spread_pct_max became override-able alongside
+    # preferred_volume_min/preferred_oi_min above, with the identical UI
+    # `min: 0`. This one never raised (the ternary below happens to route a
+    # zero-or-negative max_pct into its `else 0` branch, since spread_pct is
+    # never negative), but "always score 0, always flag" is the opposite of
+    # what dragging the ceiling down to nothing should mean, and was every
+    # bit as unreachable-until-this-commit as the division above.
     max_pct = sr["preferred_spread_pct_max"]
+    if max_pct <= 0:
+        return 100, spread_pct, []
     score = max(0, int((1 - spread_pct / max_pct) * 100)) if spread_pct < max_pct else 0
     score = min(score, 100)
 
@@ -316,8 +342,18 @@ def validate_contract(
             # `_score_liquidity`/`_score_spread` read these from `sr` on every
             # call, so raising or lowering them changes both the soft flag AND
             # the 0-100 sub-score, not merely the reject/accept boundary.
-            elif key == "preferred_volume_min":     sr["preferred_volume_min"]     = float(val)
-            elif key == "preferred_oi_min":         sr["preferred_oi_min"]         = float(val)
+            # ROUND 1 AUDIT FINDING: int(), not float(), matching their
+            # hard-reject siblings (min_volume/min_open_interest above) and
+            # LiquidityDetail's own `int` typing (schemas/__init__.py). A
+            # float() cast here let a fractional value (the new UI field's
+            # `step` is not enforced by its own input handler) reach the
+            # response `detail` block, where pydantic's `int` field then
+            # raised on construction -- caught and swallowed by both callers
+            # (_safe() in routers/scan.py, _safe_detail() in
+            # routers/contracts.py), silently dropping the whole
+            # liquidityDetail block from the card with no error anywhere.
+            elif key == "preferred_volume_min":     sr["preferred_volume_min"]     = int(val)
+            elif key == "preferred_oi_min":         sr["preferred_oi_min"]         = int(val)
             elif key == "preferred_spread_pct_max": sr["preferred_spread_pct_max"] = float(val)
     contract_id = _contract_id(contract)
 
