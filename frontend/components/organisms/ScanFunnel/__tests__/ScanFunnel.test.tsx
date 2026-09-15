@@ -20,6 +20,7 @@ function pipeline(over: Partial<OptionsPipeline> = {}): OptionsPipeline {
     no_chain: 15,
     failed_score: 200,
     failed_contracts: 51,
+    other_rejected: 0,
     failed_direction: 0,
     failed_shortlist: 0,
     candidates: 5,
@@ -44,14 +45,65 @@ describe('ScanFunnel — options mode', () => {
     expect(screen.getByText('−13 over cap')).toBeInTheDocument();
   });
 
-  it('tolerates a persisted result predating the new counters', () => {
-    // failed_direction / failed_shortlist absent — an older stored blob.
+  it('hides the gate for a persisted result predating the new counters', () => {
+    // failed_direction / failed_shortlist absent — an older stored blob, whose
+    // `candidates` was counted BEFORE the gate ran. Rendering the stage with a
+    // zero would positively assert nothing was gated, which the blob cannot
+    // support. Absent must read as "unknown", not as "none".
     const legacy = {
       scanned: 100, failed_data: 5, failed_pre_screen: 40, no_chain: 5,
       failed_score: 30, failed_contracts: 15, candidates: 5,
     } as OptionsPipeline;
 
     expect(() => render(<ScanFunnel mode="options" pipeline={legacy} />)).not.toThrow();
-    expect(screen.getByText('Direction conviction')).toBeInTheDocument();
+    expect(screen.queryByText('Direction conviction')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shortlist cap')).not.toBeInTheDocument();
+  });
+
+  it('hides the gate on a horizon where it never ran', () => {
+    // The gate is defined for four direction/horizon pairs only. On Intraday no
+    // gate runs at all, so a stage would imply a screen that did not happen.
+    render(<ScanFunnel mode="options" pipeline={pipeline({ failed_direction: 0 })} />);
+    expect(screen.queryByText('Direction conviction')).not.toBeInTheDocument();
+  });
+
+  it('surfaces exceptions and unclassified rejections instead of losing them', () => {
+    render(<ScanFunnel mode="options" pipeline={pipeline({ other_rejected: 7 })} />);
+    expect(screen.getByText('Other (errors / unclassified)')).toBeInTheDocument();
+    expect(screen.getByText('−7 errors')).toBeInTheDocument();
+  });
+});
+
+describe('ScanFunnel — stock mode', () => {
+  const stock = {
+    scanned: 100, failed_history: 10, failed_score: 30, failed_signal: 20,
+    failed_backtest: 15, failed_regime: 8, failed_direction: 9,
+    failed_shortlist: 3, other_rejected: 4, candidates: 1,
+  };
+
+  it('renders the drops the stock funnel used to swallow', () => {
+    // failed_regime and other_rejected were counted by the backend and never
+    // displayed — and stock-mode direction_conviction rejections landed inside
+    // other_rejected, so the stock funnel had the same bug as the options one.
+    render(<ScanFunnel mode="stock" pipeline={stock} />);
+
+    expect(screen.getByText('Regime')).toBeInTheDocument();
+    expect(screen.getByText('−8 headwind')).toBeInTheDocument();
+    expect(screen.getByText('Direction')).toBeInTheDocument();
+    expect(screen.getByText('−9 no conviction')).toBeInTheDocument();
+    expect(screen.getByText('Other')).toBeInTheDocument();
+    expect(screen.getByText('−4 errors')).toBeInTheDocument();
+    expect(screen.getByText('Shortlist cap')).toBeInTheDocument();
+  });
+
+  it('hides each conditional stage that dropped nothing', () => {
+    render(<ScanFunnel mode="stock" pipeline={{
+      ...stock, failed_regime: 0, failed_direction: 0, failed_shortlist: 0, other_rejected: 0,
+    }} />);
+
+    expect(screen.queryByText('Regime')).not.toBeInTheDocument();
+    expect(screen.queryByText('Direction')).not.toBeInTheDocument();
+    expect(screen.queryByText('Other')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shortlist cap')).not.toBeInTheDocument();
   });
 });

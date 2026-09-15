@@ -1126,6 +1126,8 @@ async def _execute_stock_scan_core(
             1 for r in rejected
             if isinstance(r, dict) and r.get("reason") == "regime headwind"
         ),
+        failed_direction=_dir_filtered,
+        failed_shortlist=original_count - len(candidates),
         other_rejected=sum(
             1 for r in rejected
             if isinstance(r, dict)
@@ -1135,13 +1137,18 @@ async def _execute_stock_scan_core(
             and not (r.get("reason", "").startswith("no ") and "setup" in r.get("reason", ""))
             and not r.get("reason", "").startswith("backtest gate:")
             and r.get("reason") != "regime headwind"
+            # Was silently absorbing every direction_conviction rejection, which
+            # is now its own bucket and its own funnel stage.
+            and not r.get("reason", "").startswith("direction_conviction:")
         ),
         candidates=len(candidates),
     )
     logger.info(
-        "STOCK SCAN pipeline: scanned=%d hist_fail=%d score_fail=%d signal_fail=%d bt_fail=%d regime_fail=%d other=%d candidates=%d",
+        "STOCK SCAN pipeline: scanned=%d hist_fail=%d score_fail=%d signal_fail=%d bt_fail=%d regime_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
         _pipeline.scanned, _pipeline.failed_history, _pipeline.failed_score,
-        _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.failed_regime, _pipeline.other_rejected, _pipeline.candidates,
+        _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.failed_regime,
+        _pipeline.failed_direction, _pipeline.failed_shortlist,
+        _pipeline.other_rejected, _pipeline.candidates,
     )
     result = StockScanResult(
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),

@@ -1553,7 +1553,12 @@ async def _execute_scan_core(
                 direction_filtered_count += 1
                 rejected.append(RejectedCandidate(
                     symbol=_c.symbol,
-                    reason=f"direction_conviction: trend {_t} {'>' if _max else '<'} "
+                    # `is not None`, not truthiness: a max_trend of 0 -- a
+                    # legitimate "bearish structure only" gate -- is falsy, and
+                    # would render the comparison inverted ("trend 5 < 0") in
+                    # the rejection record the user reads.
+                    reason=f"direction_conviction: trend {_t} "
+                           f"{'>' if _max is not None else '<'} "
                            f"{_max if _max is not None else _min} for {req.direction} {req.horizon}",
                 ))
             else:
@@ -1596,25 +1601,43 @@ async def _execute_scan_core(
     # "Candidates 5" above a table with no rows and, because step-4-ranking
     # returns early when the list is empty, no banner explaining where they went.
     # stock_scan.py has always built StockPipeline after its own filters; this is
-    # the options path catching up, so the invariant now holds in both modes:
+    # the options path catching up, so the invariant holds:
     # pipeline.candidates == len(result.candidates) == rows in the table.
+    #
+    # `other_rejected` is the RESIDUAL, computed as a leftover rather than by a
+    # predicate of its own. Every bucket below matches on `r.reason` text, and a
+    # per-symbol exception is recorded as `reason=str(result)` (line ~1528),
+    # which for httpx/asyncio errors is routinely the empty string -- matching
+    # nothing. Counting the residual instead of enumerating causes is what makes
+    # `scanned == candidates + every bucket` true on a PARTIAL/FAILED run and on
+    # any future reason nobody remembered to classify.
     _data_kw = ("no market data", "price filter", "cap filter")
+    def _is_data(r):       return any(k in r.reason for k in _data_kw)
+    def _is_pre_screen(r): return r.reason.startswith("Pre-screen:")
+    def _is_no_chain(r):   return r.reason == "no option chain"
+    def _is_score(r):      return r.reason.startswith("Score gate:")
+    def _is_contracts(r):  return "contracts rejected" in r.reason
+    def _is_direction(r):  return r.reason.startswith("direction_conviction:")
+    _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts, _is_direction)
+
     _pipeline = OptionsPipeline(
         scanned=len(symbols),
-        failed_data=sum(1 for r in rejected if any(k in r.reason for k in _data_kw)),
-        failed_pre_screen=sum(1 for r in rejected if r.reason.startswith("Pre-screen:")),
-        no_chain=sum(1 for r in rejected if r.reason == "no option chain"),
-        failed_score=sum(1 for r in rejected if r.reason.startswith("Score gate:")),
-        failed_contracts=sum(1 for r in rejected if "contracts rejected" in r.reason),
+        failed_data=sum(1 for r in rejected if _is_data(r)),
+        failed_pre_screen=sum(1 for r in rejected if _is_pre_screen(r)),
+        no_chain=sum(1 for r in rejected if _is_no_chain(r)),
+        failed_score=sum(1 for r in rejected if _is_score(r)),
+        failed_contracts=sum(1 for r in rejected if _is_contracts(r)),
+        other_rejected=sum(1 for r in rejected if not any(f(r) for f in _buckets)),
         failed_direction=direction_filtered_count,
         failed_shortlist=original_count - len(candidates),
         candidates=len(candidates),
     )
     _log.info(
-        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d candidates=%d",
+        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
         scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
         _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts,
-        _pipeline.failed_direction, _pipeline.failed_shortlist, _pipeline.candidates,
+        _pipeline.failed_direction, _pipeline.failed_shortlist, _pipeline.other_rejected,
+        _pipeline.candidates,
     )
 
     # Determine state: PARTIAL if some exceptions occurred but we still got candidates

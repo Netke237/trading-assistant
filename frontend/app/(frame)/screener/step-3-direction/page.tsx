@@ -813,7 +813,11 @@ export default function Step3Page() {
 
   const totalPassed   = scanResult?.candidates?.length ?? 0;
   const totalRejected = rejectedLog.length;
-  const totalScanned  = totalPassed + totalRejected;
+  // Prefer the server's own count. Deriving it as passed + rejected undercounts
+  // whenever the shortlist cap trims, because trimmed candidates are dropped
+  // from the returned list without being added to `rejected` — which put
+  // "Scanned 508" next to the funnel's "Universe 518" on the same screen.
+  const totalScanned  = scanResult?.pipeline?.scanned ?? totalPassed + totalRejected;
 
   const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
 

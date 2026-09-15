@@ -236,6 +236,10 @@ class StockPipeline(BaseModel):
     failed_signal:   int   # "no {strategy} setup"
     failed_backtest: int   # "backtest gate: ..."
     failed_regime:   int = 0  # filtered out by regime headwind
+    # None means ABSENT, not zero -- a result persisted before these existed
+    # cannot claim nothing was gated. Same reasoning as OptionsPipeline's.
+    failed_direction: Optional[int] = None  # direction-conviction gate
+    failed_shortlist: Optional[int] = None  # trimmed by the shortlist cap
     other_rejected:  int   # exceptions / unclassified
     candidates:      int
 

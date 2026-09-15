@@ -38,12 +38,33 @@ interface Props {
   pipeline: OptionsPipeline | StockPipeline;
 }
 
+/**
+ * ONE rule for which stages render, in both modes: the fixed stages every scan
+ * runs are always shown, and a CONDITIONAL gate is shown only when it actually
+ * dropped something. A gate that did not run (the direction gate is defined for
+ * four direction/horizon pairs only), and a counter absent from a result
+ * persisted before it existed, both read as "nothing dropped" and stay hidden —
+ * so the funnel never implies a gate ran, and never fabricates a zero for a
+ * figure it does not have.
+ */
+function dropped(n: number | undefined): number {
+  return n ?? 0;
+}
+
 export function ScanFunnel({ mode, pipeline }: Props) {
   if (mode === 'stock') {
     const p = pipeline as StockPipeline;
-    const afterHistory = p.scanned - p.failed_history;
-    const afterScore   = afterHistory - p.failed_score;
-    const afterSignal  = afterScore - p.failed_signal;
+    const failedRegime    = dropped(p.failed_regime);
+    const failedDirection = dropped(p.failed_direction);
+    const failedShortlist = dropped(p.failed_shortlist);
+    const otherRejected   = dropped(p.other_rejected);
+    const afterHistory   = p.scanned - p.failed_history;
+    const afterScore     = afterHistory - p.failed_score;
+    const afterSignal    = afterScore - p.failed_signal;
+    const afterBacktest  = afterSignal - p.failed_backtest;
+    const afterRegime    = afterBacktest - failedRegime;
+    const afterDirection = afterRegime - failedDirection;
+    const afterOther     = afterDirection - otherRejected;
     return (
       <div className={styles.funnel}>
         <div className={styles.header}>
@@ -53,7 +74,19 @@ export function ScanFunnel({ mode, pipeline }: Props) {
         <Stage label="History"    count={afterHistory}  rejected={p.failed_history}  rejectedLabel="no history" total={p.scanned} />
         <Stage label="Score gate" count={afterScore}    rejected={p.failed_score}    rejectedLabel="REJECT"     total={p.scanned} />
         <Stage label="Signal"     count={afterSignal}   rejected={p.failed_signal}   rejectedLabel="no setup"   total={p.scanned} />
-        <Stage label="Backtest"   count={p.candidates + p.failed_backtest} rejected={p.failed_backtest} rejectedLabel="gate fail" total={p.scanned} />
+        <Stage label="Backtest"   count={afterBacktest} rejected={p.failed_backtest} rejectedLabel="gate fail"  total={p.scanned} />
+        {failedRegime > 0 && (
+          <Stage label="Regime"    count={afterRegime}    rejected={failedRegime}    rejectedLabel="headwind"      total={p.scanned} />
+        )}
+        {failedDirection > 0 && (
+          <Stage label="Direction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
+        )}
+        {otherRejected > 0 && (
+          <Stage label="Other"     count={afterOther}     rejected={otherRejected}   rejectedLabel="errors"        total={p.scanned} />
+        )}
+        {failedShortlist > 0 && (
+          <Stage label="Shortlist cap" count={afterOther - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
+        )}
         <div className={styles.divider} />
         <div className={styles.finalStage}>
           <Text size={12} tone="pass" weight={500}>Candidates</Text>
@@ -68,9 +101,11 @@ export function ScanFunnel({ mode, pipeline }: Props) {
   const afterPreScreen  = afterData - p.failed_pre_screen;
   const afterChain      = afterPreScreen - p.no_chain;
   const afterScored     = afterChain - p.failed_score - p.failed_contracts;
-  const failedDirection = p.failed_direction ?? 0;
-  const failedShortlist = p.failed_shortlist ?? 0;
+  const failedDirection = dropped(p.failed_direction);
+  const failedShortlist = dropped(p.failed_shortlist);
+  const otherRejected   = dropped(p.other_rejected);
   const afterDirection  = afterScored - failedDirection;
+  const afterOther      = afterDirection - otherRejected;
   return (
     <div className={styles.funnel}>
       <div className={styles.header}>
@@ -81,9 +116,14 @@ export function ScanFunnel({ mode, pipeline }: Props) {
       <Stage wide label="Pre-screen (setup score)"        count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
       <Stage wide label="Option chain (DTE window)"       count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />
       <Stage wide label="Score + contracts (final + rules)" count={afterScored} rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
-      <Stage wide label="Direction conviction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
+      {failedDirection > 0 && (
+        <Stage wide label="Direction conviction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
+      )}
+      {otherRejected > 0 && (
+        <Stage wide label="Other (errors / unclassified)" count={afterOther} rejected={otherRejected} rejectedLabel="errors" total={p.scanned} />
+      )}
       {failedShortlist > 0 && (
-        <Stage wide label="Shortlist cap" count={afterDirection - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
+        <Stage wide label="Shortlist cap" count={afterOther - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
       )}
       <div className={styles.divider} />
       <div className={styles.finalStageWide}>
