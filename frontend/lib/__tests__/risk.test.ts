@@ -2,6 +2,7 @@ import {
   capitalAtRisk,
   exposurePct,
   checkInvalidation,
+  checkMethodPick,
   totalNotional,
   computePortfolioRiskMetrics,
   checkTradeRisk,
@@ -16,7 +17,16 @@ import {
   stopLossIsTotalOnPrintedFigures,
   formatStopLossPct,
 } from '@/lib/risk';
-import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan, StopCostOut } from '@/types/domain';
+import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan, StopCostOut, MethodPick } from '@/types/domain';
+
+const pick = (over: Partial<MethodPick> = {}): MethodPick => ({
+  method: 'monte_carlo',
+  rowStockPrice: 197.5,
+  rowOptionPrice: 6.24,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+  ...over,
+});
 
 const DEFAULT_LIMITS: RiskLimits = {
   maxSingleTradeExposurePct: 0.05,
@@ -123,6 +133,31 @@ describe('risk helpers', () => {
     });
   });
 
+  describe('checkMethodPick (Phase G piece 5, build step 4, spec test 7)', () => {
+    it('returns false for null and undefined', () => {
+      expect(checkMethodPick(null)).toBe(false);
+      expect(checkMethodPick(undefined)).toBe(false);
+    });
+
+    it('returns true for a well-formed pick', () => {
+      expect(checkMethodPick(pick())).toBe(true);
+    });
+
+    it('returns true even when rowStockPrice is null (Barrier Race never has one, §7.4)', () => {
+      expect(checkMethodPick(pick({ rowStockPrice: null }))).toBe(true);
+    });
+
+    it('returns true even when rowOptionPrice is null (Ladder/Arithmetic never have one, §7.4)', () => {
+      expect(checkMethodPick(pick({ rowOptionPrice: null }))).toBe(true);
+    });
+
+    it('is true for all four PickedMethod values', () => {
+      for (const method of ['arithmetic', 'monte_carlo', 'ladder', 'barrier_race'] as const) {
+        expect(checkMethodPick(pick({ method }))).toBe(true);
+      }
+    });
+  });
+
   describe('totalNotional', () => {
     it('sums currentPrice * 100 * contracts', () => {
       const positions = [
@@ -168,7 +203,7 @@ describe('risk helpers', () => {
 
   describe('checkTradeRisk', () => {
     it('approves a clean trade within limits', () => {
-      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 0);
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 0, null, undefined, pick());
       expect(result.approved).toBe(true);
       expect(result.reasons).toEqual([]);
       expect(result.capitalAtRisk).toBe(250);
@@ -270,7 +305,7 @@ describe('risk helpers', () => {
 
     it('approves when the loss at the exit-plan final stop is within the per-trade limit', () => {
       const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 2.0 }) } });
-      const result = checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0);
+      const result = checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0, null, undefined, pick());
       expect(result.approved).toBe(true);
       expect(result.reasons).not.toContain('max_loss_per_trade_exceeded');
     });
@@ -280,7 +315,7 @@ describe('risk helpers', () => {
       // default limit = $1,875 (rejected without an override). A $2,500
       // dollar override raises the limit above the loss, flipping approval.
       const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 0.5 }) } });
-      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'dollar', value: 2500 });
+      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'dollar', value: 2500 }, undefined, pick());
       expect(result.approved).toBe(true);
       expect(result.reasons).not.toContain('max_loss_per_trade_exceeded');
       expect(result.maxLossAtStop).toBe(2000);
@@ -290,9 +325,20 @@ describe('risk helpers', () => {
     it('Feature 5 — a percent-mode override is resolved against portfolioValue, same as the global default', () => {
       const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 0.5 }) } });
       // 10% of the 50,000 portfolioValue = $5,000 — well above the $2,000 loss.
-      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'percent', value: 0.10 });
+      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'percent', value: 0.10 }, undefined, pick());
       expect(result.approved).toBe(true);
       expect(result.maxLossLimitDollar).toBe(5000);
+    });
+
+    it('Phase G piece 5, build step 4 (spec test 8) — pushes missing_method_pick and sets approved false when no pick is passed', () => {
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('missing_method_pick');
+    });
+
+    it('does not push missing_method_pick once a pick is supplied', () => {
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 0, null, undefined, pick());
+      expect(result.reasons).not.toContain('missing_method_pick');
     });
   });
 });

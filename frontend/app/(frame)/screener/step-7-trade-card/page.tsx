@@ -28,7 +28,10 @@ import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
-import { checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
+import {
+  checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
+  checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
+} from '@/lib/risk';
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
@@ -645,6 +648,15 @@ export default function Step7Page() {
   const stopMissing = !checkInvalidation(resolvedInvalidationForCard);
   const editKey = editKeyFor(effectiveCard);
 
+  /* Phase G piece 5, build step 4 (§7.1). Same shape as `stopMissing` above,
+   * one section along: `methodPickFor` is the same reader the card itself is
+   * wired to (§6.2), so this cannot disagree with what the Final
+   * Recommendation control shows as picked. Null-safe on `effectiveCard` for
+   * the same reason `stopMissing` is — the buttons render inside its own
+   * guard but the send handlers do not. */
+  const resolvedMethodPickForCard = effectiveCard ? methodPickFor(effectiveCard) : null;
+  const pickMissing = !checkMethodPick(resolvedMethodPickForCard);
+
   // The card actually handed to <TradeCard>, with any cached "Estimate" /
   // "Check structure" result for this contract spliced into exit.* — the same
   // fields TradeCard reads for its initial state and its contract-change reset,
@@ -980,6 +992,10 @@ export default function Step7Page() {
     // having to remember it. Exactly the shape SendToBrokerDialog.submit()
     // already uses beside its own `disabled`, and for the same reason.
     if (!checkInvalidation(invalidationFor(card))) return;
+    // Phase G piece 5, build step 4 (§7.1). Same belt-and-braces shape as the
+    // invalidation check immediately above, on the same reading `pickMissing`
+    // was derived from.
+    if (!checkMethodPick(methodPickFor(card))) return;
     // ROUND 10 finding 11 -- CLEAR THE NOTES PER ORDER. They are facts about
     // ONE save, and were only reset when the active candidate changed, so a
     // "Size reduced to 1 contract" from a previous fill sat under the next,
@@ -1038,6 +1054,8 @@ export default function Step7Page() {
     // having to remember it. Exactly the shape SendToBrokerDialog.submit()
     // already uses beside its own `disabled`, and for the same reason.
     if (!checkInvalidation(invalidationFor(card))) return;
+    // Phase G piece 5, build step 4 (§7.1) — see placeLimitPaper's identical guard.
+    if (!checkMethodPick(methodPickFor(card))) return;
     // See placeLimitPaper — notes describe this save only.
     setMarketPlacing(true); setOrderError(null); setSaveNotes([]);
     try {
@@ -1321,8 +1339,12 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing}
-                  title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  title={
+                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
                 >
                   {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
                 </button>
@@ -1330,8 +1352,12 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing}
-                  title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  title={
+                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
                 >
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
@@ -1352,6 +1378,16 @@ export default function Step7Page() {
               {stopMissing && (
                 <Text size={11} tone="reject">
                   {MISSING_INVALIDATION_MESSAGE}
+                </Text>
+              )}
+              {/* Phase G piece 5, build step 4 (§7.1). Independent of
+                * `stopMissing` above for the same reason that one is
+                * independent of `!planReady` — a card can be missing both a
+                * stop and a pick at once, and suppressing this behind the
+                * other would hide a refusal the user can act on right now. */}
+              {pickMissing && (
+                <Text size={11} tone="reject">
+                  {MISSING_METHOD_PICK_MESSAGE}
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
@@ -1379,6 +1415,11 @@ export default function Step7Page() {
                   // rather than recomputed, so Arm and the two direct buttons
                   // cannot refuse on two different readings of one field.
                   resolvedInvalidation={resolvedInvalidationForCard}
+                  // Phase G piece 5, build step 4 (§7.1). The same resolution
+                  // `pickMissing` is derived from, passed rather than
+                  // recomputed, so Arm and the two direct buttons cannot
+                  // refuse on two different readings of one field.
+                  methodPick={resolvedMethodPickForCard}
                 />
               )}
             </>
@@ -1413,6 +1454,9 @@ export default function Step7Page() {
           overridesBySymbol={maxLossOverrideBySymbol}
           invalidationBySymbol={Object.fromEntries(
             basketCards.map((c) => [c.symbol, invalidationFor(c)]),
+          )}
+          methodPickBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, methodPickFor(c)]),
           )}
           onClose={() => setDialogOpen(false)}
           onSubmit={handleSubmit}

@@ -7,8 +7,8 @@ import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
-import { checkInvalidation, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
-import type { TradeCardData } from '@/types/domain';
+import { checkInvalidation, MISSING_INVALIDATION_TITLE, checkMethodPick, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
+import type { TradeCardData, MethodPick } from '@/types/domain';
 import styles from './AutoTradeArm.module.css';
 
 interface AutoTradeArmProps {
@@ -79,6 +79,18 @@ interface AutoTradeArmProps {
    *  meaning for the same word, so a caller with no overlay to consult can omit
    *  it and still be gated on something real. */
   resolvedInvalidation?: number | null;
+  /** Phase G piece 5, build step 4 (§7.1) — the trader's explicit method pick
+   *  for this card, resolved by the caller exactly as step 7's `methodPickFor`
+   *  does (keyed by contract through `editKeyFor`). Unlike `resolvedInvalidation`
+   *  there is no card-level fallback to fall back to: `MethodPick` is not a
+   *  field `TradeCardData` carries (§9.4), so `undefined`/`null` both mean "no
+   *  pick" rather than "inherit the card's own value".
+   *
+   *  Why this control needs the check at all, given §8 (arming, build step 5)
+   *  has not yet wired the pick onto the arm request: the same reasoning
+   *  `resolvedInvalidation`'s doc gives — a gate on the other paths with Arm
+   *  left open does not close the hole, it relabels it. */
+  methodPick?: MethodPick | null;
   /** The live option mid, fetched by the page (`liveQuote?.price`) -- the same
    *  number it already hands TradeCard as `liveMid` and prints as "Live mid".
    *
@@ -104,7 +116,7 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -140,6 +152,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    * card is null too) and matching the established idiom is worth more than a
    * second, subtly different one. */
   const stopMissing = !checkInvalidation(resolvedInvalidation ?? card.exit.invalidation);
+  /* Phase G piece 5, build step 4 (§7.1) — same treatment `stopMissing` gets,
+   * one prop along. No card-level fallback exists to `??` against (see the
+   * `methodPick` prop doc), so this reads the prop alone. */
+  const pickMissing = !checkMethodPick(methodPick);
   /* NOTE: the disclosure is the CALLER'S, not this component's, and that is a
    * choice rather than an omission. Rendering the refusal sentence here too put
    * it on screen TWICE in one column -- step 7 already prints it a few rows
@@ -163,6 +179,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     // step 7's two direct handlers and SendToBrokerDialog.submit(): `disabled`
     // protects the button, this protects the REQUEST.
     if (stopMissing) return;
+    // Phase G piece 5, build step 4 (§7.1) — same belt-and-braces shape as
+    // the check immediately above, on the same reading `pickMissing` was
+    // derived from.
+    if (pickMissing) return;
     setWorking(true); setError(null);
     try {
       await api.armAutoTrade({
@@ -247,8 +267,12 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         <div className={styles.armRow}>
           {!armed ? (
             <button type="button" className={`${styles.btn} ${styles.btnArm}`}
-              onClick={handleArm} disabled={!broker || working || stopMissing}
-              title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}>
+              onClick={handleArm} disabled={!broker || working || stopMissing || pickMissing}
+              title={
+                stopMissing ? MISSING_INVALIDATION_TITLE
+                : pickMissing ? MISSING_METHOD_PICK_TITLE
+                : undefined
+              }>
               {working ? 'Arming…' : `Arm — ${card.symbol} ${card.direction}`}
             </button>
           ) : (

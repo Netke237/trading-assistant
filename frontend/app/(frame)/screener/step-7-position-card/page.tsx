@@ -5,10 +5,12 @@ import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
+import { selectCardEdits } from '@/lib/cardEdits';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
+import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
@@ -35,6 +37,11 @@ function ExecutionModeButton({ label, desc, active, disabled, onClick }:
 export default function Step7PositionCardPage() {
   const result = useScanStore((s) => s.stockScanResult);
   const selectedSymbol = useScanStore((s) => s.selectedSymbol);
+  // Phase G piece 5, build step 4 (§7.2, S3). This is a SEPARATE component
+  // from `StockPositionCard` (§2.5) — its own `submit()`, its own
+  // `postStockOrder` -> `addPosition` pair — so it needs its own read of the
+  // stamped picks slice rather than inheriting one gated elsewhere.
+  const stocksPicks = useScanStore((s) => selectCardEdits(s, 'stocks').picks);
   const [selectedIdx, setSelectedIdx] = useState(() => {
     const passing = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
     const i = passing.findIndex((c) => c.symbol === selectedSymbol);
@@ -73,6 +80,7 @@ export default function Step7PositionCardPage() {
   const candidates = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
   const card: PositionCardData | undefined = candidates[selectedIdx];
   const hasOrderForCurrent = orderId !== null && orderedIdx === selectedIdx;
+  const pickMissing = !card || !checkMethodPick(stocksPicks[card.symbol] ?? null);
 
   // error/warning are transient feedback about a submit, not durable
   // per-candidate state like orderId/orderedIdx above — if the user switches
@@ -109,6 +117,10 @@ export default function Step7PositionCardPage() {
 
   async function submit(orderType: 'LMT' | 'MKT') {
     if (!card || execMode === 'recommendation' || hasOrderForCurrent) return;
+    // Phase G piece 5, build step 4 (§7.2, S3) — belt-and-braces beside the
+    // button's own `disabled`, on the same reading `pickMissing` was derived
+    // from.
+    if (pickMissing) return;
     const submittedIdx = selectedIdx;
     const stillViewing = () => selectedIdxRef.current === submittedIdx;
     setPlacingType(orderType);
@@ -229,17 +241,22 @@ export default function Step7PositionCardPage() {
       {execMode !== 'recommendation' && (
         <div className={styles.actions}>
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => submit('LMT')} disabled={placingType !== null || hasOrderForCurrent}>
+            onClick={() => submit('LMT')} disabled={placingType !== null || hasOrderForCurrent || pickMissing}
+            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}>
             {placingType === 'LMT' ? 'Placing…' : `Place Limit Order @ $${card.strategy.entry_price}`}
           </button>
           <button type="button" className={`${styles.btn} ${styles.btnMarket}`}
-            onClick={() => submit('MKT')} disabled={placingType !== null || hasOrderForCurrent}>
+            onClick={() => submit('MKT')} disabled={placingType !== null || hasOrderForCurrent || pickMissing}
+            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}>
             {placingType === 'MKT' ? 'Placing…' : 'Right Now — Market Order'}
           </button>
         </div>
       )}
 
       {hasOrderForCurrent && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
+      {execMode !== 'recommendation' && pickMissing && (
+        <Text size={12} tone="reject">{MISSING_METHOD_PICK_MESSAGE}</Text>
+      )}
       {error && <Text size={12} tone="reject">{error}</Text>}
       {warning && <Text size={12} tone="caution">{warning}</Text>}
     </div>

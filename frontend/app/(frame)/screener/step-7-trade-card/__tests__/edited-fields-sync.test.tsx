@@ -7,7 +7,23 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
-import type { TradeCardData } from '@/types/domain';
+import type { TradeCardData, MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — this suite is about the edited-field sync
+// paths, not the method-pick gate, so every fixture below stamps a satisfied
+// pick for every contract key it sends through (base AAA/BBB, and the two
+// user-overridden contracts the "never shows... quote" test switches to) or
+// the new `pickMissing` check leaves every send path disabled regardless of
+// what these tests exercise. `ladder`, not `monte_carlo`: Ladder is the only
+// method available with no run, so it is the only pick that survives
+// TradeCard's own "clear a stale pick" reset effect with no estimate fetched.
+const pick = (): MethodPick => ({
+  method: 'ladder',
+  rowStockPrice: 160,
+  rowOptionPrice: null,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 /*
  * The card's edits have to REACH the order. Piece 4 threaded the Premium stop
@@ -107,7 +123,11 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
         // — without one there is no stamp, and every edit is dropped. The slices
         // are reset here too: they used to die with the page's useState hooks on
         // unmount, and a persisted store does not.
-        optionsCardEdits: emptyCardEdits(),
+        optionsCardEdits: {
+          ...emptyCardEdits(),
+          scanId: 'test-scan',
+          picks: { 'AAA|150|2026-05-15|C': pick(), 'BBB|155|2026-05-15|C': pick() },
+        },
         stocksCardEdits: emptyCardEdits(),
         pickedContracts: {},
         contractsBySymbol: {},
@@ -216,6 +236,24 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     );
     // The slice is still physically present; it is the STAMP that hides it.
     expect(useScanStore.getState().optionsCardEdits.entryLimit).toEqual({ 'AAA|150|2026-05-15|C': 2.71 });
+
+    // Phase G piece 5, build step 4 — the OLD stamp's pick is gone the same
+    // way its entryLimit just was (§7.4: a pick from a previous scan is not
+    // "old", it is GONE), so the trader has to pick again under the new scan
+    // before either send path unblocks. This is a fresh write under the
+    // CURRENT stamp, exactly what a real re-pick click would produce — it is
+    // deliberately AFTER the raw-entryLimit assertion above, not folded into
+    // the scan-landing `setState`, so it cannot be mistaken for something the
+    // scan itself carries.
+    act(() => {
+      useScanStore.setState({
+        optionsCardEdits: {
+          ...emptyCardEdits(),
+          scanId: 'test-scan-2',
+          picks: { 'AAA|150|2026-05-15|C': pick(), 'BBB|155|2026-05-15|C': pick() },
+        },
+      });
+    });
 
     // HALF TWO — and so does the wire. The button label is a promise about
     // what the click will do, so it has to move too.
@@ -490,7 +528,20 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
         // — without one there is no stamp, and every edit is dropped. The slices
         // are reset here too: they used to die with the page's useState hooks on
         // unmount, and a persisted store does not.
-        optionsCardEdits: emptyCardEdits(), stocksCardEdits: emptyCardEdits(),
+        optionsCardEdits: {
+          ...emptyCardEdits(),
+          scanId: 'test-scan',
+          picks: {
+            'AAA|150|2026-05-15|C': pick(), 'BBB|155|2026-05-15|C': pick(),
+            // The two user-overridden contracts the quote-leak test switches
+            // to — `editKeyFor` reads the EFFECTIVE (overridden) card once
+            // `pickedContracts` names one, so a pick keyed only to the base
+            // contract would leave that test's send gated on a key nothing
+            // ever writes to.
+            'AAA|160|2026-05-15|C': pick(), 'BBB|170|2026-05-15|C': pick(),
+          },
+        },
+        stocksCardEdits: emptyCardEdits(),
         pickedContracts: {}, contractsBySymbol: {}, scanOverrides: {},
       } as any);
       usePortfolioStore.setState({ positions: [], lastSyncError: null });

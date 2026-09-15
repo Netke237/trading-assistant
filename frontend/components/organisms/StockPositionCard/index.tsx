@@ -11,6 +11,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
+import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { winRateTooltip } from '@/lib/statusTooltips';
@@ -384,6 +385,10 @@ export function StockPositionCard({
   const setCardEdit   = useScanStore((st) => st.setCardEdit);
   const clearCardPick = useScanStore((st) => st.clearCardPick);
   const methodPick    = stocksPicks[card.symbol] ?? null;
+  // Phase G piece 5, build step 4 (§7.2, S1/S2). Stocks mode had no pre-send
+  // refusal of any kind before this — this is that gate's own local reading,
+  // same shape as step 7's `pickMissing`.
+  const pickMissing   = !checkMethodPick(methodPick);
   // READ FROM THE STORE, NOT MIRRORED INTO LOCAL STATE, and that buys a
   // property the typed-price fields do not have. `lib/stockScan.ts` sets
   // `stockScanResult` to null for the DURATION of every stock scan, so a click
@@ -517,6 +522,10 @@ export function StockPositionCard({
 
   async function submit(orderType: 'LMT' | 'MKT') {
     if (execMode === 'recommendation' || orderId !== null) return;
+    // Phase G piece 5, build step 4 (§7.2, S1) — belt-and-braces beside the
+    // button's own `disabled`, on the same reading `pickMissing` was derived
+    // from. Same shape as step 7's direct-send handlers.
+    if (pickMissing) return;
     setPlacingType(orderType);
     setErr(null);
     setWarning(null);
@@ -682,6 +691,9 @@ export function StockPositionCard({
 
   async function onAddToPortfolio() {
     if (adding || added || queued) return; // guards against a double-click firing two adds
+    // Phase G piece 5, build step 4 (§7.2, S2) — same gate `submit()` above
+    // carries, belt-and-braces beside this button's own `disabled`.
+    if (pickMissing) return;
     // stockPositionLevels() silently DROPS a target on the wrong side of entry —
     // a fat-fingered T1/T2/T3 (EditableField has no side check) would otherwise
     // lose that rung, and the shares allocated to it, from the sell-to-close
@@ -1216,13 +1228,19 @@ export function StockPositionCard({
           type="button"
           className={styles.actionBtn}
           onClick={onAddToPortfolio}
-          disabled={added || adding || queued}
+          disabled={added || adding || queued || pickMissing}
+          title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
         >
           <Text size={12}>
             {added ? 'Added to Portfolio' : queued ? 'Queued — will sync' : adding ? 'Adding…' : 'Add to Portfolio'}
           </Text>
         </button>
       </div>
+      {pickMissing && (
+        <Text size={11} tone="reject">
+          {MISSING_METHOD_PICK_MESSAGE}
+        </Text>
+      )}
 
       {/* Section 4 — Broker mode selector */}
       <div className={styles.modeRow}>
@@ -1253,7 +1271,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('LMT')}
-            disabled={placingType !== null || orderId !== null}
+            disabled={placingType !== null || orderId !== null || pickMissing}
+            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}</Text>
           </button>
@@ -1261,7 +1280,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('MKT')}
-            disabled={placingType !== null || orderId !== null}
+            disabled={placingType !== null || orderId !== null || pickMissing}
+            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'MKT' ? 'Placing…' : 'Market Order'}</Text>
           </button>

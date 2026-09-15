@@ -1,7 +1,19 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { StockSendDialog } from '@/components/organisms/StockSendDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useScanStore } from '@/lib/scanStore';
 import type { PositionCardData } from '@/types/stockDomain';
+import type { MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 (§7.2, S4) — this suite is about the pending/
+// backend-unreachable submit path, not the method-pick gate.
+const pick = (): MethodPick => ({
+  method: 'monte_carlo',
+  rowStockPrice: 197.5,
+  rowOptionPrice: 6.24,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 jest.mock('@/lib/api', () => ({
   api: { getBrokerStatus: jest.fn().mockResolvedValue({}), postStockOrder: jest.fn() },
@@ -30,6 +42,13 @@ const originalFetch = global.fetch;
 describe('StockSendDialog — pending (backend-unreachable) submit', () => {
   beforeEach(() => {
     usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
   });
   afterEach(() => {
     global.fetch = originalFetch;

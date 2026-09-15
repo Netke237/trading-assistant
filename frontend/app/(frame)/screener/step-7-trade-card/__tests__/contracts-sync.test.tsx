@@ -2,11 +2,24 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
+import { emptyCardEdits } from '@/lib/cardEdits';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
-import type { TradeCardData } from '@/types/domain';
+import type { TradeCardData, MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — this suite is about the shared Contracts
+// map, not the method-pick gate, so every fixture stamps a satisfied pick
+// for both basket symbols or the new `pickMissing` check leaves every send
+// path disabled regardless of what these tests exercise.
+const pick = (): MethodPick => ({
+  method: 'ladder',
+  rowStockPrice: 160,
+  rowOptionPrice: null,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 /*
  * Feature 7 regression coverage — the real, pre-existing bug: TradeCard's
@@ -63,7 +76,15 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
   beforeEach(() => {
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        scanResult: { scan_id: 'test-scan', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        optionsCardEdits: {
+          ...emptyCardEdits(),
+          scanId: 'test-scan',
+          picks: {
+            'AAA|150|2026-05-15|C': pick(),
+            'BBB|150|2026-05-15|C': pick(),
+          },
+        },
         pickedContracts: {},
         contractsBySymbol: {},
         scanOverrides: {},
