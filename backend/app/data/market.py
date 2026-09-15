@@ -227,7 +227,10 @@ _YF_MAX_DAYS: dict[str, int] = {
 # The chart-facing / frontend interval spelling ('1D', '1W') doesn't match this
 # module's own keys ('daily', 'weekly') — normalize before any lookup so both
 # spellings resolve identically (yfinance interval code, day cap, IBKR eligibility).
-_INTERVAL_ALIASES: dict[str, str] = {"1D": "daily", "1W": "weekly"}
+# '60m' is folded to '1h' here rather than in each lookup table: market.py and
+# ibkr.py both already special-cased it, but chart_cache.py's widening did not,
+# so '?interval=60m' silently served 55 days where '1h' served 730.
+_INTERVAL_ALIASES: dict[str, str] = {"1D": "daily", "1W": "weekly", "60m": "1h"}
 
 
 def normalize_interval(interval: str) -> str:

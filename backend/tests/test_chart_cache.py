@@ -107,6 +107,117 @@ async def test_1h_widened_to_hourly_cap_not_left_at_default_55():
     mock_fetch.assert_called_once_with("AAPL", "1h", 730)
 
 
+def test_hourly_widening_still_matches_the_yfinance_ceiling():
+    """Tripwire for the 730 literal in the widening tests above:
+    _CHART_HOURLY_DAYS is only correct while it equals market._YF_MAX_DAYS for
+    1h/4h. If Yahoo's window moves and only one side is updated, the chart
+    silently over- or under-fetches."""
+    from app.data import market
+    from app.data.chart_cache import _CHART_HOURLY_DAYS
+
+    assert market._YF_MAX_DAYS["1h"] == _CHART_HOURLY_DAYS
+    assert market._YF_MAX_DAYS["4h"] == _CHART_HOURLY_DAYS
+
+
+@pytest.mark.asyncio
+async def test_60m_normalizes_to_1h_and_widens():
+    """'60m' must resolve exactly like '1h' — market.py and ibkr.py both already
+    handled that spelling, so the cache layer treating it as unknown (55 days,
+    default TTL) was an inconsistency waiting to bite a new interval button."""
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows) as mock_fetch:
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+        _INTRADAY_CACHE.clear()
+        await get_intraday("AAPL", "60m")
+    mock_fetch.assert_called_once_with("AAPL", "1h", 730)
+    assert "AAPL:1h:730" in _INTRADAY_CACHE
+
+
+@pytest.mark.asyncio
+async def test_double_checked_lock_hit_still_promotes_recency():
+    """A caller that loses the race to a concurrent writer — its outer,
+    pre-semaphore cache check misses, then by the time it acquires
+    _CHART_SEM another coroutine has already written a fresh entry — must
+    still count as a touch of that key for LRU purposes. Without
+    move_to_end() on this inner-check branch too, a key only ever reached
+    through it stays wherever the *original write* left it, so it can be
+    evicted sooner than a real LRU would allow even while still being
+    actively requested."""
+    from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    _INTRADAY_CACHE.clear()
+    fresh_entry = (mock_rows, time.monotonic() + 3600)
+
+    call_n = 0
+
+    def fake_get(k, default=None):
+        nonlocal call_n
+        call_n += 1
+        # Outer check (before acquiring _CHART_SEM): nothing cached yet.
+        if call_n == 1:
+            return None
+        # Inner check (after acquiring _CHART_SEM): a concurrent writer
+        # finished in between and the entry is now there.
+        return fresh_entry
+
+    with patch.object(_INTRADAY_CACHE, "get", side_effect=fake_get), \
+         patch.object(_INTRADAY_CACHE, "move_to_end") as mock_move_to_end, \
+         patch("app.data.chart_cache.fetch_intraday_candles") as mock_fetch:
+        result = await get_intraday("RACE", "15min", 55)
+
+    assert result == mock_rows
+    mock_fetch.assert_not_called()  # served from the inner-check hit, not refetched
+    mock_move_to_end.assert_called_once_with("RACE:15min:55")
+
+
+@pytest.mark.asyncio
+async def test_cache_is_bounded_and_evicts_oldest_first():
+    """The cache was unbounded and only ever overwritten per-key, so every symbol
+    the user browsed stayed resident for the process lifetime — at ~1 MiB per 1h
+    entry after the widening, that is hundreds of MiB across a watchlist."""
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows):
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE, _MAX_CACHE_ENTRIES
+        _INTRADAY_CACHE.clear()
+        for i in range(_MAX_CACHE_ENTRIES + 25):
+            await get_intraday(f"SYM{i}", "15min", 55)
+    assert len(_INTRADAY_CACHE) <= _MAX_CACHE_ENTRIES
+    assert "SYM0:15min:55" not in _INTRADAY_CACHE          # oldest evicted
+    assert f"SYM{_MAX_CACHE_ENTRIES + 24}:15min:55" in _INTRADAY_CACHE  # newest kept
+
+
+@pytest.mark.asyncio
+async def test_explicit_days_for_daily_is_honored_not_floored():
+    """A caller explicitly asking for fewer days than the default widening
+    (e.g. days=10 for a daily chart) must get exactly that back, not silently
+    forced up to the ~5y default. Before this fix, `days = max(days, cap)`
+    could only ever push an explicit value *up*, never respect a smaller
+    explicit request — this is the case that was previously impossible."""
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows) as mock_fetch:
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+        _INTRADAY_CACHE.clear()
+        await get_intraday("AAPL", "daily", 10)
+    mock_fetch.assert_called_once_with("AAPL", "daily", 10)
+    assert "AAPL:daily:10" in _INTRADAY_CACHE
+
+
+@pytest.mark.asyncio
+async def test_omitted_days_for_daily_still_widens_to_the_default():
+    """Regression guard: omitting `days` entirely (the None sentinel) for a
+    widened interval must still resolve to the historical per-interval
+    default — the no-args production call path is unchanged by this fix."""
+    from app.data import chart_cache
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows) as mock_fetch:
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+        _INTRADAY_CACHE.clear()
+        await get_intraday("AAPL", "daily")
+    mock_fetch.assert_called_once_with("AAPL", "daily", chart_cache._CHART_DAILY_DAYS)
+    assert f"AAPL:daily:{chart_cache._CHART_DAILY_DAYS}" in _INTRADAY_CACHE
+
+
 @pytest.mark.asyncio
 async def test_at_most_2_concurrent_fetches():
     """At most 2 concurrent chart fetches run simultaneously."""

@@ -5,3 +5,8 @@
 # COPY ... FROM STDIN or dollar-quoted blocks (today's .sql files tolerate
 # CRLF, but that's incidental, not guaranteed for scripts added later).
 backend/migrations/init-scripts/* text eol=lf
+
+# Windows launcher scripts. cmd.exe's parsing of goto-driven loops and
+# multi-line PowerShell continuations in LF-only files is historically
+# fragile, so pin them to CRLF rather than relying on core.autocrlf.
+*.bat text eol=crlf

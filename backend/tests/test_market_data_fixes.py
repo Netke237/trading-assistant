@@ -160,7 +160,7 @@ def test_1W_interval_alias_calls_yf_with_1wk():
 
 @pytest.mark.asyncio
 async def test_get_intraday_widens_daily_weekly_at_production_default():
-    """The chart's real entry points (WS stream + /chart/history) pass days=55.
+    """The chart's real entry points (WS stream + /chart/history) omit `days`.
     get_intraday must widen daily/weekly to a multi-year window *at the caching
     layer* — so the cache key reflects the real window — while leaving intraday
     (and non-chart callers of fetch_intraday_candles) untouched at 55."""
@@ -174,9 +174,9 @@ async def test_get_intraday_widens_daily_weekly_at_production_default():
 
     chart_cache._INTRADAY_CACHE.clear()
     with patch("app.data.chart_cache.fetch_intraday_candles", side_effect=_fake_fetch):
-        await chart_cache.get_intraday("SPY", "1D", days=55)
-        await chart_cache.get_intraday("SPY", "1W", days=55)
-        await chart_cache.get_intraday("SPY", "15min", days=55)
+        await chart_cache.get_intraday("SPY", "1D")
+        await chart_cache.get_intraday("SPY", "1W")
+        await chart_cache.get_intraday("SPY", "15min")
 
     # daily/weekly widened; intraday left alone
     assert ("daily", chart_cache._CHART_DAILY_DAYS) in captured, captured

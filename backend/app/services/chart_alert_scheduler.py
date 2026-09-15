@@ -64,7 +64,7 @@ async def _tick() -> None:
             _last_seen_candle[key] = closed['time']
 
             ht_candles = await get_intraday(symbol, '1D') if interval == '1h' else None
-            signals = compute_structure(candles, interval, symbol, ht_candles)
+            signals = await asyncio.to_thread(compute_structure, candles, interval, symbol, ht_candles)
 
             await evaluate_and_notify_for_symbol(symbol, interval, closed, candles, signals)
         except Exception:

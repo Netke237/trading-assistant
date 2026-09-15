@@ -30,7 +30,21 @@ async def test_history_uppercases_symbol():
     with patch("app.routers.chart.get_intraday", return_value=MOCK_CANDLES) as mock_get:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await client.get("/chart/history", params={"symbol": "aapl", "interval": "15min"})
-    mock_get.assert_called_once_with("AAPL", "15min", 55)
+    mock_get.assert_called_once_with("AAPL", "15min", None)
+
+
+@pytest.mark.asyncio
+async def test_history_rejects_non_positive_days():
+    """`days` is honored as an explicit override (not floored) since the
+    days-as-a-limit fix, so a non-positive value is no longer implicitly
+    corrected by the old `max(days, cap)` widening — it must be rejected
+    at the query-param boundary instead of flowing a negative/zero window
+    into the data layer."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp_zero = await client.get("/chart/history", params={"symbol": "AAPL", "interval": "daily", "days": 0})
+        resp_negative = await client.get("/chart/history", params={"symbol": "AAPL", "interval": "daily", "days": -5})
+    assert resp_zero.status_code == 422
+    assert resp_negative.status_code == 422
 
 
 # NOTE: the WebSocket tests below use the *synchronous* Starlette TestClient and
