@@ -46,8 +46,22 @@ class ArmRequest(BaseModel):
     # snake_case with NO alias, unlike PortfolioPositionCreate's camelCase-with-
     # snake-alias: every other field on THIS schema is snake_case, the frontend
     # posts snake_case to this endpoint, and `ArmedStrategy(**req.model_dump())`
-    # at :39 keys off field NAMES. A camelCase field here would arrive at the
-    # dataclass as `pickedMethod=` and raise TypeError.
+    # at :39 keys off field NAMES.
+    #
+    # BOTH HALVES MEASURED, because the loud half is not the dangerous one and
+    # an earlier draft of this comment only stated the loud one. DECLARING a
+    # camelCase field here is loud: model_dump() would emit `pickedMethod` and
+    # the dataclass raises TypeError ("unexpected keyword argument"). But a
+    # camelCase KEY arriving ON THE WIRE is SILENT -- this schema inherits
+    # pydantic's default `extra='ignore'`, so a body carrying pickedMethod /
+    # pickedRowStockPrice / ... returns 200 and arms with all five NULL.
+    # Verified by posting exactly that body.
+    #
+    # The silent half is why the frontend has a SEPARATE snake_case mapping
+    # (`armPickedFieldsFrom`) instead of reusing the portfolio path's camelCase
+    # one: a mix-up there does not fail, it arms a trade whose pick was thrown
+    # away -- precisely the "gate passed, record NULL" defect c41145ba had to go
+    # back and close on the other seven send paths.
     #
     # All five are Optional and default to None, and NULL IS A REAL STATE: it
     # means nobody picked. The send gate (build step 4) already refuses an

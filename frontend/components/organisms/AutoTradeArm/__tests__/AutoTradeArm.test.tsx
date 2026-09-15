@@ -284,11 +284,15 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
   });
 
   it('posts snake_case keys and NOT the portfolio path\'s camelCase ones', async () => {
-    // `ArmRequest` has no aliases and `ArmedStrategy(**req.model_dump())` keys
-    // off its field NAMES, so `pickedMethod` would not be quietly ignored the
-    // way an extra key usually is — it would raise TypeError at the dataclass.
-    // `POST /api/portfolio` takes the camelCase spelling, this endpoint does
-    // not, and one mapping serving both is how that gets confused.
+    // THIS TEST IS THE ONLY GUARD, which is why it asserts the absence rather
+    // than trusting the presence assertions above it. Sending camelCase here
+    // fails SILENTLY at both ends: `ArmRequest` inherits pydantic's
+    // `extra='ignore'` (measured — a camelCase body returns 200 and arms with
+    // all five NULL), and on this side `tsc --noEmit` stays silent too, because
+    // spreading the wrong mapping into an object literal bypasses TS's
+    // excess-property check. `POST /api/portfolio` takes the camelCase
+    // spelling, this endpoint does not, and one mapping serving both is how
+    // that gets confused — into an armed trade whose pick was discarded.
     render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 

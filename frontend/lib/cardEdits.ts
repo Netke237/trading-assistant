@@ -412,11 +412,21 @@ export function pickedFieldsFrom(pick: MethodPick | null): {
  *  not share a naming convention and neither is free to change:
  *  `PortfolioPositionCreate` is camelCase with snake aliases (its whole surface
  *  is), while `ArmRequest` is snake_case with no aliases at all (its whole
- *  surface is, and `ArmedStrategy(**req.model_dump())` keys off field NAMES, so
- *  a camelCase key would arrive at the dataclass as `pickedMethod=` and raise
- *  TypeError rather than be ignored). Collapsing them into one mapping means
- *  one of the two call sites renaming keys at the call site, which is where a
- *  field gets quietly dropped.
+ *  surface is, and `ArmedStrategy(**req.model_dump())` keys off field NAMES).
+ *
+ *  AND SENDING THE WRONG SPELLING IS SILENT, which is the actual reason this
+ *  function exists rather than a shared one. `ArmRequest` inherits pydantic's
+ *  default `extra='ignore'`: a body carrying `pickedMethod` and friends returns
+ *  200 and arms with all five NULL. Measured by posting exactly that body -- an
+ *  earlier draft of this comment claimed a TypeError, which is true only of
+ *  DECLARING a camelCase field on the schema, not of sending one.
+ *
+ *  TypeScript will not catch the swap either: spreading the wrong mapping into
+ *  the request object bypasses excess-property checking, and `tsc --noEmit`
+ *  stays silent. So the guard is this function's name plus the tests that
+ *  assert the wire keys -- and the failure it guards against is a trade armed
+ *  with its pick thrown away, the same "gate passed, record NULL" defect
+ *  c41145ba closed on the other seven send paths.
  *
  *  `null` maps to all five fields EXPLICITLY null, never omitted — the same
  *  rule `pickedFieldsFrom` follows, and for the same reason: "no pick" must

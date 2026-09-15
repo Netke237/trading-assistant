@@ -375,10 +375,12 @@ describe('pickedFieldsFrom', () => {
 // separately from `pickedFieldsFrom` because the two endpoints do not share a
 // naming convention and neither is free to change: `PortfolioPositionCreate` is
 // camelCase-with-snake-aliases, `ArmRequest` is snake_case with no aliases, and
-// `ArmedStrategy(**req.model_dump())` keys off ArmRequest's field NAMES — so a
-// camelCase key does not get ignored there, it raises TypeError at the
-// dataclass. The alternative to two functions is renaming keys at a call site,
-// which is where a field gets quietly dropped.
+// `ArmedStrategy(**req.model_dump())` keys off ArmRequest's field NAMES. Sending
+// the wrong spelling is SILENT at both ends — `ArmRequest` inherits pydantic's
+// `extra='ignore'` and returns 200 with all five NULL (measured), and `tsc`
+// does not flag a wrong mapping spread into an object literal. The alternative
+// to two functions is renaming keys at a call site, which is where a field gets
+// quietly dropped.
 describe('armPickedFieldsFrom', () => {
   it('maps every field of a MethodPick onto its snake_case arm-request name', () => {
     expect(armPickedFieldsFrom(pick('monte_carlo'))).toEqual({

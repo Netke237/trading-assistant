@@ -613,8 +613,10 @@ export const api = {
     /** Phase G piece 5, build step 5 (§8) — the trader's explicit method pick,
      *  captured at arm. snake_case, like every other field on this endpoint and
      *  unlike `POST /api/portfolio`'s camelCase: `ArmedStrategy(**req.model_dump())`
-     *  keys off ArmRequest's field NAMES, so a camelCase key raises TypeError at
-     *  the dataclass rather than being quietly ignored.
+     *  keys off ArmRequest's field NAMES. Sending the camelCase spelling here is
+     *  SILENT, not loud -- `ArmRequest` inherits pydantic's `extra='ignore'`, so
+     *  it returns 200 and arms with all five NULL rather than erroring. Measured,
+     *  not assumed.
      *
      *  `| null` and not just optional: `armPickedFieldsFrom` (lib/cardEdits.ts)
      *  maps "no pick" to five explicit nulls rather than omitting them, since

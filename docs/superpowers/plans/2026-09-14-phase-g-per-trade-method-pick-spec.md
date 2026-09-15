@@ -1143,7 +1143,37 @@ Both suites must be green and `npm run typecheck` silent before this is called d
    does NOT touch O4 (auto-trade arm/fire, which creates no `PortfolioPosition` at all today — a
    separate, pre-existing, already-documented limitation) or S5 (verified untouched, still
    produces `picked_method = NULL` by omission per §7.3, exactly as intended).
-5. Arming (§8). Test 6's second half.
+5. ~~Arming (§8). Test 6's second half.~~ **BUILT 2026-09-15** — `ArmRequest`
+   (`routers/auto_trade.py`) gains all **five** `picked_*` fields, flowing into `ArmedStrategy`
+   through the existing `ArmedStrategy(**req.model_dump())`. Captured at arm and not read again:
+   `fire_now()` takes no body, the order is unchanged (`execute_option_order` builds `BrokerOrder`
+   from seven named fields and none of these), and the pick simply travels with the strategy.
+   Frontend: `armPickedFieldsFrom` (`lib/cardEdits.ts`) beside `pickedFieldsFrom`, spread into
+   `handleArm`'s payload; `api.ts`'s request type declares the five; `AutoTradeArm`'s `:22` note
+   gains the clause §8 asks for, and the `methodPick` prop doc is corrected (it said step 5 "has
+   not yet wired the pick onto the arm request", which this step made false).
+   **FIVE, NOT FOUR** — §8 above and §10 test 6 both say "the four fields"; §4.1 and §4.2 list five
+   and five is what exists, so the two counts in this document are stale, not the build.
+   **§10 TEST 6'S SECOND HALF IS NOT DELIVERED, and could not be.** It asks that `fire_now()`
+   "creates a position carrying the armed pick" — but the auto-trade fire path creates **no**
+   `PortfolioPosition` at all (O4: pre-existing, and put explicitly out of scope by the
+   send-path-wiring note above). What ships instead: the observable half ("not a live one") is
+   tested where the distinction exists — the strategy handed to `execute_option_order` still
+   carries the ARMED pick — plus a **tripwire** asserting no position is created, which goes red
+   the day anyone wires one and tells them, in its failure message, that `ArmedStrategy` has been
+   carrying the five fields all along. Without it the eighth send path would be free to repeat the
+   exact defect `c41145ba` had to go back and close on the other seven.
+   **AUDITED, ONE ROUND, CLEAN 2026-09-15** — zero gate-level. Two below-gate logged against main
+   (`phase_g_step5_followups`): `ArmRequest` inherits pydantic's `extra='ignore'`, so a camelCase
+   key on the wire is silently dropped (200, armed, all five NULL) and `tsc` does not catch the
+   frontend half either; and the tripwire reads the table through a second session. **One false
+   claim the step itself made was corrected rather than logged**, since main does not carry it:
+   five comments and the commit message said a camelCase key raises `TypeError` — it does not, it
+   is silent, and that is *worse*, which makes it the stronger argument for two mappings.
+
+**THE BUILD ORDER IS COMPLETE.** Every numbered step, plus the unnumbered send-path wiring fix
+found after step 4, is built and has had an adversarial round come back clean at the gate. No
+single round has reviewed Phase G as a whole; whether one runs before the merge is Kenneth's call.
 
 Steps 1 and 2 are independent of each other. Step 4 depends on 3; nothing can be gated on a pick the
 user has no way to make. Step 1 must not begin without running `alembic heads` first (§4.4).
