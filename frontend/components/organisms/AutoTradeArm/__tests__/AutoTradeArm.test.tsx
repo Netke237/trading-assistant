@@ -221,8 +221,9 @@ describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () 
 
 /* Phase G piece 5, build step 4 (§7.1, O4). Same treatment `stopMissing` gets,
  * one prop along — see the `methodPick` prop's own doc on AutoTradeArmProps
- * for why this control needs the check at all given build step 5 (arming)
- * has not yet wired the pick onto the request. */
+ * for why this control needed the check at all at the time step 4 added it,
+ * before build step 5 (arming) wired the pick onto the request. Step 5 has
+ * since wired it; the block below this one covers the payload half. */
 describe('AutoTradeArm — refuses to arm a card with no method pick (spec test 9, O4)', () => {
   beforeEach(() => {
     act(() => {
@@ -249,5 +250,86 @@ describe('AutoTradeArm — refuses to arm a card with no method pick (spec test 
 
     fireEvent.click(arm);
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+  });
+});
+
+/* Phase G piece 5, BUILD STEP 5 (§8, arming) — the payload half of O4.
+ *
+ * Step 4 made this control REFUSE an unpicked card. Step 4 did not make it
+ * SEND anything, and the send-path wiring gap closed at c41145ba is the
+ * standing proof that those are two separate defects: seven other paths passed
+ * their gate cleanly for a whole build step while writing `picked_method =
+ * NULL` on every position they created. This block is the same check applied
+ * to the eighth path before it can repeat it. */
+describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, §8)', () => {
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it('posts all five picked_* fields, snake_case, from the supplied pick', async () => {
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.picked_method).toBe('monte_carlo');
+    expect(payload.picked_row_stock_price).toBe(197.5);
+    expect(payload.picked_row_option_price).toBe(6.24);
+    expect(payload.picked_stop_basis).toBe('stock');
+    expect(payload.picked_at).toBe('2026-09-14T10:00:00.000Z');
+  });
+
+  it('posts snake_case keys and NOT the portfolio path\'s camelCase ones', async () => {
+    // `ArmRequest` has no aliases and `ArmedStrategy(**req.model_dump())` keys
+    // off its field NAMES, so `pickedMethod` would not be quietly ignored the
+    // way an extra key usually is — it would raise TypeError at the dataclass.
+    // `POST /api/portfolio` takes the camelCase spelling, this endpoint does
+    // not, and one mapping serving both is how that gets confused.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload).not.toHaveProperty('pickedMethod');
+    expect(payload).not.toHaveProperty('pickedRowStockPrice');
+    expect(payload).not.toHaveProperty('pickedRowOptionPrice');
+    expect(payload).not.toHaveProperty('pickedStopBasis');
+    expect(payload).not.toHaveProperty('pickedAt');
+  });
+
+  it('puts the premium and the underlying in their own named slots', async () => {
+    // THE UNITS TEST on this path. The two numbers are far apart on purpose:
+    // only `picked_row_stock_price` may ever seed `resolved_tp_price`, and a
+    // $6.24 premium landing there makes `price >= 6.24` true on the first tick.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.picked_row_stock_price).not.toBe(6.24);
+    expect(payload.picked_row_option_price).not.toBe(197.5);
+  });
+
+  it('sends the row prices a barrier-race pick leaves null as null, not as 0', async () => {
+    // A `?? 0` anywhere in the mapping would pass the `gt=0` bound as a 422
+    // rather than as a stored zero — so this fails LOUDLY on the wire rather
+    // than silently. It is still wrong here: null means "this method quotes no
+    // level in that space", and 0 means a price of zero.
+    const racePick: MethodPick = {
+      method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 7.1,
+      stopBasis: 'premium', pickedAt: '2026-09-14T11:00:00.000Z',
+    };
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={racePick} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.picked_method).toBe('barrier_race');
+    expect(payload.picked_row_stock_price).toBeNull();
+    expect(payload.picked_row_option_price).toBe(7.1);
   });
 });

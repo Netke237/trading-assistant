@@ -33,6 +33,28 @@ class ArmedStrategy:
     # card described, so sizing it off a different number than the one the user
     # set is a silent divergence — which is how three globals happened.
     premium_stop_pct: Optional[float] = None
+    # Piece 5 (Phase G, build step 5) -- the method pick the card was showing
+    # when this was armed, carried through by `ArmedStrategy(**req.model_dump())`
+    # in routers/auto_trade.py. Names and bounds are validated on ArmRequest;
+    # this dataclass is the carrier, not the validator.
+    #
+    # THEY TRAVEL, THEY DO NOT ACT. Nothing submitted to any broker depends on
+    # the method (spec S8): the order built by `execute_option_order` reads
+    # symbol, action, quantity, order_type, limit_price, conid and option_symbol
+    # and none of these. They are here so that the pick is frozen at arm time
+    # (Q2) and available to whatever eventually books a position for a fired
+    # auto-trade.
+    #
+    # THE FIRE PATH CREATES NO PortfolioPosition TODAY. That is a pre-existing,
+    # separately-documented limitation, NOT something build step 5 introduced
+    # and NOT something it closes -- see PROJECT_STATE.json's
+    # phase_g_step5_followups. Until that path books a position these five are
+    # captured and unread, which is the honest state of it.
+    picked_method:           Optional[str]   = None
+    picked_row_stock_price:  Optional[float] = None
+    picked_row_option_price: Optional[float] = None
+    picked_stop_basis:       Optional[str]   = None
+    picked_at:               Optional[str]   = None
     armed_at:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

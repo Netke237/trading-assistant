@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
+from app.schemas import PickedMethod, PickedStopBasis
 from app.services.auto_trader import auto_trader, ArmedStrategy
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
@@ -31,6 +32,35 @@ class ArmRequest(BaseModel):
     # the portfolio schemas: this endpoint reaches the same sizing arithmetic
     # without ever passing through PortfolioPositionCreate.
     premium_stop_pct: Optional[float] = Field(default=None, gt=0, lt=1)
+    # Phase G (piece 5), build step 5 -- the trader's explicit method pick for
+    # the card being armed. The SAME five fields PortfolioPositionCreate
+    # carries, and for the same reason premium_stop_pct is here: this endpoint
+    # reaches the trade without ever passing through that schema, so a pick made
+    # on the card would otherwise stop at the Arm button.
+    #
+    # CAPTURED AT ARM AND NOT READ AGAIN (spec S3.2/S8, Q2). `fire_now()` takes
+    # no body and re-fires whatever ArmedStrategy was booked here, so a later
+    # edit on the card cannot retroactively change what "Fire now" records --
+    # exactly the rule quantity and premium_stop_pct already follow.
+    #
+    # snake_case with NO alias, unlike PortfolioPositionCreate's camelCase-with-
+    # snake-alias: every other field on THIS schema is snake_case, the frontend
+    # posts snake_case to this endpoint, and `ArmedStrategy(**req.model_dump())`
+    # at :39 keys off field NAMES. A camelCase field here would arrive at the
+    # dataclass as `pickedMethod=` and raise TypeError.
+    #
+    # All five are Optional and default to None, and NULL IS A REAL STATE: it
+    # means nobody picked. The send gate (build step 4) already refuses an
+    # unpicked card at the Arm button, so None reaching here means a pre-G
+    # client or a direct API call -- never a gated path that lost the pick.
+    picked_method:           Optional[PickedMethod]    = None
+    # gt=0 on both, and the units are in the names, for the reason
+    # PortfolioPositionCreate states at length: only a STOCK price may ever seed
+    # resolved_tp_price, and zero is never a price.
+    picked_row_stock_price:  Optional[float]           = Field(default=None, gt=0)
+    picked_row_option_price: Optional[float]           = Field(default=None, gt=0)
+    picked_stop_basis:       Optional[PickedStopBasis] = None
+    picked_at:               Optional[str]             = None
 
 
 @router.post("/arm")

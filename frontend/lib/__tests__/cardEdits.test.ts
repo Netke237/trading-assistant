@@ -3,7 +3,7 @@
 
 import {
   EMPTY_CARD_EDITS, clearCardPick, clearPicksForSymbol, currentScanIdFor, emptyCardEdits,
-  normalizeCardEdits, pickedFieldsFrom, selectCardEdits, writeCardEdit,
+  armPickedFieldsFrom, normalizeCardEdits, pickedFieldsFrom, selectCardEdits, writeCardEdit,
 } from '@/lib/cardEdits';
 import type { CardEditsHost, CardEditSlice } from '@/lib/cardEdits';
 import type { MethodPick } from '@/types/domain';
@@ -367,6 +367,63 @@ describe('pickedFieldsFrom', () => {
       pickedRowOptionPrice: 6.24,
       pickedStopBasis: 'premium',
       pickedAt: '2026-09-14T10:00:00.000Z',
+    });
+  });
+});
+
+// Phase G piece 5, BUILD STEP 5 (§8). The arm endpoint's counterpart. It exists
+// separately from `pickedFieldsFrom` because the two endpoints do not share a
+// naming convention and neither is free to change: `PortfolioPositionCreate` is
+// camelCase-with-snake-aliases, `ArmRequest` is snake_case with no aliases, and
+// `ArmedStrategy(**req.model_dump())` keys off ArmRequest's field NAMES — so a
+// camelCase key does not get ignored there, it raises TypeError at the
+// dataclass. The alternative to two functions is renaming keys at a call site,
+// which is where a field gets quietly dropped.
+describe('armPickedFieldsFrom', () => {
+  it('maps every field of a MethodPick onto its snake_case arm-request name', () => {
+    expect(armPickedFieldsFrom(pick('monte_carlo'))).toEqual({
+      picked_method: 'monte_carlo',
+      picked_row_stock_price: 197.5,
+      picked_row_option_price: 6.24,
+      picked_stop_basis: 'stock',
+      picked_at: '2026-09-14T10:00:00.000Z',
+    });
+  });
+
+  it('emits snake_case ONLY — no camelCase key survives onto the arm request', () => {
+    const out = armPickedFieldsFrom(pick('monte_carlo')) as Record<string, unknown>;
+    expect(Object.keys(out).sort()).toEqual([
+      'picked_at', 'picked_method', 'picked_row_option_price',
+      'picked_row_stock_price', 'picked_stop_basis',
+    ]);
+  });
+
+  it('maps null to all five fields explicitly null, not an empty object', () => {
+    // Unlike `premium_stop_pct` on the same request body, an OMISSION here has
+    // no global to mean "inherit" — so "no pick" is spelled, not left out.
+    expect(armPickedFieldsFrom(null)).toEqual({
+      picked_method: null,
+      picked_row_stock_price: null,
+      picked_row_option_price: null,
+      picked_stop_basis: null,
+      picked_at: null,
+    });
+  });
+
+  it('keeps a null row price null rather than falling back to 0', () => {
+    // `?? 0` here would be caught by ArmRequest's `gt=0` as a 422 rather than
+    // stored — loud, but still wrong: null means "this method quotes no level
+    // in that space", and the arm would simply fail.
+    const barrierRacePick: MethodPick = {
+      method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 6.24,
+      stopBasis: 'premium', pickedAt: '2026-09-14T10:00:00.000Z',
+    };
+    expect(armPickedFieldsFrom(barrierRacePick)).toEqual({
+      picked_method: 'barrier_race',
+      picked_row_stock_price: null,
+      picked_row_option_price: 6.24,
+      picked_stop_basis: 'premium',
+      picked_at: '2026-09-14T10:00:00.000Z',
     });
   });
 });

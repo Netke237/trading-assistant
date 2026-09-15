@@ -404,3 +404,39 @@ export function pickedFieldsFrom(pick: MethodPick | null): {
     pickedAt: pick?.pickedAt ?? null,
   };
 }
+
+/** Phase G piece 5, build step 5 (§8) — the SAME mapping as `pickedFieldsFrom`
+ *  above, keyed for `/auto-trade/arm` instead of `POST /api/portfolio`.
+ *
+ *  TWO FUNCTIONS, NOT ONE, AND THE SPLIT IS THE ENDPOINTS'. The two schemas do
+ *  not share a naming convention and neither is free to change:
+ *  `PortfolioPositionCreate` is camelCase with snake aliases (its whole surface
+ *  is), while `ArmRequest` is snake_case with no aliases at all (its whole
+ *  surface is, and `ArmedStrategy(**req.model_dump())` keys off field NAMES, so
+ *  a camelCase key would arrive at the dataclass as `pickedMethod=` and raise
+ *  TypeError rather than be ignored). Collapsing them into one mapping means
+ *  one of the two call sites renaming keys at the call site, which is where a
+ *  field gets quietly dropped.
+ *
+ *  `null` maps to all five fields EXPLICITLY null, never omitted — the same
+ *  rule `pickedFieldsFrom` follows, and for the same reason: "no pick" must
+ *  read as a considered value at the call site rather than a field nobody got
+ *  round to wiring. It is also why this differs from `premium_stop_pct` one
+ *  line above it in the arm request, which is deliberately OMITTED when absent
+ *  because omission there means "inherit the global". There is no global pick
+ *  to inherit. */
+export function armPickedFieldsFrom(pick: MethodPick | null): {
+  picked_method: PickedMethod | null;
+  picked_row_stock_price: number | null;
+  picked_row_option_price: number | null;
+  picked_stop_basis: PickedStopBasis | null;
+  picked_at: string | null;
+} {
+  return {
+    picked_method: pick?.method ?? null,
+    picked_row_stock_price: pick?.rowStockPrice ?? null,
+    picked_row_option_price: pick?.rowOptionPrice ?? null,
+    picked_stop_basis: pick?.stopBasis ?? null,
+    picked_at: pick?.pickedAt ?? null,
+  };
+}
