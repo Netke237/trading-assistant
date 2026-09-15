@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from '../screener.module.css';
@@ -822,24 +823,9 @@ export default function Step3Page() {
   // when a scan STARTS and when one FAILS, without clearing `scanResult` — so
   // an ungated fallback would undo both clears and show the previous run's log
   // as though it were this one's.
-  const resultIsCurrent = scanState === 'COMPLETED' || scanState === 'PARTIAL';
-  const rejectedLog   = liveRejectedLog.length > 0
-    ? liveRejectedLog
-    : (resultIsCurrent ? scanResult?.rejected ?? [] : []);
-  const totalPassed   = scanResult?.candidates?.length ?? 0;
-  const totalRejected = rejectedLog.length;
-  // Prefer the server's own count. Deriving it as passed + rejected undercounts
-  // whenever the shortlist cap trims, because trimmed candidates are dropped
-  // from the returned list without being added to `rejected` — which put
-  // "Scanned 508" next to the funnel's "Universe 518" on the same screen.
-  // Gated the same way as `rejectedLog`: taking it from a result the other two
-  // numbers are no longer being read from is how they stop agreeing.
-  const totalScanned  = (resultIsCurrent ? scanResult?.pipeline?.scanned : undefined)
-    ?? totalPassed + totalRejected;
-  // Trimmed candidates are neither returned nor rejected, so they are the exact
-  // amount by which the three headline numbers fail to sum. Name it rather than
-  // leaving the reader to discover the gap.
-  const totalTrimmed  = Math.max(0, totalScanned - totalPassed - totalRejected);
+  // Derived together, in one place — see scanLogTotals.ts for why.
+  const { shownResult, rejectedLog, totalPassed, totalRejected, totalScanned, totalTrimmed } =
+    scanLogTotals(scanState, liveRejectedLog, scanResult);
 
   const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
 
@@ -1086,8 +1072,8 @@ export default function Step3Page() {
             )}
           </div>
         </div>
-          {scanResult?.pipeline && (
-            <ScanFunnel mode="options" pipeline={scanResult.pipeline} />
+          {shownResult?.pipeline && (
+            <ScanFunnel mode="options" pipeline={shownResult.pipeline} />
           )}
           <ScanLogSection entries={rejectedLog} horizonKey={weightsKey} />
       </div>

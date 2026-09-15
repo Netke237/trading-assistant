@@ -108,8 +108,10 @@ export default function Step6BacktestPage() {
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
         <Title as="h1" size={24}>Backtest Gate</Title>
         <Text size={13} tone="secondary">
-          {filteredPassing.length} candidates passed · {result.candidates.length - passing.length} failed ·
-          {rejected.length} rejected before backtest
+          {/* No "N failed" — candidates.length - passing.length is always 0,
+              since a symbol failing the gate is rejected before it becomes a
+              candidate. It was rendering a permanent "0 failed". */}
+          {filteredPassing.length} candidates passed · {rejected.length} rejected before backtest
         </Text>
       </div>
 

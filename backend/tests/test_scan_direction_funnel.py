@@ -217,6 +217,31 @@ _REAL_REASONS = [
 ]
 
 
+def test_every_options_reason_producer_is_classified():
+    """Guards _REAL_REASONS against going stale. The previous commit claimed the
+    options path got the same staleness guard as the stock one; it did not, so
+    the failure mode described at length there — reword a producer, its bucket
+    collapses to 0, the residual absorbs it, `scanned == sum` still holds and
+    nothing fails — stayed live on this path."""
+    import inspect, re
+    from app.routers import scan as mod
+
+    src = inspect.getsource(mod)
+    # Reasons appear as reason="..." or reason=f"..." on RejectedCandidate.
+    emitted = {s.strip() for s in re.findall(r'reason=f?"([^"{]*)', src)}
+    emitted = {s for s in emitted if s}
+    assert emitted, "reason-producer regex matched nothing — this test is vacuous"
+
+    covered = [r for r, _ in _REAL_REASONS] + ["direction_conviction:"]
+    unclassified = [
+        e for e in emitted
+        if not any(c.startswith(e) or e.startswith(c) for c in covered)
+    ]
+    assert not unclassified, (
+        f"new rejection reason(s) with no bucket decision: {sorted(unclassified)}"
+    )
+
+
 @pytest.mark.parametrize("reason,bucket", _REAL_REASONS)
 def test_each_real_reason_lands_in_its_own_bucket(client, reason, bucket):
     """One symbol, one real reason, one bucket — and nothing in the residual."""

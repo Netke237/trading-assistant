@@ -111,6 +111,12 @@ describe('ScanFunnel — options mode', () => {
     expect(() => render(<ScanFunnel mode="options" pipeline={legacy} />)).not.toThrow();
     expect(screen.queryByText('Direction conviction')).not.toBeInTheDocument();
     expect(screen.queryByText('Shortlist cap')).not.toBeInTheDocument();
+
+    // Hiding the stages is not enough on its own: the chain still ends on 5
+    // above "Candidates 5" only because this blob happens to reconcile. When it
+    // does not, nothing in the arithmetic can say so — hence the explicit note.
+    expect(screen.getByText(/Stored before per-gate counts were recorded/))
+      .toBeInTheDocument();
   });
 
   it('hides the gate on a horizon where it never ran', () => {
@@ -122,7 +128,7 @@ describe('ScanFunnel — options mode', () => {
 
   it('surfaces exceptions and unclassified rejections instead of losing them', () => {
     render(<ScanFunnel mode="options" pipeline={pipeline({ other_rejected: 7 })} />);
-    expect(screen.getByText('Errored (any stage)')).toBeInTheDocument();
+    expect(screen.getByText('Unattributed / errored')).toBeInTheDocument();
     expect(screen.getByText('−7')).toBeInTheDocument();
   });
 });
@@ -144,7 +150,7 @@ describe('ScanFunnel — stock mode', () => {
     expect(screen.getByText('−8 headwind')).toBeInTheDocument();
     expect(screen.getByText('Direction')).toBeInTheDocument();
     expect(screen.getByText('−9 no conviction')).toBeInTheDocument();
-    expect(screen.getByText('Errored (any stage)')).toBeInTheDocument();
+    expect(screen.getByText('Unattributed / errored')).toBeInTheDocument();
     expect(screen.getByText('−4')).toBeInTheDocument();
     expect(screen.getByText('Shortlist cap')).toBeInTheDocument();
   });
@@ -156,7 +162,7 @@ describe('ScanFunnel — stock mode', () => {
 
     expect(screen.queryByText('Regime')).not.toBeInTheDocument();
     expect(screen.queryByText('Direction')).not.toBeInTheDocument();
-    expect(screen.queryByText('Errored (any stage)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unattributed / errored')).not.toBeInTheDocument();
     expect(screen.queryByText('Shortlist cap')).not.toBeInTheDocument();
   });
 });

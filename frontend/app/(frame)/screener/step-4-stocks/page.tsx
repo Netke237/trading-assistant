@@ -336,7 +336,6 @@ export default function Step4StocksPage() {
         </div>
       )}
 
-
       {result && (
         <div className={styles.results}>
           <div className={styles.tableHeader}>
@@ -370,7 +369,9 @@ export default function Step4StocksPage() {
               const d = deltas.get(c.symbol);
               const bt = c.backtest;
               const open = openSymbol === c.symbol;
-              const gateStatus = bt.passes_gate ? 'PASS' : 'CAUTION';
+              // Always PASS: a symbol failing the gate is rejected before it
+              // becomes a candidate, so the CAUTION branch was unreachable.
+              const gateStatus = 'PASS';
               return (
                 <div key={c.symbol}>
                   <button

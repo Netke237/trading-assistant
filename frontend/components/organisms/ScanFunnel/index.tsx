@@ -52,18 +52,42 @@ function dropped(n: number | undefined): number {
 }
 
 /**
- * Errors are NOT a pipeline stage. A raised exception can abort a symbol at any
- * point, so there is no position in the chain where subtracting them is honest:
- * placing the row after scoring claims those symbols survived scoring, which is
- * the misattribution the stage ordering above exists to avoid. Shown outside the
- * running subtraction instead, as a note on the total.
+ * A result stored before the per-gate counters existed has none of them, and
+ * `dropped()` necessarily reads absent as 0 to do any arithmetic at all. Hiding
+ * the stages then leaves the chain ending on a number above Candidates with
+ * nothing explaining the gap — the original complaint, relocated. Say so.
  */
-function ErroredNote({ count }: { count: number }) {
-  if (count <= 0) return null;
+function StaleCountsNote({ show }: { show: boolean }) {
+  if (!show) return null;
   return (
     <div className={styles.stageWide}>
-      <Text size={11} tone="dim">Errored (any stage)</Text>
-      <Text size={11} tone="reject">−{count}</Text>
+      <Text size={11} tone="caution">
+        Stored before per-gate counts were recorded — stages may not reconcile.
+      </Text>
+      <span />
+      <span />
+    </div>
+  );
+}
+
+/**
+ * The residual is NOT a pipeline stage. It holds raised exceptions, which can
+ * abort a symbol at any point, AND any rejection whose reason matched no bucket
+ * — so there is no position in the chain where subtracting it is honest:
+ * placing the row after scoring claims those symbols survived scoring, which is
+ * the misattribution the stage ordering below exists to avoid. Shown outside the
+ * running subtraction instead, as a note on the total.
+ *
+ * Labelled "unattributed" rather than "errored" because a reworded reason
+ * string lands here too, and calling a real gate rejection an error is the kind
+ * of confident-but-wrong number this whole component was fixed to stop showing.
+ */
+function UnattributedNote({ count, wide }: { count: number; wide?: boolean }) {
+  if (count <= 0) return null;
+  return (
+    <div className={wide ? styles.stageWide : styles.stage}>
+      <Text size={11} tone="dim">Unattributed / errored</Text>
+      <Data size={12} weight={500} tone="reject">−{count}</Data>
       <span />
     </div>
   );
@@ -97,7 +121,7 @@ export function ScanFunnel({ mode, pipeline }: Props) {
           <Text size={11} tone="dim" weight={500}>STOCK PIPELINE</Text>
         </div>
         <Stage label="Universe"   count={p.scanned}    total={p.scanned} />
-        <ErroredNote count={otherRejected} />
+        <UnattributedNote count={otherRejected} />
         <Stage label="History"    count={afterHistory}  rejected={p.failed_history}  rejectedLabel="no history" total={p.scanned} />
         <Stage label="Score gate" count={afterScore}    rejected={p.failed_score}    rejectedLabel="REJECT"     total={p.scanned} />
         {failedDirection > 0 && (
@@ -124,7 +148,7 @@ export function ScanFunnel({ mode, pipeline }: Props) {
   const failedDirection = dropped(p.failed_direction);
   const failedShortlist = dropped(p.failed_shortlist);
   const otherRejected   = dropped(p.other_rejected);
-  // Errors off the top — see ErroredNote.
+  // Unattributed off the top — see UnattributedNote.
   const afterErrors     = p.scanned - otherRejected;
   const afterData       = afterErrors - p.failed_data;
   const afterPreScreen  = afterData - p.failed_pre_screen;
@@ -137,7 +161,8 @@ export function ScanFunnel({ mode, pipeline }: Props) {
         <Text size={11} tone="dim" weight={500}>OPTIONS PIPELINE</Text>
       </div>
       <Stage wide label="Universe"        count={p.scanned}      total={p.scanned} />
-      <ErroredNote count={otherRejected} />
+      <StaleCountsNote show={p.other_rejected === undefined && p.failed_direction === undefined} />
+      <UnattributedNote wide count={otherRejected} />
       <Stage wide label="Data / Filters (data/price/cap)" count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
       <Stage wide label="Pre-screen (setup score)"        count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
       <Stage wide label="Option chain (DTE window)"       count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />

@@ -201,19 +201,36 @@ def test_each_real_stock_reason_lands_in_its_own_bucket(reason, bucket):
 def test_every_stock_reason_producer_is_classified():
     """Guards the list above against going stale: every literal reason this
     module emits must appear in _REAL_STOCK_REASONS, so a NEW rejection reason
-    cannot be added without deciding which bucket it belongs to."""
+    cannot be added without deciding which bucket it belongs to.
+
+    The regex allows an optional newline+indent before the string because the
+    confidence gate writes `"reason": (` then a parenthesised f-string on the
+    next line — a form the first version of this guard was silently blind to.
+    """
     import inspect, re
     from app.routers import stock_scan as mod
 
     src = inspect.getsource(mod)
-    # Reasons are emitted as {"symbol": ..., "reason": <literal or f-string>}.
-    emitted = set(re.findall(r'"reason":\s*f?"([^"{]*)', src))
-    emitted = {s.strip() for s in emitted if s.strip()}
-    covered = [r for r, _ in _REAL_STOCK_REASONS]
+    emitted = {
+        s.strip() for s in re.findall(r'"reason":\s*\(?\s*f?"([^"{]*)', src)
+    }
+    emitted = {s for s in emitted if s}
+    # Without this floor, any reformatting that stops the regex matching would
+    # make the whole test pass on an empty set.
+    assert len(emitted) >= 10, (
+        f"reason-producer regex matched only {sorted(emitted)} — it has gone "
+        f"stale against the source and this test is no longer guarding anything"
+    )
+    for required in ("confidence gate ", "unknown strategy", "regime headwind"):
+        assert any(e.startswith(required) or required.startswith(e) for e in emitted), (
+            f"regex missed the {required!r} producer"
+        )
 
+    covered = [r for r, _ in _REAL_STOCK_REASONS]
     unclassified = [
-        e for e in emitted
-        if not any(c.startswith(e) or e.startswith(c[:len(e)]) for c in covered)
+        # `c.startswith(e)` alone, not the old `e.startswith(c[:len(e)])`, which
+        # made any short capture trivially "covered" by any bucket string.
+        e for e in emitted if not any(c.startswith(e) for c in covered)
     ]
     assert not unclassified, (
         f"new rejection reason(s) with no bucket decision: {sorted(unclassified)}"
