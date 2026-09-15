@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
-import { selectCardEdits } from '@/lib/cardEdits';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { MethodPickSelector } from '@/components/molecules/MethodPickSelector';
 import type { MethodPickOption } from '@/components/molecules/MethodPickSelector';
 import type { MethodPick } from '@/types/domain';
@@ -564,6 +564,11 @@ export function StockPositionCard({
           source: 'broker',
           sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
           orderedAt: new Date().toISOString(),
+          // Phase G (piece 5) — confirmed gap as of build step 4: the send
+          // gate blocked an unpicked send but nothing carried a made pick's
+          // VALUE into the created position. `methodPick` is this card's own
+          // local pick state (synced from stocksCardEdits.picks).
+          ...pickedFieldsFrom(methodPick),
         });
         if (addRes.status === 'rejected' || addRes.status === 'pending') {
           setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
@@ -719,8 +724,8 @@ export function StockPositionCard({
       // fire on. The pristine signal rides along inside the snapshot for the audit
       // trail. stockPositionLevels() drops anything non-positive or on the wrong
       // side of entry, so a half-edited overlay can never send a 0 stop.
-      const res = await addPosition(
-        buildPaperStockPosition(
+      const res = await addPosition({
+        ...buildPaperStockPosition(
           card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
           stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
             entry: overlay.entry,
@@ -742,7 +747,9 @@ export function StockPositionCard({
             structuralStop: structural?.price ?? null,
           },
         ),
-      );
+        // Phase G (piece 5) — same confirmed send-path gap as submit() above.
+        ...pickedFieldsFrom(methodPick),
+      });
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');
         return;

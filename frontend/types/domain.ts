@@ -515,6 +515,28 @@ export interface PortfolioPosition {
   /** ISO timestamp of the last `resolvedTpPrice` refresh, for an "as of" hint
    *  next to a snapshot that is deliberately never auto-refreshed. */
   resolvedTpUpdatedAt?: string | null;
+  /** Phase G (piece 5, D4/D5) — the RAW pick the trader made, carried on the
+   *  create path only and otherwise immutable. Distinct from `activeTpMethod`/
+   *  `resolvedTpPrice` above: those are SERVER-DERIVED from this pick via the
+   *  spec's §4.3 mapping table (`picked_method.py`), this is the input to that
+   *  mapping. NULL is a real state on every one of the five fields — it means
+   *  "opened before G, or opened by a path with no human in it" (the S5
+   *  after-scan auto-executor is deliberately exempt from the send gate and
+   *  creates positions with all five NULL, §7.3) — never "missing/legacy" the
+   *  way an absent `activeTpMethod` is. Use `lib/cardEdits.ts`'s
+   *  `pickedFieldsFrom` to build these five from a `MethodPick` at a send site
+   *  rather than mapping the fields ad hoc. */
+  pickedMethod?: PickedMethod | null;
+  /** Underlying-space only — the ONLY field of the five that may ever seed
+   *  `resolvedTpPrice`. See `MethodPick.rowStockPrice`'s own doc for why a
+   *  premium landing here instead fires TP_HIT instantly on the first tick. */
+  pickedRowStockPrice?: number | null;
+  /** Premium-space — record-only, never seeds `resolvedTpPrice`, never alerts. */
+  pickedRowOptionPrice?: number | null;
+  pickedStopBasis?: PickedStopBasis | null;
+  /** ISO. The vintage of the numbers the pick was made against — see
+   *  `MethodPick.pickedAt`'s own doc. */
+  pickedAt?: string | null;
   /** Per-position alert-type overrides — absent key inherits the global
    *  `AlertConfig.enabledTypes` decision (Feature D). */
   alertOverrides?: AlertOverrides;

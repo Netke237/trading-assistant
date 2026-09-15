@@ -18,7 +18,7 @@ import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/li
 import { useRiskStore } from '@/lib/riskStore';
 import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
-import { selectCardEdits } from '@/lib/cardEdits';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type {
@@ -114,6 +114,14 @@ function positionFromOrder(
    *  fixture set the contract-quote mock to exactly `contractDetails.mid`, so
    *  live and scan were the same number. */
   livePrice: number | null = null,
+  // Phase G (piece 5) — the pick resolved by the caller through
+  // `methodPickFor(o.card)`, same shape as every other field above: a
+  // module-level function has no closure access to component state. Absent
+  // send-path wiring for this was a confirmed gap as of build step 4 — the
+  // send GATE (§7.1) blocked an unpicked send, but nothing carried a made
+  // pick's actual VALUE into the created position, so a real send silently
+  // discarded the trader's decision regardless of whether the gate passed.
+  pick: MethodPick | null = null,
 ): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
@@ -158,6 +166,7 @@ function positionFromOrder(
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
     tradeCardSnapshot: tradeCardSnapshotOf(c),
+    ...pickedFieldsFrom(pick),
   };
 }
 
@@ -975,6 +984,10 @@ export default function Step7Page() {
       recId:         generateRecId(),
       scanStockPrice: card.price,
       tradeCardSnapshot: tradeCardSnapshotOf(card),
+      // Phase G (piece 5) — see positionFromOrder's own comment on `pick`;
+      // this closure has direct access to methodPickFor, unlike that
+      // module-level function.
+      ...pickedFieldsFrom(methodPickFor(card)),
     };
   }
 
@@ -1147,6 +1160,7 @@ export default function Step7Page() {
           // Only the active card has a fetched quote; the rest legitimately
           // fall back to their scan mid.
           o.card.symbol === effectiveCard?.symbol ? liveQuoteForCard?.price ?? null : null,
+          methodPickFor(o.card),
         ),
         recId,
         // ROUND 10 finding 2 -- WITHOUT this the router never fetches the

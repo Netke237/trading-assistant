@@ -717,6 +717,19 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(basket.stop).toBe(132);
     expect(basket.premiumStopDollar).toBe(0.9);
     expect(basket.stop).not.toBe(CARD_INVALIDATION);
+    // Confirmed gap as of build step 4: the send gate blocked an UNPICKED
+    // send on both paths, but nothing carried a MADE pick's values onto
+    // either `positionFromOrder` (basket) or `buildPaperPosition` (direct) —
+    // a real send on either path silently discarded the fixture's `pick()`
+    // regardless of the gate passing.
+    expect(basket.pickedMethod).toBe(direct.pickedMethod);
+    expect(direct.pickedMethod).toBe('ladder');
+    expect(basket.pickedRowStockPrice).toBe(direct.pickedRowStockPrice);
+    expect(direct.pickedRowStockPrice).toBe(160);
+    expect(basket.pickedStopBasis).toBe(direct.pickedStopBasis);
+    expect(direct.pickedStopBasis).toBe('stock');
+    expect(basket.pickedAt).toBe(direct.pickedAt);
+    expect(direct.pickedAt).toBe('2026-09-14T10:00:00.000Z');
   });
 
   it('does NOT claim an UNTOUCHED basket stop was user-set', async () => {

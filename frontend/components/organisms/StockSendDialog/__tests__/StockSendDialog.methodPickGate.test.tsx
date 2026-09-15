@@ -40,10 +40,15 @@ function makeCard(symbol: string): PositionCardData {
   };
 }
 
+const originalFetch = global.fetch;
+
 describe('StockSendDialog — the method-pick gate', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     usePortfolioStore.setState({ positions: [] });
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
   });
 
   it('disables Submit and places no order when one card has no pick, even though the other does', async () => {
@@ -80,6 +85,36 @@ describe('StockSendDialog — the method-pick gate', () => {
     render(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
 
     expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
+  });
+
+  it('submitting carries each card\'s own pick onto the position it creates', async () => {
+    // Confirmed gap as of build step 4 (S4): the gate blocked an UNPICKED
+    // basket submit, but nothing carried a MADE pick's values into either
+    // position `submit()` creates — a real send silently discarded them
+    // regardless of the gate passing. Default row state is autoSend:true
+    // with broker left at 'recommendation', which exercises the third of
+    // StockSendDialog's three addPosition call sites (the "falls back to
+    // paper" branch).
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
+
+    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /submit 1 order/i }));
+    });
+
+    const positions = usePortfolioStore.getState().positions;
+    expect(positions).toHaveLength(1);
+    expect(positions[0]!.pickedMethod).toBe('monte_carlo');
+    expect(positions[0]!.pickedRowStockPrice).toBe(197.5);
+    expect(positions[0]!.pickedRowOptionPrice).toBe(6.24);
+    expect(positions[0]!.pickedStopBasis).toBe('stock');
   });
 
   it('refuses a pick left over from a different scan (the stamp is what makes it gone, not merely old)', () => {

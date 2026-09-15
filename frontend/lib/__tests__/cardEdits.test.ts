@@ -3,7 +3,7 @@
 
 import {
   EMPTY_CARD_EDITS, clearCardPick, clearPicksForSymbol, currentScanIdFor, emptyCardEdits,
-  normalizeCardEdits, selectCardEdits, writeCardEdit,
+  normalizeCardEdits, pickedFieldsFrom, selectCardEdits, writeCardEdit,
 } from '@/lib/cardEdits';
 import type { CardEditsHost, CardEditSlice } from '@/lib/cardEdits';
 import type { MethodPick } from '@/types/domain';
@@ -320,5 +320,53 @@ describe('clearCardPick', () => {
     const slice = stamped('old', { picks: { A: pick() }, entryLimit: { X: 2.71 } });
     expect(clearCardPick(slice, 'new', 'A')).toBe(slice);
     expect(clearCardPick(slice, null, 'A')).toBe(slice);
+  });
+});
+
+// ─── Send-path wiring gap fix (found and closed 2026-09-15) ────────────────
+// Confirmed as of build step 4: the send gate blocked an UNPICKED send, but
+// nothing carried a MADE pick's actual values into the position any send
+// path created — `positionFromOrder`, `buildPaperPosition` and every
+// `buildPaperStockPosition` caller built a `PortfolioPosition` with none of
+// the five `picked_*` fields set, so a real send silently discarded the
+// trader's decision even when the gate passed. `pickedFieldsFrom` is the one
+// mapping every one of those call sites now spreads in.
+describe('pickedFieldsFrom', () => {
+  it('maps every field of a MethodPick onto its picked_* name', () => {
+    expect(pickedFieldsFrom(pick('monte_carlo'))).toEqual({
+      pickedMethod: 'monte_carlo',
+      pickedRowStockPrice: 197.5,
+      pickedRowOptionPrice: 6.24,
+      pickedStopBasis: 'stock',
+      pickedAt: '2026-09-14T10:00:00.000Z',
+    });
+  });
+
+  it('maps null to all five fields explicitly null, not an empty object', () => {
+    // The S5 auto-executor's shape (spec §7.3) — omitting the keys and
+    // setting them null are identical to the backend schema, but the
+    // explicit form is what this function exists to guarantee at every call
+    // site, so the object shape itself is part of the contract under test.
+    expect(pickedFieldsFrom(null)).toEqual({
+      pickedMethod: null,
+      pickedRowStockPrice: null,
+      pickedRowOptionPrice: null,
+      pickedStopBasis: null,
+      pickedAt: null,
+    });
+  });
+
+  it('preserves a null row price on an otherwise-complete pick (Barrier Race has no stock price; a Monte Carlo row may)', () => {
+    const barrierRacePick: MethodPick = {
+      method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 6.24,
+      stopBasis: 'premium', pickedAt: '2026-09-14T10:00:00.000Z',
+    };
+    expect(pickedFieldsFrom(barrierRacePick)).toEqual({
+      pickedMethod: 'barrier_race',
+      pickedRowStockPrice: null,
+      pickedRowOptionPrice: 6.24,
+      pickedStopBasis: 'premium',
+      pickedAt: '2026-09-14T10:00:00.000Z',
+    });
   });
 });

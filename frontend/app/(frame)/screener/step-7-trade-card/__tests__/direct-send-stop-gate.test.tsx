@@ -294,4 +294,25 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     const limitBtn = screen.getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
   });
+
+  it('the direct Place Limit button carries the pick onto the created position', async () => {
+    // Confirmed gap as of build step 4: the gate above blocked an UNPICKED
+    // send, but nothing carried a MADE pick's actual values into the position
+    // this button creates — `buildPaperPosition` built a `PortfolioPosition`
+    // with no `pickedMethod`/`pickedRowStockPrice`/etc at all, so a real send
+    // silently discarded the trader's decision even when the gate passed.
+    mount(140, { withPick: true });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const created = usePortfolioStore.getState().positions[0]!;
+    expect(created.pickedMethod).toBe('ladder');
+    expect(created.pickedRowStockPrice).toBe(160);
+    expect(created.pickedRowOptionPrice).toBeNull();
+    expect(created.pickedStopBasis).toBe('stock');
+    expect(created.pickedAt).toBe('2026-09-14T10:00:00.000Z');
+  });
 });

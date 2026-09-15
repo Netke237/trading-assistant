@@ -83,6 +83,13 @@ describe('step-7-position-card — broker order submit()', () => {
     expect(pos.source).toBe('broker');
     expect(pos.tradeCardSnapshot).toBeDefined();
     expect(pos.stop).toBe(145);
+    // Confirmed gap as of build step 4 (S3): the gate blocked an UNPICKED
+    // send, but nothing carried a MADE pick's values into the position
+    // submit() creates here — a real send silently discarded it.
+    expect(pos.pickedMethod).toBe('monte_carlo');
+    expect(pos.pickedRowStockPrice).toBe(197.5);
+    expect(pos.pickedRowOptionPrice).toBe(6.24);
+    expect(pos.pickedStopBasis).toBe('stock');
   });
 
   it('shows a non-blocking warning and permanently disables the order buttons when the order succeeds but local tracking fails', async () => {

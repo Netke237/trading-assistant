@@ -7,7 +7,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride, AlertOverrides, TpMethod } from '@/types/domain';
+import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride, AlertOverrides, TpMethod, PickedMethod, PickedStopBasis } from '@/types/domain';
 import { useRiskStore } from '@/lib/riskStore';
 import { stripLegacyIvFields } from '@/lib/ivBasis';
 
@@ -31,6 +31,14 @@ type BackendPosition = {
   activeTpMethod?: TpMethod | null;
   resolvedTpPrice?: number | null;
   resolvedTpUpdatedAt?: string | null;
+  // Phase G (piece 5) — the raw pick, distinct from activeTpMethod/
+  // resolvedTpPrice above. See PortfolioPosition's own doc for why these five
+  // are read here rather than left to fall through with the rest.
+  pickedMethod?: PickedMethod | null;
+  pickedRowStockPrice?: number | null;
+  pickedRowOptionPrice?: number | null;
+  pickedStopBasis?: PickedStopBasis | null;
+  pickedAt?: string | null;
   alertOverrides?: AlertOverrides | null;
   targets: TargetLevel[];
   dteTotal: number | null;
@@ -71,6 +79,16 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     activeTpMethod: (p.activeTpMethod ?? 'ladder') as TpMethod,
     resolvedTpPrice: p.resolvedTpPrice ?? null,
     resolvedTpUpdatedAt: p.resolvedTpUpdatedAt ?? null,
+    // Phase G (piece 5) — the raw pick. NULL is a real, already-supported
+    // state (pre-G positions, and every S5 auto-executed one) so this reads
+    // straight through with no 'ladder'-style default, unlike activeTpMethod
+    // just above: the portfolio renders a genuinely absent pick as "—", never
+    // as a method nobody chose.
+    pickedMethod: p.pickedMethod ?? null,
+    pickedRowStockPrice: p.pickedRowStockPrice ?? null,
+    pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
+    pickedStopBasis: p.pickedStopBasis ?? null,
+    pickedAt: p.pickedAt ?? null,
     alertOverrides: p.alertOverrides ?? {},
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
@@ -243,6 +261,17 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     // firing a Critical STOP_REACHED on the first backend scan.
     stopIsUserSet: p.stopIsUserSet ?? false,
     tradeCardSnapshot: p.tradeCardSnapshot ?? null,
+    // Phase G (piece 5) — sent explicitly null rather than omitted when no
+    // pick exists (the S5 auto-executor's shape, spec §7.3), matching every
+    // builder that sets these five via `pickedFieldsFrom`: an omitted key and
+    // an explicit null are the same to the schema, but omitting here would
+    // silently reintroduce the send-path gap `pickedFieldsFrom` exists to
+    // close for a caller that forgets to spread it in.
+    pickedMethod: p.pickedMethod ?? null,
+    pickedRowStockPrice: p.pickedRowStockPrice ?? null,
+    pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
+    pickedStopBasis: p.pickedStopBasis ?? null,
+    pickedAt: p.pickedAt ?? null,
   };
 }
 

@@ -119,5 +119,36 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
     fireEvent.click(limitBtn);
 
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    // Confirmed gap as of build step 4 (S1): the gate above blocked an
+    // UNPICKED send, but nothing carried a MADE pick's values into the
+    // position `submit()` creates — a real send silently discarded it.
+    const created = usePortfolioStore.getState().positions[0]!;
+    expect(created.pickedMethod).toBe('ladder');
+    expect(created.pickedRowStockPrice).toBe(160);
+    expect(created.pickedStopBasis).toBe('stock');
+    expect(created.pickedAt).toBe('2026-09-14T10:00:00.000Z');
+  });
+
+  it('S2 — Add to Portfolio also carries the pick onto the created position', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
+
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    const addBtn = screen.getByRole('button', { name: /add to portfolio/i });
+    expect(addBtn).toBeEnabled();
+    fireEvent.click(addBtn);
+
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const created = usePortfolioStore.getState().positions[0]!;
+    expect(created.pickedMethod).toBe('ladder');
+    expect(created.pickedRowStockPrice).toBe(160);
+    expect(created.pickedStopBasis).toBe('stock');
+    expect(created.pickedAt).toBe('2026-09-14T10:00:00.000Z');
   });
 });

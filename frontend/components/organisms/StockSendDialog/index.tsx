@@ -6,7 +6,7 @@ import { Data } from '@/components/primitives/Data';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
-import { selectCardEdits } from '@/lib/cardEdits';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import { checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
@@ -133,14 +133,20 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     const warn: Record<string, string> = hasSubmittedOnce ? { ...warnings } : {};
     for (const c of targets) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
+      // Phase G (piece 5) — resolved once per symbol, reused by whichever of
+      // the three branches below fires. Confirmed gap as of build step 4: the
+      // send gate above blocked an unpicked send but nothing carried a made
+      // pick's VALUE into the created position on any of the three.
+      const pick = stocksPicks[c.symbol] ?? null;
       if (!r.autoSend) {
         // Manual → paper portfolio
-        const res = await addPosition(
-          buildPaperStockPosition(
+        const res = await addPosition({
+          ...buildPaperStockPosition(
             c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
             stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
           ),
-        );
+          ...pickedFieldsFrom(pick),
+        });
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       } else if (broker !== 'recommendation') {
@@ -174,6 +180,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               source: 'broker',
               sourceLabel: `${broker} — Limit (ID: ${res.order_id})`,
               orderedAt: new Date().toISOString(),
+              ...pickedFieldsFrom(pick),
             });
             if (addRes.status === 'rejected' || addRes.status === 'pending') {
               warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
@@ -186,12 +193,13 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         }
       } else {
         // Auto-send but broker = recommendation → fall back to paper
-        const res = await addPosition(
-          buildPaperStockPosition(
+        const res = await addPosition({
+          ...buildPaperStockPosition(
             c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
             stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
           ),
-        );
+          ...pickedFieldsFrom(pick),
+        });
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       }

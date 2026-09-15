@@ -25,7 +25,7 @@
 // closures inside a zustand `set`. Same precedent, same reason, as
 // `lib/tradeCardOverride.ts`.
 
-import type { MaxLossOverride, MethodPick } from '@/types/domain';
+import type { MaxLossOverride, MethodPick, PickedMethod, PickedStopBasis } from '@/types/domain';
 
 export type CardEditMode = 'options' | 'stocks';
 
@@ -372,4 +372,35 @@ export function clearCardPick(
   const picks = { ...slice.picks };
   delete picks[key];
   return { ...slice, picks };
+}
+
+/** Phase G piece 5 — maps a resolved `MethodPick` onto the five `picked_*`
+ *  fields `PortfolioPosition`/`PortfolioPositionCreate` (backend) want at
+ *  send time. Pure and call-site-agnostic: every builder that creates a NEW
+ *  position — the options basket path, the two options direct-send buttons,
+ *  and the shared stocks builder — needs the exact same five keys, so one
+ *  mapping lives here rather than four ad hoc ones drifting apart the way
+ *  `positionFromOrder`/`buildPaperPosition`/`buildPaperStockPosition` already
+ *  had for their other shared fields before this existed.
+ *
+ *  `null` (no pick — the S5 auto-executor's shape, §7.3) maps to all five
+ *  explicitly `null`, never omitted: the backend schema treats an omitted key
+ *  and an explicit `null` identically (`Optional[...] = None` on all five),
+ *  but the explicit form is what documents at the call site that "no pick"
+ *  was a deliberate, considered value here — not a field nobody got round to
+ *  wiring, which is the exact defect this function exists to close. */
+export function pickedFieldsFrom(pick: MethodPick | null): {
+  pickedMethod: PickedMethod | null;
+  pickedRowStockPrice: number | null;
+  pickedRowOptionPrice: number | null;
+  pickedStopBasis: PickedStopBasis | null;
+  pickedAt: string | null;
+} {
+  return {
+    pickedMethod: pick?.method ?? null,
+    pickedRowStockPrice: pick?.rowStockPrice ?? null,
+    pickedRowOptionPrice: pick?.rowOptionPrice ?? null,
+    pickedStopBasis: pick?.stopBasis ?? null,
+    pickedAt: pick?.pickedAt ?? null,
+  };
 }

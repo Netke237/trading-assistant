@@ -5,7 +5,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
-import { selectCardEdits } from '@/lib/cardEdits';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
@@ -157,6 +157,10 @@ export default function Step7PositionCardPage() {
           source: 'broker',
           sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
           orderedAt: new Date().toISOString(),
+          // Phase G (piece 5) — confirmed gap as of build step 4: the send
+          // gate blocked an unpicked send but nothing carried a made pick's
+          // VALUE into the created position.
+          ...pickedFieldsFrom(stocksPicks[card.symbol] ?? null),
         });
         if (stillViewing() && (addRes.status === 'rejected' || addRes.status === 'pending')) {
           setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
