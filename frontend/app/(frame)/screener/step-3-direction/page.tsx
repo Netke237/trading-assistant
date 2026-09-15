@@ -669,6 +669,7 @@ export default function Step3Page() {
   const context        = useScanStore((s) => s.context);
   const setContext     = useScanStore((s) => s.setContext);
   const liveRejectedLog = useScanStore((s) => s.rejectedLog);
+  const scanState       = useScanStore((s) => s.scanState);
   const regime         = useScanStore((s) => s.regime);
   const scanOverrides  = useScanStore((s) => s.scanOverrides);
   const scanResult     = useScanStore((s) => s.scanResult);
@@ -816,14 +817,25 @@ export default function Step3Page() {
   // first is empty and the second is not, so reading the store field alone
   // reported "Rejected 0" beside a restored scan's real "Scanned 518" — and
   // emptied the reason breakdown below. Fall back to the persisted copy.
-  const rejectedLog   = liveRejectedLog.length > 0 ? liveRejectedLog : (scanResult?.rejected ?? []);
+  //
+  // ONLY in a settled state. RunScanButton deliberately empties `rejectedLog`
+  // when a scan STARTS and when one FAILS, without clearing `scanResult` — so
+  // an ungated fallback would undo both clears and show the previous run's log
+  // as though it were this one's.
+  const resultIsCurrent = scanState === 'COMPLETED' || scanState === 'PARTIAL';
+  const rejectedLog   = liveRejectedLog.length > 0
+    ? liveRejectedLog
+    : (resultIsCurrent ? scanResult?.rejected ?? [] : []);
   const totalPassed   = scanResult?.candidates?.length ?? 0;
   const totalRejected = rejectedLog.length;
   // Prefer the server's own count. Deriving it as passed + rejected undercounts
   // whenever the shortlist cap trims, because trimmed candidates are dropped
   // from the returned list without being added to `rejected` — which put
   // "Scanned 508" next to the funnel's "Universe 518" on the same screen.
-  const totalScanned  = scanResult?.pipeline?.scanned ?? totalPassed + totalRejected;
+  // Gated the same way as `rejectedLog`: taking it from a result the other two
+  // numbers are no longer being read from is how they stop agreeing.
+  const totalScanned  = (resultIsCurrent ? scanResult?.pipeline?.scanned : undefined)
+    ?? totalPassed + totalRejected;
   // Trimmed candidates are neither returned nor rejected, so they are the exact
   // amount by which the three headline numbers fail to sum. Name it rather than
   // leaving the reader to discover the gap.

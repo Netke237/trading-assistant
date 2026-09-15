@@ -84,6 +84,9 @@ export default function Step6BacktestPage() {
     );
   }
 
+  // No candidate can fail passes_gate — stock_scan.py rejects those with a
+  // "backtest gate:" reason before they ever become candidates — so this is a
+  // no-op kept only because the header reads "N failed" off it.
   const passing = result.candidates.filter((c) => c.backtest.passes_gate);
   const filteredPassing = passing.filter((c) => {
     const days = c.next_event_days;
@@ -112,6 +115,15 @@ export default function Step6BacktestPage() {
 
       {result.pipeline && (
         <ScanFunnel mode="stock" pipeline={result.pipeline} />
+      )}
+
+      {/* The event filter hides rows AFTER everything the funnel counted, so
+          without this the funnel's "Candidates N" sits above a shorter table
+          with nothing accounting for the difference. */}
+      {passing.length > filteredPassing.length && (
+        <Text size={11} tone="caution">
+          {passing.length - filteredPassing.length} of {passing.length} hidden by the event filter.
+        </Text>
       )}
 
       <div className={styles.tableHeader}>

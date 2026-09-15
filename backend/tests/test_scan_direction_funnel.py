@@ -197,6 +197,41 @@ def test_a_rejection_matching_no_predicate_is_counted_not_dropped(client):
     assert _accounted(pipeline) == pipeline["scanned"] == 2
 
 
+#  The reason strings `_process_symbol` actually emits, copied from their
+#  producers in routers/scan.py. The residual makes a misclassification
+#  INVISIBLE to the accounting invariant: reword a producer and its bucket
+#  collapses to 0, `other_rejected` silently absorbs it, and `scanned == sum`
+#  still holds. Only pinning real strings to real buckets catches that.
+_REAL_REASONS = [
+    # scan.py:511, 515, 517, 526, 530, 599, 607, 688, 715, 717 — verbatim.
+    ("no market data",                              "failed_data"),
+    ("price filter ($12.30 < $20.00 min)",          "failed_data"),
+    ("price filter ($812.30 > $500.00 max)",        "failed_data"),
+    ("cap filter ($1.2B < $2.0B min)",              "failed_data"),
+    ("cap filter ($900.0B > $500.0B max)",          "failed_data"),
+    ("Pre-screen: score 29 rejected",               "failed_pre_screen"),
+    ("no option chain",                             "no_chain"),
+    ("Score gate: score 58 rejected",               "failed_score"),
+    ("contracts rejected: spread_too_wide",         "failed_contracts"),
+    ("all contracts rejected",                      "failed_contracts"),
+]
+
+
+@pytest.mark.parametrize("reason,bucket", _REAL_REASONS)
+def test_each_real_reason_lands_in_its_own_bucket(client, reason, bucket):
+    """One symbol, one real reason, one bucket — and nothing in the residual."""
+    body = _run(client, {"ZZZ": RejectedCandidate(symbol="ZZZ", reason=reason)},
+                direction="Bearish", horizon="Position")
+
+    pipeline = body["pipeline"]
+    assert pipeline[bucket] == 1, f"{reason!r} no longer classifies as {bucket}"
+    assert pipeline["other_rejected"] == 0, (
+        f"{reason!r} fell through to the residual — its producer was reworded "
+        f"without updating the predicate, and the funnel would report it as an error"
+    )
+    assert _accounted(pipeline) == pipeline["scanned"] == 1
+
+
 def test_every_scanned_symbol_is_accounted_for_in_the_funnel(client):
     """The full invariant, with every bucket non-trivially exercised at once:
     a direction strip, a shortlist trim, a raising symbol and an unclassified

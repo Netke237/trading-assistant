@@ -9,6 +9,14 @@ absorbed into a bucket nobody could see.
 
 The invariant pinned here matches the options one:
     scanned == candidates + every drop bucket
+
+KNOWN GAP: `failed_shortlist` is never exercised with a non-zero value. Getting
+a symbol all the way through to being a candidate needs a real strategy signal
+AND a passing backtest, which means mocking `_SIGNAL_FNS` and
+`run_strategy_backtest` deeply enough that the test would mostly be asserting
+its own mocks. The identical `original_count - len(candidates)` arithmetic IS
+covered on the options side (test_scan_direction_funnel.py's cap test), so this
+is left uncovered deliberately rather than faked.
 """
 from __future__ import annotations
 
@@ -154,6 +162,62 @@ def test_stock_gate_thresholds_match_the_options_gate(
     body = _run(stock_client, ["AAA"], direction=direction, horizon=horizon,
                 score_stock=MagicMock(return_value=_card(trend)))
     assert body["pipeline"]["failed_direction"] == (1 if gated else 0)
+
+
+#  Verbatim from their producers in routers/stock_scan.py. Three of these were
+#  landing in the residual until round 2: "insufficient intraday history" does
+#  not contain "insufficient history", and the mean_reversion_multi misses
+#  start with "no " but never say "setup". Nothing but this test stops that
+#  regressing — the residual hides a misclassification from the sum invariant.
+_REAL_STOCK_REASONS = [
+    ("insufficient history",                              "failed_history"),
+    ("insufficient intraday history",                     "failed_history"),
+    ("no price data",                                     "failed_history"),
+    ("price $3.10 < min",                                 "failed_history"),
+    ("REJECT score=20",                                   "failed_score"),
+    ("direction_conviction: trend 60 > 40 for Bearish Position", "failed_direction"),
+    ("regime headwind",                                   "failed_regime"),
+    ("no pullback_ema setup",                             "failed_signal"),
+    ("no mean_reversion_multi: 2/3 signals fired",        "failed_signal"),
+    ("mean_reversion_multi: variants produced no valid combined levels", "failed_signal"),
+    ("backtest gate: 38% win over 12 trades",             "failed_backtest"),
+    ("confidence gate REJECT: 41% < 50%",                 "failed_backtest"),
+    ("unknown strategy wat",                              "other_rejected"),
+]
+
+
+@pytest.mark.parametrize("reason,bucket", _REAL_STOCK_REASONS)
+def test_each_real_stock_reason_lands_in_its_own_bucket(reason, bucket):
+    """The classifier is the one place the funnel's honesty is decided, and it
+    is pure string matching over text produced elsewhere in the router. Pin
+    every real reason to its bucket: reword a producer without updating the
+    classifier and this fails, instead of the reason silently sliding into the
+    residual where the sum invariant cannot see it."""
+    from app.routers.stock_scan import classify_stock_rejection
+
+    assert classify_stock_rejection(reason) == bucket
+
+
+def test_every_stock_reason_producer_is_classified():
+    """Guards the list above against going stale: every literal reason this
+    module emits must appear in _REAL_STOCK_REASONS, so a NEW rejection reason
+    cannot be added without deciding which bucket it belongs to."""
+    import inspect, re
+    from app.routers import stock_scan as mod
+
+    src = inspect.getsource(mod)
+    # Reasons are emitted as {"symbol": ..., "reason": <literal or f-string>}.
+    emitted = set(re.findall(r'"reason":\s*f?"([^"{]*)', src))
+    emitted = {s.strip() for s in emitted if s.strip()}
+    covered = [r for r, _ in _REAL_STOCK_REASONS]
+
+    unclassified = [
+        e for e in emitted
+        if not any(c.startswith(e) or e.startswith(c[:len(e)]) for c in covered)
+    ]
+    assert not unclassified, (
+        f"new rejection reason(s) with no bucket decision: {sorted(unclassified)}"
+    )
 
 
 def test_funnel_reconciles_when_the_gate_passes_everything(stock_client):

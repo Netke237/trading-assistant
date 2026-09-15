@@ -240,7 +240,9 @@ class StockPipeline(BaseModel):
     # cannot claim nothing was gated. Same reasoning as OptionsPipeline's.
     failed_direction: Optional[int] = None  # direction-conviction gate
     failed_shortlist: Optional[int] = None  # trimmed by the shortlist cap
-    other_rejected:  int   # exceptions / unclassified
+    # Optional for the same reason, and to actually match OptionsPipeline —
+    # it was required here while the comment above claimed parity with it.
+    other_rejected:  Optional[int] = None   # exceptions / unclassified
     candidates:      int
 
 

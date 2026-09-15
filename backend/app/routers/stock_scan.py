@@ -197,6 +197,52 @@ _HISTORY_YEARS = 5
 _SCAN_SEM = asyncio.Semaphore(5)
 
 _BACKTEST_TTL = 24 * 3600  # daily — bar history doesn't change within a trading day
+def classify_stock_rejection(reason: str) -> str:
+    """Map a rejection reason to the StockPipeline field that counts it.
+
+    Module-level and total (every input returns exactly one bucket) so the
+    funnel's classification can be tested against the real reason strings
+    without driving a whole scan. That matters more here than it looks: the
+    counters are pure string matching over text produced elsewhere in this
+    file, and `other_rejected` is the RESIDUAL. Reword a producer without
+    updating its predicate and the bucket silently collapses to zero while the
+    residual absorbs it -- the funnel's `scanned == sum of buckets` invariant
+    still holds, so nothing fails, and the UI reports real gate rejections as
+    "errors". Three reasons were doing exactly that before this was centralised:
+    "insufficient intraday history" does not contain "insufficient history",
+    and the two mean_reversion_multi misses start with "no " but never say
+    "setup".
+
+    Order matters only in that the first match wins; the buckets below are
+    mutually exclusive over the reasons this module actually emits, which
+    tests/test_stock_scan_funnel.py pins string by string.
+    """
+    if (
+        "insufficient history" in reason
+        or "insufficient intraday history" in reason
+        or "no price data" in reason
+        or reason.startswith("price $")
+    ):
+        return "failed_history"
+    if reason.startswith("REJECT score="):
+        return "failed_score"
+    if reason.startswith("direction_conviction:"):
+        return "failed_direction"
+    if reason == "regime headwind":
+        return "failed_regime"
+    if (
+        (reason.startswith("no ") and "setup" in reason)
+        or reason.startswith("no mean_reversion_multi:")
+        or reason.startswith("mean_reversion_multi:")
+    ):
+        return "failed_signal"
+    # The confidence gate is a backtest-derived quality gate applied right after
+    # the backtest; it belongs with it rather than among "errors".
+    if reason.startswith("backtest gate:") or reason.startswith("confidence gate "):
+        return "failed_backtest"
+    return "other_rejected"
+
+
 _BACKTEST_CACHE: dict[str, tuple] = {}  # key → (BacktestResult, expires_at)
 _BACKTEST_POOL = concurrent.futures.ProcessPoolExecutor(
     max_workers=max(1, (os.cpu_count() or 2) // 2)
@@ -1098,60 +1144,19 @@ async def _execute_stock_scan_core(
             "All candidates are CAUTION-grade — consider reducing size or waiting for a clearer signal."
         )
 
-    # Named predicates over a repeated inline chain: `other_rejected` is the
-    # RESIDUAL of exactly these, so a bucket and its negation cannot drift apart
-    # the way they did while both were spelled out separately.
-    #
-    # "insufficient intraday history" does NOT contain "insufficient history",
-    # and the mean_reversion_multi misses start with "no " but never say
-    # "setup" -- so all three used to fall through to the residual. That was
-    # invisible while the residual was never displayed; now that the funnel
-    # renders it as "Other - N errors", an intraday or multi-variant scan would
-    # have reported most of its universe as errors.
-    def _reason(r) -> str:
-        return r.get("reason", "") if isinstance(r, dict) else ""
-
-    def _is_history(r) -> bool:
-        s = _reason(r)
-        return (
-            "insufficient history" in s
-            or "insufficient intraday history" in s
-            or "no price data" in s
-            or s.startswith("price $")
-        )
-
-    def _is_score(r) -> bool:     return _reason(r).startswith("REJECT score=")
-    def _is_direction(r) -> bool: return _reason(r).startswith("direction_conviction:")
-    def _is_regime(r) -> bool:    return _reason(r) == "regime headwind"
-
-    def _is_signal(r) -> bool:
-        s = _reason(r)
-        return (
-            (s.startswith("no ") and "setup" in s)
-            or s.startswith("no mean_reversion_multi:")
-            or s.startswith("mean_reversion_multi:")
-        )
-
-    def _is_backtest(r) -> bool:
-        s = _reason(r)
-        # The confidence gate is a backtest-derived quality gate applied right
-        # after the backtest; it belongs with it rather than among "errors".
-        return s.startswith("backtest gate:") or s.startswith("confidence gate ")
-
-    _stock_buckets = (_is_history, _is_score, _is_direction, _is_regime, _is_signal, _is_backtest)
+    def _bucket(r) -> str:
+        return classify_stock_rejection(r.get("reason", "") if isinstance(r, dict) else "")
 
     _pipeline = StockPipeline(
         scanned=len(symbols),
-        failed_history=sum(1 for r in rejected if _is_history(r)),
-        failed_score=sum(1 for r in rejected if _is_score(r)),
-        failed_signal=sum(1 for r in rejected if _is_signal(r)),
-        failed_backtest=sum(1 for r in rejected if _is_backtest(r)),
-        failed_regime=sum(1 for r in rejected if _is_regime(r)),
+        failed_history=sum(1 for r in rejected if _bucket(r) == "failed_history"),
+        failed_score=sum(1 for r in rejected if _bucket(r) == "failed_score"),
+        failed_signal=sum(1 for r in rejected if _bucket(r) == "failed_signal"),
+        failed_backtest=sum(1 for r in rejected if _bucket(r) == "failed_backtest"),
+        failed_regime=sum(1 for r in rejected if _bucket(r) == "failed_regime"),
         failed_direction=_dir_filtered,
         failed_shortlist=original_count - len(candidates),
-        other_rejected=sum(
-            1 for r in rejected if not any(f(r) for f in _stock_buckets)
-        ),
+        other_rejected=sum(1 for r in rejected if _bucket(r) == "other_rejected"),
         candidates=len(candidates),
     )
     logger.info(

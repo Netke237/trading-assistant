@@ -51,6 +51,24 @@ function dropped(n: number | undefined): number {
   return n ?? 0;
 }
 
+/**
+ * Errors are NOT a pipeline stage. A raised exception can abort a symbol at any
+ * point, so there is no position in the chain where subtracting them is honest:
+ * placing the row after scoring claims those symbols survived scoring, which is
+ * the misattribution the stage ordering above exists to avoid. Shown outside the
+ * running subtraction instead, as a note on the total.
+ */
+function ErroredNote({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <div className={styles.stageWide}>
+      <Text size={11} tone="dim">Errored (any stage)</Text>
+      <Text size={11} tone="reject">−{count}</Text>
+      <span />
+    </div>
+  );
+}
+
 export function ScanFunnel({ mode, pipeline }: Props) {
   if (mode === 'stock') {
     const p = pipeline as StockPipeline;
@@ -63,19 +81,23 @@ export function ScanFunnel({ mode, pipeline }: Props) {
     // order still reconciles at the bottom, but every intermediate count then
     // misattributes: a "Signal — 40 remaining" row placed before the direction
     // gate implies signal ran on symbols the gate had already removed.
-    const afterHistory   = p.scanned - p.failed_history;
+    // Errors come off the top, before any gate's count, because a symbol that
+    // raised never produced an outcome at any gate. Every count below therefore
+    // reads "symbols still in play that completed processing".
+    const afterErrors    = p.scanned - otherRejected;
+    const afterHistory   = afterErrors - p.failed_history;
     const afterScore     = afterHistory - p.failed_score;
     const afterDirection = afterScore - failedDirection;
     const afterRegime    = afterDirection - failedRegime;
     const afterSignal    = afterRegime - p.failed_signal;
     const afterBacktest  = afterSignal - p.failed_backtest;
-    const afterOther     = afterBacktest - otherRejected;
     return (
       <div className={styles.funnel}>
         <div className={styles.header}>
           <Text size={11} tone="dim" weight={500}>STOCK PIPELINE</Text>
         </div>
         <Stage label="Universe"   count={p.scanned}    total={p.scanned} />
+        <ErroredNote count={otherRejected} />
         <Stage label="History"    count={afterHistory}  rejected={p.failed_history}  rejectedLabel="no history" total={p.scanned} />
         <Stage label="Score gate" count={afterScore}    rejected={p.failed_score}    rejectedLabel="REJECT"     total={p.scanned} />
         {failedDirection > 0 && (
@@ -86,11 +108,8 @@ export function ScanFunnel({ mode, pipeline }: Props) {
         )}
         <Stage label="Signal"     count={afterSignal}   rejected={p.failed_signal}   rejectedLabel="no setup"   total={p.scanned} />
         <Stage label="Backtest"   count={afterBacktest} rejected={p.failed_backtest} rejectedLabel="gate fail"  total={p.scanned} />
-        {otherRejected > 0 && (
-          <Stage label="Other"     count={afterOther}     rejected={otherRejected}   rejectedLabel="errors"        total={p.scanned} />
-        )}
         {failedShortlist > 0 && (
-          <Stage label="Shortlist cap" count={afterOther - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
+          <Stage label="Shortlist cap" count={afterBacktest - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
         )}
         <div className={styles.divider} />
         <div className={styles.finalStage}>
@@ -102,21 +121,23 @@ export function ScanFunnel({ mode, pipeline }: Props) {
   }
 
   const p = pipeline as OptionsPipeline;
-  const afterData       = p.scanned - p.failed_data;
-  const afterPreScreen  = afterData - p.failed_pre_screen;
-  const afterChain      = afterPreScreen - p.no_chain;
-  const afterScored     = afterChain - p.failed_score - p.failed_contracts;
   const failedDirection = dropped(p.failed_direction);
   const failedShortlist = dropped(p.failed_shortlist);
   const otherRejected   = dropped(p.other_rejected);
+  // Errors off the top — see ErroredNote.
+  const afterErrors     = p.scanned - otherRejected;
+  const afterData       = afterErrors - p.failed_data;
+  const afterPreScreen  = afterData - p.failed_pre_screen;
+  const afterChain      = afterPreScreen - p.no_chain;
+  const afterScored     = afterChain - p.failed_score - p.failed_contracts;
   const afterDirection  = afterScored - failedDirection;
-  const afterOther      = afterDirection - otherRejected;
   return (
     <div className={styles.funnel}>
       <div className={styles.header}>
         <Text size={11} tone="dim" weight={500}>OPTIONS PIPELINE</Text>
       </div>
       <Stage wide label="Universe"        count={p.scanned}      total={p.scanned} />
+      <ErroredNote count={otherRejected} />
       <Stage wide label="Data / Filters (data/price/cap)" count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
       <Stage wide label="Pre-screen (setup score)"        count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
       <Stage wide label="Option chain (DTE window)"       count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />
@@ -124,11 +145,8 @@ export function ScanFunnel({ mode, pipeline }: Props) {
       {failedDirection > 0 && (
         <Stage wide label="Direction conviction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
       )}
-      {otherRejected > 0 && (
-        <Stage wide label="Other (errors / unclassified)" count={afterOther} rejected={otherRejected} rejectedLabel="errors" total={p.scanned} />
-      )}
       {failedShortlist > 0 && (
-        <Stage wide label="Shortlist cap" count={afterOther - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
+        <Stage wide label="Shortlist cap" count={afterDirection - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
       )}
       <div className={styles.divider} />
       <div className={styles.finalStageWide}>

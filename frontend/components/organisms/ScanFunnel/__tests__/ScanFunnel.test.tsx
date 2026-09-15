@@ -35,11 +35,11 @@ function pipeline(over: Partial<OptionsPipeline> = {}): OptionsPipeline {
  */
 describe('ScanFunnel — the funnel reconciles', () => {
   it('walks down to exactly the Candidates figure, options mode', () => {
-    // 518 − 10 − 237 − 15 − (200+51) − 5 direction − 0 other − 0 cap = 0.
+    // 518 − 10 − 237 − 15 − (200+51) − 5 direction = 0.
     render(<ScanFunnel mode="options" pipeline={pipeline({ failed_direction: 5, candidates: 0 })} />);
     const shown = screen.getAllByText(/^\d+$/).map((el) => Number(el.textContent));
 
-    expect(shown[0]).toBe(518);            // Universe
+    expect(shown[0]).toBe(518);              // Universe
     expect(shown[shown.length - 1]).toBe(0); // Candidates
     // Each stage's count is strictly the previous minus what it dropped.
     expect(shown).toEqual([518, 508, 271, 256, 5, 0, 0]);
@@ -53,6 +53,31 @@ describe('ScanFunnel — the funnel reconciles', () => {
 
     // ... 5 survive scoring, cap trims 3, 2 returned.
     expect(shown).toEqual([518, 508, 271, 256, 5, 2, 2]);
+  });
+
+  it('takes errors off the top rather than mid-chain, options mode', () => {
+    // An errored symbol never produced an outcome at any gate, so no stage may
+    // claim it survived. 7+10+237+15+200+44+5 = 518, a coherent funnel.
+    render(<ScanFunnel mode="options" pipeline={pipeline({
+      other_rejected: 7, failed_contracts: 44, candidates: 5,
+    })} />);
+    const shown = screen.getAllByText(/^\d+$/).map((el) => Number(el.textContent));
+
+    // 518 −7 errored =511, −10 =501, −237 =264, −15 =249, −244 =5.
+    expect(shown).toEqual([518, 501, 264, 249, 5, 5]);
+  });
+
+  it('walks down to exactly the Candidates figure, stock mode', () => {
+    render(<ScanFunnel mode="stock" pipeline={{
+      scanned: 100, failed_history: 10, failed_score: 30, failed_signal: 20,
+      failed_backtest: 15, failed_regime: 8, failed_direction: 9,
+      failed_shortlist: 3, other_rejected: 4, candidates: 1,
+    }} />);
+    const shown = screen.getAllByText(/^\d+$/).map((el) => Number(el.textContent));
+
+    // 100 −4 errored =96, −10 hist =86, −30 score =56, −9 dir =47,
+    // −8 regime =39, −20 signal =19, −15 backtest =4, −3 cap =1.
+    expect(shown).toEqual([100, 86, 56, 47, 39, 19, 4, 1, 1]);
   });
 });
 
@@ -97,8 +122,8 @@ describe('ScanFunnel — options mode', () => {
 
   it('surfaces exceptions and unclassified rejections instead of losing them', () => {
     render(<ScanFunnel mode="options" pipeline={pipeline({ other_rejected: 7 })} />);
-    expect(screen.getByText('Other (errors / unclassified)')).toBeInTheDocument();
-    expect(screen.getByText('−7 errors')).toBeInTheDocument();
+    expect(screen.getByText('Errored (any stage)')).toBeInTheDocument();
+    expect(screen.getByText('−7')).toBeInTheDocument();
   });
 });
 
@@ -119,8 +144,8 @@ describe('ScanFunnel — stock mode', () => {
     expect(screen.getByText('−8 headwind')).toBeInTheDocument();
     expect(screen.getByText('Direction')).toBeInTheDocument();
     expect(screen.getByText('−9 no conviction')).toBeInTheDocument();
-    expect(screen.getByText('Other')).toBeInTheDocument();
-    expect(screen.getByText('−4 errors')).toBeInTheDocument();
+    expect(screen.getByText('Errored (any stage)')).toBeInTheDocument();
+    expect(screen.getByText('−4')).toBeInTheDocument();
     expect(screen.getByText('Shortlist cap')).toBeInTheDocument();
   });
 
@@ -131,7 +156,7 @@ describe('ScanFunnel — stock mode', () => {
 
     expect(screen.queryByText('Regime')).not.toBeInTheDocument();
     expect(screen.queryByText('Direction')).not.toBeInTheDocument();
-    expect(screen.queryByText('Other')).not.toBeInTheDocument();
+    expect(screen.queryByText('Errored (any stage)')).not.toBeInTheDocument();
     expect(screen.queryByText('Shortlist cap')).not.toBeInTheDocument();
   });
 });
