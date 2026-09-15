@@ -1,7 +1,21 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useScanStore } from '@/lib/scanStore';
 import type { PositionCardData } from '@/types/stockDomain';
+import type { MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — this suite is about the Add-to-Portfolio
+// OUTCOME states, not the method-pick gate, so every fixture stamps a
+// satisfied pick or the new `pickMissing` check leaves the button disabled
+// before any of these outcomes can be reached.
+const pick = (): MethodPick => ({
+  method: 'ladder',
+  rowStockPrice: 160,
+  rowOptionPrice: null,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 // api + heavy children are modules (not stores) — mocking them is correct.
 jest.mock('@/lib/api', () => ({ api: { getBrokerStatus: jest.fn().mockResolvedValue({}) } }));
@@ -36,6 +50,13 @@ const originalFetch = global.fetch;
 describe('StockPositionCard — Add to Portfolio outcome states', () => {
   beforeEach(() => {
     usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
   });
   afterEach(() => {
     global.fetch = originalFetch;

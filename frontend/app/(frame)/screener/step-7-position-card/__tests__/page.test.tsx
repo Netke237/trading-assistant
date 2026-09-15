@@ -5,6 +5,19 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import type { StockScanResult } from '@/types/stockDomain';
+import type { MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 (§7.2, S3) — this suite is about broker
+// submit(), not the method-pick gate, so every fixture stamps a satisfied
+// pick for both candidates or the new `pickMissing` check leaves the order
+// buttons disabled regardless of what these tests exercise.
+const pick = (): MethodPick => ({
+  method: 'monte_carlo',
+  rowStockPrice: 197.5,
+  rowOptionPrice: 6.24,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -40,7 +53,13 @@ const originalFetch = global.fetch;
 
 describe('step-7-position-card — broker order submit()', () => {
   beforeEach(() => {
-    useScanStore.setState({ stockScanResult: makeScanResult(), selectedSymbol: 'AAPL' } as any);
+    useScanStore.setState({
+      stockScanResult: makeScanResult(), selectedSymbol: 'AAPL',
+      stocksCardEdits: {
+        scanId: 'S1', picks: { AAPL: pick(), MSFT: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    } as any);
     usePortfolioStore.setState({ positions: [], lastSyncError: null });
     useSettingsStore.setState({
       ibkrPaper: { baseUrl: 'https://localhost:7499/v1/api', accountId: 'ACC' },
@@ -64,6 +83,13 @@ describe('step-7-position-card — broker order submit()', () => {
     expect(pos.source).toBe('broker');
     expect(pos.tradeCardSnapshot).toBeDefined();
     expect(pos.stop).toBe(145);
+    // Confirmed gap as of build step 4 (S3): the gate blocked an UNPICKED
+    // send, but nothing carried a MADE pick's values into the position
+    // submit() creates here — a real send silently discarded it.
+    expect(pos.pickedMethod).toBe('monte_carlo');
+    expect(pos.pickedRowStockPrice).toBe(197.5);
+    expect(pos.pickedRowOptionPrice).toBe(6.24);
+    expect(pos.pickedStopBasis).toBe('stock');
   });
 
   it('shows a non-blocking warning and permanently disables the order buttons when the order succeeds but local tracking fails', async () => {
@@ -146,5 +172,67 @@ describe('step-7-position-card — broker order submit()', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AAPL' }));
     expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
     expect(screen.getByText(/Order placed — ID: ORD-1/)).toBeInTheDocument();
+  });
+});
+
+/* Phase G piece 5, build step 4 (§7.2, S3, spec test 9). A SEPARATE component
+ * from StockPositionCard (§2.5) — its own gate needed its own test. */
+describe('step-7-position-card — refuses to order a candidate with no method pick', () => {
+  beforeEach(() => {
+    useScanStore.setState({
+      stockScanResult: makeScanResult(), selectedSymbol: 'AAPL',
+      stocksCardEdits: {
+        scanId: 'S1', picks: {},
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    } as any);
+    usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useSettingsStore.setState({
+      ibkrPaper: { baseUrl: 'https://localhost:7499/v1/api', accountId: 'ACC' },
+    } as any);
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('disables both order buttons and places NO order when no candidate has a pick', async () => {
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+
+    const limitBtn  = screen.getByRole('button', { name: /place limit order/i });
+    const marketBtn = screen.getByRole('button', { name: /right now — market order/i });
+    expect(limitBtn).toBeDisabled();
+    expect(marketBtn).toBeDisabled();
+
+    fireEvent.click(limitBtn);
+    fireEvent.click(marketBtn);
+    await Promise.resolve();
+    expect(api.postStockOrder).not.toHaveBeenCalled();
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+  });
+
+  it('says why', async () => {
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    expect(screen.getByText(/Method pick required/)).toBeInTheDocument();
+  });
+
+  it('unblocks once the candidate has a pick', async () => {
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-3' });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+
+    useScanStore.setState((s) => ({
+      stocksCardEdits: { ...s.stocksCardEdits, picks: { AAPL: pick() } },
+    }));
+
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
+    const limitBtn = screen.getByRole('button', { name: /place limit order/i });
+    expect(limitBtn).toBeEnabled();
+
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
   });
 });

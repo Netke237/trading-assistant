@@ -12,8 +12,12 @@ import { useMemo, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useRiskStore } from '@/lib/riskStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { checkTradeRisk, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
-import type { TradeCardData, RiskCheckResult, MaxLossOverride } from '@/types/domain';
+import {
+  checkTradeRisk,
+  MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
+  MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
+} from '@/lib/risk';
+import type { TradeCardData, RiskCheckResult, MaxLossOverride, MethodPick } from '@/types/domain';
 import styles from './SendToBrokerDialog.module.css';
 
 export interface DraftOrder {
@@ -48,6 +52,14 @@ interface Props {
    *  user can fix by typing. A symbol absent from the map falls back to the
    *  card. */
   invalidationBySymbol: Record<string, number | null>;
+  /** Phase G piece 5, build step 4 (§7.1) — the trader's explicit method pick
+   *  for each basket card, sourced from step 7's `methodPickFor` (keyed by
+   *  contract through `editKeyFor`, looked up here per symbol since one
+   *  basket card is one contract). Fed into `checkTradeRisk` so `.some(...)`
+   *  below applies the same rule §7.1 states in words: one unpicked card
+   *  blocks the whole basket, the same rule `missing_invalidation` already
+   *  applies. A symbol absent from the map means no pick, same as `null`. */
+  methodPickBySymbol: Record<string, MethodPick | null | undefined>;
   onClose:  () => void;
   onSubmit: (orders: DraftOrder[], riskOverridden: boolean) => void;
 }
@@ -57,7 +69,7 @@ interface RowState {
   autoSend:  boolean;
 }
 
-export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol, invalidationBySymbol, onClose, onSubmit }: Props) {
+export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol, invalidationBySymbol, methodPickBySymbol, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(cards.map((c) => [c.symbol, { contracts: contractsBySymbol[c.symbol] ?? 1, autoSend: true }])),
   );
@@ -86,18 +98,28 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
         c, Math.max(1, Math.round(r.contracts)), limits, positions, dailyRecommendations,
         overridesBySymbol[c.symbol] ?? null,
         invalidationBySymbol[c.symbol] ?? c.exit.invalidation,
+        methodPickBySymbol[c.symbol] ?? null,
       );
     }
     return checks;
-  }, [cards, rows, limits, positions, dailyRecommendations, overridesBySymbol, invalidationBySymbol]);
+  }, [cards, rows, limits, positions, dailyRecommendations, overridesBySymbol, invalidationBySymbol, methodPickBySymbol]);
 
   const hasMissingInvalidation = useMemo(
     () => Object.values(riskChecks).some((rc) => rc.reasons.includes('missing_invalidation')),
     [riskChecks],
   );
 
+  const hasMissingMethodPick = useMemo(
+    () => Object.values(riskChecks).some((rc) => rc.reasons.includes('missing_method_pick')),
+    [riskChecks],
+  );
+
   const hasWarnings = useMemo(
-    () => Object.values(riskChecks).some((rc) => !rc.approved && !rc.reasons.includes('missing_invalidation')),
+    () => Object.values(riskChecks).some((rc) =>
+      !rc.approved
+      && !rc.reasons.includes('missing_invalidation')
+      && !rc.reasons.includes('missing_method_pick'),
+    ),
     [riskChecks],
   );
 
@@ -113,6 +135,7 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
 
   const submit = () => {
     if (hasMissingInvalidation) return;
+    if (hasMissingMethodPick) return;
     if (hasWarnings && !overrideReady) {
       setOverrideReady(true);
       return;
@@ -259,6 +282,7 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
         <div className={styles.riskSummaryWrap}>
           <RiskSummary
             hasMissingInvalidation={hasMissingInvalidation}
+            hasMissingMethodPick={hasMissingMethodPick}
             hasWarnings={hasWarnings}
             allClean={allClean}
             overrideReady={overrideReady}
@@ -276,8 +300,12 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0 || hasMissingInvalidation}
-              title={hasMissingInvalidation ? MISSING_INVALIDATION_TITLE : undefined}
+              disabled={cards.length === 0 || hasMissingInvalidation || hasMissingMethodPick}
+              title={
+                hasMissingInvalidation ? MISSING_INVALIDATION_TITLE
+                : hasMissingMethodPick ? MISSING_METHOD_PICK_TITLE
+                : undefined
+              }
             >
               {overrideReady && hasWarnings
                 ? 'Override & Submit'
@@ -292,12 +320,14 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
 
 function RiskSummary({
   hasMissingInvalidation,
+  hasMissingMethodPick,
   hasWarnings,
   allClean,
   overrideReady,
   riskChecks,
 }: {
   hasMissingInvalidation: boolean;
+  hasMissingMethodPick: boolean;
   hasWarnings: boolean;
   allClean: boolean;
   overrideReady: boolean;
@@ -307,6 +337,14 @@ function RiskSummary({
     return (
       <Text size={12} tone="reject">
         {MISSING_INVALIDATION_MESSAGE}
+      </Text>
+    );
+  }
+
+  if (hasMissingMethodPick) {
+    return (
+      <Text size={12} tone="reject">
+        {MISSING_METHOD_PICK_MESSAGE}
       </Text>
     );
   }

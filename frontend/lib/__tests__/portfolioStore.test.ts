@@ -729,6 +729,34 @@ describe('portfolioStore', () => {
       expect(res.ok).toBe(true);
       expect(res.adjustedQty).toBe(2);
     });
+
+    it('persistPosition includes all five picked_* fields in the POST body — regression guard for the send-path wiring gap found 2026-09-15, same genre as exitPlan/maxLossOverride above: every send-path caller now sets these on the object it passes in, but toBackendPayload itself had no allowlist entry for them, so the values would still have been silently dropped on the wire even after every caller was fixed', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({
+        ...abt, recId: 'REC-PICK-1',
+        pickedMethod: 'monte_carlo', pickedRowStockPrice: 197.5, pickedRowOptionPrice: 6.24,
+        pickedStopBasis: 'stock', pickedAt: '2026-09-14T10:00:00.000Z',
+      });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.pickedMethod).toBe('monte_carlo');
+      expect(body.pickedRowStockPrice).toBe(197.5);
+      expect(body.pickedRowOptionPrice).toBe(6.24);
+      expect(body.pickedStopBasis).toBe('stock');
+      expect(body.pickedAt).toBe('2026-09-14T10:00:00.000Z');
+    });
+
+    it('persistPosition sends all five picked_* fields as explicit null when the position has none — the S5 auto-executor\'s shape (spec §7.3), never an omitted key', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-PICK-2' });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.pickedMethod).toBeNull();
+      expect(body.pickedRowStockPrice).toBeNull();
+      expect(body.pickedRowOptionPrice).toBeNull();
+      expect(body.pickedStopBasis).toBeNull();
+      expect(body.pickedAt).toBeNull();
+    });
   });
 
   describe('addPosition verified write', () => {
@@ -1076,6 +1104,41 @@ describe('portfolioStore', () => {
       expect(p.resolvedTpPrice).toBe(230);
       expect(p.resolvedTpUpdatedAt).toBe('2026-08-27T00:00:00.000Z');
       expect(p.alertOverrides).toEqual({ STOP_REACHED: false });
+    });
+
+    it('maps the Phase G picked_* fields off the backend GET response — same genre as activeTpMethod/resolvedTpPrice above, found missing 2026-09-15: without this, a picked_method correctly persisted server-side (once the send-path wiring gap is closed) would still vanish from the client on the very next portfolio sync', async () => {
+      usePortfolioStore.setState({ positions: [] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(
+        jsonResponse([{
+          ...makeBackendPosition(),
+          pickedMethod: 'barrier_race',
+          pickedRowStockPrice: null,
+          pickedRowOptionPrice: 6.24,
+          pickedStopBasis: 'premium',
+          pickedAt: '2026-09-14T10:00:00.000Z',
+        }])
+      );
+      await usePortfolioStore.getState().syncFromBackend();
+      const p = usePortfolioStore.getState().positions[0];
+      expect(p.pickedMethod).toBe('barrier_race');
+      expect(p.pickedRowStockPrice).toBeNull();
+      expect(p.pickedRowOptionPrice).toBe(6.24);
+      expect(p.pickedStopBasis).toBe('premium');
+      expect(p.pickedAt).toBe('2026-09-14T10:00:00.000Z');
+    });
+
+    it('leaves a genuinely absent pick as null, never defaulting it the way activeTpMethod defaults to ladder', async () => {
+      // Unlike activeTpMethod (whose absence means "predates the column" and
+      // is normalised to 'ladder'), NULL is a real, already-supported state
+      // for pickedMethod — a pre-G position, or one from the S5 auto-executor
+      // (spec §7.3) — and must render as "—", never as a method nobody chose.
+      usePortfolioStore.setState({ positions: [] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(
+        jsonResponse([{ ...makeBackendPosition() }])
+      );
+      await usePortfolioStore.getState().syncFromBackend();
+      const p = usePortfolioStore.getState().positions[0];
+      expect(p.pickedMethod).toBeNull();
     });
 
     it('normalises a missing activeTpMethod to ladder and overrides to {}', async () => {

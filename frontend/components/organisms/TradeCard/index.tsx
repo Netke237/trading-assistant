@@ -6,6 +6,8 @@ import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { AlternativeContractRow } from '@/components/molecules/AlternativeContractRow';
+import { MethodPickSelector } from '@/components/molecules/MethodPickSelector';
+import type { MethodPickOption } from '@/components/molecules/MethodPickSelector';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
@@ -34,7 +36,7 @@ import {
   planOverlay,
   restoredEdits,
 } from '@/lib/tradeCardEdits';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride, StopCostOut } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride, MethodPick, StopCostOut } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -299,6 +301,25 @@ interface TradeCardProps {
    *  sufficient and simpler; there is no in-flight request whose resolution
    *  could race a candidate switch. */
   onMaxLossOverrideChange?: (v: MaxLossOverride | null) => void;
+  /** Phase G piece 5 (D4/D5), spec §6.2 — the fifth `initial*`/`on*Change`
+   *  pair, and it is wired exactly like `initialMaxLossOverride` above: the
+   *  page holds the value in `scanStore`'s scan-stamped `picks` map (read
+   *  through `selectCardEdits`, never off the slice directly) and hands it back
+   *  down, so the round trip that `initialPremiumStop`'s note describes works
+   *  for the pick too — the reset on a contract change deliberately does NOT
+   *  call back, so without the trip the card would put "no pick" on screen
+   *  while the store still held one and the send gate still saw it.
+   *
+   *  `null`/absent means NO PICK HAS BEEN MADE, which is a real and required
+   *  state (§6.1: no default is pre-selected, because a pre-selected radio is
+   *  a default nobody looked at wearing a radio's clothes).
+   *
+   *  DIRECT-CALL, NOT REF-SYNCED, for the reason `onMaxLossOverrideChange`
+   *  gives above: a pick is a synchronous user click with no in-flight request
+   *  whose resolution could race a candidate switch, so the two-effect ref
+   *  pattern `onFirstPassageChange` needs buys nothing here. */
+  initialMethodPick?: MethodPick | null;
+  onMethodPickChange?: (pick: MethodPick | null) => void;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -384,6 +405,8 @@ export function TradeCard({
   liveMid = null,
   resetKey = 0,
   onMaxLossOverrideChange,
+  initialMethodPick = null,
+  onMethodPickChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -456,6 +479,12 @@ export function TradeCard({
   // etc. in the contract-change effect below — see that effect's own comment
   // for why a per-candidate reset is required.
   const [maxLossOverride, setMaxLossOverride] = useState<MaxLossOverride | null>(initialMaxLossOverride);
+  /** Phase G piece 5 (§6.1) — the trader's explicit exit-method pick for THIS
+   *  contract, seeded from the page's scan-stamped `picks` map and re-synced on
+   *  every identity change in the reset effect below, exactly as
+   *  `maxLossOverride` above is. Local state rather than the prop read directly
+   *  so a click paints immediately instead of waiting for a store round trip. */
+  const [methodPick, setMethodPick] = useState<MethodPick | null>(initialMethodPick);
   const [structuralStop, setStructuralStop] = useState<StructuralStop | null | undefined>(
     data.exit.structuralStop,
   );
@@ -664,12 +693,25 @@ export function TradeCard({
       // candidate (its symbol-keyed cache), so the newly active card never
       // briefly shows the PREVIOUS candidate's override.
       setMaxLossOverride(initialMaxLossOverride);
+      // Phase G piece 5 — same re-sync, same reason: the page's `picks` map is
+      // keyed per contract, so the incoming candidate has its own entry and the
+      // card must show THAT one, not the outgoing candidate's.
+      //
+      // DELIBERATELY DOES NOT CALL `onMethodPickChange`. §6.1 says a contract
+      // change clears the pick, and it is already cleared -- by
+      // `scanStore.setPickedContract`, which drops every other pick under the
+      // symbol (`clearPicksForSymbol`), and by the per-contract keying, which
+      // means the new key simply has no entry. Emitting null from here would
+      // instead write null under the INCOMING key and wipe a pick the user
+      // legitimately made on this contract a moment ago -- the same hazard
+      // `initialPremiumStop`'s note describes for the typed fields.
+      setMethodPick(initialMethodPick);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
       prevResetKeyRef.current = resetKey;
     }
   }, [data.symbol, data.contract, resetKey, initialContracts, defaultTargetPct, initialMaxLossOverride,
-      initialPremiumStop, initialEntryLimit, initialInvalidation]);
+      initialPremiumStop, initialEntryLimit, initialInvalidation, initialMethodPick]);
 
   // Cancel any outstanding requests on unmount.
   useEffect(() => () => structuralRequestRef.current?.abort(), []);
@@ -1810,6 +1852,38 @@ export function TradeCard({
 
   const raceIsShowable = estimateIsFresh && !raceBarriersMoved;
 
+  // Phase G piece 5 — PICK-ONLY variants of the two flags above, compared
+  // against `prevContractRef.current` instead of the `data.contract` PROP.
+  // Round-1 audit finding (2026-09-14), CONFIRMED BY REPRODUCTION, then a
+  // round-2 finding against that fix's own hand-off-ref mechanism: on the
+  // commit that switches contract, `data.contract` is already the incoming
+  // candidate's while `raceBarriers` state is still the outgoing candidate's
+  // for one transitional render, before the reset effect (below) has run.
+  // `estimateIsFresh` above reads false in that one render purely from the
+  // prop/state mismatch — correct for its own consumers (Final
+  // Recommendation, BarrierRaceCard — TARGET-VINTAGE-2026-09-04, audited
+  // separately and untouched here), but wrong for the method-pick gate,
+  // where it can make a genuinely-fresh OUTGOING pick look gone and clear
+  // the WRONG candidate's entry (see `pickedMethodGone` below).
+  // `prevContractRef.current` is state, not a prop: it lags `data.contract`
+  // by exactly the same one render `raceBarriers` does, and the reset effect
+  // updates both together at its end — so on the transitional render they
+  // are BOTH still the outgoing candidate's (no spurious mismatch), and on
+  // every settled render (which is all of them, transitional or not, once
+  // effects have run) `prevContractRef.current === data.contract` exactly,
+  // so this behaves identically to `estimateIsFresh`/`raceIsShowable` there.
+  // A hand-off ref between two effects was tried first and rejected: it
+  // depends on `useEffect([pickedMethodGone])` re-firing only on a VALUE
+  // CHANGE, which a round-2 audit found leaves the ref stuck `true` when a
+  // reset doesn't change `pickedMethodGone` (swallowing a later, unrelated,
+  // genuinely-real clear) and skips the clearing effect entirely when the
+  // mixed and settled renders happen to agree (dropping a genuinely-stale
+  // restored pick instead of merely delaying it). Comparing against state
+  // instead of a prop removes the transitional render's bad reading at the
+  // source, so nothing needs to be handed off between effects at all.
+  const pickEstimateIsFresh = raceBarriers?.contract === prevContractRef.current;
+  const pickRaceIsShowable = pickEstimateIsFresh && !raceBarriersMoved;
+
   // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
   // separately-timed method and deliberately does not get its own
   // lastRunMethod value. It rides the same endpoint call, the same click and
@@ -1833,6 +1907,183 @@ export function TradeCard({
     if (fpAt == null) return 'arithmetic';
     return exitAt >= fpAt ? 'arithmetic' : 'monte_carlo';
   }, [exitPlan?.computedAt, firstPassage?.computedAt]);
+
+  // ─── Phase G piece 5 (D4/D5) — the per-trade method pick ───────────────────
+  //
+  // ROWS ARE BUILT UNCONDITIONALLY; `unavailable` IS THE ONLY GATE. An earlier
+  // version also re-tested `estimateIsFresh` / `raceIsShowable` inside each
+  // `rows:` expression, which read as caution and was in fact a second copy of
+  // a rule stated one line above it — no mutation of the duplicate could fail a
+  // test, because `MethodPickSelector` refuses to offer rows for a method it is
+  // rendering as disabled. That refusal is where the rule lives now, and it is
+  // pinned there.
+  //
+  // Spec §6.1. FOUR OPTIONS, and an option whose numbers do not exist is
+  // DISABLED WITH A REASON rather than hidden, so that a missing Monte Carlo
+  // reads as "Estimate hasn't been run" and not as a method this card lacks.
+  //
+  // THE TWO PRICE SLOTS PER ROW ARE FIXED BY §6.1's TABLE AND ARE NOT A CHOICE
+  // MADE HERE. `rowStockPrice` is underlying space and is the ONLY field that
+  // may ever seed `resolved_tp_price`; `rowOptionPrice` is premium space and is
+  // record-only. Ladder and Arithmetic quote stock levels and have no premium;
+  // Barrier Race carries `targetOptionPrice` and NO stock level at all
+  // (`BarrierRaceOutcome` simply has no such field), which is why §4.3 maps
+  // every race pick to `('ladder', NULL)`. Monte Carlo is the trap: the card
+  // RENDERS `optionPrice` (the Final Recommendation's rows below, and
+  // BarrierRaceCard), so `displayPrice` is the premium the trader is reading
+  // while `rowStockPrice` is the underlying level beside it. Collapsing the two
+  // would put a $6.24 premium in a stock-price column, making `price >= 6.24`
+  // true on the first tick and firing TP_HIT instantly on every bullish
+  // position (alertEngine.ts:152, alert_generator.py:181).
+  const methodPickOptions = useMemo<MethodPickOption[]>(() => [
+    {
+      // ALWAYS SELECTABLE (§6.1) — the ladder needs no run; its rows are the
+      // card's own live T1/T2/T3. `targetPrice ?? stockPrice` is the same
+      // fallback the Final Recommendation's ladder branch prints, so the pick
+      // records the number that is on screen.
+      method: 'ladder' as const,
+      label: 'Ladder',
+      unavailable: null,
+      rows: data.exit.targets.map((t, i) => {
+        const price = t.targetPrice ?? t.stockPrice;
+        return {
+          key: t.id ?? `ladder-${i}`,
+          label: t.id ? t.id.toUpperCase() : `T${i + 1}`,
+          displayPrice: price,
+          rowStockPrice: price,
+          rowOptionPrice: null,
+        };
+      }),
+    },
+    {
+      method: 'arithmetic' as const,
+      label: 'Arithmetic',
+      unavailable: exitPlan ? null : 'Compute Arithmetic Plan first',
+      rows: (exitPlan?.targets ?? []).map((t) => ({
+        key: `arith-${t.rrRatio}`,
+        label: `${t.rrRatio}:1`,
+        displayPrice: t.price,
+        rowStockPrice: t.price,
+        rowOptionPrice: null,
+      })),
+    },
+    {
+      // GATED ON `pickEstimateIsFresh`, the PICK-ONLY sibling of the flag the
+      // Final Recommendation's Monte Carlo rows are gated on
+      // (TARGET-VINTAGE-2026-09-04's `estimateIsFresh`) — see its declaration
+      // for why the pick gate needs its own copy, compared against
+      // `prevContractRef.current` rather than the `data.contract` prop. When
+      // it is false those rows are (for the DISPLAY flag) replaced by "Not
+      // re-run this session", so there is nothing on screen to pick and the
+      // method must not be selectable. This flag being per-mount AND
+      // per-contract is what makes a Monte Carlo pick unable to outlive a
+      // navigation or a reload — the clear effect below turns that into an
+      // actual clear rather than a merely-disabled button.
+      method: 'monte_carlo' as const,
+      label: 'Monte Carlo',
+      unavailable: firstPassage
+        ? (pickEstimateIsFresh ? null : 'Estimate not re-run this session')
+        : 'Run Monte Carlo Estimate first',
+      rows: (firstPassage?.targets ?? []).map((t, i) => ({
+        key: `mc-${t.pct}-${i}`,
+        label: `T${Math.round(t.pct * 100)}%`,
+        displayPrice: t.optionPrice,
+        rowStockPrice: t.stockPrice,
+        rowOptionPrice: t.optionPrice,
+      })),
+    },
+    {
+      // GATED ON `pickRaceIsShowable`, the PICK-ONLY sibling of
+      // `raceIsShowable` — the STRICTER flag: it additionally requires that
+      // neither barrier has MOVED since the estimate. `raceBarriersMoved`
+      // itself never reads `data.contract`, only `sharedStop`/`overlay`
+      // against `raceBarriers`, so it needs no pick-only copy of its own;
+      // only the `estimateIsFresh` term inside it did.
+      method: 'barrier_race' as const,
+      label: 'Barrier Race',
+      unavailable: firstPassage?.race
+        // Phrased differently from BarrierRaceCard's own "Barriers changed —
+        // re-run the estimate" on purpose: the two say the same thing in two
+        // places on one screen, and identical strings make every `getByText`
+        // in the suite ambiguous the moment this control is on the card.
+        ? (pickRaceIsShowable ? null : 'Barriers moved since the estimate')
+        : 'Run Monte Carlo Estimate first',
+      rows: (firstPassage?.race?.outcomes ?? []).map((o) => ({
+        key: `race-${o.targetPct}`,
+        label: `T${Math.round(o.targetPct * 100)}%`,
+        displayPrice: o.targetOptionPrice,
+        // NULL, ALWAYS. Not `o.targetOptionPrice` — see the block comment above.
+        rowStockPrice: null,
+        rowOptionPrice: o.targetOptionPrice,
+      })),
+    },
+  ], [data.exit.targets, exitPlan, firstPassage, pickEstimateIsFresh, pickRaceIsShowable]);
+
+  // Direct-call pattern, per the prop's doc comment: a pick is a synchronous
+  // click, like the max-loss override and unlike the exit plan.
+  const applyMethodPick = useCallback((next: MethodPick | null) => {
+    setMethodPick(next);
+    onMethodPickChange?.(next);
+  }, [onMethodPickChange]);
+
+  /** §6.1 — "picking a method whose numbers then go stale clears the pick".
+   *
+   *  STATED AS "THE PICKED METHOD IS NO LONGER SELECTABLE", which is wider than
+   *  the spec's two named triggers (`estimateIsFresh` false, contract changed)
+   *  and deliberately so: those two are the reasons a method goes away TODAY,
+   *  and reusing `methodPickOptions`' own `unavailable` means a fifth reason
+   *  added there cannot be forgotten here. It also covers a method that is not
+   *  in the list at all, which is what a corrupted persisted pick looks like.
+   *
+   *  NOT `(find(...)?.unavailable ?? 'gone') != null`. `??` fires on null as
+   *  well as undefined, and `unavailable: null` is precisely what an AVAILABLE
+   *  method looks like — so that spelling collapses "found and selectable" into
+   *  "gone" and clears every restored pick on mount. The two cases have to be
+   *  separated explicitly.
+   *
+   *  NO "HAS THE RESET SETTLED YET" GUARD, and — after two rounds of getting
+   *  this wrong — the reason is now the right one. `pickedOption`/
+   *  `pickedMethodGone` are computed from `methodPickOptions`, which in turn
+   *  is built from `pickEstimateIsFresh`/`pickRaceIsShowable`, NOT from
+   *  `estimateIsFresh`/`raceIsShowable`. Those pick-only flags (declared
+   *  above, beside `estimateIsFresh`) compare `raceBarriers.contract` against
+   *  `prevContractRef.current` — STATE, not the `data.contract` PROP — so on
+   *  the one transitional render where `data` has already switched but
+   *  `raceBarriers`/`prevContractRef` haven't been reset yet, both sides of
+   *  that comparison are still the OUTGOING candidate's, and nothing looks
+   *  spuriously gone. `pickedMethodGone` can therefore only become `true` on
+   *  a SETTLED render, where `methodPick` and the flags it is judged against
+   *  are always from the same commit, transitional or not.
+   *
+   *  Two earlier guards were tried and rejected here, in order: an identity-
+   *  ref `pickSettled` guard (42e6c6c3) that no mutation could be made to
+   *  fail, and a boolean hand-off ref between this effect and the reset
+   *  effect (round-1 audit fix, 2026-09-14) that a round-2 audit found could
+   *  get stuck `true` and swallow a later, unrelated, genuinely-real clear —
+   *  or, when the mixed and settled renders happened to agree, never fire at
+   *  all and drop a genuinely-stale restored pick instead of merely delaying
+   *  it. Both failed because they tried to suppress this effect for one
+   *  render rather than removing the bad reading at its source. Comparing
+   *  against `prevContractRef.current` fixes the SOURCE, so this effect
+   *  needs no guard, no ref, and no memory between renders at all — it is
+   *  the same effect `estimateIsFresh`'s own comments already describe:
+   *  "a guard no test can fail is not a guard."
+   *
+   *  A boolean, not the option object, so the effect does not re-fire on every
+   *  render just because `methodPickOptions` is a fresh array. */
+  const pickedOption = methodPick
+    ? methodPickOptions.find((o) => o.method === methodPick.method) ?? null
+    : null;
+  const pickedMethodGone = methodPick != null
+    && (pickedOption == null || pickedOption.unavailable != null);
+
+  const applyMethodPickRef = useRef(applyMethodPick);
+  useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
+  useEffect(() => {
+    // Clearing sets `methodPick` to null, which makes `pickedMethodGone` false
+    // on the next render, so this cannot loop.
+    if (pickedMethodGone) applyMethodPickRef.current(null);
+  }, [pickedMethodGone]);
 
   const stockBars = [
     { label: 'Trend',     value: data.stockBreakdown.trend,     detailText: trendDetailText(data.stockBreakdown.trendDetail) },
@@ -2644,6 +2895,18 @@ export function TradeCard({
             />
           </div>
           <div className={styles.scoreCardBody}>
+            {/* Phase G piece 5 (§6.1) — ABOVE the body, so the decision sits
+                 over the numbers it is about. `lastRunMethod` below is
+                 UNTOUCHED and still decides which method's numbers are
+                 DISPLAYED before a pick exists (§6.1, §9.4): the two answer
+                 different questions ("what ran last" vs "what did the trader
+                 choose"), and the fallback is what a trader sees before
+                 picking. */}
+            <MethodPickSelector
+              options={methodPickOptions}
+              pick={methodPick}
+              onChange={applyMethodPick}
+            />
             {lastRunMethod === 'arithmetic' && exitPlan && (
               <>
                 <Text size={11} tone="dim">computed via: Arithmetic, {formatHHMM(exitPlan.computedAt)}</Text>

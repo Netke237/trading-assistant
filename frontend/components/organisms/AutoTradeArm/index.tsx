@@ -7,8 +7,9 @@ import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
-import { checkInvalidation, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
-import type { TradeCardData } from '@/types/domain';
+import { armPickedFieldsFrom } from '@/lib/cardEdits';
+import { checkInvalidation, MISSING_INVALIDATION_TITLE, checkMethodPick, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
+import type { TradeCardData, MethodPick } from '@/types/domain';
 import styles from './AutoTradeArm.module.css';
 
 interface AutoTradeArmProps {
@@ -20,7 +21,14 @@ interface AutoTradeArmProps {
    *  body, and the backend re-fires whatever ArmedStrategy (quantity
    *  included) was captured earlier by /auto-trade/arm. A later Contracts
    *  edit will NOT retroactively change what "Fire now" submits once armed —
-   *  this is auto-trade's own existing design, out of scope to change here. */
+   *  this is auto-trade's own existing design, out of scope to change here.
+   *
+   *  PHASE G PIECE 5, BUILD STEP 5 (§8): the METHOD PICK is captured at arm on
+   *  exactly the same terms, and it is the same sentence for the same reason —
+   *  `handleArm` posts `methodPick` below, `fire_now()` takes no body, so a
+   *  later change on the card does not retroactively change what "Fire now"
+   *  records. Q2 ("the pick is frozen at arm time") is this behaviour, not a
+   *  new one added for it. */
   contracts?: number;
   /** Piece 4 — the card's premium stop as a DOLLAR loss per share, sourced at
    *  the call site from the same `premiumStopDollarFor` both send paths use, so
@@ -79,6 +87,25 @@ interface AutoTradeArmProps {
    *  meaning for the same word, so a caller with no overlay to consult can omit
    *  it and still be gated on something real. */
   resolvedInvalidation?: number | null;
+  /** Phase G piece 5, build step 4 (§7.1) — the trader's explicit method pick
+   *  for this card, resolved by the caller exactly as step 7's `methodPickFor`
+   *  does (keyed by contract through `editKeyFor`). Unlike `resolvedInvalidation`
+   *  there is no card-level fallback to fall back to: `MethodPick` is not a
+   *  field `TradeCardData` carries (§9.4), so `undefined`/`null` both mean "no
+   *  pick" rather than "inherit the card's own value".
+   *
+   *  Why this control needed the check at the time step 4 added it, BEFORE §8
+   *  wired the pick onto the arm request: the same reasoning
+   *  `resolvedInvalidation`'s doc gives — a gate on the other paths with Arm
+   *  left open does not close the hole, it relabels it.
+   *
+   *  BUILD STEP 5 HAS SINCE WIRED IT. The same value this gates on is now also
+   *  POSTED, through `armPickedFieldsFrom` in `handleArm` below, so the prop
+   *  has two jobs rather than one and they read the same field. It is still
+   *  the gate that makes the payload reliable and not the other way round:
+   *  `pickMissing` early-returns above the request, so the all-null shape the
+   *  mapping can produce is unreachable from this button. */
+  methodPick?: MethodPick | null;
   /** The live option mid, fetched by the page (`liveQuote?.price`) -- the same
    *  number it already hands TradeCard as `liveMid` and prints as "Live mid".
    *
@@ -104,7 +131,7 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -140,6 +167,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    * card is null too) and matching the established idiom is worth more than a
    * second, subtly different one. */
   const stopMissing = !checkInvalidation(resolvedInvalidation ?? card.exit.invalidation);
+  /* Phase G piece 5, build step 4 (§7.1) — same treatment `stopMissing` gets,
+   * one prop along. No card-level fallback exists to `??` against (see the
+   * `methodPick` prop doc), so this reads the prop alone. */
+  const pickMissing = !checkMethodPick(methodPick);
   /* NOTE: the disclosure is the CALLER'S, not this component's, and that is a
    * choice rather than an omission. Rendering the refusal sentence here too put
    * it on screen TWICE in one column -- step 7 already prints it a few rows
@@ -163,6 +194,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     // step 7's two direct handlers and SendToBrokerDialog.submit(): `disabled`
     // protects the button, this protects the REQUEST.
     if (stopMissing) return;
+    // Phase G piece 5, build step 4 (§7.1) — same belt-and-braces shape as
+    // the check immediately above, on the same reading `pickMissing` was
+    // derived from.
+    if (pickMissing) return;
     setWorking(true); setError(null);
     try {
       await api.armAutoTrade({
@@ -191,6 +226,18 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // frontend and backend exposure/daily-loss gates silently disagree on the same
         // armed trade (see commit 003040c for the same bug in portfolioStore.ts).
         portfolio_value: useRiskStore.getState().limits.portfolioValue,
+        // Phase G piece 5, build step 5 (§8) — the pick, frozen at arm. SPREAD,
+        // not five hand-written keys, and snake_case rather than the portfolio
+        // path's camelCase: see `armPickedFieldsFrom`'s own doc for why the two
+        // mappings exist separately.
+        //
+        // Reached only with a pick in hand: `pickMissing` above early-returns
+        // before this line, so in practice the all-null shape is unreachable
+        // from this button. It is still spelled explicitly rather than
+        // conditionally spread, because "no pick" is a real state on this
+        // endpoint (a pre-G client, a direct API call) and the schema must go on
+        // accepting it as one.
+        ...armPickedFieldsFrom(methodPick ?? null),
       });
       setArmed(true);
     } catch (e) {
@@ -247,8 +294,12 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         <div className={styles.armRow}>
           {!armed ? (
             <button type="button" className={`${styles.btn} ${styles.btnArm}`}
-              onClick={handleArm} disabled={!broker || working || stopMissing}
-              title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}>
+              onClick={handleArm} disabled={!broker || working || stopMissing || pickMissing}
+              title={
+                stopMissing ? MISSING_INVALIDATION_TITLE
+                : pickMissing ? MISSING_METHOD_PICK_TITLE
+                : undefined
+              }>
               {working ? 'Arming…' : `Arm — ${card.symbol} ${card.direction}`}
             </button>
           ) : (

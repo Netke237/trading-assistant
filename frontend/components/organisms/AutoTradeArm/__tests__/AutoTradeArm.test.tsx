@@ -4,7 +4,18 @@ import { AutoTradeArm } from '@/components/organisms/AutoTradeArm';
 import { useRiskStore } from '@/lib/riskStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
-import type { TradeCardData } from '@/types/domain';
+import type { TradeCardData, MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — every render below must supply a pick, or
+// the new `pickMissing` gate disables Arm regardless of what each test is
+// actually isolating (the same reason SendToBrokerDialog's suite needed one).
+const pick = (): MethodPick => ({
+  method: 'monte_carlo',
+  rowStockPrice: 197.5,
+  rowOptionPrice: 6.24,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -53,7 +64,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
   });
 
   it('handleArm posts the riskStore-configured portfolio_value, not the backend default', async () => {
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -70,7 +81,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     // $1.00 of a $2.50 mid = 0.40. Derived against entry_premium specifically:
     // anchoring it to any other premium is the bug piece 4's router fix exists
     // to prevent.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} />);
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -82,7 +93,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
   it('omits the premium stop entirely when the card carries none, so the auto-trader inherits the global', async () => {
     // undefined, not null: ArmRequest.premium_stop_pct is Optional with a None
     // default, and omitting is what "inherit" means on that endpoint.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -93,7 +104,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
   it('omits a stop at or above the whole premium rather than sending a fraction the schema rejects', async () => {
     // A total loss is unreachable-by-definition rather than a stop, and the
     // endpoint's bound is lt=1 — sending 1.0 would 422 the arm.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={2.5} />);
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={2.5} methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -113,7 +124,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     //   stale -> entry 2.50, pct 0.400  (gate books 2.4x too little risk)
     //   live  -> entry 6.00, pct 0.1667
     render(
-      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={6.0} />,
+      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={6.0} methodPick={pick()} />,
     );
     fireEvent.click(screen.getByText(/^Arm —/));
 
@@ -128,7 +139,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     // The prop is additive: a page that has not fetched a quote yet behaves
     // exactly as it did before.
     render(
-      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={null} />,
+      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={null} methodPick={pick()} />,
     );
     fireEvent.click(screen.getByText(/^Arm —/));
 
@@ -138,7 +149,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
 
   it('reflects an already-armed backend state after reload', async () => {
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({ armed: true });
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
 
     await waitFor(() => expect(screen.getByText('Armed — waiting for next trigger')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Disarm' })).toBeInTheDocument();
@@ -169,7 +180,7 @@ describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () 
   const noStopCard = { ...mockCard, exit: { ...mockCard.exit, invalidation: null } } as TradeCardData;
 
   it('disables Arm and posts NOTHING when the resolved stop is null', async () => {
-    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={null} />);
+    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={null} methodPick={pick()} />);
     const arm = screen.getByText(/^Arm —/).closest('button')!;
     expect(arm).toBeDisabled();
 
@@ -185,7 +196,7 @@ describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () 
     // `card.exit.invalidation` implementation fails: typing a stop is the
     // single gesture that fixes a restored candidate, and the caller resolves
     // it exactly as every send path does.
-    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={185} />);
+    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={185} methodPick={pick()} />);
     const arm = screen.getByText(/^Arm —/).closest('button')!;
     expect(arm).toBeEnabled();
 
@@ -199,11 +210,130 @@ describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () 
     // `undefined` means "no overlay to consult", not "no gate" -- the same
     // contract `checkTradeRisk.resolvedInvalidation` documents. A card with no
     // stop is still refused; the ordinary card is still armable.
-    const { unmount } = render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" />);
+    const { unmount } = render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" methodPick={pick()} />);
     expect(screen.getByText(/^Arm —/).closest('button')!).toBeDisabled();
     unmount();
 
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     expect(screen.getByText(/^Arm —/).closest('button')!).toBeEnabled();
+  });
+});
+
+/* Phase G piece 5, build step 4 (§7.1, O4). Same treatment `stopMissing` gets,
+ * one prop along — see the `methodPick` prop's own doc on AutoTradeArmProps
+ * for why this control needed the check at all at the time step 4 added it,
+ * before build step 5 (arming) wired the pick onto the request. Step 5 has
+ * since wired it; the block below this one covers the payload half. */
+describe('AutoTradeArm — refuses to arm a card with no method pick (spec test 9, O4)', () => {
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it('disables Arm and posts NOTHING when no methodPick is supplied', async () => {
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    const arm = screen.getByText(/^Arm —/).closest('button')!;
+    expect(arm).toBeDisabled();
+
+    fireEvent.click(arm);
+    await Promise.resolve();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('arms normally once a pick is supplied', async () => {
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    const arm = screen.getByText(/^Arm —/).closest('button')!;
+    expect(arm).toBeEnabled();
+
+    fireEvent.click(arm);
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+  });
+});
+
+/* Phase G piece 5, BUILD STEP 5 (§8, arming) — the payload half of O4.
+ *
+ * Step 4 made this control REFUSE an unpicked card. Step 4 did not make it
+ * SEND anything, and the send-path wiring gap closed at c41145ba is the
+ * standing proof that those are two separate defects: seven other paths passed
+ * their gate cleanly for a whole build step while writing `picked_method =
+ * NULL` on every position they created. This block is the same check applied
+ * to the eighth path before it can repeat it. */
+describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, §8)', () => {
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it('posts all five picked_* fields, snake_case, from the supplied pick', async () => {
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.picked_method).toBe('monte_carlo');
+    expect(payload.picked_row_stock_price).toBe(197.5);
+    expect(payload.picked_row_option_price).toBe(6.24);
+    expect(payload.picked_stop_basis).toBe('stock');
+    expect(payload.picked_at).toBe('2026-09-14T10:00:00.000Z');
+  });
+
+  it('posts snake_case keys and NOT the portfolio path\'s camelCase ones', async () => {
+    // THIS TEST IS THE ONLY GUARD, which is why it asserts the absence rather
+    // than trusting the presence assertions above it. Sending camelCase here
+    // fails SILENTLY at both ends: `ArmRequest` inherits pydantic's
+    // `extra='ignore'` (measured — a camelCase body returns 200 and arms with
+    // all five NULL), and on this side `tsc --noEmit` stays silent too, because
+    // spreading the wrong mapping into an object literal bypasses TS's
+    // excess-property check. `POST /api/portfolio` takes the camelCase
+    // spelling, this endpoint does not, and one mapping serving both is how
+    // that gets confused — into an armed trade whose pick was discarded.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload).not.toHaveProperty('pickedMethod');
+    expect(payload).not.toHaveProperty('pickedRowStockPrice');
+    expect(payload).not.toHaveProperty('pickedRowOptionPrice');
+    expect(payload).not.toHaveProperty('pickedStopBasis');
+    expect(payload).not.toHaveProperty('pickedAt');
+  });
+
+  it('puts the premium and the underlying in their own named slots', async () => {
+    // THE UNITS TEST on this path. The two numbers are far apart on purpose:
+    // only `picked_row_stock_price` may ever seed `resolved_tp_price`, and a
+    // $6.24 premium landing there makes `price >= 6.24` true on the first tick.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.picked_row_stock_price).not.toBe(6.24);
+    expect(payload.picked_row_option_price).not.toBe(197.5);
+  });
+
+  it('sends the row prices a barrier-race pick leaves null as null, not as 0', async () => {
+    // A `?? 0` anywhere in the mapping would pass the `gt=0` bound as a 422
+    // rather than as a stored zero — so this fails LOUDLY on the wire rather
+    // than silently. It is still wrong here: null means "this method quotes no
+    // level in that space", and 0 means a price of zero.
+    const racePick: MethodPick = {
+      method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 7.1,
+      stopBasis: 'premium', pickedAt: '2026-09-14T11:00:00.000Z',
+    };
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={racePick} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.picked_method).toBe('barrier_race');
+    expect(payload.picked_row_stock_price).toBeNull();
+    expect(payload.picked_row_option_price).toBe(7.1);
   });
 });

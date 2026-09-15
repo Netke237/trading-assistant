@@ -2,11 +2,28 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
+import { emptyCardEdits } from '@/lib/cardEdits';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
-import type { TradeCardData } from '@/types/domain';
+import type { TradeCardData, MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — this suite is about the edited-field sync
+// paths, not the method-pick gate, so every fixture below stamps a satisfied
+// pick for every contract key it sends through (base AAA/BBB, and the two
+// user-overridden contracts the "never shows... quote" test switches to) or
+// the new `pickMissing` check leaves every send path disabled regardless of
+// what these tests exercise. `ladder`, not `monte_carlo`: Ladder is the only
+// method available with no run, so it is the only pick that survives
+// TradeCard's own "clear a stale pick" reset effect with no estimate fetched.
+const pick = (): MethodPick => ({
+  method: 'ladder',
+  rowStockPrice: 160,
+  rowOptionPrice: null,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 /*
  * The card's edits have to REACH the order. Piece 4 threaded the Premium stop
@@ -99,7 +116,19 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     localStorage.clear();
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        // Phase G piece 5: the three edit caches this file exercises now live in
+        // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
+        // has to carry the `scan_id` the real type has always declared required
+        // — without one there is no stamp, and every edit is dropped. The slices
+        // are reset here too: they used to die with the page's useState hooks on
+        // unmount, and a persisted store does not.
+        optionsCardEdits: {
+          ...emptyCardEdits(),
+          scanId: 'test-scan',
+          picks: { 'AAA|150|2026-05-15|C': pick(), 'BBB|155|2026-05-15|C': pick() },
+        },
+        stocksCardEdits: emptyCardEdits(),
         pickedContracts: {},
         contractsBySymbol: {},
         scanOverrides: {},
@@ -162,6 +191,79 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     const [pos] = usePortfolioStore.getState().positions;
     expect(pos.stop).toBe(132);
     expect(pos.stop).not.toBe(CARD_INVALIDATION);
+  });
+
+  it('a new scan empties the slice AND resets the card, so the two cannot disagree', async () => {
+    /* PHASE G piece 5, build step 2 — THE GUARD DEVIATION 3 RESTS ON.
+     *
+     * The `[scanResult]` effect no longer clears the edit caches; the scan
+     * stamp does that. What the effect still does is bump `scanEpoch`, which
+     * reaches TradeCard as `resetKey` and makes the card rebuild its overlay.
+     * Step 2's audit found that bump was pinned by NOTHING: deleting it left
+     * all 24 step-7 tests green.
+     *
+     * It sits directly on the display-vs-send axis. Without it the store's
+     * slice empties on the new scan while the card keeps rendering the value
+     * typed against the OLD one — the user reads $2.71, the order carries
+     * $2.50. That is the disagreement step 7 spent four rounds closing, and
+     * the reason this test asserts BOTH halves in one run: the number on the
+     * screen and the number on the wire, after the same scan lands.
+     *
+     * The second scan reuses the same candidates on purpose. A different card
+     * would reset the overlay through the `data.symbol`/`data.contract` branch
+     * and prove nothing about `resetKey`. */
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    editField('Limit', String(CARD_LIMIT), '2.71');
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71'));
+
+    // A NEW scan lands while the page is mounted — same candidates, new id, so
+    // only the stamp has moved.
+    act(() => {
+      useScanStore.setState({
+        scanResult: {
+          scan_id: 'test-scan-2',
+          timestamp: '2026-09-14T11:00:00',
+          candidates: [makeCard('AAA'), makeCard('BBB')],
+        } as any,
+      } as any);
+    });
+
+    // HALF ONE — the screen falls back with the store.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent(String(CARD_LIMIT)),
+    );
+    // The slice is still physically present; it is the STAMP that hides it.
+    expect(useScanStore.getState().optionsCardEdits.entryLimit).toEqual({ 'AAA|150|2026-05-15|C': 2.71 });
+
+    // Phase G piece 5, build step 4 — the OLD stamp's pick is gone the same
+    // way its entryLimit just was (§7.4: a pick from a previous scan is not
+    // "old", it is GONE), so the trader has to pick again under the new scan
+    // before either send path unblocks. This is a fresh write under the
+    // CURRENT stamp, exactly what a real re-pick click would produce — it is
+    // deliberately AFTER the raw-entryLimit assertion above, not folded into
+    // the scan-landing `setState`, so it cannot be mistaken for something the
+    // scan itself carries.
+    act(() => {
+      useScanStore.setState({
+        optionsCardEdits: {
+          ...emptyCardEdits(),
+          scanId: 'test-scan-2',
+          picks: { 'AAA|150|2026-05-15|C': pick(), 'BBB|155|2026-05-15|C': pick() },
+        },
+      });
+    });
+
+    // HALF TWO — and so does the wire. The button label is a promise about
+    // what the click will do, so it has to move too.
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.50/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+
+    await waitFor(() => expect(api.postOptionOrder as jest.Mock).toHaveBeenCalled());
+    expect((api.postOptionOrder as jest.Mock).mock.calls[0][0].limit_price).toBe(CARD_LIMIT);
   });
 
   it('leaves an UNTOUCHED invalidation on the card\'s own value', async () => {
@@ -419,7 +521,27 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     localStorage.clear();
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        // Phase G piece 5: the three edit caches this file exercises now live in
+        // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
+        // has to carry the `scan_id` the real type has always declared required
+        // — without one there is no stamp, and every edit is dropped. The slices
+        // are reset here too: they used to die with the page's useState hooks on
+        // unmount, and a persisted store does not.
+        optionsCardEdits: {
+          ...emptyCardEdits(),
+          scanId: 'test-scan',
+          picks: {
+            'AAA|150|2026-05-15|C': pick(), 'BBB|155|2026-05-15|C': pick(),
+            // The two user-overridden contracts the quote-leak test switches
+            // to — `editKeyFor` reads the EFFECTIVE (overridden) card once
+            // `pickedContracts` names one, so a pick keyed only to the base
+            // contract would leave that test's send gated on a key nothing
+            // ever writes to.
+            'AAA|160|2026-05-15|C': pick(), 'BBB|170|2026-05-15|C': pick(),
+          },
+        },
+        stocksCardEdits: emptyCardEdits(),
         pickedContracts: {}, contractsBySymbol: {}, scanOverrides: {},
       } as any);
       usePortfolioStore.setState({ positions: [], lastSyncError: null });
@@ -479,7 +601,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // premium-stop bounds. The quote is keyed to its contract now.
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
         // Both contracts USER-PICKED, which is what arms the dedup gate.
         // `pickedContracts` maps symbol -> contract ID and is resolved against
         // `contractsBySymbol`; the id must DIFFER from `card.contract` or
@@ -595,6 +717,19 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(basket.stop).toBe(132);
     expect(basket.premiumStopDollar).toBe(0.9);
     expect(basket.stop).not.toBe(CARD_INVALIDATION);
+    // Confirmed gap as of build step 4: the send gate blocked an UNPICKED
+    // send on both paths, but nothing carried a MADE pick's values onto
+    // either `positionFromOrder` (basket) or `buildPaperPosition` (direct) —
+    // a real send on either path silently discarded the fixture's `pick()`
+    // regardless of the gate passing.
+    expect(basket.pickedMethod).toBe(direct.pickedMethod);
+    expect(direct.pickedMethod).toBe('ladder');
+    expect(basket.pickedRowStockPrice).toBe(direct.pickedRowStockPrice);
+    expect(direct.pickedRowStockPrice).toBe(160);
+    expect(basket.pickedStopBasis).toBe(direct.pickedStopBasis);
+    expect(direct.pickedStopBasis).toBe('stock');
+    expect(basket.pickedAt).toBe(direct.pickedAt);
+    expect(direct.pickedAt).toBe('2026-09-14T10:00:00.000Z');
   });
 
   it('does NOT claim an UNTOUCHED basket stop was user-set', async () => {

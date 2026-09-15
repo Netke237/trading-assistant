@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
+import { MethodPickSelector } from '@/components/molecules/MethodPickSelector';
+import type { MethodPickOption } from '@/components/molecules/MethodPickSelector';
+import type { MethodPick } from '@/types/domain';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
+import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { winRateTooltip } from '@/lib/statusTooltips';
@@ -363,6 +368,137 @@ export function StockPositionCard({
   const structuralReq = useRef<AbortController | null>(null);
   const planReq       = useRef<AbortController | null>(null);
 
+  // ─── Phase G piece 5 (D4/D5) — the per-trade method pick ───────────────────
+  //
+  // Spec §6.3. NO PROP PAIR, unlike TradeCard: this card holds its own state
+  // and sends from inside itself, so it reads and writes the store directly.
+  // KEYED BY SYMBOL because stocks mode has no contract — the same reason every
+  // other stocks-mode edit is symbol-keyed.
+  //
+  // `selectCardEdits`, never `state.stocksCardEdits`: the selector returns an
+  // EMPTY slice when the slice's stamp does not match the scan currently in the
+  // store, which is what stops last scan's pick from being sent with this
+  // scan's numbers. Stocks mode has no contract-switch reset of its own
+  // (TradeCard's is options-only), so that stamp is the ONLY thing standing
+  // between a stale pick and a position — §7.4 says so in as many words.
+  const stocksPicks   = useScanStore((st) => selectCardEdits(st, 'stocks').picks);
+  const setCardEdit   = useScanStore((st) => st.setCardEdit);
+  const clearCardPick = useScanStore((st) => st.clearCardPick);
+  const methodPick    = stocksPicks[card.symbol] ?? null;
+  // Phase G piece 5, build step 4 (§7.2, S1/S2). Stocks mode had no pre-send
+  // refusal of any kind before this — this is that gate's own local reading,
+  // same shape as step 7's `pickMissing`.
+  const pickMissing   = !checkMethodPick(methodPick);
+  // READ FROM THE STORE, NOT MIRRORED INTO LOCAL STATE, and that buys a
+  // property the typed-price fields do not have. `lib/stockScan.ts` sets
+  // `stockScanResult` to null for the DURATION of every stock scan, so a click
+  // landing in that window has no stamp to write under and `writeCardEdit`
+  // drops it (G2-6). Because the radio's checked state comes from the store and
+  // not from a local copy, a dropped write simply does not light the button up:
+  // the user sees nothing happen and clicks again. Compare `writeCardEdit`'s own
+  // note, where the same drop on a TYPED PRICE leaves the card showing $2.71
+  // while the order carries $2.50 — there the safety is unreachability, here it
+  // is visibility. Mirroring the pick into `useState` to make the click feel
+  // instant would trade that away.
+  const applyMethodPick = useCallback((next: MethodPick | null) => {
+    if (next) setCardEdit('stocks', 'picks', card.symbol, next);
+    else clearCardPick('stocks', card.symbol);
+  }, [setCardEdit, clearCardPick, card.symbol]);
+
+  /** THREE OPTIONS, NOT FOUR (§6.3). There is no Barrier Race here: the race
+   *  is a contest between an option's premium stop and the underlying's stock
+   *  stop, and a stock position has only one of those.
+   *
+   *  EVERY ROW IS STOCK SPACE, so `rowOptionPrice` is null on all of them. That
+   *  is not a simplification of §6.1's table — it is what the table says for a
+   *  card with no premium anywhere on it, and it means a stocks pick can always
+   *  seed `resolved_tp_price` (§4.3) where a Barrier Race pick never can. */
+  const methodPickOptions = useMemo<MethodPickOption[]>(() => [
+    {
+      // Always selectable — the ladder is the card's own editable T1/T2/T3 and
+      // needs no fetch. These are `overlay` values, not `card.strategy.targets`,
+      // so the pick records the rows the user has edited and is about to send.
+      method: 'ladder' as const,
+      label: 'Ladder',
+      unavailable: null,
+      rows: ([
+        { key: 'T1', price: overlay.t1 },
+        { key: 'T2', price: overlay.t2 },
+        { key: 'T3', price: overlay.t3 },
+      ]).map((r) => ({
+        key: r.key, label: r.key, displayPrice: r.price,
+        rowStockPrice: r.price, rowOptionPrice: null,
+      })),
+    },
+    {
+      method: 'arithmetic' as const,
+      label: 'Arithmetic',
+      unavailable: plan ? null : 'Run Arithmetic plan first',
+      rows: (plan?.targets ?? []).map((t) => ({
+        key: `arith-${t.rrRatio}`,
+        label: `${t.rrRatio}R`,
+        displayPrice: t.price,
+        rowStockPrice: t.price,
+        rowOptionPrice: null,
+      })),
+    },
+    {
+      // `estimate` is cleared by `patch` on any edit to entry/stop/T1/T2/T3 and
+      // by the symbol reset, so "present" already means "computed against the
+      // numbers on screen". That is this card's equivalent of TradeCard's
+      // `estimateIsFresh`, and it is enforced by the clearing rather than by a
+      // flag.
+      method: 'monte_carlo' as const,
+      label: 'Monte Carlo',
+      unavailable: estimate ? null : 'Run Estimate first',
+      rows: (estimate?.targets ?? []).map((t, i) => ({
+        key: `mc-${i}`,
+        label: `T${i + 1}`,
+        displayPrice: t.price,
+        rowStockPrice: t.price,
+        rowOptionPrice: null,
+      })),
+    },
+  ], [overlay.t1, overlay.t2, overlay.t3, plan, estimate]);
+
+  /** §6.1's clear rule, in the same shape TradeCard states it — read that
+   *  file's note for the argument, including why `??` cannot be used to fold
+   *  "no such option" together with "available".
+   *
+   *  THE SETTLING HAZARD IS REAL HERE AND IS STILL NOT GUARDED, which needs
+   *  saying because it is the opposite call from the one the shape suggests.
+   *  Unlike TradeCard, this card reads `methodPick` straight out of the store,
+   *  so on the commit that switches symbols the pick is ALREADY the new
+   *  symbol's while `plan`/`estimate` still hold the old symbol's — the two
+   *  halves of this decision genuinely come from different commits.
+   *
+   *  It cannot produce a wrong clear today, and the proof is short enough to
+   *  keep: a clear is only WRONG if the method would have been available once
+   *  the reset settled. The symbol-change effect above sets `plan` and
+   *  `estimate` to null unconditionally and this card caches neither, so after
+   *  any switch Arithmetic and Monte Carlo are both unavailable and a pick
+   *  naming either is cleared regardless of what the transition commit decided.
+   *  Ladder is the only method left, and it is available in EVERY commit. So
+   *  the two paths agree on every input, and a `pickSettled` guard written here
+   *  survived every mutation — by this codebase's standard, not a guard.
+   *
+   *  WHAT WOULD BRING IT BACK: caching `plan` or `estimate` per symbol, the way
+   *  TradeCard's parent caches `exitPlanByContract`. The moment a restored plan
+   *  can be present after a switch, the transition commit can say "unavailable"
+   *  about a method that is about to be available, and the clear becomes a
+   *  wrong one. Re-read this note before adding that cache. */
+  const pickedOption = methodPick
+    ? methodPickOptions.find((o) => o.method === methodPick.method) ?? null
+    : null;
+  const pickedMethodGone = methodPick != null
+    && (pickedOption == null || pickedOption.unavailable != null);
+
+  const applyMethodPickRef = useRef(applyMethodPick);
+  useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
+  useEffect(() => {
+    if (pickedMethodGone) applyMethodPickRef.current(null);
+  }, [pickedMethodGone]);
+
   // Abort anything still in flight when the card unmounts, so a late resolve
   // cannot setState on an unmounted component.
   useEffect(() => () => {
@@ -386,6 +522,10 @@ export function StockPositionCard({
 
   async function submit(orderType: 'LMT' | 'MKT') {
     if (execMode === 'recommendation' || orderId !== null) return;
+    // Phase G piece 5, build step 4 (§7.2, S1) — belt-and-braces beside the
+    // button's own `disabled`, on the same reading `pickMissing` was derived
+    // from. Same shape as step 7's direct-send handlers.
+    if (pickMissing) return;
     setPlacingType(orderType);
     setErr(null);
     setWarning(null);
@@ -424,6 +564,11 @@ export function StockPositionCard({
           source: 'broker',
           sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
           orderedAt: new Date().toISOString(),
+          // Phase G (piece 5) — confirmed gap as of build step 4: the send
+          // gate blocked an unpicked send but nothing carried a made pick's
+          // VALUE into the created position. `methodPick` is this card's own
+          // local pick state (synced from stocksCardEdits.picks).
+          ...pickedFieldsFrom(methodPick),
         });
         if (addRes.status === 'rejected' || addRes.status === 'pending') {
           setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
@@ -551,6 +696,9 @@ export function StockPositionCard({
 
   async function onAddToPortfolio() {
     if (adding || added || queued) return; // guards against a double-click firing two adds
+    // Phase G piece 5, build step 4 (§7.2, S2) — same gate `submit()` above
+    // carries, belt-and-braces beside this button's own `disabled`.
+    if (pickMissing) return;
     // stockPositionLevels() silently DROPS a target on the wrong side of entry —
     // a fat-fingered T1/T2/T3 (EditableField has no side check) would otherwise
     // lose that rung, and the shares allocated to it, from the sell-to-close
@@ -576,8 +724,8 @@ export function StockPositionCard({
       // fire on. The pristine signal rides along inside the snapshot for the audit
       // trail. stockPositionLevels() drops anything non-positive or on the wrong
       // side of entry, so a half-edited overlay can never send a 0 stop.
-      const res = await addPosition(
-        buildPaperStockPosition(
+      const res = await addPosition({
+        ...buildPaperStockPosition(
           card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
           stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
             entry: overlay.entry,
@@ -599,7 +747,9 @@ export function StockPositionCard({
             structuralStop: structural?.price ?? null,
           },
         ),
-      );
+        // Phase G (piece 5) — same confirmed send-path gap as submit() above.
+        ...pickedFieldsFrom(methodPick),
+      });
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');
         return;
@@ -1054,6 +1204,16 @@ export function StockPositionCard({
 
       <FundamentalHealthCard f={card.fundamentals} />
 
+      {/* Section 2d — Phase G piece 5 (§6.3): which exit method this trade is
+           being taken on. Placed directly above the actions, after all three
+           methods' numbers, because it is a decision ABOUT those numbers and
+           the send paths are what read it. THREE options, no Barrier Race. */}
+      <MethodPickSelector
+        options={methodPickOptions}
+        pick={methodPick}
+        onChange={applyMethodPick}
+      />
+
       {/* Section 3 — Action buttons */}
       <div className={styles.actionRow}>
         <a
@@ -1075,13 +1235,19 @@ export function StockPositionCard({
           type="button"
           className={styles.actionBtn}
           onClick={onAddToPortfolio}
-          disabled={added || adding || queued}
+          disabled={added || adding || queued || pickMissing}
+          title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
         >
           <Text size={12}>
             {added ? 'Added to Portfolio' : queued ? 'Queued — will sync' : adding ? 'Adding…' : 'Add to Portfolio'}
           </Text>
         </button>
       </div>
+      {pickMissing && (
+        <Text size={11} tone="reject">
+          {MISSING_METHOD_PICK_MESSAGE}
+        </Text>
+      )}
 
       {/* Section 4 — Broker mode selector */}
       <div className={styles.modeRow}>
@@ -1112,7 +1278,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('LMT')}
-            disabled={placingType !== null || orderId !== null}
+            disabled={placingType !== null || orderId !== null || pickMissing}
+            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}</Text>
           </button>
@@ -1120,7 +1287,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('MKT')}
-            disabled={placingType !== null || orderId !== null}
+            disabled={placingType !== null || orderId !== null || pickMissing}
+            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'MKT' ? 'Placing…' : 'Market Order'}</Text>
           </button>

@@ -3,8 +3,24 @@ import { render, screen, act, fireEvent, waitFor } from '@testing-library/react'
 import { StockSendDialog } from '@/components/organisms/StockSendDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
+import type { MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 (§7.2, S4) — this suite is about basket
+// send/retry mechanics, not the method-pick gate, so every fixture stamps a
+// satisfied pick for every symbol used across these tests or the new
+// `hasMissingMethodPick` check leaves Submit disabled regardless of what
+// these tests exercise (see StockSendDialog.methodPickGate.test.tsx for the
+// gate's own tests).
+const pick = (): MethodPick => ({
+  method: 'monte_carlo',
+  rowStockPrice: 197.5,
+  rowOptionPrice: 6.24,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -51,6 +67,13 @@ describe('StockSendDialog — partial basket failure retry', () => {
       useSettingsStore.setState((s) => ({
         ibkrPaper: { baseUrl: 'https://localhost:7499/v1/api', accountId: 'ACC' },
       }));
+      useScanStore.setState({
+        stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+        stocksCardEdits: {
+          scanId: 'stk-1', picks: { AAPL: pick(), MSFT: pick(), NVDA: pick() },
+          invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+        },
+      });
     });
   });
 

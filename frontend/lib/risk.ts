@@ -10,6 +10,8 @@ import type {
   RiskCheckResult,
   MaxLossOverride,
   StopCostOut,
+  MethodPick,
+  PickedMethod,
 } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import { worstStatus, STATUS_LABEL } from '@/lib/status';
@@ -297,6 +299,37 @@ export function checkInvalidation(invalidation: number | null | undefined): bool
 
 export const hasInvalidation = checkInvalidation;
 
+/* ── The missing-method-pick refusal (Phase G piece 5, build step 4) ───────
+ *
+ * Spec §7.4 — "an explicit pick" means a `MethodPick` exists for the key
+ * being sent and its `method` is one of the four values. A pick made for a
+ * different contract, or cleared by a staleness reset, is absent and blocks;
+ * so is a pick from a previous scan, since §5's reader returns an empty
+ * slice on a `scan_id` mismatch — a stale pick is not "old", it is GONE.
+ *
+ * The set-membership check (rather than a bare `pick != null`) is defensive
+ * against a corrupted/pre-G localStorage blob reaching this far: `method` is
+ * typed as `PickedMethod` and can never legitimately be anything else, but a
+ * restored value is not "trust the type", it is "trust what was on disk".
+ *
+ * NEITHER PRICE FIELD BLOCKS. Not `rowStockPrice` — Barrier Race never has
+ * one (§4.1) and blocking on it would make the race unpickable. Not
+ * `rowOptionPrice` — Ladder and Arithmetic never have one. A missing price is
+ * not a missing DECISION: it degrades the `active_tp_method` seed to
+ * `('ladder', NULL)` per §4.3's precondition, a state all three consumers
+ * already agree on. */
+const VALID_PICKED_METHODS: ReadonlySet<PickedMethod> = new Set([
+  'arithmetic', 'monte_carlo', 'ladder', 'barrier_race',
+]);
+
+export function checkMethodPick(pick: MethodPick | null | undefined): boolean {
+  return pick != null && VALID_PICKED_METHODS.has(pick.method);
+}
+
+export const MISSING_METHOD_PICK_TITLE = 'Method pick required';
+export const MISSING_METHOD_PICK_MESSAGE =
+  'Method pick required — choose which method this trade is judged on before submitting.';
+
 /* ── The missing-invalidation refusal, said once ───────────────────────────
  *
  * DIRECT-SEND-STOP-GATE-2026-09-09. Three surfaces refuse a card whose
@@ -485,6 +518,13 @@ export function checkTradeRisk(
    *  `undefined` to fall back to the card, which is what every caller with no
    *  overlay to consult should do. */
   resolvedInvalidation?: number | null,
+  /** Phase G piece 5, build step 4 (§7.1) — the trader's explicit method
+   *  pick for this card, resolved by the caller exactly as `resolvedInvalidation`
+   *  is: step 7's `methodPickFor`, keyed by contract through `editKeyFor`.
+   *  `undefined`/`null` alike mean no pick, since `MethodPick` has no
+   *  card-level fallback the way invalidation falls back to `card.exit.*` —
+   *  a pick is a decision a human made, not a field the card seeds. */
+  methodPick?: MethodPick | null,
 ): RiskCheckResult {
   const reasons: string[] = [];
   let approved = true;
@@ -497,6 +537,11 @@ export function checkTradeRisk(
 
   if (!checkInvalidation(resolvedInvalidation ?? card.exit.invalidation)) {
     reasons.push('missing_invalidation');
+    approved = false;
+  }
+
+  if (!checkMethodPick(methodPick)) {
+    reasons.push('missing_method_pick');
     approved = false;
   }
 

@@ -3,7 +3,20 @@ import { render, screen, act } from '@testing-library/react';
 import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
-import type { TradeCardData } from '@/types/domain';
+import type { TradeCardData, MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — every render below must supply a pick for
+// each symbol in the basket, or the new `missing_method_pick` gate
+// short-circuits RiskSummary before the max-loss worst-offender block this
+// suite exists to test is ever reached (see the dialog's own `hasMissingMethodPick`
+// check, which renders ahead of `allClean`/the reasons stack).
+const pick = (): MethodPick => ({
+  method: 'monte_carlo',
+  rowStockPrice: 197.5,
+  rowOptionPrice: 6.24,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 // Reset the real (unmocked) stores this dialog reads from — same convention
 // as StockSendDialog.test.tsx — so an empty portfolio and the account
@@ -99,7 +112,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
       // lossAtStop = (50 - 1) * 100 * 1 = $4,900
     });
 
-    render(<SendToBrokerDialog cards={[aaa, bbb]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} onClose={noop} onSubmit={noop} />);
+    render(<SendToBrokerDialog cards={[aaa, bbb]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick(), BBB: pick() }} onClose={noop} onSubmit={noop} />);
 
     expect(screen.queryByText('Single trade exposure too high')).not.toBeInTheDocument();
     expect(screen.getByText(/Max loss at stop \(BBB\) ≈ \$4,900 \(limit \$3,750\)/)).toBeInTheDocument();
@@ -126,7 +139,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
       // lossAtStop = (2 - 1.5) * 100 * 1 = $50, well within the $3,750 limit.
     });
 
-    render(<SendToBrokerDialog cards={[aaa]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} onClose={noop} onSubmit={noop} />);
+    render(<SendToBrokerDialog cards={[aaa]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick() }} onClose={noop} onSubmit={noop} />);
 
     expect(screen.getByText('Within risk limits.')).toBeInTheDocument();
   });
@@ -140,7 +153,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
     const bbb = makeCard({ symbol: 'BBB' });
 
     const { rerender } = render(
-      <SendToBrokerDialog cards={[bbb]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} onClose={noop} onSubmit={noop} />,
+      <SendToBrokerDialog cards={[bbb]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ BBB: pick() }} onClose={noop} onSubmit={noop} />,
     );
     expect(screen.getByText(/Max loss at stop \(BBB\)/)).toBeInTheDocument();
 
@@ -150,11 +163,56 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
         contractsBySymbol={{}}
         overridesBySymbol={{ BBB: { mode: 'dollar', value: 5000 } }}
         invalidationBySymbol={{}}
+        methodPickBySymbol={{ BBB: pick() }}
         onClose={noop}
         onSubmit={noop}
       />,
     );
     expect(screen.getByText('Within risk limits.')).toBeInTheDocument();
     expect(screen.queryByText(/Max loss at stop \(BBB\)/)).not.toBeInTheDocument();
+  });
+});
+
+describe('SendToBrokerDialog — the method-pick gate (Phase G piece 5, build step 4, spec test 10)', () => {
+  const noop = () => {};
+
+  it('blocks submit when one basket card has no method pick, even though the other does', () => {
+    const aaa = makeCard({ symbol: 'AAA' });
+    const bbb = makeCard({ symbol: 'BBB' });
+
+    render(
+      <SendToBrokerDialog
+        cards={[aaa, bbb]}
+        contractsBySymbol={{}}
+        overridesBySymbol={{}}
+        invalidationBySymbol={{}}
+        methodPickBySymbol={{ AAA: pick() }}
+        onClose={noop}
+        onSubmit={noop}
+      />,
+    );
+
+    expect(screen.getByText(/Method pick required/)).toBeInTheDocument();
+    const submitBtn = screen.getByRole('button', { name: /Submit 2 orders/ });
+    expect(submitBtn).toBeDisabled();
+  });
+
+  it('does not block when every basket card carries a pick', () => {
+    const aaa = makeCard({ symbol: 'AAA' });
+    const bbb = makeCard({ symbol: 'BBB' });
+
+    render(
+      <SendToBrokerDialog
+        cards={[aaa, bbb]}
+        contractsBySymbol={{}}
+        overridesBySymbol={{}}
+        invalidationBySymbol={{}}
+        methodPickBySymbol={{ AAA: pick(), BBB: pick() }}
+        onClose={noop}
+        onSubmit={noop}
+      />,
+    );
+
+    expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
   });
 });

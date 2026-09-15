@@ -39,6 +39,25 @@ class PortfolioPositionModel(Base):
     resolved_tp_price = Column(Float, nullable=True)
     resolved_tp_updated_at = Column(DateTime(timezone=True), nullable=True)
     alert_overrides = Column(JSON, nullable=True, default=dict)
+    # Phase G (piece 5) — the trader's explicit method pick, recorded on the
+    # position at creation. NULLABLE, NO SERVER DEFAULT, NO BACKFILL, for the
+    # same reason premium_stop_pct above is: NULL is a real state — "opened
+    # before G, or opened by a path with no human in it" — and not a value
+    # waiting to be filled in. D11 requires existing open positions untouched,
+    # and the after-scan auto-executor (S5) is exempt from G's send gate and
+    # deliberately writes NULL here (PHASE-G-S5-EXEMPT-2026-09-14).
+    #
+    # The portfolio must render NULL as "—", NEVER as 'ladder'. These are the
+    # RECORD of what a human chose; active_tp_method above is the ALERT DRIVER
+    # seeded from them, and the two can legitimately disagree (a barrier-race
+    # pick records 'barrier_race' here and seeds 'ladder' there).
+    picked_method = Column(String, nullable=True)
+    # Units are in the names deliberately: only picked_row_stock_price may ever
+    # reach resolved_tp_price, which is compared against the STOCK quote.
+    picked_row_stock_price = Column(Float, nullable=True)
+    picked_row_option_price = Column(Float, nullable=True)
+    picked_stop_basis = Column(String, nullable=True)
+    picked_at = Column(String, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

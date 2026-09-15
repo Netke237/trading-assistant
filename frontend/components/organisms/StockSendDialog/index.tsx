@@ -6,8 +6,10 @@ import { Data } from '@/components/primitives/Data';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
+import { checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
 import type { PositionCardData } from '@/types/stockDomain';
 import type { Direction } from '@/types/domain';
 import styles from './StockSendDialog.module.css';
@@ -63,6 +65,14 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const ibkrPaper    = useSettingsStore((s) => s.ibkrPaper);
   const tradierPaper = useSettingsStore((s) => s.tradierPaper);
   const scanHorizon = useScanStore((s) => s.context?.horizon ?? 'Swing');
+  // Phase G piece 5, build step 4 (§7.2, S4) — the stocks basket. One
+  // unpicked card blocks the whole basket, the same rule §7.1's `.some(...)`
+  // applies to the options basket.
+  const stocksPicks = useScanStore((s) => selectCardEdits(s, 'stocks').picks);
+  const hasMissingMethodPick = useMemo(
+    () => cards.some((c) => !checkMethodPick(stocksPicks[c.symbol] ?? null)),
+    [cards, stocksPicks],
+  );
 
   const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
   const tradierConfigured = !!tradierPaper.token && !!tradierPaper.accountId;
@@ -96,6 +106,11 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
 
   async function submit() {
     if (submitting) return;
+    // Phase G piece 5, build step 4 (§7.2, S4) — belt-and-braces beside the
+    // button's own `disabled`, on the same reading `hasMissingMethodPick`
+    // was derived from. Same shape as SendToBrokerDialog.submit()'s
+    // `hasMissingInvalidation` guard.
+    if (hasMissingMethodPick) return;
     setSubmitting(true);
 
     // On a retry (i.e. a prior attempt already ran), only re-process symbols
@@ -118,14 +133,20 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     const warn: Record<string, string> = hasSubmittedOnce ? { ...warnings } : {};
     for (const c of targets) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
+      // Phase G (piece 5) — resolved once per symbol, reused by whichever of
+      // the three branches below fires. Confirmed gap as of build step 4: the
+      // send gate above blocked an unpicked send but nothing carried a made
+      // pick's VALUE into the created position on any of the three.
+      const pick = stocksPicks[c.symbol] ?? null;
       if (!r.autoSend) {
         // Manual → paper portfolio
-        const res = await addPosition(
-          buildPaperStockPosition(
+        const res = await addPosition({
+          ...buildPaperStockPosition(
             c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
             stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
           ),
-        );
+          ...pickedFieldsFrom(pick),
+        });
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       } else if (broker !== 'recommendation') {
@@ -159,6 +180,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               source: 'broker',
               sourceLabel: `${broker} — Limit (ID: ${res.order_id})`,
               orderedAt: new Date().toISOString(),
+              ...pickedFieldsFrom(pick),
             });
             if (addRes.status === 'rejected' || addRes.status === 'pending') {
               warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
@@ -171,12 +193,13 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         }
       } else {
         // Auto-send but broker = recommendation → fall back to paper
-        const res = await addPosition(
-          buildPaperStockPosition(
+        const res = await addPosition({
+          ...buildPaperStockPosition(
             c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
             stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
           ),
-        );
+          ...pickedFieldsFrom(pick),
+        });
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       }
@@ -331,6 +354,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
           })}
         </div>
 
+        {hasMissingMethodPick && (
+          <Text size={12} tone="reject">{MISSING_METHOD_PICK_MESSAGE}</Text>
+        )}
+
         <footer className={styles.footer}>
           <Text size={12} tone="secondary">
             {autoCount} auto · {manualCount} manual · Est total $
@@ -344,7 +371,8 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0 || submitting || (hasQueued && !hasRetryableErrors) || (hasWarnings && !hasRetryableErrors && !hasQueued)}
+              disabled={cards.length === 0 || submitting || (hasQueued && !hasRetryableErrors) || (hasWarnings && !hasRetryableErrors && !hasQueued) || hasMissingMethodPick}
+              title={hasMissingMethodPick ? MISSING_METHOD_PICK_TITLE : undefined}
             >
               <Text size={13}>
                 {submitting

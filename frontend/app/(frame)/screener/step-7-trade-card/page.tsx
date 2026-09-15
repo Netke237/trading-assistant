@@ -18,16 +18,20 @@ import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/li
 import { useRiskStore } from '@/lib/riskStore';
 import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type {
-  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride,
+  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride, MethodPick,
 } from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
-import { checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE } from '@/lib/risk';
+import {
+  checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
+  checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
+} from '@/lib/risk';
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
@@ -110,6 +114,14 @@ function positionFromOrder(
    *  fixture set the contract-quote mock to exactly `contractDetails.mid`, so
    *  live and scan were the same number. */
   livePrice: number | null = null,
+  // Phase G (piece 5) — the pick resolved by the caller through
+  // `methodPickFor(o.card)`, same shape as every other field above: a
+  // module-level function has no closure access to component state. Absent
+  // send-path wiring for this was a confirmed gap as of build step 4 — the
+  // send GATE (§7.1) blocked an unpicked send, but nothing carried a made
+  // pick's actual VALUE into the created position, so a real send silently
+  // discarded the trader's decision regardless of whether the gate passed.
+  pick: MethodPick | null = null,
 ): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
@@ -154,6 +166,7 @@ function positionFromOrder(
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
     tradeCardSnapshot: tradeCardSnapshotOf(c),
+    ...pickedFieldsFrom(pick),
   };
 }
 
@@ -235,7 +248,20 @@ export default function Step7Page() {
   // whole overlay on every patch, and the seed itself moves under an untouched
   // field when `mergePlan` lands. Only the card knows which it is, so it tells
   // us -- see `onEditsChange`'s `meta.touched.premiumStop`.
-  const [premiumStopByContract, setPremiumStopByContract] = useState<Record<string, number | null>>({});
+  // PHASE G piece 5, build step 2 (spec §5). These four caches used to be
+  // `useState` on this page. They now live in ONE scan-stamped slice on
+  // scanStore, read through `selectCardEdits` -- which returns an EMPTY slice
+  // whenever the slice's `scan_id` stamp does not match the scan currently in
+  // the store, so a previous run's typed levels can never render on a card
+  // built from new prices.
+  //
+  // READ THE SLICE ONLY THROUGH THIS SELECTOR. `state.optionsCardEdits` read
+  // directly would skip the stamp check, which is the single defect this design
+  // exists to make impossible.
+  const cardEdits = useScanStore((s) => selectCardEdits(s, 'options'));
+  const setCardEdit = useScanStore((s) => s.setCardEdit);
+  const clearCardPick = useScanStore((s) => s.clearCardPick);
+  const premiumStopByContract = cardEdits.premiumStop;
   // The card's editable INVALIDATION -- the underlying stock level that becomes
   // `PortfolioPosition.stop` and drives STOP_REACHED. Keyed by SYMBOL, like
   // `structuralBySymbol` and `maxLossOverrideBySymbol` beside it and unlike
@@ -247,11 +273,11 @@ export default function Step7Page() {
   // distinct state `premiumStopByContract` carries, for the same reason: the
   // seed moves under an untouched field when `mergePlan` lands, so a cached
   // seed would pin the stop to a level the plan has since replaced.
-  const [invalidationBySymbol, setInvalidationBySymbol] = useState<Record<string, number | null>>({});
+  const invalidationBySymbol = cardEdits.invalidation;
   // The card's editable ENTRY LIMIT -- the option premium posted as the broker
   // order's `limit_price`. Contract-keyed for the same reason the premium stop
   // is: it is a price for one contract, meaningless against another.
-  const [entryLimitByContract, setEntryLimitByContract] = useState<Record<string, number | null>>({});
+  const entryLimitByContract = cardEdits.entryLimit;
   /** Bumped in lockstep with clearing the three edit caches below, and handed
    *  to TradeCard as `resetKey`. Without it the parent dropped a cached edit
    *  while the card kept showing (and keeping touched) the same value -- the
@@ -266,26 +292,18 @@ export default function Step7Page() {
     setOrderContractsBySymbol((prev) =>
       prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
     );
-    // Same identity-preserving guard as above, on every cache: an unchanged
-    // write must return `prev` untouched or every TradeCard render re-triggers
-    // this cascade.
-    const invalidation = meta.touched.invalidation ? overlay.invalidation : null;
-    setInvalidationBySymbol((prev) =>
-      prev[symbol] === invalidation ? prev : { ...prev, [symbol]: invalidation },
-    );
+    // The identity-preserving guard these three carried inline now lives in
+    // `writeCardEdit` (lib/cardEdits.ts), for the same reason it existed here:
+    // the card reports its whole overlay on every patch, so an unchanged write
+    // must not produce a new object or every render re-triggers this cascade.
+    // `null` still means "untouched", which is why `meta.touched` gates each.
+    setCardEdit('options', 'invalidation', symbol,
+      meta.touched.invalidation ? overlay.invalidation : null);
     if (!cardContractKey) return;
-    const premiumStop = meta.touched.premiumStop ? overlay.premiumStop : null;
-    setPremiumStopByContract((prev) =>
-      prev[cardContractKey] === premiumStop
-        ? prev
-        : { ...prev, [cardContractKey]: premiumStop },
-    );
-    const entryLimit = meta.touched.entryLimit ? overlay.entryLimit : null;
-    setEntryLimitByContract((prev) =>
-      prev[cardContractKey] === entryLimit
-        ? prev
-        : { ...prev, [cardContractKey]: entryLimit },
-    );
+    setCardEdit('options', 'premiumStop', cardContractKey,
+      meta.touched.premiumStop ? overlay.premiumStop : null);
+    setCardEdit('options', 'entryLimit', cardContractKey,
+      meta.touched.entryLimit ? overlay.entryLimit : null);
   };
   /** The cache key for the two CONTRACT-keyed edits (entry limit, premium
    *  stop). `contractKeyFor` returns null whenever `contractDetails` is
@@ -382,9 +400,41 @@ export default function Step7Page() {
   // created PortfolioPosition) and SendToBrokerDialog (so its own risk check
   // knows about an active override and doesn't force a spurious extra
   // confirmation click).
-  const [maxLossOverrideBySymbol, setMaxLossOverrideBySymbol] = useState<Record<string, MaxLossOverride | null>>({});
+  // Phase G piece 5 -- in the same stamped slice as the three above. It was the
+  // one edit cache the `[scanResult]` effect below forgot to clear (spec §5.1
+  // calls that "an omission, not a decision"); sharing one slice with one stamp
+  // is what makes forgetting it again impossible rather than merely fixed.
+  const maxLossOverrideBySymbol = cardEdits.maxLossOverride;
   const handleMaxLossOverrideChange = (symbol: string, override: MaxLossOverride | null) => {
-    setMaxLossOverrideBySymbol((prev) => ({ ...prev, [symbol]: override }));
+    setCardEdit('options', 'maxLossOverride', symbol, override);
+  };
+  /** Phase G piece 5 (§6.2) — the trader's explicit exit-method pick, in the
+   *  SAME stamped slice as the four caches above and keyed by CONTRACT through
+   *  `editKeyFor`, like the entry limit and the premium stop and unlike the
+   *  invalidation: a pick names one target row out of one contract's plan, and
+   *  is meaningless against another's numbers.
+   *
+   *  Absent means NO PICK, which is a real state the send gate (build step 4)
+   *  reads. Going through `selectCardEdits` above is what makes a pick from a
+   *  previous scan absent rather than merely old — §7.4 leans on exactly that:
+   *  a stale pick is gone, so the gate refuses the send instead of stamping
+   *  last scan's price onto this scan's position. */
+  const methodPickByContract = cardEdits.picks;
+  const methodPickFor = (card: TradeCardData | undefined): MethodPick | null => {
+    const key = editKeyFor(card);
+    return (key ? methodPickByContract[key] : null) ?? null;
+  };
+  const handleMethodPickChange = (card: TradeCardData, pick: MethodPick | null) => {
+    const key = editKeyFor(card);
+    // No key, no write — and unlike the three typed prices this cannot silently
+    // drop an edit the card still displays, because `editKeyFor`'s fallback
+    // (`SYMBOL|contract`) returns null only when the card has neither a symbol
+    // nor a contract label, which is not a card.
+    if (!key) return;
+    // `picks` holds no nulls: a present key means a human picked, so clearing
+    // is a DELETE, not a stored null. See `clearCardPick`.
+    if (pick) setCardEdit('options', 'picks', key, pick);
+    else clearCardPick('options', key);
   };
   // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
   // alongside the read side (withCachedEstimate) — the two rules they enforce are
@@ -506,20 +556,22 @@ export default function Step7Page() {
     setEstimatesByContract({});
     setStructuralBySymbol({});
     setExitPlanByContract({});
-    // The three EDIT caches clear here too, for the reason the comment above
-    // gives for the estimate caches — and more urgently, because these two are
-    // keyed on things that RECUR across scans: `invalidationBySymbol` on the
-    // bare symbol, and `entryLimitByContract`/`premiumStopByContract` on
-    // `symbol|strike|expiry|right`, which is the same key when a new scan
-    // picks the same contract. An entry limit typed against yesterday's $2.50
-    // mid would otherwise survive onto a card whose new mid is $6.00, and the
-    // button would still promise $2.71. Leaving the newest three caches out of
-    // the same belt-and-suspenders the older three get was not a decision, it
-    // was an omission.
-    setPremiumStopByContract({});
-    setInvalidationBySymbol({});
-    setEntryLimitByContract({});
-    // Same commit, same statement group: the card must reset with them.
+    // THE FOUR EDIT CACHES ARE NOT CLEARED HERE, AND MUST NOT BE (Phase G piece
+    // 5, spec §5 / §5.1). They now live in one scan-stamped slice on scanStore,
+    // and the stamp already does this job: a new `scan_id` makes every older
+    // edit read as empty, by every path that lands a result rather than only
+    // the ones someone remembered to wire.
+    //
+    // Re-adding a reset call here would be worse than redundant -- it would be
+    // WRONG. This effect also runs on MOUNT, where `scanResult` has not changed
+    // at all, and on mount the slice may legitimately hold edits StoreHydration
+    // just restored alongside the very result they were stamped against. A
+    // blanket reset would destroy a restored pick on every page load, which is
+    // exactly what spec test 11b pins against.
+    //
+    // The three FETCHED caches above still clear, because they are still local
+    // `useState` and are not stamped by anything.
+    // The card must still reset with them:
     setScanEpoch((n) => n + 1);
     if (scanResult?.candidates?.length) {
       setCards(scanResult.candidates);
@@ -604,6 +656,15 @@ export default function Step7Page() {
   const resolvedInvalidationForCard = effectiveCard ? invalidationFor(effectiveCard) : null;
   const stopMissing = !checkInvalidation(resolvedInvalidationForCard);
   const editKey = editKeyFor(effectiveCard);
+
+  /* Phase G piece 5, build step 4 (§7.1). Same shape as `stopMissing` above,
+   * one section along: `methodPickFor` is the same reader the card itself is
+   * wired to (§6.2), so this cannot disagree with what the Final
+   * Recommendation control shows as picked. Null-safe on `effectiveCard` for
+   * the same reason `stopMissing` is — the buttons render inside its own
+   * guard but the send handlers do not. */
+  const resolvedMethodPickForCard = effectiveCard ? methodPickFor(effectiveCard) : null;
+  const pickMissing = !checkMethodPick(resolvedMethodPickForCard);
 
   // The card actually handed to <TradeCard>, with any cached "Estimate" /
   // "Check structure" result for this contract spliced into exit.* — the same
@@ -923,6 +984,10 @@ export default function Step7Page() {
       recId:         generateRecId(),
       scanStockPrice: card.price,
       tradeCardSnapshot: tradeCardSnapshotOf(card),
+      // Phase G (piece 5) — see positionFromOrder's own comment on `pick`;
+      // this closure has direct access to methodPickFor, unlike that
+      // module-level function.
+      ...pickedFieldsFrom(methodPickFor(card)),
     };
   }
 
@@ -940,6 +1005,10 @@ export default function Step7Page() {
     // having to remember it. Exactly the shape SendToBrokerDialog.submit()
     // already uses beside its own `disabled`, and for the same reason.
     if (!checkInvalidation(invalidationFor(card))) return;
+    // Phase G piece 5, build step 4 (§7.1). Same belt-and-braces shape as the
+    // invalidation check immediately above, on the same reading `pickMissing`
+    // was derived from.
+    if (!checkMethodPick(methodPickFor(card))) return;
     // ROUND 10 finding 11 -- CLEAR THE NOTES PER ORDER. They are facts about
     // ONE save, and were only reset when the active candidate changed, so a
     // "Size reduced to 1 contract" from a previous fill sat under the next,
@@ -998,6 +1067,8 @@ export default function Step7Page() {
     // having to remember it. Exactly the shape SendToBrokerDialog.submit()
     // already uses beside its own `disabled`, and for the same reason.
     if (!checkInvalidation(invalidationFor(card))) return;
+    // Phase G piece 5, build step 4 (§7.1) — see placeLimitPaper's identical guard.
+    if (!checkMethodPick(methodPickFor(card))) return;
     // See placeLimitPaper — notes describe this save only.
     setMarketPlacing(true); setOrderError(null); setSaveNotes([]);
     try {
@@ -1089,6 +1160,7 @@ export default function Step7Page() {
           // Only the active card has a fetched quote; the rest legitimately
           // fall back to their scan mid.
           o.card.symbol === effectiveCard?.symbol ? liveQuoteForCard?.price ?? null : null,
+          methodPickFor(o.card),
         ),
         recId,
         // ROUND 10 finding 2 -- WITHOUT this the router never fetches the
@@ -1241,6 +1313,8 @@ export default function Step7Page() {
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
               initialMaxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
               onMaxLossOverrideChange={(v) => handleMaxLossOverrideChange(effectiveCard.symbol, v)}
+              initialMethodPick={methodPickFor(effectiveCard)}
+              onMethodPickChange={(pick) => handleMethodPickChange(effectiveCard, pick)}
             />
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
@@ -1279,8 +1353,12 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing}
-                  title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  title={
+                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
                 >
                   {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
                 </button>
@@ -1288,8 +1366,12 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing}
-                  title={stopMissing ? MISSING_INVALIDATION_TITLE : undefined}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  title={
+                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
                 >
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
@@ -1310,6 +1392,16 @@ export default function Step7Page() {
               {stopMissing && (
                 <Text size={11} tone="reject">
                   {MISSING_INVALIDATION_MESSAGE}
+                </Text>
+              )}
+              {/* Phase G piece 5, build step 4 (§7.1). Independent of
+                * `stopMissing` above for the same reason that one is
+                * independent of `!planReady` — a card can be missing both a
+                * stop and a pick at once, and suppressing this behind the
+                * other would hide a refusal the user can act on right now. */}
+              {pickMissing && (
+                <Text size={11} tone="reject">
+                  {MISSING_METHOD_PICK_MESSAGE}
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
@@ -1337,6 +1429,11 @@ export default function Step7Page() {
                   // rather than recomputed, so Arm and the two direct buttons
                   // cannot refuse on two different readings of one field.
                   resolvedInvalidation={resolvedInvalidationForCard}
+                  // Phase G piece 5, build step 4 (§7.1). The same resolution
+                  // `pickMissing` is derived from, passed rather than
+                  // recomputed, so Arm and the two direct buttons cannot
+                  // refuse on two different readings of one field.
+                  methodPick={resolvedMethodPickForCard}
                 />
               )}
             </>
@@ -1371,6 +1468,9 @@ export default function Step7Page() {
           overridesBySymbol={maxLossOverrideBySymbol}
           invalidationBySymbol={Object.fromEntries(
             basketCards.map((c) => [c.symbol, invalidationFor(c)]),
+          )}
+          methodPickBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, methodPickFor(c)]),
           )}
           onClose={() => setDialogOpen(false)}
           onSubmit={handleSubmit}

@@ -2,8 +2,23 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
+import type { MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — this suite is about broker submit(), not
+// the method-pick gate, so every fixture stamps a satisfied pick or the new
+// `pickMissing` check leaves the order buttons disabled regardless of what
+// these tests exercise (see StockPositionCard.methodPickSendGate.test.tsx
+// for the gate's own tests).
+const pick = (): MethodPick => ({
+  method: 'ladder',
+  rowStockPrice: 160,
+  rowOptionPrice: null,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -41,6 +56,13 @@ describe('StockPositionCard — broker order submit()', () => {
     useSettingsStore.setState({
       ibkrPaper: { baseUrl: 'https://localhost:7499/v1/api', accountId: 'ACC' },
     } as any);
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
     jest.clearAllMocks();
   });
   afterEach(() => {

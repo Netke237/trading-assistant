@@ -1,5 +1,6 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
+              PickedMethod, PickedStopBasis } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -609,6 +610,23 @@ export const api = {
      *  off the global while the router, the schema bound and both
      *  `resolve_premium_stop_pct` call sites in auto_trader.py sat unreachable. */
     premium_stop_pct?: number;
+    /** Phase G piece 5, build step 5 (§8) — the trader's explicit method pick,
+     *  captured at arm. snake_case, like every other field on this endpoint and
+     *  unlike `POST /api/portfolio`'s camelCase: `ArmedStrategy(**req.model_dump())`
+     *  keys off ArmRequest's field NAMES. Sending the camelCase spelling here is
+     *  SILENT, not loud -- `ArmRequest` inherits pydantic's `extra='ignore'`, so
+     *  it returns 200 and arms with all five NULL rather than erroring. Measured,
+     *  not assumed.
+     *
+     *  `| null` and not just optional: `armPickedFieldsFrom` (lib/cardEdits.ts)
+     *  maps "no pick" to five explicit nulls rather than omitting them, since
+     *  unlike `premium_stop_pct` directly above there is no global pick for an
+     *  omission to mean "inherit". */
+    picked_method?: PickedMethod | null;
+    picked_row_stock_price?: number | null;
+    picked_row_option_price?: number | null;
+    picked_stop_basis?: PickedStopBasis | null;
+    picked_at?: string | null;
   }) => post<{ armed: boolean }>('/auto-trade/arm', req),
 
   disarmAutoTrade: () => del('/auto-trade/arm'),

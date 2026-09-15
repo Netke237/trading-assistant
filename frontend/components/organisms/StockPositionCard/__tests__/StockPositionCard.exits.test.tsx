@@ -1,8 +1,22 @@
 import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
+import type { MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — this suite is about the fat-fingered-target
+// validation, not the method-pick gate, so its fixture below stamps a
+// satisfied pick or the new `pickMissing` check leaves the button disabled
+// before the validation under test is ever reached.
+const pick = (): MethodPick => ({
+  method: 'ladder',
+  rowStockPrice: 160,
+  rowOptionPrice: null,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 // api + heavy children are modules (not stores) — mocking them is correct.
 jest.mock('@/lib/api', () => ({
@@ -35,6 +49,23 @@ function makeCard(targets?: number[]): PositionCardData {
     sentiment: null, fundamentals: null,
   };
 }
+
+// File-scoped reset, run before EVERY test regardless of describe block. A
+// pick seeded by one describe's own `beforeEach` otherwise survives into a
+// LATER describe in this same file (the store is a module-level singleton),
+// and a picked Ladder renders its T1/T2/T3 rows in the method-pick control,
+// colliding with this file's own unrelated `getByText('T1')` lookups in the
+// sell-to-close-allocation suite below. Each describe block that needs a
+// satisfied pick re-seeds it in its own `beforeEach`, which runs AFTER this
+// one.
+beforeEach(() => {
+  useScanStore.setState({
+    stockScanResult: null,
+    stocksCardEdits: {
+      scanId: null, picks: {}, invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+    },
+  });
+});
 
 describe('StockPositionCard — exit ladder seeding', () => {
   beforeEach(() => {
@@ -181,6 +212,13 @@ describe('StockPositionCard — first-passage Estimate', () => {
 describe('StockPositionCard — Check structure', () => {
   beforeEach(() => {
     usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
     mockEstimate.mockReset();
     mockStructural.mockReset();
     global.fetch = jest.fn().mockResolvedValue({
@@ -452,6 +490,13 @@ describe('StockPositionCard — sell-to-close share allocation is clamped to tot
 describe('StockPositionCard — Add to Portfolio rejects a fat-fingered target', () => {
   beforeEach(() => {
     usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
   });
   afterEach(() => jest.clearAllMocks());
 

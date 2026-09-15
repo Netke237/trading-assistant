@@ -25,6 +25,8 @@ from app.services.portfolio_performance import (
 )
 from app.data.market import fetch_contract_quote_async
 from app.services.audit import log_approval
+from app.services.config_loader import load_exit_plan_cfg
+from app.services.picked_method import seed_tp_from_pick
 from app.models.audit_event import AuditEventModel
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -397,6 +399,55 @@ async def add_position(
             # discard a fraction that is independently valid.
             resolved_premium_stop_pct = body.premiumStopPct
 
+    # Phase G (piece 5) — seed the post-trade alert basis from the trader's
+    # pre-trade pick, so TP_HIT starts life agreeing with the card the trade was
+    # sent from instead of defaulting to the ladder.
+    #
+    # THE PAIR IS RETURNED AS ONE VALUE and assigned as one, because a non-ladder
+    # `active_tp_method` with a NULL `resolved_tp_price` is a state the drawer's
+    # own writer cannot produce and is gate-level when it happens: the drawer
+    # renders that method as selected with a null price while TP_HIT silently
+    # fires on the ladder (spec §2.7). Do not split this into two assignments.
+    #
+    # `body.exitPlan` is passed UNCHANGED and the picked price is stored
+    # UNCHANGED — neither is re-anchored by the live-price `delta` above, and
+    # that is deliberate rather than an oversight. The exit plan is persisted
+    # verbatim and never recomputed, so the picked row and the plan row it came
+    # from must stay in the SAME frame: shifting one and not the other would put
+    # a price on screen in the drawer that differs from the one that actually
+    # fires, which is the very disagreement §2.7 forbids. The ladder `targets`
+    # ARE re-anchored, and are allowed to differ — they are a different method.
+    #
+    # A body with no pick (a pre-G client, or the exempt after-scan
+    # auto-executor) yields ('ladder', None), which is today's default and
+    # exactly what those positions got before G.
+    #
+    # The config read is GUARDED, and for the reason §4.4 gives about this
+    # endpoint specifically: every send path places the broker order FIRST and
+    # persists second, so an exception raised here does not prevent a trade —
+    # it loses the RECORD of a trade that already happened, leaving a real
+    # filled position with no stop and no TP alert. A malformed or unreadable
+    # risk_rules.yaml must therefore degrade the arithmetic mapping (to the
+    # ladder, which is where the alert fired before G) and never 500 the create.
+    try:
+        _rr_ratios = load_exit_plan_cfg().get("target", {}).get("rr_ratios")
+    except Exception:
+        _rr_ratios = None
+        _log.warning(
+            "add_position: could not load exit_plan.target.rr_ratios for %s; "
+            "an arithmetic method pick degrades to the ladder for this position",
+            body.contract, exc_info=True,
+        )
+    active_tp_method, resolved_tp_price = seed_tp_from_pick(
+        body.pickedMethod,
+        body.pickedRowStockPrice,
+        exit_plan=body.exitPlan,
+        # From config, never a literal. `rr_ratios` is configurable, so a 1.5R
+        # first row must map to `exit_plan_2r` and a 2.0R pick must fall through
+        # when 2.0 is not configured.
+        rr_ratios=_rr_ratios,
+    )
+
     position = PortfolioPositionModel(
         rec_id=body.recId,
         symbol=body.symbol,
@@ -418,6 +469,29 @@ async def add_position(
         # from the card carries the stop the user chose on it. None persists as
         # NULL, meaning "inherit the global".
         premium_stop_pct=resolved_premium_stop_pct,
+        # Phase G — the RECORD of the human decision, stored as sent. NULL is a
+        # real state ("nobody picked"), and `picked_method` is what the
+        # portfolio displays; `active_tp_method` below is the alert driver
+        # seeded from it, and the two are allowed to disagree (a barrier-race
+        # pick records 'barrier_race' here and seeds 'ladder' there).
+        picked_method=body.pickedMethod,
+        picked_row_stock_price=body.pickedRowStockPrice,
+        # RECORD ONLY. This is a PREMIUM and must never reach
+        # `resolved_tp_price`, which is compared against the stock quote.
+        picked_row_option_price=body.pickedRowOptionPrice,
+        picked_stop_basis=body.pickedStopBasis,
+        picked_at=body.pickedAt,
+        active_tp_method=active_tp_method,
+        resolved_tp_price=resolved_tp_price,
+        # Stamped ONLY when a price was actually seeded. The drawer's writer
+        # stamps it on both branches, but doing that here would give every
+        # pre-G and every no-pick create a timestamp where it gets NULL today,
+        # for a field that exists to show "as of" staleness on a resolved price
+        # that in those cases does not exist. No pick -> byte-identical to
+        # today's behaviour; a seeded pick -> carries its vintage.
+        resolved_tp_updated_at=(
+            datetime.now(timezone.utc) if resolved_tp_price is not None else None
+        ),
     )
     db.add(position)
     try:

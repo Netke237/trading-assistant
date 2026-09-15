@@ -57,14 +57,21 @@ function legacyBlob(): Record<string, any> {   // eslint-disable-line @typescrip
 }
 
 describe('scanStore migrate(): v15, piece 3\'s stop', () => {
-  it('is registered at v15, so a v14 blob actually reaches the branch', () => {
+  it('sits below the configured version, so a v14 blob actually reaches the branch', () => {
     // zustand calls migrate only when the stored version DIFFERS from the
     // configured one. Every test below invokes migrate directly and so bypasses
-    // that comparison — this pin is the only assertion that verifies the branch
+    // that comparison — this assertion is the only one that verifies the branch
     // is REACHED in a real browser. Round 5 of Phase A shipped a migration that
     // was appended to an already-released version's branch and was therefore
     // dead code for exactly the stores that needed it; this is that lesson.
-    expect(migrate.version).toBe(15);
+    //
+    // A FLOOR, NOT AN EQUALITY, since Phase G piece 5 took the store to v16 for
+    // the card-edit slices. The property that matters to piece 3's stop has
+    // never been "the configured version is exactly 15" — it is "a v14 blob
+    // still differs from it", which every later bump keeps true while an
+    // equality pin would fail on each one and teach nothing. That the branch
+    // itself still strips the stop is asserted directly below.
+    expect(migrate.version).toBeGreaterThan(14);
   });
 
   it('strips the flat stop from every candidate in both runs', () => {

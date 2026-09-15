@@ -2,11 +2,33 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
+import { emptyCardEdits } from '@/lib/cardEdits';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
-import type { TradeCardData } from '@/types/domain';
+import type { TradeCardData, MethodPick } from '@/types/domain';
+
+// Phase G piece 5, build step 4 — this suite is isolating the INVALIDATION
+// gate, so every fixture also needs a satisfied METHOD PICK gate or the new
+// `pickMissing` check would leave both direct buttons disabled regardless of
+// what these tests are exercising. Keyed to match `makeCard`'s contract
+// details via `contractKeyFor` (AAA|150|2026-05-15|C) and stamped with the
+// same `scan_id` `mount()` seeds, since `selectCardEdits` returns empty on a
+// stamp mismatch.
+const CONTRACT_KEY = 'AAA|150|2026-05-15|C';
+// `ladder`, not `monte_carlo`: Ladder is the only method available with no
+// run (§2.2) — a Monte Carlo pick with no fetched estimate would be cleared
+// as stale by TradeCard's own reset effect the instant it mounts, which
+// would make every "enabled" assertion below fail for a reason unrelated to
+// what this suite (or direct-send-stop-gate.test.tsx as a whole) tests.
+const pick = (): MethodPick => ({
+  method: 'ladder',
+  rowStockPrice: 160,
+  rowOptionPrice: null,
+  stopBasis: 'stock',
+  pickedAt: '2026-09-14T10:00:00.000Z',
+});
 
 /*
  * DIRECT-SEND-STOP-GATE-2026-09-09.
@@ -85,11 +107,27 @@ function makeCard(invalidation: number | null): TradeCardData {
 
 const originalFetch = global.fetch;
 
-function mount(invalidation: number | null) {
+function mount(invalidation: number | null, { withPick = true }: { withPick?: boolean } = {}) {
   localStorage.clear();
   act(() => {
     useScanStore.setState({
-      scanResult: { candidates: [makeCard(invalidation)] } as any,
+      scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard(invalidation)] } as any,
+      // Phase G piece 5: the three edit caches this file exercises now live in
+      // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
+      // has to carry the `scan_id` the real type has always declared required
+      // — without one there is no stamp, and every edit is dropped. The slices
+      // are reset here too: they used to die with the page's useState hooks on
+      // unmount, and a persisted store does not.
+      //
+      // Build step 4 (§7.1) — `withPick` defaults true so this suite's own
+      // invalidation-gate tests stay isolated from the newer method-pick
+      // gate; the method-pick gate's own tests below pass `false`.
+      optionsCardEdits: {
+        ...emptyCardEdits(),
+        scanId: 'test-scan',
+        picks: withPick ? { [CONTRACT_KEY]: pick() } : {},
+      },
+      stocksCardEdits: emptyCardEdits(),
       pickedContracts: {},
       contractsBySymbol: {},
       scanOverrides: {},
@@ -200,5 +238,81 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     fireEvent.click(limitBtn);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     expect(usePortfolioStore.getState().positions[0].stop).toBe(140);
+  });
+});
+
+/* Phase G piece 5, build step 4 (§7.1, O2/O3, spec test 9). Same shape as the
+ * invalidation-gate suite above, one field along: a card with a real stop but
+ * no explicit method pick is refused on the SAME two buttons, and the send
+ * handlers early-return before either posts an order. */
+describe('step-7-trade-card — the direct buttons refuse a card with no method pick', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('disables Place Limit and Right Now — Market, and places NO order, when no pick has been made', async () => {
+    mount(140, { withPick: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    const limitBtn  = screen.getByRole('button', { name: /place limit/i });
+    const marketBtn = screen.getByRole('button', { name: /right now — market/i });
+    expect(limitBtn).toBeDisabled();
+    expect(marketBtn).toBeDisabled();
+
+    fireEvent.click(limitBtn);
+    fireEvent.click(marketBtn);
+    await Promise.resolve();
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+  });
+
+  it('says why', async () => {
+    mount(140, { withPick: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    expect(screen.getByText('Method pick required — choose which method this trade is judged on before submitting.')).toBeInTheDocument();
+  });
+
+  it('leaves an ordinary card (with a stop AND a pick) alone', async () => {
+    mount(140, { withPick: true });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+  });
+
+  it('the direct Place Limit button carries the pick onto the created position', async () => {
+    // Confirmed gap as of build step 4: the gate above blocked an UNPICKED
+    // send, but nothing carried a MADE pick's actual values into the position
+    // this button creates — `buildPaperPosition` built a `PortfolioPosition`
+    // with no `pickedMethod`/`pickedRowStockPrice`/etc at all, so a real send
+    // silently discarded the trader's decision even when the gate passed.
+    mount(140, { withPick: true });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const created = usePortfolioStore.getState().positions[0]!;
+    expect(created.pickedMethod).toBe('ladder');
+    expect(created.pickedRowStockPrice).toBe(160);
+    expect(created.pickedRowOptionPrice).toBeNull();
+    expect(created.pickedStopBasis).toBe('stock');
+    expect(created.pickedAt).toBe('2026-09-14T10:00:00.000Z');
   });
 });
