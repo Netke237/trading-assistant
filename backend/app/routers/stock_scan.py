@@ -1098,48 +1098,59 @@ async def _execute_stock_scan_core(
             "All candidates are CAUTION-grade — consider reducing size or waiting for a clearer signal."
         )
 
-    _hist_kw = ("insufficient history", "no price data")
+    # Named predicates over a repeated inline chain: `other_rejected` is the
+    # RESIDUAL of exactly these, so a bucket and its negation cannot drift apart
+    # the way they did while both were spelled out separately.
+    #
+    # "insufficient intraday history" does NOT contain "insufficient history",
+    # and the mean_reversion_multi misses start with "no " but never say
+    # "setup" -- so all three used to fall through to the residual. That was
+    # invisible while the residual was never displayed; now that the funnel
+    # renders it as "Other - N errors", an intraday or multi-variant scan would
+    # have reported most of its universe as errors.
+    def _reason(r) -> str:
+        return r.get("reason", "") if isinstance(r, dict) else ""
+
+    def _is_history(r) -> bool:
+        s = _reason(r)
+        return (
+            "insufficient history" in s
+            or "insufficient intraday history" in s
+            or "no price data" in s
+            or s.startswith("price $")
+        )
+
+    def _is_score(r) -> bool:     return _reason(r).startswith("REJECT score=")
+    def _is_direction(r) -> bool: return _reason(r).startswith("direction_conviction:")
+    def _is_regime(r) -> bool:    return _reason(r) == "regime headwind"
+
+    def _is_signal(r) -> bool:
+        s = _reason(r)
+        return (
+            (s.startswith("no ") and "setup" in s)
+            or s.startswith("no mean_reversion_multi:")
+            or s.startswith("mean_reversion_multi:")
+        )
+
+    def _is_backtest(r) -> bool:
+        s = _reason(r)
+        # The confidence gate is a backtest-derived quality gate applied right
+        # after the backtest; it belongs with it rather than among "errors".
+        return s.startswith("backtest gate:") or s.startswith("confidence gate ")
+
+    _stock_buckets = (_is_history, _is_score, _is_direction, _is_regime, _is_signal, _is_backtest)
+
     _pipeline = StockPipeline(
         scanned=len(symbols),
-        failed_history=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and (
-                any(k in r.get("reason", "") for k in _hist_kw)
-                or r.get("reason", "").startswith("price $")
-            )
-        ),
-        failed_score=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and r.get("reason", "").startswith("REJECT score=")
-        ),
-        failed_signal=sum(
-            1 for r in rejected
-            if isinstance(r, dict)
-            and r.get("reason", "").startswith("no ")
-            and "setup" in r.get("reason", "")
-        ),
-        failed_backtest=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and r.get("reason", "").startswith("backtest gate:")
-        ),
-        failed_regime=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and r.get("reason") == "regime headwind"
-        ),
+        failed_history=sum(1 for r in rejected if _is_history(r)),
+        failed_score=sum(1 for r in rejected if _is_score(r)),
+        failed_signal=sum(1 for r in rejected if _is_signal(r)),
+        failed_backtest=sum(1 for r in rejected if _is_backtest(r)),
+        failed_regime=sum(1 for r in rejected if _is_regime(r)),
         failed_direction=_dir_filtered,
         failed_shortlist=original_count - len(candidates),
         other_rejected=sum(
-            1 for r in rejected
-            if isinstance(r, dict)
-            and not any(k in r.get("reason", "") for k in _hist_kw)
-            and not r.get("reason", "").startswith("price $")
-            and not r.get("reason", "").startswith("REJECT score=")
-            and not (r.get("reason", "").startswith("no ") and "setup" in r.get("reason", ""))
-            and not r.get("reason", "").startswith("backtest gate:")
-            and r.get("reason") != "regime headwind"
-            # Was silently absorbing every direction_conviction rejection, which
-            # is now its own bucket and its own funnel stage.
-            and not r.get("reason", "").startswith("direction_conviction:")
+            1 for r in rejected if not any(f(r) for f in _stock_buckets)
         ),
         candidates=len(candidates),
     )

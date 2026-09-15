@@ -22,6 +22,10 @@ import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
 import styles from './page.module.css';
 
+function isWorthShowing(c: { backtest: { passes_gate: boolean; win_rate: number } }): boolean {
+  return c.backtest.passes_gate || c.backtest.win_rate >= 0.40;
+}
+
 function _startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
@@ -135,6 +139,14 @@ export default function Step4StocksPage() {
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
   const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
+
+  // The table applies a LAST filter of its own, after everything the funnel
+  // counted — so the funnel's "Candidates N" sat above a table with fewer than
+  // N rows, which is the same discrepancy this whole change exists to remove.
+  // The filter stays (a sub-40% win rate is not worth showing), but the gap is
+  // now named instead of being left for the user to notice.
+  const shownCandidates = result?.candidates.filter(isWorthShowing) ?? [];
+  const hiddenByWinRate = (result?.candidates.length ?? 0) - shownCandidates.length;
 
   const scanning = scanState === 'SCANNING';
 
@@ -329,6 +341,13 @@ export default function Step4StocksPage() {
         </div>
       )}
 
+      {hiddenByWinRate > 0 && (
+        <Text size={11} tone="dim">
+          {hiddenByWinRate} further {hiddenByWinRate === 1 ? 'candidate is' : 'candidates are'} hidden
+          below — backtest gate failed and win rate under 40%.
+        </Text>
+      )}
+
       {result && (
         <div className={styles.results}>
           <div className={styles.tableHeader}>
@@ -353,7 +372,7 @@ export default function Step4StocksPage() {
           </div>
 
           <div className={styles.tableBody}>
-            {[...result.candidates.filter((c) => c.backtest.passes_gate || c.backtest.win_rate >= 0.40)].sort((a, b) => {
+            {[...shownCandidates].sort((a, b) => {
               if (healthSort === null) return 0;
               const aScore = a.fundamentals?.score ?? -1;
               const bScore = b.fundamentals?.score ?? -1;

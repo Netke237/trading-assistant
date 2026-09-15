@@ -58,13 +58,18 @@ export function ScanFunnel({ mode, pipeline }: Props) {
     const failedDirection = dropped(p.failed_direction);
     const failedShortlist = dropped(p.failed_shortlist);
     const otherRejected   = dropped(p.other_rejected);
+    // Stage order MIRRORS THE BACKEND'S GATE ORDER (stock_scan.py: score ->
+    // direction -> regime -> signal -> backtest). Listing them in any other
+    // order still reconciles at the bottom, but every intermediate count then
+    // misattributes: a "Signal — 40 remaining" row placed before the direction
+    // gate implies signal ran on symbols the gate had already removed.
     const afterHistory   = p.scanned - p.failed_history;
     const afterScore     = afterHistory - p.failed_score;
-    const afterSignal    = afterScore - p.failed_signal;
+    const afterDirection = afterScore - failedDirection;
+    const afterRegime    = afterDirection - failedRegime;
+    const afterSignal    = afterRegime - p.failed_signal;
     const afterBacktest  = afterSignal - p.failed_backtest;
-    const afterRegime    = afterBacktest - failedRegime;
-    const afterDirection = afterRegime - failedDirection;
-    const afterOther     = afterDirection - otherRejected;
+    const afterOther     = afterBacktest - otherRejected;
     return (
       <div className={styles.funnel}>
         <div className={styles.header}>
@@ -73,14 +78,14 @@ export function ScanFunnel({ mode, pipeline }: Props) {
         <Stage label="Universe"   count={p.scanned}    total={p.scanned} />
         <Stage label="History"    count={afterHistory}  rejected={p.failed_history}  rejectedLabel="no history" total={p.scanned} />
         <Stage label="Score gate" count={afterScore}    rejected={p.failed_score}    rejectedLabel="REJECT"     total={p.scanned} />
-        <Stage label="Signal"     count={afterSignal}   rejected={p.failed_signal}   rejectedLabel="no setup"   total={p.scanned} />
-        <Stage label="Backtest"   count={afterBacktest} rejected={p.failed_backtest} rejectedLabel="gate fail"  total={p.scanned} />
-        {failedRegime > 0 && (
-          <Stage label="Regime"    count={afterRegime}    rejected={failedRegime}    rejectedLabel="headwind"      total={p.scanned} />
-        )}
         {failedDirection > 0 && (
           <Stage label="Direction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
         )}
+        {failedRegime > 0 && (
+          <Stage label="Regime"    count={afterRegime}    rejected={failedRegime}    rejectedLabel="headwind"      total={p.scanned} />
+        )}
+        <Stage label="Signal"     count={afterSignal}   rejected={p.failed_signal}   rejectedLabel="no setup"   total={p.scanned} />
+        <Stage label="Backtest"   count={afterBacktest} rejected={p.failed_backtest} rejectedLabel="gate fail"  total={p.scanned} />
         {otherRejected > 0 && (
           <Stage label="Other"     count={afterOther}     rejected={otherRejected}   rejectedLabel="errors"        total={p.scanned} />
         )}

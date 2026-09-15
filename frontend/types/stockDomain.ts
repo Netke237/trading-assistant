@@ -40,7 +40,7 @@ export interface StockPipeline {
   // Undefined means ABSENT, not zero — see the note on OptionsPipeline.
   failed_direction?: number;
   failed_shortlist?: number;
-  other_rejected:  number;
+  other_rejected?: number;
   candidates:      number;
 }
 

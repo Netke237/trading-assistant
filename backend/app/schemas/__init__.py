@@ -759,7 +759,11 @@ class OptionsPipeline(BaseModel):
     # this bucket the funnel silently loses every symbol on a PARTIAL/FAILED
     # run, which is the same class of hole `failed_direction` was added to
     # close. Mirrors StockPipeline.other_rejected.
-    other_rejected:    int = 0
+    #
+    # Optional for the same reason as the two below, and it must be: defaulting
+    # it to 0 would let a legacy blob claim it saw zero exceptions, which is
+    # precisely the fabricated reading that default is rejected for there.
+    other_rejected:    Optional[int] = None
     # None means ABSENT, not zero. A PERSISTED v2 blob predates these fields;
     # its `candidates` was snapshotted BEFORE the direction-conviction filter
     # and the shortlist cap ran, so it can over-report. Defaulting to 0 would

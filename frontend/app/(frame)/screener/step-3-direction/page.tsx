@@ -668,7 +668,7 @@ function SectionBlock({
 export default function Step3Page() {
   const context        = useScanStore((s) => s.context);
   const setContext     = useScanStore((s) => s.setContext);
-  const rejectedLog    = useScanStore((s) => s.rejectedLog);
+  const liveRejectedLog = useScanStore((s) => s.rejectedLog);
   const regime         = useScanStore((s) => s.regime);
   const scanOverrides  = useScanStore((s) => s.scanOverrides);
   const scanResult     = useScanStore((s) => s.scanResult);
@@ -811,6 +811,12 @@ export default function Step3Page() {
   const [previewMinDte, previewMaxDte] = previewDteWindow(holdMin, holdMax);
   const displayDefaults: ParamDefaults = { ...defaults, min_dte: previewMinDte, max_dte: previewMaxDte };
 
+  // `rejectedLog` is written only by RunScanButton and is NOT persisted, while
+  // the identical entries on `scanResult.rejected` ARE. After a reload the
+  // first is empty and the second is not, so reading the store field alone
+  // reported "Rejected 0" beside a restored scan's real "Scanned 518" — and
+  // emptied the reason breakdown below. Fall back to the persisted copy.
+  const rejectedLog   = liveRejectedLog.length > 0 ? liveRejectedLog : (scanResult?.rejected ?? []);
   const totalPassed   = scanResult?.candidates?.length ?? 0;
   const totalRejected = rejectedLog.length;
   // Prefer the server's own count. Deriving it as passed + rejected undercounts
@@ -818,6 +824,10 @@ export default function Step3Page() {
   // from the returned list without being added to `rejected` — which put
   // "Scanned 508" next to the funnel's "Universe 518" on the same screen.
   const totalScanned  = scanResult?.pipeline?.scanned ?? totalPassed + totalRejected;
+  // Trimmed candidates are neither returned nor rejected, so they are the exact
+  // amount by which the three headline numbers fail to sum. Name it rather than
+  // leaving the reader to discover the gap.
+  const totalTrimmed  = Math.max(0, totalScanned - totalPassed - totalRejected);
 
   const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
 
@@ -1045,6 +1055,12 @@ export default function Step3Page() {
                   <Text size={11} tone="reject">Rejected</Text>
                   <span className={`${formStyles.badge} ${formStyles.badgeReject}`}>{totalRejected}</span>
                 </span>
+                {totalTrimmed > 0 && (
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="caution">Over cap</Text>
+                    <span className={formStyles.badge}>{totalTrimmed}</span>
+                  </span>
+                )}
                 <span className={formStyles.logStat}>
                   <Text size={11} tone="dim">DTE</Text>
                   <Text size={11} tone="secondary">

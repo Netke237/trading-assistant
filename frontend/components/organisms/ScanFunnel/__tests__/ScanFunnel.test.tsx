@@ -28,6 +28,34 @@ function pipeline(over: Partial<OptionsPipeline> = {}): OptionsPipeline {
   };
 }
 
+/**
+ * The counts, not just the labels. Asserting only the "−N label" chips let the
+ * arithmetic be wrong in any way that preserved them: flipping a minus to a
+ * plus, or dropping a term from a running total, passed the whole file.
+ */
+describe('ScanFunnel — the funnel reconciles', () => {
+  it('walks down to exactly the Candidates figure, options mode', () => {
+    // 518 − 10 − 237 − 15 − (200+51) − 5 direction − 0 other − 0 cap = 0.
+    render(<ScanFunnel mode="options" pipeline={pipeline({ failed_direction: 5, candidates: 0 })} />);
+    const shown = screen.getAllByText(/^\d+$/).map((el) => Number(el.textContent));
+
+    expect(shown[0]).toBe(518);            // Universe
+    expect(shown[shown.length - 1]).toBe(0); // Candidates
+    // Each stage's count is strictly the previous minus what it dropped.
+    expect(shown).toEqual([518, 508, 271, 256, 5, 0, 0]);
+  });
+
+  it('walks down to exactly the Candidates figure with a cap trim', () => {
+    render(<ScanFunnel mode="options" pipeline={pipeline({
+      failed_score: 200, failed_contracts: 51, failed_shortlist: 3, candidates: 2,
+    })} />);
+    const shown = screen.getAllByText(/^\d+$/).map((el) => Number(el.textContent));
+
+    // ... 5 survive scoring, cap trims 3, 2 returned.
+    expect(shown).toEqual([518, 508, 271, 256, 5, 2, 2]);
+  });
+});
+
 describe('ScanFunnel — options mode', () => {
   it('names the direction-conviction gate as the stage that took the candidates', () => {
     render(<ScanFunnel mode="options" pipeline={pipeline({ failed_direction: 5, candidates: 0 })} />);
