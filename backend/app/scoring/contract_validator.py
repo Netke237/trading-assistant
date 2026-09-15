@@ -120,6 +120,17 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     return reasons
 
 
+def _int_pref_override(val: float) -> int:
+    """int(val), except a value strictly between 0 and 1 floors to 1 rather
+    than 0. Used for preferred_volume_min/preferred_oi_min overrides: plain
+    truncation would turn a fractional "make this stricter" value into 0,
+    which _score_liquidity reads as "no preference" -- the opposite of intent
+    (ROUND 2 AUDIT FINDING, options-scan-liquidity-profiles, 2026-09-15)."""
+    if 0 < val < 1:
+        return 1
+    return int(val)
+
+
 def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
     """Returns (liquidity_score, oi_score, flags).
 
@@ -352,8 +363,17 @@ def validate_contract(
             # (_safe() in routers/scan.py, _safe_detail() in
             # routers/contracts.py), silently dropping the whole
             # liquidityDetail block from the card with no error anywhere.
-            elif key == "preferred_volume_min":     sr["preferred_volume_min"]     = int(val)
-            elif key == "preferred_oi_min":         sr["preferred_oi_min"]         = int(val)
+            #
+            # ROUND 2 AUDIT FINDING: plain int() truncates any override in
+            # (0, 1) -- e.g. a mistyped `0.5` -- down to 0, which then hits
+            # _score_liquidity's own "<= 0 means no preference" branch and
+            # silently DISABLES the check the caller was trying to make
+            # strict, the opposite of the value they set. `_int_pref_override`
+            # below floors that open interval to 1 (a strict near-zero
+            # threshold, still "> 0") instead of 0; <= 0 and >= 1 are
+            # unchanged from plain int().
+            elif key == "preferred_volume_min":     sr["preferred_volume_min"]     = _int_pref_override(val)
+            elif key == "preferred_oi_min":         sr["preferred_oi_min"]         = _int_pref_override(val)
             elif key == "preferred_spread_pct_max": sr["preferred_spread_pct_max"] = float(val)
     contract_id = _contract_id(contract)
 

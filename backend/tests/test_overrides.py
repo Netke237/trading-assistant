@@ -266,6 +266,31 @@ def test_preferred_volume_min_override_survives_liquidity_detail_construction():
     LiquidityDetail(**card.detail["liquidity"])  # must not raise
 
 
+# ROUND 2 AUDIT FINDING: plain int() truncates any override in the open
+# interval (0, 1) down to 0, which _score_liquidity's own "<= 0 means no
+# preference" branch (added by round 1's fix, above) then reads as "disable
+# this check entirely" -- the opposite of what a caller sending a strict
+# near-zero value intended. The two round-1 fixes are independent everywhere
+# except this interval, where they actively conflict. `_int_pref_override`
+# floors (0, 1) to 1 -- still "> 0" -- instead of letting it fall to 0.
+
+def test_preferred_volume_min_fractional_override_still_flags_low_volume():
+    """override=0.5 must NOT be silently read as 'no preference' (int(0.5)==0
+    would fall into the <= 0 branch); it must behave as a strict near-zero
+    floor of 1, still catching a genuinely zero-volume contract."""
+    contract = _make_contract(volume=0, oi=2000)
+    card = validate_contract(contract, 70, overrides={"preferred_volume_min": 0.5})
+    assert "low_volume" in card.soft_flags
+    assert card.breakdown.liquidity_score < 100
+
+
+def test_preferred_oi_min_fractional_override_still_flags_low_open_interest():
+    contract = _make_contract(volume=2000, oi=0)
+    card = validate_contract(contract, 70, overrides={"preferred_oi_min": 0.9})
+    assert "low_open_interest" in card.soft_flags
+    assert card.breakdown.oi_score < 100
+
+
 # ── WI-12: off-hours null-data guard ─────────────────────────────────────────
 
 def test_zero_volume_with_adequate_oi_is_not_rejected():
