@@ -1,8 +1,14 @@
 # YAML config integrity — an edit either takes effect, or fails loudly
 
-**Status:** DRAFT, revised after adversarial round 2 (25 findings, 16 gate-level;
-round 1 was 24/15). Not yet clean. §9 lists the six decisions Kenneth must
-re-confirm before anything is built.
+**Status:** DRAFT, revised after adversarial round 3 (11 gate-level + 19 nits;
+round 2 was 25/16, round 1 was 24/15). Not yet clean. §9 lists the NINE decisions
+Kenneth must re-confirm before anything is built.
+
+**Round 3 confirmed every factual correction from rounds 1-2** — the six-reader
+inventory, the 10→50 arithmetic, all four repros, the collision table, the
+frontend and `main.py` cites. What it broke was the *plan*: Stage 0 could not
+ship first as specified, the formula divergence was diagnosed and then orphaned,
+and the failure posture still did not reach Kenneth's screen.
 **Goal, in one sentence:** when Kenneth maintains a config YAML, the change he
 made is the change the app runs — or the app tells him, by name, that it is not.
 
@@ -12,6 +18,23 @@ code bug, not a config bug, but it exposed the same class of hazard: this app
 can run on a number nobody intended and give no sign. The next threshold change
 Kenneth makes will be to the bearish floors in `scoring_rules.yaml`, by hand,
 based on scan evidence. That edit must hold.
+
+**What round 3 changed — read this before §2.**
+
+1. **The two `regime_sizing` formulas disagree on the SHIPPED, VALID config** —
+   by up to 1.5× — so there is a wrong number on a broker order **today**, with
+   no typo and nothing malformed (§2.2). Round 2 found the divergence and filed
+   it as "independent of validation", assigning it to no stage. That was wrong:
+   it is the most immediate gate-level item in this document.
+2. **Stage 0 was not standalone.** Its acceptance ("rejected at startup") needed
+   a startup call site that §4 said Stage 4 owned. The holder and call site move
+   into Stage 0 (§2.3, §4.1).
+3. **The banner had no poll.** Stage 4 mirrored `EventThresholdsBootstrap`,
+   which fetches once on mount with no interval — so "the banner clears on the
+   next poll" described a mechanism that did not exist, and restart discipline
+   remained the only detection (§4.5).
+4. **Mode A1's optimism was too broad**, and **D2's "only writer" was false**
+   (§1).
 
 **What round 2 changed — read this before §2.** Round 1 established that this
 work *does* touch a broker order, correcting the first draft's claim that it
@@ -55,21 +78,38 @@ missed the sixth):
 | `_cfg` | `scoring/signal_confidence.py:23` | whole file | no |
 
 **No `cache_clear()` for any of them exists anywhere under `backend/app/`**
-(verified — the only four in the tree are `risk_settings.py:159-161`, for the
+(verified — the only three in the tree are `risk_settings.py:159-161`, for the
 risk config).
 
-**A1 — uniform staleness, and `lru_cache` inverts it for the broken-file case.**
-Round 1 modelled this as "cached, so an edit does not take effect until a
-restart". That is right for a *valid* edit and **wrong for an invalid one**:
-`functools.lru_cache` does not cache exceptions (verified — a raising cached
-function re-executes on every call). So the five non-catching readers **re-read a
-broken file on every call**, and fixing the YAML takes effect with no restart.
+**A1 — staleness, and it splits in two. Round 2's version of this was too
+optimistic and would have misled whoever implements Stage 2.**
 
-`auto_trader._load_scoring_config` is the exception, and the asymmetry is the
-hazard: it catches and returns `{}` (`auto_trader.py:103-106`), and **`{}` is
-cached permanently**. Fix a broken YAML without restarting and every scan
-recovers while auto-trade stays silently unsized for the life of the process.
-Stage 0 must account for this; round 1's design did not mention it.
+- **A1a — the file does not parse.** `functools.lru_cache` does not cache
+  exceptions (verified — a raising cached function re-executes on every call),
+  so the five non-catching readers **re-read on every call** and a fix takes
+  effect with no restart. `auto_trader._load_scoring_config` is the exception:
+  it catches and returns `{}` (`auto_trader.py:103-106`), and **`{}` caches
+  permanently**, so auto-trade stays silently unsized for the life of the
+  process while every scan recovers.
+- **A1b — the file parses to the WRONG value. All six caches are poisoned, and
+  only a restart clears them.** Round 2 stated the recovery property as though
+  it covered broken files generally. It does not, and the cases it misses are
+  the ones this plan exists for:
+  - `yaml.safe_load('')` returns `None` (verified). All five non-catching
+    readers return that without indexing (`config_loader.py:19`,
+    `stock_scan.py:131`, `stock_scorer.py:48-49`, `entry_quality.py:18-19`,
+    `signal_confidence.py:25-26`), so **`None` is cached permanently in all
+    five**, `{}` in the sixth. All six poisoned, not one.
+  - A copy of `scoring_rules.yaml` truncated at a line boundary — exactly what a
+    crash mid-`open(path,'w')` produces, i.e. what D2 below can create —
+    **parses cleanly**, yielding a dict missing `regime_sizing`, `regime_gate`
+    and `fundamentals_gate`. Cached in all six.
+  - And §2.1's headline hazard, a well-formed file with a wrong number, is
+    cached identically by all six with no restart-free recovery.
+
+  **A1b is the case that matters**, and it is the one where restart discipline
+  is the only remedy. Stage 0 requirement #6 and Stage 2's design must be read
+  against A1b, not A1a.
 
 **A2 — torn read.** The six caches populate lazily at six different moments, so
 an edit landing between two of them leaves two versions live at once: a scan can
@@ -120,14 +160,16 @@ positionally validated.
   `scoring/signal_confidence.py:34`. They fail loudly but uselessly: they need a
   *message*, not a *check*.
 - **C3 — swallowed into a per-symbol rejection, which empties the scan
-  silently (new in this revision).** `stock_scan.py:140-141` bare-indexes
+  silently (new in this revision).** `stock_scan.py:141-142` bare-indexes
   `sizing["full_conviction_pct"]` and `sizing["min_mult"]` inside
   `_conviction_mult`, which is called at `:968` — **inside `_process_stock`'s
   try** (`:706`), whose handler at `:1030-1032` is
   `except Exception as exc: return {"symbol": symbol, "reason": str(exc)}`.
   So a `regime_sizing` block missing `min_mult` makes **every symbol in the
-  universe return `reason: "'min_mult'"`** — an empty scan, no error, no 500,
-  nothing naming the file. This is the plan's own thesis failure, on a path
+  universe return `reason: "'min_mult'"`** — an empty scan, no 500, and
+  nothing naming the file. (There *is* a per-symbol traceback:
+  `stock_scan.py:1031` is `logger.exception("Error processing %s", symbol)`.
+  What is missing is any signal that the CONFIG is the cause.) This is the plan's own thesis failure, on a path
   round 1 listed as deliberately left running.
 
 **C2's consequence outside the scan.** Because `routers/config.py` indexes bare,
@@ -149,11 +191,24 @@ plain truncating `open(path,'w')` + `yaml.dump` over the whole file.
   The handler (`:134-157`) does `cfg = _load_risk()`, patches individual keys,
   then dumps `cfg`, so unknown keys round-trip intact and `sort_keys=False`
   preserves order. Comments and formatting only.
-- **D2 — NON-ATOMIC WRITE, and this is gate-level.** No tmp-then-`os.replace`.
-  A crash or full disk mid-write leaves `risk_rules.yaml` truncated — position
-  sizing and max-loss config, gone. Under `audit_rule`'s "**CORRUPT PERSISTED
-  DATA**" clause this blocks. It is the **only** YAML writer in the repo that
-  does this: all six schedule stores and `strategy_param_store` use
+- **D2 — NON-ATOMIC WRITE, and this is gate-level. There are THREE of them,
+  not one** (round 2 said "the only YAML writer in the repo that does this";
+  `grep -rn "yaml.dump\|yaml.safe_dump" backend/app/` says otherwise):
+  - `routers/risk_settings.py:40-43` — `_save_risk` → `risk_rules.yaml`.
+  - `routers/risk_settings.py:24-29` — `_save_settings` → `settings.yaml`.
+  - `routers/notification_settings.py:25-28` — `_save_yaml` → `settings.yaml`,
+    the identical `open(path,'w')` + `yaml.dump(data, f)` pattern.
+
+  A crash or full disk mid-write leaves the file truncated — position sizing and
+  max-loss config, or broker and scheduler configuration, gone. Under
+  `audit_rule`'s "**CORRUPT PERSISTED DATA**" clause all three block.
+  `settings.yaml` being out of scope for *validation* (§3) does not exempt it
+  from this: the exclusion criterion is about which hazard applies, and D2 is
+  the Mode D hazard the criterion names. Two modules also independently
+  read-modify-write `settings.yaml`, so they can lose each other's updates.
+
+  Every other writer is atomic — all six schedule stores, `strategy_param_store`,
+  `credential_store.py:111` and `settings_migrations.py:48` use
   tmp + `os.replace` (`scan_schedule_store.py:71-72`,
   `ingestion_schedule_store.py:56-57`, `edgar_schedule_store.py:51-52`,
   `tuning_schedule_store.py:54-55`, `sp500_schedule_store.py:51-52`,
@@ -169,7 +224,7 @@ DATA" — this section and D2 are the only gate-level items in this document.
 
 ### 2.1 — The multiplier is NOT bounded above by 1.0
 
-`auto_trader.py:129-131`:
+`auto_trader.py`, stitched from `:124`, `:130` and `:131`:
 
 ```python
 min_mult        = float(cfg.get("min_mult", 0.5))
@@ -201,18 +256,44 @@ mult = _conviction_mult(regime_signal["conviction_pct"], sizing_cfg) if regime_s
 sized_risk_pct = (req.risk_pct * mult) if req.risk_pct is not None else None
 ```
 
-That flows into `_position_size(...)` (`:970`) → the share count on
+That flows into `_position_size(...)` (`:971`, which also takes the
+similarly-multiplied `sized_risk_fixed` from `:970`) → the share count on
 `StockPositionCard` → `StockSendDialog` → broker.
 
 And it is a **different formula over the same block** (`stock_scan.py:138-144`):
-`lo + (1.0 - lo) * frac`, versus auto_trader's `max(lo, min(1.0, frac))`. Both
-inflate when `lo > 1`, but by different amounts. **The same `regime_sizing`
-block means two different things depending on which path reads it.** A
-config-integrity plan that never noticed its two readers disagree on the meaning
-of the config has missed its own subject. Logged here as its own item; it is a
-correctness defect independent of validation.
+`lo + (1.0 - lo) * frac`, versus auto_trader's `max(lo, min(1.0, frac))`.
 
-One asymmetry worth noting for Stage 0: `stock_scan.py:142` guards its division
+**These disagree on the SHIPPED, VALID config — today, with no typo and nothing
+malformed.** Executed against both real functions with the shipped
+`min_mult: 0.5, full_conviction_pct: 40, enabled: true`:
+
+| conviction | `auto_trader` | `stock_scan` | ratio |
+|---|---|---|---|
+| 0 | 0.500 | 0.500 | 1.00× |
+| 10 | 0.500 | 0.625 | **1.25×** |
+| 20 | 0.500 | 0.750 | **1.50×** |
+| 30 | 0.750 | 0.875 | 1.17× |
+| 40 | 1.000 | 1.000 | 1.00× |
+
+The scan card's share count and the auto-trade fire path size the same setup up
+to **50% apart**. That is a wrong number on a broker order under
+`audit_rule`'s gate, requiring no config edit at all. Round 2 filed this as "a
+correctness defect independent of validation" and assigned it to no stage; that
+was wrong, and it is now Stage 0 requirement #7 with its own acceptance criterion
+and its own decision in §9.7.
+
+**And under a `min_mult` typo the scan formula is not merely inflated — it is
+INVERTED.** With `lo = 5`, `lo + (1-lo)·frac` is monotonically *decreasing* in
+conviction (verified: conviction 0 → 5.00, 10 → 4.00, 20 → 3.00, 40 → 1.00).
+The strongest signal gets the smallest position. That is the same class of defect
+as the inverted direction-conviction gate that motivated this entire plan.
+
+An existing test already pins this multiplier and asserts an invariant the code
+does not honour: `tests/test_stock_scan_regime.py:5-11`,
+`test_conviction_mult_only_reduces`, is true for `min_mult <= 1` and **false**
+for `min_mult > 1`. Stage 0's tests must reference it — its name is a claim.
+
+One asymmetry worth noting for Stage 0: `stock_scan.py:143` guards its division
 (`if full else 0.0`); `auto_trader.py:130` does **not**, so
 `full_conviction_pct: 0` is an uncaught `ZeroDivisionError` on the fire path.
 
@@ -221,28 +302,60 @@ One asymmetry worth noting for Stage 0: `stock_scan.py:142` guards its division
 Round 1's Stage 0 ("replace the `except: return {}` with a hard failure") is
 necessary but nowhere near sufficient. Stage 0 must:
 
+0. **Own the startup call site and the `config_health` holder.** Round 2 put
+   these in Stage 4 while Stage 0's acceptance said "rejected at startup", so
+   Stage 0 could not meet its own criterion on its own branch. They move here.
+   Stage 4 then adds only the endpoint and the frontend. **The call must run
+   BEFORE any scheduler starts** — the scan scheduler starts at
+   `main.py:172-177`, early in the lifespan body (`lifespan` is defined at
+   `:132-133`, its startup section runs `:134-268`, `yield` at `:269`), so a
+   call placed after it lets a scheduled scan fire against an unpopulated
+   holder.
 1. **Validate value ranges, not just parseability**: `0 < min_mult <= 1.0`,
    `full_conviction_pct > 0`. This is what stops §2.1, and no amount of
-   exception re-routing does.
-2. **Clamp at the point of use** as a belt-and-braces second line, so a value
-   that somehow reaches the arithmetic cannot exceed 1.0.
+   exception re-routing does. Both bounds matter: `min_mult: -2` yields a
+   negative `dollar_risk`, and `_position_size` (`stock_scan.py:684`) returns
+   `max(1, int(negative))` = 1 share — another silent wrong number.
+2. **Clamp at the point of use — and RECORD the clamp.** A silent clamp is this
+   plan's own thesis failure introduced by its own remedy: with the startup
+   check bypassed (Kenneth edits without restarting — §9.5's unguarded case), a
+   bare clamp turns `min_mult: 5` into a plausible `mult = 1.0` and nothing
+   anywhere says the config was ignored. So the clamp must clamp **both bounds**
+   and write into `config_health`, log at ERROR, and mark the affected card, so
+   a clamped run is never indistinguishable from a correct one.
 3. **Distinguish parse failure from `regime_sizing` absent** — both currently
    return `{}` and are indistinguishable at the return site.
 4. **Fail closed on the fire path** rather than firing unsized (§9.1).
-5. **Fix C3**: the bare indexes at `stock_scan.py:140-141` must not be able to
+5. **Fix C3**: the bare indexes at `stock_scan.py:141-142` must not be able to
    empty a scan through the per-symbol handler.
-6. **Account for the `lru_cache` asymmetry in §1 A1**: `{}` is cached forever,
-   so a "fixed" YAML does not revive auto-trade sizing without a restart.
+6. **Account for §1 A1b**: a file that *parses* to a wrong, `None` or partial
+   value is cached in all six readers, so a "fixed" YAML does not revive
+   anything without a restart. (A1a's restart-free recovery applies only to
+   files that fail to parse.)
+7. **Unify the two formulas**, per §2.2 — this is the item that fixes a wrong
+   number on a broker order today, independent of any config edit. Which formula
+   is canonical is Kenneth's decision, §9.7.
 
-**Size:** not the ~20 lines round 1 estimated. Two consumers, two formulas, a
-range validator, a clamp, and a test with a mocked broker on the armed path.
-Realistically ~120 source, ~200 test — and it may need splitting between the
-validation and the formula-divergence fix.
+**Size:** not the ~20 lines round 1 estimated, nor the ~120/~200 round 2 gave
+before the call site and the formula unification were added. Two consumers, two
+formulas, a range validator, a recording clamp, the startup holder, and a test
+with a mocked broker on the armed path: realistically **~180 source, ~280 test**.
+**This is at `audit_rule`'s ~500-line batch ceiling and should be split** into
+0a (formula unification + clamp, the money fix) and 0b (startup validation +
+holder).
 
-**Acceptance:** `min_mult: 5` is rejected at startup naming
-`regime_sizing.min_mult`; if it somehow reaches the arithmetic, `mult <= 1.0` on
-both paths; `full_conviction_pct: 0` raises no `ZeroDivisionError`;
-`min_mult` absent does not empty a scan.
+**Acceptance** — each clause checkable on Stage 0's own branch:
+- `min_mult: 5` and `min_mult: -2` are both rejected at startup naming
+  `regime_sizing.min_mult`, with the holder populated before any scheduler runs.
+- A value reaching the arithmetic is clamped to `0 < mult <= 1.0` on both paths
+  **and the clamp is visible** — in `config_health`, in the log at ERROR, and on
+  the affected card. A clamped run is never indistinguishable from a correct one.
+- Both paths return the **same** multiplier for the same conviction on the
+  shipped config (the §2.2 table collapses to a single column).
+- `test_conviction_mult_only_reduces` holds for every value the range validator
+  admits.
+- `full_conviction_pct: 0` raises no `ZeroDivisionError` on either path.
+- `min_mult` absent does not empty a scan (C3).
 
 **Branch:** `claude/yaml-integrity-stage0-regime-sizing`.
 **Rollback:** the clamp and range check are additive; revert restores today's
@@ -261,10 +374,16 @@ its own adversarial round.
 **Stages are NOT independent. Round 1 claimed "any stage can ship alone and is
 useful alone"; that is false and is withdrawn.** The real dependency graph:
 
-- **Stage 0** — genuinely standalone. Ships and is useful alone.
+- **Stage 0** — standalone **because it now carries its own startup call site
+  and holder** (§2.3 item 0). Round 2 claimed it was "genuinely standalone"
+  while its acceptance depended on a call site Stage 4 owned; that was the
+  contradiction. Note the honest limit: Stage 0's startup rejection is visible
+  in the log and in the holder, but not on screen until Stage 4 — the same
+  caveat §3 applies to Stages 1 and 2. Stage 0 ships first anyway because its
+  *other* half, the formula unification, fixes a live wrong number with no
+  surface required.
 - **Stage 4 (surface)** — must precede 1, 2 and 3 to give them a surface. It
-  also **owns the startup validation call site**, which round 1 accidentally
-  placed in Stage 3's rollback note.
+  adds the endpoint and frontend on top of Stage 0's holder.
 - **Stage 1** — output is a better `ValueError` message. Shipped before Stage 4,
   it is invisible: the message dies in `RunScanButton`'s `.catch(() => …)`.
 - **Stage 2** — output is a staleness signal. Shipped before Stage 4, it is a
@@ -293,40 +412,86 @@ contrast: nothing under `backend/app/` writes `scoring_rules.yaml` or
 Round 1 added this stage but left it unable to work: it served a verdict no stage
 produced, and a `stale` field owned by a stage scheduled after it.
 
-**4.1 — The startup call site lives HERE.** `main.py`'s lifespan (`:165-275`)
-calls no validator today. Stage 4 adds the single-line call and the
-module-level `config_health` holder it writes. Round 1 put this in Stage 3's
-rollback note, which — with Stage 3 scheduled last — meant Stage 4's banner
-would be structurally green until the final stage landed.
+**4.1 — The holder and call site come from Stage 0; Stage 4 adds the endpoint.**
+`main.py`'s lifespan startup section (`:134-268`, `yield` at `:269`) calls no
+validator today, and no `config_health`-shaped endpoint exists anywhere.
 
-**4.2 — The endpoint re-stats on read.** `GET /api/config/health` →
-`{ ok, errors: [{file, path, message}], stale }`. It must `stat` the file on
-every read rather than serving the boot-time verdict verbatim, so the banner can
-**never assert health about bytes it no longer matches** (§9.5). A stale-green
-banner is worse than no banner.
+**What the call validates, and what `ok` therefore means.** The only validator
+in the tree is `_validated_direction_conviction_blocks` (`config_loader.py:131`),
+which checks `direction_conviction` placement and nothing else. Stage 3 adds the
+rest, last. So through Stages 0, 4, 1 and 2 the banner would be structurally
+green for every Mode C hazard — the very thing this plan is named for — while
+reporting `ok: true`. §4.3 refuses to hardcode `stale: false` on exactly this
+reasoning; the same reasoning binds here.
+
+**So `ok` is scoped, and the payload must say so:** `{ ok, checked: [<family>…],
+errors, stale }`, and the banner renders "checks passing: direction_conviction,
+regime_sizing" rather than a bare green. An unscoped `ok` is an assertion the
+system cannot make.
+
+**4.2 — The endpoint re-parses and re-validates from disk; a `stat` alone
+cannot answer.** `GET /api/config/health` →
+`{ ok, checked, errors: [{file, path, message}], stale }`.
+
+Round 2 said the endpoint "must `stat` the file on every read". A `stat` tells
+you the mtime moved; it **cannot produce `ok` or `errors[]` for the new bytes** —
+that needs a re-parse and a re-run of the validator against a file the six
+`lru_cache`s are not holding. So: `stat` as the cheap pre-filter, and on change
+re-parse and re-validate from disk, outside the caches.
+
+That creates a **third state**, which the payload must carry rather than
+flattening into `true`/`false`: *disk is valid but differs from what this process
+is running* — the A1b case, where the fix is a restart, not an edit. A
+stale-green banner is worse than no banner (§9.5).
 
 **4.3 — `stale` ownership.** The field is populated by Stage 2. Until Stage 2
 ships, Stage 4 serves `stale: null` (unknown), not `false`. A hardcoded `false`
 would be an assertion the system cannot make.
 
-**4.4 — The unattended path.** Round 1 promised "the banner reads off that
-existing last-run record" and wired nothing. Scheduled scans
-(`scan_schedule_scheduler.py:150-156` → `_execute_stock_scan_core`, recorded via
-`record_scheduled_scan_run` at `:163`/`:170`) must either be surfaced by the
-health payload carrying the last scheduled-run error, or the claim must be
-dropped. **Decision: carry it** — a failed overnight scan Kenneth never sees is
-exactly this plan's subject.
+**4.4 — The unattended path, and why the last-run error is not enough.**
+Scheduled scans run at `scan_schedule_scheduler.py:150-156` →
+`_execute_stock_scan_core`, recorded via `record_scheduled_scan_run`
+(`:163`/`:170`). An error notifier already exists end to end
+(`_notify_scan_schedule_error` → `notify_enabled_channels`, `:87-98`) — round 2's
+framing that a failed overnight scan is invisible was not accurate for the case
+it covers.
+
+**But that path only fires when an exception ESCAPES, and C3 does not escape.**
+A missing `min_mult` becomes a per-symbol rejection at `stock_scan.py:1030-1032`,
+so the run completes, records `status="success"`, and
+`_notify_scan_schedule_success` (`:101-108`) emails Kenneth
+"**0 candidate(s) found**". The unattended path reports success on a scan the
+config silently emptied — this plan's thesis failure, inside the remedy round 2
+chose for it.
+
+**So the scheduled-run record and the health payload carry a mass-rejection
+signal**: candidate count plus a rejection-reason histogram. A run where every
+symbol failed for the same reason is unhealthy regardless of its status field.
 
 **4.5 — Frontend.** Per CLAUDE.md conventions (own folder, `index.tsx` +
 `.module.css`, atoms→molecules→organisms, no card shadows):
 - `configHealthStore` — ephemeral, not persisted (server state).
-- `ConfigHealthBootstrap` **atom**, mounted in `app/(frame)/layout.tsx`,
-  mirroring `EventThresholdsBootstrap` (`components/atoms/EventThresholdsBootstrap/index.tsx`,
-  mounted at `layout.tsx:31-32`). Round 1 omitted this and would have skipped
-  the atom level, which CLAUDE.md forbids.
+- `ConfigHealthBootstrap` **atom**, mounted in `app/(frame)/layout.tsx`
+  alongside `EventThresholdsBootstrap` (`layout.tsx:31`). Round 1 omitted the
+  atom entirely, which CLAUDE.md forbids.
+  **It must NOT simply mirror `EventThresholdsBootstrap`.** That component is,
+  in full, `useEffect(() => { fetch(); }, [fetch])` — one fetch on mount, no
+  interval — and `(frame)/layout.tsx` is a persistent shell that does not
+  remount across route changes. Mirroring it means **there is no poll**, so
+  §4.2's re-validate-on-read is never read a second time and "the banner clears
+  on the next poll" describes a mechanism that does not exist. This was round
+  2's remedy for §9.5 answering itself with nothing.
+  **Specify: a 60s interval, plus an immediate refetch on scan submit.** The
+  interval bounds how long a stale-green banner can persist; the submit refetch
+  makes the check land at the moment it matters.
 - `ConfigHealthBanner` organism.
 - `RunScanButton`'s catch changed from `.catch(() => …)` to `.catch((err) => …)`
-  surfacing `err.message`. Today (`RunScanButton/index.tsx:171-181`) it discards
+  surfacing `err.message`. **Say what Kenneth actually reads:** `lib/api.ts:64`
+  throws `` `API ${path} → ${res.status}: ${detail}` ``, so a raw pass-through
+  would toast `API /api/stock-scan → 500: misplaced direction_conviction block
+  in scoring_rules.yaml: found at …`. Functional but wrong for an alert toast —
+  strip the transport prefix and render the detail, with the full string kept
+  for the banner. Today (`RunScanButton/index.tsx:171-181`) it discards
   the error and toasts "Scan failed — backend unreachable", so a malformed YAML
   sends Kenneth to debug the wrong thing entirely — while `lib/api.ts:45-65`
   carefully extracts the `json.detail` it throws away.
@@ -334,9 +499,16 @@ exactly this plan's subject.
 **Size:** ~70 backend + ~60 backend test; ~140 frontend + CSS + ~80 frontend
 test. (Round 1 budgeted no tests for this stage.)
 
-**Acceptance:** with a deliberately broken YAML, the banner names the file and
-path; after fixing the file *without restarting*, the banner clears on the next
-poll (this is what 4.2's re-stat buys); a failed scheduled run surfaces.
+**Acceptance:**
+- With a deliberately broken YAML, the banner names the file and the path.
+- After fixing the file *without restarting*, the banner reflects the new state
+  within one interval (≤60s) — this is what 4.2's re-validate plus 4.5's poll
+  buy together; neither alone is sufficient.
+- A file that is valid on disk but differs from what the process is running
+  renders as the third state (restart needed), not as green.
+- A scheduled scan returning zero candidates because of config surfaces as
+  unhealthy, not as success.
+- The banner never renders a bare "ok" — it names which families were checked.
 
 **Branch:** `claude/yaml-integrity-stage4-surface`.
 **Rollback:** the banner is additive; reverting leaves today's behaviour.
@@ -424,7 +596,7 @@ typos only, so `sorted()` never sees mixed types.
 **Intraday is a trading-semantics question, not an implementation detail**, and
 round 1 routed it to nobody. `_DIRECTION_CONVICTION_DEFAULTS` omits intraday
 (`config_loader.py:101-103`) and `test_shipped_yaml_and_code_defaults_agree`
-(`:390`) asserts YAML and code defaults agree on null-ness, so a numeric intraday
+(`test_config_loader.py:355`) asserts YAML and code defaults agree on null-ness, so a numeric intraday
 threshold would be honoured by the resolver *and fail that existing test*. §9.4.
 
 **Also note a third call site:** `stock_scan.py:704` resolves the gate inside
@@ -439,7 +611,7 @@ change to what the resolver raises must account for `:704`.
 
 ---
 
-## 6. Stage 2 — staleness detection (Mode A1 only)
+## 6. Stage 2 — staleness detection (Mode A1b)
 
 **2.1 — Scope honestly: this stage detects A1, NOT A2.** Round 1 asserted the
 opposite ("a per-cache stash would … miss A2 entirely") and had it backwards.
@@ -450,6 +622,14 @@ each other", because it never records what each cache holds. **Per-cache hashes
 compared pairwise are the only construction that sees A2** — round 1 forbade the
 only thing that works. Given six caches and Kenneth's restart discipline, A2
 detection is deferred, not solved; recorded as a known gap.
+
+**2.1b — What is hashed, and against what reference.** Round 2 never said.
+**Scope: `scoring_rules.yaml` only** (Stage 3's breadth order brings the other
+two later). **Reference point: the bytes read by the startup validation in Stage
+0b**, not "first load" — with six caches populating lazily at six different
+moments there is no single first load, so "what was first loaded" was undefined
+and 2.2's rule could not be implemented as written. The startup read is the one
+moment all six are guaranteed not yet populated.
 
 **2.2 — Which signal wins.** `mtime` is the cheap pre-filter; the byte hash is
 authoritative. A changed `mtime` with an unchanged hash is not a divergence and
@@ -496,6 +676,8 @@ Collisions in the shipped file (verified programmatically): `event`, `vol`,
 `trend`, `pullback`, `trigger` = 6 paths each (a block at `horizons.<h>.<name>`
 *and* a scalar at `horizons.<h>.weights.<name>`); `atr_period` = 6; `enabled` = 4;
 `swing`/`position`/`intraday` = 3 each; `cautionBelow`/`rejectBelow` = 2 each.
+(The two largest are `strong` = 8 and `weak` = 7; they do not change the
+conclusion, but the table is illustrative, not exhaustive.)
 A name-based rule either rejects the shipped file on day one or must enumerate
 every legal path — at which point the typo it exists to catch (indenting
 `trend:` into `weights`) is indistinguishable from the legal `weights.trend`.
@@ -510,24 +692,49 @@ other.
 `horizons.<h>.*` spans lines 43-445 and is its own stage. **`regime_sizing` is
 NOT here** — it is gate-level and belongs to Stage 0.
 
-**3.3 — Do not police the file.** This schema owns the paths it declares, not the
-namespace. With a path-shaped schema this is a natural property rather than a
-rule fighting the mechanism. **But it has a cost that round 1 presented as a
-feature:** a misspelled *family* (`regime_gates:`, `confidence_gates:`) is
-silently skipped forever — the exact hazard this plan is named for, accepted as a
-false negative. §9.6.
+**3.3 — Do not police the file, but DO close a declared family's subtree.**
+Round 2 left this ambiguous, and the ambiguity decides whether Stage 3 catches
+anything at all. Two different rules were being conflated:
+
+- **Undeclared top-level families: OPEN.** An unrecognised family is ignored, so
+  an additive edit cannot 500 the scan. Cost: a misspelled *family*
+  (`regime_gates:` for `regime_gate:`) is silently skipped forever — this plan's
+  own hazard, accepted as a false negative. §9.6.
+- **Inside a DECLARED family: CLOSED.** An undeclared key within a family the
+  schema owns is an error naming the key and its family. **Without this, Stage 3
+  catches nothing that can actually happen to three of its four target
+  families** (see the acceptance table below), and C1 goes unsolved. §9.8.
 
 **Size and splitting.** `horizons` alone is ~400 YAML lines. Per family, roughly:
 `stock_score_thresholds` ~40 source/~60 test; `confidence_gate` ~30/~50;
 `regime_gate` ~30/~50; `fundamentals_gate` ~40/~60; `horizons.<h>.*` ~150/~250
 and probably a further split. Five branches, `claude/yaml-integrity-stage3-<family>`.
 
-**Acceptance, per family** (round 1's whole-file criterion was uncheckable on a
-single-family branch): the family's shipped block validates clean; a key indented
-one level wrong inside *that family* raises a `ValueError` naming where it was
-found and where it belongs; an unknown sibling family is ignored. The whole-file
-criterion ("shipped `scoring_rules.yaml` validates clean") is checked on the
-**last** family branch only.
+**Acceptance, per family.** Round 2's criterion — "a key indented one level
+wrong inside that family raises a `ValueError`" — is **unwritable for three of
+the four targets**, because they are flat blocks of scalars with no nesting to
+indent into (verified against the shipped file):
+
+| Family | Shape | Realistic typo |
+|---|---|---|
+| `stock_score_thresholds` | flat: `pass`, `caution` | misspelled key |
+| `confidence_gate` | flat: `enabled`, `cautionBelow`, `rejectBelow` | misspelled key |
+| `regime_gate` | flat: 4 scalars | misspelled key |
+| `fundamentals_gate` | **nested**: `safety`, `weights`, `thresholds`, `quality_label_thresholds` + 6 scalars | misspelled key **or** mis-indent |
+
+So the criterion is per shape:
+- **Flat families:** `cautionbelow:` for `cautionBelow:`, or
+  `headwind_reject_pt:` for `headwind_reject_pct:`, raises a `ValueError` naming
+  the key and the family. This is the closed-subtree rule in 3.3, and it is the
+  only thing that makes Stage 3 useful for these three.
+- **Nested families (`fundamentals_gate`, `horizons.<h>.*`):** both the
+  misspelled-key case and the mis-indent case raise, naming where the key was
+  found and where it belongs.
+- Every family: its shipped block validates clean; an unknown *sibling family*
+  is ignored.
+
+The whole-file criterion ("shipped `scoring_rules.yaml` validates clean") is
+checked on the **last** family branch only.
 
 **Rollback:** the validator is invoked from Stage 4's single-line call site, so
 reverting a family's schema cannot affect boot.
@@ -536,37 +743,66 @@ reverting a family's schema cannot affect boot.
 
 ## 8. Order
 
-1. **Stage 0 — `regime_sizing`.** Gate-level, standalone, ships first.
-2. **Stage 4 — surface.** Moved ahead of 1/2/3: until it exists, every other
-   stage's message dies in a log, and it owns the startup call site.
-3. **Stage 1 — `direction_conviction` defects.** Where the next edit lands.
-4. **Stage 2 — staleness (A1).**
-5. **Stage 3 — path-shaped schema**, per family, scoring → risk → contracts.
+0a. **Formula unification + recording clamp.** Gate-level, fixes a live wrong
+   number (§2.2) with no surface required. Ships first.
+0b. **`regime_sizing` range validation + startup holder and call site.**
+   Gate-level. Split from 0a to stay under `audit_rule`'s batch ceiling.
+0c. **D2 — atomic writes.** Gate-level, ~20 source / ~40 test. See below.
+1. **Stage 4 — surface.** Moved ahead of 1/2/3: until it exists, every other
+   stage's message dies in a log. It builds on Stage 0b's holder.
+2. **Stage 1 — `direction_conviction` defects.** Where the next edit lands.
+3. **Stage 2 — staleness (A1b).**
+4. **Stage 3 — path-shaped schema**, per family, scoring → risk → contracts.
 
-**D2 (the non-atomic `risk_rules.yaml` write) is gate-level and is not yet
-assigned a stage** — it belongs either in Stage 0 alongside the other gate work
-or in its own ~15-line change. §9.3.
+The three gate-level items (0a, 0b, 0c) ship before any below-gate work, per
+`audit_rule`. 0a first because it is the only one fixing a wrong number that is
+live today with no config edit at all.
+
+**D2 (= 0c) is gate-level and is now assigned its own change.** All
+three non-atomic writers (`risk_settings.py:40-43` and `:24-29`,
+`notification_settings.py:25-28`) convert to tmp + `os.replace`, matching the
+nine writers that already do. ~20 source, ~40 test. `settings.yaml` being out of
+scope for *validation* does not exempt its writers from this. §9.3b.
 
 **PROJECT_STATE registration.** `direction_conviction_gate_audit.hard_cap_note`
-records that this line of work has no phase record (`active_phase` is null) and
-that the three-round hard cap "did not fire automatically" as a result. Each
-stage gets a phase entry with a PRESENCE `verify` probe before it is built.
-`scripts/state.py:625-639` only flags drift when `declared_shipped !=
-actual_shipped`, so a `status: planned` phase with no probe is clean.
+records that the three-round hard cap "did not fire automatically" for this line
+of work, for want of a phase record. Each
+stage gets a phase entry with a PRESENCE `verify` probe before it is built —
+**a `verify` key is mandatory**, since `scripts/state.py:625-627` calls
+`probe(ph["verify"])` unconditionally and `probe` dereferences `v["path"]`
+(`:89`), so a phase entry without one raises `KeyError` and breaks the
+SessionStart hook. With a probe present, `state.py:634` only flags drift when
+`declared_shipped != actual_shipped`, so a `status: planned` phase whose probe
+does not yet match is clean.
 
-**On the per-stage adversarial gate — stated so a clean round is not mistaken
-for evidence.** `audit_rule` says a finding blocks *only* at the gate and that
-the brief must instruct the reviewer not to report anything else. Stages 1-4 are
-classified below-gate, so a gate-only round over them is required by construction
-to return nothing. **Stages 1-4 are therefore audited for correctness against
-their stated acceptance criteria, not against the `audit_rule` gate.** Only
-Stage 0 and D2 get a true gate audit.
+Note the record this plan quotes is itself stale: `hard_cap_note` says
+`active_phase` is null, but the shipped `PROJECT_STATE.json` has it set to
+`"STATE-PROBE-TARGET-SCOPING …"`. Do not act on the null claim.
+
+**On the adversarial gate — classify PER CHANGE, not per stage.** `audit_rule`
+says a finding blocks *only* at the gate and that the brief must instruct the
+reviewer not to report anything else. Round 2 applied that as a blanket
+per-stage rule ("Stages 1-4 are below-gate"), which is an excuse rather than an
+argument in at least two places:
+
+- **Gate-level:** Stage 0 in full; D2; **Stage 4's banner correctness** — it
+  renders a verdict to Kenneth, and §4.2's own words are "a stale-green banner
+  is worse than no banner", i.e. a wrong thing in front of a user; and
+  **Stage 3's false-POSITIVE behaviour** — rejecting a good config refuses a
+  scan Kenneth should have had.
+- **Below-gate:** a validator's false-NEGATIVE behaviour (failing to catch a
+  typo that was already going uncaught) leaves an existing wrong number, it does
+  not create one. That covers Stage 1 in full and Stage 3's miss cases.
+
+Below-gate work is audited against its stated acceptance criteria; gate-level
+work gets a true `audit_rule` round. A clean gate round over below-gate work
+certifies nothing and must not be reported as though it did.
 
 ---
 
 ## 9. Decisions for Kenneth
 
-### Settled 2026-09-16 and unaffected by either round
+### Settled 2026-09-16 and unaffected by any round
 
 **9.2 Staleness:** he never edits while the backend runs; he always restarts.
 No reload endpoint, no auto-reload.
@@ -577,7 +813,7 @@ MUCH MONEY goes into a trade.
 
 **Failure posture:** a bad config must restrict the scan and **never refuse to
 boot**. Everything runs in one process — scan scheduler, EDGAR prefetch, strategy
-watch evaluator, portfolio alert monitor (`main.py:172-268`) — so refusing to
+watch evaluator, portfolio alert monitor (`main.py`, lifespan startup `:134-268`) — so refusing to
 boot over a scan-threshold typo would kill alerting on live positions.
 
 The two statements about his behaviour are compatible and round 1 never noticed
@@ -588,8 +824,9 @@ requirement: a restart that does not come back up leaves open positions
 unmonitored.
 
 One correction to this section's own evidence: `main.py` wraps each scheduler so
-a failure warns and the app survives — true of eight blocks but **not** of
-`:179-184`, where `run_portfolio_alert_monitor`, `run_regime_monitor` and
+a failure warns and the app survives — true of eleven `try`/`except Exception` blocks in the lifespan startup
+(`main.py` lines 148, 167, 172, 186, 195, 217, 231, 240, 249, 258, 264) but
+**not** of `:179-184`, where `run_portfolio_alert_monitor`, `run_regime_monitor` and
 `run_chart_alert_scheduler` start with bare `asyncio.create_task` outside any
 `try`. The portfolio alert monitor — the thing the posture says must never be
 killed — is the unwrapped one. Not this plan's job to fix, but it must not be
@@ -613,7 +850,7 @@ cited as precedent.
 Left running on an invalid config: pre-breakout and fib-pullback scans,
 first-passage, exit-plan, and every monitor and scheduler.
 
-### NEEDS RE-CONFIRMATION — six items, three new in round 2
+### NEEDS RE-CONFIRMATION — nine items, three new in round 3
 
 **9.1 — Does a config failure disarm auto-trade?** The posture says restrict the
 scan and nothing else, decided on the belief that nothing outside the scan
@@ -643,7 +880,7 @@ the shipped config.
 
 **9.5 — NEW. 500 vs 400, and whether restart discipline counts as a control.**
 Round 1's scope table specified `400`. Both shipped call sites raise **500**,
-with the rationale in code: `stock_scan.py:1133-1147` — *"500, not 4xx: the
+with the rationale in code: `stock_scan.py:1132-1147` — *"500, not 4xx: the
 request is fine, the SERVER's YAML is broken and no request can succeed until it
 is fixed, so this must not be confused with the genuine 4xx this endpoint already
 raises for a bad user override"* (same at `scan.py:1426-1430`). The table above
@@ -657,6 +894,34 @@ restarting, the validator never runs and the banner reports the last boot's
 verdict — **green, on a file that is now broken**. §4.2's re-stat-on-read is the
 fix, and it is why Stage 2 should not be demoted as far as §9.2's reasoning
 suggests. Confirm: re-stat on every health poll.
+
+**9.7 — NEW (round 3). WHICH SIZING FORMULA IS CANONICAL?** §2.2 shows the scan
+path and the fire path size the same setup up to 50% apart on today's shipped,
+valid config. Unifying them is Stage 0 requirement #7, but *which* survives is a
+position-sizing decision, not an implementation detail:
+- `auto_trader`'s `max(lo, min(1, f))` — a **step floor**: full size at/above
+  full conviction, floor below it, nothing in between.
+- `stock_scan`'s `lo + (1-lo)·f` — a **linear ramp** from floor to full.
+
+The ramp is the smoother behaviour and is what the scan card has shown all
+along; the step is what has actually sized live auto-trades. **Recommendation:
+the linear ramp**, because it is what Kenneth has been reading on screen. But
+this changes live auto-trade sizing either way, so it is his call.
+
+**9.8 — NEW (round 3). Is a declared family's subtree CLOSED to undeclared
+keys?** §7 3.3 now says yes, and it has to for Stage 3 to be worth building:
+three of its four target families are flat scalar blocks where the only possible
+typo is a misspelled key. But closing a subtree means a key Kenneth adds
+deliberately inside a declared family becomes an error until the schema learns
+it. **Recommendation: closed**, with the error naming both the key and how to
+declare it.
+
+**9.9 — NEW (round 3). Is a silently clamped multiplier acceptable?** §2.3 item 2
+now requires the clamp to record itself — log at ERROR, mark the card, write to
+`config_health` — precisely so a clamped run is not mistaken for a correct one.
+The alternative is to refuse the scan outright on an out-of-range `min_mult`.
+**Recommendation: clamp and record**, matching the never-refuse-to-boot posture;
+refusing would restrict more than the scan.
 
 **9.6 — NEW. A misspelled top-level family is undetectable, by design.** §7 3.3
 tolerates unknown families so an additive edit cannot 500 the scan. The cost is
