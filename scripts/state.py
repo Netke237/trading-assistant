@@ -268,6 +268,32 @@ def _pointer_scoped_base(base_ref: str, state: dict) -> str:
     that ordering is backwards -- the pointer is set when the piece starts,
     before it has had a round -- whereas the false positive above is the
     ordinary case.
+
+    ROUND 3 FINDING, and it sat inside round 2's own fix: the narrowing ran for
+    EVERY pointer value, `null` included -- and `null` is not a scope, it is the
+    ABSENCE of one. The commit that PEELS the pointer off a piece therefore
+    became the excluded boundary, collapsing the window to the commits after it,
+    usually none. A branch that ran four rounds and then recorded the piece
+    UNDERCOUNTED while clearing the pointer in ONE commit rendered "No drift" at
+    exit 0. Clearing the pointer had become an escape hatch from the undercount
+    check, in the one file whose whole purpose is that the count cannot quietly
+    go wrong.
+
+    KENNETH CHOSE (A) on 2026-09-16 -- decision
+    STATE-PROBE-NULL-POINTER-2026-09-16, which carries the full reasoning and
+    the two rejected alternatives. A falsy pointer does not narrow at all, so
+    the unphased banner fires over the whole branch again.
+
+    ITS COST IS ACCEPTED, NOT OVERLOOKED, and is written here so a later round
+    does not read it as a fresh bug: a branch that clears the pointer BEFORE
+    merging draws the banner on an HONEST file, because the unphased path never
+    reads `already_shipped` counts (teaching it to was option C, rejected). That
+    banner clears by merging or by re-pointing -- both honest actions, neither
+    the round-1 shape whose only escape was writing a number known to be false
+    -- and measured over the last 25 state-file commits, this repo has never
+    cleared a pointer on a branch at all. A false ALARM is visible and
+    self-correcting; the false ALL-CLEAR it replaces ran for a week while four
+    rounds shipped unseen.
     """
     try:
         rel = STATE.relative_to(ROOT).as_posix()
@@ -278,6 +304,12 @@ def _pointer_scoped_base(base_ref: str, state: dict) -> str:
         return base_ref
 
     active = state.get("active_phase")
+    if not active:
+        # No pointer, nothing to scope to -- see ROUND 3 above. Answer for the
+        # whole branch rather than for the commits that happen to follow the
+        # one that cleared it.
+        return base_ref
+
     out = _git("log", "--format=%H", f"{base_ref}..HEAD", "--", rel)
     if out is None:
         return base_ref

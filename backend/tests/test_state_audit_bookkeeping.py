@@ -470,9 +470,27 @@ def test_a_pointer_that_never_moved_still_answers_for_the_whole_branch(repo):
 
 
 def test_scoping_degrades_to_the_full_range_when_state_is_outside_root(repo, monkeypatch):
+    """History that WOULD narrow, so the fallback is what is being measured.
+
+    The first version of this asserted against a repo with no state-file
+    history at all and a null pointer, which meant it passed whether the
+    fallback was there or not -- twice over. The pointer is set, and the branch
+    carries a real pointer move, so gutting the `except ValueError` branch
+    fails here.
+    """
+    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
+    repo.write_state(one, "Open piece one")
+    repo.commit("round 3: fixes on piece one")
+    two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
+    repo.write_state(two, "Record piece one; open piece two")
+
+    assert _mod._pointer_scoped_base("origin/main", two) != "origin/main", (
+        "this history must narrow while STATE is locatable, or the assertion "
+        "below cannot tell the fallback from a no-op"
+    )
+
     monkeypatch.setattr(_mod, "STATE", Path("/nowhere/PROJECT_STATE.json"))
-    repo.commit("round 3: fixes")
-    assert _mod._pointer_scoped_base("origin/main", _state()) == "origin/main"
+    assert _mod._pointer_scoped_base("origin/main", two) == "origin/main"
 
 
 def test_scoping_survives_unparseable_state_history(repo):
@@ -485,6 +503,122 @@ def test_scoping_survives_unparseable_state_history(repo):
     repo.git("commit", "-q", "-m", "round 1: broken state file")
     severity, _ = _mod.audit_bookkeeping_drift(_state(active=None))
     assert severity == "warn"
+
+
+# --- round 3: a cleared pointer is not a scope ------------------------------
+#
+# Kenneth's option (A), decision STATE-PROBE-NULL-POINTER-2026-09-16. Round 2's
+# fix narrowed the range for every pointer value, `null` among them, so the
+# commit that CLEARED the pointer became the excluded boundary and the window
+# collapsed to empty. No test here exercised _pointer_scoped_base with a null
+# pointer, which is exactly how that got through round 2.
+
+def test_clearing_the_pointer_does_not_hide_an_undercount(repo):
+    """THE REGRESSION, end to end. Four rounds run; one commit then records the
+    piece UNDERCOUNTED and clears the pointer. Before the fix this rendered "No
+    drift" at exit 0 -- clearing the pointer was an escape hatch from the one
+    check that exists to catch an undercount."""
+    piece = _piece_state("the piece",
+                         [{"name": "the piece", "audit_rounds": 0, "audit_clean": False}])
+    repo.write_state(piece, "Open the piece")
+    for n in (1, 2, 3, 4):
+        repo.commit(f"round {n}: fixes on the piece")
+
+    cleared = _piece_state(None, [
+        {"name": "the piece", "audit_rounds": 1, "audit_clean": True},
+    ])
+    repo.write_state(cleared, "Record the piece and clear the active phase")
+
+    result = _mod.audit_bookkeeping_drift(cleared)
+    assert result is not None, "the undercount went silent again"
+    severity, message = result
+    assert severity == "drift"
+    assert "reach round 4" in message
+    assert "HARD CAP" in message
+
+
+def test_a_cleared_pointer_does_not_narrow_the_range_at_all(repo):
+    """The mechanism, pinned directly: with no pointer there is no scope, so
+    the base ref comes back untouched rather than as the clearing commit."""
+    piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
+    repo.write_state(piece, "Open the piece")
+    repo.commit("round 4: fixes on the piece")
+    cleared = _piece_state(None, [{"name": "the piece", "audit_rounds": 4}])
+    repo.write_state(cleared, "Record the piece; clear the active phase")
+
+    assert _mod._pointer_scoped_base("origin/main", cleared) == "origin/main"
+
+
+def test_an_honest_cleared_pointer_draws_the_banner_too(repo):
+    """(A)'s ACCEPTED COST, pinned so a later round reads it as the decision it
+    is rather than as a fresh bug. The unphased path cannot read
+    `already_shipped` counts -- teaching it to was option C, rejected -- so a
+    branch that clears the pointer before merging is banner-ed even when its
+    count is perfectly honest."""
+    piece = _piece_state("the piece",
+                         [{"name": "the piece", "audit_rounds": 0, "audit_clean": False}])
+    repo.write_state(piece, "Open the piece")
+    for n in (1, 2, 3, 4):
+        repo.commit(f"round {n}: fixes on the piece")
+
+    honest = _piece_state(None, [
+        {"name": "the piece", "audit_rounds": 4, "audit_clean": True},
+    ])
+    repo.write_state(honest, "Record the piece: 4 rounds, clean; clear the pointer")
+
+    severity, message = _mod.audit_bookkeeping_drift(honest)
+    assert severity == "drift"
+    assert "active_phase is null" in message
+
+
+def test_the_cleared_pointers_banner_clears_by_re_pointing(repo):
+    """The first of its two honest escapes, and the one that needs no push."""
+    piece = _piece_state("the piece",
+                         [{"name": "the piece", "audit_rounds": 0, "audit_clean": False}])
+    repo.write_state(piece, "Open the piece")
+    for n in (1, 2, 3, 4):
+        repo.commit(f"round {n}: fixes on the piece")
+    repo.write_state(
+        _piece_state(None, [{"name": "the piece", "audit_rounds": 4, "audit_clean": True}]),
+        "Record the piece; clear the active phase",
+    )
+
+    re_pointed = _piece_state("the piece", [
+        {"name": "the piece", "audit_rounds": 4, "audit_clean": True},
+    ])
+    assert _mod.audit_bookkeeping_drift(re_pointed) is None
+
+
+def test_the_cleared_pointers_banner_clears_by_merging(repo):
+    """The second escape. `base_ref..HEAD` is empty once the work is merged, so
+    the wider range this fix restores cannot hold up a banner nobody can clear
+    -- the property `_round_numbers_in_branch_subjects` degrades to None for."""
+    piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
+    repo.write_state(piece, "Open the piece")
+    for n in (1, 2, 3, 4):
+        repo.commit(f"round {n}: fixes on the piece")
+    cleared = _piece_state(None, [{"name": "the piece", "audit_rounds": 1}])
+    repo.write_state(cleared, "Record the piece; clear the active phase")
+
+    assert _mod.audit_bookkeeping_drift(cleared) is not None
+    repo.set_origin_main("feature")
+    assert _mod.audit_bookkeeping_drift(cleared) is None
+
+
+def test_a_dangling_pointer_still_narrows(repo):
+    """Only a FALSY pointer skips the narrowing. A pointer naming something in
+    neither pool is a typo, not an absence: it still scopes to its own span, so
+    round 2's fix is not widened past what (A) asked for."""
+    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
+    repo.write_state(one, "Open piece one")
+    repo.commit("round 4: fixes on piece one")
+
+    typo = _piece_state("piece tow", [{"name": "piece two", "audit_rounds": 0}])
+    repo.write_state(typo, "Record piece one; open piece two (misspelt pointer)")
+    opened = repo.git("rev-parse", "HEAD")
+
+    assert _mod._pointer_scoped_base("origin/main", typo) == opened
+    assert _mod.audit_bookkeeping_drift(typo) is None
 
 
 # --- finding 4: the verify probe must pin the load-bearing half -------------
@@ -507,4 +641,22 @@ def test_the_shipped_entrys_verify_probe_tracks_the_base_ref_fix(repo):
     gutted = src.replace("def _resolve_base_ref", "def _reverted")
     assert not re.search(pattern, gutted, re.M), (
         "the probe still certifies this shipped with the base-ref fix removed"
+    )
+
+
+def test_the_null_pointer_entrys_verify_probe_tracks_the_early_return(repo):
+    """Same modelling error as ROUND 1 FINDING 4, refused up front for the new
+    entry: its probe must die when the one line of behaviour it certifies is
+    reverted, not merely when some neighbouring symbol is renamed."""
+    real_root = Path(__file__).parent.parent.parent
+    state = json.loads((real_root / STATE_REL).read_text(encoding="utf-8"))
+    entry = next(i for i in state["already_shipped"]
+                 if i["name"].startswith("STATE-PROBE-NULL-POINTER"))
+    pattern = entry["verify"]["pattern"]
+    src = (real_root / entry["verify"]["path"]).read_text(encoding="utf-8")
+
+    assert re.search(pattern, src, re.M), "the entry's probe does not match the real file"
+    reverted = re.sub(pattern, "pass", src, count=1)
+    assert not re.search(pattern, reverted, re.M), (
+        "the probe still certifies this shipped with the early return removed"
     )
