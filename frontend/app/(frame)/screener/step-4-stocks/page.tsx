@@ -136,6 +136,13 @@ export default function Step4StocksPage() {
   const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
   const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
 
+  // The table used to re-filter on `passes_gate || win_rate >= 0.40`. That was
+  // dead: stock_scan.py returns a "backtest gate:" rejection for every symbol
+  // failing passes_gate, so no candidate reaching here can fail it and the
+  // predicate was always true. Dropped rather than kept for reassurance — the
+  // funnel's count and this table are the same list.
+  const shownCandidates = result?.candidates ?? [];
+
   const scanning = scanState === 'SCANNING';
 
   const strategyLabel: Record<string, string> = {
@@ -353,7 +360,7 @@ export default function Step4StocksPage() {
           </div>
 
           <div className={styles.tableBody}>
-            {[...result.candidates.filter((c) => c.backtest.passes_gate || c.backtest.win_rate >= 0.40)].sort((a, b) => {
+            {[...shownCandidates].sort((a, b) => {
               if (healthSort === null) return 0;
               const aScore = a.fundamentals?.score ?? -1;
               const bScore = b.fundamentals?.score ?? -1;
@@ -362,7 +369,9 @@ export default function Step4StocksPage() {
               const d = deltas.get(c.symbol);
               const bt = c.backtest;
               const open = openSymbol === c.symbol;
-              const gateStatus = bt.passes_gate ? 'PASS' : 'CAUTION';
+              // Always PASS: a symbol failing the gate is rejected before it
+              // becomes a candidate, so the CAUTION branch was unreachable.
+              const gateStatus = 'PASS';
               return (
                 <div key={c.symbol}>
                   <button

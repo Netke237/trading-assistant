@@ -84,6 +84,9 @@ export default function Step6BacktestPage() {
     );
   }
 
+  // No candidate can fail passes_gate — stock_scan.py rejects those with a
+  // "backtest gate:" reason before they ever become candidates — so this is a
+  // no-op kept only because the header reads "N failed" off it.
   const passing = result.candidates.filter((c) => c.backtest.passes_gate);
   const filteredPassing = passing.filter((c) => {
     const days = c.next_event_days;
@@ -105,13 +108,24 @@ export default function Step6BacktestPage() {
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
         <Title as="h1" size={24}>Backtest Gate</Title>
         <Text size={13} tone="secondary">
-          {filteredPassing.length} candidates passed · {result.candidates.length - passing.length} failed ·
-          {rejected.length} rejected before backtest
+          {/* No "N failed" — candidates.length - passing.length is always 0,
+              since a symbol failing the gate is rejected before it becomes a
+              candidate. It was rendering a permanent "0 failed". */}
+          {filteredPassing.length} candidates passed · {rejected.length} rejected before backtest
         </Text>
       </div>
 
       {result.pipeline && (
         <ScanFunnel mode="stock" pipeline={result.pipeline} />
+      )}
+
+      {/* The event filter hides rows AFTER everything the funnel counted, so
+          without this the funnel's "Candidates N" sits above a shorter table
+          with nothing accounting for the difference. */}
+      {passing.length > filteredPassing.length && (
+        <Text size={11} tone="caution">
+          {passing.length - filteredPassing.length} of {passing.length} hidden by the event filter.
+        </Text>
       )}
 
       <div className={styles.tableHeader}>

@@ -1,0 +1,89 @@
+import '@testing-library/jest-dom';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import Step3Page from '../page';
+import { useScanStore } from '@/lib/scanStore';
+import type { ScanResult } from '@/lib/scanStore';
+
+/**
+ * The one line no unit test could reach.
+ *
+ * scanLogTotals() gates the SCAN LOG's numbers on a settled scan state, and its
+ * tests pin that thoroughly — but nothing asserted that page.tsx actually hands
+ * the FUNNEL `shownResult.pipeline` rather than the ungated `scanResult`
+ * .pipeline. Reverting that single line left every other test green, which is
+ * exactly the regression that shipped once already: header numbers derived from
+ * a cleared log sitting above a funnel still rendering the previous run's 518.
+ *
+ * So this mounts the real page and asserts the funnel is not there at all while
+ * a scan is running, with a completed result still sitting in the store.
+ */
+
+jest.mock('@/lib/api', () => ({
+  api: {
+    getRegime: jest.fn().mockResolvedValue(null),
+    getScanStatus: jest.fn().mockResolvedValue(null),
+    getLastScanStatus: jest.fn().mockResolvedValue({ status: null, updated_at: null }),
+    getEventThresholds: jest.fn().mockResolvedValue(null),
+  },
+}));
+
+// Not under test: it fires a scan and owns its own store writes.
+jest.mock('@/components/organisms/RunScanButton', () => ({
+  RunScanButton: () => null,
+}));
+jest.mock('@/components/organisms/SearchProfileBar', () => ({
+  SearchProfileBar: () => null,
+}));
+
+const previousRun: ScanResult = {
+  scan_id: 'REC-PREV', timestamp: '2026-09-15T21:33:00+00:00',
+  candidates: [{ symbol: 'AAA' } as never],
+  rejected: [{ symbol: 'R1', reason: 'no market data' }],
+  pipeline: {
+    scanned: 518, failed_data: 10, failed_pre_screen: 237, no_chain: 15,
+    failed_score: 200, failed_contracts: 51, other_rejected: 0,
+    failed_direction: 4, failed_shortlist: 0, candidates: 1,
+  },
+};
+
+function seed(scanState: string) {
+  useScanStore.setState({
+    scanResult: previousRun,
+    rejectedLog: [],          // RunScanButton clears this on scan start
+    scanState: scanState as never,
+    screenerMode: 'options',
+  });
+}
+
+describe('Step 3 — the funnel reads the same gated result the numbers do', () => {
+  afterEach(() => {
+    useScanStore.setState({ scanResult: undefined, rejectedLog: [], scanState: 'IDLE' as never });
+  });
+
+  it('renders the funnel for a completed scan', () => {
+    seed('COMPLETED');
+    render(<Step3Page />);
+
+    expect(screen.getByText('OPTIONS PIPELINE')).toBeInTheDocument();
+  });
+
+  it('hides the previous run\'s funnel while a new scan is running', () => {
+    // The regression this guards: the header fell back to passed + rejected
+    // while the funnel still rendered the stale pipeline's "Universe 518".
+    seed('SCANNING');
+    render(<Step3Page />);
+
+    expect(screen.queryByText('OPTIONS PIPELINE')).not.toBeInTheDocument();
+    expect(screen.queryByText('518')).not.toBeInTheDocument();
+  });
+
+  it('hides the previous run\'s funnel after a failed scan', () => {
+    // FAILED is a persisted terminal state, so this survives a reload.
+    seed('FAILED');
+    render(<Step3Page />);
+
+    expect(screen.queryByText('OPTIONS PIPELINE')).not.toBeInTheDocument();
+    expect(screen.queryByText('518')).not.toBeInTheDocument();
+  });
+});

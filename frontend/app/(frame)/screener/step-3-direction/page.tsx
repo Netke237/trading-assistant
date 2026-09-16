@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from '../screener.module.css';
@@ -668,7 +669,8 @@ function SectionBlock({
 export default function Step3Page() {
   const context        = useScanStore((s) => s.context);
   const setContext     = useScanStore((s) => s.setContext);
-  const rejectedLog    = useScanStore((s) => s.rejectedLog);
+  const liveRejectedLog = useScanStore((s) => s.rejectedLog);
+  const scanState       = useScanStore((s) => s.scanState);
   const regime         = useScanStore((s) => s.regime);
   const scanOverrides  = useScanStore((s) => s.scanOverrides);
   const scanResult     = useScanStore((s) => s.scanResult);
@@ -811,9 +813,19 @@ export default function Step3Page() {
   const [previewMinDte, previewMaxDte] = previewDteWindow(holdMin, holdMax);
   const displayDefaults: ParamDefaults = { ...defaults, min_dte: previewMinDte, max_dte: previewMaxDte };
 
-  const totalPassed   = scanResult?.candidates?.length ?? 0;
-  const totalRejected = rejectedLog.length;
-  const totalScanned  = totalPassed + totalRejected;
+  // `rejectedLog` is written only by RunScanButton and is NOT persisted, while
+  // the identical entries on `scanResult.rejected` ARE. After a reload the
+  // first is empty and the second is not, so reading the store field alone
+  // reported "Rejected 0" beside a restored scan's real "Scanned 518" — and
+  // emptied the reason breakdown below. Fall back to the persisted copy.
+  //
+  // ONLY in a settled state. RunScanButton deliberately empties `rejectedLog`
+  // when a scan STARTS and when one FAILS, without clearing `scanResult` — so
+  // an ungated fallback would undo both clears and show the previous run's log
+  // as though it were this one's.
+  // Derived together, in one place — see scanLogTotals.ts for why.
+  const { shownResult, rejectedLog, totalPassed, totalRejected, totalScanned, totalTrimmed } =
+    scanLogTotals(scanState, liveRejectedLog, scanResult);
 
   const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
 
@@ -1041,6 +1053,12 @@ export default function Step3Page() {
                   <Text size={11} tone="reject">Rejected</Text>
                   <span className={`${formStyles.badge} ${formStyles.badgeReject}`}>{totalRejected}</span>
                 </span>
+                {totalTrimmed > 0 && (
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="caution">Over cap</Text>
+                    <span className={formStyles.badge}>{totalTrimmed}</span>
+                  </span>
+                )}
                 <span className={formStyles.logStat}>
                   <Text size={11} tone="dim">DTE</Text>
                   <Text size={11} tone="secondary">
@@ -1054,8 +1072,8 @@ export default function Step3Page() {
             )}
           </div>
         </div>
-          {scanResult?.pipeline && (
-            <ScanFunnel mode="options" pipeline={scanResult.pipeline} />
+          {shownResult?.pipeline && (
+            <ScanFunnel mode="options" pipeline={shownResult.pipeline} />
           )}
           <ScanLogSection entries={rejectedLog} horizonKey={weightsKey} />
       </div>
