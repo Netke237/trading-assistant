@@ -685,14 +685,6 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     return shares, round(dollar_risk, 2)
 
 
-# Sentinel for _process_stock's pre-resolved direction gate. `None` is a
-# MEANINGFUL value for that parameter -- it is how "this direction/horizon is
-# exempt" is spelled -- so it cannot double as "the caller did not supply one".
-# Without the sentinel, the direct callers in the test suite would silently run
-# with the gate disabled while the orchestrated path ran with it on.
-_UNSET_MIN_TREND: Any = object()
-
-
 async def _process_stock(
     symbol: str,
     req: StockScanRequest,
@@ -700,8 +692,16 @@ async def _process_stock(
     price_map: dict[str, dict],
     benchmark_closes: list[float],
     fund_gate: dict | None = None,
-    direction_min_trend: Any = _UNSET_MIN_TREND,
 ) -> PositionCardOut | dict:
+    # Resolved OUTSIDE the `try` below, which converts every exception into a
+    # per-symbol rejection: a malformed threshold has to propagate as an error,
+    # not be reported to the user as though this one symbol had failed to
+    # screen. `_execute_stock_scan_core` resolves the same value once before
+    # dispatching any of these, so in the scan path this has already raised
+    # before the first symbol is touched; the call is kept here so that direct
+    # callers (the test suite) screen on the real gate rather than silently
+    # running with it disabled.
+    _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     async with _SCAN_SEM:
         try:
             end = date.today()
@@ -829,11 +829,7 @@ async def _process_stock(
             # which is how Intraday is excused rather than by naming it here.
             # Must stay identical to the options gate in routers/scan.py — both
             # now read the same resolver, which is what keeps them in step.
-            _min_trend = (
-                load_direction_conviction_min_trend(req.direction, req.horizon)
-                if direction_min_trend is _UNSET_MIN_TREND
-                else direction_min_trend
-            )
+            # `_min_trend` was resolved at the top of this function.
             if _min_trend is not None:
                 _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
                 if _trend_score < _min_trend:
@@ -1128,14 +1124,17 @@ async def _execute_stock_scan_core(
         pass   # RS column shows None — non-fatal
 
     fund_gate = _resolve_fundamentals_gate(req)
-    # Resolved ONCE, here, rather than per symbol inside _process_stock: that
-    # function catches Exception and turns it into a per-symbol rejection, so a
-    # malformed direction_conviction threshold would otherwise surface as every
-    # symbol failing for an opaque reason instead of the scan failing with the
-    # config error.
-    direction_min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
-    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate,
-                            direction_min_trend=direction_min_trend) for s in symbols]
+    # Resolved once HERE purely to fail fast: _process_stock resolves it again
+    # per symbol, but by then the universe's price and benchmark fetches above
+    # have already been paid for. A malformed threshold surfaces as a 422
+    # naming the offending key instead of a bare 500 whose message only reaches
+    # the server log.
+    try:
+        load_direction_conviction_min_trend(req.direction, req.horizon)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate)
+             for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []

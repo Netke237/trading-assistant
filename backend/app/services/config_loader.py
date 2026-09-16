@@ -85,6 +85,16 @@ def load_first_passage_cfg() -> dict:
 # These are the DEFAULTS. scoring_rules.yaml's
 # horizons.<horizon>.direction_conviction overrides them per horizon, and an
 # explicit `null` there disables the gate for that direction.
+_DIRECTION_CONVICTION_KEYS = frozenset({"bullish_min_trend", "bearish_min_trend"})
+_DIRECTION_CONVICTION_KEYS_TEXT = "bullish_min_trend / bearish_min_trend"
+
+# NOTE ON THE NUMBERS: the bearish floors MIRROR the bullish ones rather than
+# having been measured. The bullish side is the one with live history behind it;
+# the bearish side was a ceiling for three months, so there is no observed
+# bearish pass-rate to tune against — a mirror is the only defensible starting
+# point, not a validated one. UNMEASURED in the same sense as this repo's
+# iv_rank_* and pass_max_fraction thresholds. Revisit once a few real bearish
+# scans have run and the survivor count can be looked at; one edit either way.
 _DIRECTION_CONVICTION_DEFAULTS: dict[str, dict[str, float | None]] = {
     "swing":    {"bullish_min_trend": 30.0, "bearish_min_trend": 30.0},
     "position": {"bullish_min_trend": 40.0, "bearish_min_trend": 40.0},
@@ -118,12 +128,31 @@ def load_direction_conviction_min_trend(direction: str, horizon: str) -> float |
         )
     horizon_key = horizon.strip().lower()
 
+    horizons = load_scoring_cfg().get("horizons")
+    horizon_cfg = horizons.get(horizon_key) if isinstance(horizons, dict) else None
     block = (
-        load_scoring_cfg()
-        .get("horizons", {})
-        .get(horizon_key, {})
-        .get("direction_conviction")
+        horizon_cfg.get("direction_conviction")
+        if isinstance(horizon_cfg, dict) else None
     )
+
+    # The SHAPE is validated before the values, because the likeliest config
+    # typo is not a bad number — it is a misspelled key or a block written at
+    # the wrong nesting. Both used to skip validation entirely and fall through
+    # to the code default, so the edit was silently ignored and whoever made it
+    # believed they had moved the gate when they had not.
+    if block is not None and not isinstance(block, dict):
+        raise ValueError(
+            f"invalid direction_conviction block for horizon {horizon!r}: "
+            f"expected a mapping of {_DIRECTION_CONVICTION_KEYS_TEXT}, got {block!r}"
+        )
+    if isinstance(block, dict):
+        unknown = sorted(set(block) - _DIRECTION_CONVICTION_KEYS)
+        if unknown:
+            raise ValueError(
+                f"unknown direction_conviction key(s) {unknown} for horizon "
+                f"{horizon!r}: expected {_DIRECTION_CONVICTION_KEYS_TEXT}"
+            )
+
     if isinstance(block, dict) and dir_key in block:
         raw = block[dir_key]
     else:

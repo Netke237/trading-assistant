@@ -173,6 +173,15 @@ horizons:
       # the names that were not falling. Do not reintroduce a ceiling.
       #
       # Set either key to `null` to exempt that direction at this horizon.
+      #
+      # THE BEARISH NUMBER IS UNMEASURED -- it MIRRORS the bullish one rather
+      # than having been derived. The bullish floor has live history behind it;
+      # the bearish side ran as an inverted ceiling for three months, so there
+      # is no observed bearish pass-rate to tune against and a mirror is the
+      # only defensible starting point, not a validated one. Same standing as
+      # this file's iv_rank_* and pass_max_fraction thresholds. Revisit once a
+      # few real bearish scans have run and the survivor count can be looked
+      # at; one edit either way.
       bullish_min_trend: 30
       bearish_min_trend: 30
   intraday:
@@ -413,6 +422,9 @@ horizons:
       # screens most of the preset strip, not one entry. The bearish side was a
       # `max_trend` CEILING of 40 until 2026-09-16; that is what made the
       # inversion bite hardest here.
+      #
+      # The bearish number is UNMEASURED and mirrors the bullish one -- see the
+      # swing block above for why, and for when to revisit it.
       bullish_min_trend: 40
       bearish_min_trend: 40
 entry_quality:

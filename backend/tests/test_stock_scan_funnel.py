@@ -182,49 +182,35 @@ def test_stock_gate_matches_the_mirrored_floor_contract(
     assert body["pipeline"]["failed_direction"] == (1 if gated else 0)
 
 
-def test_both_scan_modes_resolve_the_same_floor_contract():
-    """The resolver the two modes share returns the contract above, for every
-    direction/horizon pair — including the Intraday exemption.
-
-    This is what makes the options and stock screens identical: they call this
-    one function. If someone edits scoring_rules.yaml, this fails and the
-    _MIRRORED_FLOORS contract has to be updated deliberately.
-    """
-    from app.services.config_loader import load_direction_conviction_min_trend
-
-    for (direction, horizon), floor in _MIRRORED_FLOORS.items():
-        resolved = load_direction_conviction_min_trend(direction, horizon)
-        assert resolved == floor, (
-            f"{direction}/{horizon}: resolver says {resolved}, contract says {floor}"
-        )
-
-
-def test_the_bearish_gate_is_a_floor_not_a_ceiling():
-    """The inversion regression, stated as the trading claim rather than as a
-    threshold comparison.
+@pytest.mark.parametrize("horizon", ["Swing", "Position"])
+def test_the_bearish_gate_is_a_floor_not_a_ceiling(stock_client, horizon):
+    """The inversion regression, asserted THROUGH THE ENDPOINT.
 
     On a Bearish scan the trend rule scores how strongly price is falling, so
     the STRONGEST short setup scores HIGHEST. A gate that drops high scores on
     the bearish side deletes exactly the candidates the scan exists to find —
     which is what shipped between 2026-06-18 and 2026-09-16.
-    """
-    from app.services.config_loader import load_direction_conviction_min_trend
 
-    for horizon in ("Swing", "Position"):
-        floor = load_direction_conviction_min_trend("Bearish", horizon)
-        assert floor is not None, f"Bearish/{horizon} must still be gated"
-        # A textbook strong downtrend: close below the MA, falling slope, high
-        # ADX — the additive method's three components all paying out.
-        assert 95 >= floor, (
-            f"Bearish/{horizon} rejects a trend score of 95 — the gate is "
-            f"inverted again"
-        )
-        # ...and the flat, structureless name is still removed, which is the
-        # gate's actual job.
-        assert 5 < floor, (
-            f"Bearish/{horizon} admits a trend score of 5 — the gate no longer "
-            f"removes candidates with no directional structure"
-        )
+    This has to run the real request. An earlier version asserted `95 >= floor`
+    against the number the resolver returns, which cannot fail no matter which
+    way the routers compare against it: flipping `<` to `>` in the gate left
+    that version green. The two cases below are the actual regression — a
+    textbook downtrend surviving, a structureless name being dropped — and
+    re-inverting the comparison breaks the first of them.
+    """
+    strong_downtrend = _run(stock_client, ["AAA"], direction="Bearish", horizon=horizon,
+                            score_stock=MagicMock(return_value=_card(95)))
+    assert strong_downtrend["pipeline"]["failed_direction"] == 0, (
+        f"Bearish/{horizon} threw away a trend score of 95 — the strongest "
+        f"short setup there is. The gate is inverted again."
+    )
+
+    no_structure = _run(stock_client, ["AAA"], direction="Bearish", horizon=horizon,
+                        score_stock=MagicMock(return_value=_card(5)))
+    assert no_structure["pipeline"]["failed_direction"] == 1, (
+        f"Bearish/{horizon} admitted a trend score of 5 — the gate no longer "
+        f"removes candidates with no directional structure, which is its job."
+    )
 
 
 #  Verbatim from their producers in routers/stock_scan.py. Three of these were

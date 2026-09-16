@@ -300,3 +300,99 @@ def test_every_scanned_symbol_is_accounted_for_in_the_funnel(client):
     assert pipeline["failed_direction"] == 1
     assert pipeline["failed_shortlist"] == 1
     assert pipeline["candidates"] == 1
+
+
+# ── The gate's thresholds, on the OPTIONS path ───────────────────────────────
+#
+# This file used to exercise the gate only at Bearish/Position and
+# Bearish/Intraday — no Bullish case, no Swing case, and no boundary value
+# anywhere. The cross-mode check that covered the rest lived in
+# test_stock_scan_funnel.py and worked by regex-parsing the `_DIRECTION_TREND_GATE`
+# dict out of scan.py's source; when the thresholds moved into
+# scoring_rules.yaml that dict went away and its coverage of THIS path went with
+# it. So the options gate is pinned here directly, against the same literal
+# contract the stock suite uses.
+#
+# Deliberately literal rather than read back from config_loader: a test that
+# derives its expectations from the code under test asserts only that the code
+# equals itself. A threshold change is supposed to fail here.
+_OPTIONS_FLOORS: dict[tuple[str, str], int | None] = {
+    ("Bearish", "Swing"):    30,
+    ("Bearish", "Position"): 40,
+    ("Bullish", "Swing"):    30,
+    ("Bullish", "Position"): 40,
+    ("Bearish", "Intraday"): None,   # exempt
+    ("Bullish", "Intraday"): None,   # exempt
+}
+
+
+@pytest.mark.parametrize("direction,horizon,trend,gated", [
+    # One point either side of each of the four real floors.
+    ("Bearish", "Position", 39, True),  ("Bearish", "Position", 40, False),
+    ("Bearish", "Swing",    29, True),  ("Bearish", "Swing",    30, False),
+    ("Bullish", "Position", 39, True),  ("Bullish", "Position", 40, False),
+    ("Bullish", "Swing",    29, True),  ("Bullish", "Swing",    30, False),
+    # A strong trend in the traded direction survives on BOTH sides. The
+    # bearish half is the inversion regression: under the old ceiling, 85 on a
+    # Bearish scan was thrown away by the options path too.
+    ("Bearish", "Position", 85, False), ("Bullish", "Position", 85, False),
+    ("Bearish", "Swing",    85, False), ("Bullish", "Swing",    85, False),
+    # Intraday is exempt in both directions, at any score.
+    ("Bearish", "Intraday",  1, False), ("Bullish", "Intraday",  1, False),
+])
+def test_options_gate_matches_the_mirrored_floor_contract(
+    client, direction, horizon, trend, gated,
+):
+    """The options endpoint screens on the floors in _OPTIONS_FLOORS.
+
+    These are the same numbers test_stock_scan_funnel.py's _MIRRORED_FLOORS
+    pins for the stock endpoint. The two modes are supposed to screen
+    identically; asserting the same contract from both sides is what makes a
+    divergence fail rather than pass quietly in one of them.
+    """
+    floor = _OPTIONS_FLOORS[(direction, horizon)]
+    assert gated == (floor is not None and trend < floor), (
+        "the parametrize case disagrees with the floor contract it is meant to "
+        "exercise — fix the case, not the assertion"
+    )
+
+    body = _run(client, _cards(("AAA", trend)), direction=direction, horizon=horizon)
+    assert body["pipeline"]["failed_direction"] == (1 if gated else 0)
+    assert len(body["candidates"]) == (0 if gated else 1)
+
+
+@pytest.mark.parametrize("horizon", ["Swing", "Position"])
+def test_options_bearish_gate_is_a_floor_not_a_ceiling(client, horizon):
+    """The inversion regression on the options path, stated as the trading
+    claim: the strongest short setup must reach the ranking table.
+
+    Asserted through the endpoint, not against the resolver's return value —
+    flipping the comparison in scan.py has to break this.
+    """
+    strong_downtrend = _run(client, _cards(("AAA", 95)),
+                            direction="Bearish", horizon=horizon)
+    assert strong_downtrend["pipeline"]["failed_direction"] == 0, (
+        f"Bearish/{horizon} threw away a trend score of 95 — the strongest "
+        f"short setup there is. The gate is inverted again."
+    )
+    assert [c["symbol"] for c in strong_downtrend["candidates"]] == ["AAA"]
+
+    no_structure = _run(client, _cards(("AAA", 5)),
+                        direction="Bearish", horizon=horizon)
+    assert no_structure["pipeline"]["failed_direction"] == 1, (
+        f"Bearish/{horizon} admitted a trend score of 5 — the gate no longer "
+        f"removes candidates with no directional structure, which is its job."
+    )
+
+
+def test_options_rejection_reason_names_the_floor_it_applied(client):
+    """The reason string the user reads must say `<` and carry the threshold as
+    an integer. `direction_conviction:` is also the prefix both funnel
+    classifiers match on, so a reword here silently relocates these rejections
+    into the residual and the UI renders them as errors."""
+    body = _run(client, _cards(("AAA", 10)), direction="Bearish", horizon="Position")
+
+    reasons = [r["reason"] for r in body["rejected"]]
+    assert reasons == ["direction_conviction: trend 10 < 40 for Bearish Position"], reasons
+    assert body["pipeline"]["failed_direction"] == 1
+    assert body["pipeline"]["other_rejected"] == 0

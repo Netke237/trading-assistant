@@ -1404,6 +1404,16 @@ async def _execute_scan_core(
         raise HTTPException(status_code=422, detail=str(e))
 
     gate = _resolve_gate(req)
+    # Direction-conviction floor, resolved HERE — before the chain, quote and
+    # fundamentals fan-out below — so a malformed threshold costs nothing. The
+    # gate itself runs after `asyncio.gather`; resolving it there would let a
+    # config typo burn a full rate-limited scan of the universe before failing.
+    # Surfaced as a 422 rather than a bare 500 so the message naming the bad key
+    # reaches whoever is editing the config, not just the server log.
+    try:
+        _direction_min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
     _atr_target = req.confidence_atr_mult_target
     _atr_stop = req.confidence_atr_mult_stop
@@ -1545,15 +1555,20 @@ async def _execute_scan_core(
     #
     # Thresholds live in scoring_rules.yaml
     # (horizons.<horizon>.direction_conviction) with defaults in config_loader.
-    # `None` means this direction/horizon is exempt. Resolved ONCE, before the
-    # loop, so a malformed threshold raises for the whole scan rather than
-    # per candidate.
-    _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
+    # `None` means this direction/horizon is exempt. `_direction_min_trend` was
+    # resolved at the top of this function, before the fan-out.
+    _min_trend = _direction_min_trend
     direction_filtered_count = 0
     if _min_trend is not None and candidates:
         _kept: list[TradeCardData] = []
         for _c in candidates:
-            _t = _c.stockBreakdown.trend if _c.stockBreakdown else 50
+            # `stockBreakdown` is a REQUIRED field on TradeCardData
+            # (schemas/__init__.py), and a pydantic model defines neither
+            # __bool__ nor __len__, so it is always truthy. The `if ... else 50`
+            # guard this used to carry was dead, and its 50 quietly changed
+            # meaning when the gate became a floor — it went from "rejected on a
+            # bearish scan" to "passes". Removed rather than re-tuned.
+            _t = _c.stockBreakdown.trend
             if _t < _min_trend:
                 direction_filtered_count += 1
                 rejected.append(RejectedCandidate(

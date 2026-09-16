@@ -223,3 +223,51 @@ def test_direction_conviction_treats_an_unknown_horizon_as_exempt():
     rather than raising keeps a non-scan caller from crashing on a horizon name
     this table simply does not cover."""
     assert load_direction_conviction_min_trend("Bearish", "Decade") is None
+
+
+@pytest.mark.parametrize("block", [
+    30,                                  # scalar written where a mapping belongs
+    "30",                                # ditto, quoted
+    [{"bearish_min_trend": 30}],         # list, e.g. a stray YAML "- "
+])
+def test_direction_conviction_rejects_a_block_that_is_not_a_mapping(block):
+    """Round 1 audit finding: a block of the wrong SHAPE used to skip every
+    validation and fall through to the code default, so the YAML edit was
+    silently ignored while the user believed they had moved the gate."""
+    with patch("app.services.config_loader.load_scoring_cfg",
+               return_value={"horizons": {"position": {"direction_conviction": block}}}):
+        with pytest.raises(ValueError, match="direction_conviction block"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+@pytest.mark.parametrize("typo", ["bearish_min_tren", "bearish_trend_min", "min_trend"])
+def test_direction_conviction_rejects_a_misspelled_key(typo):
+    """A misspelled key is the LIKELIEST config typo, and used to be the most
+    dangerous: it matched nothing, so the resolver silently returned the code
+    default and the edit had no effect at all."""
+    with patch("app.services.config_loader.load_scoring_cfg",
+               return_value=_cfg({"position": {typo: 30}})):
+        with pytest.raises(ValueError, match="unknown direction_conviction key"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_direction_conviction_names_the_offending_key_and_horizon():
+    """The message has to be actionable on its own — it is what reaches the
+    operator as a 422 body when a scan refuses to start."""
+    with patch("app.services.config_loader.load_scoring_cfg",
+               return_value=_cfg({"swing": {"bearish_min_tren": 30}})):
+        with pytest.raises(ValueError) as exc:
+            load_direction_conviction_min_trend("Bearish", "Swing")
+    message = str(exc.value)
+    assert "bearish_min_tren" in message          # what is wrong
+    assert "Swing" in message                     # where
+    assert "bearish_min_trend" in message         # what was expected
+
+
+def test_direction_conviction_tolerates_a_horizon_entry_that_is_not_a_mapping():
+    """A malformed SIBLING horizon must not take the resolver down — only the
+    horizon actually being scanned is this function's business."""
+    with patch("app.services.config_loader.load_scoring_cfg",
+               return_value={"horizons": {"position": None, "swing": {}}}):
+        assert load_direction_conviction_min_trend("Bearish", "Position") == 40.0
+        assert load_direction_conviction_min_trend("Bearish", "Swing") == 30.0
