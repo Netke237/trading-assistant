@@ -253,21 +253,129 @@ def test_direction_conviction_rejects_a_misspelled_key(typo):
 
 def test_direction_conviction_names_the_offending_key_and_horizon():
     """The message has to be actionable on its own — it is what reaches the
-    operator as a 422 body when a scan refuses to start."""
+    operator as the 500 body when a scan refuses to start.
+
+    The horizon is named in its YAML spelling (`swing`), not the caller's
+    (`Swing`): the message exists to point at the line that needs editing, and
+    that file spells its keys lower-case."""
     with patch("app.services.config_loader.load_scoring_cfg",
                return_value=_cfg({"swing": {"bearish_min_tren": 30}})):
         with pytest.raises(ValueError) as exc:
             load_direction_conviction_min_trend("Bearish", "Swing")
     message = str(exc.value)
     assert "bearish_min_tren" in message          # what is wrong
-    assert "Swing" in message                     # where
+    assert "swing" in message                     # where, as the YAML spells it
     assert "bearish_min_trend" in message         # what was expected
 
 
-def test_direction_conviction_tolerates_a_horizon_entry_that_is_not_a_mapping():
-    """A malformed SIBLING horizon must not take the resolver down — only the
-    horizon actually being scanned is this function's business."""
+def test_direction_conviction_rejects_a_horizon_entry_that_is_not_a_mapping():
+    """Round 2 audit finding: the previous version of this test asserted that
+    `{"horizons": {"position": None}}` resolved to the code default, pinning the
+    silent fallthrough as correct.
+
+    It cannot be benign. `horizons.position` being None means the ENTIRE
+    Position scoring block is gone — weights, trend, pullback, trigger, event,
+    vol, stop_premium — and stock_scorer would have thrown long before the gate
+    was consulted. Treating it as "use the defaults" hid a broken config file
+    behind a plausible-looking number."""
     with patch("app.services.config_loader.load_scoring_cfg",
                return_value={"horizons": {"position": None, "swing": {}}}):
-        assert load_direction_conviction_min_trend("Bearish", "Position") == 40.0
-        assert load_direction_conviction_min_trend("Bearish", "Swing") == 30.0
+        with pytest.raises(ValueError, match="horizons.position must be a mapping"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+# ── Shapes that used to make the YAML block silently inert ───────────────────
+#
+# Round 2 audit: the round-1 hardening caught a bad LEAF key and a bad block
+# shape, but a block at the wrong NESTING, a mis-cased or misspelled horizon
+# key, and a wrong-shaped `horizons` parent all still fell through to the code
+# defaults in total silence — which is the original finding's exact failure
+# mode, just one level up.
+
+def test_direction_conviction_rejects_a_block_nested_one_level_too_deep():
+    """The likeliest typo for a block three levels down: indent it once more and
+    it lands under a sibling key. Nothing sees it, the gate keeps running on its
+    old threshold, and the operator believes they moved the screen."""
+    cfg = {"horizons": {"position": {
+        "stop_premium": {"pass_max_fraction": 0.6,
+                         "direction_conviction": {"bearish_min_trend": 70}},
+    }}}
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        with pytest.raises(ValueError, match="misplaced direction_conviction block"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_direction_conviction_rejects_a_mis_cased_horizon_key():
+    """`Position:` is what Horizon = Literal['Intraday','Swing','Position']
+    shows everywhere in the codebase, so it is the natural thing to write — and
+    the lookup is lower-cased, so as written the whole block was inert."""
+    with patch("app.services.config_loader.load_scoring_cfg",
+               return_value={"horizons": {"Position": {
+                   "direction_conviction": {"bearish_min_trend": 55}}}}):
+        with pytest.raises(ValueError, match="must be lower-case"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_direction_conviction_rejects_a_misspelled_horizon_key():
+    with patch("app.services.config_loader.load_scoring_cfg",
+               return_value={"horizons": {"positon": {
+                   "direction_conviction": {"bearish_min_trend": 55}}}}):
+        with pytest.raises(ValueError, match="unknown horizon"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+@pytest.mark.parametrize("horizons", [None, [], [{"position": {}}], "position", 7])
+def test_direction_conviction_rejects_a_horizons_parent_of_the_wrong_shape(horizons):
+    """A stray `- ` turning the map into a list used to resolve to 'use the code
+    defaults' rather than failing — a structurally broken config file reported
+    as a working one."""
+    with patch("app.services.config_loader.load_scoring_cfg",
+               return_value={"horizons": horizons}):
+        with pytest.raises(ValueError, match="`horizons` must be a mapping"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_direction_conviction_validates_every_horizon_not_just_the_scanned_one():
+    """A typo in the `swing` block used to survive every Position and Intraday
+    scan and surface only the first time somebody ran a Swing scan."""
+    cfg = {"horizons": {
+        "swing":    {"direction_conviction": {"bearish_min_tren": 99}},   # typo
+        "position": {"direction_conviction": {"bearish_min_trend": 40}},  # fine
+    }}
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        with pytest.raises(ValueError, match="bearish_min_tren"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_shipped_yaml_and_code_defaults_agree():
+    """The thresholds exist in two places that must not drift: the shipped YAML
+    (what runs) and _DIRECTION_CONVICTION_DEFAULTS (what runs if the block is
+    ever deleted).
+
+    Round 2 audit described the trap this closes: edit the YAML, watch the
+    endpoint tests go red, then "fix" them by editing the defaults to match —
+    and end up with a gate running on the DEFAULTS while the YAML sits inert.
+    Pinning the two together means that path fails here instead of passing.
+    """
+    import yaml
+    from pathlib import Path
+    from app.services.config_loader import _DIRECTION_CONVICTION_DEFAULTS
+
+    cfg = yaml.safe_load(
+        (Path(__file__).parent.parent / "config" / "scoring_rules.yaml").read_text()
+    )
+    for horizon, block in cfg["horizons"].items():
+        declared = (block or {}).get("direction_conviction") or {}
+        defaults = _DIRECTION_CONVICTION_DEFAULTS.get(horizon, {})
+        for key in ("bullish_min_trend", "bearish_min_trend"):
+            yaml_val = declared.get(key)
+            code_val = defaults.get(key)
+            assert (yaml_val is None) == (code_val is None), (
+                f"{horizon}.{key}: YAML says {yaml_val!r}, code default says "
+                f"{code_val!r} — one exempts the direction and the other gates it"
+            )
+            if yaml_val is not None:
+                assert float(yaml_val) == float(code_val), (
+                    f"{horizon}.{key}: YAML {yaml_val} != code default {code_val}. "
+                    f"Change BOTH, or deleting the YAML block silently moves the gate."
+                )

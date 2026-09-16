@@ -173,6 +173,17 @@ horizons:
       # the names that were not falling. Do not reintroduce a ceiling.
       #
       # Set either key to `null` to exempt that direction at this horizon.
+      # DELETING a key is NOT the same as setting it `null`: a deleted key falls
+      # back to the code default in config_loader.py (which is 30/40, not
+      # "exempt"), an explicit `null` is honoured as "no gate for this
+      # direction". To turn a gate off, write `null` — do not remove the line.
+      #
+      # Every shape mistake here is REJECTED rather than ignored: a misspelled
+      # leaf key, a misspelled or mis-cased horizon key above, a block indented
+      # one level too deep, or a non-mapping anywhere on the path all raise and
+      # fail the scan with a message naming the offending key. That is
+      # deliberate — a silently inert edit is the failure this gate has already
+      # had once, and it cost three months.
       #
       # THE BEARISH NUMBER IS UNMEASURED -- it MIRRORS the bullish one rather
       # than having been derived. The bullish floor has live history behind it;

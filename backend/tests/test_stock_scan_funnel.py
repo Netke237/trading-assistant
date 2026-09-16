@@ -301,3 +301,75 @@ def test_funnel_reconciles_when_the_gate_passes_everything(stock_client):
     assert pipeline["failed_direction"] == 0
     assert _accounted(pipeline) == pipeline["scanned"] == 2
     assert pipeline["candidates"] == len(body["candidates"])
+
+
+# ── The config fail-fast, end to end ─────────────────────────────────────────
+#
+# Round 2 audit: deleting the whole fail-fast block from either router left the
+# suite 112/112 green, so the entirety of that protection was unguarded. These
+# tests are what make deleting it fail.
+
+_BAD_CFG = {"horizons": {"position": {"direction_conviction": {"bearish_min_tren": 30}}}}
+
+
+def test_a_malformed_threshold_fails_the_stock_scan_instead_of_screening_on_a_stale_one(
+    stock_client,
+):
+    """A config typo must stop the scan and name itself.
+
+    Without the pre-check the scan returns 200 with every symbol rejected under
+    a symbol literally called "unknown" — the resolver raises inside
+    _process_stock, asyncio.gather(return_exceptions=True) collects it, and
+    classify_stock_rejection files it in other_rejected. The user gets an empty
+    table and a residual count instead of "your config is broken"."""
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=_BAD_CFG):
+        r = stock_client.post("/api/stock-scan", json={
+            "symbols": ["AAA"], "universe": [], "direction": "Bearish",
+            "horizon": "Position", "strategy": "pullback_ema",
+        })
+    assert r.status_code == 500, r.text
+    detail = r.json()["detail"]
+    assert "bearish_min_tren" in detail, detail
+
+
+def test_the_stock_fail_fast_runs_before_the_universe_price_fetch(stock_client):
+    """It has to be cheap to be wrong. The check sits above the batch Tradier
+    quote call and the SPY benchmark fetch, so a broken config costs no
+    universe-wide round trip — it used to sit below both."""
+    fetch = MagicMock(return_value={})
+    with ExitStack() as stack:
+        stack.enter_context(patch("app.services.config_loader.load_scoring_cfg",
+                                  return_value=_BAD_CFG))
+        stack.enter_context(patch("app.routers.stock_scan.fetch_quotes", fetch))
+        r = stock_client.post("/api/stock-scan", json={
+            "symbols": ["AAA"], "universe": [], "direction": "Bearish",
+            "horizon": "Position", "strategy": "pullback_ema",
+        })
+    assert r.status_code == 500, r.text
+    assert fetch.call_count == 0, (
+        "the universe quote fetch ran before the config was checked — the "
+        "fail-fast is below it again"
+    )
+
+
+def test_process_stock_lets_a_config_error_propagate_rather_than_rejecting_the_symbol():
+    """_process_stock resolves the floor OUTSIDE its `except Exception`.
+
+    Inside it, a config error becomes {"symbol": ..., "reason": "invalid
+    direction_conviction..."} — which does not start with "direction_conviction:"
+    and so lands in other_rejected, reported to the user as a per-symbol
+    scanning failure rather than as the config fault it is. Moving the call back
+    inside the try has to fail here."""
+    import asyncio
+    from app.routers.stock_scan import _process_stock
+    from app.schemas.stock_scan import StockScanRequest
+
+    req = StockScanRequest(
+        universe=[], symbols=["AAA"], direction="Bearish",
+        horizon="Position", strategy="pullback_ema",
+    )
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=_BAD_CFG):
+        with pytest.raises(ValueError, match="bearish_min_tren"):
+            asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
+                _process_stock("AAA", req, "scan-1", {}, [])
+            )

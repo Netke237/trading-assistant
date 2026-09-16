@@ -1106,6 +1106,19 @@ async def _execute_stock_scan_core(
         except PresetUnavailableError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    # Direction-conviction floor, validated BEFORE the batch quote call and the
+    # SPY benchmark fetch below — a malformed threshold must not cost a
+    # universe-wide round trip first. 500, not 4xx: the request is fine, the
+    # SERVER's YAML is broken and no request can succeed until it is fixed, so
+    # this must not be confused with the genuine 4xx this endpoint already
+    # raises for a bad user override, and must trip server-error alerting.
+    # HTTPException serialises `detail` at any status, so the message naming the
+    # offending key still reaches the operator rather than only the log.
+    try:
+        load_direction_conviction_min_trend(req.direction, req.horizon)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
     # Pre-fetch all prices in one Tradier call (removes 519 individual HTTP requests)
     try:
         price_map = await asyncio.to_thread(fetch_quotes, symbols)
@@ -1124,15 +1137,6 @@ async def _execute_stock_scan_core(
         pass   # RS column shows None — non-fatal
 
     fund_gate = _resolve_fundamentals_gate(req)
-    # Resolved once HERE purely to fail fast: _process_stock resolves it again
-    # per symbol, but by then the universe's price and benchmark fetches above
-    # have already been paid for. A malformed threshold surfaces as a 422
-    # naming the offending key instead of a bare 500 whose message only reaches
-    # the server log.
-    try:
-        load_direction_conviction_min_trend(req.direction, req.horizon)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
     tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate)
              for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)

@@ -1408,12 +1408,19 @@ async def _execute_scan_core(
     # fundamentals fan-out below — so a malformed threshold costs nothing. The
     # gate itself runs after `asyncio.gather`; resolving it there would let a
     # config typo burn a full rate-limited scan of the universe before failing.
-    # Surfaced as a 422 rather than a bare 500 so the message naming the bad key
-    # reaches whoever is editing the config, not just the server log.
+    #
+    # 500, not 4xx: the request is fine, the SERVER's YAML is broken and no
+    # request can succeed until it is fixed. This endpoint already raises a
+    # genuine 422 a few lines above for a malformed USER override from the
+    # Step-3 panel; reusing that status here would make "your input is wrong"
+    # and "the server is misconfigured" indistinguishable to the client, and
+    # would keep a server fault out of 5xx alerting and retry policy.
+    # HTTPException serialises `detail` at any status, so the message naming
+    # the offending key still reaches the operator rather than only the log.
     try:
         _direction_min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
     # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
     _atr_target = req.confidence_atr_mult_target
     _atr_stop = req.confidence_atr_mult_stop

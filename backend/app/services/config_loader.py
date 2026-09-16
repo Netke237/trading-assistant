@@ -104,6 +104,91 @@ _DIRECTION_CONVICTION_DEFAULTS: dict[str, dict[str, float | None]] = {
 }
 
 
+_KNOWN_HORIZONS = frozenset({"swing", "intraday", "position"})
+
+
+def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
+    """Return {horizon_key: direction_conviction block or None}, having checked
+    the whole of scoring_rules.yaml's `horizons` map first.
+
+    Everything here exists because a config edit that is SILENTLY IGNORED is
+    the worst outcome for this particular gate: the operator believes they
+    moved the screen, the scan runs on the old number, and nothing says
+    otherwise. Each check below corresponds to a way that actually happened or
+    was demonstrated:
+
+      * `horizons` missing or not a mapping — a stray `- ` turning the map into
+        a list used to resolve to "use the code defaults" rather than failing.
+      * a horizon key that is mis-cased or misspelled (`Position:`, `positon:`)
+        — matched byte-exact against the lowercased lookup, so a block written
+        with the app's own display casing was inert. `Position:` is what
+        `Horizon = Literal['Intraday','Swing','Position']` shows everywhere in
+        the codebase, so this is the natural thing to write.
+      * a `direction_conviction` block indented one level too deep, landing
+        under a sibling key such as `stop_premium`. This is the likeliest typo
+        for a block that sits three levels down, and it is invisible: the
+        resolver simply never sees it.
+      * a block that is not a mapping, or carries an unrecognised leaf key.
+    """
+    cfg = load_scoring_cfg()
+    horizons = cfg.get("horizons")
+    if not isinstance(horizons, dict):
+        raise ValueError(
+            f"invalid scoring_rules.yaml: `horizons` must be a mapping of "
+            f"{sorted(_KNOWN_HORIZONS)}, got {type(horizons).__name__}"
+        )
+
+    blocks: dict[str, dict | None] = {}
+    for horizon_key, horizon_cfg in horizons.items():
+        key_text = str(horizon_key)
+        if key_text.lower() not in _KNOWN_HORIZONS:
+            raise ValueError(
+                f"unknown horizon {key_text!r} in scoring_rules.yaml `horizons`: "
+                f"expected one of {sorted(_KNOWN_HORIZONS)}"
+            )
+        if key_text != key_text.lower():
+            raise ValueError(
+                f"horizon key {key_text!r} in scoring_rules.yaml must be "
+                f"lower-case ({key_text.lower()!r}) — it is looked up "
+                f"case-sensitively, so as written it is silently ignored"
+            )
+        if not isinstance(horizon_cfg, dict):
+            raise ValueError(
+                f"invalid scoring_rules.yaml: horizons.{key_text} must be a "
+                f"mapping, got {type(horizon_cfg).__name__}"
+            )
+
+        # A block indented one level too deep ends up under a sibling key.
+        # Nothing else in this file nests a `direction_conviction`, so any
+        # occurrence below the horizon's own level is a misplaced block.
+        for sibling_key, sibling in horizon_cfg.items():
+            if isinstance(sibling, dict) and "direction_conviction" in sibling:
+                raise ValueError(
+                    f"misplaced direction_conviction block in scoring_rules.yaml: "
+                    f"found at horizons.{key_text}.{sibling_key}.direction_conviction, "
+                    f"but it must sit directly under horizons.{key_text} — as "
+                    f"written it is silently ignored and the gate keeps running "
+                    f"on its previous threshold"
+                )
+
+        block = horizon_cfg.get("direction_conviction")
+        if block is not None and not isinstance(block, dict):
+            raise ValueError(
+                f"invalid direction_conviction block for horizon {key_text!r}: "
+                f"expected a mapping of {_DIRECTION_CONVICTION_KEYS_TEXT}, got {block!r}"
+            )
+        if isinstance(block, dict):
+            unknown = sorted(set(block) - _DIRECTION_CONVICTION_KEYS)
+            if unknown:
+                raise ValueError(
+                    f"unknown direction_conviction key(s) {unknown} for horizon "
+                    f"{key_text!r}: expected {_DIRECTION_CONVICTION_KEYS_TEXT}"
+                )
+        blocks[key_text] = block
+
+    return blocks
+
+
 def load_direction_conviction_min_trend(direction: str, horizon: str) -> float | None:
     """Return the minimum trend score a `direction` scan requires at `horizon`,
     or None when no gate applies (Intraday today).
@@ -117,9 +202,11 @@ def load_direction_conviction_min_trend(direction: str, horizon: str) -> float |
       3. Otherwise None — no gate.
 
     Raises ValueError on a malformed threshold (non-numeric, boolean, or
-    outside the 0-100 range a trend score can actually take) rather than
-    silently disabling the gate: a typo in the config must fail the scan
-    loudly, not quietly widen the screen.
+    outside the 0-100 range a trend score can actually take), and on a config
+    whose SHAPE would make the block silently inert — see
+    _validated_direction_conviction_blocks, which checks every horizon, not
+    just the one being scanned. A typo in the config must fail the scan loudly,
+    not quietly widen the screen.
     """
     dir_key = f"{direction.strip().lower()}_min_trend"
     if dir_key not in ("bullish_min_trend", "bearish_min_trend"):
@@ -128,30 +215,12 @@ def load_direction_conviction_min_trend(direction: str, horizon: str) -> float |
         )
     horizon_key = horizon.strip().lower()
 
-    horizons = load_scoring_cfg().get("horizons")
-    horizon_cfg = horizons.get(horizon_key) if isinstance(horizons, dict) else None
-    block = (
-        horizon_cfg.get("direction_conviction")
-        if isinstance(horizon_cfg, dict) else None
-    )
-
-    # The SHAPE is validated before the values, because the likeliest config
-    # typo is not a bad number — it is a misspelled key or a block written at
-    # the wrong nesting. Both used to skip validation entirely and fall through
-    # to the code default, so the edit was silently ignored and whoever made it
-    # believed they had moved the gate when they had not.
-    if block is not None and not isinstance(block, dict):
-        raise ValueError(
-            f"invalid direction_conviction block for horizon {horizon!r}: "
-            f"expected a mapping of {_DIRECTION_CONVICTION_KEYS_TEXT}, got {block!r}"
-        )
-    if isinstance(block, dict):
-        unknown = sorted(set(block) - _DIRECTION_CONVICTION_KEYS)
-        if unknown:
-            raise ValueError(
-                f"unknown direction_conviction key(s) {unknown} for horizon "
-                f"{horizon!r}: expected {_DIRECTION_CONVICTION_KEYS_TEXT}"
-            )
+    # EVERY horizon is validated on every call, not just the one being scanned.
+    # Scoping validation to the scanned horizon meant a typo in the `swing`
+    # block survived every Position and Intraday scan and only surfaced the
+    # first time somebody ran a Swing scan.
+    blocks = _validated_direction_conviction_blocks()
+    block = blocks.get(horizon_key)
 
     if isinstance(block, dict) and dir_key in block:
         raw = block[dir_key]

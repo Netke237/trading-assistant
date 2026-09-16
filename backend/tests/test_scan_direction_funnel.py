@@ -24,32 +24,45 @@ from app.schemas import (
 )
 
 
-def _card(symbol: str, trend: int) -> TradeCardData:
+def _card(symbol: str, trend: int, direction: str = "Bearish") -> TradeCardData:
     """A minimal PASS candidate whose only interesting axis is `trend` — the
-    single field the direction-conviction gate reads."""
+    single field the direction-conviction gate reads.
+
+    `direction` only dresses the card consistently (a Bullish card should not
+    describe itself as a put). The gate reads `req.direction` off the REQUEST,
+    never `_c.direction`, so these cases exercise the right floor either way —
+    but a card that says "Bearish" inside an assertion about Bullish behaviour
+    is a trap for the first code path that ever does consult the card.
+    """
+    right = "P" if direction == "Bearish" else "C"
     return TradeCardData(
         symbol=symbol,
         company=symbol,
         price=100.0,
-        direction="Bearish",
+        direction=direction,
         status="PASS",
         stockScore=70,
         stockConfidence="PASS",
         stockBreakdown=ScoreBreakdown(
             trend=trend, pullback=50, trigger=50, event=50, volatility=50,
         ),
-        contract=f"{symbol}|100|2026-06-20|P",
+        contract=f"{symbol}|100|2026-06-20|{right}",
         contractScore=60,
         contractConfidence="PASS",
         contractBreakdown=ContractScoreBreakdown(
             dteFit=50, delta=50, ivAttractiveness=50, liquidity=50, spread=50,
         ),
         contractDetails=ContractDetails(
-            strike=100, expiry="2026-06-20", right="P", mid=1.0, delta=-0.5,
+            strike=100, expiry="2026-06-20", right=right, mid=1.0,
+            delta=-0.5 if direction == "Bearish" else 0.5,
             theta=-0.05, ivRank=50, dte=55,
         ),
         entry=TradeEntry(limit=1.0, maxFill=1.05, orderType="Limit"),
-        exit=TradeExit(invalidation=105.0, premiumStop=0.6, timeStopDays=10, target=90.0),
+        exit=TradeExit(
+            invalidation=105.0 if direction == "Bearish" else 95.0,
+            premiumStop=0.6, timeStopDays=10,
+            target=90.0 if direction == "Bearish" else 110.0,
+        ),
         rrRatio=2.0,
         rrModel="BS repriced (IV-derived)",
         finalStatus="PASS",
@@ -99,8 +112,8 @@ def _run(client, outcomes: dict[str, object], *, direction: str, horizon: str,
     return r.json()
 
 
-def _cards(*specs: tuple[str, int]) -> dict[str, object]:
-    return {sym: _card(sym, trend) for sym, trend in specs}
+def _cards(*specs: tuple[str, int], direction: str = "Bearish") -> dict[str, object]:
+    return {sym: _card(sym, trend, direction) for sym, trend in specs}
 
 
 def _accounted(pipeline: dict) -> int:
@@ -356,7 +369,8 @@ def test_options_gate_matches_the_mirrored_floor_contract(
         "exercise — fix the case, not the assertion"
     )
 
-    body = _run(client, _cards(("AAA", trend)), direction=direction, horizon=horizon)
+    body = _run(client, _cards(("AAA", trend), direction=direction),
+                direction=direction, horizon=horizon)
     assert body["pipeline"]["failed_direction"] == (1 if gated else 0)
     assert len(body["candidates"]) == (0 if gated else 1)
 
@@ -396,3 +410,45 @@ def test_options_rejection_reason_names_the_floor_it_applied(client):
     assert reasons == ["direction_conviction: trend 10 < 40 for Bearish Position"], reasons
     assert body["pipeline"]["failed_direction"] == 1
     assert body["pipeline"]["other_rejected"] == 0
+
+
+# ── The config fail-fast, end to end ─────────────────────────────────────────
+#
+# Round 2 audit: deleting the whole try/except fail-fast from this router left
+# the suite green, so none of that protection was actually guarded.
+
+_BAD_CFG = {"horizons": {"position": {"direction_conviction": {"bearish_min_tren": 30}}}}
+
+
+def test_a_malformed_threshold_fails_the_options_scan_before_any_fetching(client):
+    """A config typo must stop the scan, name itself, and cost nothing.
+
+    500 rather than 4xx deliberately: the request is fine and the server's YAML
+    is broken, so it must not be confused with the genuine 422 this same
+    endpoint raises for a malformed user override, and it has to reach
+    server-error alerting. The check sits above the batch quote call, so a
+    broken config does not burn a rate-limited scan of the whole universe
+    first — it used to run after the entire fan-out.
+    """
+    from unittest.mock import MagicMock
+
+    fetch = MagicMock(return_value={})
+    with ExitStack() as stack:
+        stack.enter_context(patch("app.services.config_loader.load_scoring_cfg",
+                                  return_value=_BAD_CFG))
+        stack.enter_context(patch("app.routers.scan.fetch_quotes", fetch))
+        stack.enter_context(patch(
+            "app.routers.scan.get_tradier_creds",
+            return_value=("tok", "https://example.invalid"),
+        ))
+        r = client.post("/api/scan", json={
+            "universe": ["AAA"], "direction": "Bearish", "horizon": "Position",
+            "overrides": {},
+        })
+
+    assert r.status_code == 500, r.text
+    assert "bearish_min_tren" in r.json()["detail"], r.json()
+    assert fetch.call_count == 0, (
+        "the universe quote fetch ran before the config was checked — the "
+        "fail-fast moved back below the fan-out"
+    )
