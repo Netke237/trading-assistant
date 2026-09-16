@@ -368,8 +368,27 @@ def test_process_stock_lets_a_config_error_propagate_rather_than_rejecting_the_s
         universe=[], symbols=["AAA"], direction="Bearish",
         horizon="Position", strategy="pullback_ema",
     )
+    # asyncio.run, matching the other 18 async call sites in this suite. The
+    # earlier `get_event_loop_policy().new_event_loop().run_until_complete(...)`
+    # never closed its loop, leaking a selector fd per run.
     with patch("app.services.config_loader.load_scoring_cfg", return_value=_BAD_CFG):
         with pytest.raises(ValueError, match="bearish_min_tren"):
-            asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
-                _process_stock("AAA", req, "scan-1", {}, [])
-            )
+            asyncio.run(_process_stock("AAA", req, "scan-1", {}, []))
+
+
+def test_the_stock_rejection_reason_names_the_floor_as_an_integer(stock_client):
+    """The stock path's user-visible reason string had no end-to-end pin, so
+    dropping the `:g` from its f-string survived the suite (round 3, M34) and
+    the user would have read `trend 20 < 40.0`.
+
+    `direction_conviction:` is also the prefix classify_stock_rejection matches
+    on, so a reword silently relocates these into other_rejected and the funnel
+    renders them as errors. The options path has had this assertion since
+    round 2; this is the missing half."""
+    body = _run(stock_client, ["AAA"], direction="Bearish", horizon="Position",
+                score_stock=MagicMock(return_value=_card(20)))
+
+    reasons = [r["reason"] for r in body["rejected"]]
+    assert reasons == ["direction_conviction: trend 20 < 40 for Bearish Position"], reasons
+    assert body["pipeline"]["failed_direction"] == 1
+    assert body["pipeline"]["other_rejected"] == 0

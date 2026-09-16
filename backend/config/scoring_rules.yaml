@@ -172,11 +172,16 @@ horizons:
       # which inverted the gate: it deleted the strongest short setups and kept
       # the names that were not falling. Do not reintroduce a ceiling.
       #
-      # Set either key to `null` to exempt that direction at this horizon.
-      # DELETING a key is NOT the same as setting it `null`: a deleted key falls
-      # back to the code default in config_loader.py (which is 30/40, not
-      # "exempt"), an explicit `null` is honoured as "no gate for this
-      # direction". To turn a gate off, write `null` — do not remove the line.
+      # To turn a gate off, write `null`. DO NOT DELETE THE LINE: a deleted key
+      # falls back to the code default in config_loader.py (30/40 — a gate, not
+      # an exemption), whereas an explicit `null` is honoured as "no gate for
+      # this direction". The two are opposite outcomes.
+      #
+      # Deleting is not merely different, it is UNSUPPORTED on this file: the
+      # shipped config is expected to declare all four thresholds explicitly,
+      # and test_shipped_yaml_and_code_defaults_agree fails if it does not. The
+      # code defaults are a safety net for a config that cannot be read, not a
+      # second place to configure the gate from.
       #
       # Every shape mistake here is REJECTED rather than ignored: a misspelled
       # leaf key, a misspelled or mis-cased horizon key above, a block indented

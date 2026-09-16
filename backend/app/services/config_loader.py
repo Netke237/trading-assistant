@@ -107,28 +107,56 @@ _DIRECTION_CONVICTION_DEFAULTS: dict[str, dict[str, float | None]] = {
 _KNOWN_HORIZONS = frozenset({"swing", "intraday", "position"})
 
 
+def _walk_direction_conviction_paths(node, path: tuple[str, ...] = ()):
+    """Yield the dotted path of every `direction_conviction` key anywhere in the
+    config, at any depth, through mappings and lists alike.
+
+    Keys are stringified: PyYAML parses `on:`, `yes:` and `true:` as BOOLEANS
+    and `1:` as an int, so a bare `key.lower()` on a raw key would blow up with
+    an AttributeError instead of the named error this module promises — and
+    neither router catches AttributeError, so it would escape as a bare 500
+    with no `detail` at all.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            key_text = str(key)
+            if key_text == "direction_conviction":
+                yield ".".join(path + (key_text,)), value
+            else:
+                yield from _walk_direction_conviction_paths(value, path + (key_text,))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _walk_direction_conviction_paths(value, path + (f"[{index}]",))
+
+
 def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
-    """Return {horizon_key: direction_conviction block or None}, having checked
-    the whole of scoring_rules.yaml's `horizons` map first.
+    """Return {horizon_key: direction_conviction block or None} for the known
+    horizons, having checked where every `direction_conviction` in the file
+    actually sits.
 
-    Everything here exists because a config edit that is SILENTLY IGNORED is
-    the worst outcome for this particular gate: the operator believes they
-    moved the screen, the scan runs on the old number, and nothing says
-    otherwise. Each check below corresponds to a way that actually happened or
-    was demonstrated:
+    This exists because a config edit that is SILENTLY IGNORED is the worst
+    outcome for this particular gate: the operator believes they moved the
+    screen, the scan keeps running on the old number, and nothing says
+    otherwise. That already happened once, for three months.
 
-      * `horizons` missing or not a mapping — a stray `- ` turning the map into
-        a list used to resolve to "use the code defaults" rather than failing.
-      * a horizon key that is mis-cased or misspelled (`Position:`, `positon:`)
-        — matched byte-exact against the lowercased lookup, so a block written
-        with the app's own display casing was inert. `Position:` is what
-        `Horizon = Literal['Intraday','Swing','Position']` shows everywhere in
-        the codebase, so this is the natural thing to write.
-      * a `direction_conviction` block indented one level too deep, landing
-        under a sibling key such as `stop_premium`. This is the likeliest typo
-        for a block that sits three levels down, and it is invisible: the
-        resolver simply never sees it.
-      * a block that is not a mapping, or carries an unrecognised leaf key.
+    THE RULE IS POSITIONAL, and deliberately narrow. Every
+    `direction_conviction` key in the file must sit at exactly
+    `horizons.<known horizon>.direction_conviction`. Anywhere else — one level
+    too deep under a sibling such as `vol`, two levels deep under
+    `trend.additive`, at the file's top level, inside a list, or under a
+    horizon key that is misspelled (`positon:`) or mis-cased (`Position:`,
+    which is exactly how `Horizon = Literal['Intraday','Swing','Position']`
+    spells it everywhere else in the codebase) — is a block that will never be
+    read, so it is an error rather than a silent no-op.
+
+    WHAT THIS DELIBERATELY DOES NOT DO is police the `horizons` namespace. An
+    earlier version rejected any key in `horizons` outside the known three,
+    which meant a harmless additive edit — a new horizon, or the standard
+    `_defaults: &anchor` holder that a YAML merge key needs — hard-500'd BOTH
+    scan endpoints while every other consumer of this file carried on working.
+    This feature owns `direction_conviction`; it does not own the file. An
+    unrecognised horizon carrying no `direction_conviction` is none of its
+    business.
     """
     cfg = load_scoring_cfg()
     horizons = cfg.get("horizons")
@@ -138,38 +166,29 @@ def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
             f"{sorted(_KNOWN_HORIZONS)}, got {type(horizons).__name__}"
         )
 
+    legal_paths = {f"horizons.{h}.direction_conviction" for h in _KNOWN_HORIZONS}
+    for found_path, _block in _walk_direction_conviction_paths(cfg):
+        if found_path not in legal_paths:
+            raise ValueError(
+                f"misplaced direction_conviction block in scoring_rules.yaml: "
+                f"found at {found_path}, but it must sit at one of "
+                f"{sorted(legal_paths)} — as written it is never read, so the "
+                f"gate silently keeps running on its previous threshold"
+            )
+
     blocks: dict[str, dict | None] = {}
-    for horizon_key, horizon_cfg in horizons.items():
-        key_text = str(horizon_key)
-        if key_text.lower() not in _KNOWN_HORIZONS:
-            raise ValueError(
-                f"unknown horizon {key_text!r} in scoring_rules.yaml `horizons`: "
-                f"expected one of {sorted(_KNOWN_HORIZONS)}"
-            )
-        if key_text != key_text.lower():
-            raise ValueError(
-                f"horizon key {key_text!r} in scoring_rules.yaml must be "
-                f"lower-case ({key_text.lower()!r}) — it is looked up "
-                f"case-sensitively, so as written it is silently ignored"
-            )
+    for key_text in sorted(_KNOWN_HORIZONS):
+        if key_text not in horizons:
+            continue
+        horizon_cfg = horizons[key_text]
+        # Only the KNOWN horizons are shape-checked. One of them not being a
+        # mapping means its whole scoring block is gone, which cannot be
+        # benign; an unrecognised sibling key is left alone (see above).
         if not isinstance(horizon_cfg, dict):
             raise ValueError(
                 f"invalid scoring_rules.yaml: horizons.{key_text} must be a "
                 f"mapping, got {type(horizon_cfg).__name__}"
             )
-
-        # A block indented one level too deep ends up under a sibling key.
-        # Nothing else in this file nests a `direction_conviction`, so any
-        # occurrence below the horizon's own level is a misplaced block.
-        for sibling_key, sibling in horizon_cfg.items():
-            if isinstance(sibling, dict) and "direction_conviction" in sibling:
-                raise ValueError(
-                    f"misplaced direction_conviction block in scoring_rules.yaml: "
-                    f"found at horizons.{key_text}.{sibling_key}.direction_conviction, "
-                    f"but it must sit directly under horizons.{key_text} — as "
-                    f"written it is silently ignored and the gate keeps running "
-                    f"on its previous threshold"
-                )
 
         block = horizon_cfg.get("direction_conviction")
         if block is not None and not isinstance(block, dict):
@@ -178,7 +197,7 @@ def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
                 f"expected a mapping of {_DIRECTION_CONVICTION_KEYS_TEXT}, got {block!r}"
             )
         if isinstance(block, dict):
-            unknown = sorted(set(block) - _DIRECTION_CONVICTION_KEYS)
+            unknown = sorted(str(k) for k in set(block) - _DIRECTION_CONVICTION_KEYS)
             if unknown:
                 raise ValueError(
                     f"unknown direction_conviction key(s) {unknown} for horizon "
@@ -214,6 +233,17 @@ def load_direction_conviction_min_trend(direction: str, horizon: str) -> float |
             f"unknown direction {direction!r}: expected 'Bullish' or 'Bearish'"
         )
     horizon_key = horizon.strip().lower()
+    # An unrecognised horizon RAISES rather than returning None. Returning None
+    # means "exempt", so an unknown horizon would silently disable the gate —
+    # the exact silent-widening this whole change exists to remove, left alive
+    # on the one axis the config validation cannot see. Unreachable from the
+    # API today (both request models Literal-restrict `horizon`), so this costs
+    # nothing; the day `Horizon` gains a member and the config entry is
+    # forgotten, it fails loudly instead of screening nothing.
+    if horizon_key not in _KNOWN_HORIZONS:
+        raise ValueError(
+            f"unknown horizon {horizon!r}: expected one of {sorted(_KNOWN_HORIZONS)}"
+        )
 
     # EVERY horizon is validated on every call, not just the one being scanned.
     # Scoping validation to the scanned horizon meant a typo in the `swing`

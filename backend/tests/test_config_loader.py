@@ -217,12 +217,17 @@ def test_direction_conviction_rejects_an_unknown_direction():
         load_direction_conviction_min_trend("Sideways", "Swing")
 
 
-def test_direction_conviction_treats_an_unknown_horizon_as_exempt():
-    """An unrecognised horizon has no floor to apply. It cannot reach here from
-    the API — both request models Literal-restrict `horizon` — so returning None
-    rather than raising keeps a non-scan caller from crashing on a horizon name
-    this table simply does not cover."""
-    assert load_direction_conviction_min_trend("Bearish", "Decade") is None
+def test_direction_conviction_rejects_an_unknown_horizon_from_the_caller():
+    """Round 3 audit finding: this used to return None — "exempt" — so an
+    unrecognised horizon SILENTLY DISABLED the gate.
+
+    That is the exact silent-widening this change exists to remove, left alive
+    on the one axis the config validation cannot see. Unreachable from the API
+    today (both request models Literal-restrict `horizon`), so raising costs
+    nothing; the day `Horizon` gains a member and somebody forgets the config
+    entry, it fails loudly instead of screening nothing at all."""
+    with pytest.raises(ValueError, match="unknown horizon"):
+        load_direction_conviction_min_trend("Bearish", "Decade")
 
 
 @pytest.mark.parametrize("block", [
@@ -312,7 +317,7 @@ def test_direction_conviction_rejects_a_mis_cased_horizon_key():
     with patch("app.services.config_loader.load_scoring_cfg",
                return_value={"horizons": {"Position": {
                    "direction_conviction": {"bearish_min_trend": 55}}}}):
-        with pytest.raises(ValueError, match="must be lower-case"):
+        with pytest.raises(ValueError, match="misplaced direction_conviction block"):
             load_direction_conviction_min_trend("Bearish", "Position")
 
 
@@ -320,7 +325,7 @@ def test_direction_conviction_rejects_a_misspelled_horizon_key():
     with patch("app.services.config_loader.load_scoring_cfg",
                return_value={"horizons": {"positon": {
                    "direction_conviction": {"bearish_min_trend": 55}}}}):
-        with pytest.raises(ValueError, match="unknown horizon"):
+        with pytest.raises(ValueError, match="misplaced direction_conviction block"):
             load_direction_conviction_min_trend("Bearish", "Position")
 
 
@@ -350,12 +355,20 @@ def test_direction_conviction_validates_every_horizon_not_just_the_scanned_one()
 def test_shipped_yaml_and_code_defaults_agree():
     """The thresholds exist in two places that must not drift: the shipped YAML
     (what runs) and _DIRECTION_CONVICTION_DEFAULTS (what runs if the block is
-    ever deleted).
+    ever lost).
 
-    Round 2 audit described the trap this closes: edit the YAML, watch the
-    endpoint tests go red, then "fix" them by editing the defaults to match —
-    and end up with a gate running on the DEFAULTS while the YAML sits inert.
-    Pinning the two together means that path fails here instead of passing.
+    WHAT THIS DOES AND DOES NOT CATCH, corrected after round 3. Resolution is
+    YAML-first, so the YAML always wins and the defaults are unreachable while
+    it is present — this test therefore does NOT catch "the gate is running on
+    the defaults while the YAML sits inert", which cannot happen, and it does
+    NOT catch an edit that changes the YAML and the defaults together (the
+    literal floor tables in the two funnel suites catch that, by running the
+    endpoints).
+
+    What it does catch is the two drifting APART, which matters because the
+    defaults are the safety net: if they say something different from the
+    shipped file, then the day the YAML block is lost or unreadable the gate
+    silently moves instead of holding its ground.
     """
     import yaml
     from pathlib import Path
@@ -364,7 +377,11 @@ def test_shipped_yaml_and_code_defaults_agree():
     cfg = yaml.safe_load(
         (Path(__file__).parent.parent / "config" / "scoring_rules.yaml").read_text()
     )
-    for horizon, block in cfg["horizons"].items():
+    # The UNION of both sides, not just the YAML's horizons: iterating only the
+    # YAML meant a code default for a horizon the YAML never declares was never
+    # examined (round 3 mutation M48 added one and survived).
+    for horizon in sorted(set(cfg["horizons"]) | set(_DIRECTION_CONVICTION_DEFAULTS)):
+        block = cfg["horizons"].get(horizon)
         declared = (block or {}).get("direction_conviction") or {}
         defaults = _DIRECTION_CONVICTION_DEFAULTS.get(horizon, {})
         for key in ("bullish_min_trend", "bearish_min_trend"):
@@ -379,3 +396,107 @@ def test_shipped_yaml_and_code_defaults_agree():
                     f"{horizon}.{key}: YAML {yaml_val} != code default {code_val}. "
                     f"Change BOTH, or deleting the YAML block silently moves the gate."
                 )
+
+
+# ── Round 3: the validator must not own the `horizons` namespace ─────────────
+
+@pytest.mark.parametrize("extra_key,extra_value", [
+    ("weekly",    {"weights": {"trend": 0.3}}),           # a plausible new horizon
+    ("_defaults", {"weights": {"trend": 0.3}}),           # the YAML anchor-holder idiom
+    ("quarterly", None),                                  # even a broken unknown entry
+])
+def test_an_unrecognised_horizon_without_a_gate_block_is_none_of_our_business(
+    extra_key, extra_value,
+):
+    """Round 3 audit finding: an earlier version rejected ANY key in `horizons`
+    outside the known three, so a harmless additive edit to scoring_rules.yaml —
+    a new horizon, or the `_defaults: &anchor` holder a YAML merge key needs —
+    hard-500'd BOTH scan endpoints while every other consumer of the file
+    carried on working.
+
+    This feature owns `direction_conviction`, not the file."""
+    cfg = {"horizons": {
+        extra_key:  extra_value,
+        "position": {"direction_conviction": {"bearish_min_trend": 40}},
+    }}
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        assert load_direction_conviction_min_trend("Bearish", "Position") == 40.0
+
+
+# ── Round 3: misplacement is positional, at ANY depth ───────────────────────
+
+@pytest.mark.parametrize("cfg,where", [
+    # Two levels too deep. NOT hypothetical: the shipped file has real 3-deep
+    # mappings at horizons.<h>.trend.{crossover,additive,relative_strength}, so
+    # a double-indent lands somewhere that exists.
+    ({"horizons": {"position": {"trend": {"additive": {
+        "direction_conviction": {"bearish_min_trend": 70}}}}}},
+     "two levels deep"),
+    # Outside `horizons` altogether.
+    ({"direction_conviction": {"bearish_min_trend": 70},
+      "horizons": {"position": {}}},
+     "file top level"),
+    # Inside a list-valued sibling — the old mapping-only check skipped these.
+    ({"horizons": {"position": {"variants": [
+        {"direction_conviction": {"bearish_min_trend": 70}}]}}},
+     "inside a list"),
+])
+def test_a_misplaced_block_is_rejected_at_any_depth(cfg, where):
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        with pytest.raises(ValueError, match="misplaced direction_conviction block"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_misplacement_is_detected_under_a_LATER_sibling_not_just_the_first():
+    """Round 3 mutation M44: restricting the search to the first sibling
+    survived the suite, because the only misnesting test had exactly one
+    sibling to search. In the shipped file `direction_conviction` is the 8th key
+    under each horizon, so a real misnest lands under `weights`, `trend`,
+    `pullback`, `trigger`, `event` or `vol` — never the first key."""
+    cfg = {"horizons": {"position": {
+        "weights":       {"trend": 0.3},
+        "trend":         {"method": "additive"},
+        "pullback":      {},
+        "trigger":       {},
+        "event":         {"reject_days": 21},
+        "vol":           {},
+        "stop_premium":  {"pass_max_fraction": 0.6,
+                          "direction_conviction": {"bearish_min_trend": 70}},
+    }}}
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        with pytest.raises(ValueError, match="misplaced direction_conviction block"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_a_non_string_yaml_key_gives_a_named_error_not_an_attributeerror():
+    """Round 3 mutation M35: PyYAML parses `on:`, `yes:` and `true:` as BOOLEAN
+    keys and `1:` as an int. Without stringifying, `key.lower()` raises
+    AttributeError — which neither router catches (both catch ValueError), so it
+    escapes as a bare 500 with no `detail` and destroys the naming-the-offending-
+    key guarantee this validation exists to provide."""
+    for weird_key in (True, 1, None):
+        cfg = {"horizons": {
+            weird_key:  {"direction_conviction": {"bearish_min_trend": 70}},
+            "position": {},
+        }}
+        with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+            with pytest.raises(ValueError, match="misplaced direction_conviction block"):
+                load_direction_conviction_min_trend("Bearish", "Position")
+
+
+def test_code_defaults_only_name_known_horizons():
+    """Round 3 mutation M48: test_shipped_yaml_and_code_defaults_agree iterates
+    the YAML's horizons, so a code default for a horizon the YAML never declares
+    was never examined — a typo'd default key (`positon`) would sit inert
+    forever, which is the exact failure the YAML side is hardened against."""
+    from app.services.config_loader import (
+        _DIRECTION_CONVICTION_DEFAULTS, _KNOWN_HORIZONS,
+    )
+    unknown = sorted(set(_DIRECTION_CONVICTION_DEFAULTS) - _KNOWN_HORIZONS)
+    assert not unknown, (
+        f"code defaults name horizon(s) {unknown} that the resolver will never "
+        f"look up — a typo here is silently inert"
+    )
+    for horizon, block in _DIRECTION_CONVICTION_DEFAULTS.items():
+        bad_keys = sorted(set(block) - {"bullish_min_trend", "bearish_min_trend"})
+        assert not bad_keys, f"{horizon}: unusable default key(s) {bad_keys}"

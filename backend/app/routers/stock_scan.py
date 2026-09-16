@@ -831,6 +831,27 @@ async def _process_stock(
             # now read the same resolver, which is what keeps them in step.
             # `_min_trend` was resolved at the top of this function.
             if _min_trend is not None:
+                # The `, 50` fallback is KEPT, unlike the `if _c.stockBreakdown
+                # else 50` removed from the options gate. They look like twins
+                # and are not: that one guarded a REQUIRED pydantic field on a
+                # model that is always truthy, so it was provably dead code,
+                # while this one fires for any card whose `rules` carries no
+                # trend entry — which several test fixtures build deliberately
+                # (`rules=[]`) to exercise backtest and signal paths. Raising
+                # here instead breaks four tests that are not about this gate.
+                #
+                # Unreachable in production: score_stock always appends
+                # trend_result (stock_scorer.py:1089) and every _trend_* branch
+                # returns a RuleResult named "trend".
+                #
+                # The 50 DID change meaning when the gate became a floor — at
+                # Bearish/Position it went from rejected (old ceiling of 40) to
+                # passing (floor of 40). That is the bullish side's behaviour,
+                # now mirrored, and it is one instance of a wider problem the
+                # gate has: it reads a single integer and cannot tell a measured
+                # 50 from "no measurement". Tracked as an open question in
+                # PROJECT_STATE.json rather than patched here, because the fix
+                # is a scorer-contract change, not a gate change.
                 _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
                 if _trend_score < _min_trend:
                     return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend:g} for {req.direction} {req.horizon}"}
@@ -1111,12 +1132,18 @@ async def _execute_stock_scan_core(
     # universe-wide round trip first. 500, not 4xx: the request is fine, the
     # SERVER's YAML is broken and no request can succeed until it is fixed, so
     # this must not be confused with the genuine 4xx this endpoint already
-    # raises for a bad user override, and must trip server-error alerting.
-    # HTTPException serialises `detail` at any status, so the message naming the
-    # offending key still reaches the operator rather than only the log.
+    # raises for a bad user override. HTTPException serialises `detail` at any
+    # status, so the message naming the offending key survives to the UI and to
+    # the scheduled path's `record_scheduled_scan_run(error=str(exc))`.
+    #
+    # The explicit log line is NOT redundant: this app installs no exception
+    # handler or logging middleware, and starlette's ExceptionMiddleware returns
+    # an HTTPException WITHOUT logging it — so raising a 500 here would
+    # otherwise leave no server-side trace at all.
     try:
         load_direction_conviction_min_trend(req.direction, req.horizon)
     except ValueError as e:
+        logger.error("STOCK SCAN %s aborted on malformed scoring_rules.yaml: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
     # Pre-fetch all prices in one Tradier call (removes 519 individual HTTP requests)

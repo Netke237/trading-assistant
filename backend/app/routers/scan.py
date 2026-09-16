@@ -1413,13 +1413,20 @@ async def _execute_scan_core(
     # request can succeed until it is fixed. This endpoint already raises a
     # genuine 422 a few lines above for a malformed USER override from the
     # Step-3 panel; reusing that status here would make "your input is wrong"
-    # and "the server is misconfigured" indistinguishable to the client, and
-    # would keep a server fault out of 5xx alerting and retry policy.
+    # and "the server is misconfigured" indistinguishable to the client.
     # HTTPException serialises `detail` at any status, so the message naming
-    # the offending key still reaches the operator rather than only the log.
+    # the offending key survives to the UI and to the scheduled path's
+    # `record_scheduled_scan_run(error=str(exc))`.
+    #
+    # The explicit log line is NOT redundant: this app installs no exception
+    # handler or logging middleware, and starlette's ExceptionMiddleware
+    # returns an HTTPException WITHOUT logging it — so raising a 500 here
+    # would otherwise leave no server-side trace at all, which is strictly
+    # worse than the unhandled ValueError it replaced.
     try:
         _direction_min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     except ValueError as e:
+        _log.error("SCAN %s aborted on malformed scoring_rules.yaml: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
     # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
     _atr_target = req.confidence_atr_mult_target
