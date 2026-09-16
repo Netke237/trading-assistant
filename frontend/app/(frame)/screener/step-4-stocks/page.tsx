@@ -184,14 +184,17 @@ export default function Step4StocksPage() {
     if (!selected) return;
     setError(null);
     setNotice(null);
-    // The catch is for a rejection runStockScan could not convert into a null
-    // return (it sets scanState before its own try opens) — without it that
-    // throw escapes this handler as an unhandled rejection and the user is
-    // told nothing at all.
+    // The catch is for a throw runStockScan could not convert into a null
+    // return (setScanState itself failing) — without it that throw escapes
+    // this handler as an unhandled rejection and the user is told nothing at
+    // all. It resets scanState as well as showing the reason: the throw
+    // happens with SCANNING already set, which leaves the Run button disabled
+    // for the rest of the session.
     let res: StockScanResult | null;
     try {
       res = await runStockScan(selected, params);
     } catch (err) {
+      useScanStore.getState().setScanState('FAILED');
       setError(`Scan failed — ${stockScanFailureReason(err, false)}`);
       return;
     }

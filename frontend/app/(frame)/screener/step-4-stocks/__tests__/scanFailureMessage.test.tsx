@@ -42,6 +42,10 @@ async function runScan() {
 describe('step-4-stocks — a failed scan shows why', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // AFTER clearAllMocks (which clears calls but NOT implementations), so the
+    // last case's mockRejectedValue cannot leak into a case reordered after
+    // it, and so this suite survives clearMocks/resetMocks being turned on.
+    failWith(null);
     act(() => {
       useScanStore.setState({
         context: { direction: 'Bullish', universe: 'SP500' } as never,
@@ -79,5 +83,7 @@ describe('step-4-stocks — a failed scan shows why', () => {
     (runStockScan as jest.Mock).mockRejectedValue(new Error('store is not hydrated'));
     await runScan();
     expect(await screen.findByText('Scan failed — store is not hydrated')).toBeInTheDocument();
+    // …and the Run button is usable again: the throw left SCANNING set.
+    expect(useScanStore.getState().scanState).toBe('FAILED');
   });
 });

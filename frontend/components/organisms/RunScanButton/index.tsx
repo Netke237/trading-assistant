@@ -87,11 +87,6 @@ export function RunScanButton() {
         });
         return;
       }
-      // Fire-and-forget by design (the button reflects progress through
-      // scanState), but a failure must not be silent: this path has no inline
-      // error area of its own the way step-4-stocks does, so surface the
-      // reason runStockScan() parked in the store as a toast, exactly as the
-      // options path below does for its own failure.
       const toastFailure = (reason: string) => useAlertStore.getState().addToast({
         kind: 'Critical',
         symbol: 'SYSTEM',
@@ -103,15 +98,26 @@ export function RunScanButton() {
       // scanState), but a failure must not be silent: this path has no inline
       // error area of its own the way step-4-stocks does, so surface the
       // reason runStockScan() parked in the store as a toast, exactly as the
-      // options path below does for its own failure. The .catch() is the belt
-      // for a rejection runStockScan's own try/catch could not convert (it
-      // sets scanState before that try opens).
-      void runStockScan(activeStrategy)
-        .then((res) => {
+      // options path below does for its own failure.
+      //
+      // The rejection handler is the belt for a throw runStockScan could not
+      // convert into a null return (setScanState itself failing). It resets
+      // scanState too: the throw happens with SCANNING already set, and
+      // telling the user why the scan failed while leaving the Run button
+      // disabled for the rest of the session is the worse of the two bugs.
+      // Two-argument then(), not .then().catch(): a chained catch would also
+      // catch a throw from toastFailure inside the handler above and answer it
+      // by calling toastFailure again with the toast layer's own error.
+      void runStockScan(activeStrategy).then(
+        (res) => {
           if (res) return;
           toastFailure(useScanStore.getState().stockScanError ?? 'unknown error');
-        })
-        .catch((err: unknown) => toastFailure(stockScanFailureReason(err, false)));
+        },
+        (err: unknown) => {
+          useScanStore.getState().setScanState('FAILED');
+          toastFailure(stockScanFailureReason(err, false));
+        },
+      );
       return;
     }
 

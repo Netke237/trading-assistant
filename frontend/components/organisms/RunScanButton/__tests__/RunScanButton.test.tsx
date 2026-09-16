@@ -11,6 +11,10 @@ jest.mock('@/lib/api', () => ({
   api: {
     postScanBody: jest.fn(),
   },
+  // The '@/lib/stockScan' mock below requireActual's the real module, so its
+  // stockScanFailureReason() reads this — without it the user-facing hint in
+  // this suite would render "the backend at undefined".
+  API_BASE_URL: 'http://localhost:8000',
 }));
 
 jest.mock('@/lib/stockScan', () => ({
@@ -162,6 +166,10 @@ describe('RunScanButton — conflict suppression wiring', () => {
     expect(addToastSpy).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'Stock scan failed — store is not hydrated' }),
     );
+    // The throw happens with SCANNING already set. Leaving it there disables
+    // the Run button for the rest of the session — telling the user why it
+    // failed and then not letting them retry is the worse bug.
+    expect(useScanStore.getState().scanState).toBe('FAILED');
   });
 
   it('shows a toast and does not call runStockScan when Stocks mode has no activeStrategy selected (M6)', async () => {

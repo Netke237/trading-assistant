@@ -32,10 +32,18 @@ export function stockPositionCardKey(c: PositionCardData): string {
 }
 
 /** Longest reason that still reads as a sentence in a toast row or the thin
- *  inline error line on step 4. A 502 from a proxy arrives as a whole HTML
- *  document (api.ts's apiError() falls back to the raw body text), and both
- *  of those surfaces render it unclamped. */
+ *  inline error line on step 4. Applied to the FINAL string, hint included —
+ *  clamping only the raw message let a long one plus the hint compose past
+ *  this. */
 const MAX_REASON_CHARS = 200;
+
+/** `apiError()` falls back to the raw response body when it is not JSON with a
+ *  `detail`, so a proxy's or gateway's error page arrives as the "detail".
+ *  200 characters of markup is not an explanation. */
+const HTML_DETAIL = /<(?:!doctype|html|head|body|title)\b/i;
+
+/** Splits apiError()'s `API ${path} → ${status}: ${detail}` (api.ts:64). */
+const API_ERROR = /^(API \S+ → \d+)(?::\s*([\s\S]*))?$/;
 
 /**
  * One human-readable line explaining why a stock scan failed — collapsed to a
@@ -47,41 +55,86 @@ const MAX_REASON_CHARS = 200;
  *  - `api.ts`'s `apiError()` already formatted it as
  *    `API /api/stock-scan → 422: <detail>`. The backend answered and said what
  *    was wrong; that detail is the entire point of binding the error, so it
- *    goes through as-is (clamped).
- *  - `fetch` rejected with a `TypeError` on a request that was actually sent.
- *    That, and only that, means nothing at the other end took it, so it is the
- *    one case the backend-unreachable hint is TRUE for — and a bare "Failed to
- *    fetch" needs it, since it explains nothing on its own.
+ *    goes through as-is — unless the "detail" is an HTML error page, which is
+ *    the body text apiError() falls back to and explains nothing, so only the
+ *    status line survives.
+ *  - the request was sent and `fetch` rejected with a transport failure. A
+ *    bare "Failed to fetch" explains nothing on its own, so this is the one
+ *    case that earns the backend-unreachable hint. Note the hint says the
+ *    request did not get through, NOT that the backend is down: a CORS or
+ *    mixed-content block rejects identically from a backend that is up and
+ *    answering, and the browser gives us no way to tell them apart.
  *  - anything else: a `SyntaxError` from a 200 whose body was not JSON, an
- *    `AbortError`, a `TypeError` thrown by our own request-building code
- *    before anything was sent (`reachedRequest === false`). Show it verbatim.
- *    Appending "is the backend reachable" here would repeat the original
- *    defect — pointing at a backend that answered, or was never asked.
+ *    `AbortError`, a `TypeError` raised by our own code (`api.postStockScan is
+ *    not a function`, a bad `NEXT_PUBLIC_API_URL`) before a socket was ever
+ *    opened. Show it verbatim. Appending "could not reach the backend" here
+ *    would repeat the original defect — pointing at a backend that answered,
+ *    or was never asked.
  *
  * @param reachedRequest false when the throw happened before `postStockScan`
- *   was called, so a TypeError from our own code can never borrow the network
- *   hint.
+ *   was called at all, so our own request-building code can never borrow the
+ *   network hint.
  */
 export function stockScanFailureReason(err: unknown, reachedRequest = true): string {
-  const raw = clampReason(err instanceof Error ? err.message : String(err ?? ''));
-  // Matches apiError()'s `API ${path} → ${status}` prefix, which it builds
-  // itself; the backend-supplied detail is interpolated after it and so cannot
-  // forge it. A thrown string of that shape reads the same way, hence no
-  // `instanceof Error` narrowing here.
-  if (raw.startsWith('API ')) return raw;
-  if (reachedRequest && err instanceof TypeError) {
-    const hint = `is the backend reachable at ${API_BASE_URL}?`;
-    return raw ? `${raw} (${hint})` : hint;
+  const raw = oneLine(err instanceof Error ? err.message : String(err ?? ''));
+  const cause = err instanceof Error && err.cause instanceof Error
+    // Node/undici hides the real ECONNREFUSED / ENOTFOUND / certificate error
+    // in `cause` behind a bare "fetch failed" — the actual explanation.
+    ? oneLine(err.cause.message)
+    : '';
+
+  // apiError() builds the `API ${path} → ${status}` head itself and
+  // interpolates the backend's detail AFTER it, so the head cannot be forged
+  // from the wire. A thrown string of that shape reads the same way, hence no
+  // `instanceof Error` narrowing.
+  const api = API_ERROR.exec(raw);
+  if (api) {
+    const [, head, detail = ''] = api;
+    return clampReason(HTML_DETAIL.test(detail)
+      ? `${head}: the server returned an HTML error page`
+      : raw);
   }
-  return raw || 'unknown error';
+
+  const withCause = cause && cause !== raw ? `${raw} — ${cause}` : raw;
+  if (reachedRequest && isTransportFailure(err)) {
+    const hint = `could not reach the backend at ${API_BASE_URL}`;
+    return clampReason(withCause ? `${withCause} (${hint})` : hint);
+  }
+  return clampReason(withCause) || 'unknown error';
+}
+
+/**
+ * Did the request fail before any response came back?
+ *
+ * `fetch` signals that with a TypeError — but so does plenty of ordinary
+ * broken JavaScript, and round 1 of this file's audit shipped a version where
+ * `api.postStockScan is not a function` told the user to go check their
+ * backend. Hence the message shape as well as the type.
+ *
+ * `err.name`, not `instanceof TypeError`: `instanceof` is realm-bound, so a
+ * TypeError from an iframe or a fetch polyfill built in another context
+ * silently fails it.
+ */
+function isTransportFailure(err: unknown): boolean {
+  if (!(err instanceof Error) || err.name !== 'TypeError') return false;
+  return /failed to fetch|fetch failed|network\s?error|load failed/i.test(err.message);
+}
+
+function oneLine(message: string): string {
+  return message.replace(/\s+/g, ' ').trim();
 }
 
 function clampReason(message: string): string {
-  const oneLine = message.replace(/\s+/g, ' ').trim();
-  return oneLine.length > MAX_REASON_CHARS
-    ? `${oneLine.slice(0, MAX_REASON_CHARS - 1).trimEnd()}…`
-    : oneLine;
+  return message.length > MAX_REASON_CHARS
+    ? `${message.slice(0, MAX_REASON_CHARS - 1).trimEnd()}…`
+    : message;
 }
+
+/** Guards against an earlier run's status response landing after a later
+ *  run's and pinning TopBar/Settings to the older scan — the staleness the
+ *  refresh exists to prevent. Module-level because the runs it orders are
+ *  separate calls, not state any one of them owns. */
+let metaRefreshSeq = 0;
 
 /**
  * Refresh TopBar/Settings' last-run status from the backend — deliberately
@@ -102,13 +155,23 @@ function clampReason(message: string): string {
  * Never throws: the scan's own outcome must not depend on this bookkeeping.
  */
 function refreshLastStockScanMeta(): void {
+  const seq = ++metaRefreshSeq;
   try {
-    void api.getLastStockScanStatus()
-      .then((s) => useScanStore.getState().setLastStockScanMeta(
-        s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
-      ))
-      // Backend unreachable — leave stale, StoreHydration catches up on next load.
-      .catch(() => {});
+    void api.getLastStockScanStatus().then(
+      (s) => {
+        // A later run has already refreshed (or is about to) — its answer is
+        // the current one, so this older response must not overwrite it.
+        if (seq !== metaRefreshSeq) return;
+        useScanStore.getState().setLastStockScanMeta(
+          s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
+        );
+      },
+      // Two-argument form on purpose: this swallows a FAILED REQUEST (backend
+      // unreachable — leave the meta stale, StoreHydration catches up on the
+      // next load) and not a throw from the handler above it, which would be a
+      // real bug in the payload's shape and should surface.
+      () => {},
+    );
   } catch { /* not callable (a test double, a partially-mocked api) — ignore */ }
 }
 
@@ -142,23 +205,26 @@ export async function runStockScan(
 ): Promise<StockScanResult | null> {
   const store = useScanStore.getState();
 
-  store.setActiveStrategy(strategy);
-  store.setStockScanResult(null);
-  // Clear the previous run's reason before this one starts — a FAILED pill
-  // from an earlier attempt must never caption a scan that is still running,
-  // and a run that succeeds must leave nothing behind for a later caller to
-  // read as its own failure.
-  store.setStockScanError(null);
-  store.setScanState('SCANNING');
-
-  // Everything below is inside the try — including reading the stores and
-  // building the request body. Those ran BEFORE it, so a throw there (a
-  // malformed persisted confidenceGate is enough) escaped runStockScan with
-  // `scanState` pinned at SCANNING, disabling the Run button for the rest of
-  // the session, and rejected the promise instead of returning null — which
-  // the fire-and-forget call site could not see at all.
+  // Everything else is inside the try, the store writes below included. The
+  // store reads and the request-body build used to sit outside it, so a throw
+  // there (a malformed persisted confidenceGate is enough; so is a
+  // QuotaExceededError out of a persist() write) escaped runStockScan with
+  // `scanState` pinned at SCANNING — disabling the Run button for the rest of
+  // the session — and rejected the promise instead of returning null, which
+  // the fire-and-forget call site could not see at all. Both call sites still
+  // carry a catch for a rejection that gets past even this (`setScanState`
+  // itself throwing), and both reset scanState there.
   let reachedRequest = false;
   try {
+    store.setActiveStrategy(strategy);
+    store.setStockScanResult(null);
+    // Clear the previous run's reason before this one starts — a FAILED pill
+    // from an earlier attempt must never caption a scan that is still running,
+    // and a run that succeeds must leave nothing behind for a later caller to
+    // read as its own failure.
+    store.setStockScanError(null);
+    store.setScanState('SCANNING');
+
     const saved = useScanParamsStore.getState();
     const p = { ...saved, ...overrides };
     const context = store.context;
