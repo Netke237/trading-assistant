@@ -224,10 +224,12 @@ def _resolve_base_ref() -> tuple[str | None, str]:
             return None, "there is no usable git repository here"
         return None, (
             "neither origin/main nor main resolves in this checkout -- a "
-            "--single-branch or --depth 1 clone produces exactly this"
+            "--single-branch or --depth 1 clone does this, and so does a "
+            "repository with no commits on it yet"
         )
     measured.sort()
-    return measured[0][2], measured[0][2]
+    ref = measured[0][2]
+    return ref, f"base {ref}"
 
 
 def _pointer_scoped_base(base_ref: str, state: dict) -> str:
@@ -244,11 +246,28 @@ def _pointer_scoped_base(base_ref: str, state: dict) -> str:
     record this file exists to keep straight.
 
     So: walk the state file's own history newest-first and stop at the first
-    commit where `active_phase` was something else. Rounds committed before the
-    pointer moved belong to the previous piece and are not this target's to
-    answer for. A pointer that never changed inside the range leaves the range
-    untouched, which is the ordinary single-piece branch and the case the
-    original Phase A catch came from.
+    commit where `active_phase` was something else, and take the OLDEST commit
+    still carrying the current pointer -- the one that set it. Rounds committed
+    before the pointer moved belong to the previous piece and are not this
+    target's to answer for. A pointer that never changed inside the range
+    leaves the range untouched, which is the ordinary single-piece branch and
+    the case the original Phase A catch came from.
+
+    ROUND 2 FINDING 1: the first version returned the newest commit where the
+    pointer DIFFERED, which is one commit too far back. `git log sha..HEAD`
+    excludes only `sha` itself, so the commit that MOVES the pointer stayed
+    inside the new pointer's range -- and moving the pointer while recording
+    the round that just finished is one commit in this repo's actual style
+    ("Record round 4: clean at the gate...", "Phase G is in: name the merge,
+    clear the active phase"). A piece with zero rounds of its own then drew red
+    drift for the PREVIOUS piece's round number, and the only ways out were
+    merging or writing a false count: finding 2's own failure mode, intact.
+
+    The boundary commit is EXCLUDED on purpose. A commit that both opens a
+    piece and carries a round of that same piece's work would be missed, but
+    that ordering is backwards -- the pointer is set when the piece starts,
+    before it has had a round -- whereas the false positive above is the
+    ordinary case.
     """
     try:
         rel = STATE.relative_to(ROOT).as_posix()
@@ -263,16 +282,33 @@ def _pointer_scoped_base(base_ref: str, state: dict) -> str:
     if out is None:
         return base_ref
 
-    for sha in out.split()[:_POINTER_SCAN_LIMIT]:
+    shas = out.split()
+    truncated = len(shas) > _POINTER_SCAN_LIMIT
+    boundary: str | None = None
+
+    for sha in shas[:_POINTER_SCAN_LIMIT]:
         blob = _git("show", f"{sha}:{rel}")
         if blob is None:
             continue
         try:
             was = json.loads(blob).get("active_phase")
-        except ValueError:
-            continue  # unparseable history; not a boundary we can trust
+        except (ValueError, AttributeError):
+            continue  # unparseable, or not an object; not a boundary to trust
         if was != active:
-            return sha
+            # `boundary` is the oldest commit that still carries this pointer.
+            # None means even the newest committed state file disagrees, so the
+            # pointer was moved in the working tree and nothing COMMITTED
+            # belongs to it yet -- HEAD..HEAD is empty, which is the honest
+            # answer rather than the whole branch.
+            return boundary if boundary is not None else "HEAD"
+        boundary = sha
+
+    if truncated and boundary is not None:
+        # The window ran out before the pointer was seen to move, so the
+        # boundary may lie beyond it. Fall back to the oldest commit CONFIRMED
+        # to carry this pointer rather than widening to the full range, which
+        # would be the pre-fix false positive rather than a safe degradation.
+        return boundary
     return base_ref
 
 

@@ -50,6 +50,7 @@ class Repo:
 
     def __init__(self, path: Path):
         self.path = path
+        self._writes = 0
 
     def git(self, *args: str) -> str:
         proc = subprocess.run(
@@ -66,9 +67,16 @@ class Repo:
     def write_state(self, state: dict, subject: str) -> None:
         """Commit a state file at its real repo-relative path, so the
         pointer-scoping walk has genuine history to read."""
+        # A marker that changes every write. Without it, committing the same
+        # pointer twice writes byte-identical JSON, git records no change to
+        # THAT PATH, and `git log -- <path>` does not list the commit at all --
+        # so a test meaning to build N state-file commits silently builds
+        # fewer. That is how the scan-window test first passed against code
+        # that had no scan-window handling.
+        self._writes += 1
         f = self.path / STATE_REL
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(state), encoding="utf-8")
+        f.write_text(json.dumps(dict(state, _write=self._writes)), encoding="utf-8")
         self.git("add", "-A")
         self.git("commit", "-q", "-m", subject)
 
@@ -375,15 +383,78 @@ def test_an_earlier_pieces_rounds_are_not_the_current_targets(repo):
     assert _mod.audit_bookkeeping_drift(two) is None
 
 
-def test_the_scoped_base_is_where_the_pointer_last_differed(repo):
+def test_the_scoped_base_is_the_commit_that_set_the_pointer(repo):
+    """Not the commit where the pointer last DIFFERED -- that is one commit too
+    far back, and `git log sha..HEAD` excludes only `sha` itself."""
     one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
     repo.write_state(one, "Build piece one")
     repo.commit("round 1: fixes on piece one")
-    boundary = repo.git("rev-parse", "HEAD~1")
 
     two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
-    repo.write_state(two, "Build piece two")
-    assert _mod._pointer_scoped_base("origin/main", two) == boundary
+    repo.write_state(two, "Record piece one; open piece two")
+    opened = repo.git("rev-parse", "HEAD")
+
+    assert _mod._pointer_scoped_base("origin/main", two) == opened
+
+
+def test_the_commit_that_moves_the_pointer_is_not_the_new_pieces_round(repo):
+    """ROUND 2 FINDING 1. Recording the round that just finished and moving the
+    pointer is ONE commit in this repo's actual style ("Record round 4: clean
+    at the gate...", "Phase G is in: name the merge, clear the active phase").
+    Leaving that commit inside the new pointer's range drew red drift on a
+    piece that had had no rounds at all -- clearable only by merging, or by
+    writing a count known to be false into the record."""
+    one = _piece_state("piece one",
+                       [{"name": "piece one", "audit_rounds": 0, "audit_clean": False}])
+    repo.write_state(one, "Build piece one")
+    repo.commit("round 1: fixes on piece one")
+    repo.commit("round 2: fixes on piece one")
+
+    two = _piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": 2, "audit_clean": True},
+        {"name": "piece two", "audit_rounds": 0, "audit_clean": False},
+    ])
+    repo.write_state(two, "Record round 2 clean; open piece two")
+
+    assert _mod.audit_bookkeeping_drift(two) is None, (
+        "piece two has had no rounds of its own; the only ways to clear this "
+        "banner would be merging or writing a false count"
+    )
+
+
+def test_a_pointer_moved_only_in_the_working_tree_claims_no_committed_rounds(repo):
+    """No COMMITTED round can belong to a pointer that exists only on disk."""
+    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
+    repo.write_state(one, "Build piece one")
+    repo.commit("round 3: fixes on piece one")
+
+    two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
+    assert _mod._pointer_scoped_base("origin/main", two) == "HEAD"
+    assert _mod.audit_bookkeeping_drift(two) is None
+
+
+def test_exhausting_the_scan_window_does_not_widen_back_to_the_full_range(repo, monkeypatch):
+    """Degrading past the cap must not land back on the pre-fix false positive."""
+    monkeypatch.setattr(_mod, "_POINTER_SCAN_LIMIT", 2)
+    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
+    repo.write_state(one, "Build piece one")
+    repo.commit("round 4: fixes on piece one")
+
+    two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
+    repo.write_state(two, "Open piece two")
+    repo.write_state(two, "Touch the state file again")
+    repo.write_state(two, "And once more")
+
+    # Four state-file commits, window of two: the boundary lies beyond it.
+    in_range = _mod._git("log", "--format=%H", "origin/main..HEAD", "--", STATE_REL)
+    assert len(in_range.split()) > _mod._POINTER_SCAN_LIMIT, "window was never exhausted"
+    assert _mod._round_numbers_in_branch_subjects("origin/main")[0] == 4, (
+        "the full range must still contain the earlier piece's round, or this "
+        "test cannot tell a safe degradation from a lucky one"
+    )
+
+    assert _mod._pointer_scoped_base("origin/main", two) != "origin/main"
+    assert _mod.audit_bookkeeping_drift(two) is None
 
 
 def test_a_pointer_that_never_moved_still_answers_for_the_whole_branch(repo):
