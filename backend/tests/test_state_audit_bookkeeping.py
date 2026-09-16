@@ -21,6 +21,8 @@ matching test_update_sp500_liquidity_script.py.
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -38,6 +40,9 @@ PROSE_MAIN = (
     "BEARISH DIRECTION-CONVICTION GATE FIX MERGED at 49ffa53 (2026-09-16, "
     "--no-ff). || PREVIOUSLY: PHASE G MERGED at 45ccb2d2."
 )
+
+
+STATE_REL = "docs/superpowers/PROJECT_STATE.json"
 
 
 class Repo:
@@ -58,6 +63,15 @@ class Repo:
         message = subject if not body else f"{subject}\n\n{body}"
         self.git("commit", "-q", "-m", message)
 
+    def write_state(self, state: dict, subject: str) -> None:
+        """Commit a state file at its real repo-relative path, so the
+        pointer-scoping walk has genuine history to read."""
+        f = self.path / STATE_REL
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(state), encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", subject)
+
     def set_origin_main(self, ref: str = "HEAD") -> None:
         self.git("update-ref", "refs/remotes/origin/main", self.git("rev-parse", ref))
 
@@ -75,6 +89,7 @@ def repo(tmp_path, monkeypatch) -> Repo:
     r.set_origin_main()
     r.git("checkout", "-q", "-b", "feature")
     monkeypatch.setattr(_mod, "ROOT", tmp_path)
+    monkeypatch.setattr(_mod, "STATE", tmp_path / STATE_REL)
     return r
 
 
@@ -91,19 +106,61 @@ def _state(active=None, phases=None, shipped=None) -> dict:
 
 # --- base ref resolution ---------------------------------------------------
 
-def test_base_ref_prefers_origin_main(repo):
-    assert _mod._resolve_base_ref() == "origin/main"
+def test_base_ref_is_origin_main_when_both_are_level(repo):
+    ref, _ = _mod._resolve_base_ref()
+    assert ref == "origin/main"
 
 
 def test_base_ref_falls_back_to_local_main(repo):
     repo.drop_origin_main()
-    assert _mod._resolve_base_ref() == "main"
+    ref, _ = _mod._resolve_base_ref()
+    assert ref == "main"
 
 
-def test_base_ref_is_none_when_no_base_exists(repo):
+def test_base_ref_prefers_the_tighter_ref_not_the_remote_one(repo):
+    """ROUND 1 FINDING 3. This project merges with a local --no-ff and pushes
+    afterwards, and those pushes have 403'd. Between merge and push, local main
+    carries the merged work and origin/main is the stale one -- so preferring
+    origin/main by name kept a banner up that the merge was meant to clear."""
+    repo.git("checkout", "-q", "main")
+    repo.commit("round 2: fixes on the earlier piece")
+    repo.commit("Merge the earlier piece")          # local merge, never pushed
+    repo.git("checkout", "-q", "-b", "later-piece")
+    repo.commit("build the later piece")
+
+    ref, _ = _mod._resolve_base_ref()
+    assert ref == "main", "stale origin/main was preferred over the merged local main"
+    # and the earlier piece's round is therefore out of range entirely
+    assert _mod.audit_bookkeeping_drift(_state(active=None)) is None
+
+
+def test_no_base_ref_warns_rather_than_reporting_no_drift(repo):
+    """ROUND 1 FINDING 1. A --single-branch or --depth 1 clone has neither ref.
+    Returning None renders as "No drift" -- a clean bill for a check that never
+    ran, which is the exact observable this whole change exists to remove."""
     repo.drop_origin_main()
     repo.git("branch", "-D", "main")
-    assert _mod._resolve_base_ref() is None
+    repo.commit("round 4: fixes")
+
+    ref, detail = _mod._resolve_base_ref()
+    assert ref is None
+    assert "single-branch" in detail
+
+    severity, message = _mod.audit_bookkeeping_drift(_state())
+    assert severity == "warn", "an unrunnable check must not exit non-zero"
+    assert "COULD NOT RUN" in message
+    assert "UNCHECKED bill, not a clean one" in message
+
+
+def test_no_git_repository_at_all_warns_too(tmp_path, monkeypatch):
+    """Deliberately does NOT use the `repo` fixture: a directory nested inside
+    a git repo is still in one, since git walks upward to find .git."""
+    monkeypatch.setattr(_mod, "ROOT", tmp_path)
+    monkeypatch.setattr(_mod, "STATE", tmp_path / STATE_REL)
+    ref, detail = _mod._resolve_base_ref()
+    assert ref is None
+    assert "no usable git repository" in detail
+    assert _mod.audit_bookkeeping_drift(_state())[0] == "warn"
 
 
 def test_base_ref_is_not_read_from_the_state_file(repo):
@@ -280,3 +337,103 @@ def test_main_prints_the_message_not_the_tuple(repo, monkeypatch, capsys):
     repo.commit("round 1: first pass")
     _, out = _run_main(repo, monkeypatch, capsys, _renderable())
     assert "('warn'" not in out and '("warn"' not in out
+
+
+# --- finding 2: rounds are scoped to the pointer, not to the whole branch ---
+
+def _piece_state(active, shipped) -> dict:
+    return {"main": PROSE_MAIN, "active_phase": active,
+            "phases": [], "already_shipped": shipped}
+
+
+def test_an_earlier_pieces_rounds_are_not_the_current_targets(repo):
+    """ROUND 1 FINDING 2, the sharpest one. One branch, two pieces, nothing
+    merged, a state file that is completely honest -- and the probe reported
+    drift, prescribing a remedy that could only be satisfied by writing a
+    number known to be false into the record."""
+    one = _piece_state("piece one",
+                       [{"name": "piece one", "audit_rounds": 0, "audit_clean": False}])
+    repo.write_state(one, "Build piece one")
+    repo.commit("round 1: fixes on piece one")
+    repo.commit("round 2: fixes on piece one")
+    one["already_shipped"][0].update(audit_rounds=2, audit_clean=True)
+    repo.write_state(one, "Record piece one: clean after 2 rounds")
+
+    two = _piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": 2, "audit_clean": True},
+        {"name": "piece two", "audit_rounds": 0, "audit_clean": False},
+    ])
+    repo.write_state(two, "Build piece two")
+    repo.commit("round 1: fixes on piece two")
+    two["already_shipped"][1]["audit_rounds"] = 1
+    repo.write_state(two, "Record piece two: round 1 findings fixed")
+
+    # Unscoped, the branch's highest round is piece ONE's 2 ...
+    assert _mod._round_numbers_in_branch_subjects("origin/main")[0] == 2
+    # ... and scoping to the pointer is the only thing standing between that
+    # and a red banner on an honest file.
+    assert _mod.audit_bookkeeping_drift(two) is None
+
+
+def test_the_scoped_base_is_where_the_pointer_last_differed(repo):
+    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
+    repo.write_state(one, "Build piece one")
+    repo.commit("round 1: fixes on piece one")
+    boundary = repo.git("rev-parse", "HEAD~1")
+
+    two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
+    repo.write_state(two, "Build piece two")
+    assert _mod._pointer_scoped_base("origin/main", two) == boundary
+
+
+def test_a_pointer_that_never_moved_still_answers_for_the_whole_branch(repo):
+    """The narrowing must not blunt the original catch: a single-piece branch
+    is exactly the Phase A case this probe was written for."""
+    st = _piece_state("piece", [{"name": "piece", "audit_rounds": 0, "audit_clean": False}])
+    repo.write_state(st, "Build the piece")
+    repo.commit("round 1: fixes")
+    repo.commit("round 2: fixes")
+    severity, message = _mod.audit_bookkeeping_drift(st)
+    assert severity == "drift"
+    assert "reach round 2" in message and "declares 0" in message
+
+
+def test_scoping_degrades_to_the_full_range_when_state_is_outside_root(repo, monkeypatch):
+    monkeypatch.setattr(_mod, "STATE", Path("/nowhere/PROJECT_STATE.json"))
+    repo.commit("round 3: fixes")
+    assert _mod._pointer_scoped_base("origin/main", _state()) == "origin/main"
+
+
+def test_scoping_survives_unparseable_state_history(repo):
+    """A commit whose state file is not valid JSON is not a boundary anyone can
+    trust; it must be skipped, not crash the SessionStart hook."""
+    f = repo.path / STATE_REL
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("{ this is not json", encoding="utf-8")
+    repo.git("add", "-A")
+    repo.git("commit", "-q", "-m", "round 1: broken state file")
+    severity, _ = _mod.audit_bookkeeping_drift(_state(active=None))
+    assert severity == "warn"
+
+
+# --- finding 4: the verify probe must pin the load-bearing half -------------
+
+def test_the_shipped_entrys_verify_probe_tracks_the_base_ref_fix(repo):
+    """ROUND 1 FINDING 4. The probe pinned UNPHASED_FAIL_ROUND -- a constant
+    belonging to the SECOND dead end -- so the whole revival could be reverted
+    while state.py still certified it shipped. Same modelling error
+    STATE_TRACKING.md already names about v0_grid."""
+    real_root = Path(__file__).parent.parent.parent
+    state = json.loads(
+        (real_root / STATE_REL).read_text(encoding="utf-8")
+    )
+    entry = next(i for i in state["already_shipped"]
+                 if i["name"].startswith("STATE-PROBE-REVIVAL"))
+    pattern = entry["verify"]["pattern"]
+    src = (real_root / entry["verify"]["path"]).read_text(encoding="utf-8")
+
+    assert re.search(pattern, src, re.M), "the entry's probe does not match the real file"
+    gutted = src.replace("def _resolve_base_ref", "def _reverted")
+    assert not re.search(pattern, gutted, re.M), (
+        "the probe still certifies this shipped with the base-ref fix removed"
+    )

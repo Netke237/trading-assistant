@@ -33,7 +33,15 @@ is:
    range it reads is empty from then on, which is what stops it holding up a
    banner nobody can clear.
 
-3. `audit_clean` AT ALL. Nothing here can verify the assertion that a round came
+3. A BASE REF THAT DOES NOT RESOLVE -- except that it no longer fails silently.
+   Round 1 finding 1: with no `origin/main` and no `main` (a `--single-branch`
+   or `--depth 1` clone does this) the check cannot run at all, and it used to
+   return None, which renders as "No drift" -- a clean bill for a check that
+   never happened, the exact observable the base-ref fix exists to remove. It
+   now says so in the UNAUDITED block instead. It still exits 0: git being
+   unavailable is not evidence of drift.
+
+4. `audit_clean` AT ALL. Nothing here can verify the assertion that a round came
    back with zero findings. That claim rests entirely on whoever wrote it.
 
 Usage:
@@ -103,6 +111,24 @@ def probe(v: dict) -> tuple[bool, str]:
     return found, ("found " if found else "absent ") + where
 
 
+def _git(*args: str) -> str | None:
+    """Run one git command in ROOT. Returns stdout, or None on any failure.
+
+    Collapsing "git is missing", "git errored" and "git timed out" into one
+    None is deliberate and matches how this probe has always degraded: a check
+    that cries drift whenever git is unavailable trains the reader to scroll
+    past a red banner. The CALLERS distinguish "could not look" from "looked
+    and found nothing" -- see round 1 finding 1.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def _round_numbers_in_branch_subjects(base_ref: str | None) -> tuple[int, list[str]] | None:
     """Highest `round N` mentioned in this branch's commit SUBJECTS.
 
@@ -141,9 +167,18 @@ def _round_numbers_in_branch_subjects(base_ref: str | None) -> tuple[int, list[s
     return best, subjects
 
 
-def _resolve_base_ref() -> str | None:
+_BASE_REF_CANDIDATES = ("origin/main", "main")
+
+# Cap on how far back to read the state file when scoping rounds to the current
+# pointer. A branch under audit is a handful of commits; anything past this is a
+# repo shape this probe should degrade on rather than stall a SessionStart.
+_POINTER_SCAN_LIMIT = 100
+
+
+def _resolve_base_ref() -> tuple[str | None, str]:
     """The ref this branch's rounds are measured against. Asked of git, not of
-    the state file.
+    the state file. Returns (ref, detail); ref is None when nothing resolved and
+    detail then says WHY, because the caller has to be able to say so.
 
     It used to come from `state["main"]`, which was a bare sha when this probe
     was written (2026-09-07) and became a narrative paragraph two days later
@@ -156,20 +191,89 @@ def _resolve_base_ref() -> str | None:
     The lesson is narrower than "that field was wrong": a field that doubles as
     prose for a human reader cannot also be a machine input, because the humans
     will keep writing prose into it and nothing will complain. So ask git.
-    `origin/main` first -- it is the base work is actually cut from, and a
-    local `main` can be stale, which would widen the range and overcount.
+
+    TIGHTEST WINS, not a fixed order (round 1 finding 3). Preferring
+    `origin/main` outright was wrong for the shape this project actually
+    produces: it merges with a local `--no-ff` and pushes afterwards, and
+    pushing from these containers has 403'd before now. Between the merge and
+    the push, `origin/main` is the STALE one, so preferring it kept a banner up
+    that the merge was supposed to clear -- and "push to clear it" is not
+    always a route that exists. The ref yielding the FEWEST commits in
+    `ref..HEAD` is the one that already contains the most merged work, which is
+    exactly the base that should not be counted twice. Ties go to the earlier
+    candidate.
     """
-    for ref in ("origin/main", "main"):
+    measured: list[tuple[int, int, str]] = []
+    for rank, ref in enumerate(_BASE_REF_CANDIDATES):
+        # Each candidate is measured independently: a transient failure on one
+        # must not skip the other. The first version returned None from inside
+        # this loop, which made a timeout on `origin/main` silently discard the
+        # `main` fallback.
+        if _git("rev-parse", "--verify", "--quiet", ref) is None:
+            continue
+        out = _git("rev-list", "--count", f"{ref}..HEAD")
+        if out is None:
+            continue
         try:
-            proc = subprocess.run(
-                ["git", "rev-parse", "--verify", "--quiet", ref],
-                cwd=ROOT, capture_output=True, text=True, timeout=10,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        if proc.returncode == 0:
-            return ref
-    return None
+            measured.append((int(out.strip()), rank, ref))
+        except ValueError:
+            continue
+
+    if not measured:
+        if _git("rev-parse", "--git-dir") is None:
+            return None, "there is no usable git repository here"
+        return None, (
+            "neither origin/main nor main resolves in this checkout -- a "
+            "--single-branch or --depth 1 clone produces exactly this"
+        )
+    measured.sort()
+    return measured[0][2], measured[0][2]
+
+
+def _pointer_scoped_base(base_ref: str, state: dict) -> str:
+    """Narrow `base_ref..HEAD` to the span the CURRENT pointer has been set for.
+
+    ROUND 1 FINDING 2. `_round_numbers_in_branch_subjects` takes the highest
+    round over the whole branch while `_pointer_target` resolves exactly one
+    piece, and nothing tied the two together. A branch carrying two pieces --
+    or one piece plus a locally-merged earlier one -- compared piece B's
+    declared count against piece A's round numbers, and reported drift on a
+    state file that was completely honest. Worse, the remedy it printed ("record
+    the count there") could only be satisfied by writing piece A's number into
+    piece B's entry: a red banner whose only escape was falsifying the one
+    record this file exists to keep straight.
+
+    So: walk the state file's own history newest-first and stop at the first
+    commit where `active_phase` was something else. Rounds committed before the
+    pointer moved belong to the previous piece and are not this target's to
+    answer for. A pointer that never changed inside the range leaves the range
+    untouched, which is the ordinary single-piece branch and the case the
+    original Phase A catch came from.
+    """
+    try:
+        rel = STATE.relative_to(ROOT).as_posix()
+    except ValueError:
+        # The state file is not under ROOT (only reachable when a caller has
+        # repointed one of them). Cannot locate its history, so cannot narrow:
+        # fall back to the full range rather than guess a boundary.
+        return base_ref
+
+    active = state.get("active_phase")
+    out = _git("log", "--format=%H", f"{base_ref}..HEAD", "--", rel)
+    if out is None:
+        return base_ref
+
+    for sha in out.split()[:_POINTER_SCAN_LIMIT]:
+        blob = _git("show", f"{sha}:{rel}")
+        if blob is None:
+            continue
+        try:
+            was = json.loads(blob).get("active_phase")
+        except ValueError:
+            continue  # unparseable history; not a boundary we can trust
+        if was != active:
+            return sha
+    return base_ref
 
 
 def _pointer_target(state: dict) -> tuple[dict | None, str]:
@@ -213,7 +317,10 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
 
     The evidence git actually holds is that a round produced commits. So: take
     the highest `round N` in this branch's commit subjects and compare it
-    against the count declared by whatever `active_phase` points at. Scoping to
+    against the count declared by whatever `active_phase` points at -- over the
+    span that pointer has been set for, not the whole branch (round 1 finding
+    2: a branch carrying two pieces otherwise answers for the earlier one's
+    round numbers). Scoping to
     that one target is what makes the comparison mean anything: Phase D's 13
     clean rounds are the global maximum, so comparing against every entry could
     never fire, and comparing against merely-open work fires forever once the
@@ -226,7 +333,22 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     not evidence of anything: rounds legitimately run without producing a
     commit, and merged history moves out of the range.
     """
-    evidence = _round_numbers_in_branch_subjects(_resolve_base_ref())
+    base_ref, base_detail = _resolve_base_ref()
+    if base_ref is None:
+        # ROUND 1 FINDING 1. This returned None, and None renders as "No drift"
+        # -- a clean bill for a check that never ran, which is the same
+        # observable the base-ref fix exists to remove. Say it could not look.
+        # WARN, not drift: git being unavailable is not evidence of anything,
+        # and a red banner for it would train the reader to scroll past the
+        # real ones.
+        return "warn", (
+            f"Audit bookkeeping COULD NOT RUN: {base_detail}. This is the only "
+            f"check here that reads git rather than a code symbol, so "
+            f"audit_rounds/audit_clean were not verified against anything on "
+            f"this run. That is an UNCHECKED bill, not a clean one."
+        )
+
+    evidence = _round_numbers_in_branch_subjects(_pointer_scoped_base(base_ref, state))
     if evidence is None:
         return None
     git_max, subjects = evidence
@@ -353,8 +475,9 @@ def main() -> int:
         severity, message = bookkeeping
         # "drift" joins the red block and exits non-zero; "warn" joins the
         # yellow UNAUDITED block and exits 0. Both blocks print even under
-        # --quiet, which is the point: a bookkeeping warning that only shows in
-        # the full render is invisible to the SessionStart hook that runs this.
+        # --quiet, so a bookkeeping warning survives the one caller that passes
+        # it. (The SessionStart hook does NOT: it runs the full render. An
+        # earlier version of this comment said otherwise -- round 1 caught it.)
         (drift if severity == "drift" else unaudited).append(message)
 
     if not quiet:
