@@ -285,15 +285,58 @@ def _pointer_scoped_base(base_ref: str, state: dict) -> str:
     the unphased banner fires over the whole branch again.
 
     ITS COST IS ACCEPTED, NOT OVERLOOKED, and is written here so a later round
-    does not read it as a fresh bug: a branch that clears the pointer BEFORE
-    merging draws the banner on an HONEST file, because the unphased path never
-    reads `already_shipped` counts (teaching it to was option C, rejected). That
-    banner clears by merging or by re-pointing -- both honest actions, neither
-    the round-1 shape whose only escape was writing a number known to be false
-    -- and measured over the last 25 state-file commits, this repo has never
-    cleared a pointer on a branch at all. A false ALARM is visible and
-    self-correcting; the false ALL-CLEAR it replaces ran for a week while four
-    rounds shipped unseen.
+    does not read it as a fresh bug: a branch running under a null pointer
+    draws the banner on an HONEST file, because the unphased path never reads
+    `already_shipped` counts (teaching it to was option C, rejected). A false
+    ALARM is visible and self-correcting; the false ALL-CLEAR it replaces ran
+    for a week while four rounds shipped unseen.
+
+    ROUND 1 OF THIS PIECE CORRECTED THE COST'S SCOPE AND ITS MEASUREMENT, both
+    of which were written too favourably above:
+
+      - The cost is NOT limited to a branch that CLEARS the pointer. It lands
+        on any branch running under a null pointer, INHERITED ONES INCLUDED --
+        and inheriting null from main is this repo's ordinary starting state.
+        325ec1d, 77bbcbf, 1b1ae9d and 9f162ab are the bearish gate's own branch
+        commits, every one of them `active_phase: null` and carrying a round
+        number in its subject; under (A) each renders red drift on a file that
+        is telling the truth. The SessionStart hook prints drift and continues
+        at exit 0, so this is a banner and not a block -- but it is a banner on
+        the common case, not the rare one this paragraph first claimed.
+      - The sentence "measured over the last 25 state-file commits, this repo
+        has never cleared a pointer on a branch at all" measured the wrong
+        event. 7a689df ("Phase G is in: name the merge, clear the active
+        phase") takes the pointer from 'G' to null INSIDE that window. It sits
+        on main, so the "on a branch" qualifier rescued the sentence while the
+        measurement behind it never covered that qualifier -- and the same
+        docstring quotes that commit's subject as an example of the repo's
+        style seven paragraphs earlier. The claim is withdrawn rather than
+        restated; what the history actually shows is the four commits above.
+
+    AND THE ESCAPE HATCH IS NARROWED, NOT CLOSED. That is round 1's gate-level
+    finding and it is OPEN -- Kenneth's call, not fixed here, because the same
+    class of defect has now been found inside three consecutive fixes and
+    audit_rule says that is evidence the approach is wrong rather than evidence
+    it needs another round. The undercount check is keyed on the pointer's
+    CURRENT value, so every route that makes the pointer disagree with the
+    newest COMMITTED state file still collapses the window to empty through the
+    `boundary is None -> "HEAD"` path below:
+
+      - RE-POINTING at the same piece with the false count left intact. It does
+        not even need a commit; a working-tree edit is enough. The paragraph
+        this round WITHDREW called re-pointing one of the two "honest actions"
+        that clear the banner -- it clears the undercount along with it.
+      - A TRUTHY POINTER THAT RESOLVES TO NOTHING -- a typo, or an
+        `already_shipped` entry renamed while the pointer still names the old
+        string. It takes the narrowing path here AND the unphased path in
+        `audit_bookkeeping_drift`, so the escalation runs against a window the
+        same nonsense value just emptied.
+
+    Both are reproduced in backend/tests/test_state_audit_bookkeeping.py and
+    marked OPEN there, each carrying the instruction to invert its assertion
+    when the escape is closed, so that a later round reads them as known and
+    unfixed rather than as settled behaviour. (A) closed the `null` door of a
+    room with three.
     """
     try:
         rel = STATE.relative_to(ROOT).as_posix()
@@ -361,7 +404,12 @@ def _pointer_target(state: dict) -> tuple[dict | None, str]:
     """
     active = state.get("active_phase")
     if not active:
-        return None, "active_phase is null"
+        # ROUND 1 FINDING 8: `""`, `0` and `False` all land here and all
+        # reported as "null", so a reader grepping this file for the value they
+        # saw would not find it. The null wording stays for the null case.
+        if active is None:
+            return None, "active_phase is null"
+        return None, f"active_phase is {active!r}, which is falsy and names nothing"
     for ph in state["phases"]:
         if ph["id"] == active:
             return ph, f"Phase {ph['id']} ({ph['name']})"

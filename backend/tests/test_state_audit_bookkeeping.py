@@ -571,22 +571,68 @@ def test_an_honest_cleared_pointer_draws_the_banner_too(repo):
     assert "active_phase is null" in message
 
 
-def test_the_cleared_pointers_banner_clears_by_re_pointing(repo):
-    """The first of its two honest escapes, and the one that needs no push."""
+def _four_rounds_then_a_cleared_pointer(repo, declared: int):
+    """Rounds 1-4 really ran. The file records `declared` and clears the
+    pointer. At declared=4 that is an honest record; at declared=1 it is the
+    undercount the whole probe exists to catch."""
     piece = _piece_state("the piece",
                          [{"name": "the piece", "audit_rounds": 0, "audit_clean": False}])
     repo.write_state(piece, "Open the piece")
     for n in (1, 2, 3, 4):
         repo.commit(f"round {n}: fixes on the piece")
     repo.write_state(
-        _piece_state(None, [{"name": "the piece", "audit_rounds": 4, "audit_clean": True}]),
-        "Record the piece; clear the active phase",
+        _piece_state(None, [{"name": "the piece", "audit_rounds": declared}]),
+        f"Record the piece at {declared}; clear the active phase",
     )
 
-    re_pointed = _piece_state("the piece", [
-        {"name": "the piece", "audit_rounds": 4, "audit_clean": True},
-    ])
+
+def test_the_cleared_pointers_banner_clears_by_re_pointing(repo):
+    """The first of its two honest escapes, and the one that needs no push.
+
+    ROUND 1 FINDING 7 rewrote this. It used to assert `is None` after
+    re-pointing with an HONEST count and nothing else, which cannot tell "the
+    count now covers the evidence" from "the range went empty because the
+    pointer moved" -- it passed against a stubbed `_pointer_scoped_base`, and
+    it passed with the declared count set to 1 instead of 4. It pinned nothing
+    about honesty. The honest escape is now asserted against a control that
+    makes the range demonstrably non-empty first."""
+    _four_rounds_then_a_cleared_pointer(repo, declared=4)
+
+    # Control: the cleared pointer DOES fire, so the `is None` below is the
+    # re-pointing doing the work rather than an empty range.
+    cleared = _piece_state(None, [{"name": "the piece", "audit_rounds": 4}])
+    assert _mod.audit_bookkeeping_drift(cleared) is not None
+
+    re_pointed = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 4}])
     assert _mod.audit_bookkeeping_drift(re_pointed) is None
+
+
+def test_OPEN_re_pointing_also_silences_a_dishonest_count(repo):
+    """ROUND 1 FINDING 1, GATE-LEVEL, OPEN -- NOT A PASSING BEHAVIOUR.
+
+    This asserts what the code does TODAY so the hole is visible and pinned,
+    not that what it does is right. Option (A) closed the `null` door; this is
+    the next one along. Re-pointing at the piece with the false count left
+    intact silences the undercount exactly as clearing the pointer used to,
+    because `_pointer_scoped_base` hits `was != active` on the newest committed
+    state file, `boundary` is still None, and the "HEAD" fallback makes
+    `HEAD..HEAD` empty. It needs no commit at all -- a working-tree edit does
+    it -- which is why the working-tree case is asserted first.
+
+    WHEN THE ESCAPE IS CLOSED, BOTH ASSERTIONS BELOW MUST BE INVERTED to
+    `is not None` and this test renamed. Leaving it green while the fix lands
+    would re-pin the bug."""
+    _four_rounds_then_a_cleared_pointer(repo, declared=1)
+    lying = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 1}])
+
+    # Working tree only -- zero commits carry this pointer.
+    assert _mod._pointer_scoped_base("origin/main", lying) == "HEAD"
+    assert _mod.audit_bookkeeping_drift(lying) is None, "the escape closed; invert this"
+
+    # And once the re-point is committed, the four round commits fall out of
+    # range permanently rather than transiently.
+    repo.write_state(lying, "Re-point at the piece, count still wrong")
+    assert _mod.audit_bookkeeping_drift(lying) is None, "the escape closed; invert this"
 
 
 def test_the_cleared_pointers_banner_clears_by_merging(repo):
@@ -608,7 +654,21 @@ def test_the_cleared_pointers_banner_clears_by_merging(repo):
 def test_a_dangling_pointer_still_narrows(repo):
     """Only a FALSY pointer skips the narrowing. A pointer naming something in
     neither pool is a typo, not an absence: it still scopes to its own span, so
-    round 2's fix is not widened past what (A) asked for."""
+    round 2's fix is not widened past what (A) asked for.
+
+    ROUND 1 FINDING 2, GATE-LEVEL, OPEN: that scoping is ALSO a false
+    all-clear, and this test's second assertion is the proof rather than the
+    endorsement. A dangling pointer takes the narrowing path here AND the
+    unphased path in `audit_bookkeeping_drift` (`_pointer_target` cannot
+    resolve it), so the round-3 escalation runs against a window the same
+    nonsense value just emptied -- the round-3 defect reached through a typo.
+    It is reachable without one: `already_shipped` entries are matched by
+    `name`, and those names are long prose strings, so renaming one while the
+    pointer still holds the old string dangles it. So does opening a piece in
+    one commit and adding its entry in the next.
+
+    The first assertion is the boundary (A) asked for and stays either way.
+    THE SECOND MUST BE INVERTED when the escape is closed."""
     one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
     repo.write_state(one, "Open piece one")
     repo.commit("round 4: fixes on piece one")
@@ -618,7 +678,25 @@ def test_a_dangling_pointer_still_narrows(repo):
     opened = repo.git("rev-parse", "HEAD")
 
     assert _mod._pointer_scoped_base("origin/main", typo) == opened
-    assert _mod.audit_bookkeeping_drift(typo) is None
+    assert _mod.audit_bookkeeping_drift(typo) is None, "the escape closed; invert this"
+
+
+def test_OPEN_a_non_string_pointer_is_silent_too(repo):
+    """ROUND 1 FINDING 2, the same hole reached without a typo. OPEN.
+
+    Pins that these do not CRASH, and records that they are silent. A state
+    file is hand-edited, so a pointer that is a number, a bool or a list is a
+    plausible slip, and every one of them resolves to no target while emptying
+    its own window."""
+    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
+    repo.write_state(one, "Open piece one")
+    repo.commit("round 4: fixes on piece one")
+    repo.write_state(_piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}]),
+                     "Re-record piece one")
+
+    for value in (123, True, ["piece one"], {"id": "piece one"}):
+        state = _piece_state(value, [{"name": "piece one", "audit_rounds": 0}])
+        assert _mod.audit_bookkeeping_drift(state) is None, f"{value!r}: invert this"
 
 
 # --- finding 4: the verify probe must pin the load-bearing half -------------
