@@ -161,7 +161,16 @@ export function ScanFunnel({ mode, pipeline }: Props) {
         <Text size={11} tone="dim" weight={500}>OPTIONS PIPELINE</Text>
       </div>
       <Stage wide label="Universe"        count={p.scanned}      total={p.scanned} />
-      <StaleCountsNote show={p.other_rejected === undefined && p.failed_direction === undefined} />
+      {/* ANY missing counter, not all of them. The first version of this change
+          shipped `failed_direction`/`failed_shortlist` without `other_rejected`,
+          so a blob stored then has one and not the other — requiring both to be
+          absent would hide the warning on exactly that blob, where the chain is
+          short by however many symbols errored. */}
+      <StaleCountsNote show={
+        p.other_rejected === undefined
+        || p.failed_direction === undefined
+        || p.failed_shortlist === undefined
+      } />
       <UnattributedNote wide count={otherRejected} />
       <Stage wide label="Data / Filters (data/price/cap)" count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
       <Stage wide label="Pre-screen (setup score)"        count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />

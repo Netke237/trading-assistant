@@ -22,8 +22,36 @@ const completed: ScanResult = {
   },
 };
 
+/**
+ * WEAK ON PURPOSE-ADJACENT, so do not lean on it: `totalTrimmed` is defined as
+ * `max(0, scanned - passed - rejected)`, which makes this identity hold
+ * automatically whenever `scanned >= passed + rejected`. It can only fail in
+ * the one direction where scanned is SHORT of the other two.
+ *
+ * In particular it would NOT have caught the bug this file was written for.
+ * There, the header fell back to `passed + rejected` (5) while the funnel
+ * rendered a stale `pipeline.scanned` (518): the three header numbers summed
+ * perfectly and the contradiction was between the header and the funnel.
+ *
+ * `expectNothingStaleIsReachable` below is the assertion that actually guards
+ * it — the funnel and the numbers both read `shownResult`, so the only way they
+ * can disagree is if something stale is still reachable through it.
+ */
 function expectCoherent(t: ReturnType<typeof scanLogTotals>) {
   expect(t.totalScanned).toBe(t.totalPassed + t.totalRejected + t.totalTrimmed);
+}
+
+/** No stale figure is reachable — including by the funnel, which renders
+ *  `shownResult.pipeline`. If this holds, the header and the funnel cannot
+ *  disagree, because there is nothing for either to disagree with. */
+function expectNothingStaleIsReachable(t: ReturnType<typeof scanLogTotals>) {
+  expect(t.shownResult).toBeUndefined();
+  expect(t.shownResult?.pipeline).toBeUndefined();
+  expect(t.totalScanned).toBe(0);
+  expect(t.totalPassed).toBe(0);
+  expect(t.totalRejected).toBe(0);
+  expect(t.totalTrimmed).toBe(0);
+  expect(t.rejectedLog).toEqual([]);
 }
 
 describe('scanLogTotals', () => {
@@ -52,10 +80,7 @@ describe('scanLogTotals', () => {
     // funnel's "Universe 518".
     const t = scanLogTotals('SCANNING', [], completed);
 
-    expect(t.shownResult).toBeUndefined();
-    expect(t.totalScanned).toBe(0);
-    expect(t.totalPassed).toBe(0);
-    expect(t.totalRejected).toBe(0);
+    expectNothingStaleIsReachable(t);
     expectCoherent(t);
   });
 
@@ -63,10 +88,18 @@ describe('scanLogTotals', () => {
     // FAILED is a persisted terminal state, so this survives a reload.
     const t = scanLogTotals('FAILED', [], completed);
 
-    expect(t.shownResult).toBeUndefined();
-    expect(t.totalScanned).toBe(0);
+    expectNothingStaleIsReachable(t);
     expectCoherent(t);
   });
+
+  it.each(['IDLE', 'SCANNING', 'FAILED', 'CANCELLED'])(
+    'exposes nothing for the funnel to render in state %s', (state) => {
+      // The funnel reads shownResult.pipeline. If an unsettled state could
+      // still hand it one, the header and the funnel would disagree again —
+      // which is exactly how this panel broke three times running.
+      expectNothingStaleIsReachable(scanLogTotals(state, [], completed));
+    },
+  );
 
   it.each(['IDLE', 'SCANNING', 'FAILED', 'CANCELLED', 'COMPLETED', 'PARTIAL'])(
     'keeps the numbers coherent in state %s', (state) => {
