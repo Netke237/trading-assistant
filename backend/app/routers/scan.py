@@ -26,6 +26,7 @@ import json as _json
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
+from app.services.config_loader import load_direction_conviction_min_trend
 
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
@@ -1535,31 +1536,32 @@ async def _execute_scan_core(
     # Removes candidates that show no actual directional structure — prevents
     # "least bad" stocks in an opposing trend from polluting the results.
     # Intraday is exempt: intraday reversals are common regardless of daily trend.
-    _DIRECTION_TREND_GATE: dict[tuple[str, str], dict] = {
-        ("Bearish", "Swing"):    {"max_trend": 50},
-        ("Bearish", "Position"): {"max_trend": 40},
-        ("Bullish", "Swing"):    {"min_trend": 30},
-        ("Bullish", "Position"): {"min_trend": 40},
-    }
-    _dir_gate = _DIRECTION_TREND_GATE.get((req.direction, req.horizon))
+    #
+    # A FLOOR IN BOTH DIRECTIONS. The trend rule is direction-aware, so a high
+    # trend score on a Bearish scan means a strong DOWNtrend — the setup a put
+    # wants — and the thing this gate removes is a LOW score either way. The
+    # bearish side was a ceiling until 2026-09-16 and deleted exactly the
+    # candidates it should have kept; see config_loader for the full note.
+    #
+    # Thresholds live in scoring_rules.yaml
+    # (horizons.<horizon>.direction_conviction) with defaults in config_loader.
+    # `None` means this direction/horizon is exempt. Resolved ONCE, before the
+    # loop, so a malformed threshold raises for the whole scan rather than
+    # per candidate.
+    _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     direction_filtered_count = 0
-    if _dir_gate and candidates:
+    if _min_trend is not None and candidates:
         _kept: list[TradeCardData] = []
         for _c in candidates:
             _t = _c.stockBreakdown.trend if _c.stockBreakdown else 50
-            _max = _dir_gate.get("max_trend")
-            _min = _dir_gate.get("min_trend")
-            if (_max is not None and _t > _max) or (_min is not None and _t < _min):
+            if _t < _min_trend:
                 direction_filtered_count += 1
                 rejected.append(RejectedCandidate(
                     symbol=_c.symbol,
-                    # `is not None`, not truthiness: a max_trend of 0 -- a
-                    # legitimate "bearish structure only" gate -- is falsy, and
-                    # would render the comparison inverted ("trend 5 < 0") in
-                    # the rejection record the user reads.
-                    reason=f"direction_conviction: trend {_t} "
-                           f"{'>' if _max is not None else '<'} "
-                           f"{_max if _max is not None else _min} for {req.direction} {req.horizon}",
+                    # `:g` so a threshold that resolved to 40.0 reads "40" in
+                    # the rejection record the user sees, not "40.0".
+                    reason=f"direction_conviction: trend {_t} < {_min_trend:g} "
+                           f"for {req.direction} {req.horizon}",
                 ))
             else:
                 _kept.append(_c)

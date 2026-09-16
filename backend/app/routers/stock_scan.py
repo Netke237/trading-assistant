@@ -66,6 +66,7 @@ from app.scoring.first_passage import estimate_stock_first_passage
 from app.scoring.exit_plan import compute_final_stop, compute_target_row
 from app.services.config_loader import (
     load_first_passage_cfg as _fp_cfg, load_exit_plan_cfg,
+    load_direction_conviction_min_trend,
 )
 # _load_config is lru_cached AND cache_cleared by POST /settings/risk, so the
 # risk budget below follows a saved settings change without a restart. A
@@ -684,6 +685,14 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     return shares, round(dollar_risk, 2)
 
 
+# Sentinel for _process_stock's pre-resolved direction gate. `None` is a
+# MEANINGFUL value for that parameter -- it is how "this direction/horizon is
+# exempt" is spelled -- so it cannot double as "the caller did not supply one".
+# Without the sentinel, the direct callers in the test suite would silently run
+# with the gate disabled while the orchestrated path ran with it on.
+_UNSET_MIN_TREND: Any = object()
+
+
 async def _process_stock(
     symbol: str,
     req: StockScanRequest,
@@ -691,6 +700,7 @@ async def _process_stock(
     price_map: dict[str, dict],
     benchmark_closes: list[float],
     fund_gate: dict | None = None,
+    direction_min_trend: Any = _UNSET_MIN_TREND,
 ) -> PositionCardOut | dict:
     async with _SCAN_SEM:
         try:
@@ -810,17 +820,24 @@ async def _process_stock(
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
 
-            # Direction conviction filter (Swing/Position only)
-            if req.horizon != "Intraday":
+            # Direction conviction filter — a FLOOR in both directions, never a
+            # ceiling on the bearish side. The trend rule is direction-aware, so
+            # a high trend score on a Bearish scan means a strong DOWNtrend,
+            # which is the setup a put wants; what this gate removes is a LOW
+            # score either way. Thresholds live in scoring_rules.yaml
+            # (horizons.<horizon>.direction_conviction); `None` means exempt,
+            # which is how Intraday is excused rather than by naming it here.
+            # Must stay identical to the options gate in routers/scan.py — both
+            # now read the same resolver, which is what keeps them in step.
+            _min_trend = (
+                load_direction_conviction_min_trend(req.direction, req.horizon)
+                if direction_min_trend is _UNSET_MIN_TREND
+                else direction_min_trend
+            )
+            if _min_trend is not None:
                 _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
-                if req.direction == "Bearish":
-                    _max_trend = 40 if req.horizon == "Position" else 50
-                    if _trend_score > _max_trend:
-                        return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} > {_max_trend} for Bearish {req.horizon}"}
-                elif req.direction == "Bullish":
-                    _min_trend = 40 if req.horizon == "Position" else 30
-                    if _trend_score < _min_trend:
-                        return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend} for Bullish {req.horizon}"}
+                if _trend_score < _min_trend:
+                    return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend:g} for {req.direction} {req.horizon}"}
 
             if req.regime_filter and regime_signal and \
                regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
@@ -1111,7 +1128,14 @@ async def _execute_stock_scan_core(
         pass   # RS column shows None — non-fatal
 
     fund_gate = _resolve_fundamentals_gate(req)
-    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate) for s in symbols]
+    # Resolved ONCE, here, rather than per symbol inside _process_stock: that
+    # function catches Exception and turns it into a per-symbol rejection, so a
+    # malformed direction_conviction threshold would otherwise surface as every
+    # symbol failing for an opaque reason instead of the scan failing with the
+    # config error.
+    direction_min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
+    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate,
+                            direction_min_trend=direction_min_trend) for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []

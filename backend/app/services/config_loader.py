@@ -60,6 +60,100 @@ def load_first_passage_cfg() -> dict:
     return full["first_passage"]
 
 
+# ── Direction-conviction gate ────────────────────────────────────────────────
+# The minimum trend score a candidate must reach to count as having real
+# directional structure. Applied by BOTH scan paths (routers/scan.py for
+# options, routers/stock_scan.py for stocks), which is why it resolves here
+# rather than being spelled out twice.
+#
+# A FLOOR IN BOTH DIRECTIONS, NEVER A CEILING. Every trend method in
+# scoring/stock_scorer.py — _trend_crossover, _trend_additive and
+# _trend_relative_strength — is direction-aware: each scores how strongly price
+# is moving IN THE DIRECTION BEING TRADED (bearish awards its points for close
+# BELOW the MA, a falling slope, and relative strength negated). So a high trend
+# score on a Bearish scan means a strong DOWNtrend, which is exactly the setup a
+# put wants, and "no directional structure" — the only thing this gate exists to
+# remove — is a LOW score on either side.
+#
+# Until 2026-09-16 the bearish side applied a `max_trend` CEILING, which
+# inverted the gate: it deleted the strongest short setups and kept the names
+# that were not falling. scoring/first_passage.py agreed with the scorer rather
+# than with the gate all along — its drift term is
+# `direction_sign * (trend_score - 50)`, so a high trend score on a put already
+# produced downward drift. The ceiling is gone; do not reintroduce one here.
+#
+# These are the DEFAULTS. scoring_rules.yaml's
+# horizons.<horizon>.direction_conviction overrides them per horizon, and an
+# explicit `null` there disables the gate for that direction.
+_DIRECTION_CONVICTION_DEFAULTS: dict[str, dict[str, float | None]] = {
+    "swing":    {"bullish_min_trend": 30.0, "bearish_min_trend": 30.0},
+    "position": {"bullish_min_trend": 40.0, "bearish_min_trend": 40.0},
+    # "intraday" is deliberately ABSENT — exempt in both directions, because
+    # intraday reversals are common regardless of the daily trend. An absent
+    # horizon means no gate, so this is the exemption, not an oversight.
+}
+
+
+def load_direction_conviction_min_trend(direction: str, horizon: str) -> float | None:
+    """Return the minimum trend score a `direction` scan requires at `horizon`,
+    or None when no gate applies (Intraday today).
+
+    Resolution order, per direction:
+      1. scoring_rules.yaml horizons.<horizon>.direction_conviction.<dir>_min_trend
+         when that key is PRESENT — including an explicit `null`, which means
+         "no gate for this direction" and is honoured rather than falling
+         through to the default.
+      2. Otherwise _DIRECTION_CONVICTION_DEFAULTS for that horizon.
+      3. Otherwise None — no gate.
+
+    Raises ValueError on a malformed threshold (non-numeric, boolean, or
+    outside the 0-100 range a trend score can actually take) rather than
+    silently disabling the gate: a typo in the config must fail the scan
+    loudly, not quietly widen the screen.
+    """
+    dir_key = f"{direction.strip().lower()}_min_trend"
+    if dir_key not in ("bullish_min_trend", "bearish_min_trend"):
+        raise ValueError(
+            f"unknown direction {direction!r}: expected 'Bullish' or 'Bearish'"
+        )
+    horizon_key = horizon.strip().lower()
+
+    block = (
+        load_scoring_cfg()
+        .get("horizons", {})
+        .get(horizon_key, {})
+        .get("direction_conviction")
+    )
+    if isinstance(block, dict) and dir_key in block:
+        raw = block[dir_key]
+    else:
+        raw = _DIRECTION_CONVICTION_DEFAULTS.get(horizon_key, {}).get(dir_key)
+
+    if raw is None:
+        return None
+    # `isinstance(raw, bool)` first: bool is a subclass of int, so a YAML
+    # `true` would otherwise sail through float() as 1.0 and install a gate
+    # that passes essentially everything.
+    if isinstance(raw, bool):
+        raise ValueError(
+            f"invalid direction_conviction.{dir_key} for horizon {horizon!r}: "
+            f"{raw!r} is a boolean, expected a number in [0, 100] or null"
+        )
+    try:
+        val = float(raw)
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"invalid direction_conviction.{dir_key} for horizon {horizon!r}: "
+            f"{raw!r} is not a number in [0, 100] or null"
+        )
+    if not math.isfinite(val) or not (0.0 <= val <= 100.0):
+        raise ValueError(
+            f"invalid direction_conviction.{dir_key} for horizon {horizon!r}: "
+            f"{raw!r} is outside the 0-100 range a trend score can take"
+        )
+    return val
+
+
 # Maps the Step 3 "Reward/Risk" panel's override keys (frontend/lib/
 # executionParamDefaults.ts) onto risk_rules.yaml's reward_risk block keys.
 _RR_OVERRIDE_KEY_MAP = {

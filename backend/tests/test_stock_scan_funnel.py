@@ -93,10 +93,14 @@ def _run(stock_client, symbols, *, direction, horizon, score_stock, **body):
 
 
 def test_direction_gated_symbols_get_their_own_bucket(stock_client):
-    """Bearish/Position drops trend > 40. Those rejections used to be absorbed
-    into other_rejected, where the funnel never showed them at all."""
+    """Bearish/Position drops trend < 40. Those rejections used to be absorbed
+    into other_rejected, where the funnel never showed them at all.
+
+    trend=10 rather than the 60 this used to pass: the gate is a FLOOR in both
+    directions now, so 60 on a Bearish scan is a strong downtrend and survives.
+    """
     body = _run(stock_client, ["AAA", "BBB"], direction="Bearish", horizon="Position",
-                score_stock=MagicMock(return_value=_card(60)))
+                score_stock=MagicMock(return_value=_card(10)))
 
     pipeline = body["pipeline"]
     assert pipeline["failed_direction"] == 2
@@ -119,49 +123,108 @@ def test_a_raising_symbol_lands_in_the_residual_not_nowhere(stock_client):
     assert _accounted(pipeline) == pipeline["scanned"] == 1
 
 
+# The gate, spelled out INDEPENDENTLY of the code that implements it.
+#
+# Deliberately literal rather than read back from config_loader or the YAML: a
+# test that derives its expectations from the thing under test asserts only
+# that the code equals itself. These numbers are the contract, and a change to
+# the YAML is supposed to fail here so that whoever makes it has to say so.
+#
+# A FLOOR on both sides, and the two sides MIRROR each other. The bearish side
+# was a `max_trend` CEILING (50 Swing / 40 Position) until 2026-09-16, which
+# inverted the gate: because every trend method in stock_scorer.py is
+# direction-aware, a high trend score on a Bearish scan means a strong
+# DOWNtrend, so the ceiling deleted the best short setups and kept the names
+# that were not falling.
+_MIRRORED_FLOORS: dict[tuple[str, str], int | None] = {
+    ("Bearish", "Swing"):    30,
+    ("Bearish", "Position"): 40,
+    ("Bullish", "Swing"):    30,
+    ("Bullish", "Position"): 40,
+    ("Bearish", "Intraday"): None,   # exempt
+    ("Bullish", "Intraday"): None,   # exempt
+}
+
+
 @pytest.mark.parametrize("direction,horizon,trend,gated", [
-    # The four non-Intraday pairs, at one point either side of each threshold.
-    ("Bearish", "Position", 41, True),  ("Bearish", "Position", 40, False),
-    ("Bearish", "Swing",    51, True),  ("Bearish", "Swing",    50, False),
+    # The four non-Intraday pairs, at one point either side of each floor.
+    ("Bearish", "Position", 39, True),  ("Bearish", "Position", 40, False),
+    ("Bearish", "Swing",    29, True),  ("Bearish", "Swing",    30, False),
     ("Bullish", "Position", 39, True),  ("Bullish", "Position", 40, False),
     ("Bullish", "Swing",    29, True),  ("Bullish", "Swing",    30, False),
+    # A STRONG trend in the traded direction survives on BOTH sides. The
+    # bearish half of this is the regression that matters: under the old
+    # ceiling, trend 85 on a Bearish scan was thrown away.
+    ("Bearish", "Position", 85, False), ("Bullish", "Position", 85, False),
     # Intraday is exempt in both modes, at any trend score.
     ("Bearish", "Intraday", 99, False), ("Bullish", "Intraday", 1,  False),
 ])
-def test_stock_gate_thresholds_match_the_options_gate(
+def test_stock_gate_matches_the_mirrored_floor_contract(
     stock_client, direction, horizon, trend, gated,
 ):
-    """The direction gate is hardcoded TWICE — a dict in routers/scan.py and an
-    if/else in routers/stock_scan.py — in a repo where every other threshold
-    lives in config/*.yaml. They agree today (Bearish 50/40, Bullish 30/40,
-    Intraday exempt). Nothing but this test stops one copy from drifting.
+    """The stock endpoint screens on the floors in _MIRRORED_FLOORS.
 
-    Asserted against the options dict itself, so editing either copy alone
-    fails here rather than silently giving the two modes different screens.
+    Both scan modes now resolve their threshold through the one function
+    (services/config_loader.load_direction_conviction_min_trend), so the drift
+    this test used to guard — a dict in routers/scan.py and an if/else in
+    routers/stock_scan.py, edited apart — is no longer possible by
+    construction. What is asserted instead is the behaviour itself, end to end
+    through the real endpoint.
     """
-    from app.routers.scan import _execute_scan_core  # noqa: F401  (module import)
-    import inspect, re
-
-    src = inspect.getsource(_execute_scan_core)
-    gate_src = re.search(r"_DIRECTION_TREND_GATE.*?\n    \}", src, re.S).group(0)
-    options_gate: dict = {}
-    for d, h, kind, val in re.findall(
-        r'\("(\w+)",\s*"(\w+)"\):\s*\{"(\w+)":\s*(\d+)\}', gate_src
-    ):
-        options_gate[(d, h)] = (kind, int(val))
-
-    expected = options_gate.get((direction, horizon))
-    if expected is None:
-        assert not gated, f"options exempts {direction}/{horizon}; stock must too"
-    else:
-        kind, threshold = expected
-        assert gated == (trend > threshold if kind == "max_trend" else trend < threshold), (
-            f"options {kind}={threshold} for {direction}/{horizon} disagrees with stock"
-        )
+    floor = _MIRRORED_FLOORS[(direction, horizon)]
+    assert gated == (floor is not None and trend < floor), (
+        "the parametrize case disagrees with the floor contract it is meant to "
+        "exercise — fix the case, not the assertion"
+    )
 
     body = _run(stock_client, ["AAA"], direction=direction, horizon=horizon,
                 score_stock=MagicMock(return_value=_card(trend)))
     assert body["pipeline"]["failed_direction"] == (1 if gated else 0)
+
+
+def test_both_scan_modes_resolve_the_same_floor_contract():
+    """The resolver the two modes share returns the contract above, for every
+    direction/horizon pair — including the Intraday exemption.
+
+    This is what makes the options and stock screens identical: they call this
+    one function. If someone edits scoring_rules.yaml, this fails and the
+    _MIRRORED_FLOORS contract has to be updated deliberately.
+    """
+    from app.services.config_loader import load_direction_conviction_min_trend
+
+    for (direction, horizon), floor in _MIRRORED_FLOORS.items():
+        resolved = load_direction_conviction_min_trend(direction, horizon)
+        assert resolved == floor, (
+            f"{direction}/{horizon}: resolver says {resolved}, contract says {floor}"
+        )
+
+
+def test_the_bearish_gate_is_a_floor_not_a_ceiling():
+    """The inversion regression, stated as the trading claim rather than as a
+    threshold comparison.
+
+    On a Bearish scan the trend rule scores how strongly price is falling, so
+    the STRONGEST short setup scores HIGHEST. A gate that drops high scores on
+    the bearish side deletes exactly the candidates the scan exists to find —
+    which is what shipped between 2026-06-18 and 2026-09-16.
+    """
+    from app.services.config_loader import load_direction_conviction_min_trend
+
+    for horizon in ("Swing", "Position"):
+        floor = load_direction_conviction_min_trend("Bearish", horizon)
+        assert floor is not None, f"Bearish/{horizon} must still be gated"
+        # A textbook strong downtrend: close below the MA, falling slope, high
+        # ADX — the additive method's three components all paying out.
+        assert 95 >= floor, (
+            f"Bearish/{horizon} rejects a trend score of 95 — the gate is "
+            f"inverted again"
+        )
+        # ...and the flat, structureless name is still removed, which is the
+        # gate's actual job.
+        assert 5 < floor, (
+            f"Bearish/{horizon} admits a trend score of 5 — the gate no longer "
+            f"removes candidates with no directional structure"
+        )
 
 
 #  Verbatim from their producers in routers/stock_scan.py. Three of these were
@@ -175,7 +238,7 @@ _REAL_STOCK_REASONS = [
     ("no price data",                                     "failed_history"),
     ("price $3.10 < min",                                 "failed_history"),
     ("REJECT score=20",                                   "failed_score"),
-    ("direction_conviction: trend 60 > 40 for Bearish Position", "failed_direction"),
+    ("direction_conviction: trend 20 < 40 for Bearish Position", "failed_direction"),
     ("regime headwind",                                   "failed_regime"),
     ("no pullback_ema setup",                             "failed_signal"),
     ("no mean_reversion_multi: 2/3 signals fired",        "failed_signal"),
@@ -239,9 +302,14 @@ def test_every_stock_reason_producer_is_classified():
 
 def test_funnel_reconciles_when_the_gate_passes_everything(stock_client):
     """The invariant must hold on the happy path too, not only when things
-    are being dropped."""
+    are being dropped.
+
+    trend=85 rather than the 10 this used to pass: 10 is now BELOW the
+    Bearish/Position floor and would be gated, which would have made this test
+    assert the opposite of its own name.
+    """
     body = _run(stock_client, ["AAA", "BBB"], direction="Bearish", horizon="Position",
-                score_stock=MagicMock(return_value=_card(10)))
+                score_stock=MagicMock(return_value=_card(85)))
 
     pipeline = body["pipeline"]
     assert pipeline["failed_direction"] == 0

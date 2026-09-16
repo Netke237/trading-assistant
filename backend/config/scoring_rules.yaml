@@ -154,6 +154,27 @@ horizons:
       # measured against a real universe -- Kenneth's explicit call. Revisit
       # only if the observed flag rate looks wrong; one edit either way.
       pass_max_fraction: 0.7   # Swing -- PASS means >=30% of premium still there
+
+    direction_conviction:
+      # Minimum trend score a candidate must reach to count as having real
+      # directional structure. Read by BOTH scan paths (routers/scan.py for
+      # options, routers/stock_scan.py for stocks) through
+      # services/config_loader.load_direction_conviction_min_trend, which also
+      # holds the fallback defaults if these keys are removed.
+      #
+      # A FLOOR IN BOTH DIRECTIONS, NEVER A CEILING -- and the two sides mirror
+      # each other deliberately. The trend rule is direction-aware: on a Bearish
+      # scan it awards its points for price BELOW the MA with a falling slope,
+      # so a HIGH score means a strong DOWNtrend, which is the setup a put
+      # wants. "No directional structure" is a LOW score on either side.
+      #
+      # Until 2026-09-16 the bearish side was a `max_trend` CEILING of 50 here,
+      # which inverted the gate: it deleted the strongest short setups and kept
+      # the names that were not falling. Do not reintroduce a ceiling.
+      #
+      # Set either key to `null` to exempt that direction at this horizon.
+      bullish_min_trend: 30
+      bearish_min_trend: 30
   intraday:
     weights:
       trend: 0.35
@@ -256,6 +277,15 @@ horizons:
       # measured against a real universe -- Kenneth's explicit call. Revisit
       # only if the observed flag rate looks wrong; one edit either way.
       pass_max_fraction: 0.8   # Intraday -- PASS means >=20% of premium still there
+
+    direction_conviction:
+      # Intraday is EXEMPT in both directions, and the `null`s say so
+      # explicitly rather than leaving the reader to infer it from an absent
+      # block: intraday reversals are common regardless of the daily trend, so
+      # requiring daily-trend conviction here would screen out the setups this
+      # horizon exists to find. Put a number in either key to gate that side.
+      bullish_min_trend: null
+      bearish_min_trend: null
   position:
     weights:
       trend: 0.30
@@ -370,6 +400,21 @@ horizons:
       # measured against a real universe -- Kenneth's explicit call. Revisit
       # only if the observed flag rate looks wrong; one edit either way.
       pass_max_fraction: 0.6   # Position -- PASS means >=40% of premium still there
+
+    direction_conviction:
+      # See horizons.swing.direction_conviction for the full rationale. Floors,
+      # never ceilings, and the two sides mirror each other.
+      #
+      # Position is the strictest horizon in both directions, and it carries the
+      # widest blast radius: frontend/lib/horizonPresets.ts collapses FOUR of the
+      # seven user presets -- Position, Quarterly, Semi-annual and Annual -- onto
+      # this one scoring horizon, and Custom lands here too whenever its upper
+      # hold bound exceeds 20 days (scoringHorizonForHold). So every number here
+      # screens most of the preset strip, not one entry. The bearish side was a
+      # `max_trend` CEILING of 40 until 2026-09-16; that is what made the
+      # inversion bite hardest here.
+      bullish_min_trend: 40
+      bearish_min_trend: 40
 entry_quality:
   spread_tolerance_pct: 0.10
   max_slippage_pct: 0.03

@@ -119,9 +119,13 @@ def _accounted(pipeline: dict) -> int:
 
 
 def test_funnel_candidates_matches_returned_list_when_gate_strips_all(client):
-    """Bearish/Position gates out trend > 40. Five candidates all above it must
-    leave the funnel reporting 0 — not 5 — and name where they went."""
-    body = _run(client, _cards(*((s, 60) for s in ("AAA", "BBB", "CCC", "DDD", "EEE"))),
+    """Bearish/Position gates out trend < 40. Five candidates all below it must
+    leave the funnel reporting 0 — not 5 — and name where they went.
+
+    trend=20, not the 60 this used to use: the gate became a FLOOR on the
+    bearish side on 2026-09-16, so 60 is a strong downtrend and now survives.
+    """
+    body = _run(client, _cards(*((s, 20) for s in ("AAA", "BBB", "CCC", "DDD", "EEE"))),
                 direction="Bearish", horizon="Position")
 
     assert body["candidates"] == []
@@ -135,7 +139,7 @@ def test_funnel_candidates_matches_returned_list_when_gate_strips_all(client):
 
 def test_funnel_candidates_matches_returned_list_on_a_partial_strip(client):
     """The survivors, and only the survivors, are counted as candidates."""
-    body = _run(client, _cards(("AAA", 60), ("BBB", 20), ("CCC", 30)),
+    body = _run(client, _cards(("AAA", 20), ("BBB", 60), ("CCC", 70)),
                 direction="Bearish", horizon="Position")
 
     pipeline = body["pipeline"]
@@ -146,8 +150,13 @@ def test_funnel_candidates_matches_returned_list_on_a_partial_strip(client):
 
 
 def test_funnel_reports_no_direction_failures_when_no_gate_applies(client):
-    """Intraday is exempt from the gate, so nothing is attributed to it."""
-    body = _run(client, _cards(("AAA", 90), ("BBB", 90)),
+    """Intraday is exempt from the gate, so nothing is attributed to it.
+
+    trend=10, not 90: at Position these two would be gated, so the exemption is
+    what carries the assertion. With 90 — which now clears every floor — the
+    test would pass whether Intraday were exempt or not.
+    """
+    body = _run(client, _cards(("AAA", 10), ("BBB", 10)),
                 direction="Bearish", horizon="Intraday")
 
     pipeline = body["pipeline"]
@@ -158,7 +167,7 @@ def test_funnel_reports_no_direction_failures_when_no_gate_applies(client):
 def test_shortlist_cap_is_accounted_for_rather_than_silently_trimming(client):
     """The cap trims the returned list, so the funnel must show that too —
     otherwise moving `candidates` past the cap just relocates the same lie."""
-    body = _run(client, _cards(("AAA", 10), ("BBB", 10), ("CCC", 10)),
+    body = _run(client, _cards(("AAA", 60), ("BBB", 60), ("CCC", 60)),
                 direction="Bearish", horizon="Position",
                 overrides={"shortlist_max_candidates": 2})
 
@@ -173,7 +182,7 @@ def test_a_symbol_that_raises_is_counted_not_dropped(client):
     """Exceptions are recorded as `reason=str(exc)`, which for many httpx and
     asyncio errors is the EMPTY STRING and so matches no reason predicate.
     Without a residual bucket such a symbol leaves the funnel entirely."""
-    outcomes: dict[str, object] = _cards(("AAA", 10))
+    outcomes: dict[str, object] = _cards(("AAA", 60))   # clears the bearish floor
     outcomes["BOOM"] = RuntimeError("")   # empty message, as asyncio errors often are
 
     body = _run(client, outcomes, direction="Bearish", horizon="Position")
@@ -187,7 +196,7 @@ def test_a_symbol_that_raises_is_counted_not_dropped(client):
 def test_a_rejection_matching_no_predicate_is_counted_not_dropped(client):
     """The buckets match on reason text. A reason nobody classified must still
     land somewhere rather than silently leaving the funnel short."""
-    outcomes: dict[str, object] = _cards(("AAA", 10))
+    outcomes: dict[str, object] = _cards(("AAA", 60))   # clears the bearish floor
     outcomes["ZZZ"] = RejectedCandidate(symbol="ZZZ", reason="some brand new reason")
 
     body = _run(client, outcomes, direction="Bearish", horizon="Position")
@@ -270,9 +279,9 @@ def test_every_scanned_symbol_is_accounted_for_in_the_funnel(client):
     a direction strip, a shortlist trim, a raising symbol and an unclassified
     rejection — so the assertion cannot pass by everything being zero."""
     outcomes: dict[str, object] = _cards(
-        ("AAA", 60),   # stripped by the direction gate
-        ("BBB", 10),   # survives
-        ("CCC", 10),   # survives, then trimmed by the cap
+        ("AAA", 10),   # stripped by the direction gate — below the floor
+        ("BBB", 60),   # survives
+        ("CCC", 60),   # survives, then trimmed by the cap
     )
     outcomes["BOOM"] = RuntimeError("")
     outcomes["ZZZ"] = RejectedCandidate(symbol="ZZZ", reason="some brand new reason")
