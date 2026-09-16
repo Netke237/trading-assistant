@@ -57,10 +57,10 @@ function dropped(n: number | undefined): number {
  * the stages then leaves the chain ending on a number above Candidates with
  * nothing explaining the gap — the original complaint, relocated. Say so.
  */
-function StaleCountsNote({ show }: { show: boolean }) {
+function StaleCountsNote({ show, wide }: { show: boolean; wide?: boolean }) {
   if (!show) return null;
   return (
-    <div className={styles.stageWide}>
+    <div className={wide ? styles.stageWide : styles.stage}>
       <Text size={11} tone="caution">
         Stored before per-gate counts were recorded — stages may not reconcile.
       </Text>
@@ -121,6 +121,17 @@ export function ScanFunnel({ mode, pipeline }: Props) {
           <Text size={11} tone="dim" weight={500}>STOCK PIPELINE</Text>
         </div>
         <Stage label="Universe"   count={p.scanned}    total={p.scanned} />
+        {/* Stock needs this as much as options: a persisted stock result from
+            before these counters existed had its direction-conviction
+            rejections sitting inside other_rejected, so without the note the
+            funnel labels real gate rejections "Unattributed / errored" — the
+            very thing UnattributedNote's own docstring says it exists to
+            avoid. This was the last asymmetry between the two modes. */}
+        <StaleCountsNote show={
+          p.other_rejected === undefined
+          || p.failed_direction === undefined
+          || p.failed_shortlist === undefined
+        } />
         <UnattributedNote count={otherRejected} />
         <Stage label="History"    count={afterHistory}  rejected={p.failed_history}  rejectedLabel="no history" total={p.scanned} />
         <Stage label="Score gate" count={afterScore}    rejected={p.failed_score}    rejectedLabel="REJECT"     total={p.scanned} />
@@ -166,7 +177,7 @@ export function ScanFunnel({ mode, pipeline }: Props) {
           so a blob stored then has one and not the other — requiring both to be
           absent would hide the warning on exactly that blob, where the chain is
           short by however many symbols errored. */}
-      <StaleCountsNote show={
+      <StaleCountsNote wide show={
         p.other_rejected === undefined
         || p.failed_direction === undefined
         || p.failed_shortlist === undefined

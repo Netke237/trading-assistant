@@ -232,10 +232,18 @@ def test_every_options_reason_producer_is_classified():
     emitted = {s for s in emitted if s}
     assert emitted, "reason-producer regex matched nothing — this test is vacuous"
 
-    covered = [r for r, _ in _REAL_REASONS] + ["direction_conviction:"]
+    # `c.startswith(e)` ONLY — the same strictness as the stock guard. The
+    # reverse direction (`e.startswith(c)`) was load-bearing purely to let the
+    # bare "direction_conviction:" entry match the captured
+    # "direction_conviction: trend " prefix, and it cost far more than it
+    # bought: with it, a genuinely novel reason like
+    # "no option chain within the DTE window" was accepted as covered by
+    # "no option chain" — while `_is_no_chain` matches on equality, so that
+    # reason lands in the residual and is shown to the user as an error.
+    # Listing the real captured prefix instead removes the need for it.
+    covered = [r for r, _ in _REAL_REASONS] + ["direction_conviction: trend "]
     unclassified = [
-        e for e in emitted
-        if not any(c.startswith(e) or e.startswith(c) for c in covered)
+        e for e in emitted if not any(c.startswith(e) for c in covered)
     ]
     assert not unclassified, (
         f"new rejection reason(s) with no bucket decision: {sorted(unclassified)}"
