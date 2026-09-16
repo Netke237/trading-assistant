@@ -289,9 +289,52 @@ def test_already_shipped_target_without_a_count_is_drift(repo):
 
 
 def test_one_directional_file_ahead_of_git_is_not_drift(repo):
-    """Rounds legitimately run without producing a commit."""
+    """Rounds legitimately run without producing a commit.
+
+    `audit_clean` is TRUE here on purpose. The property under test is that the
+    UNDERCOUNT check is one-directional, and a piece at 6 rounds with none of
+    them clean now trips the hard cap on its own -- a different complaint, on
+    different evidence. The test below pins that one."""
+    repo.commit("round 1: first pass")
+    phases = [{"id": "H", "name": "Phase H", "audit_rounds": 6, "audit_clean": True}]
+    assert _mod.audit_bookkeeping_drift(_state(active="H", phases=phases)) is None
+
+
+def test_the_hard_cap_fires_on_the_resolved_path_too(repo):
+    """THE CAP USED TO BE OPT-OUT, verified by reproduction before it was fixed:
+    `UNPHASED_FAIL_ROUND` was read in exactly one place, inside the `target is
+    None` branch, so once a pointer resolved and the declared count kept up with
+    the git evidence this returned None at ANY round count. A piece could run 3,
+    8 or 30 rounds without going clean under a rendered "No drift" -- and the
+    unphased message's own printed remedy, point the pointer at the entry and
+    record the count there, was precisely the move onto the branch that could
+    not escalate. Following the instruction turned the check off."""
     repo.commit("round 1: first pass")
     phases = [{"id": "H", "name": "Phase H", "audit_rounds": 6, "audit_clean": False}]
+    severity, message = _mod.audit_bookkeeping_drift(_state(active="H", phases=phases))
+    assert severity == "drift"
+    assert "HARD CAP" in message
+    assert "NONE of them came back clean" in message
+
+
+def test_the_hard_cap_holds_its_fire_below_the_threshold(repo):
+    """Two rounds and no clean one is the commonest shape in this repo (C, E,
+    F1 and F2 all went clean in exactly two). The cap is a stop signal, not a
+    running commentary."""
+    repo.commit("round 1: first pass")
+    phases = [{"id": "H", "name": "Phase H", "audit_rounds": 2, "audit_clean": False}]
+    assert _mod.audit_bookkeeping_drift(_state(active="H", phases=phases)) is None
+
+
+def test_the_hard_cap_clears_by_merging(repo):
+    """Round 4 finding 6's rule, applied to the new banner: a red banner nobody
+    can clear is worse than no banner. This one clears by going clean (the test
+    above) or by merging, after which the range is empty, there is no evidence
+    to read, and the cap never runs."""
+    repo.commit("round 6: the last unclean round")
+    phases = [{"id": "H", "name": "Phase H", "audit_rounds": 6, "audit_clean": False}]
+    assert _mod.audit_bookkeeping_drift(_state(active="H", phases=phases)) is not None
+    repo.set_origin_main("feature")
     assert _mod.audit_bookkeeping_drift(_state(active="H", phases=phases)) is None
 
 
@@ -354,6 +397,45 @@ def _piece_state(active, shipped) -> dict:
             "phases": [], "already_shipped": shipped}
 
 
+def test_a_count_that_was_lower_earlier_is_the_boundary_too(repo):
+    """THE NON-ABSENT HALF OF THE BOUNDARY RULE, and it was a surviving mutant
+    until this test existed: `if rounds < declared` could be disabled outright
+    and all 49 other tests still passed, because every one of them reached its
+    boundary through the ABSENT branch instead.
+
+    The gap it leaves is a false positive of exactly the shape round 1 finding 2
+    was about. Here piece two's entry exists for the WHOLE branch -- it was
+    created on main, so it is never absent -- while piece one runs four rounds
+    and finishes. Without this branch of the rule nothing bounds the range, it
+    widens to the full branch, and piece two answers for piece one's round 4 on
+    an entirely honest file."""
+    both = _piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": 0},
+        {"name": "piece two", "audit_rounds": 0},
+    ])
+    repo.write_state(both, "Open both pieces")
+    repo.commit("round 4: fixes on piece one")
+    repo.write_state(_piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": 4, "audit_clean": True},
+        {"name": "piece two", "audit_rounds": 0},
+    ]), "Record piece one at 4, clean")
+    lower = repo.git("rev-parse", "HEAD")
+
+    repo.commit("round 1: fixes on piece two")
+    repo.commit("round 2: fixes on piece two")
+    now = _piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": 4, "audit_clean": True},
+        {"name": "piece two", "audit_rounds": 2, "audit_clean": True},
+    ])
+    repo.write_state(now, "Record piece two at 2, clean")
+
+    # The boundary is the newest commit where piece two's OWN count was lower.
+    assert _mod._target_scoped_base("origin/main", now) == lower
+    assert _mod.audit_bookkeeping_drift(now) is None, (
+        "piece two answered for piece one's round 4"
+    )
+
+
 def test_an_earlier_pieces_rounds_are_not_the_current_targets(repo):
     """ROUND 1 FINDING 2, the sharpest one. One branch, two pieces, nothing
     merged, a state file that is completely honest -- and the probe reported
@@ -383,9 +465,12 @@ def test_an_earlier_pieces_rounds_are_not_the_current_targets(repo):
     assert _mod.audit_bookkeeping_drift(two) is None
 
 
-def test_the_scoped_base_is_the_commit_that_set_the_pointer(repo):
-    """Not the commit where the pointer last DIFFERED -- that is one commit too
-    far back, and `git log sha..HEAD` excludes only `sha` itself."""
+def test_the_scoped_base_is_the_commit_that_introduced_the_entry(repo):
+    """Not the commit before it -- that is one commit too far back, and
+    `git log sha..HEAD` excludes only `sha` itself. Opening a piece while
+    recording the PREVIOUS piece's last round is one commit in this repo's
+    style, so including the introducing commit would hand a brand-new piece the
+    round number of the piece before it (round 2 finding 1, in the new key)."""
     one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
     repo.write_state(one, "Build piece one")
     repo.commit("round 1: fixes on piece one")
@@ -394,7 +479,7 @@ def test_the_scoped_base_is_the_commit_that_set_the_pointer(repo):
     repo.write_state(two, "Record piece one; open piece two")
     opened = repo.git("rev-parse", "HEAD")
 
-    assert _mod._pointer_scoped_base("origin/main", two) == opened
+    assert _mod._target_scoped_base("origin/main", two) == opened
 
 
 def test_the_commit_that_moves_the_pointer_is_not_the_new_pieces_round(repo):
@@ -422,15 +507,27 @@ def test_the_commit_that_moves_the_pointer_is_not_the_new_pieces_round(repo):
     )
 
 
-def test_a_pointer_moved_only_in_the_working_tree_claims_no_committed_rounds(repo):
-    """No COMMITTED round can belong to a pointer that exists only on disk."""
+def test_an_entry_that_exists_only_on_disk_does_not_narrow_anything(repo):
+    """THE INVERSION OF A TEST THAT USED TO PIN AN ESCAPE HATCH. It asserted
+    that a pointer moved only in the working tree scoped to `HEAD`, making
+    `HEAD..HEAD` empty and the whole check silent -- and that was the mechanism
+    behind the re-pointing escape: no commit was needed to switch the undercount
+    check off, only an edit.
+
+    Scoping now keys on the TARGET'S OWN history, and an entry the newest
+    committed state file has never carried has no history to key on. So it
+    refuses to narrow, and three rounds on the branch answer to a piece
+    declaring none of them. Inventing an entry on disk, pointing at it and
+    declaring 0 is not a way out."""
     one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
     repo.write_state(one, "Build piece one")
     repo.commit("round 3: fixes on piece one")
 
     two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
-    assert _mod._pointer_scoped_base("origin/main", two) == "HEAD"
-    assert _mod.audit_bookkeeping_drift(two) is None
+    assert _mod._target_scoped_base("origin/main", two) == "origin/main"
+    severity, message = _mod.audit_bookkeeping_drift(two)
+    assert severity == "drift"
+    assert "reach round 3" in message
 
 
 def test_exhausting_the_scan_window_does_not_widen_back_to_the_full_range(repo, monkeypatch):
@@ -453,7 +550,7 @@ def test_exhausting_the_scan_window_does_not_widen_back_to_the_full_range(repo, 
         "test cannot tell a safe degradation from a lucky one"
     )
 
-    assert _mod._pointer_scoped_base("origin/main", two) != "origin/main"
+    assert _mod._target_scoped_base("origin/main", two) != "origin/main"
     assert _mod.audit_bookkeeping_drift(two) is None
 
 
@@ -484,13 +581,13 @@ def test_scoping_degrades_to_the_full_range_when_state_is_outside_root(repo, mon
     two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
     repo.write_state(two, "Record piece one; open piece two")
 
-    assert _mod._pointer_scoped_base("origin/main", two) != "origin/main", (
+    assert _mod._target_scoped_base("origin/main", two) != "origin/main", (
         "this history must narrow while STATE is locatable, or the assertion "
         "below cannot tell the fallback from a no-op"
     )
 
     monkeypatch.setattr(_mod, "STATE", Path("/nowhere/PROJECT_STATE.json"))
-    assert _mod._pointer_scoped_base("origin/main", two) == "origin/main"
+    assert _mod._target_scoped_base("origin/main", two) == "origin/main"
 
 
 def test_scoping_survives_unparseable_state_history(repo):
@@ -510,7 +607,7 @@ def test_scoping_survives_unparseable_state_history(repo):
 # Kenneth's option (A), decision STATE-PROBE-NULL-POINTER-2026-09-16. Round 2's
 # fix narrowed the range for every pointer value, `null` among them, so the
 # commit that CLEARED the pointer became the excluded boundary and the window
-# collapsed to empty. No test here exercised _pointer_scoped_base with a null
+# collapsed to empty. No test here exercised _target_scoped_base with a null
 # pointer, which is exactly how that got through round 2.
 
 def test_clearing_the_pointer_does_not_hide_an_undercount(repo):
@@ -546,7 +643,7 @@ def test_a_cleared_pointer_does_not_narrow_the_range_at_all(repo):
     cleared = _piece_state(None, [{"name": "the piece", "audit_rounds": 4}])
     repo.write_state(cleared, "Record the piece; clear the active phase")
 
-    assert _mod._pointer_scoped_base("origin/main", cleared) == "origin/main"
+    assert _mod._target_scoped_base("origin/main", cleared) == "origin/main"
 
 
 def test_an_honest_cleared_pointer_draws_the_banner_too(repo):
@@ -571,7 +668,7 @@ def test_an_honest_cleared_pointer_draws_the_banner_too(repo):
     assert "active_phase is null" in message
 
 
-def _four_rounds_then_a_cleared_pointer(repo, declared: int):
+def _four_rounds_then_a_cleared_pointer(repo, declared: int, clean: bool = True):
     """Rounds 1-4 really ran. The file records `declared` and clears the
     pointer. At declared=4 that is an honest record; at declared=1 it is the
     undercount the whole probe exists to catch."""
@@ -581,7 +678,8 @@ def _four_rounds_then_a_cleared_pointer(repo, declared: int):
     for n in (1, 2, 3, 4):
         repo.commit(f"round {n}: fixes on the piece")
     repo.write_state(
-        _piece_state(None, [{"name": "the piece", "audit_rounds": declared}]),
+        _piece_state(None, [{"name": "the piece", "audit_rounds": declared,
+                             "audit_clean": clean}]),
         f"Record the piece at {declared}; clear the active phase",
     )
 
@@ -592,7 +690,7 @@ def test_the_cleared_pointers_banner_clears_by_re_pointing(repo):
     ROUND 1 FINDING 7 rewrote this. It used to assert `is None` after
     re-pointing with an HONEST count and nothing else, which cannot tell "the
     count now covers the evidence" from "the range went empty because the
-    pointer moved" -- it passed against a stubbed `_pointer_scoped_base`, and
+    pointer moved" -- it passed against a stubbed `_target_scoped_base`, and
     it passed with the declared count set to 1 instead of 4. It pinned nothing
     about honesty. The honest escape is now asserted against a control that
     makes the range demonstrably non-empty first."""
@@ -600,39 +698,42 @@ def test_the_cleared_pointers_banner_clears_by_re_pointing(repo):
 
     # Control: the cleared pointer DOES fire, so the `is None` below is the
     # re-pointing doing the work rather than an empty range.
-    cleared = _piece_state(None, [{"name": "the piece", "audit_rounds": 4}])
+    cleared = _piece_state(None, [{"name": "the piece", "audit_rounds": 4,
+                                   "audit_clean": True}])
     assert _mod.audit_bookkeeping_drift(cleared) is not None
 
-    re_pointed = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 4}])
+    re_pointed = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 4,
+                                             "audit_clean": True}])
     assert _mod.audit_bookkeeping_drift(re_pointed) is None
 
 
-def test_OPEN_re_pointing_also_silences_a_dishonest_count(repo):
-    """ROUND 1 FINDING 1, GATE-LEVEL, OPEN -- NOT A PASSING BEHAVIOUR.
+def test_re_pointing_does_not_silence_a_dishonest_count(repo):
+    """THE INVERSION THIS TEST WAS WRITTEN TO RECEIVE. It shipped asserting
+    `is None` -- the behaviour of the day -- under a docstring saying that was
+    a GATE-LEVEL hole, not a passing behaviour, and that both assertions must
+    flip when the escape closed. They have.
 
-    This asserts what the code does TODAY so the hole is visible and pinned,
-    not that what it does is right. Option (A) closed the `null` door; this is
-    the next one along. Re-pointing at the piece with the false count left
-    intact silences the undercount exactly as clearing the pointer used to,
-    because `_pointer_scoped_base` hits `was != active` on the newest committed
-    state file, `boundary` is still None, and the "HEAD" fallback makes
-    `HEAD..HEAD` empty. It needs no commit at all -- a working-tree edit does
-    it -- which is why the working-tree case is asserted first.
-
-    WHEN THE ESCAPE IS CLOSED, BOTH ASSERTIONS BELOW MUST BE INVERTED to
-    `is not None` and this test renamed. Leaving it green while the fix lands
-    would re-pin the bug."""
-    _four_rounds_then_a_cleared_pointer(repo, declared=1)
+    FINDING 1 OF ROUND 1 ON OPTION (A): re-pointing at the piece with the false
+    count left intact silenced the undercount exactly as clearing the pointer
+    used to, and needed no commit at all -- a working-tree edit was enough,
+    because the walk hit `was != active` on the newest committed state file and
+    fell through to `HEAD`. Scoping keys on the target's own count history now,
+    so the pointer's value cannot move the boundary: four rounds ran, the file
+    says one, and it says so whichever way the pointer is pointing."""
+    _four_rounds_then_a_cleared_pointer(repo, declared=1, clean=False)
     lying = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 1}])
 
     # Working tree only -- zero commits carry this pointer.
-    assert _mod._pointer_scoped_base("origin/main", lying) == "HEAD"
-    assert _mod.audit_bookkeeping_drift(lying) is None, "the escape closed; invert this"
+    assert _mod._target_scoped_base("origin/main", lying) != "HEAD"
+    severity, message = _mod.audit_bookkeeping_drift(lying)
+    assert severity == "drift"
+    assert "reach round 4" in message and "declares 1" in message
 
-    # And once the re-point is committed, the four round commits fall out of
-    # range permanently rather than transiently.
+    # And committing the re-point does not buy the silence either.
     repo.write_state(lying, "Re-point at the piece, count still wrong")
-    assert _mod.audit_bookkeeping_drift(lying) is None, "the escape closed; invert this"
+    severity, message = _mod.audit_bookkeeping_drift(lying)
+    assert severity == "drift"
+    assert "reach round 4" in message
 
 
 def test_the_cleared_pointers_banner_clears_by_merging(repo):
@@ -651,43 +752,40 @@ def test_the_cleared_pointers_banner_clears_by_merging(repo):
     assert _mod.audit_bookkeeping_drift(cleared) is None
 
 
-def test_a_dangling_pointer_still_narrows(repo):
-    """Only a FALSY pointer skips the narrowing. A pointer naming something in
-    neither pool is a typo, not an absence: it still scopes to its own span, so
-    round 2's fix is not widened past what (A) asked for.
+def test_a_dangling_pointer_does_not_narrow_at_all(repo):
+    """THE OTHER INVERSION, and the same instruction honoured.
 
-    ROUND 1 FINDING 2, GATE-LEVEL, OPEN: that scoping is ALSO a false
-    all-clear, and this test's second assertion is the proof rather than the
-    endorsement. A dangling pointer takes the narrowing path here AND the
-    unphased path in `audit_bookkeeping_drift` (`_pointer_target` cannot
-    resolve it), so the round-3 escalation runs against a window the same
-    nonsense value just emptied -- the round-3 defect reached through a typo.
-    It is reachable without one: `already_shipped` entries are matched by
-    `name`, and those names are long prose strings, so renaming one while the
-    pointer still holds the old string dangles it. So does opening a piece in
-    one commit and adding its entry in the next.
+    FINDING 2 OF ROUND 1 ON OPTION (A): `not active` handled FALSY pointers and
+    did nothing for one that was truthy and resolved to NOTHING. Such a value
+    took the narrowing path AND the unphased path at once, so the escalation ran
+    against a window the same nonsense value had just emptied -- the round-3
+    defect, reached through a typo, and reachable without one: `already_shipped`
+    is matched on `name`, those names are long prose strings, and renaming one
+    while the pointer still holds the old string dangles it. So does opening a
+    piece in one commit and adding its entry in the next.
 
-    The first assertion is the boundary (A) asked for and stays either way.
-    THE SECOND MUST BE INVERTED when the escape is closed."""
+    `_target_identity` now answers None for anything that resolves to nothing,
+    null and typo alike, and nothing that resolves to nothing narrows."""
     one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
     repo.write_state(one, "Open piece one")
     repo.commit("round 4: fixes on piece one")
 
     typo = _piece_state("piece tow", [{"name": "piece two", "audit_rounds": 0}])
     repo.write_state(typo, "Record piece one; open piece two (misspelt pointer)")
-    opened = repo.git("rev-parse", "HEAD")
 
-    assert _mod._pointer_scoped_base("origin/main", typo) == opened
-    assert _mod.audit_bookkeeping_drift(typo) is None, "the escape closed; invert this"
+    assert _mod._target_scoped_base("origin/main", typo) == "origin/main"
+    severity, message = _mod.audit_bookkeeping_drift(typo)
+    assert severity == "drift"
+    assert "neither phases nor already_shipped" in message
+    assert "reach round 4" in message
 
 
-def test_OPEN_a_non_string_pointer_is_silent_too(repo):
-    """ROUND 1 FINDING 2, the same hole reached without a typo. OPEN.
+def test_a_non_string_pointer_is_treated_as_no_pointer(repo):
+    """The same hole reached without a typo, and the same inversion.
 
-    Pins that these do not CRASH, and records that they are silent. A state
-    file is hand-edited, so a pointer that is a number, a bool or a list is a
-    plausible slip, and every one of them resolves to no target while emptying
-    its own window."""
+    A state file is hand-edited, so a pointer that is a number, a bool, a list
+    or an object is a plausible slip. Every one of them resolves to no target,
+    so none of them narrows, and none of them crashes on the way."""
     one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
     repo.write_state(one, "Open piece one")
     repo.commit("round 4: fixes on piece one")
@@ -696,7 +794,9 @@ def test_OPEN_a_non_string_pointer_is_silent_too(repo):
 
     for value in (123, True, ["piece one"], {"id": "piece one"}):
         state = _piece_state(value, [{"name": "piece one", "audit_rounds": 0}])
-        assert _mod.audit_bookkeeping_drift(state) is None, f"{value!r}: invert this"
+        assert _mod._target_scoped_base("origin/main", state) == "origin/main", repr(value)
+        severity, _ = _mod.audit_bookkeeping_drift(state)
+        assert severity == "drift", repr(value)
 
 
 # --- finding 4: the verify probe must pin the load-bearing half -------------
@@ -722,10 +822,44 @@ def test_the_shipped_entrys_verify_probe_tracks_the_base_ref_fix(repo):
     )
 
 
+def test_the_target_scoping_entrys_probe_tracks_BOTH_halves(repo):
+    """The structural change has two load-bearing halves -- scoping keyed on the
+    target's own count, and the hard cap on the resolved path -- and reverting
+    either one restores a false all-clear. A probe pinning only one of them
+    would certify the piece shipped with the other gone, which is round 1
+    finding 4's modelling error with an extra step. So the pattern spans both,
+    and this test guts each half in turn."""
+    real_root = Path(__file__).parent.parent.parent
+    state = json.loads((real_root / STATE_REL).read_text(encoding="utf-8"))
+    entry = next(i for i in state["already_shipped"]
+                 if i["name"].startswith("STATE-PROBE-TARGET-SCOPING"))
+    pattern = entry["verify"]["pattern"]
+    src = (real_root / entry["verify"]["path"]).read_text(encoding="utf-8")
+
+    assert re.search(pattern, src, re.M), "the entry's probe does not match the real file"
+
+    no_scoping = src.replace("rounds = _declared_rounds_at(blob, identity)", "rounds = 0")
+    assert not re.search(pattern, no_scoping, re.M), (
+        "the probe still certifies this shipped with the count-keyed scoping gone"
+    )
+    no_cap = src.replace(
+        'declared >= UNPHASED_FAIL_ROUND and not target.get("audit_clean")', "False"
+    )
+    assert not re.search(pattern, no_cap, re.M), (
+        "the probe still certifies this shipped with the resolved-path cap gone"
+    )
+
+
 def test_the_null_pointer_entrys_verify_probe_tracks_the_early_return(repo):
-    """Same modelling error as ROUND 1 FINDING 4, refused up front for the new
+    """Same modelling error as ROUND 1 FINDING 4, refused up front for that
     entry: its probe must die when the one line of behaviour it certifies is
-    reverted, not merely when some neighbouring symbol is renamed."""
+    reverted, not merely when some neighbouring symbol is renamed.
+
+    The line MOVED when the structural fix landed -- option A's guarantee is
+    now `if identity is None` in `_target_scoped_base` rather than `if not
+    active` in a function that no longer exists -- so the probe moved with it.
+    Repointing a probe at the same guarantee in its new home is not the same as
+    loosening it: gutting the return still has to break this."""
     real_root = Path(__file__).parent.parent.parent
     state = json.loads((real_root / STATE_REL).read_text(encoding="utf-8"))
     entry = next(i for i in state["already_shipped"]
