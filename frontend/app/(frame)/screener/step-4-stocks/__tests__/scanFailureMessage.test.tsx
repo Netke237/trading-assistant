@@ -66,11 +66,18 @@ describe('step-4-stocks — a failed scan shows why', () => {
     )).toBeInTheDocument();
   });
 
-  it('falls back to the backend-unreachable hint when no reason was recorded', async () => {
+  it('says so plainly when no reason was recorded, rather than blaming the backend', async () => {
     failWith(null);
     await runScan();
-    expect(await screen.findByText(
-      'Scan failed — is the backend running on port 8000?',
-    )).toBeInTheDocument();
+    expect(await screen.findByText('Scan failed — unknown error')).toBeInTheDocument();
+  });
+
+  it('surfaces a rejection that never became a null return', async () => {
+    // runStockScan sets scanState before its own try opens, so it can still
+    // reject; without the handler's try/catch that escapes onRun() as an
+    // unhandled rejection and the page shows nothing at all.
+    (runStockScan as jest.Mock).mockRejectedValue(new Error('store is not hydrated'));
+    await runScan();
+    expect(await screen.findByText('Scan failed — store is not hydrated')).toBeInTheDocument();
   });
 });

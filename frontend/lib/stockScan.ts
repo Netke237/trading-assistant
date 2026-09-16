@@ -1,4 +1,4 @@
-import { api } from '@/lib/api';
+import { api, API_BASE_URL } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -31,26 +31,85 @@ export function stockPositionCardKey(c: PositionCardData): string {
   return `${c.symbol}-${c.strategy.entry_price}-${c.strategy.stop_price}-${ladder.join(',')}`;
 }
 
+/** Longest reason that still reads as a sentence in a toast row or the thin
+ *  inline error line on step 4. A 502 from a proxy arrives as a whole HTML
+ *  document (api.ts's apiError() falls back to the raw body text), and both
+ *  of those surfaces render it unclamped. */
+const MAX_REASON_CHARS = 200;
+
 /**
- * One human-readable line explaining why a stock scan failed.
+ * One human-readable line explaining why a stock scan failed — collapsed to a
+ * single line and clamped, because the caller renders it verbatim.
  *
- * `api.postStockScan` throws two shapes that need different text. A non-2xx
- * response arrives already formatted by api.ts's `apiError()` as
- * `API /api/stock-scan → 422: <detail>` — the backend answered and said what
- * was wrong, so pass that through untouched; surfacing that detail is the
- * whole reason this error is bound rather than swallowed. A transport failure
- * arrives as a bare `TypeError: Failed to fetch`, which on its own explains
- * nothing, so it keeps the backend-unreachable hint the call sites used to
- * print for EVERY failure — including the validation ones, where it actively
- * misdirected the user to a backend that was running and had just rejected
- * the request.
+ * Three cases, and the difference matters because the WRONG hint is what this
+ * whole change exists to stop:
+ *
+ *  - `api.ts`'s `apiError()` already formatted it as
+ *    `API /api/stock-scan → 422: <detail>`. The backend answered and said what
+ *    was wrong; that detail is the entire point of binding the error, so it
+ *    goes through as-is (clamped).
+ *  - `fetch` rejected with a `TypeError` on a request that was actually sent.
+ *    That, and only that, means nothing at the other end took it, so it is the
+ *    one case the backend-unreachable hint is TRUE for — and a bare "Failed to
+ *    fetch" needs it, since it explains nothing on its own.
+ *  - anything else: a `SyntaxError` from a 200 whose body was not JSON, an
+ *    `AbortError`, a `TypeError` thrown by our own request-building code
+ *    before anything was sent (`reachedRequest === false`). Show it verbatim.
+ *    Appending "is the backend reachable" here would repeat the original
+ *    defect — pointing at a backend that answered, or was never asked.
+ *
+ * @param reachedRequest false when the throw happened before `postStockScan`
+ *   was called, so a TypeError from our own code can never borrow the network
+ *   hint.
  */
-export function stockScanFailureReason(err: unknown): string {
-  const raw = err instanceof Error ? err.message.trim() : String(err ?? '').trim();
-  // Matches apiError()'s `API ${path} → ${status}...` prefix. A thrown string
-  // of that shape reads the same way, so it is not narrowed to Error.
+export function stockScanFailureReason(err: unknown, reachedRequest = true): string {
+  const raw = clampReason(err instanceof Error ? err.message : String(err ?? ''));
+  // Matches apiError()'s `API ${path} → ${status}` prefix, which it builds
+  // itself; the backend-supplied detail is interpolated after it and so cannot
+  // forge it. A thrown string of that shape reads the same way, hence no
+  // `instanceof Error` narrowing here.
   if (raw.startsWith('API ')) return raw;
-  return `${raw || 'unknown error'} (is the backend running on port 8000?)`;
+  if (reachedRequest && err instanceof TypeError) {
+    const hint = `is the backend reachable at ${API_BASE_URL}?`;
+    return raw ? `${raw} (${hint})` : hint;
+  }
+  return raw || 'unknown error';
+}
+
+function clampReason(message: string): string {
+  const oneLine = message.replace(/\s+/g, ' ').trim();
+  return oneLine.length > MAX_REASON_CHARS
+    ? `${oneLine.slice(0, MAX_REASON_CHARS - 1).trimEnd()}…`
+    : oneLine;
+}
+
+/**
+ * Refresh TopBar/Settings' last-run status from the backend — deliberately
+ * NOT awaited by the scan itself.
+ *
+ * This was an `await` inside runStockScan's `finally`, which meant the scan's
+ * own promise only resolved after a second, unrelated round trip. Two ways
+ * that lost the failure reason this module exists to deliver:
+ *
+ *  - the reason was unreadable until the extra trip finished, while the Run
+ *    button was already re-enabled (`scanState` leaves SCANNING the moment the
+ *    catch runs). A user who clicked Run again in that window started a scan
+ *    that cleared the reason before the first one's caller ever read it;
+ *  - `fetch` has no default timeout, so a backend that accepts the socket and
+ *    then hangs left the promise pending forever — no inline error, no toast,
+ *    for precisely the unreachable-backend case the hint is written for.
+ *
+ * Never throws: the scan's own outcome must not depend on this bookkeeping.
+ */
+function refreshLastStockScanMeta(): void {
+  try {
+    void api.getLastStockScanStatus()
+      .then((s) => useScanStore.getState().setLastStockScanMeta(
+        s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
+      ))
+      // Backend unreachable — leave stale, StoreHydration catches up on next load.
+      .catch(() => {});
+  } catch { /* not callable (a test double, a partially-mocked api) — ignore */ }
 }
 
 /** Optional per-run param overrides (the page passes its locally-edited params). */
@@ -82,14 +141,6 @@ export async function runStockScan(
   overrides: StockScanParamOverrides = {},
 ): Promise<StockScanResult | null> {
   const store = useScanStore.getState();
-  const saved = useScanParamsStore.getState();
-  const p = { ...saved, ...overrides };
-
-  const context = store.context;
-  const requireReversal =
-    (store.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
-  const { confidenceGate } = useSettingsStore.getState();
-  const rawOverrides = store.scanOverrides;
 
   store.setActiveStrategy(strategy);
   store.setStockScanResult(null);
@@ -100,29 +151,45 @@ export async function runStockScan(
   store.setStockScanError(null);
   store.setScanState('SCANNING');
 
-  // account_size/risk_pct are hardcoded here (not read from riskStore) —
-  // this is the manual-run path's existing, already-shipped behavior,
-  // unchanged by this extraction. Flagged (not silently fixed) per the
-  // scheduler-timezone-awareness plan: the profile-based schedule resolver
-  // (scanScheduleResolve.ts) explicitly reads live riskStore values instead,
-  // since a scheduled entry firing unattended for months must never
-  // silently keep a stale $50k/1% default baked in from before the user set
-  // their real position sizing — fixing this same gap for the manual path
-  // too is a separate, pre-existing concern outside this plan's scope.
-  const requestBody = buildStockScanRequestBody({
-    universe: context?.universe ? [context.universe] : ['SP500'],
-    direction: context?.direction ?? 'Bullish',
-    horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
-    strategy,
-    params: p,
-    requireReversal,
-    scanOverrides: rawOverrides,
-    confidenceGate,
-    accountSize: 50_000,
-    riskPct: 0.01,
-  });
-
+  // Everything below is inside the try — including reading the stores and
+  // building the request body. Those ran BEFORE it, so a throw there (a
+  // malformed persisted confidenceGate is enough) escaped runStockScan with
+  // `scanState` pinned at SCANNING, disabling the Run button for the rest of
+  // the session, and rejected the promise instead of returning null — which
+  // the fire-and-forget call site could not see at all.
+  let reachedRequest = false;
   try {
+    const saved = useScanParamsStore.getState();
+    const p = { ...saved, ...overrides };
+    const context = store.context;
+    const requireReversal =
+      (store.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
+    const { confidenceGate } = useSettingsStore.getState();
+    const rawOverrides = store.scanOverrides;
+
+    // account_size/risk_pct are hardcoded here (not read from riskStore) —
+    // this is the manual-run path's existing, already-shipped behavior,
+    // unchanged by this extraction. Flagged (not silently fixed) per the
+    // scheduler-timezone-awareness plan: the profile-based schedule resolver
+    // (scanScheduleResolve.ts) explicitly reads live riskStore values instead,
+    // since a scheduled entry firing unattended for months must never
+    // silently keep a stale $50k/1% default baked in from before the user set
+    // their real position sizing — fixing this same gap for the manual path
+    // too is a separate, pre-existing concern outside this plan's scope.
+    const requestBody = buildStockScanRequestBody({
+      universe: context?.universe ? [context.universe] : ['SP500'],
+      direction: context?.direction ?? 'Bullish',
+      horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
+      strategy,
+      params: p,
+      requireReversal,
+      scanOverrides: rawOverrides,
+      confidenceGate,
+      accountSize: 50_000,
+      riskPct: 0.01,
+    });
+
+    reachedRequest = true;
     const result = await api.postStockScan(requestBody);
     store.setStockScanResult(result);
     store.setScanState('COMPLETED');
@@ -132,7 +199,7 @@ export async function runStockScan(
     // (step 3) fires this without awaiting a result it can inspect, so a
     // `null` return alone left that path with nothing to show and the
     // step-4 path guessing "backend unreachable" for every failure.
-    store.setStockScanError(stockScanFailureReason(err));
+    store.setStockScanError(stockScanFailureReason(err, reachedRequest));
     store.setScanState('FAILED');
     return null;
   } finally {
@@ -140,13 +207,8 @@ export async function runStockScan(
     // reflect this scan immediately (success or failure), not just after the
     // next full page load — the backend is the source of truth for what it
     // actually persisted (e.g. reverted to "idle" on a mid-scan failure).
-    try {
-      const s = await api.getLastStockScanStatus();
-      store.setLastStockScanMeta(
-        s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
-      );
-    } catch {
-      // Backend unreachable — leave stale, StoreHydration will catch up on next load.
-    }
+    // Fire-and-forget: see refreshLastStockScanMeta's header for why awaiting
+    // it here used to cost the failure reason outright.
+    refreshLastStockScanMeta();
   }
 }

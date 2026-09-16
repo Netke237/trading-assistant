@@ -13,17 +13,18 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
-jest.mock('@/lib/stockScan', () => ({ runStockScan: jest.fn().mockResolvedValue(null) }));
+jest.mock('@/lib/stockScan', () => ({
+  // requireActual, so the real stockScanFailureReason() runs in the .catch()
+  // path under test rather than arriving as undefined.
+  ...jest.requireActual('@/lib/stockScan'),
+  runStockScan: jest.fn(),
+}));
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 const mockPostScanBody = api.postScanBody as jest.MockedFunction<typeof api.postScanBody>;
 
 function resetStores() {
-  // The two failure/success tests below swap this mock's implementation;
-  // restore the file-level default so test order stays irrelevant.
-  (runStockScan as jest.Mock).mockReset();
-  (runStockScan as jest.Mock).mockResolvedValue(null);
   useScanStore.setState({
     scanState: 'IDLE',
     scanAt: null,
@@ -41,6 +42,10 @@ describe('RunScanButton — conflict suppression wiring', () => {
   beforeEach(() => {
     resetStores();
     jest.clearAllMocks();
+    // AFTER clearAllMocks (and surviving a future clearMocks/resetMocks in
+    // jest.config) so the tests that swap this implementation cannot leak
+    // into the ones that don't.
+    (runStockScan as jest.Mock).mockResolvedValue(null);
   });
 
   it('populates conflictedSymbols when scan candidate overlaps portfolio', async () => {
@@ -121,8 +126,15 @@ describe('RunScanButton — conflict suppression wiring', () => {
     );
   });
 
-  it('does not toast when the stock scan succeeds', async () => {
-    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+  it('gates the toast on the returned result, not on whatever stockScanError holds', async () => {
+    // A successful scan with an OLD reason still sitting in the store must not
+    // toast — pins that the handler branches on `res`, which belongs to this
+    // run, rather than on a store field that could outlive a previous one.
+    useScanStore.setState({
+      screenerMode: 'stocks',
+      activeStrategy: 'pullback_ema',
+      stockScanError: 'API /api/stock-scan → 500: a previous run',
+    } as any);
     (runStockScan as jest.Mock).mockResolvedValue({ scan_id: 'S-1', candidates: [], rejected: [] });
     const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
 
@@ -132,6 +144,24 @@ describe('RunScanButton — conflict suppression wiring', () => {
     });
 
     expect(addToastSpy).not.toHaveBeenCalled();
+  });
+
+  it('toasts the thrown reason when runStockScan rejects outright', async () => {
+    // runStockScan sets scanState BEFORE its own try opens, so a rejection can
+    // still escape it. Without the .catch() on the chain that is an unhandled
+    // rejection and the user sees nothing — the silent failure again.
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+    (runStockScan as jest.Mock).mockRejectedValue(new Error('store is not hydrated'));
+    const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
+
+    render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+    });
+
+    expect(addToastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'Stock scan failed — store is not hydrated' }),
+    );
   });
 
   it('shows a toast and does not call runStockScan when Stocks mode has no activeStrategy selected (M6)', async () => {

@@ -5,12 +5,17 @@ import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
 
 jest.mock('@/lib/api', () => ({
-  api: { postStockScan: jest.fn() },
+  api: { postStockScan: jest.fn(), getLastStockScanStatus: jest.fn() },
+  API_BASE_URL: 'http://localhost:8000',
 }));
 
 describe('runStockScan', () => {
   beforeEach(() => {
     (api.postStockScan as jest.Mock).mockReset();
+    (api.getLastStockScanStatus as jest.Mock).mockReset();
+    (api.getLastStockScanStatus as jest.Mock).mockResolvedValue(
+      { status: 'idle', updated_at: null, strategy: null },
+    );
     useScanStore.setState({
       context: { universe: 'NAS100', direction: 'Bullish', horizon: 'Swing (5–15d)' },
       scanOverrides: {},
@@ -66,7 +71,44 @@ describe('runStockScan', () => {
     await runStockScan('pullback_ema');
 
     expect(useScanStore.getState().stockScanError)
-      .toBe('Failed to fetch (is the backend running on port 8000?)');
+      .toBe('Failed to fetch (is the backend reachable at http://localhost:8000?)');
+  });
+
+  it('has the reason readable the moment it resolves, even while the status refresh hangs', async () => {
+    // The ordering this whole design rests on, and the one the call sites'
+    // own tests cannot see because they mock runStockScan out. The last-run
+    // status refresh used to be AWAITED in the finally: the reason was
+    // unreadable until that second round trip finished, and a backend that
+    // accepts the socket then hangs — modelled here by a promise that never
+    // settles — meant it never became readable at all.
+    (api.postStockScan as jest.Mock).mockRejectedValue(
+      new Error('API /api/stock-scan → 500: scorer blew up'),
+    );
+    (api.getLastStockScanStatus as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    await runStockScan('pullback_ema');
+
+    expect(useScanStore.getState().scanState).toBe('FAILED');
+    expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 500: scorer blew up');
+  });
+
+  it('a second run cannot clear the first run\'s reason before its caller reads it', async () => {
+    // Same hazard from the caller's side: the Run button is re-enabled the
+    // moment scanState leaves SCANNING, so an impatient second click used to
+    // land inside the first run's still-pending finally and null the reason.
+    (api.postStockScan as jest.Mock).mockRejectedValue(new Error('API /api/stock-scan → 422: bad param'));
+    let releaseStatus: (v: unknown) => void = () => {};
+    (api.getLastStockScanStatus as jest.Mock).mockReturnValue(
+      new Promise((resolve) => { releaseStatus = resolve; }),
+    );
+
+    const first = runStockScan('pullback_ema');
+    const second = runStockScan('pullback_ema');   // the impatient re-click
+    await first;
+
+    expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 422: bad param');
+    releaseStatus({ status: 'idle', updated_at: null, strategy: null });
+    await second;
   });
 
   it('clears a previous failure reason on the next run, including one that succeeds', async () => {
@@ -219,22 +261,47 @@ describe('stockScanFailureReason', () => {
       .toBe('API /api/stock-scan → 500: boom');
   });
 
-  it('appends the backend hint to anything else', () => {
-    expect(stockScanFailureReason(new Error('Failed to fetch')))
-      .toBe('Failed to fetch (is the backend running on port 8000?)');
+  it('appends the backend hint to a fetch transport failure, naming the real base URL', () => {
+    // fetch() rejects with a TypeError, and only with a TypeError, when the
+    // request never reached a server — the one case the hint is true for.
+    expect(stockScanFailureReason(new TypeError('Failed to fetch')))
+      .toBe('Failed to fetch (is the backend reachable at http://localhost:8000?)');
   });
 
-  it('handles a non-Error throw without losing the text', () => {
-    expect(stockScanFailureReason('socket hang up'))
-      .toBe('socket hang up (is the backend running on port 8000?)');
+  it('does NOT claim the backend is unreachable for an error that proves it answered', () => {
+    // A 200 whose body is not JSON throws a SyntaxError out of res.json().
+    // The backend plainly answered, so repeating "is the backend reachable?"
+    // here would be the same misdirection this change exists to remove.
+    expect(stockScanFailureReason(new SyntaxError('Unexpected token < in JSON at position 0')))
+      .toBe('Unexpected token < in JSON at position 0');
+    expect(stockScanFailureReason('socket hang up')).toBe('socket hang up');
+  });
+
+  it('withholds the hint from a TypeError thrown before the request was sent', () => {
+    // Our own request-building code throwing a TypeError must not borrow the
+    // network hint — nothing was ever sent, so the backend is not the suspect.
+    expect(stockScanFailureReason(new TypeError("Cannot read properties of undefined (reading 'swing')"), false))
+      .toBe("Cannot read properties of undefined (reading 'swing')");
+  });
+
+  it('collapses a multi-line body to one clamped line', () => {
+    // apiError() falls back to the raw response text, so a proxy's 502 HTML
+    // page arrives as the detail — rendered verbatim into a one-line inline
+    // error and a toast row unless it is clamped here.
+    const html = `API /api/stock-scan → 502: <html>\n  <head><title>502 Bad Gateway</title></head>\n  <body>${'x'.repeat(500)}</body>\n</html>`;
+    const out = stockScanFailureReason(new Error(html));
+    expect(out).toHaveLength(200);
+    expect(out.endsWith('…')).toBe(true);
+    expect(out).not.toContain('\n');
+    expect(out.startsWith('API /api/stock-scan → 502: <html> <head>')).toBe(true);
   });
 
   it('never renders an empty reason', () => {
     // `throw new Error()` and `throw undefined` both reach here with nothing
     // to show; an empty string would render as a dangling "Scan failed — ".
-    expect(stockScanFailureReason(new Error('')))
-      .toBe('unknown error (is the backend running on port 8000?)');
-    expect(stockScanFailureReason(undefined))
-      .toBe('unknown error (is the backend running on port 8000?)');
+    expect(stockScanFailureReason(new Error(''))).toBe('unknown error');
+    expect(stockScanFailureReason(undefined)).toBe('unknown error');
+    expect(stockScanFailureReason(new TypeError('')))
+      .toBe('is the backend reachable at http://localhost:8000?');
   });
 });

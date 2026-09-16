@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
-import { runStockScan, stockPositionCardKey } from '@/lib/stockScan';
+import { runStockScan, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
@@ -20,6 +20,7 @@ import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
+import type { StockScanResult } from '@/types/stockDomain';
 import styles from './page.module.css';
 
 function _startOfDay(d: Date): number {
@@ -183,12 +184,22 @@ export default function Step4StocksPage() {
     if (!selected) return;
     setError(null);
     setNotice(null);
-    const res = await runStockScan(selected, params);
+    // The catch is for a rejection runStockScan could not convert into a null
+    // return (it sets scanState before its own try opens) — without it that
+    // throw escapes this handler as an unhandled rejection and the user is
+    // told nothing at all.
+    let res: StockScanResult | null;
+    try {
+      res = await runStockScan(selected, params);
+    } catch (err) {
+      setError(`Scan failed — ${stockScanFailureReason(err, false)}`);
+      return;
+    }
     if (!res) {
       // The backend's own reason when it gave one (a 4xx/5xx detail), rather
       // than the unconditional "is the backend running?" guess this line used
       // to show even for a request the running backend had just rejected.
-      setError(`Scan failed — ${useScanStore.getState().stockScanError ?? 'is the backend running on port 8000?'}`);
+      setError(`Scan failed — ${useScanStore.getState().stockScanError ?? 'unknown error'}`);
       return;
     }
     // Auto-execute symbols armed for after_scan — add as paper positions locally
