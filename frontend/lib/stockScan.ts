@@ -31,6 +31,28 @@ export function stockPositionCardKey(c: PositionCardData): string {
   return `${c.symbol}-${c.strategy.entry_price}-${c.strategy.stop_price}-${ladder.join(',')}`;
 }
 
+/**
+ * One human-readable line explaining why a stock scan failed.
+ *
+ * `api.postStockScan` throws two shapes that need different text. A non-2xx
+ * response arrives already formatted by api.ts's `apiError()` as
+ * `API /api/stock-scan → 422: <detail>` — the backend answered and said what
+ * was wrong, so pass that through untouched; surfacing that detail is the
+ * whole reason this error is bound rather than swallowed. A transport failure
+ * arrives as a bare `TypeError: Failed to fetch`, which on its own explains
+ * nothing, so it keeps the backend-unreachable hint the call sites used to
+ * print for EVERY failure — including the validation ones, where it actively
+ * misdirected the user to a backend that was running and had just rejected
+ * the request.
+ */
+export function stockScanFailureReason(err: unknown): string {
+  const raw = err instanceof Error ? err.message.trim() : String(err ?? '').trim();
+  // Matches apiError()'s `API ${path} → ${status}...` prefix. A thrown string
+  // of that shape reads the same way, so it is not narrowed to Error.
+  if (raw.startsWith('API ')) return raw;
+  return `${raw || 'unknown error'} (is the backend running on port 8000?)`;
+}
+
 /** Optional per-run param overrides (the page passes its locally-edited params). */
 export interface StockScanParamOverrides {
   pullbackTolerancePct?: number;
@@ -71,6 +93,11 @@ export async function runStockScan(
 
   store.setActiveStrategy(strategy);
   store.setStockScanResult(null);
+  // Clear the previous run's reason before this one starts — a FAILED pill
+  // from an earlier attempt must never caption a scan that is still running,
+  // and a run that succeeds must leave nothing behind for a later caller to
+  // read as its own failure.
+  store.setStockScanError(null);
   store.setScanState('SCANNING');
 
   // account_size/risk_pct are hardcoded here (not read from riskStore) —
@@ -100,7 +127,12 @@ export async function runStockScan(
     store.setStockScanResult(result);
     store.setScanState('COMPLETED');
     return result;
-  } catch {
+  } catch (err) {
+    // The reason goes to the store, not to the return value: RunScanButton
+    // (step 3) fires this without awaiting a result it can inspect, so a
+    // `null` return alone left that path with nothing to show and the
+    // step-4 path guessing "backend unreachable" for every failure.
+    store.setStockScanError(stockScanFailureReason(err));
     store.setScanState('FAILED');
     return null;
   } finally {

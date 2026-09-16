@@ -87,7 +87,21 @@ export function RunScanButton() {
         });
         return;
       }
-      void runStockScan(activeStrategy);
+      // Fire-and-forget by design (the button reflects progress through
+      // scanState), but a failure must not be silent: this path has no inline
+      // error area of its own the way step-4-stocks does, so surface the
+      // reason runStockScan() parked in the store as a toast, exactly as the
+      // options path below does for its own failure.
+      void runStockScan(activeStrategy).then((res) => {
+        if (res) return;
+        useAlertStore.getState().addToast({
+          kind: 'Critical',
+          symbol: 'SYSTEM',
+          reason: `Stock scan failed — ${useScanStore.getState().stockScanError ?? 'unknown error'}`,
+          recId: 'STOCK-SCAN-FAILED',
+          alertType: 'SCAN_FAILED',
+        });
+      });
       return;
     }
 

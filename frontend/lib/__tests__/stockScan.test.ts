@@ -1,4 +1,4 @@
-import { runStockScan, stockPositionCardKey } from '@/lib/stockScan';
+import { runStockScan, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
@@ -18,6 +18,7 @@ describe('runStockScan', () => {
       previousStockScanResult: null,
       activeStrategy: null,
       scanState: 'IDLE',
+      stockScanError: null,
     } as any);
     useSettingsStore.setState({ confidenceGate: { ...DEFAULT_CONFIDENCE_GATE } });
   });
@@ -42,6 +43,45 @@ describe('runStockScan', () => {
     (api.postStockScan as jest.Mock).mockRejectedValue(new Error('boom'));
     await runStockScan('pullback_ema');
     expect(useScanStore.getState().scanState).toBe('FAILED');
+  });
+
+  it("parks the backend's own reason in stockScanError when the request is rejected", async () => {
+    // The defect this closes: the catch swallowed the error entirely, so a 422
+    // telling the user exactly which parameter the backend refused surfaced as
+    // "is the backend running on port 8000?" — pointing at a backend that was
+    // running and had just answered.
+    (api.postStockScan as jest.Mock).mockRejectedValue(
+      new Error('API /api/stock-scan → 422: rsi_oversold must be < 50'),
+    );
+
+    await runStockScan('pullback_ema');
+
+    expect(useScanStore.getState().stockScanError)
+      .toBe('API /api/stock-scan → 422: rsi_oversold must be < 50');
+  });
+
+  it('keeps the backend-unreachable hint for a transport failure', async () => {
+    (api.postStockScan as jest.Mock).mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await runStockScan('pullback_ema');
+
+    expect(useScanStore.getState().stockScanError)
+      .toBe('Failed to fetch (is the backend running on port 8000?)');
+  });
+
+  it('clears a previous failure reason on the next run, including one that succeeds', async () => {
+    (api.postStockScan as jest.Mock).mockRejectedValue(new Error('API /api/stock-scan → 500: boom'));
+    await runStockScan('pullback_ema');
+    expect(useScanStore.getState().stockScanError).not.toBeNull();
+
+    (api.postStockScan as jest.Mock).mockResolvedValue(
+      { scan_id: 'S-2', timestamp: 't', rejected: [], candidates: [] },
+    );
+    await runStockScan('pullback_ema');
+
+    // A stale reason left here would caption the NEXT failure — or, read by a
+    // caller that only checks a null return, the next success.
+    expect(useScanStore.getState().stockScanError).toBeNull();
   });
 
   it('sends the full Settings default ATR pair for this horizon when no override is set', async () => {
@@ -170,5 +210,31 @@ describe('stockPositionCardKey', () => {
     const single = stockPositionCardKey(card({ target: 160, targets: [160] }));
     expect(absent).toBe(empty);
     expect(absent).toBe(single);
+  });
+});
+
+describe('stockScanFailureReason', () => {
+  it('passes an api.ts-formatted error through untouched', () => {
+    expect(stockScanFailureReason(new Error('API /api/stock-scan → 500: boom')))
+      .toBe('API /api/stock-scan → 500: boom');
+  });
+
+  it('appends the backend hint to anything else', () => {
+    expect(stockScanFailureReason(new Error('Failed to fetch')))
+      .toBe('Failed to fetch (is the backend running on port 8000?)');
+  });
+
+  it('handles a non-Error throw without losing the text', () => {
+    expect(stockScanFailureReason('socket hang up'))
+      .toBe('socket hang up (is the backend running on port 8000?)');
+  });
+
+  it('never renders an empty reason', () => {
+    // `throw new Error()` and `throw undefined` both reach here with nothing
+    // to show; an empty string would render as a dangling "Scan failed — ".
+    expect(stockScanFailureReason(new Error('')))
+      .toBe('unknown error (is the backend running on port 8000?)');
+    expect(stockScanFailureReason(undefined))
+      .toBe('unknown error (is the backend running on port 8000?)');
   });
 });

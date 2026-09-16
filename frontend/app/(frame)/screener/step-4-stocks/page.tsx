@@ -185,7 +185,10 @@ export default function Step4StocksPage() {
     setNotice(null);
     const res = await runStockScan(selected, params);
     if (!res) {
-      setError('Scan failed — is the backend running on port 8000?');
+      // The backend's own reason when it gave one (a 4xx/5xx detail), rather
+      // than the unconditional "is the backend running?" guess this line used
+      // to show even for a request the running backend had just rejected.
+      setError(`Scan failed — ${useScanStore.getState().stockScanError ?? 'is the backend running on port 8000?'}`);
       return;
     }
     // Auto-execute symbols armed for after_scan — add as paper positions locally

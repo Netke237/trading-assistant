@@ -20,6 +20,10 @@ jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }))
 const mockPostScanBody = api.postScanBody as jest.MockedFunction<typeof api.postScanBody>;
 
 function resetStores() {
+  // The two failure/success tests below swap this mock's implementation;
+  // restore the file-level default so test order stays irrelevant.
+  (runStockScan as jest.Mock).mockReset();
+  (runStockScan as jest.Mock).mockResolvedValue(null);
   useScanStore.setState({
     scanState: 'IDLE',
     scanAt: null,
@@ -28,6 +32,7 @@ function resetStores() {
     conflictedSymbols: [],
     screenerMode: 'options',
     activeStrategy: null,
+    stockScanError: null,
   } as any);
   usePortfolioStore.setState({ positions: [] });
 }
@@ -89,6 +94,44 @@ describe('RunScanButton — conflict suppression wiring', () => {
     fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
 
     expect(runStockScan).toHaveBeenCalledWith('pullback_ema');
+  });
+
+  it('toasts the stored reason when a stock scan fails (this path has no inline error area)', async () => {
+    // Fire-and-forget means a null return was the ONLY signal here, and nothing
+    // read it — a failed stock scan from step 3 left the FAILED pill as its
+    // entire explanation.
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+    (runStockScan as jest.Mock).mockImplementation(async () => {
+      useScanStore.setState({ stockScanError: 'API /api/stock-scan → 422: rsi_oversold must be < 50' } as any);
+      return null;
+    });
+    const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
+
+    render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+    });
+
+    expect(addToastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recId: 'STOCK-SCAN-FAILED',
+        alertType: 'SCAN_FAILED',
+        reason: 'Stock scan failed — API /api/stock-scan → 422: rsi_oversold must be < 50',
+      }),
+    );
+  });
+
+  it('does not toast when the stock scan succeeds', async () => {
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+    (runStockScan as jest.Mock).mockResolvedValue({ scan_id: 'S-1', candidates: [], rejected: [] });
+    const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
+
+    render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+    });
+
+    expect(addToastSpy).not.toHaveBeenCalled();
   });
 
   it('shows a toast and does not call runStockScan when Stocks mode has no activeStrategy selected (M6)', async () => {
