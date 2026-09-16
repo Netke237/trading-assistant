@@ -309,12 +309,27 @@ def test_the_hard_cap_fires_on_the_resolved_path_too(repo):
     unphased message's own printed remedy, point the pointer at the entry and
     record the count there, was precisely the move onto the branch that could
     not escalate. Following the instruction turned the check off."""
-    repo.commit("round 1: first pass")
-    phases = [{"id": "H", "name": "Phase H", "audit_rounds": 6, "audit_clean": False}]
+    repo.commit("round 4: the fourth unclean round")
+    phases = [{"id": "H", "name": "Phase H", "audit_rounds": 4, "audit_clean": False}]
     severity, message = _mod.audit_bookkeeping_drift(_state(active="H", phases=phases))
     assert severity == "drift"
     assert "HARD CAP" in message
-    assert "NONE of them came back clean" in message
+
+
+def test_the_hard_cap_counts_this_branch_not_the_self_report(repo):
+    """IT GATED ON `audit_rounds` FIRST, AND THAT BANNER COULD NOT BE CLEARED.
+    A piece past three unclean rounds whose work cannot yet merge had no truthful
+    way back: going clean is only honest when it IS clean, lowering the count
+    trips the undercount check, and re-pointing moves the complaint instead of
+    answering it. It also re-fired forever on work whose cap had already been
+    escalated and merged, and on a stale pointer left at a finished piece --
+    round 4 finding 6's rule broken by the block that cites it.
+
+    Counting what the branch still carries keeps the signal on the unfinished
+    rounds. Here the six rounds are merged history and only round 1 is live."""
+    repo.commit("round 1: first pass")
+    phases = [{"id": "H", "name": "Phase H", "audit_rounds": 6, "audit_clean": False}]
+    assert _mod.audit_bookkeeping_drift(_state(active="H", phases=phases)) is None
 
 
 def test_the_hard_cap_holds_its_fire_below_the_threshold(repo):
@@ -333,6 +348,7 @@ def test_the_hard_cap_clears_by_merging(repo):
     to read, and the cap never runs."""
     repo.commit("round 6: the last unclean round")
     phases = [{"id": "H", "name": "Phase H", "audit_rounds": 6, "audit_clean": False}]
+    # The rounds are live on the branch, so the cap is up ...
     assert _mod.audit_bookkeeping_drift(_state(active="H", phases=phases)) is not None
     repo.set_origin_main("feature")
     assert _mod.audit_bookkeeping_drift(_state(active="H", phases=phases)) is None
@@ -397,18 +413,26 @@ def _piece_state(active, shipped) -> dict:
             "phases": [], "already_shipped": shipped}
 
 
-def test_a_count_that_was_lower_earlier_is_the_boundary_too(repo):
-    """THE NON-ABSENT HALF OF THE BOUNDARY RULE, and it was a surviving mutant
-    until this test existed: `if rounds < declared` could be disabled outright
-    and all 49 other tests still passed, because every one of them reached its
-    boundary through the ABSENT branch instead.
+def test_an_entry_older_than_the_branch_gets_no_narrowing(repo):
+    """THE ACCEPTED COST OF THE INTRODUCING-COMMIT RULE, pinned so it is a
+    decision rather than a surprise.
 
-    The gap it leaves is a false positive of exactly the shape round 1 finding 2
-    was about. Here piece two's entry exists for the WHOLE branch -- it was
-    created on main, so it is never absent -- while piece one runs four rounds
-    and finishes. Without this branch of the rule nothing bounds the range, it
-    widens to the full branch, and piece two answers for piece one's round 4 on
-    an entirely honest file."""
+    THIS TEST USED TO SPECIFY A REGRESSION. It asserted `is None` here and
+    required the boundary to be "the newest commit where this target's own count
+    was LOWER than the value now declared" -- and that rule, shipped at d5fcbce,
+    made every undercount above zero SILENT, because raising the declared count
+    makes more historical commits qualify as lower and the newest qualifying one
+    wins, so recording a number moved the boundary FORWARD. In this repo's style,
+    where every branch commit touches the state file, the newest state-file
+    commit almost always declares less than the live one. Five rounds run and a
+    file declaring two rendered "No drift" at exit 0.
+
+    So the count no longer supplies a boundary at all, and the price is here: an
+    entry that predates the branch point is never ABSENT inside the range, gets
+    no narrowing, and answers for the whole branch -- piece one's round 4
+    included, on a file telling the truth. A false ALARM, visible, and it clears
+    by merging or by recording the count. That is the deliberate trade against
+    never going silent on an undercount."""
     both = _piece_state("piece two", [
         {"name": "piece one", "audit_rounds": 0},
         {"name": "piece two", "audit_rounds": 0},
@@ -419,21 +443,51 @@ def test_a_count_that_was_lower_earlier_is_the_boundary_too(repo):
         {"name": "piece one", "audit_rounds": 4, "audit_clean": True},
         {"name": "piece two", "audit_rounds": 0},
     ]), "Record piece one at 4, clean")
-    lower = repo.git("rev-parse", "HEAD")
 
-    repo.commit("round 1: fixes on piece two")
-    repo.commit("round 2: fixes on piece two")
     now = _piece_state("piece two", [
         {"name": "piece one", "audit_rounds": 4, "audit_clean": True},
         {"name": "piece two", "audit_rounds": 2, "audit_clean": True},
     ])
     repo.write_state(now, "Record piece two at 2, clean")
 
-    # The boundary is the newest commit where piece two's OWN count was lower.
-    assert _mod._target_scoped_base("origin/main", now) == lower
-    assert _mod.audit_bookkeeping_drift(now) is None, (
-        "piece two answered for piece one's round 4"
-    )
+    assert _mod._target_scoped_base("origin/main", now) == "origin/main"
+    severity, _ = _mod.audit_bookkeeping_drift(now)
+    assert severity == "drift", "the accepted false alarm has quietly become silence"
+
+    # And it clears the way the docstring says it does.
+    repo.set_origin_main("feature")
+    assert _mod.audit_bookkeeping_drift(now) is None
+
+
+def test_recording_a_count_cannot_move_the_boundary(repo):
+    """THE PROPERTY THE REGRESSION BROKE, pinned directly rather than implied.
+
+    This repo's style is that every branch commit touches PROJECT_STATE.json, so
+    the newest state-file commit is almost always one that trails the live count.
+    Whatever the file claims, the span under judgement must not shrink."""
+    piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
+    repo.write_state(piece, "Open the piece")
+    for n in (1, 2, 3, 4, 5):
+        repo.write_state(
+            _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}]),
+            f"Close round {n}'s findings",
+        )
+    # Nothing in range predates the entry, so there is no boundary to find and
+    # the range stays whole -- which is the point: no count can shrink it.
+    for declared in (0, 1, 2, 3, 4):
+        state = _piece_state("the piece", [{"name": "the piece", "audit_rounds": declared,
+                                            "audit_clean": True}])
+        assert _mod._target_scoped_base("origin/main", state) == "origin/main", declared
+        severity, message = _mod.audit_bookkeeping_drift(state)
+        assert severity == "drift", f"declared {declared} went silent"
+        assert "reach round 5" in message
+
+    # Committing the undercount does not buy the silence either.
+    lying = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 2,
+                                        "audit_clean": True}])
+    repo.write_state(lying, "Record the rounds run so far")
+    severity, _ = _mod.audit_bookkeeping_drift(lying)
+    assert severity == "drift"
 
 
 def test_an_earlier_pieces_rounds_are_not_the_current_targets(repo):
@@ -823,12 +877,23 @@ def test_the_shipped_entrys_verify_probe_tracks_the_base_ref_fix(repo):
 
 
 def test_the_target_scoping_entrys_probe_tracks_BOTH_halves(repo):
-    """The structural change has two load-bearing halves -- scoping keyed on the
-    target's own count, and the hard cap on the resolved path -- and reverting
-    either one restores a false all-clear. A probe pinning only one of them
-    would certify the piece shipped with the other gone, which is round 1
-    finding 4's modelling error with an extra step. So the pattern spans both,
-    and this test guts each half in turn."""
+    """The structural change has two load-bearing halves -- the
+    introducing-commit boundary and the hard cap on the resolved path -- and
+    reverting either restores a false all-clear, so a probe pinning only one
+    would certify the piece shipped with the other gone.
+
+    THE FIRST VERSION OF THIS TEST WAS ROUND 1 FINDING 5, and the mistake is
+    worth keeping written down because it is subtle: it anchored on
+    `rounds = _declared_rounds_at(blob, identity)` and on the cap's CONDITION,
+    then "proved" the probe tracked behaviour by mutating exactly those two
+    strings. Every real behavioural revert left both anchors standing, so the
+    probe certified the piece shipped with the behaviour gone -- round 1 finding
+    4's modelling error, committed inside the test written to prevent it.
+
+    A presence probe can only ever detect text that a revert REMOVES; that is
+    limitation #1 in this script's own header, not something to design around.
+    So the anchors are the two RETURNS -- the values the behaviour produces --
+    and the mutations below are the reverts an actual reverter would write."""
     real_root = Path(__file__).parent.parent.parent
     state = json.loads((real_root / STATE_REL).read_text(encoding="utf-8"))
     entry = next(i for i in state["already_shipped"]
@@ -838,15 +903,38 @@ def test_the_target_scoping_entrys_probe_tracks_BOTH_halves(repo):
 
     assert re.search(pattern, src, re.M), "the entry's probe does not match the real file"
 
-    no_scoping = src.replace("rounds = _declared_rounds_at(blob, identity)", "rounds = 0")
-    assert not re.search(pattern, no_scoping, re.M), (
-        "the probe still certifies this shipped with the count-keyed scoping gone"
+    # Revert 1: the ABSENT branch stops backing up to the introducing commit.
+    no_boundary = src.replace(
+        "return boundary if boundary is not None else base_ref", "return sha"
     )
+    assert no_boundary != src
+    assert not re.search(pattern, no_boundary, re.M), (
+        "the probe still certifies this shipped with the introducing-commit rule gone"
+    )
+
+    # Revert 2: the resolved-path cap stops firing.
     no_cap = src.replace(
-        'declared >= UNPHASED_FAIL_ROUND and not target.get("audit_clean")', "False"
+        'if git_max >= UNPHASED_FAIL_ROUND and not target.get("audit_clean"):', "if False:"
     )
+    assert no_cap != src
     assert not re.search(pattern, no_cap, re.M), (
         "the probe still certifies this shipped with the resolved-path cap gone"
+    )
+
+    # Revert 3: the condition is left standing and only the VERDICT changes.
+    # This is the one a text probe is worst at, and it is included to show
+    # exactly how far the anchor reaches: it catches this because the verdict
+    # is what the pattern pins, and it would NOT catch a change that kept
+    # `return "drift"` while altering the message or the threshold constant.
+    downgraded = src.replace(
+        '        return "drift", (\n            f"Audit bookkeeping: {label} -- the '
+        'active target -- declares {declared} "',
+        '        return "warn", (\n            f"Audit bookkeeping: {label} -- the '
+        'active target -- declares {declared} "',
+    )
+    assert downgraded != src, "the revert-3 fixture no longer matches the source"
+    assert not re.search(pattern, downgraded, re.M), (
+        "the probe still certifies this shipped with the cap downgraded to a warning"
     )
 
 

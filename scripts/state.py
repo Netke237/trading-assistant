@@ -332,27 +332,54 @@ def _target_scoped_base(base_ref: str, state: dict) -> str:
     one at a time, on the evidence that three consecutive fixes had each
     contained the next instance of the same shape.
 
-    SO THE BOUNDARY IS NOW A FACT IN THE FILE'S HISTORY RATHER THAN A VALUE
-    ANYONE CAN EDIT: the newest state-file commit in range where this target's
-    own `audit_rounds` was LOWER than the value now declared -- or, when it was
-    never lower because the piece is new, the commit that INTRODUCED the entry.
-    Everything after that commit is work the current count claims to cover,
-    which is exactly the span the count should be judged over.
+    SO THE BOUNDARY IS THE COMMIT THAT INTRODUCED THE ENTRY, and nothing else.
+    Everything after it is this piece's to answer for.
+
+    IT WAS BRIEFLY THE COUNT'S OWN HISTORY TOO -- "the newest commit where this
+    target's `audit_rounds` was LOWER than the value now declared" -- and that
+    shipped at d5fcbce as a REGRESSION, caught by the next round and reverted
+    here. The reasoning behind it was inverted: raising `declared` makes MORE
+    historical commits qualify as "lower", and since the newest qualifying one
+    wins, raising the count moved the boundary FORWARD. In this repo's actual
+    style, where every branch commit touches this file, the newest state-file
+    commit almost always declares less than the live one -- so it became the
+    boundary, the window collapsed, and EVERY undercount above zero rendered
+    "No drift" at exit 0. It was strictly worse than the code it replaced, and
+    it was worse in the direction this probe exists to refuse. Measured: five
+    rounds in the subjects, file declaring anything from 1 to 4, silent.
+
+    The introducing commit cannot be moved that way. It is where the entry
+    APPEARED, not what the entry SAYS, so recording a number -- true or false,
+    committed or not -- leaves it exactly where it was.
 
     What that buys, case by case:
 
-      - Recording an undercount cannot move the boundary forward, because the
-        boundary is defined by counts BELOW the declared one. To move it you
-        would have to have already declared a count at least as high -- which
-        means you already declared it.
       - The pointer's value no longer scopes anything. Clearing it, re-pointing
         at the piece, or misspelling it changes only WHICH target resolves, and
         when none resolves `_target_identity` returns None and this function
         does not narrow at all, so the unphased banner fires over the whole
         branch.
       - The two-piece branch stays fixed. A piece that has just opened is
-        ABSENT from every commit before it, so its boundary is the commit
-        before its entry appeared and the previous piece's rounds fall outside.
+        ABSENT from every commit before it, so its boundary is the commit that
+        introduced it and the previous piece's rounds fall outside.
+
+    THE ACCEPTED COST, stated rather than discovered: a piece whose entry
+    predates the branch point is never ABSENT inside the range, so it gets NO
+    narrowing and answers for the whole branch -- including an earlier piece's
+    round numbers, on a file that is telling the truth. That is a false ALARM,
+    it is visible, and it clears by merging or by recording the count. It is
+    the deliberate trade for never going silent on an undercount, and it is the
+    original Phase A catch's behaviour.
+
+    AND ONE ROUTE REMAINS OPEN, KENNETH'S CALL, NOT PATCHED HERE: the entry's
+    NAME and PRESENCE are still hand-written in the audited file, so renaming an
+    `already_shipped` entry, moving it between `phases` and `already_shipped`,
+    or dropping and restoring it makes every older commit read as ABSENT and
+    resets the boundary to that commit. See the round record in
+    PROJECT_STATE.json. Fixing it is not another patch of this shape: the round
+    that found it argues a boundary computed from the audited file's own
+    contents cannot both scope out a previous piece and detect an undercount of
+    the current one, because both are the same edit.
 
     The boundary commit is EXCLUDED, since `git log sha..HEAD` excludes `sha`
     itself. A commit that both lowers the count and carries a round of the new
@@ -373,10 +400,6 @@ def _target_scoped_base(base_ref: str, state: dict) -> str:
         # repointed one of them). Cannot locate its history, so cannot narrow:
         # fall back to the full range rather than guess a boundary.
         return base_ref
-
-    pool, key = identity
-    live = state.get("phases", []) if pool == "phase" else state.get("already_shipped", [])
-    declared = _entry_rounds(live, pool, key) or 0
 
     out = _git("log", "--format=%H", f"{base_ref}..HEAD", "--", rel)
     if out is None:
@@ -410,9 +433,7 @@ def _target_scoped_base(base_ref: str, state: dict) -> str:
             # exactly the family this rework closed: invent an entry, point at
             # it, declare 0, and the window empties.
             return boundary if boundary is not None else base_ref
-        if rounds < declared:
-            return sha
-        boundary = sha          # confirmed to already carry the declared count
+        boundary = sha          # confirmed to carry this entry
 
     if truncated and boundary is not None:
         # The window ran out before the count was seen to be lower, so the
@@ -470,9 +491,10 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     The evidence git actually holds is that a round produced commits. So: take
     the highest `round N` in this branch's commit subjects and compare it
     against the count declared by whatever `active_phase` points at -- over the
-    span that pointer has been set for, not the whole branch (round 1 finding
-    2: a branch carrying two pieces otherwise answers for the earlier one's
-    round numbers). Scoping to
+    span since that target's entry was INTRODUCED, not the whole branch (round 1
+    finding 2: a branch carrying two pieces otherwise answers for the earlier
+    one's round numbers). The pointer itself no longer scopes anything; see
+    `_target_scoped_base`. Scoping to
     that one target is what makes the comparison mean anything: Phase D's 13
     clean rounds are the global maximum, so comparing against every entry could
     never fire, and comparing against merely-open work fires forever once the
@@ -556,9 +578,17 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     # escalates to the branch that could not. Following the instruction turned
     # the check off. Phase D's thirteen rounds would never have tripped it.
     #
-    # Read off `declared` rather than `git_max`: control only reaches here when
-    # git_max <= declared, so declared is the higher of the two, and it is the
-    # number the file itself admits to.
+    # READ OFF `git_max`, NOT `declared`. Gating on the self-reported total was
+    # the first version and it made the banner unclearable, which is round 4
+    # finding 6's rule broken by the block that cites it: a piece past three
+    # unclean rounds whose work cannot yet merge had no truthful way back --
+    # going clean is only honest when it IS clean, lowering the count trips the
+    # undercount check, and re-pointing moves the complaint rather than
+    # answering it. Worse, it re-fired forever on work whose cap had already
+    # been escalated to Kenneth and merged, and it fired on a stale pointer
+    # left at a finished piece. Counting what THIS BRANCH still carries keeps
+    # the signal where the unfinished rounds are, and merging empties the range
+    # exactly as it does for the unphased banner above.
     #
     # IT CLEARS THE TWO WAYS THE UNPHASED BANNER DOES, which is what keeps it
     # inside round 4 finding 6's rule that a red banner nobody can clear is
@@ -567,13 +597,14 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     # Acknowledging it is deliberately NOT a third route -- an acknowledgement
     # flag would be one more editable field that switches the check off, which
     # is the exact shape of the three findings the scoping rework just closed.
-    if declared >= UNPHASED_FAIL_ROUND and not target.get("audit_clean"):
+    if git_max >= UNPHASED_FAIL_ROUND and not target.get("audit_clean"):
         return "drift", (
-            f"Audit bookkeeping: {label} -- the active target -- is at {declared} "
-            f"round(s) and NONE of them came back clean. audit_rule's HARD CAP is "
-            f"{UNPHASED_FAIL_ROUND}: STOP AUDITING AND TELL KENNETH -- that is evidence "
-            f"the batch is too big to audit, not that it needs another round. Clears by "
-            f"going clean, or by merging. Subjects: {shown}"
+            f"Audit bookkeeping: {label} -- the active target -- declares {declared} "
+            f"round(s), NONE of them clean, and this branch still carries round "
+            f"{git_max}. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND}: STOP AUDITING "
+            f"AND TELL KENNETH -- that is evidence the batch is too big to audit, not "
+            f"that it needs another round. Clears by going clean, by merging, or by "
+            f"moving active_phase if it is pointing at finished work. Subjects: {shown}"
         )
 
     return None
