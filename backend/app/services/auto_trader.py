@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 import logging
 import threading
@@ -9,7 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 from app.services.premium_stop import resolve_premium_stop_pct
-from app.scoring.conviction_sizing import conviction_mult
+from app.scoring.conviction_sizing import (
+    SizingConfigError,
+    conviction_mult,
+    resolve_sizing,
+)
 
 _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -97,24 +102,68 @@ _SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring
 
 @functools.lru_cache(maxsize=1)
 def _load_scoring_config() -> dict:
-    """Load regime_sizing block from scoring_rules.yaml (cached)."""
+    """Load the regime_sizing block from scoring_rules.yaml (cached).
+
+    Raises SizingConfigError if the file cannot be read or parsed. It used to
+    swallow that into an empty dict, which reads as "sizing disabled" and so
+    sized the order at FULL — the loudest possible failure producing the
+    largest possible position. §9.1's fail-closed posture (Kenneth,
+    2026-09-17) is that a config this path cannot read stops the trade.
+
+    An absent regime_sizing block is NOT a failure and still returns {}: the
+    file parsed, and it says sizing is off. A block that is PRESENT and cannot
+    be read as on or off is a failure — resolve_sizing decides that, not this.
+
+    lru_cache does not cache exceptions, so a file that could not be READ or
+    PARSED is re-read on the next fire attempt. THAT IS NOT TRUE OF A BAD
+    VALUE, and round 1 corrected an earlier claim here that said it was: a
+    block that parses and is then refused by resolve_sizing was already cached
+    by this function, so the refusal stands until the process restarts even
+    after the YAML is fixed. Deliberately not plumbed around: §9.2 is settled
+    ("he never edits while the backend runs; he always restarts", no reload
+    endpoint), so a restart is the documented way this file takes effect at
+    all, and cache invalidation here would be a mechanism §9.2 says to omit.
+    """
     try:
         with open(_SCORING_CONFIG_PATH) as f:
-            return yaml.safe_load(f).get("regime_sizing", {})
+            doc = yaml.safe_load(f)
     except Exception as exc:
-        logger.warning("_load_scoring_config: failed to load %s — vol sizing disabled: %s",
-                       _SCORING_CONFIG_PATH, exc)
-        return {}
+        raise SizingConfigError(
+            f"cannot read {_SCORING_CONFIG_PATH}: {exc}"
+        ) from exc
+    if not isinstance(doc, dict):
+        raise SizingConfigError(
+            f"{_SCORING_CONFIG_PATH} did not parse to a mapping "
+            f"(got {type(doc).__name__})"
+        )
+    return doc.get("regime_sizing", {})
 
 
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     """Return a (possibly quantity-adjusted) copy of strategy based on regime conviction.
 
     Reads cached conviction from regime_monitor (no network call).
-    If conviction is None or regime_sizing is disabled, returns strategy unchanged.
+    If conviction is None or regime_sizing is disabled, returns strategy
+    unchanged. RAISES SizingConfigError if the regime_sizing block is present
+    and cannot be honoured — the §9.1 fail-closed posture, which fire() turns
+    into a recorded refusal rather than an order at full size.
     """
     cfg = _load_scoring_config()
-    if not cfg.get("enabled", False):
+    # Validated BEFORE the conviction lookup, and that order is load-bearing:
+    # `conviction is None` below returns the strategy unchanged (full size), so
+    # validating after it would let a broken config through on every fire that
+    # happens before regime_monitor has cached anything.
+    if resolve_sizing(cfg) is None:
+        # Logged for the same reason as the unchanged-quantity line below: this
+        # returns at FULL SIZE, and round 2 caught it as the one full-size path
+        # still leaving no trace. It is the "off versus broken" case a reader
+        # most needs to be able to tell apart afterwards — a block that carries
+        # real min_mult/full_conviction_pct values but says `enabled: false`
+        # comes through here, not through a refusal.
+        logger.info(
+            "vol_sizing: %s qty %d unchanged — regime_sizing is off by "
+            "configuration", strategy.symbol, strategy.quantity,
+        )
         return strategy
 
     from app.services.regime_monitor import get_last_conviction
@@ -129,6 +178,14 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     adjusted_qty = max(1, round(strategy.quantity * mult))
 
     if adjusted_qty == strategy.quantity:
+        # Logged too, and round 1 is why: every case where a bad-but-honourable
+        # config produced mult 1.0 (full size) returned here and left NO trace
+        # at any level, so the one outcome worth noticing was the only silent
+        # one. Includes the honest no-op (conviction at or above full).
+        logger.info(
+            "vol_sizing: %s qty %d unchanged (conviction=%.1f, mult=%.2f)",
+            strategy.symbol, strategy.quantity, directional_conv, mult,
+        )
         return strategy
 
     logger.info(
@@ -136,6 +193,86 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         strategy.symbol, strategy.quantity, adjusted_qty, directional_conv, mult,
     )
     return _dc_replace(strategy, quantity=adjusted_qty)
+
+
+def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
+    """Push a sizing-config refusal to a channel that reaches a phone.
+
+    §9.1 is "refuse to fire AND alert". The manual trigger needs no help — the
+    refusal is the 400 body of POST /auto-trade/fire, with a human reading it.
+    The scan trigger has no reader at all: POST /scan calls it through
+    `asyncio.to_thread` and discards the outcome, so without this the refusal
+    is a log line on a box nobody is watching while an armed order silently
+    does not happen.
+
+    WHY asyncio.run IS CORRECT HERE: this runs in the worker thread
+    `asyncio.to_thread` created, which has no event loop of its own, so a
+    fresh loop is the only way to await an async notifier. Keeping it at the
+    scan-trigger boundary rather than inside fire() is what makes that true —
+    fire() is also reachable from the event-loop thread, via the /fire
+    endpoint, where asyncio.run raises.
+
+    THE RUNNING-LOOP GUARD IS UNREACHABLE TODAY and round 1 was right to say
+    so: the only caller is maybe_fire_on_scan, whose only caller is POST
+    /scan through asyncio.to_thread. It stays because the cost of being wrong
+    about that later is §9.1's "and alert" half silently not happening, and a
+    logged skip is the difference between finding that out and not.
+
+    type_enabled=True is deliberate and is the documented per-call override:
+    CONFIG_ERROR is not one of the portfolio alert types in `enabledTypes`, so
+    the global check would drop it. masterEnabled is NOT bypassed — that is
+    Kenneth's account-wide kill switch.
+
+    Nothing here may raise: the refusal has already happened and has already
+    been recorded by fire(). A dead SMTP server must not turn a safe refusal
+    into an unhandled exception in the scan endpoint's worker thread.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass  # no loop in this thread — a fresh one is safe
+    else:
+        logger.error(
+            "AutoTrader: sizing-config refusal for %s NOT alerted (an event loop "
+            "is already running in this thread): %s", symbol, exc,
+        )
+        return
+
+    try:
+        from app.services.notifications.alert_notifier import notify_alert
+        delivered = asyncio.run(notify_alert(
+            symbol=symbol,
+            alert_type="CONFIG_ERROR",
+            reason=(
+                f"Auto-trade REFUSED to fire {symbol}: "
+                + ("scoring_rules.yaml's regime_sizing block cannot be honoured"
+                   if isinstance(exc, SizingConfigError)
+                   else "the regime conviction is not a usable number")
+                + f", so the position size is unknown. Nothing was sent and the "
+                  f"auto-trader is disarmed. {exc}"
+            ),
+            # Stable, symbol-independent key: the file is broken, not the
+            # symbol, so the dedup window collapses a run of scans into one
+            # alert instead of one per armed order.
+            rec_id="auto-trade-sizing-config",
+            type_enabled=True,
+        ))
+        if not delivered:
+            # notify_alert returns False for the master kill switch, an armed
+            # dedup window (persisted in alert_dedup.json, so it survives a
+            # restart) and a genuine delivery failure alike. Without this line
+            # "and alert" could be a silent no-op -- which is how this whole
+            # class of defect got here.
+            logger.error(
+                "AutoTrader: sizing-config refusal for %s was NOT delivered by "
+                "any channel (master switch off, dedup window armed, or "
+                "delivery failed). The refusal itself stands.", symbol,
+            )
+    except Exception as notify_exc:
+        logger.error(
+            "AutoTrader: failed to alert the sizing-config refusal for %s "
+            "(the refusal itself stands): %s", symbol, notify_exc,
+        )
 
 
 def execute_option_order(strategy: ArmedStrategy):
@@ -223,7 +360,42 @@ class AutoTradeService:
             self._state.strategy = None
 
         # Vol-scaled sizing: adjust quantity using cached regime conviction (no network call)
-        strategy = _apply_vol_sizing(strategy)
+        # A config this cannot honour refuses the fire (§9.1, fail closed). The
+        # order matters: disarm has already happened above, so a refusal here
+        # leaves nothing armed and nothing sent — the same shape as the two
+        # blocks below. SizingConfigError is a RuntimeError, so /auto-trade/fire
+        # still maps it to a 400 and maybe_fire_on_scan can single it out to alert.
+        try:
+            strategy = _apply_vol_sizing(strategy)
+        except (SizingConfigError, ValueError) as exc:
+            # ValueError too, and round 2 is why. Round 1 correctly stopped
+            # reporting a bad CONVICTION as a broken config file (the message
+            # named a key that does not exist in scoring_rules.yaml) by raising
+            # a plain ValueError — and thereby walked the refusal out of this
+            # handler entirely: no history entry, no alert, `/auto-trade/status`
+            # still showing the PREVIOUS order as last_order. Nothing shipped,
+            # which is why it was below the gate, but it was strictly worse than
+            # what it replaced on both halves of §9.1.
+            with self._lock:
+                self._state.history.append({
+                    "order_id":        None,
+                    "status":          ("sizing_config_blocked"
+                                        if isinstance(exc, SizingConfigError)
+                                        else "sizing_data_blocked"),
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
+                })
+            logger.error(
+                "AutoTrader fire REFUSED for %s — %s, so the order size is "
+                "unknown: %s", strategy.symbol,
+                "regime_sizing unusable" if isinstance(exc, SizingConfigError)
+                else "the regime conviction is not a usable number", exc,
+            )
+            raise
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
         pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
@@ -347,6 +519,12 @@ class AutoTradeService:
         try:
             self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
             logger.info("AutoTrader: fired on scan completion trigger")
+        except (SizingConfigError, ValueError) as exc:
+            # fire() has already logged and recorded it; this trigger has no
+            # reader, so it is also the half of §9.1 that says "and alert".
+            # ValueError is here for the same reason it is in fire() — see the
+            # handler there.
+            _alert_sizing_config_refusal(strategy.symbol, exc)
         except Exception as exc:
             logger.error("AutoTrader scan-trigger fire failed: %s", exc)
 
