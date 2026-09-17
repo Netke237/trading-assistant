@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field, model_validator
 
 from app.services import portfolio_risk, alert_generator
+from app.services.atomic_yaml import atomic_write_yaml
 from app.routers import scan as scan_router
 
 router = APIRouter(prefix='/settings', tags=['settings'])
@@ -24,9 +25,8 @@ def _load_settings() -> dict:
 
 
 def _save_settings(data: dict) -> None:
-    _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _SETTINGS_PATH.write_text(
-        yaml.dump(data, default_flow_style=False, allow_unicode=True)
+    atomic_write_yaml(
+        _SETTINGS_PATH, data, default_flow_style=False, allow_unicode=True
     )
 
 
@@ -38,9 +38,9 @@ def _load_risk() -> dict:
 
 
 def _save_risk(data: dict) -> None:
-    _RISK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_RISK_PATH, 'w') as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    atomic_write_yaml(
+        _RISK_PATH, data, default_flow_style=False, sort_keys=False
+    )
 
 
 class RiskConfig(BaseModel):

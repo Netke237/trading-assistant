@@ -40,7 +40,13 @@ export interface ScanScheduleRun {
   candidate_count: number | null;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+/** Where every call in this module goes. Exported because a caller that has
+ *  to TELL the user the backend could not be reached (lib/stockScan.ts) must
+ *  name the address it actually tried — the old hardcoded "port 8000" hint
+ *  was a lie in any deployment that sets NEXT_PUBLIC_API_URL. */
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+const BASE_URL = API_BASE_URL;
 
 async function apiError(path: string, res: Response): Promise<never> {
   const text = await res.text().catch(() => '');
