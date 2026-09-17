@@ -19,13 +19,40 @@
   background: color-mix(in srgb, var(--caution) 8%, var(--bg-surface));
 }
 
+/* The candidates table gets the width it actually needs; the chart takes the
+ * rest. Kenneth's call, 2026-09-17, over stacking or dropping columns.
+ *
+ * WHERE THE 814px COMES FROM, measured rather than chosen: the ten tracks are
+ * 530px of fixed columns + 9 gaps of 12px + a 120px floor for NAME, inside
+ * .tableHeader's 12px side padding and .leftPanel's 16px. 530+108+120+24+32.
+ * Below that the grid has no free space to distribute, NAME collapses to zero
+ * and the right-hand columns clip off-screen -- which is the state this
+ * replaces. It was 40%, and 40% is never enough: 347px on a laptop, 539px on a
+ * 1080p monitor, against a table that wants 696px even with NAME starved.
+ *
+ * AND WHY IT STACKS BELOW 1750px, which is NOT a hedge on that decision. At
+ * 1440 the split is 872px wide in total. Giving the table its 814px leaves the
+ * chart FORTY-TWO PIXELS -- the panel does not shrink, it disappears. Side by
+ * side is simply not available at that width for a ten-column table, so the
+ * laptop stacks: the table then gets the full 872px (NAME ~178px, every column
+ * visible), which is MORE than widening the panel could ever have given it,
+ * and the chart keeps its 320px min-height underneath.
+ *
+ * 1750px is where the chart still clears ~350px beside a full table
+ * (split ≈ viewport − 568 for the nav rail, context rail and page padding). */
 .split {
   display: grid;
-  grid-template-columns: minmax(320px, 40%) 1fr;
+  grid-template-columns: minmax(814px, 58%) minmax(0, 1fr);
   gap: var(--space-4);
   align-items: stretch;
   min-width: 0;
   overflow: hidden;
+}
+
+@media (max-width: 1750px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .leftPanel {
