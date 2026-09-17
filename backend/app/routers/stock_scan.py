@@ -26,6 +26,7 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 
 from app.services.audit import new_rec_id
+from app.scoring.conviction_sizing import conviction_mult
 from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut, StockPipeline, StockAnalysisRequest,
@@ -135,13 +136,10 @@ def _load_regime_cfg(horizon: str) -> dict:
     return _load_full_scoring_cfg()["regime"][horizon.lower()]
 
 
-def _conviction_mult(conviction_pct: int, sizing: dict) -> float:
-    if not sizing.get("enabled", False):
-        return 1.0
-    full = sizing["full_conviction_pct"]
-    lo = sizing["min_mult"]
-    frac = max(0.0, min(conviction_pct / full, 1.0)) if full else 0.0
-    return lo + (1.0 - lo) * frac
+# Shared with auto_trader via app.scoring.conviction_sizing — the two had
+# drifted to different formulas. Kept as a module-level alias so existing
+# callers and tests importing _conviction_mult from here still resolve.
+_conviction_mult = conviction_mult
 
 router = APIRouter(prefix="/api", tags=["stock-scan"])
 logger = logging.getLogger(__name__)

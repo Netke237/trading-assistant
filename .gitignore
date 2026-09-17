@@ -64,6 +64,12 @@ backend/config/local_credentials.yaml
 # and share this same gap today — pre-existing, out of scope here.
 backend/config/scan_schedule.yaml
 
+# Atomic-write sidecars (app/services/atomic_yaml.py). Normally transient, but
+# a process killed mid-write leaks one until the next write sweeps it — and for
+# settings.yaml that orphan is a full plaintext copy, credentials included. The
+# ignores above are exact paths, so they do not cover the suffixed name.
+backend/config/*.yaml.*.tmp
+
 # SQLite WAL/SHM sidecars
 *.db-shm
 *.db-wal

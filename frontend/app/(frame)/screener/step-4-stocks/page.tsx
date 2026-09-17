@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
-import { runStockScan, stockPositionCardKey } from '@/lib/stockScan';
+import { runStockScan, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
@@ -20,6 +20,7 @@ import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
+import type { StockScanResult } from '@/types/stockDomain';
 import styles from './page.module.css';
 
 function _startOfDay(d: Date): number {
@@ -183,9 +184,35 @@ export default function Step4StocksPage() {
     if (!selected) return;
     setError(null);
     setNotice(null);
-    const res = await runStockScan(selected, params);
+    // The catch is for a throw runStockScan could not convert into a null
+    // return (setScanState itself failing) — without it that throw escapes
+    // this handler as an unhandled rejection and the user is told nothing at
+    // all. It resets scanState as well as showing the reason: the throw
+    // happens with SCANNING already set, which leaves the Run button disabled
+    // for the rest of the session.
+    let res: StockScanResult | null;
+    try {
+      res = await runStockScan(selected, params);
+    } catch (err) {
+      // Reason FIRST: this catch exists for a throw runStockScan could not
+      // convert into a null return — `setScanState` itself failing — so
+      // resetting the state before showing the message meant the one case it
+      // is written for threw again and the user saw nothing.
+      const reason = stockScanFailureReason(err, false);
+      setError(`Scan failed — ${reason}`);
+      // SCANNING is already set; leaving it there disables the Run button for
+      // the rest of the session. The reason goes to the store too, so a stale
+      // one from an earlier run cannot outlive this FAILED. One try EACH: the
+      // first write throwing must not skip the FAILED reset.
+      try { useScanStore.getState().setStockScanError(reason); } catch { /* store is what failed */ }
+      try { useScanStore.getState().setScanState('FAILED'); } catch { /* ditto */ }
+      return;
+    }
     if (!res) {
-      setError('Scan failed — is the backend running on port 8000?');
+      // The backend's own reason when it gave one (a 4xx/5xx detail), rather
+      // than the unconditional "is the backend running?" guess this line used
+      // to show even for a request the running backend had just rejected.
+      setError(`Scan failed — ${useScanStore.getState().stockScanError ?? 'unknown error'}`);
       return;
     }
     // Auto-execute symbols armed for after_scan — add as paper positions locally
