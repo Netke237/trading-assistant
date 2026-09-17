@@ -210,7 +210,11 @@ export default function Step5Page() {
     const causes: string[] = [];
     const noIv = n('noIv'), iv = n('iv'), ev = n('event'), both = n('both');
     if (noIv) causes.push(`${noIv} with no volatility reading (counted as CAUTION, never as PASS — a missing reading is not a passing one)`);
-    if (iv)   causes.push(`${iv} on ${IV_COLUMN_LABEL.toLowerCase()} above its threshold`);
+    // NOT lowercased. `IV` is an initialism, and `.toLowerCase()` rendered it
+    // "4 on iv above its threshold" — caught on the first screenshot of this
+    // banner, which is the argument for looking at the page rather than only
+    // at the tests: every assertion still passed.
+    if (iv)   causes.push(`${iv} on ${IV_COLUMN_LABEL} above its threshold`);
     if (ev)   causes.push(`${ev} on an event inside this horizon's window`);
     if (both) causes.push(`${both} on both`);
     return causes.length === 0 ? head : `${head} Driven by: ${causes.join('; ')}.`;
