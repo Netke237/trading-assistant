@@ -37,25 +37,26 @@ import styles from './page.module.css';
 const PAGE_SIZE = 10;
 
 // icon(star+chart) | SYMBOL | NAME | HORIZON | Δ RNK | Δ SCR | SCORE | CONF | STOP | NEXT
-// NAME is `minmax(0, 1fr)`, NOT `1fr`, and the zero is the whole point.
+// Every fixed track trimmed and the gap cut to 8px so all ten columns fit
+// beside a chart that is still worth looking at (page.module.css .split has
+// the measurements). Fixed tracks total 418px; at 1920 that leaves NAME 103px.
 //
-// A bare `1fr` is `minmax(auto, 1fr)`, so when the grid has no free space to
-// distribute the track falls back to its MIN-CONTENT width — and the header
-// and the body rows have different min-contents. Measured at 1920: the header
-// resolved this track to 30.375px (the word "NAME") while every row resolved
-// it to 0px (`.nameCell` clips its text), so the header sat exactly 30px to
-// the right of its own column from HORIZON onward. Every heading named the
-// wrong column, silently, and only while the table was too narrow to fit --
-// which is why it never showed up on a wide screen or in a test.
+// NAME is `minmax(100px, 1fr)`, and NEITHER bound is incidental.
 //
-// `minmax(0, 1fr)` removes the content-based minimum, so both resolve
-// identically and the headings stay over their data at every width.
+// The 1fr may not be a BARE `1fr`: that is `minmax(auto, 1fr)`, so with no free
+// space to distribute the track falls back to MIN-CONTENT -- and the header and
+// the body rows have different min-contents. Measured before this was fixed:
+// the header resolved the track to 30.375px (the word "NAME") while every row
+// resolved it to 0px (`.nameCell` clips its text), putting every heading from
+// HORIZON rightward exactly 30px clear of its own data. Silent, and only while
+// the table was too narrow to fit, which is why no test caught it.
 //
-// This fixes the ALIGNMENT only. The table still needs ~696px of content and
-// the left panel gives it 347px (1440) / 539px (1920), so NAME is starved to
-// zero and the right-hand columns are still clipped -- that is a panel-width
-// decision, pending with Kenneth, not a grid-template one.
-const COLUMNS = '44px 56px minmax(0, 1fr) 60px 52px 50px 56px 68px 64px 80px';
+// The 100px floor is what makes the laptop's horizontal scroll honest. Under
+// `minmax(0, 1fr)` NAME collapses to zero as soon as the grid runs out of
+// slack, so scrolling would uncover SCORE and STOP while the company names
+// stayed invisible. The floor sits just below the 103px that 1920 resolves on
+// its own, so it changes nothing where the table already fits.
+const COLUMNS = '36px 52px minmax(100px, 1fr) 44px 40px 40px 44px 52px 52px 58px';
 
 const HORIZON_WEIGHTS: Record<string, { trend: number; pullback: number; trigger: number; event: number; volatility: number }> = {
   Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5,  volatility: 10 },
@@ -269,7 +270,11 @@ export default function Step4Page() {
             <span aria-hidden />
             <SortHeader label="SYMBOL"   sortKey="symbol"        currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <Text size={11} tone="dim">NAME</Text>
-            <Text size={11} tone="dim">HORIZON</Text>
+            {/* "HORIZON" is ~55px at 11px and the track is 44px, so the full word
+                was clipped by .tableHeader's overflow rule. The cell's own title
+                keeps the long form on hover, and the value below it ("Swing",
+                "Position") reads as a horizon without the heading spelling it. */}
+            <Text size={11} tone="dim"><span title="Horizon">HRZN</span></Text>
             <SortHeader label="Δ RNK"    sortKey="rankDelta"     currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <SortHeader label="Δ SCR"    sortKey="scoreDelta"    currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <SortHeader label="SCORE"    sortKey="score"         currentKey={sortKey} dir={sortDir} onSort={handleSort} />
@@ -285,6 +290,7 @@ export default function Step4Page() {
                 key={row.symbol}
                 status={row.status}
                 columns={COLUMNS}
+                className={styles.denseRow}
                 selected={row.symbol === selectedSym}
                 onClick={() => {
                   setSelectedSym(row.symbol);
