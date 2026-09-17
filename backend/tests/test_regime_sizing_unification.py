@@ -342,8 +342,9 @@ def test_a_falsy_enabled_disables_without_a_spurious_record(enabled):
 
 
 def test_a_quoted_enabled_does_not_enlarge_the_fire_path(conviction, seam):
-    """The fire-path half of the same defect: 50 -> 100 contracts on a real
-    broker order, which is a 2x, not a rounding difference."""
+    """The fire-path half of the same defect: a 100-contract armed pick fires
+    at 100 instead of 75 on a real broker order. Same 1.33x as the card, since
+    both paths already shared the ramp when this bug existed."""
     seam({"enabled": "true", "min_mult": 0.5, "full_conviction_pct": 40})
     conviction(20.0)
     assert _apply_vol_sizing(_strategy(quantity=100)).quantity == 75

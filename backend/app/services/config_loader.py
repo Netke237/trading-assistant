@@ -410,10 +410,15 @@ def _normalise_regime_sizing(block) -> tuple[dict, list[str]]:
     # `enabled: "true"` — the canonical YAML footgun, and hand-editing the
     # file is the ONLY way this block is ever changed — ENABLED sizing. An
     # `is True` check here would DISABLE it instead, and disabled means
-    # multiplier 1.0, i.e. FULL SIZE: on the shipped config at conviction 20
-    # the card goes 75 shares/$375 to 100 shares/$500, and the fire path goes
-    # 50 to 100 contracts. That is strictly the LARGER order, on a typo, in
+    # multiplier 1.0, i.e. FULL SIZE. On the shipped config at conviction 20
+    # the intended 0.75 becomes 1.0 on BOTH paths: the card goes 75 shares
+    # /$375 to 100 shares/$500, and a 100-contract armed pick fires at 100
+    # instead of 75. That is 1.33x, strictly the LARGER order, on a typo, in
     # the one input class that would otherwise carry no record at all.
+    # (An earlier version of this comment said the fire path went "50 to 100".
+    # It did not: 50 is the PRE-unification step floor, a different code
+    # version. Both paths already shared the ramp by the time this bug
+    # existed, so both were wrong by the same 1.33x.)
     #
     # A non-bool is still recorded, because "never refuse, always record" is
     # the rule this normaliser implements. Absent or null is NOT recorded: a
