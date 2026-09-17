@@ -111,7 +111,8 @@ def _load_scoring_config() -> dict:
     2026-09-17) is that a config this path cannot read stops the trade.
 
     An absent regime_sizing block is NOT a failure and still returns {}: the
-    file parsed, and it says sizing is off.
+    file parsed, and it says sizing is off. A block that is PRESENT and cannot
+    be read as on or off is a failure — resolve_sizing decides that, not this.
 
     lru_cache does not cache exceptions, so a file that could not be READ or
     PARSED is re-read on the next fire attempt. THAT IS NOT TRUE OF A BAD
@@ -153,6 +154,16 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     # validating after it would let a broken config through on every fire that
     # happens before regime_monitor has cached anything.
     if resolve_sizing(cfg) is None:
+        # Logged for the same reason as the unchanged-quantity line below: this
+        # returns at FULL SIZE, and round 2 caught it as the one full-size path
+        # still leaving no trace. It is the "off versus broken" case a reader
+        # most needs to be able to tell apart afterwards — a block that carries
+        # real min_mult/full_conviction_pct values but says `enabled: false`
+        # comes through here, not through a refusal.
+        logger.info(
+            "vol_sizing: %s qty %d unchanged — regime_sizing is off by "
+            "configuration", strategy.symbol, strategy.quantity,
+        )
         return strategy
 
     from app.services.regime_monitor import get_last_conviction
@@ -233,10 +244,12 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
             symbol=symbol,
             alert_type="CONFIG_ERROR",
             reason=(
-                f"Auto-trade REFUSED to fire {symbol}: scoring_rules.yaml's "
-                f"regime_sizing block cannot be honoured, so the position size "
-                f"is unknown. Nothing was sent and the auto-trader is disarmed. "
-                f"{exc}"
+                f"Auto-trade REFUSED to fire {symbol}: "
+                + ("scoring_rules.yaml's regime_sizing block cannot be honoured"
+                   if isinstance(exc, SizingConfigError)
+                   else "the regime conviction is not a usable number")
+                + f", so the position size is unknown. Nothing was sent and the "
+                  f"auto-trader is disarmed. {exc}"
             ),
             # Stable, symbol-independent key: the file is broken, not the
             # symbol, so the dedup window collapses a run of scans into one
@@ -354,11 +367,21 @@ class AutoTradeService:
         # still maps it to a 400 and maybe_fire_on_scan can single it out to alert.
         try:
             strategy = _apply_vol_sizing(strategy)
-        except SizingConfigError as exc:
+        except (SizingConfigError, ValueError) as exc:
+            # ValueError too, and round 2 is why. Round 1 correctly stopped
+            # reporting a bad CONVICTION as a broken config file (the message
+            # named a key that does not exist in scoring_rules.yaml) by raising
+            # a plain ValueError — and thereby walked the refusal out of this
+            # handler entirely: no history entry, no alert, `/auto-trade/status`
+            # still showing the PREVIOUS order as last_order. Nothing shipped,
+            # which is why it was below the gate, but it was strictly worse than
+            # what it replaced on both halves of §9.1.
             with self._lock:
                 self._state.history.append({
                     "order_id":        None,
-                    "status":          "sizing_config_blocked",
+                    "status":          ("sizing_config_blocked"
+                                        if isinstance(exc, SizingConfigError)
+                                        else "sizing_data_blocked"),
                     "broker":          strategy.broker,
                     "symbol":          strategy.symbol,
                     "option":          strategy.option_symbol,
@@ -367,8 +390,10 @@ class AutoTradeService:
                     "error":           str(exc),
                 })
             logger.error(
-                "AutoTrader fire REFUSED for %s — regime_sizing unusable, so the "
-                "order size is unknown: %s", strategy.symbol, exc,
+                "AutoTrader fire REFUSED for %s — %s, so the order size is "
+                "unknown: %s", strategy.symbol,
+                "regime_sizing unusable" if isinstance(exc, SizingConfigError)
+                else "the regime conviction is not a usable number", exc,
             )
             raise
 
@@ -494,9 +519,11 @@ class AutoTradeService:
         try:
             self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
             logger.info("AutoTrader: fired on scan completion trigger")
-        except SizingConfigError as exc:
+        except (SizingConfigError, ValueError) as exc:
             # fire() has already logged and recorded it; this trigger has no
             # reader, so it is also the half of §9.1 that says "and alert".
+            # ValueError is here for the same reason it is in fire() — see the
+            # handler there.
             _alert_sizing_config_refusal(strategy.symbol, exc)
         except Exception as exc:
             logger.error("AutoTrader scan-trigger fire failed: %s", exc)

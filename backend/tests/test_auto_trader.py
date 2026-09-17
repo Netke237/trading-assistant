@@ -765,10 +765,15 @@ def test_a_dead_notifier_cannot_turn_a_safe_refusal_into_a_crash(mocker):
 
 
 def test_the_alert_is_skipped_loudly_when_it_would_crash_on_a_running_loop(caplog):
-    """asyncio.run raises inside a thread that already has a loop. fire() is
-    reachable from the event-loop thread (POST /auto-trade/fire), so the helper
-    must degrade to a log line rather than replacing a refusal with a
-    RuntimeError from asyncio."""
+    """asyncio.run raises inside a thread that already has a loop, so the
+    helper must degrade to a log line rather than replacing a refusal with a
+    RuntimeError from asyncio.
+
+    THE BRANCH IS UNREACHABLE TODAY and this docstring used to claim the
+    opposite (round 2): the helper's only caller is maybe_fire_on_scan, whose
+    only caller is POST /scan via asyncio.to_thread — always a worker thread
+    with no loop. It is pinned because the cost of being wrong about that
+    later is section 9.1's "and alert" half silently not happening."""
     import asyncio
     import app.services.auto_trader as at
     from app.scoring.conviction_sizing import SizingConfigError
@@ -814,3 +819,63 @@ def test_a_full_size_multiplier_still_leaves_a_trace(mocker, caplog):
     assert out.quantity == 10
     assert "unchanged" in caplog.text
     assert "mult=1.00" in caplog.text
+
+
+def test_a_bad_conviction_is_recorded_and_alerted_like_a_bad_config(mocker):
+    """Round 1 stopped a regime_monitor DATA fault being reported as a broken
+    config file — correctly — by raising a plain ValueError, and thereby walked
+    the refusal out of fire()'s handler entirely: no history entry, no alert,
+    /auto-trade/status still naming the PREVIOUS order as last_order. Nothing
+    shipped, so it was below the gate, but it was strictly worse than what it
+    replaced on both halves of §9.1. Round 2 measured it across three trees."""
+    import app.services.auto_trader as at
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    mocker.patch.object(at, "_load_scoring_config", return_value={
+        "enabled": True, "min_mult": 0.3, "full_conviction_pct": 40,
+    })
+    mocker.patch("app.services.regime_monitor.get_last_conviction",
+                 return_value=float("nan"))
+    alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
+
+    svc = AutoTradeService()
+    svc.arm(_sizing_strategy(4))
+    svc.maybe_fire_on_scan()
+
+    execute.assert_not_called()
+    state = svc.get_state()
+    assert state.armed is False
+    last = state.history[-1]
+    assert last["status"] == "sizing_data_blocked", (
+        "a DATA fault must be distinguishable in the history from a CONFIG "
+        "fault — the remedy is different and one of them blames the file"
+    )
+    assert alert.call_count == 1
+
+
+def test_the_alert_does_not_blame_the_file_for_a_data_fault(mocker):
+    async def _fake_notify(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    captured: dict = {}
+    import app.services.auto_trader as at
+    mocker.patch("app.services.notifications.alert_notifier.notify_alert", _fake_notify)
+    at._alert_sizing_config_refusal("AAPL", ValueError("conviction_pct is not finite (nan)"))
+    assert "scoring_rules.yaml" not in captured["reason"]
+    assert "conviction" in captured["reason"]
+
+
+def test_sizing_off_by_configuration_still_leaves_a_trace(mocker, caplog):
+    """The last silent full-size return (round 2): a block carrying real
+    min_mult/full_conviction_pct values but `enabled: false` comes through here
+    rather than through a refusal, and returned at full size with no trace."""
+    import app.services.auto_trader as at
+    mocker.patch.object(at, "_load_scoring_config", return_value={
+        "enabled": False, "min_mult": 0.3, "full_conviction_pct": 40,
+    })
+    with caplog.at_level("INFO", logger="app.services.auto_trader"):
+        out = at._apply_vol_sizing(_sizing_strategy(7))
+    assert out.quantity == 7
+    assert "off by configuration" in caplog.text

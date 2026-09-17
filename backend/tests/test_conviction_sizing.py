@@ -108,7 +108,7 @@ def test_a_partial_block_refuses_rather_than_inventing_a_floor():
     assert "'min_mul'" in str(exc.value)
 
 
-def test_a_populated_block_that_lost_its_enabled_line_refuses(caplog):
+def test_a_populated_block_that_lost_its_enabled_line_refuses():
     """G1 of round 1's siblings: read as "sizing off" -> multiplier 1.0 -> FULL
     SIZE, from a block carrying real sizing values. Present-but-unreadable and
     deliberately-off produced the same number, which is the collapse this
@@ -130,7 +130,7 @@ def test_enabled_must_be_a_real_boolean():
             conviction_mult(20, {"enabled": bad, "min_mult": 0.3, "full_conviction_pct": 40})
 
 
-@pytest.mark.parametrize("full", [0.40, 0.99, 100.5, 1000])
+@pytest.mark.parametrize("full", [0.40, 0.99, 1, 1.0, 100.5, 1000])
 def test_full_conviction_pct_outside_the_conviction_scale_refuses(full):
     """THE gate-level finding of round 1. full_conviction_pct is a point on the
     0-100 conviction scale while its sibling min_mult is a fraction, so
@@ -142,10 +142,47 @@ def test_full_conviction_pct_outside_the_conviction_scale_refuses(full):
     assert "full_conviction_pct" in str(exc.value)
 
 
-def test_the_required_keys_are_exactly_the_three_the_ramp_reads():
-    """If a fourth key ever becomes load-bearing, it belongs here — that is what
-    makes a dropped line a refusal instead of a silent default."""
-    assert set(REQUIRED_KEYS) == {"enabled", "min_mult", "full_conviction_pct"}
+def test_the_bound_sits_on_the_fraction_ambiguity_not_one_step_inside_it():
+    """THE round-2 gate-level finding. The bound was `>= 1.0`, so it refused
+    0.01 through 0.99 and admitted exactly 1.0 — the single most likely form of
+    the mix-up it exists to catch, because a fraction expressing "100%" IS 1.0.
+    Measured on the fire path: qty 10 went out at 10 where the floor intends 6.
+
+    The whole fraction range is (0, 1], so that is what is refused. Just above
+    it is honoured, aggressive or not: no bound distinguishes a deliberate 4
+    from a typo, and inventing a floor is what D-A1 declined to do for
+    negatives."""
+    with pytest.raises(SizingConfigError) as exc:
+        conviction_mult(20, _cfg(full_conviction_pct=1.0))
+    assert "Did you mean 100?" in str(exc.value)
+
+    assert conviction_mult(20, _cfg(full_conviction_pct=1.01)) == pytest.approx(1.0)
+    assert conviction_mult(20, _cfg(full_conviction_pct=100)) == pytest.approx(
+        0.3 + 0.7 * 0.2)
+
+
+def test_the_two_halves_of_the_bound_say_different_things():
+    """One message served both and was inverted on the upper half: a value
+    above 100 sizes every order at the FLOOR, not at full, because no
+    conviction can reach it."""
+    with pytest.raises(SizingConfigError) as low:
+        resolve_sizing(_cfg(full_conviction_pct=0.4))
+    with pytest.raises(SizingConfigError) as high:
+        resolve_sizing(_cfg(full_conviction_pct=1000))
+    assert "at FULL" in str(low.value)
+    assert "at FULL" not in str(high.value)
+    assert "floor" in str(high.value)
+
+
+def test_every_required_key_is_required_behaviourally():
+    """Was an assertion of REQUIRED_KEYS against its own literal, which cannot
+    fail for any behavioural reason (round 2). Dropping each key from a
+    complete block in turn is the same intent, measured."""
+    for key in REQUIRED_KEYS:
+        partial = {k: v for k, v in _cfg().items() if k != key}
+        with pytest.raises(SizingConfigError) as exc:
+            conviction_mult(20, partial)
+        assert key in str(exc.value)
 
 
 def test_zero_full_conviction_falls_back_to_the_default_scale():
@@ -253,6 +290,15 @@ def test_the_error_is_a_runtimeerror_so_existing_handlers_still_map_it():
     assert issubclass(SizingConfigError, RuntimeError)
 
 
+def test_a_negative_keeps_its_own_message_rather_than_the_range_check():
+    """D-A1's load-bearing distinction — a negative is REFUSED, not defaulted —
+    had no test that separated it from the generic range refusal, so deleting
+    the negative branch entirely left the suite green (round 2)."""
+    with pytest.raises(SizingConfigError) as exc:
+        resolve_sizing(_cfg(full_conviction_pct=-40))
+    assert "backwards" in str(exc.value)
+
+
 def test_the_error_names_the_file_and_the_key():
     """The message is the whole remedy — it reaches the 400 body, the scan's
     500 detail and the alert, and none of those has anything else to go on."""
@@ -262,20 +308,44 @@ def test_the_error_names_the_file_and_the_key():
     assert "full_conviction_pct" in str(exc.value)
 
 
-def test_an_out_of_range_min_mult_is_still_clamped_and_now_recorded(caplog):
-    """Unchanged behaviour (clamp, not refuse) — the clamp can only size DOWN,
-    and refusing instead is open question 9.9, which is Kenneth's call. What is
-    new is that the clamped run says so."""
-    with caplog.at_level("ERROR", logger="app.scoring.conviction_sizing"):
-        assert conviction_mult(0, _cfg(min_mult=1.7)) == pytest.approx(1.0)
-    assert "min_mult" in caplog.text
+def test_an_out_of_range_min_mult_refuses_rather_than_clamping_to_full_size():
+    """Round 2's gate-level confirmation, and the reason this stopped being a
+    clamp.
+
+    Section 9.9's answer on record was "clamp and record", on the rationale
+    that clamping can only size a position DOWN. It cannot: min_mult is a
+    FRACTION of full size, so `min_mult: 30` clamps to 1.0, and 1.0 is full
+    size. Measured on the fire path before this change, qty 10 went out at 10
+    where the file's own floor intends 6 — with two ERROR lines about it, which
+    is the point: recording a wrong number does not un-place the order.
+
+    This amends a recommendation rather than following one, and it is
+    reversible in one line if Kenneth wants the clamp back.
+    """
+    for bad in (1.7, 30, -2.0):
+        with pytest.raises(SizingConfigError) as exc:
+            conviction_mult(0, _cfg(min_mult=bad))
+        assert "min_mult" in str(exc.value)
+
+    # The percent-for-fraction case gets the arithmetic it probably meant.
+    with pytest.raises(SizingConfigError) as exc:
+        conviction_mult(0, _cfg(min_mult=30))
+    assert "0.3" in str(exc.value)
+
+    # The boundary values themselves are honourable and must still pass.
+    assert conviction_mult(0, _cfg(min_mult=0.0)) == pytest.approx(0.0)
+    assert conviction_mult(0, _cfg(min_mult=1.0)) == pytest.approx(1.0)
 
 
-def test_misconfigured_min_mult_can_never_size_a_position_up():
-    cfg = {"enabled": True, "min_mult": 1.7, "full_conviction_pct": 40}
-    assert conviction_mult(0, cfg) == pytest.approx(1.0)
-    cfg_neg = {"enabled": True, "min_mult": -2.0, "full_conviction_pct": 40}
-    assert conviction_mult(0, cfg_neg) == pytest.approx(0.0)
+def test_a_misconfigured_min_mult_cannot_size_a_position_up_because_it_refuses():
+    """This test's NAME used to assert something its body disproved: it pinned
+    conviction_mult(0, min_mult=1.7) == 1.0, which IS sizing a position up —
+    all the way to full. Round 2 flagged the contradiction. The guarantee in
+    the name now holds because the value is refused."""
+    with pytest.raises(SizingConfigError):
+        conviction_mult(0, {"enabled": True, "min_mult": 1.7, "full_conviction_pct": 40})
+    with pytest.raises(SizingConfigError):
+        conviction_mult(0, {"enabled": True, "min_mult": -2.0, "full_conviction_pct": 40})
 
 
 # ── The shipped config ────────────────────────────────────────────────────────
@@ -286,3 +356,20 @@ def test_shipped_config_is_the_ramp_at_0_3():
     assert cfg["min_mult"] == 0.3
     assert cfg["full_conviction_pct"] == 40
     assert conviction_mult(20, cfg) == pytest.approx(0.65)
+
+
+def test_mixed_type_yaml_keys_cannot_escape_as_a_typeerror():
+    """`on:`, `yes:` and `true:` are BOOLS in YAML and a bare date is a
+    datetime.date, so sorting unknown keys against strings raised TypeError —
+    not a SizingConfigError, so it escaped both `except SizingConfigError`
+    handlers: no history record, no alert, and an unhandled 500 in place of the
+    400 or the scan's 500 detail. Needs a missing required key AND two unknown
+    keys of different types (round 2)."""
+    import datetime
+    for cfg in (
+        {1: True, "minmult": 0.3},
+        {"enabled": True, 1: "x", "foo": "y", "min_mult": 0.3},
+        {datetime.date(2026, 9, 17): 1, "foo": 2},
+    ):
+        with pytest.raises(SizingConfigError):
+            resolve_sizing(cfg)
