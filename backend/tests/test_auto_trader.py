@@ -592,3 +592,178 @@ def test_arm_succeeds_with_positive_entry_premium():
         entry_premium=2.50,
     ))
     assert svc.get_state().armed is True
+
+
+# ── §9.1 fail closed: a config the sizing path cannot honour stops the trade ──
+#
+# Kenneth, 2026-09-17. The earlier posture was "a bad config restricts the scan
+# and nothing else", decided on the belief that nothing outside the scan touches
+# money. regime_sizing multiplies the quantity of a live broker order, so the
+# belief was wrong and the posture is amended here. Every test below used to
+# describe a fire at FULL SIZE.
+
+def _sizing_strategy(quantity: int = 4) -> ArmedStrategy:
+    return ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=quantity, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=100_000.0,
+    )
+
+
+def test_an_unreadable_scoring_file_refuses_instead_of_firing_full(mocker, tmp_path):
+    """_load_scoring_config used to swallow any read error into {}, which reads
+    as "sizing disabled" — the largest possible order from the loudest possible
+    failure."""
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    mocker.patch.object(at, "_SCORING_CONFIG_PATH", tmp_path / "gone.yaml")
+    at._load_scoring_config.cache_clear()
+    try:
+        with pytest.raises(SizingConfigError):
+            at._load_scoring_config()
+    finally:
+        at._load_scoring_config.cache_clear()
+
+
+def test_a_file_that_parses_to_a_non_mapping_refuses(mocker, tmp_path):
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    bad = tmp_path / "scoring_rules.yaml"
+    bad.write_text("- not\n- a mapping\n")
+    mocker.patch.object(at, "_SCORING_CONFIG_PATH", bad)
+    at._load_scoring_config.cache_clear()
+    try:
+        with pytest.raises(SizingConfigError):
+            at._load_scoring_config()
+    finally:
+        at._load_scoring_config.cache_clear()
+
+
+def test_an_absent_block_is_still_sizing_off_not_a_failure(mocker, tmp_path):
+    """The distinction the whole change rests on: a file that parses and says
+    nothing about regime_sizing has turned sizing OFF, and full size is right."""
+    import app.services.auto_trader as at
+
+    ok = tmp_path / "scoring_rules.yaml"
+    ok.write_text("some_other_block:\n  a: 1\n")
+    mocker.patch.object(at, "_SCORING_CONFIG_PATH", ok)
+    at._load_scoring_config.cache_clear()
+    try:
+        assert at._load_scoring_config() == {}
+        assert at._apply_vol_sizing(_sizing_strategy(4)).quantity == 4
+    finally:
+        at._load_scoring_config.cache_clear()
+
+
+def test_a_broken_block_refuses_before_the_conviction_lookup(mocker):
+    """Order matters: a missing conviction returns the strategy unchanged (full
+    size), so validating after it would let a broken config through on every
+    fire before regime_monitor has cached anything."""
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    mocker.patch.object(at, "_load_scoring_config",
+                        return_value={"enabled": True, "full_conviction_pct": -40})
+    conviction = mocker.patch("app.services.regime_monitor.get_last_conviction",
+                              return_value=None)
+    with pytest.raises(SizingConfigError):
+        at._apply_vol_sizing(_sizing_strategy(4))
+    conviction.assert_not_called()
+
+
+def test_fire_sends_nothing_records_the_refusal_and_stays_disarmed(mocker):
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    mocker.patch.object(at, "_load_scoring_config",
+                        return_value={"enabled": True, "min_mult": "half"})
+
+    svc = AutoTradeService()
+    svc.arm(_sizing_strategy(4))
+    with pytest.raises(SizingConfigError):
+        svc.fire()
+
+    execute.assert_not_called()
+    state = svc.get_state()
+    assert state.armed is False
+    assert state.strategy is None
+    last = state.history[-1]
+    assert last["status"] == "sizing_config_blocked"
+    assert last["order_id"] is None
+    assert last["premium_at_risk"] == 0.0
+    assert "min_mult" in last["error"]
+
+
+def test_the_scan_trigger_alerts_because_nobody_is_reading_it(mocker):
+    """POST /scan runs maybe_fire_on_scan through asyncio.to_thread and discards
+    the outcome, so the refusal has no reader. §9.1 is "refuse AND alert"."""
+    import app.services.auto_trader as at
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    mocker.patch.object(at, "_load_scoring_config",
+                        return_value={"enabled": True, "min_mult": "half"})
+    alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
+
+    svc = AutoTradeService()
+    svc.arm(_sizing_strategy(4))
+    svc.maybe_fire_on_scan()          # must not raise — this is a fire-and-forget trigger
+
+    assert alert.call_count == 1
+    assert alert.call_args.args[0] == "AAPL"
+    assert svc.get_state().armed is False
+
+
+def test_the_alert_reaches_the_channel_that_reaches_a_phone(mocker):
+    """notify_alert, not alert_service.broadcast: nothing in the frontend
+    subscribes to /ws/alerts, so a broadcast would be a channel with no reader."""
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    async def _fake_notify(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    captured: dict = {}
+    mocker.patch("app.services.notifications.alert_notifier.notify_alert", _fake_notify)
+    at._alert_sizing_config_refusal("AAPL", SizingConfigError("min_mult is not a number"))
+
+    assert captured["symbol"] == "AAPL"
+    assert captured["type_enabled"] is True, (
+        "CONFIG_ERROR is not in enabledTypes, so the global check would drop it"
+    )
+    assert "min_mult is not a number" in captured["reason"]
+
+
+def test_a_dead_notifier_cannot_turn_a_safe_refusal_into_a_crash(mocker):
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    async def _boom(**kwargs):
+        raise OSError("smtp is down")
+
+    mocker.patch("app.services.notifications.alert_notifier.notify_alert", _boom)
+    at._alert_sizing_config_refusal("AAPL", SizingConfigError("bad"))   # must not raise
+
+
+def test_the_alert_is_skipped_loudly_when_it_would_crash_on_a_running_loop(caplog):
+    """asyncio.run raises inside a thread that already has a loop. fire() is
+    reachable from the event-loop thread (POST /auto-trade/fire), so the helper
+    must degrade to a log line rather than replacing a refusal with a
+    RuntimeError from asyncio."""
+    import asyncio
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    async def _from_the_loop():
+        with caplog.at_level("ERROR", logger="app.services.auto_trader"):
+            at._alert_sizing_config_refusal("AAPL", SizingConfigError("bad"))
+
+    asyncio.run(_from_the_loop())
+    assert "NOT alerted" in caplog.text

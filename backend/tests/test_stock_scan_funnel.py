@@ -392,3 +392,60 @@ def test_the_stock_rejection_reason_names_the_floor_as_an_integer(stock_client):
     assert reasons == ["direction_conviction: trend 20 < 40 for Bearish Position"], reasons
     assert body["pipeline"]["failed_direction"] == 1
     assert body["pipeline"]["other_rejected"] == 0
+
+
+# ── regime_sizing's own fail-fast (§9.1, Kenneth 2026-09-17) ─────────────────
+#
+# The scope table puts regime_sizing on POST /stock-scan AND the auto-trade
+# fire path. It is the only entry on that table that changes the NUMBER OF
+# SHARES the response carries rather than which names come back, so it gets
+# the same pre-check the direction-conviction floor above already has.
+
+_BAD_SIZING = {"regime_sizing": {"enabled": True, "full_conviction_pct": -40}}
+
+
+def test_an_unusable_regime_sizing_block_fails_the_stock_scan(stock_client):
+    """Without the pre-check, every card in the response carries a share count
+    multiplied by a number nobody chose — or, once conviction_mult refuses, a
+    universe of symbols rejected under the name "unknown"."""
+    with patch("app.routers.stock_scan._load_full_scoring_cfg", return_value=_BAD_SIZING):
+        r = stock_client.post("/api/stock-scan", json={
+            "symbols": ["AAA"], "universe": [], "direction": "Bullish",
+            "horizon": "Swing", "strategy": "pullback_ema",
+        })
+    assert r.status_code == 500, r.text
+    detail = r.json()["detail"]
+    assert "full_conviction_pct" in detail, detail
+    assert "scoring_rules.yaml" in detail, detail
+
+
+def test_the_sizing_fail_fast_runs_before_the_universe_price_fetch(stock_client):
+    fetch = MagicMock(return_value={})
+    with ExitStack() as stack:
+        stack.enter_context(patch("app.routers.stock_scan._load_full_scoring_cfg",
+                                  return_value=_BAD_SIZING))
+        stack.enter_context(patch("app.routers.stock_scan.fetch_quotes", fetch))
+        r = stock_client.post("/api/stock-scan", json={
+            "symbols": ["AAA"], "universe": [], "direction": "Bullish",
+            "horizon": "Swing", "strategy": "pullback_ema",
+        })
+    assert r.status_code == 500, r.text
+    assert fetch.call_count == 0, (
+        "the universe quote fetch ran before regime_sizing was checked"
+    )
+
+
+@pytest.mark.parametrize("cfg", [
+    {},                                    # block absent
+    {"regime_sizing": None},               # `regime_sizing:` with nothing under it
+    {"regime_sizing": {"enabled": False, "full_conviction_pct": "junk"}},
+])
+def test_sizing_off_does_not_fail_the_scan(stock_client, cfg):
+    """Off is a configuration, not a failure — and junk under a disabled block
+    is inert. Refusing here would restrict more than §9.1 asks for."""
+    with patch("app.routers.stock_scan._load_full_scoring_cfg", return_value=cfg):
+        r = stock_client.post("/api/stock-scan", json={
+            "symbols": ["AAA"], "universe": [], "direction": "Bullish",
+            "horizon": "Swing", "strategy": "pullback_ema",
+        })
+    assert r.status_code == 200, r.text

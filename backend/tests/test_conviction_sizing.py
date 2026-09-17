@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from app.scoring.conviction_sizing import conviction_mult
+from app.scoring.conviction_sizing import (
+    DEFAULT_FULL_CONVICTION_PCT,
+    SizingConfigError,
+    conviction_mult,
+    resolve_sizing,
+)
 
 CFG = {"enabled": True, "min_mult": 0.3, "full_conviction_pct": 40}
 
@@ -85,10 +90,101 @@ def test_partial_block_falls_back_instead_of_raising():
     assert conviction_mult(0, {"enabled": True}) == pytest.approx(0.5)
 
 
-def test_zero_full_conviction_does_not_divide_by_zero():
-    """auto_trader's form raised ZeroDivisionError here, in the live-money path."""
+def test_zero_full_conviction_falls_back_to_the_default_scale():
+    """D-A1, decided by Kenneth 2026-09-17 as option (b).
+
+    auto_trader's old form raised ZeroDivisionError here, in the live-money
+    path, while stock_scan's floored the multiplier — one input, two sizes.
+    The ruling is that zero falls back to the documented default of 40 rather
+    than being read as "no conviction scale", so both paths agree.
+
+    The 0.75 is the number the decision was taken on: min_mult 0.5,
+    conviction 20, full falling back to 40.
+    """
+    cfg = {"enabled": True, "min_mult": 0.5, "full_conviction_pct": 0}
+    assert conviction_mult(20, cfg) == pytest.approx(0.75)
+    assert resolve_sizing(cfg) == (0.5, DEFAULT_FULL_CONVICTION_PCT)
+
+
+def test_zero_full_conviction_is_logged_at_error(caplog):
     cfg = {"enabled": True, "min_mult": 0.3, "full_conviction_pct": 0}
-    assert conviction_mult(40, cfg) == pytest.approx(0.3)
+    with caplog.at_level("ERROR", logger="app.scoring.conviction_sizing"):
+        conviction_mult(40, cfg)
+    assert "full_conviction_pct is 0" in caplog.text
+
+
+# ── FAIL CLOSED (§9.1, Kenneth 2026-09-17) ────────────────────────────────────
+#
+# Every case here used to return a multiplier of 1.0 or min_mult, or crash
+# deep in the fire path. 1.0 is FULL SIZE: "sizing is off" and "sizing is
+# broken" must not be the same outcome, which is the whole point of the class.
+
+def test_a_disabled_block_is_off_not_broken():
+    """Sizing off by configuration is a decision, and junk inside it is inert."""
+    assert conviction_mult(20, None) == 1.0
+    assert conviction_mult(20, {}) == 1.0
+    assert conviction_mult(20, {"enabled": False}) == 1.0
+    assert conviction_mult(20, {"enabled": False, "full_conviction_pct": "nonsense"}) == 1.0
+    assert resolve_sizing({"enabled": False}) is None
+
+
+@pytest.mark.parametrize("bad", [
+    {"enabled": True, "full_conviction_pct": -40},
+    {"enabled": True, "full_conviction_pct": "forty"},
+    {"enabled": True, "full_conviction_pct": True},
+    {"enabled": True, "full_conviction_pct": float("nan")},
+    {"enabled": True, "full_conviction_pct": float("inf")},
+    {"enabled": True, "full_conviction_pct": None},
+    {"enabled": True, "full_conviction_pct": [40]},
+    {"enabled": True, "min_mult": "half"},
+    {"enabled": True, "min_mult": True},
+    {"enabled": True, "min_mult": float("nan")},
+    {"enabled": True, "min_mult": None},
+])
+def test_an_unusable_block_refuses_instead_of_sizing_full(bad):
+    with pytest.raises(SizingConfigError):
+        conviction_mult(20, bad)
+    with pytest.raises(SizingConfigError):
+        resolve_sizing(bad)
+
+
+def test_a_block_that_is_not_a_mapping_refuses():
+    with pytest.raises(SizingConfigError):
+        resolve_sizing([{"enabled": True}])
+    with pytest.raises(SizingConfigError):
+        resolve_sizing("enabled: true")
+
+
+def test_a_nan_conviction_cannot_reach_a_broker_quantity():
+    """max()/min() let nan through every range check, and round(nan) raises
+    inside fire() after the order is already committed to."""
+    with pytest.raises(SizingConfigError):
+        conviction_mult(float("nan"), CFG)
+
+
+def test_the_error_is_a_runtimeerror_so_existing_handlers_still_map_it():
+    """POST /auto-trade/fire catches (ValueError, RuntimeError) -> 400, and
+    fire() signals every other refusal as RuntimeError. If this stopped being
+    a RuntimeError subclass, a refusal would surface as an unhandled 500."""
+    assert issubclass(SizingConfigError, RuntimeError)
+
+
+def test_the_error_names_the_file_and_the_key():
+    """The message is the whole remedy — it reaches the 400 body, the scan's
+    500 detail and the alert, and none of those has anything else to go on."""
+    with pytest.raises(SizingConfigError) as exc:
+        conviction_mult(20, {"enabled": True, "full_conviction_pct": -40})
+    assert "scoring_rules.yaml" in str(exc.value)
+    assert "full_conviction_pct" in str(exc.value)
+
+
+def test_an_out_of_range_min_mult_is_still_clamped_and_now_recorded(caplog):
+    """Unchanged behaviour (clamp, not refuse) — the clamp can only size DOWN,
+    and refusing instead is open question 9.9, which is Kenneth's call. What is
+    new is that the clamped run says so."""
+    with caplog.at_level("ERROR", logger="app.scoring.conviction_sizing"):
+        assert conviction_mult(0, {"enabled": True, "min_mult": 1.7}) == pytest.approx(1.0)
+    assert "min_mult" in caplog.text
 
 
 def test_misconfigured_min_mult_can_never_size_a_position_up():
