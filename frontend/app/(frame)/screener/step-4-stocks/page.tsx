@@ -194,8 +194,19 @@ export default function Step4StocksPage() {
     try {
       res = await runStockScan(selected, params);
     } catch (err) {
-      useScanStore.getState().setScanState('FAILED');
-      setError(`Scan failed — ${stockScanFailureReason(err, false)}`);
+      // Reason FIRST: this catch exists for a throw runStockScan could not
+      // convert into a null return — `setScanState` itself failing — so
+      // resetting the state before showing the message meant the one case it
+      // is written for threw again and the user saw nothing.
+      const reason = stockScanFailureReason(err, false);
+      setError(`Scan failed — ${reason}`);
+      try {
+        // SCANNING is already set; leaving it there disables the Run button
+        // for the rest of the session. The reason goes to the store too, so a
+        // stale one from an earlier run cannot outlive this FAILED.
+        useScanStore.getState().setStockScanError(reason);
+        useScanStore.getState().setScanState('FAILED');
+      } catch { /* the store is what failed — the inline error already shows */ }
       return;
     }
     if (!res) {

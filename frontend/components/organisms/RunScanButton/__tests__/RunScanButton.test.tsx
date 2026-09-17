@@ -12,8 +12,10 @@ jest.mock('@/lib/api', () => ({
     postScanBody: jest.fn(),
   },
   // The '@/lib/stockScan' mock below requireActual's the real module, so its
-  // stockScanFailureReason() reads this — without it the user-facing hint in
-  // this suite would render "the backend at undefined".
+  // stockScanFailureReason() reads this. No case here reaches the hint today
+  // (the rejection path passes reachedRequest = false), but the real module is
+  // loaded, so leaving it out would render "the backend at undefined" the
+  // moment one does.
   API_BASE_URL: 'http://localhost:8000',
 }));
 
@@ -151,11 +153,16 @@ describe('RunScanButton — conflict suppression wiring', () => {
   });
 
   it('toasts the thrown reason when runStockScan rejects outright', async () => {
-    // runStockScan sets scanState BEFORE its own try opens, so a rejection can
-    // still escape it. Without the .catch() on the chain that is an unhandled
-    // rejection and the user sees nothing — the silent failure again.
+    // runStockScan converts its own failures into a null return, but a throw
+    // from setScanState itself still escapes. Without the rejection handler
+    // that is an unhandled rejection and the user sees nothing — the silent
+    // failure again. The mock enters SCANNING before throwing, as the real one
+    // does, because clearing that state is half of what the handler is for.
     useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
-    (runStockScan as jest.Mock).mockRejectedValue(new Error('store is not hydrated'));
+    (runStockScan as jest.Mock).mockImplementation(async () => {
+      useScanStore.setState({ scanState: 'SCANNING' } as any);
+      throw new Error('store is not hydrated');
+    });
     const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
 
     render(<RunScanButton />);
@@ -170,6 +177,26 @@ describe('RunScanButton — conflict suppression wiring', () => {
     // the Run button for the rest of the session — telling the user why it
     // failed and then not letting them retry is the worse bug.
     expect(useScanStore.getState().scanState).toBe('FAILED');
+  });
+
+  it('still toasts when the store write is itself what failed', async () => {
+    // Same load-bearing order as the step-4 belt: this handler exists for a
+    // store write throwing, so it must not do a store write before the toast.
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+    (runStockScan as jest.Mock).mockRejectedValue(new Error('QuotaExceededError'));
+    const spy = jest.spyOn(useScanStore.getState(), 'setStockScanError')
+      .mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
+
+    render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+    });
+
+    expect(addToastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'Stock scan failed — QuotaExceededError' }),
+    );
+    spy.mockRestore();
   });
 
   it('shows a toast and does not call runStockScan when Stocks mode has no activeStrategy selected (M6)', async () => {

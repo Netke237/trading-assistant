@@ -92,12 +92,18 @@ describe('runStockScan', () => {
     expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 500: scorer blew up');
   });
 
-  it("a concurrent run cannot steal the earlier run's reason before its caller reads it", async () => {
-    // The impatient re-click: run 2 starts (clearing stockScanError
-    // synchronously) while run 1's request is still in flight. Run 1's reason
-    // must still be what its own caller reads when it resolves. Distinct
-    // rejections on purpose — with the same text on both, this assertion
-    // cannot tell whose reason it got.
+  it("a still-running second scan does not blank the reason of the one that just failed", async () => {
+    // What is actually guaranteed, named honestly: run 2 starts (clearing
+    // stockScanError synchronously) while run 1's request is in flight, and
+    // run 1's reason is still what its own caller reads when it settles.
+    // Distinct rejections on purpose — with the same text on both, this
+    // assertion could not tell whose reason it got.
+    //
+    // NOT guaranteed, and deliberately not claimed: whichever run settles LAST
+    // owns the store (see the case below). Both surfaces disable Run while
+    // scanState is SCANNING, so overlapping runs are not reachable from the
+    // UI; a per-run token would only trade this for a worse failure — the
+    // losing run's caller reading a store its own run was forbidden to write.
     let rejectFirst: (e: Error) => void = () => {};
     (api.postStockScan as jest.Mock)
       .mockImplementationOnce(() => new Promise((_res, rej) => { rejectFirst = rej; }))
@@ -112,6 +118,45 @@ describe('runStockScan', () => {
 
     expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 422: run one');
     void second;
+  });
+
+  it('lets the run that settles last own the store, whichever it is', async () => {
+    // Documenting the ordering rather than implying one that does not exist.
+    let rejectFirst: (e: Error) => void = () => {};
+    (api.postStockScan as jest.Mock)
+      .mockImplementationOnce(() => new Promise((_res, rej) => { rejectFirst = rej; }))
+      .mockImplementationOnce(async () => ({ scan_id: 'S-2', timestamp: 't', rejected: [], candidates: [] }));
+
+    const first = runStockScan('pullback_ema');
+    await runStockScan('ma_crossover');          // run 2 settles first…
+    rejectFirst(new Error('API /api/stock-scan → 500: run one'));
+    await first;                                 // …run 1 settles last and wins
+
+    expect(useScanStore.getState().scanState).toBe('FAILED');
+    expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 500: run one');
+  });
+
+  it('an earlier status refresh still applies when the later one failed outright', async () => {
+    // "Latest issued wins" discarded a good response whenever a later request
+    // failed, leaving the meta at neither run's answer — the staleness the
+    // refresh exists to prevent, on exactly the flaky backends where it matters.
+    (api.postStockScan as jest.Mock).mockResolvedValue(
+      { scan_id: 'S-1', timestamp: 't', rejected: [], candidates: [] },
+    );
+    let releaseFirst: (v: unknown) => void = () => {};
+    (api.getLastStockScanStatus as jest.Mock)
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
+      .mockImplementationOnce(() => Promise.reject(new Error('boom')));
+
+    await runStockScan('pullback_ema');   // run 1 — status pending
+    await runStockScan('ma_crossover');   // run 2 — status rejects
+    await Promise.resolve();
+    releaseFirst({ status: 'completed', updated_at: null, strategy: 'pullback_ema' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(useScanStore.getState().lastStockScanStatus).toBe('completed');
+    expect(useScanStore.getState().lastStockScanStrategy).toBe('pullback_ema');
   });
 
   it('does not let an earlier run\'s last-run status overwrite a later one', async () => {
@@ -301,13 +346,59 @@ describe('stockScanFailureReason', () => {
   });
 
   it('recognises a transport failure from another realm', () => {
-    // `instanceof TypeError` is realm-bound: an error from an iframe or a
-    // fetch polyfill built in another context fails it and the hint silently
-    // stops appearing. Matched on `name` instead.
-    const foreign = new Error('Failed to fetch');
-    foreign.name = 'TypeError';
+    // `instanceof Error` is realm-bound exactly as `instanceof TypeError` is,
+    // so an error from an iframe, a vm context or a fetch polyfill built
+    // elsewhere used to lose BOTH its message and the hint. A plain object
+    // stands in for it: it passes no `instanceof` check at all.
+    const foreign = { name: 'TypeError', message: 'Failed to fetch' };
     expect(stockScanFailureReason(foreign))
       .toBe('Failed to fetch (could not reach the backend at http://localhost:8000)');
+  });
+
+  it('reads a cause that is not an Error', () => {
+    // `cause` is unconstrained by spec — a string or `{ code }` is common.
+    expect(stockScanFailureReason(new TypeError('fetch failed', { cause: 'ECONNREFUSED' })))
+      .toBe('fetch failed — ECONNREFUSED (could not reach the backend at http://localhost:8000)');
+    expect(stockScanFailureReason(new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } })))
+      .toBe('fetch failed — ENOTFOUND (could not reach the backend at http://localhost:8000)');
+  });
+
+  it('does not compose a dangling dash when only the cause has text', () => {
+    expect(stockScanFailureReason(new Error('', { cause: new Error('ECONNREFUSED') })))
+      .toBe('ECONNREFUSED');
+  });
+
+  it("keeps a detail that merely mentions markup", () => {
+    // The probe is anchored: an unanchored one threw away every detail that
+    // CONTAINED a tag — including the backend explaining that a symbol column
+    // must not contain one.
+    expect(stockScanFailureReason(new Error('API /api/stock-scan → 422: symbol must not contain <html> tags')))
+      .toBe('API /api/stock-scan → 422: symbol must not contain <html> tags');
+  });
+
+  it('substitutes a non-HTML markup error page too', () => {
+    // A load balancer's XML body and a bare fragment are the same problem as
+    // the nginx page; enumerating HTML tag names missed both.
+    expect(stockScanFailureReason(new Error(`API /api/stock-scan → 502: <?xml version="1.0"?><Error><Code>Timeout</Code>${'z'.repeat(400)}`)))
+      .toBe('API /api/stock-scan → 502: the server returned an error page, not JSON');
+    expect(stockScanFailureReason(new Error('API /api/stock-scan → 502: <h1>502 Bad Gateway</h1>')))
+      .toBe('API /api/stock-scan → 502: the server returned an error page, not JSON');
+  });
+
+  it('does not mistake a front-end chunk-load failure for an unreachable backend', () => {
+    // webpack/Next.js raise this TypeError for a stale asset, not the API host.
+    expect(stockScanFailureReason(new TypeError(
+      'Failed to fetch dynamically imported module: https://app.example/_next/chunk.js',
+    ))).toBe('Failed to fetch dynamically imported module: https://app.example/_next/chunk.js');
+  });
+
+  it('never cuts a clamped reason mid-character', () => {
+    // A UTF-16 slice splits a non-BMP character and leaves a lone surrogate,
+    // which renders as the replacement character.
+    const out = stockScanFailureReason(new Error(`API /api/stock-scan → 500: ${'a'.repeat(197)}😀tail`));
+    expect(out.endsWith('…')).toBe(true);
+    expect(/[\uD800-\uDBFF]$/.test(out.slice(0, -1))).toBe(false);
+    expect(out).not.toContain('\uFFFD');
   });
 
   it("surfaces undici's cause, where the real transport error hides", () => {
@@ -335,27 +426,35 @@ describe('stockScanFailureReason', () => {
       .toBe("Cannot read properties of undefined (reading 'swing')");
   });
 
-  it('replaces an HTML error page with the status line rather than 200 chars of markup', () => {
+  it('replaces a markup error page with the status line rather than 200 chars of it', () => {
     // apiError() falls back to the raw response text, so a proxy's 502 page
     // arrives as the detail. Clamping it alone still put markup in front of
     // the user; only the status line means anything to them.
     const html = `API /api/stock-scan → 502: <html>\n  <head><title>502 Bad Gateway</title></head>\n  <body>${'x'.repeat(500)}</body>\n</html>`;
     expect(stockScanFailureReason(new Error(html)))
-      .toBe('API /api/stock-scan → 502: the server returned an HTML error page');
+      .toBe('API /api/stock-scan → 502: the server returned an error page, not JSON');
   });
 
-  it('collapses and clamps a long plain-text detail', () => {
-    const out = stockScanFailureReason(new Error(`API /api/stock-scan → 500: ${'boom '.repeat(200)}`));
-    expect(out).toHaveLength(200);
+  it('collapses and clamps a long multi-line plain-text detail', () => {
+    // Real newlines and tabs in the fixture — the previous version built its
+    // input from a repeated single-line string, so the "collapses" half of the
+    // name held vacuously and dropping oneLine() would not have failed it.
+    const out = stockScanFailureReason(new Error(
+      `API /api/stock-scan → 500: traceback:\n\tline one\n\tline two ${'boom '.repeat(200)}`,
+    ));
+    expect(out.length).toBeLessThanOrEqual(200);
     expect(out.endsWith('…')).toBe(true);
-    expect(out).not.toContain('\n');
+    expect(out).not.toMatch(/[\n\t]/);
+    expect(out).toContain('traceback: line one line two');
   });
 
-  it('clamps the composed string, hint included', () => {
-    // Clamping only the raw message let a long one plus the hint compose well
-    // past MAX_REASON_CHARS — the overflow the clamp exists for.
+  it('clamps the detail but never the hint', () => {
+    // Clamping the composed string kept 200 chars of "Failed to fetch xxxxx…"
+    // and truncated the hint away — the actionable half of the message.
     const out = stockScanFailureReason(new TypeError(`Failed to fetch ${'x'.repeat(400)}`));
     expect(out.length).toBeLessThanOrEqual(200);
+    expect(out).toContain('(could not reach the backend at http://localhost:8000)');
+    expect(out).toContain('…');
   });
 
   it('never renders an empty reason', () => {

@@ -32,18 +32,46 @@ export function stockPositionCardKey(c: PositionCardData): string {
 }
 
 /** Longest reason that still reads as a sentence in a toast row or the thin
- *  inline error line on step 4. Applied to the FINAL string, hint included —
- *  clamping only the raw message let a long one plus the hint compose past
- *  this. */
+ *  inline error line on step 4. */
 const MAX_REASON_CHARS = 200;
 
-/** `apiError()` falls back to the raw response body when it is not JSON with a
- *  `detail`, so a proxy's or gateway's error page arrives as the "detail".
- *  200 characters of markup is not an explanation. */
-const HTML_DETAIL = /<(?:!doctype|html|head|body|title)\b/i;
+/** Is the backend's "detail" a markup error page rather than prose? Anchored:
+ *  an unanchored probe fired on any detail that MENTIONED a tag (`symbol
+ *  column must not contain <html> tags`) and threw the real explanation away.
+ *  Deliberately wider than HTML — `<?xml` bodies from a load balancer and bare
+ *  `<h1>502 Bad Gateway</h1>` fragments are the same problem. */
+const MARKUP_DETAIL = /^<[!?a-z]/i;
 
-/** Splits apiError()'s `API ${path} → ${status}: ${detail}` (api.ts:64). */
+/** Splits apiError()'s `API ${path} → ${status}: ${detail}` — the throw at
+ *  api.ts's `apiError()`. Change the arrow, the separator or the spacing there
+ *  and every backend detail quietly stops being recognised here, which is why
+ *  `stockScanApiError.test.ts` drives the real apiError() through this. */
 const API_ERROR = /^(API \S+ → \d+)(?::\s*([\s\S]*))?$/;
+
+/** The parts of a thrown value this module reads. Structural, not
+ *  `instanceof`: `instanceof Error` is realm-bound exactly as `instanceof
+ *  TypeError` is, so an error from an iframe, a `vm` context or a fetch
+ *  polyfill built in another realm fails it and loses both its message and
+ *  the transport hint. */
+interface ErrorLike { name: string; message: string; cause?: unknown }
+
+function asErrorLike(value: unknown): ErrorLike | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const e = value as { name?: unknown; message?: unknown; cause?: unknown };
+  if (typeof e.message !== 'string') return null;
+  return { name: typeof e.name === 'string' ? e.name : '', message: e.message, cause: e.cause };
+}
+
+/** `cause` is unconstrained by spec: undici sets an Error, other libraries set
+ *  a string or `{ code: 'ECONNREFUSED' }`. Reading only Errors discarded the
+ *  real explanation for the rest. */
+function causeText(cause: unknown): string {
+  if (typeof cause === 'string') return oneLine(cause);
+  const like = asErrorLike(cause);
+  if (like) return oneLine(like.message);
+  const code = (cause as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? oneLine(code) : '';
+}
 
 /**
  * One human-readable line explaining why a stock scan failed — collapsed to a
@@ -55,8 +83,8 @@ const API_ERROR = /^(API \S+ → \d+)(?::\s*([\s\S]*))?$/;
  *  - `api.ts`'s `apiError()` already formatted it as
  *    `API /api/stock-scan → 422: <detail>`. The backend answered and said what
  *    was wrong; that detail is the entire point of binding the error, so it
- *    goes through as-is — unless the "detail" is an HTML error page, which is
- *    the body text apiError() falls back to and explains nothing, so only the
+ *    goes through as-is — unless the detail is a markup error page, which is
+ *    the raw body apiError() falls back to and explains nothing, so only the
  *    status line survives.
  *  - the request was sent and `fetch` rejected with a transport failure. A
  *    bare "Failed to fetch" explains nothing on its own, so this is the one
@@ -76,64 +104,73 @@ const API_ERROR = /^(API \S+ → \d+)(?::\s*([\s\S]*))?$/;
  *   network hint.
  */
 export function stockScanFailureReason(err: unknown, reachedRequest = true): string {
-  const raw = oneLine(err instanceof Error ? err.message : String(err ?? ''));
-  const cause = err instanceof Error && err.cause instanceof Error
-    // Node/undici hides the real ECONNREFUSED / ENOTFOUND / certificate error
-    // in `cause` behind a bare "fetch failed" — the actual explanation.
-    ? oneLine(err.cause.message)
-    : '';
+  const like = asErrorLike(err);
+  const raw = oneLine(like ? like.message : String(err ?? ''));
+  const cause = like ? causeText(like.cause) : '';
 
   // apiError() builds the `API ${path} → ${status}` head itself and
   // interpolates the backend's detail AFTER it, so the head cannot be forged
-  // from the wire. A thrown string of that shape reads the same way, hence no
-  // `instanceof Error` narrowing.
+  // from the wire.
   const api = API_ERROR.exec(raw);
   if (api) {
     const [, head, detail = ''] = api;
-    return clampReason(HTML_DETAIL.test(detail)
-      ? `${head}: the server returned an HTML error page`
+    return clampReason(MARKUP_DETAIL.test(detail)
+      ? `${head}: the server returned an error page, not JSON`
       : raw);
   }
 
-  const withCause = cause && cause !== raw ? `${raw} — ${cause}` : raw;
-  if (reachedRequest && isTransportFailure(err)) {
+  // `cause` alone when there is no message of our own — otherwise an empty
+  // message composed into a dangling " — ECONNREFUSED".
+  const detail = cause && cause !== raw ? (raw ? `${raw} — ${cause}` : cause) : raw;
+
+  if (reachedRequest && isTransportFailure(like)) {
     const hint = `could not reach the backend at ${API_BASE_URL}`;
-    return clampReason(withCause ? `${withCause} (${hint})` : hint);
+    if (!detail) return clampReason(hint);
+    // Clamp the DETAIL, not the composed string. Clamping the whole thing
+    // truncated the hint off the end — i.e. it ate the actionable half and
+    // kept 200 characters of "Failed to fetch xxxxx…". The hint always
+    // survives; the detail gets whatever room is left (a floor of 20 chars,
+    // for an API_BASE_URL long enough that both cannot fit).
+    const room = Math.max(MAX_REASON_CHARS - hint.length - 3, 20);
+    return `${clampReason(detail, room)} (${hint})`;
   }
-  return clampReason(withCause) || 'unknown error';
+  return clampReason(detail) || 'unknown error';
 }
 
 /**
  * Did the request fail before any response came back?
  *
  * `fetch` signals that with a TypeError — but so does plenty of ordinary
- * broken JavaScript, and round 1 of this file's audit shipped a version where
- * `api.postStockScan is not a function` told the user to go check their
- * backend. Hence the message shape as well as the type.
- *
- * `err.name`, not `instanceof TypeError`: `instanceof` is realm-bound, so a
- * TypeError from an iframe or a fetch polyfill built in another context
- * silently fails it.
+ * broken JavaScript, and an earlier round of this file's audit shipped a
+ * version where `api.postStockScan is not a function` told the user to go
+ * check their backend. Hence the message shape as well as the name, with word
+ * boundaries (`network\s?error` matched the identifier `networkError`) and an
+ * explicit exclusion for webpack's chunk-load error, which is a front-end
+ * asset failure with nothing to do with the API host.
  */
-function isTransportFailure(err: unknown): boolean {
-  if (!(err instanceof Error) || err.name !== 'TypeError') return false;
-  return /failed to fetch|fetch failed|network\s?error|load failed/i.test(err.message);
+function isTransportFailure(err: ErrorLike | null): boolean {
+  if (!err || err.name !== 'TypeError') return false;
+  if (/dynamically imported module/i.test(err.message)) return false;
+  return /\b(?:failed to fetch|fetch failed|network\s?error|load failed)\b/i.test(err.message);
 }
 
 function oneLine(message: string): string {
   return message.replace(/\s+/g, ' ').trim();
 }
 
-function clampReason(message: string): string {
-  return message.length > MAX_REASON_CHARS
-    ? `${message.slice(0, MAX_REASON_CHARS - 1).trimEnd()}…`
+/** Slices by CODE POINT: a UTF-16 slice cuts a non-BMP character (emoji, some
+ *  CJK) in half and leaves a lone surrogate that renders as `�`. */
+function clampReason(message: string, max = MAX_REASON_CHARS): string {
+  const points = [...message];
+  return points.length > max
+    ? `${points.slice(0, max - 1).join('').trimEnd()}…`
     : message;
 }
 
-/** Guards against an earlier run's status response landing after a later
- *  run's and pinning TopBar/Settings to the older scan — the staleness the
- *  refresh exists to prevent. Module-level because the runs it orders are
- *  separate calls, not state any one of them owns. */
+/** Orders the last-run status refreshes: an earlier run's response landing
+ *  after a later run's would pin TopBar/Settings to the older scan — the
+ *  staleness the refresh exists to prevent. Module-level because the runs it
+ *  orders are separate calls, not state any one of them owns. */
 let metaRefreshSeq = 0;
 
 /**
@@ -152,25 +189,35 @@ let metaRefreshSeq = 0;
  *    then hangs left the promise pending forever — no inline error, no toast,
  *    for precisely the unreachable-backend case the hint is written for.
  *
- * Never throws: the scan's own outcome must not depend on this bookkeeping.
+ * Never throws, and never leaves an unhandled rejection: the scan's own
+ * outcome must not depend on this bookkeeping.
  */
 function refreshLastStockScanMeta(): void {
-  const seq = ++metaRefreshSeq;
   try {
-    void api.getLastStockScanStatus().then(
+    // Inside the try, and only once the call is actually being made: bumping
+    // it first meant a `getLastStockScanStatus` that is not callable (a
+    // partially-mocked api) permanently invalidated a refresh that WAS in
+    // flight, and the meta then stopped updating altogether.
+    const request = api.getLastStockScanStatus();
+    const seq = ++metaRefreshSeq;
+    void request.then(
       (s) => {
-        // A later run has already refreshed (or is about to) — its answer is
-        // the current one, so this older response must not overwrite it.
-        if (seq !== metaRefreshSeq) return;
-        useScanStore.getState().setLastStockScanMeta(
-          s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
-        );
+        try {
+          // A later run has already refreshed — its answer is the current one,
+          // so this older response must not overwrite it.
+          if (seq !== metaRefreshSeq) return;
+          useScanStore.getState().setLastStockScanMeta(
+            s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
+          );
+        } catch { /* a malformed payload or a failed store write — bookkeeping only */ }
       },
       // Two-argument form on purpose: this swallows a FAILED REQUEST (backend
       // unreachable — leave the meta stale, StoreHydration catches up on the
-      // next load) and not a throw from the handler above it, which would be a
-      // real bug in the payload's shape and should surface.
-      () => {},
+      // next load) and not a throw from the handler above it, which has its
+      // own guard. Yielding the token back lets an EARLIER refresh that is
+      // still in flight apply its answer, instead of "latest issued" silently
+      // discarding a good response because a later request failed.
+      () => { if (seq === metaRefreshSeq) metaRefreshSeq = seq - 1; },
     );
   } catch { /* not callable (a test double, a partially-mocked api) — ignore */ }
 }
@@ -265,8 +312,16 @@ export async function runStockScan(
     // (step 3) fires this without awaiting a result it can inspect, so a
     // `null` return alone left that path with nothing to show and the
     // step-4 path guessing "backend unreachable" for every failure.
-    store.setStockScanError(stockScanFailureReason(err, reachedRequest));
-    store.setScanState('FAILED');
+    //
+    // Guarded, because scanStore is persist()ed and zustand writes storage
+    // synchronously on every set: whatever made a store write throw in the try
+    // (a QuotaExceededError, blocked storage) makes these throw too, and an
+    // unguarded catch block re-throws — which is how the escape route the try
+    // was widened to close came back out through the failure path instead.
+    try {
+      store.setStockScanError(stockScanFailureReason(err, reachedRequest));
+      store.setScanState('FAILED');
+    } catch { /* see above — the null return is the signal that survives */ }
     return null;
   } finally {
     // Refresh last-run status/strategy from the backend so TopBar/Settings

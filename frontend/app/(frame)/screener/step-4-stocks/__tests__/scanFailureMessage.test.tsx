@@ -77,13 +77,32 @@ describe('step-4-stocks — a failed scan shows why', () => {
   });
 
   it('surfaces a rejection that never became a null return', async () => {
-    // runStockScan sets scanState before its own try opens, so it can still
-    // reject; without the handler's try/catch that escapes onRun() as an
-    // unhandled rejection and the page shows nothing at all.
-    (runStockScan as jest.Mock).mockRejectedValue(new Error('store is not hydrated'));
+    // runStockScan converts its own failures into a null return, but a throw
+    // from setScanState itself still escapes; without the handler's try/catch
+    // that leaves onRun() with an unhandled rejection and the page shows
+    // nothing at all. The mock enters SCANNING before throwing, as the real
+    // one does, because clearing that state is half of what the catch is for.
+    (runStockScan as jest.Mock).mockImplementation(async () => {
+      useScanStore.setState({ scanState: 'SCANNING' } as never);
+      throw new Error('store is not hydrated');
+    });
     await runScan();
     expect(await screen.findByText('Scan failed — store is not hydrated')).toBeInTheDocument();
     // …and the Run button is usable again: the throw left SCANNING set.
     expect(useScanStore.getState().scanState).toBe('FAILED');
+  });
+
+  it('still shows the reason when the store write is itself what failed', async () => {
+    // The case this catch is written for is `setScanState` throwing. Resetting
+    // the state BEFORE showing the message meant that exact case threw again
+    // and the user was told nothing — so the order is load-bearing, not style.
+    (runStockScan as jest.Mock).mockRejectedValue(new Error('QuotaExceededError'));
+    const spy = jest.spyOn(useScanStore.getState(), 'setScanState')
+      .mockImplementation(() => { throw new Error('QuotaExceededError'); });
+
+    await runScan();
+
+    expect(await screen.findByText('Scan failed — QuotaExceededError')).toBeInTheDocument();
+    spy.mockRestore();
   });
 });

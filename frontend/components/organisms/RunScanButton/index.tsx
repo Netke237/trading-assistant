@@ -114,8 +114,18 @@ export function RunScanButton() {
           toastFailure(useScanStore.getState().stockScanError ?? 'unknown error');
         },
         (err: unknown) => {
-          useScanStore.getState().setScanState('FAILED');
+          // Reason FIRST. This handler exists for a throw runStockScan could
+          // not convert into a null return — `setScanState` itself failing —
+          // so doing the state reset first meant the one case it is written
+          // for threw again and the user was told nothing at all.
           toastFailure(stockScanFailureReason(err, false));
+          try {
+            // SCANNING is already set, and leaving it there disables the Run
+            // button for the rest of the session. The reason goes to the store
+            // too, or a stale one from an earlier run outlives this FAILED.
+            useScanStore.getState().setStockScanError(stockScanFailureReason(err, false));
+            useScanStore.getState().setScanState('FAILED');
+          } catch { /* the store is what failed — the toast already landed */ }
         },
       );
       return;
