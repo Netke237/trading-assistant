@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 from app.services.premium_stop import resolve_premium_stop_pct
+from app.services.config_loader import conviction_multiplier, load_regime_sizing
 
 _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -91,19 +92,21 @@ def _market_is_open(symbol: str) -> bool:
         return False
 
 
-_SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
-
-
-@functools.lru_cache(maxsize=1)
 def _load_scoring_config() -> dict:
-    """Load regime_sizing block from scoring_rules.yaml (cached)."""
-    try:
-        with open(_SCORING_CONFIG_PATH) as f:
-            return yaml.safe_load(f).get("regime_sizing", {})
-    except Exception as exc:
-        logger.warning("_load_scoring_config: failed to load %s — vol sizing disabled: %s",
-                       _SCORING_CONFIG_PATH, exc)
-        return {}
+    """Return the normalised regime_sizing block.
+
+    Kept as a NAMED SEAM — tests/test_phase_g_arm_pick.py:287 patches it by
+    name — but the body is now one delegation to config_loader, so this path
+    and the scan card read the same block through the same rule.
+
+    The `@functools.lru_cache` is deliberately gone: `load_scoring_cfg()` is
+    already cached, this has exactly one caller, and nothing anywhere calls
+    `cache_clear()` on it. The try/except did NOT go with it — it moved into
+    `load_regime_sizing`, which is load-bearing because `fire()` disarms
+    BEFORE calling `_apply_vol_sizing`, so a propagating exception would
+    destroy the armed pick with no order and no retry.
+    """
+    return load_regime_sizing()
 
 
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
@@ -121,13 +124,18 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     if conviction is None:
         return strategy
 
-    min_mult        = float(cfg.get("min_mult", 0.5))
-    full_conviction = float(cfg.get("full_conviction_pct", 40))
-
     # Direction-aware: BUY scales with bullish conviction; SELL scales with bearish conviction
-    # (bearish conviction = 100 - bullish conviction, capped to full_conviction scale)
+    # (bearish conviction = 100 - bullish conviction, capped to full_conviction scale).
+    # The direction derivation stays here — it is the fire path's own concern,
+    # not the formula's. NOTE the two paths still DERIVE conviction differently
+    # (per-symbol OMM on the card, market-wide cached here), which this change
+    # does not close; `100 - conviction` is not equivalent to
+    # compute_omm(direction="Bearish").
     directional_conv = conviction if strategy.action == "BUY" else (100 - conviction)
-    mult = max(min_mult, min(1.0, directional_conv / full_conviction))
+    # The canonical linear ramp, shared with the scan card. This replaced a
+    # step floor — `max(min_mult, min(1.0, frac))` — which sized the SAME setup
+    # up to 50% smaller than the card on the shipped, valid config.
+    mult = conviction_multiplier(directional_conv, cfg)
     adjusted_qty = max(1, round(strategy.quantity * mult))
 
     if adjusted_qty == strategy.quantity:

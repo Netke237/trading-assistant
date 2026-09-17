@@ -437,8 +437,22 @@ def test_fire_proceeds_when_market_open(mocker):
 
 # ── Vol-scaled sizing (Task 8) ─────────────────────────────────────────────────
 
-def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
-    """conviction=20, full=40 → mult=0.5 → quantity=2 halved to 1."""
+def test_vol_sizing_reduces_quantity_at_low_conviction(mocker):
+    """conviction=20, full=40 → mult=0.75 → quantity=4 reduced to 3.
+
+    WAS `..._halves_quantity...`, asserting 2 → 1 off a mult of 0.5. That was
+    the STEP FLOOR, which the 2026-09-17 regime-sizing unification replaced
+    with the card's linear ramp (`lo + (1-lo)*frac`) on Kenneth's confirmed
+    decision — he was told and accepted that live auto-trades get BIGGER at
+    mid conviction, 0.500 → 0.750 at conviction 20. So the old numbers are the
+    defect, not the baseline.
+
+    THE QUANTITY MOVED FROM 2 TO 4 ON PURPOSE. At the ramp's 0.75 a quantity of
+    2 gives `round(1.5)` = 2 under banker's rounding — unchanged, so
+    `_apply_vol_sizing` returns the strategy untouched and the test would still
+    pass while asserting nothing about sizing at all. 4 → 3 keeps the reduction
+    observable.
+    """
     from app.data.ibkr_paper import OrderResult
     captured = {}
     def mock_execute(s):
@@ -453,13 +467,13 @@ def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
     strategy = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=2, order_type="LMT",
+        action="BUY", quantity=4, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
     )
     svc.arm(strategy)
     svc.fire()
-    assert captured.get("quantity") == 1, "Low conviction must halve quantity from 2 to 1"
+    assert captured.get("quantity") == 3, "Low conviction must reduce quantity from 4 to 3"
 
 
 def test_vol_sizing_keeps_full_quantity_at_high_conviction(mocker):
@@ -511,8 +525,14 @@ def test_vol_sizing_skipped_when_conviction_is_none(mocker):
     assert captured.get("quantity") == 3
 
 
-def test_vol_sizing_sell_halved_in_strongly_bullish_market(mocker):
-    """SELL at conviction=80 (strongly bullish) → bearish_conv=20 < full_conviction=40 → min_mult=0.5."""
+def test_vol_sizing_sell_reduced_in_strongly_bullish_market(mocker):
+    """SELL at conviction=80 (strongly bullish) → bearish_conv=20, which on the
+    canonical ramp gives mult=0.75 → quantity 4 reduced to 3.
+
+    WAS `..._sell_halved...`, asserting 4 → 2 off the step floor's 0.5. Same
+    2026-09-17 unification as the BUY case above; the direction derivation
+    (`100 - conviction`) is unchanged and still lives in auto_trader.
+    """
     from app.data.ibkr_paper import OrderResult
     captured = {}
     def mock_execute(s):
@@ -532,8 +552,8 @@ def test_vol_sizing_sell_halved_in_strongly_bullish_market(mocker):
         entry_premium=2.50, portfolio_value=100_000.0,
     ))
     svc.fire()
-    assert captured.get("quantity") == 2, (
-        "SELL in strongly bullish market (conviction=80) must halve from 4 to 2"
+    assert captured.get("quantity") == 3, (
+        "SELL in strongly bullish market (conviction=80) must reduce from 4 to 3"
     )
 
 

@@ -67,6 +67,7 @@ from app.scoring.exit_plan import compute_final_stop, compute_target_row
 from app.services.config_loader import (
     load_first_passage_cfg as _fp_cfg, load_exit_plan_cfg,
     load_direction_conviction_min_trend,
+    conviction_multiplier, load_regime_sizing,
 )
 # _load_config is lru_cached AND cache_cleared by POST /settings/risk, so the
 # risk budget below follows a saved settings change without a restart. A
@@ -136,12 +137,14 @@ def _load_regime_cfg(horizon: str) -> dict:
 
 
 def _conviction_mult(conviction_pct: int, sizing: dict) -> float:
-    if not sizing.get("enabled", False):
-        return 1.0
-    full = sizing["full_conviction_pct"]
-    lo = sizing["min_mult"]
-    frac = max(0.0, min(conviction_pct / full, 1.0)) if full else 0.0
-    return lo + (1.0 - lo) * frac
+    """Delegates to the canonical multiplier, shared with the auto-trade fire
+    path. The name is kept because tests/test_stock_scan_regime.py imports it;
+    it now pins the canonical function rather than a second copy of the
+    formula. Bare-indexing `min_mult` / `full_conviction_pct` used to make a
+    missing key raise KeyError into the per-symbol handler below, rejecting
+    EVERY symbol with `reason: "'min_mult'"` — HTTP 200, zero candidates,
+    nothing naming the file."""
+    return conviction_multiplier(conviction_pct, sizing)
 
 router = APIRouter(prefix="/api", tags=["stock-scan"])
 logger = logging.getLogger(__name__)
@@ -964,7 +967,7 @@ async def _process_stock(
                     if _SEVERITY.get(card.status, 0) < _SEVERITY["CAUTION"]:
                         card = dataclasses.replace(card, status="CAUTION")
 
-            sizing_cfg = full_cfg.get("regime_sizing", {"enabled": False})
+            sizing_cfg = load_regime_sizing()
             mult = _conviction_mult(regime_signal["conviction_pct"], sizing_cfg) if regime_signal else 1.0
             sized_risk_pct = (req.risk_pct * mult) if req.risk_pct is not None else None
             sized_risk_fixed = (req.risk_fixed_usd * mult) if req.risk_fixed_usd is not None else None

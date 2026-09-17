@@ -5,11 +5,14 @@ multiple modules (scan router, fundamentals_gate, etc.) need the same file.
 """
 from __future__ import annotations
 
+import logging
 import math
 from functools import lru_cache
 from pathlib import Path
 
 _CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -338,3 +341,156 @@ def merge_reward_risk_overrides(overrides: dict | None) -> dict:
             )
         merged[cfg_key] = val
     return merged
+
+
+# ── regime_sizing: one normaliser, one formula ────────────────────────────
+#
+# `regime_sizing` has two consumers — the scan card (routers/stock_scan.py's
+# `_conviction_mult`) and the auto-trade fire path (services/auto_trader.py's
+# `_apply_vol_sizing`). Until 2026-09-17 they computed DIFFERENT multipliers
+# over the same config block: a linear ramp on the card, a step floor on the
+# fire path, diverging by up to 50% on the SHIPPED, VALID config. Kenneth
+# confirmed the linear ramp as canonical, so both now route through
+# `conviction_multiplier` below and the step floor is gone.
+#
+# A router must not be imported by a service, which is why the canonical
+# formula lives here rather than in stock_scan.py. Precedent:
+# `load_direction_conviction_min_trend` above, the shared resolver built for
+# the bearish direction-conviction gate.
+
+# The shipped file's own numbers (config/scoring_rules.yaml regime_sizing),
+# which are also auto_trader's historical `.get` defaults. Out-of-range values
+# FALL BACK to these rather than being CLAMPED to a bound, because clamping to
+# either bound is itself a wrong number on a broker order:
+#   - clamp min_mult<=0 to 0.0  -> sized_risk_pct 0.0 hits _position_size's
+#     `(risk_pct or 0.01)` falsy fall-through and DOUBLES the share count
+#     (100 shares/$500 unscaled becomes 200 shares/$1,000).
+#   - clamp min_mult>1 to 1.0   -> a decimal typo (`5` for `0.5`) silently
+#     sizes every position at FULL size at every conviction.
+# Falling back returns the shipped curve [0.5, 0.625, 0.75, 0.875, 1.0] over
+# conviction 0..40 instead: monotone, never above 1.0, never above what a
+# correct config would have given.
+_REGIME_SIZING_MIN_MULT_DEFAULT = 0.5
+_REGIME_SIZING_FULL_CONVICTION_DEFAULT = 40.0
+
+
+def _is_finite_number(value) -> bool:
+    """True for a real, finite int/float. Excludes bool (which is an int) and
+    NaN/inf — NaN matters because `nan > 0.0` is False but `nan <= 0.0` is too,
+    so a bare comparison would let NaN through one of the checks below."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _normalise_regime_sizing(block) -> tuple[dict, list[str]]:
+    """Return `(normalised_block, problems)` for a raw `regime_sizing` mapping.
+
+    PURE: no I/O, no logging. The caller decides what to do with `problems`;
+    `load_regime_sizing` logs them, `conviction_multiplier` discards them
+    (the loader already logged, and this function is idempotent — a block that
+    came through `load_regime_sizing` is unchanged by a second pass).
+
+    The rule is FALL BACK, not CLAMP — see the constants above for why.
+    """
+    problems: list[str] = []
+
+    if not isinstance(block, dict):
+        return {"enabled": False}, [
+            f"regime_sizing is {type(block).__name__}, not a mapping "
+            f"— regime sizing disabled"
+        ]
+
+    # Anything other than a literal True disables the block, which is what both
+    # paths did before this change.
+    if block.get("enabled") is not True:
+        return {"enabled": False}, problems
+
+    lo = block.get("min_mult")
+    if not (_is_finite_number(lo) and 0.0 < lo <= 1.0):
+        problems.append(
+            f"regime_sizing.min_mult={lo!r} is outside the usable range "
+            f"(0 < x <= 1.0) — falling back to the shipped "
+            f"{_REGIME_SIZING_MIN_MULT_DEFAULT}"
+        )
+        lo = _REGIME_SIZING_MIN_MULT_DEFAULT
+
+    full = block.get("full_conviction_pct")
+    if not (_is_finite_number(full) and full > 0.0):
+        problems.append(
+            f"regime_sizing.full_conviction_pct={full!r} is not a positive "
+            f"number — falling back to the shipped "
+            f"{_REGIME_SIZING_FULL_CONVICTION_DEFAULT}"
+        )
+        full = _REGIME_SIZING_FULL_CONVICTION_DEFAULT
+
+    return {
+        "enabled": True,
+        "min_mult": float(lo),
+        "full_conviction_pct": float(full),
+    }, problems
+
+
+def load_regime_sizing() -> dict:
+    """Return the normalised `regime_sizing` block, logging any problems.
+
+    The try/except is NOT optional and must not be dropped. `load_scoring_cfg`
+    has no error handling of its own, and this function's fire-path caller
+    (`auto_trader._apply_vol_sizing`) runs from `fire()` AFTER the disarm:
+
+        223:  strategy = self._state.strategy
+        224:  self._state.armed = False
+        225:  self._state.strategy = None
+        228:  strategy = _apply_vol_sizing(strategy)
+
+    So a propagating exception destroys the armed pick, places no order, and
+    has no retry path. Returning a disabled block instead preserves the
+    historical behaviour exactly: sizing off, the order fires at the typed
+    quantity.
+    """
+    try:
+        block = load_scoring_cfg().get("regime_sizing", {})
+    except Exception as exc:
+        logger.error(
+            "load_regime_sizing: failed to read scoring_rules.yaml "
+            "— regime sizing disabled: %s", exc,
+        )
+        return {"enabled": False}
+
+    normalised, problems = _normalise_regime_sizing(block)
+    for problem in problems:
+        logger.error("load_regime_sizing: %s", problem)
+    return normalised
+
+
+def conviction_multiplier(conviction_pct: float, sizing: dict) -> float:
+    """THE canonical position-size multiplier for a conviction score.
+
+    Normalises `sizing` AGAIN before computing. That is deliberate and is the
+    only placement that works — the guard belongs at the POINT OF USE, not at
+    the loader:
+
+      - `auto_trader._load_scoring_config` is a mockable named seam that
+        returns a raw dict (tests/test_phase_g_arm_pick.py:287 patches it), so
+        a guard at the loader is bypassed by every caller supplying a dict.
+      - The fire path's only historical bound was applied inline at the point
+        of use; moving the sole bound to the loader would be a net LOSS of
+        safety there.
+    """
+    normalised, _ = _normalise_regime_sizing(sizing)
+    if not normalised.get("enabled"):
+        return 1.0
+
+    lo = normalised["min_mult"]
+    full = normalised["full_conviction_pct"]
+
+    # `max(0.0, ...)`: conviction is legitimately negative — regime_gate's
+    # headwind_reject_pct is -40. Without it, conviction -50 on the shipped
+    # config returns -0.125 rather than the floor 0.5.
+    # `if full else 0.0`: normalisation already guarantees full > 0, and this
+    # is kept anyway so no future caller can reintroduce the uncaught
+    # ZeroDivisionError this function exists to remove.
+    frac = max(0.0, min(conviction_pct / full, 1.0)) if full else 0.0
+    return lo + (1.0 - lo) * frac
