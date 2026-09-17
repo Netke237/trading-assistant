@@ -24,16 +24,48 @@
   white-space: normal;
   pointer-events: none;
   opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s, visibility 0.12s;
   z-index: 200;
   box-shadow: var(--shadow-elevated);
+
+  /* `display: none`, NOT `visibility: hidden`, and the difference is the whole
+   * reason this rule has a comment.
+   *
+   * A hidden absolutely-positioned box still contributes to the SCROLLABLE
+   * OVERFLOW of its ancestors -- `visibility: hidden` removes it from paint and
+   * from the a11y tree, but not from layout. This panel is 220px wide and
+   * centred on its trigger (`left: 50%` + `translateX(-50%)`), so it reached
+   * 110px past each edge of whatever it was attached to and pushed that much
+   * scroll width into the nearest scrolling ancestor -- on a badge that nobody
+   * was hovering.
+   *
+   * That was the source of every "constant" horizontal scrollbar in the
+   * screener: overflow that did not move when the viewport doubled, because it
+   * was a fixed 220px box, not a proportion. Measured against the arithmetic
+   * 110 + half the trigger: Step 5's GATE badge 80px wide -> 150px of content
+   * (40 + 110); the Trade Card's SymbolHeader badges 70px -> 145 and 64px ->
+   * 142. Every figure matched, which is what identified this rule as the cause
+   * rather than the eight separate layouts it was surfacing in.
+   *
+   * `display: none` costs nothing here: the panel was already unreadable by
+   * assistive tech under `visibility: hidden`, and `allow-discrete` +
+   * `@starting-style` keep the fade. */
+  display: none;
+  transition: opacity 0.12s, display 0.12s allow-discrete;
 }
 
 .wrap:hover .tip,
 .wrap:focus-within .tip {
   opacity: 1;
-  visibility: visible;
+  display: block;
+}
+
+/* Without this the panel would snap in at full opacity: a discrete property
+ * animating to `display: block` has no "from" state to fade out of. */
+@starting-style {
+  .wrap:hover .tip,
+  .wrap:focus-within .tip {
+    opacity: 0;
+  }
 }
 
 /* position bottom */
