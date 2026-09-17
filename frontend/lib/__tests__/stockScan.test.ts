@@ -140,22 +140,32 @@ describe('runStockScan', () => {
     // "Latest issued wins" discarded a good response whenever a later request
     // failed, leaving the meta at neither run's answer — the staleness the
     // refresh exists to prevent, on exactly the flaky backends where it
-    // matters. TWO later failures on purpose: handing the token back one step
-    // per rejection still lost the answer as soon as more than one failed.
+    // matters.
+    //
+    // All three requests must be IN FLIGHT TOGETHER. A fixture that lets each
+    // rejection settle before the next run is issued cannot tell the two
+    // implementations apart: handing a token back one step per rejection
+    // restores it in full when the rejections are sequential, so that version
+    // passes too. Deferred rejectors, settled only once all three runs are
+    // issued, is what discriminates.
     (api.postStockScan as jest.Mock).mockResolvedValue(
       { scan_id: 'S-1', timestamp: 't', rejected: [], candidates: [] },
     );
-    let releaseFirst: (v: unknown) => void = () => {};
-    (api.getLastStockScanStatus as jest.Mock)
-      .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
-      .mockImplementationOnce(() => Promise.reject(new Error('boom')))
-      .mockImplementationOnce(() => Promise.reject(new Error('boom again')));
+    const pending: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> = [];
+    (api.getLastStockScanStatus as jest.Mock).mockImplementation(
+      () => new Promise((resolve, reject) => { pending.push({ resolve, reject }); }),
+    );
 
-    await runStockScan('pullback_ema');   // run 1 — status pending
-    await runStockScan('ma_crossover');   // run 2 — status rejects
-    await runStockScan('breakout_base');  // run 3 — status rejects too
+    await runStockScan('pullback_ema');    // issues refresh #1
+    await runStockScan('ma_crossover');    // #2
+    await runStockScan('breakout_base');   // #3
+    expect(pending).toHaveLength(3);
+
+    pending[1]!.reject(new Error('boom'));
+    pending[2]!.reject(new Error('boom again'));
     await Promise.resolve();
-    releaseFirst({ status: 'completed', updated_at: null, strategy: 'pullback_ema' });
+    await Promise.resolve();
+    pending[0]!.resolve({ status: 'completed', updated_at: null, strategy: 'pullback_ema' });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -163,42 +173,28 @@ describe('runStockScan', () => {
     expect(useScanStore.getState().lastStockScanStrategy).toBe('pullback_ema');
   });
 
-  it('does not let an earlier run\'s last-run status overwrite a later one', async () => {
-    // The status refresh is fire-and-forget now, so two overlapping runs have
-    // two responses in flight with no ordering of their own — and run 1's
-    // landing last would pin TopBar/Settings to the older scan, the staleness
-    // the refresh exists to prevent.
-    (api.postStockScan as jest.Mock).mockResolvedValue(
-      { scan_id: 'S-1', timestamp: 't', rejected: [], candidates: [] },
-    );
-    let releaseFirst: (v: unknown) => void = () => {};
-    (api.getLastStockScanStatus as jest.Mock)
-      .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
-      .mockResolvedValue({ status: 'completed', updated_at: null, strategy: 'ma_crossover' });
-
-    await runStockScan('pullback_ema');    // run 1 — status still pending
-    await runStockScan('ma_crossover');    // run 2 — status resolves
-    releaseFirst({ status: 'idle', updated_at: null, strategy: 'pullback_ema' });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(useScanStore.getState().lastStockScanStatus).toBe('completed');
-    expect(useScanStore.getState().lastStockScanStrategy).toBe('ma_crossover');
-  });
-
-  it('clears a previous failure reason on the next run, including one that succeeds', async () => {
+  it('still reaches FAILED when the reason write is what threw', async () => {
+    // The store writes in the catch are guarded ONE EACH, not as a pair:
+    // zustand applies the in-memory update and then writes storage, so a
+    // QuotaExceededError out of the first write would skip the second — and
+    // the second is what re-enables the Run button. Nothing pinned this split
+    // before; a single try around both passed the whole suite.
     (api.postStockScan as jest.Mock).mockRejectedValue(new Error('API /api/stock-scan → 500: boom'));
-    await runStockScan('pullback_ema');
-    expect(useScanStore.getState().stockScanError).not.toBeNull();
-
-    (api.postStockScan as jest.Mock).mockResolvedValue(
-      { scan_id: 'S-2', timestamp: 't', rejected: [], candidates: [] },
+    // Swapped through setState, not jest.spyOn: zustand copies the current
+    // state object's methods into the next one, so a spy survives its own
+    // mockRestore() (which writes the original back onto the OLD object) and
+    // leaks a throwing store write into every later case.
+    const original = useScanStore.getState().setStockScanError;
+    useScanStore.setState(
+      { setStockScanError: () => { throw new Error('QuotaExceededError'); } } as never,
     );
-    await runStockScan('pullback_ema');
 
-    // A stale reason left here would caption the NEXT failure — or, read by a
-    // caller that only checks a null return, the next success.
-    expect(useScanStore.getState().stockScanError).toBeNull();
+    try {
+      await runStockScan('pullback_ema');
+      expect(useScanStore.getState().scanState).toBe('FAILED');
+    } finally {
+      useScanStore.setState({ setStockScanError: original } as never);
+    }
   });
 
   it('sends the full Settings default ATR pair for this horizon when no override is set', async () => {

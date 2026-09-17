@@ -141,6 +141,8 @@ export function stockScanFailureReason(err: unknown, reachedRequest = true): str
  *  Chrome/WebKit "Failed to fetch", undici "fetch failed", Safari "Load
  *  failed", Firefox "NetworkError when attempting to fetch resource.".
  *
+ *  (Plus a bare "Network error", which some polyfills and older engines send.)
+ *
  *  Anchored, and matched whole rather than searched. Searching for these
  *  phrases inside a longer message is what kept re-admitting the misdirection
  *  this module exists to remove: word boundaries still matched the identifier

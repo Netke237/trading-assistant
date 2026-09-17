@@ -30,6 +30,31 @@ jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }))
 
 const mockPostScanBody = api.postScanBody as jest.MockedFunction<typeof api.postScanBody>;
 
+/**
+ * Replace a store method with one that throws, and hand back the undo.
+ *
+ * NOT jest.spyOn: zustand builds the next state object by copying the current
+ * one, so a spied method is copied along with it — and mockRestore() then
+ * writes the original back onto the OLD object while the live state keeps the
+ * spy. A throwing store write installed that way leaks into every later case
+ * in the file. Going through setState puts it on (and takes it off) whatever
+ * object is live.
+ */
+function breakStoreWrite(key: 'setScanState' | 'setStockScanError'): () => void {
+  const original = useScanStore.getState()[key];
+  useScanStore.setState({ [key]: () => { throw new Error('QuotaExceededError'); } } as never);
+  return () => useScanStore.setState({ [key]: original } as never);
+}
+
+function breakAddToast(): { restore: () => void; calls: number } {
+  const original = useAlertStore.getState().addToast;
+  const state = { restore: () => useAlertStore.setState({ addToast: original } as never), calls: 0 };
+  useAlertStore.setState({
+    addToast: () => { state.calls += 1; throw new Error('QuotaExceededError'); },
+  } as never);
+  return state;
+}
+
 function resetStores() {
   useScanStore.setState({
     scanState: 'IDLE',
@@ -45,6 +70,14 @@ function resetStores() {
 }
 
 describe('RunScanButton — conflict suppression wiring', () => {
+  afterEach(() => {
+    // Several cases below spy on a zustand store method and make it THROW.
+    // clearAllMocks does not undo an implementation, and a case that fails
+    // before its own mockRestore() would otherwise leave that throwing method
+    // installed for every case after it.
+    jest.restoreAllMocks();
+  });
+
   beforeEach(() => {
     resetStores();
     jest.clearAllMocks();
@@ -187,19 +220,69 @@ describe('RunScanButton — conflict suppression wiring', () => {
     // setScanState, because that is the write the old order performed FIRST —
     // mocking one the old order never called would have left this green
     // against the very reordering it is here to pin.
-    const spy = jest.spyOn(useScanStore.getState(), 'setScanState')
-      .mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    const undo = breakStoreWrite('setScanState');
     const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
 
-    render(<RunScanButton />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
-    });
+    try {
+      render(<RunScanButton />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+      });
 
-    expect(addToastSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'Stock scan failed — QuotaExceededError' }),
-    );
-    spy.mockRestore();
+      expect(addToastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: 'Stock scan failed — QuotaExceededError' }),
+      );
+    } finally { undo(); }
+  });
+
+  it('still reaches FAILED when the reason write is what threw', async () => {
+    // Same one-try-each split as the step-4 belt: the first write throwing
+    // must not skip the FAILED reset that re-enables the Run button.
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+    (runStockScan as jest.Mock).mockRejectedValue(new Error('QuotaExceededError'));
+    const undo = breakStoreWrite('setStockScanError');
+
+    try {
+      render(<RunScanButton />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+      });
+
+      expect(useScanStore.getState().scanState).toBe('FAILED');
+    } finally { undo(); }
+  });
+
+  it('does not leave an unhandled rejection when the toast itself fails', async () => {
+    // runStockScan catches its own store writes, so under blocked storage it
+    // RETURNS NULL rather than rejecting — the null branch is the one that
+    // runs, and addToast writes a persist()ed store, so it can throw there
+    // too. Unguarded, that throw escapes a void-discarded chain entirely.
+    useScanStore.setState({
+      screenerMode: 'stocks', activeStrategy: 'pullback_ema',
+      stockScanError: 'API /api/stock-scan → 500: boom',
+    } as any);
+    (runStockScan as jest.Mock).mockResolvedValue(null);
+    const toast = breakAddToast();
+    const rejections: unknown[] = [];
+    const onRejection = (e: unknown) => { rejections.push(e); };
+    process.on('unhandledRejection', onRejection);
+
+    try {
+      render(<RunScanButton />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+      });
+      // A macrotask turn: node emits 'unhandledRejection' after the microtask
+      // queue drains, so a same-tick flush would miss it. (jsdom has no
+      // setImmediate.)
+      await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+      expect(toast.calls).toBe(1);
+      expect(rejections).toHaveLength(0);
+    } finally {
+      process.off('unhandledRejection', onRejection);
+      toast.restore();
+    }
   });
 
   it('shows a toast and does not call runStockScan when Stocks mode has no activeStrategy selected (M6)', async () => {

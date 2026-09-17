@@ -24,6 +24,20 @@ jest.mock('@/components/organisms/StrategyParamsPanel', () => ({ StrategyParamsP
 jest.mock('@/components/organisms/ScanFunnel', () => ({ ScanFunnel: () => null }));
 jest.mock('@/components/atoms/WatchStar', () => ({ WatchStar: () => null }));
 
+/**
+ * Replace a store method with one that throws, and hand back the undo.
+ *
+ * NOT jest.spyOn: zustand builds the next state object by copying the current
+ * one, so a spied method is copied along with it and mockRestore() then writes
+ * the original back onto the OLD object while the live state keeps the spy —
+ * a throwing store write installed that way leaks into every later case.
+ */
+function breakStoreWrite(key: 'setScanState' | 'setStockScanError'): () => void {
+  const original = useScanStore.getState()[key];
+  useScanStore.setState({ [key]: () => { throw new Error('QuotaExceededError'); } } as never);
+  return () => useScanStore.setState({ [key]: original } as never);
+}
+
 function failWith(reason: string | null) {
   (runStockScan as jest.Mock).mockImplementation(async () => {
     useScanStore.setState({ stockScanError: reason } as never);
@@ -97,12 +111,23 @@ describe('step-4-stocks — a failed scan shows why', () => {
     // the state BEFORE showing the message meant that exact case threw again
     // and the user was told nothing — so the order is load-bearing, not style.
     (runStockScan as jest.Mock).mockRejectedValue(new Error('QuotaExceededError'));
-    const spy = jest.spyOn(useScanStore.getState(), 'setScanState')
-      .mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    const undo = breakStoreWrite('setScanState');
 
-    await runScan();
+    try {
+      await runScan();
+      expect(await screen.findByText('Scan failed — QuotaExceededError')).toBeInTheDocument();
+    } finally { undo(); }
+  });
 
-    expect(await screen.findByText('Scan failed — QuotaExceededError')).toBeInTheDocument();
-    spy.mockRestore();
+  it('still reaches FAILED when the reason write is what threw', async () => {
+    // The belt guards its two store writes ONE EACH: a throw out of the first
+    // must not skip the FAILED reset, which is what re-enables the Run button.
+    (runStockScan as jest.Mock).mockRejectedValue(new Error('QuotaExceededError'));
+    const undo = breakStoreWrite('setStockScanError');
+
+    try {
+      await runScan();
+      expect(useScanStore.getState().scanState).toBe('FAILED');
+    } finally { undo(); }
   });
 });

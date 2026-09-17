@@ -111,7 +111,15 @@ export function RunScanButton() {
       void runStockScan(activeStrategy).then(
         (res) => {
           if (res) return;
-          toastFailure(useScanStore.getState().stockScanError ?? 'unknown error');
+          // Guarded for the same reason the rejection branch below is, and
+          // more urgently: runStockScan catches its own store writes now, so
+          // under blocked storage it RETURNS NULL rather than rejecting —
+          // this is the branch that actually runs, and an unguarded throw out
+          // of a persist()ed addToast escapes a void-discarded chain as an
+          // unhandled rejection with nothing shown.
+          try {
+            toastFailure(useScanStore.getState().stockScanError ?? 'unknown error');
+          } catch { /* storage is down; nothing left to show with */ }
         },
         (err: unknown) => {
           // Reason FIRST. This handler exists for a throw runStockScan could
