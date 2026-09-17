@@ -874,7 +874,8 @@ cited as precedent.
 Left running on an invalid config: pre-breakout and fib-pullback scans,
 first-passage, exit-plan, and every monitor and scheduler.
 
-### NEEDS RE-CONFIRMATION — nine items, three new in round 3
+### 9.7 CONFIRMED (ramp). 9.10 and 9.11 added and confirmed 2026-09-17.
+### The rest still await Kenneth.
 
 **9.1 — Does a config failure disarm auto-trade?** The posture says restrict the
 scan and nothing else, decided on the belief that nothing outside the scan
@@ -928,9 +929,21 @@ position-sizing decision, not an implementation detail:
 - `stock_scan`'s `lo + (1-lo)·f` — a **linear ramp** from floor to full.
 
 The ramp is the smoother behaviour and is what the scan card has shown all
-along; the step is what has actually sized live auto-trades. **Recommendation:
-the linear ramp**, because it is what Kenneth has been reading on screen. But
-this changes live auto-trade sizing either way, so it is his call.
+along; the step is what has actually sized live auto-trades. **CONFIRMED BY KENNETH 2026-09-17: THE LINEAR RAMP.** Both paths unify on
+`lo + (1.0 - lo) * frac`. `auto_trader`'s step floor is what changes, not the card.
+
+HE WAS TOLD THE COST AND TOOK IT, recorded here so it does not surface later as a
+surprise: the ramp makes live auto-trades BIGGER at mid conviction — 0.500 to
+0.750 at conviction 20, a 50% increase in position size on those fires. The step
+is what produced his auto-trade history to date. The ramp wins because it is what
+the card has shown him all along, and because the step gives no gradation at all
+between floor and full size (conviction 10 and 20 size identically).
+
+TWO LIVE BUGS IN THE SAME CODE JOIN THIS CHANGE, both from §2.2: the card's
+formula INVERTS when `min_mult > 1` (strongest signal, smallest position — the
+same shape as the inverted direction-conviction gate that started this plan), and
+`full_conviction_pct: 0` is an uncaught `ZeroDivisionError` on the fire path
+(`auto_trader.py:130`) that the card already guards (`stock_scan.py:143`).
 
 **9.8 — NEW (round 3). Is a declared family's subtree CLOSED to undeclared
 keys?** §7 3.3 now says yes, and it has to for Stage 3 to be worth building:
@@ -946,6 +959,33 @@ now requires the clamp to record itself — log at ERROR, mark the card, write t
 The alternative is to refuse the scan outright on an out-of-range `min_mult`.
 **Recommendation: clamp and record**, matching the never-refuse-to-boot posture;
 refusing would restrict more than the scan.
+
+**9.10 — CONFIRMED 2026-09-17. AUTO-TRADE FIRING INTO A CONTRACT ALREADY HELD:
+WARN, DO NOT BLOCK — AND FIX THE BOOKS FIRST.** Kenneth's call: show a popup and
+allow the fire, because the price may legitimately differ and a second entry can
+be intended. The popup must show the EXISTING position's size and entry price.
+
+VERIFIED FROM THE CODE, not from any spec: there is no check at all today.
+`auto_trader.py:149-152` — *"Auto-trade is structurally entry-only — arm()/fire()
+have no existing-position lookup anywhere"* — with `effect="OPEN"` hardcoded. It
+fires a second buy-to-open with nothing asked.
+
+THE DUPLICATE IS THE SMALLER HALF, and this decides the order of work:
+`auto_trader.py:48` — *"THE FIRE PATH CREATES NO PortfolioPosition TODAY."* Every
+auto-trade fire is already absent from the portfolio, held contract or not, so
+exposure is understated by the whole fired order on EVERY fire. A duplicate
+warning over books that do not record the trade buys very little. Book the fired
+position first; add the warning second.
+
+**9.11 — CONFIRMED 2026-09-17. ALERTS ALWAYS FIRE; ONLY THE SCAN IS RESTRICTED;
+THE BANNER NAMES THE PARAMETER.** Asked directly by Kenneth, and the answer has a
+shape the payload must carry. `GET /api/config/health` returns `{ok, checked,
+errors: [{file, path, message}], stale}` — `path` IS the parameter to edit (his
+maturity level 2) and `file` says which YAML. The banner never renders a bare
+green: it names WHICH CHECKS RAN ("checks passing: direction_conviction,
+regime_sizing"), because until Stage 3 ships most families are unvalidated and an
+unscoped green claims more than the system can check. The third state stands:
+disk valid but different from what this process runs, where the fix is a restart.
 
 **9.6 — NEW. A misspelled top-level family is undetectable, by design.** §7 3.3
 tolerates unknown families so an additive edit cannot 500 the scan. The cost is
