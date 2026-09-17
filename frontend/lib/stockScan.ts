@@ -137,21 +137,25 @@ export function stockScanFailureReason(err: unknown, reachedRequest = true): str
   return clampReason(detail) || 'unknown error';
 }
 
-/**
- * Did the request fail before any response came back?
+/** The WHOLE message each engine uses when a request got no response at all:
+ *  Chrome/WebKit "Failed to fetch", undici "fetch failed", Safari "Load
+ *  failed", Firefox "NetworkError when attempting to fetch resource.".
  *
- * `fetch` signals that with a TypeError — but so does plenty of ordinary
- * broken JavaScript, and an earlier round of this file's audit shipped a
- * version where `api.postStockScan is not a function` told the user to go
- * check their backend. Hence the message shape as well as the name, with word
- * boundaries (`network\s?error` matched the identifier `networkError`) and an
- * explicit exclusion for webpack's chunk-load error, which is a front-end
- * asset failure with nothing to do with the API host.
- */
+ *  Anchored, and matched whole rather than searched. Searching for these
+ *  phrases inside a longer message is what kept re-admitting the misdirection
+ *  this module exists to remove: word boundaries still matched the identifier
+ *  in `api.networkError is not a function`, and "Failed to fetch dynamically
+ *  imported module: …/chunk.js" is webpack's stale-asset error, nothing to do
+ *  with the API host. Both are TypeErrors; neither is the backend's fault.
+ *
+ *  An engine whose wording is not listed here loses the hint and shows its
+ *  message verbatim — the safe direction to be wrong in. */
+const FETCH_FAILURE_MESSAGE =
+  /^(?:failed to fetch|fetch failed|load failed|network error|networkerror when attempting to fetch resource\.?)$/i;
+
+/** Did the request fail before any response came back? */
 function isTransportFailure(err: ErrorLike | null): boolean {
-  if (!err || err.name !== 'TypeError') return false;
-  if (/dynamically imported module/i.test(err.message)) return false;
-  return /\b(?:failed to fetch|fetch failed|network\s?error|load failed)\b/i.test(err.message);
+  return !!err && err.name === 'TypeError' && FETCH_FAILURE_MESSAGE.test(oneLine(err.message));
 }
 
 function oneLine(message: string): string {
@@ -170,8 +174,17 @@ function clampReason(message: string, max = MAX_REASON_CHARS): string {
 /** Orders the last-run status refreshes: an earlier run's response landing
  *  after a later run's would pin TopBar/Settings to the older scan — the
  *  staleness the refresh exists to prevent. Module-level because the runs it
- *  orders are separate calls, not state any one of them owns. */
+ *  orders are separate calls, not state any one of them owns.
+ *
+ *  Two counters, not one. `metaRefreshSeq` only hands out increasing ids;
+ *  `metaAppliedSeq` is the id whose answer is currently on screen, and an
+ *  answer applies when it is NEWER than that. Gating on "is this the latest
+ *  id issued" instead meant every failed request permanently discarded the
+ *  older answers still in flight: with two later requests failing, no amount
+ *  of yielding a token back one step let the good answer through, and the
+ *  pill stayed at neither run's result. */
 let metaRefreshSeq = 0;
+let metaAppliedSeq = 0;
 
 /**
  * Refresh TopBar/Settings' last-run status from the backend — deliberately
@@ -203,9 +216,10 @@ function refreshLastStockScanMeta(): void {
     void request.then(
       (s) => {
         try {
-          // A later run has already refreshed — its answer is the current one,
-          // so this older response must not overwrite it.
-          if (seq !== metaRefreshSeq) return;
+          // A NEWER answer is already on screen, so this older response must
+          // not overwrite it. Responses can arrive out of order; ids cannot.
+          if (seq <= metaAppliedSeq) return;
+          metaAppliedSeq = seq;
           useScanStore.getState().setLastStockScanMeta(
             s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
           );
@@ -214,10 +228,9 @@ function refreshLastStockScanMeta(): void {
       // Two-argument form on purpose: this swallows a FAILED REQUEST (backend
       // unreachable — leave the meta stale, StoreHydration catches up on the
       // next load) and not a throw from the handler above it, which has its
-      // own guard. Yielding the token back lets an EARLIER refresh that is
-      // still in flight apply its answer, instead of "latest issued" silently
-      // discarding a good response because a later request failed.
-      () => { if (seq === metaRefreshSeq) metaRefreshSeq = seq - 1; },
+      // own guard. A failed request applies nothing and blocks nothing: an
+      // older answer still in flight is still newer than what is on screen.
+      () => {},
     );
   } catch { /* not callable (a test double, a partially-mocked api) — ignore */ }
 }
@@ -318,10 +331,16 @@ export async function runStockScan(
     // (a QuotaExceededError, blocked storage) makes these throw too, and an
     // unguarded catch block re-throws — which is how the escape route the try
     // was widened to close came back out through the failure path instead.
+    // One try EACH, not one around both: zustand applies the in-memory update
+    // and then writes storage, so a QuotaExceededError out of the first write
+    // would skip the second — and the one that must not be skipped is FAILED,
+    // which is what re-enables the Run button.
     try {
       store.setStockScanError(stockScanFailureReason(err, reachedRequest));
-      store.setScanState('FAILED');
     } catch { /* see above — the null return is the signal that survives */ }
+    try {
+      store.setScanState('FAILED');
+    } catch { /* ditto */ }
     return null;
   } finally {
     // Refresh last-run status/strategy from the backend so TopBar/Settings

@@ -136,20 +136,24 @@ describe('runStockScan', () => {
     expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 500: run one');
   });
 
-  it('an earlier status refresh still applies when the later one failed outright', async () => {
+  it('an earlier status refresh still applies when the later ones failed outright', async () => {
     // "Latest issued wins" discarded a good response whenever a later request
     // failed, leaving the meta at neither run's answer — the staleness the
-    // refresh exists to prevent, on exactly the flaky backends where it matters.
+    // refresh exists to prevent, on exactly the flaky backends where it
+    // matters. TWO later failures on purpose: handing the token back one step
+    // per rejection still lost the answer as soon as more than one failed.
     (api.postStockScan as jest.Mock).mockResolvedValue(
       { scan_id: 'S-1', timestamp: 't', rejected: [], candidates: [] },
     );
     let releaseFirst: (v: unknown) => void = () => {};
     (api.getLastStockScanStatus as jest.Mock)
       .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
-      .mockImplementationOnce(() => Promise.reject(new Error('boom')));
+      .mockImplementationOnce(() => Promise.reject(new Error('boom')))
+      .mockImplementationOnce(() => Promise.reject(new Error('boom again')));
 
     await runStockScan('pullback_ema');   // run 1 — status pending
     await runStockScan('ma_crossover');   // run 2 — status rejects
+    await runStockScan('breakout_base');  // run 3 — status rejects too
     await Promise.resolve();
     releaseFirst({ status: 'completed', updated_at: null, strategy: 'pullback_ema' });
     await Promise.resolve();
@@ -392,13 +396,42 @@ describe('stockScanFailureReason', () => {
     ))).toBe('Failed to fetch dynamically imported module: https://app.example/_next/chunk.js');
   });
 
+  it('does not mistake our own TypeError that merely contains a network word', () => {
+    // Word boundaries did not close this: `\bnetwork\s?error\b` still matches
+    // the identifier in `api.networkError is not a function`, because the dot
+    // before it is a boundary. The whole message has to be the engine's, not
+    // contain it.
+    expect(stockScanFailureReason(new TypeError('api.networkError is not a function')))
+      .toBe('api.networkError is not a function');
+    expect(stockScanFailureReason(new TypeError("Cannot read properties of undefined (reading 'networkError')")))
+      .toBe("Cannot read properties of undefined (reading 'networkError')");
+  });
+
+  it("recognises each engine's own wording for a request that got no response", () => {
+    for (const message of [
+      'Failed to fetch',                                   // Chrome / WebKit
+      'fetch failed',                                      // undici
+      'Load failed',                                       // Safari
+      'NetworkError when attempting to fetch resource.',   // Firefox
+    ]) {
+      expect(stockScanFailureReason(new TypeError(message)))
+        .toContain('(could not reach the backend at http://localhost:8000)');
+    }
+  });
+
   it('never cuts a clamped reason mid-character', () => {
-    // A UTF-16 slice splits a non-BMP character and leaves a lone surrogate,
-    // which renders as the replacement character.
-    const out = stockScanFailureReason(new Error(`API /api/stock-scan → 500: ${'a'.repeat(197)}😀tail`));
+    // The emoji has to STRADDLE the cut or this proves nothing. The head is 27
+    // characters and the clamp keeps 199, so 171 filler characters put the
+    // emoji at UTF-16 units 198–199: a UTF-16 slice(0, 199) keeps its high
+    // surrogate alone, which renders as the replacement character. A
+    // code-point slice keeps the whole emoji or drops it whole.
+    const head = 'API /api/stock-scan → 500: ';
+    expect(head).toHaveLength(27);
+    const out = stockScanFailureReason(new Error(`${head}${'a'.repeat(171)}😀tail`));
+
     expect(out.endsWith('…')).toBe(true);
+    expect(out).toContain('😀');
     expect(/[\uD800-\uDBFF]$/.test(out.slice(0, -1))).toBe(false);
-    expect(out).not.toContain('\uFFFD');
   });
 
   it("surfaces undici's cause, where the real transport error hides", () => {
@@ -451,7 +484,12 @@ describe('stockScanFailureReason', () => {
   it('clamps the detail but never the hint', () => {
     // Clamping the composed string kept 200 chars of "Failed to fetch xxxxx…"
     // and truncated the hint away — the actionable half of the message.
-    const out = stockScanFailureReason(new TypeError(`Failed to fetch ${'x'.repeat(400)}`));
+    // A long undici `cause` (a TLS chain, a multi-address ECONNREFUSED) is the
+    // real shape here: the engine's own message is short, the detail after it
+    // is not.
+    const out = stockScanFailureReason(
+      new TypeError('fetch failed', { cause: new Error(`connect ECONNREFUSED ${'1.2.3.4:8000, '.repeat(40)}`) }),
+    );
     expect(out.length).toBeLessThanOrEqual(200);
     expect(out).toContain('(could not reach the backend at http://localhost:8000)');
     expect(out).toContain('…');

@@ -184,7 +184,10 @@ describe('RunScanButton — conflict suppression wiring', () => {
     // store write throwing, so it must not do a store write before the toast.
     useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
     (runStockScan as jest.Mock).mockRejectedValue(new Error('QuotaExceededError'));
-    const spy = jest.spyOn(useScanStore.getState(), 'setStockScanError')
+    // setScanState, because that is the write the old order performed FIRST —
+    // mocking one the old order never called would have left this green
+    // against the very reordering it is here to pin.
+    const spy = jest.spyOn(useScanStore.getState(), 'setScanState')
       .mockImplementation(() => { throw new Error('QuotaExceededError'); });
     const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
 
