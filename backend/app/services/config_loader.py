@@ -403,9 +403,31 @@ def _normalise_regime_sizing(block) -> tuple[dict, list[str]]:
             f"— regime sizing disabled"
         ]
 
-    # Anything other than a literal True disables the block, which is what both
-    # paths did before this change.
-    if block.get("enabled") is not True:
+    # TRUTHINESS, NOT IDENTITY — and this is not a style choice.
+    #
+    # Both pre-change consumers tested `not cfg.get("enabled", False)`
+    # (stock_scan.py's card and auto_trader.py's fire path), so a quoted
+    # `enabled: "true"` — the canonical YAML footgun, and hand-editing the
+    # file is the ONLY way this block is ever changed — ENABLED sizing. An
+    # `is True` check here would DISABLE it instead, and disabled means
+    # multiplier 1.0, i.e. FULL SIZE: on the shipped config at conviction 20
+    # the card goes 75 shares/$375 to 100 shares/$500, and the fire path goes
+    # 50 to 100 contracts. That is strictly the LARGER order, on a typo, in
+    # the one input class that would otherwise carry no record at all.
+    #
+    # A non-bool is still recorded, because "never refuse, always record" is
+    # the rule this normaliser implements. Absent or null is NOT recorded: a
+    # missing key means "not turned on", which is exactly what the historical
+    # `.get("enabled", False)` default meant, and logging it would fire an
+    # ERROR on every scan of a config that simply omits the block.
+    enabled = block.get("enabled")
+    if enabled is not None and not isinstance(enabled, bool):
+        problems.append(
+            f"regime_sizing.enabled={enabled!r} is not a boolean (in YAML a "
+            f"quoted \"true\" is a string and a bare 1 is an int, neither is "
+            f"true) — reading it as {bool(enabled)!r}"
+        )
+    if not enabled:
         return {"enabled": False}, problems
 
     lo = block.get("min_mult")

@@ -288,3 +288,62 @@ def test_the_sell_side_uses_the_same_ramp_on_its_own_derived_conviction(
     conviction(30.0)  # SELL sees 100 - 30 = 70, which caps at full -> 1.0
     assert _apply_vol_sizing(_strategy(action="SELL", quantity=100)).quantity == 100
     assert _apply_vol_sizing(_strategy(action="BUY", quantity=100)).quantity == 88
+
+
+# ── The `enabled` flag: truthiness, not identity ─────────────────────────
+#
+# Found by the post-implementation adversarial round. The first cut of
+# `_normalise_regime_sizing` tested `block.get("enabled") is not True`, which
+# looks harmless and is not: both pre-change consumers tested
+# `not cfg.get("enabled", False)`, so a quoted `enabled: "true"` ENABLED
+# sizing and an identity check DISABLES it. Disabled means multiplier 1.0 —
+# FULL SIZE — so a YAML typo silently made every sized order LARGER on both
+# paths, and it was the one input class that carried no record at all.
+
+_TRUTHY_NON_BOOLS = ["true", "True", 1, "yes", "false"]
+
+
+@pytest.mark.parametrize("enabled", _TRUTHY_NON_BOOLS)
+def test_a_truthy_non_bool_enabled_still_enables_sizing(enabled):
+    """The pre-change numbers, exactly. `"false"` is in this list on purpose:
+    a non-empty string is truthy, so it enabled sizing before this change too,
+    and preserving that is the point — the fix restores behaviour, it does not
+    improve on it."""
+    sizing = {"enabled": enabled, "min_mult": 0.5, "full_conviction_pct": 40}
+    assert _conviction_mult(20, sizing) == 0.75
+
+
+@pytest.mark.parametrize("enabled", _TRUTHY_NON_BOOLS)
+def test_a_non_bool_enabled_is_recorded_rather_than_swallowed(enabled):
+    """"Never refuse, always record." Every other rejected value appends to
+    `problems`; this one must too, or the typo is invisible everywhere."""
+    from app.services.config_loader import _normalise_regime_sizing
+    _, problems = _normalise_regime_sizing(
+        {"enabled": enabled, "min_mult": 0.5, "full_conviction_pct": 40}
+    )
+    assert any("enabled" in p for p in problems), (
+        f"enabled={enabled!r} was accepted or rejected with no record"
+    )
+
+
+@pytest.mark.parametrize("enabled", [False, None])
+def test_a_falsy_enabled_disables_without_a_spurious_record(enabled):
+    """Absent or null means "not turned on" — the historical
+    `.get("enabled", False)` default. Recording it would fire an ERROR on
+    every scan of a config that simply omits the block."""
+    from app.services.config_loader import _normalise_regime_sizing
+    sizing = {"min_mult": 0.5, "full_conviction_pct": 40}
+    if enabled is not None:
+        sizing["enabled"] = enabled
+    normalised, problems = _normalise_regime_sizing(sizing)
+    assert normalised == {"enabled": False}
+    assert problems == []
+    assert _conviction_mult(20, sizing) == 1.0
+
+
+def test_a_quoted_enabled_does_not_enlarge_the_fire_path(conviction, seam):
+    """The fire-path half of the same defect: 50 -> 100 contracts on a real
+    broker order, which is a 2x, not a rounding difference."""
+    seam({"enabled": "true", "min_mult": 0.5, "full_conviction_pct": 40})
+    conviction(20.0)
+    assert _apply_vol_sizing(_strategy(quantity=100)).quantity == 75
