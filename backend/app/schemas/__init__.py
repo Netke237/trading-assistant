@@ -752,7 +752,36 @@ class OptionsPipeline(BaseModel):
     no_chain:          int   # "no option chain"
     failed_score:      int   # Pass 2 score gate (reason starts with "Score gate:")
     failed_contracts:  int   # "all contracts rejected"
-    candidates:        int   # made it through everything
+    # The residual: anything in `rejected` that matched none of the buckets
+    # above. Mostly per-symbol EXCEPTIONS, which routers/scan.py records as
+    # `reason=str(result)` -- frequently the empty string for httpx/asyncio
+    # errors, so it matches no predicate and would otherwise vanish. Without
+    # this bucket the funnel silently loses every symbol on a PARTIAL/FAILED
+    # run, which is the same class of hole `failed_direction` was added to
+    # close. Mirrors StockPipeline.other_rejected.
+    #
+    # Optional for the same reason as the two below, and it must be: defaulting
+    # it to 0 would let a legacy blob claim it saw zero exceptions, which is
+    # precisely the fabricated reading that default is rejected for there.
+    other_rejected:    Optional[int] = None
+    # None means ABSENT, not zero. A PERSISTED v2 blob predates these fields;
+    # its `candidates` was snapshotted BEFORE the direction-conviction filter
+    # and the shortlist cap ran, so it can over-report. Defaulting to 0 would
+    # let such a blob positively assert "nothing was gated" -- fabricating a
+    # reading rather than admitting the count is unaccounted for. The frontend
+    # omits the stage entirely when the value is None.
+    #
+    # Deliberately NOT a SCAN_RESULT_SCHEMA_VERSION bump, though `candidates`
+    # does change meaning. The two bumps above were safety-critical: a stored
+    # price or stop silently denominated in something other than its name, with
+    # the basis unrecoverable. These are display counters for the Step-3 funnel
+    # -- nothing sizes, prices or gates a trade off them -- so the cost of a
+    # bump (the guard refuses EVERY stored v2 result, discarding real scan
+    # history) buys nothing a stale funnel count does not already cost. The
+    # None-vs-0 distinction is what keeps that cheaper choice honest.
+    failed_direction:  Optional[int] = None  # removed by the direction-conviction gate
+    failed_shortlist:  Optional[int] = None  # trimmed by the shortlist cap (see original_count)
+    candidates:        int   # made it through everything, after every filter
 
 
 class DteWindow(BaseModel):

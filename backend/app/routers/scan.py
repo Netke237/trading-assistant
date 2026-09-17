@@ -26,6 +26,7 @@ import json as _json
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
+from app.services.config_loader import load_direction_conviction_min_trend
 
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
@@ -1403,6 +1404,30 @@ async def _execute_scan_core(
         raise HTTPException(status_code=422, detail=str(e))
 
     gate = _resolve_gate(req)
+    # Direction-conviction floor, resolved HERE — before the chain, quote and
+    # fundamentals fan-out below — so a malformed threshold costs nothing. The
+    # gate itself runs after `asyncio.gather`; resolving it there would let a
+    # config typo burn a full rate-limited scan of the universe before failing.
+    #
+    # 500, not 4xx: the request is fine, the SERVER's YAML is broken and no
+    # request can succeed until it is fixed. This endpoint already raises a
+    # genuine 422 a few lines above for a malformed USER override from the
+    # Step-3 panel; reusing that status here would make "your input is wrong"
+    # and "the server is misconfigured" indistinguishable to the client.
+    # HTTPException serialises `detail` at any status, so the message naming
+    # the offending key survives to the UI and to the scheduled path's
+    # `record_scheduled_scan_run(error=str(exc))`.
+    #
+    # The explicit log line is NOT redundant: this app installs no exception
+    # handler or logging middleware, and starlette's ExceptionMiddleware
+    # returns an HTTPException WITHOUT logging it — so raising a 500 here
+    # would otherwise leave no server-side trace at all, which is strictly
+    # worse than the unhandled ValueError it replaced.
+    try:
+        _direction_min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
+    except ValueError as e:
+        _log.error("SCAN %s aborted on malformed scoring_rules.yaml: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
     # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
     _atr_target = req.confidence_atr_mult_target
     _atr_stop = req.confidence_atr_mult_stop
@@ -1531,47 +1556,41 @@ async def _execute_scan_core(
         elif isinstance(result, TradeCardData):
             candidates.append(result)
 
-    # ── Pipeline funnel counters ───────────────────────────────────────────────
-    _data_kw = ("no market data", "price filter", "cap filter")
-    _pipeline = OptionsPipeline(
-        scanned=len(symbols),
-        failed_data=sum(1 for r in rejected if any(k in r.reason for k in _data_kw)),
-        failed_pre_screen=sum(1 for r in rejected if r.reason.startswith("Pre-screen:")),
-        no_chain=sum(1 for r in rejected if r.reason == "no option chain"),
-        failed_score=sum(1 for r in rejected if r.reason.startswith("Score gate:")),
-        failed_contracts=sum(1 for r in rejected if "contracts rejected" in r.reason),
-        candidates=len(candidates),
-    )
-    _log.info(
-        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d candidates=%d",
-        scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
-        _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts, _pipeline.candidates,
-    )
-
     # ── Direction conviction filter ───────────────────────────────────────────
     # Removes candidates that show no actual directional structure — prevents
     # "least bad" stocks in an opposing trend from polluting the results.
     # Intraday is exempt: intraday reversals are common regardless of daily trend.
-    _DIRECTION_TREND_GATE: dict[tuple[str, str], dict] = {
-        ("Bearish", "Swing"):    {"max_trend": 50},
-        ("Bearish", "Position"): {"max_trend": 40},
-        ("Bullish", "Swing"):    {"min_trend": 30},
-        ("Bullish", "Position"): {"min_trend": 40},
-    }
-    _dir_gate = _DIRECTION_TREND_GATE.get((req.direction, req.horizon))
+    #
+    # A FLOOR IN BOTH DIRECTIONS. The trend rule is direction-aware, so a high
+    # trend score on a Bearish scan means a strong DOWNtrend — the setup a put
+    # wants — and the thing this gate removes is a LOW score either way. The
+    # bearish side was a ceiling until 2026-09-16 and deleted exactly the
+    # candidates it should have kept; see config_loader for the full note.
+    #
+    # Thresholds live in scoring_rules.yaml
+    # (horizons.<horizon>.direction_conviction) with defaults in config_loader.
+    # `None` means this direction/horizon is exempt. `_direction_min_trend` was
+    # resolved at the top of this function, before the fan-out.
+    _min_trend = _direction_min_trend
     direction_filtered_count = 0
-    if _dir_gate and candidates:
+    if _min_trend is not None and candidates:
         _kept: list[TradeCardData] = []
         for _c in candidates:
-            _t = _c.stockBreakdown.trend if _c.stockBreakdown else 50
-            _max = _dir_gate.get("max_trend")
-            _min = _dir_gate.get("min_trend")
-            if (_max is not None and _t > _max) or (_min is not None and _t < _min):
+            # `stockBreakdown` is a REQUIRED field on TradeCardData
+            # (schemas/__init__.py), and a pydantic model defines neither
+            # __bool__ nor __len__, so it is always truthy. The `if ... else 50`
+            # guard this used to carry was dead, and its 50 quietly changed
+            # meaning when the gate became a floor — it went from "rejected on a
+            # bearish scan" to "passes". Removed rather than re-tuned.
+            _t = _c.stockBreakdown.trend
+            if _t < _min_trend:
                 direction_filtered_count += 1
                 rejected.append(RejectedCandidate(
                     symbol=_c.symbol,
-                    reason=f"direction_conviction: trend {_t} {'>' if _max else '<'} "
-                           f"{_max if _max is not None else _min} for {req.direction} {req.horizon}",
+                    # `:g` so a threshold that resolved to 40.0 reads "40" in
+                    # the rejection record the user sees, not "40.0".
+                    reason=f"direction_conviction: trend {_t} < {_min_trend:g} "
+                           f"for {req.direction} {req.horizon}",
                 ))
             else:
                 _kept.append(_c)
@@ -1604,6 +1623,53 @@ async def _execute_scan_core(
     original_count: int = len(candidates)
     shortlist_truncated: bool = original_count > max_candidates
     candidates = candidates[:max_candidates]
+
+    # ── Pipeline funnel counters ───────────────────────────────────────────────
+    # Built HERE, after every filter, not straight after scoring. Snapshotting
+    # `candidates` before the direction-conviction gate made the funnel report a
+    # yield the ranking table never received: a Bearish/Position scan that scored
+    # 5 candidates and then had all 5 stripped for trend > 40 rendered
+    # "Candidates 5" above a table with no rows and, because step-4-ranking
+    # returns early when the list is empty, no banner explaining where they went.
+    # stock_scan.py has always built StockPipeline after its own filters; this is
+    # the options path catching up, so the invariant holds:
+    # pipeline.candidates == len(result.candidates) == rows in the table.
+    #
+    # `other_rejected` is the RESIDUAL, computed as a leftover rather than by a
+    # predicate of its own. Every bucket below matches on `r.reason` text, and a
+    # per-symbol exception is recorded as `reason=str(result)` (line ~1528),
+    # which for httpx/asyncio errors is routinely the empty string -- matching
+    # nothing. Counting the residual instead of enumerating causes is what makes
+    # `scanned == candidates + every bucket` true on a PARTIAL/FAILED run and on
+    # any future reason nobody remembered to classify.
+    _data_kw = ("no market data", "price filter", "cap filter")
+    def _is_data(r):       return any(k in r.reason for k in _data_kw)
+    def _is_pre_screen(r): return r.reason.startswith("Pre-screen:")
+    def _is_no_chain(r):   return r.reason == "no option chain"
+    def _is_score(r):      return r.reason.startswith("Score gate:")
+    def _is_contracts(r):  return "contracts rejected" in r.reason
+    def _is_direction(r):  return r.reason.startswith("direction_conviction:")
+    _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts, _is_direction)
+
+    _pipeline = OptionsPipeline(
+        scanned=len(symbols),
+        failed_data=sum(1 for r in rejected if _is_data(r)),
+        failed_pre_screen=sum(1 for r in rejected if _is_pre_screen(r)),
+        no_chain=sum(1 for r in rejected if _is_no_chain(r)),
+        failed_score=sum(1 for r in rejected if _is_score(r)),
+        failed_contracts=sum(1 for r in rejected if _is_contracts(r)),
+        other_rejected=sum(1 for r in rejected if not any(f(r) for f in _buckets)),
+        failed_direction=direction_filtered_count,
+        failed_shortlist=original_count - len(candidates),
+        candidates=len(candidates),
+    )
+    _log.info(
+        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
+        scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
+        _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts,
+        _pipeline.failed_direction, _pipeline.failed_shortlist, _pipeline.other_rejected,
+        _pipeline.candidates,
+    )
 
     # Determine state: PARTIAL if some exceptions occurred but we still got candidates
     state: ScanState = 'COMPLETED'

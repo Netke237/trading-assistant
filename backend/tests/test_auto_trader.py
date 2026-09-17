@@ -438,7 +438,7 @@ def test_fire_proceeds_when_market_open(mocker):
 # ── Vol-scaled sizing (Task 8) ─────────────────────────────────────────────────
 
 def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
-    """conviction=20, full=40 → mult=0.5 → quantity=2 halved to 1."""
+    """conviction=20, full=40, min_mult=0.3 → ramp mult=0.65 → 2 rounds to 1."""
     from app.data.ibkr_paper import OrderResult
     captured = {}
     def mock_execute(s):
@@ -511,8 +511,13 @@ def test_vol_sizing_skipped_when_conviction_is_none(mocker):
     assert captured.get("quantity") == 3
 
 
-def test_vol_sizing_sell_halved_in_strongly_bullish_market(mocker):
-    """SELL at conviction=80 (strongly bullish) → bearish_conv=20 < full_conviction=40 → min_mult=0.5."""
+def test_vol_sizing_sell_reduced_in_strongly_bullish_market(mocker):
+    """SELL at conviction=80 → bearish_conv=20, full=40 → ramp mult=0.65 → 4 rounds to 3.
+
+    Under the old clamp form this was 0.5 (4 -> 2). The clamp bound for every
+    conviction from 0 to 20, so conviction 1 and conviction 19 sized identically;
+    the ramp grades them. See app/scoring/conviction_sizing.py.
+    """
     from app.data.ibkr_paper import OrderResult
     captured = {}
     def mock_execute(s):
@@ -532,8 +537,9 @@ def test_vol_sizing_sell_halved_in_strongly_bullish_market(mocker):
         entry_premium=2.50, portfolio_value=100_000.0,
     ))
     svc.fire()
-    assert captured.get("quantity") == 2, (
-        "SELL in strongly bullish market (conviction=80) must halve from 4 to 2"
+    assert captured.get("quantity") == 3, (
+        "SELL in strongly bullish market (conviction=80) must reduce 4 to 3 "
+        "(ramp mult 0.65), not stay at 4"
     )
 
 

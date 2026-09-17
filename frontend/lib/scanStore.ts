@@ -63,6 +63,14 @@ export interface OptionsPipeline {
   no_chain:          number;
   failed_score:      number;
   failed_contracts:  number;
+  // The residual — exceptions and any reason matching no other bucket.
+  other_rejected?:   number;
+  // Undefined means ABSENT, not zero: a scan result persisted before these
+  // existed has no value for them, and its `candidates` was counted before the
+  // direction gate and the shortlist cap ran. The funnel hides a stage whose
+  // counter is absent rather than rendering a zero it cannot vouch for.
+  failed_direction?: number;
+  failed_shortlist?: number;
   candidates:        number;
 }
 
@@ -312,6 +320,17 @@ interface ScanStoreState {
   optionsScanAt:       string | null;
   setOptionsScanAt:    (at: string) => void;
   setStockScanResult:  (r: StockScanResult | null) => void;
+  /** Why the last stock scan failed, as one human-readable line — null when
+   *  the last run succeeded, was cleared at the start of a new run, or none
+   *  has run yet. Written only by `runStockScan()` (lib/stockScan.ts).
+   *
+   *  Ephemeral and deliberately NOT in `partialize`: `scanState: 'FAILED'`
+   *  IS persisted so the pill survives a reload, but the reason behind it
+   *  describes one HTTP request this browser made in a session that is now
+   *  over. Restoring it would caption a stale pill with a stale explanation
+   *  (e.g. "backend unreachable" long after the backend came back). */
+  stockScanError:      string | null;
+  setStockScanError:   (message: string | null) => void;
   stockBasket:           PositionCardData[];
   addToStockBasket:      (card: PositionCardData) => void;
   removeFromStockBasket: (symbol: string) => void;
@@ -465,6 +484,7 @@ export const useScanStore = create<ScanStoreState>()(
       setContractsBySymbol: (map) => set({ contractsBySymbol: map }),
       screenerMode:             'options',
       stockScanResult:          null,
+      stockScanError:           null,
       previousStockScanResult:  null,
       stockScanAt:              null,
       optionsScanAt:            null,
@@ -489,6 +509,7 @@ export const useScanStore = create<ScanStoreState>()(
         stockBasket: s.stockBasket.filter((c) => c.symbol !== symbol),
       })),
       clearStockBasket:      () => set({ stockBasket: [] }),
+      setStockScanError:   (message) => set({ stockScanError: message }),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
       setLastOptionsScanMeta: (status, updatedAt) => set({
         lastOptionsScanStatus: status, lastOptionsScanUpdatedAt: updatedAt,

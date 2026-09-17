@@ -23,8 +23,6 @@ export class ChartWSClient {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private backoff = 1000;
   private destroyed = false;
-  /** True after the server sends type:"error" (data unavailable). Stops auto-reconnect. */
-  private dataError = false;
   private handlers = new Set<MessageHandler>();
   private stateHandler?: (s: ConnectionState) => void;
 
@@ -35,7 +33,7 @@ export class ChartWSClient {
   ) {}
 
   connect(): void {
-    if (this.destroyed || this.dataError) return;
+    if (this.destroyed) return;
     this.stateHandler?.('connecting');
     const url = `${this.baseUrl}/chart/stream/${encodeURIComponent(this.symbol)}?interval=${encodeURIComponent(this.interval)}`;
     this.ws = new WebSocket(url);
@@ -54,9 +52,10 @@ export class ChartWSClient {
           this.backoff = 1000;
         }
         if (msg.type === 'error') {
-          // Backend signals no data is available for this symbol/interval.
-          // Stop reconnecting so we don't hammer the server.
-          this.dataError = true;
+          // Backend signals no data is available for this symbol/interval
+          // right now. Surface 'error' to the UI, but keep retrying on the
+          // capped backoff below rather than stopping forever — the
+          // condition may be transient (upstream gap, backend restart).
           this.stateHandler?.('error');
         }
         this.handlers.forEach(h => h(msg));
@@ -64,17 +63,20 @@ export class ChartWSClient {
     };
 
     this.ws.onclose = () => {
-      if (!this.destroyed && !this.dataError) {
-        this.stateHandler?.('reconnecting');
-        this.timer = setTimeout(() => {
-          this.backoff = Math.min(this.backoff * 2, 30_000);
-          this.connect();
-        }, this.backoff);
-      }
+      if (this.destroyed) return;
+      this.stateHandler?.('reconnecting');
+      this.timer = setTimeout(() => {
+        this.backoff = Math.min(this.backoff * 2, 30_000);
+        this.connect();
+      }, this.backoff);
     };
 
     this.ws.onerror = () => {
-      if (!this.dataError) this.stateHandler?.('error');
+      // Previously guarded by a "data error" latch that stopped reconnects
+      // forever after one no-data message. With that gone, this handler
+      // just always reports 'error' and closes — onclose fires moments
+      // later and schedules the retry on the same capped backoff.
+      this.stateHandler?.('error');
       this.ws?.close();
     };
   }

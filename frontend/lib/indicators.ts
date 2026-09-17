@@ -138,10 +138,45 @@ export function calcATR(candles: Candle[], period = 14): Point[] {
   return result;
 }
 
+/** Eastern-market calendar date for an intraday bar — the VWAP session anchor.
+ *  Returns null for date-string bars (daily/weekly), which have no intraday
+ *  session to anchor to. Formatter is module-level: building one per candle
+ *  is measurably slow across a multi-year 1h series. */
+const _sessionFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function sessionKey(time: string | number): string | null {
+  if (typeof time !== 'number') return null;
+  // Backend intraday bars are unix seconds; guard in case of millis.
+  const ms = time < 1e12 ? time * 1000 : time;
+  return _sessionFmt.format(new Date(ms));
+}
+
+/** Session-anchored VWAP: the accumulation resets at each Eastern trading day.
+ *
+ *  It previously accumulated across the whole array with no anchor, so the
+ *  value depended on how many bars were loaded — widening the chart lookback
+ *  silently moved every reading. Anchoring per session matches the standard
+ *  definition and makes the series independent of the loaded window.
+ *
+ *  Daily/weekly bars carry date strings and have no intraday session; they
+ *  keep the original running-total behaviour. (ChartWorkspace does not draw
+ *  VWAP on 1D/1W anyway.) */
 export function calcVWAP(candles: Candle[]): Point[] {
   let cumPV = 0;
   let cumVol = 0;
+  let currentSession: string | null = null;
   return candles.map(c => {
+    const session = sessionKey(c.time);
+    if (session !== null && session !== currentSession) {
+      currentSession = session;
+      cumPV = 0;
+      cumVol = 0;
+    }
     const tp = (c.high + c.low + c.close) / 3;
     cumPV += tp * c.volume;
     cumVol += c.volume;

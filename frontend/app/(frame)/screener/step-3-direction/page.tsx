@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from '../screener.module.css';
@@ -286,6 +287,21 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Derived from the holding horizon (hold × 2). Change the horizon to change this.' },
   { key: 'max_dte', label: 'Max DTE', type: 'display', section: 'options', subGroup: 'Contract', unit: 'days',
     hint: 'Derived from the holding horizon (hold × 2). Change the horizon to change this.' },
+  // OPTIONS — Preferred Liquidity. SOFT-RANK counterparts of the three
+  // Contract fields above (max_bid_ask_spread_pct / min_volume /
+  // min_open_interest): those REJECT a contract outright; these three only
+  // dock its score, but three or more soft misses on ANY axis (these three,
+  // plus delta/DTE/IV) reject it too, via the fixed max_soft_fail_count. A
+  // contract that only clears the hard Contract floor above but stays under
+  // these can still be rejected on liquidity/spread grounds it looks like it
+  // passed — move both together for a change to actually admit or exclude
+  // more contracts, not just relabel the ones that already would have.
+  { key: 'preferred_volume_min', label: 'Preferred min volume', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
+    hint: 'Daily contract volume below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged (fewer survive 3 misses) · ↓ Lower → fewer soft-flagged. Default: 200. Independent of the hard "Min option volume" floor above, which rejects outright rather than scoring.' },
+  { key: 'preferred_oi_min', label: 'Preferred min open interest', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
+    hint: 'Open interest below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged · ↓ Lower → fewer soft-flagged. Default: 1000. Independent of the hard "Min open interest" floor above.' },
+  { key: 'preferred_spread_pct_max', label: 'Preferred spread ceiling', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 1, step: 0.01,
+    hint: 'Spread (as a fraction of mid) above this docks the spread score and counts as one soft miss. ↑ Higher → wider spreads tolerated before scoring/rejecting on this axis · ↓ Lower → stricter. Default: 0.08. Independent of the hard "Bid-ask spread ceiling" above, which is far looser (0.20) by default — this preferred ceiling is usually the tighter, binding constraint in practice.' },
   // ALL — Regime Gate
   { key: 'regime_headwind_caution_pct', label: 'Headwind caution %', type: 'number', section: 'all', subGroup: 'Regime Gate', min: -100, max: 0, step: 5, unit: '%',
     hint: 'Sector underperformance vs benchmark below this % → CAUTION on candidate. ↑ Higher (closer to 0) → stricter, more candidates caught (fewer pass) · ↓ Lower → only severe laggards affected (more pass). Default: -15%' },
@@ -653,7 +669,8 @@ function SectionBlock({
 export default function Step3Page() {
   const context        = useScanStore((s) => s.context);
   const setContext     = useScanStore((s) => s.setContext);
-  const rejectedLog    = useScanStore((s) => s.rejectedLog);
+  const liveRejectedLog = useScanStore((s) => s.rejectedLog);
+  const scanState       = useScanStore((s) => s.scanState);
   const regime         = useScanStore((s) => s.regime);
   const scanOverrides  = useScanStore((s) => s.scanOverrides);
   const scanResult     = useScanStore((s) => s.scanResult);
@@ -796,9 +813,19 @@ export default function Step3Page() {
   const [previewMinDte, previewMaxDte] = previewDteWindow(holdMin, holdMax);
   const displayDefaults: ParamDefaults = { ...defaults, min_dte: previewMinDte, max_dte: previewMaxDte };
 
-  const totalPassed   = scanResult?.candidates?.length ?? 0;
-  const totalRejected = rejectedLog.length;
-  const totalScanned  = totalPassed + totalRejected;
+  // `rejectedLog` is written only by RunScanButton and is NOT persisted, while
+  // the identical entries on `scanResult.rejected` ARE. After a reload the
+  // first is empty and the second is not, so reading the store field alone
+  // reported "Rejected 0" beside a restored scan's real "Scanned 518" — and
+  // emptied the reason breakdown below. Fall back to the persisted copy.
+  //
+  // ONLY in a settled state. RunScanButton deliberately empties `rejectedLog`
+  // when a scan STARTS and when one FAILS, without clearing `scanResult` — so
+  // an ungated fallback would undo both clears and show the previous run's log
+  // as though it were this one's.
+  // Derived together, in one place — see scanLogTotals.ts for why.
+  const { shownResult, rejectedLog, totalPassed, totalRejected, totalScanned, totalTrimmed } =
+    scanLogTotals(scanState, liveRejectedLog, scanResult);
 
   const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
 
@@ -1026,6 +1053,12 @@ export default function Step3Page() {
                   <Text size={11} tone="reject">Rejected</Text>
                   <span className={`${formStyles.badge} ${formStyles.badgeReject}`}>{totalRejected}</span>
                 </span>
+                {totalTrimmed > 0 && (
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="caution">Over cap</Text>
+                    <span className={formStyles.badge}>{totalTrimmed}</span>
+                  </span>
+                )}
                 <span className={formStyles.logStat}>
                   <Text size={11} tone="dim">DTE</Text>
                   <Text size={11} tone="secondary">
@@ -1039,8 +1072,8 @@ export default function Step3Page() {
             )}
           </div>
         </div>
-          {scanResult?.pipeline && (
-            <ScanFunnel mode="options" pipeline={scanResult.pipeline} />
+          {shownResult?.pipeline && (
+            <ScanFunnel mode="options" pipeline={shownResult.pipeline} />
           )}
           <ScanLogSection entries={rejectedLog} horizonKey={weightsKey} />
       </div>

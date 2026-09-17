@@ -19,7 +19,7 @@ router = APIRouter(prefix="/chart", tags=["chart"])
 async def history(
     symbol: str = Query(...),
     interval: str = Query("15min"),
-    days: int = Query(55),
+    days: Optional[int] = Query(None, ge=1),
 ) -> list[dict]:
     return await get_intraday(symbol.upper(), interval, days)
 
@@ -52,7 +52,7 @@ async def stream(
             ht_candles = await get_intraday(symbol, "1D")
 
         # Phase 2: compute and send market structure signals
-        signals = compute_structure(candles, interval, symbol, ht_candles)
+        signals = await asyncio.to_thread(compute_structure, candles, interval, symbol, ht_candles)
         await websocket.send_json({
             "type": "structure",
             "symbol": symbol,
@@ -78,7 +78,8 @@ async def stream(
                         ht_candles = None
                         if interval == "1h":
                             ht_candles = await get_intraday(symbol, "1D")
-                        signals = compute_structure(candles, interval, symbol, ht_candles)
+                        signals = await asyncio.to_thread(
+                            compute_structure, candles, interval, symbol, ht_candles)
                         await websocket.send_json({
                             "type": "structure",
                             "symbol": symbol,

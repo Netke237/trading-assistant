@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 from app.services.premium_stop import resolve_premium_stop_pct
+from app.scoring.conviction_sizing import conviction_mult
 
 _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -121,13 +122,10 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     if conviction is None:
         return strategy
 
-    min_mult        = float(cfg.get("min_mult", 0.5))
-    full_conviction = float(cfg.get("full_conviction_pct", 40))
-
     # Direction-aware: BUY scales with bullish conviction; SELL scales with bearish conviction
     # (bearish conviction = 100 - bullish conviction, capped to full_conviction scale)
     directional_conv = conviction if strategy.action == "BUY" else (100 - conviction)
-    mult = max(min_mult, min(1.0, directional_conv / full_conviction))
+    mult = conviction_mult(directional_conv, cfg)
     adjusted_qty = max(1, round(strategy.quantity * mult))
 
     if adjusted_qty == strategy.quantity:

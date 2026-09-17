@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
-import { runStockScan, stockPositionCardKey } from '@/lib/stockScan';
+import { runStockScan, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
@@ -20,6 +20,7 @@ import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
+import type { StockScanResult } from '@/types/stockDomain';
 import styles from './page.module.css';
 
 function _startOfDay(d: Date): number {
@@ -136,6 +137,13 @@ export default function Step4StocksPage() {
   const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
   const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
 
+  // The table used to re-filter on `passes_gate || win_rate >= 0.40`. That was
+  // dead: stock_scan.py returns a "backtest gate:" rejection for every symbol
+  // failing passes_gate, so no candidate reaching here can fail it and the
+  // predicate was always true. Dropped rather than kept for reassurance — the
+  // funnel's count and this table are the same list.
+  const shownCandidates = result?.candidates ?? [];
+
   const scanning = scanState === 'SCANNING';
 
   const strategyLabel: Record<string, string> = {
@@ -176,9 +184,35 @@ export default function Step4StocksPage() {
     if (!selected) return;
     setError(null);
     setNotice(null);
-    const res = await runStockScan(selected, params);
+    // The catch is for a throw runStockScan could not convert into a null
+    // return (setScanState itself failing) — without it that throw escapes
+    // this handler as an unhandled rejection and the user is told nothing at
+    // all. It resets scanState as well as showing the reason: the throw
+    // happens with SCANNING already set, which leaves the Run button disabled
+    // for the rest of the session.
+    let res: StockScanResult | null;
+    try {
+      res = await runStockScan(selected, params);
+    } catch (err) {
+      // Reason FIRST: this catch exists for a throw runStockScan could not
+      // convert into a null return — `setScanState` itself failing — so
+      // resetting the state before showing the message meant the one case it
+      // is written for threw again and the user saw nothing.
+      const reason = stockScanFailureReason(err, false);
+      setError(`Scan failed — ${reason}`);
+      // SCANNING is already set; leaving it there disables the Run button for
+      // the rest of the session. The reason goes to the store too, so a stale
+      // one from an earlier run cannot outlive this FAILED. One try EACH: the
+      // first write throwing must not skip the FAILED reset.
+      try { useScanStore.getState().setStockScanError(reason); } catch { /* store is what failed */ }
+      try { useScanStore.getState().setScanState('FAILED'); } catch { /* ditto */ }
+      return;
+    }
     if (!res) {
-      setError('Scan failed — is the backend running on port 8000?');
+      // The backend's own reason when it gave one (a 4xx/5xx detail), rather
+      // than the unconditional "is the backend running?" guess this line used
+      // to show even for a request the running backend had just rejected.
+      setError(`Scan failed — ${useScanStore.getState().stockScanError ?? 'unknown error'}`);
       return;
     }
     // Auto-execute symbols armed for after_scan — add as paper positions locally
@@ -353,7 +387,7 @@ export default function Step4StocksPage() {
           </div>
 
           <div className={styles.tableBody}>
-            {[...result.candidates.filter((c) => c.backtest.passes_gate || c.backtest.win_rate >= 0.40)].sort((a, b) => {
+            {[...shownCandidates].sort((a, b) => {
               if (healthSort === null) return 0;
               const aScore = a.fundamentals?.score ?? -1;
               const bScore = b.fundamentals?.score ?? -1;
@@ -362,7 +396,9 @@ export default function Step4StocksPage() {
               const d = deltas.get(c.symbol);
               const bt = c.backtest;
               const open = openSymbol === c.symbol;
-              const gateStatus = bt.passes_gate ? 'PASS' : 'CAUTION';
+              // Always PASS: a symbol failing the gate is rejected before it
+              // becomes a candidate, so the CAUTION branch was unreachable.
+              const gateStatus = 'PASS';
               return (
                 <div key={c.symbol}>
                   <button

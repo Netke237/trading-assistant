@@ -74,4 +74,35 @@ describe('calcVWAP', () => {
   it('returns same number of points as input', () => {
     expect(calcVWAP(candles).length).toBe(candles.length);
   });
+
+  // 09:30, 10:30, 11:30 ET on 2024-01-02, then the same three on 2024-01-03.
+  const DAY1 = [1704205800, 1704209400, 1704213000];
+  const DAY2 = [1704292200, 1704295800, 1704299400];
+  const intraday = (times: number[]): Candle[] =>
+    times.map((t, i) => ({
+      time: t, open: 100 + i, high: 101 + i, low: 99 + i, close: 100 + i, volume: 1000 + i * 10,
+    }));
+
+  it('resets the accumulation at each Eastern session boundary', () => {
+    const bars = intraday([...DAY1, ...DAY2]);
+    const out = calcVWAP(bars);
+    const i = DAY1.length;
+    const tp = (bars[i].high + bars[i].low + bars[i].close) / 3;
+    expect(out[i].value).toBeCloseTo(tp, 8);
+  });
+
+  it('is independent of how much history is loaded', () => {
+    // The regression guard: widening the chart lookback must not move VWAP.
+    const all = intraday([...DAY1, ...DAY2]);
+    const long = calcVWAP(all).slice(DAY1.length);
+    const short = calcVWAP(all.slice(DAY1.length));
+    expect(long.map(p => p.value)).toEqual(short.map(p => p.value));
+  });
+
+  it('keeps the running total for date-string (daily) bars', () => {
+    const out = calcVWAP(candles);
+    const last = candles[candles.length - 1];
+    const tp = (last.high + last.low + last.close) / 3;
+    expect(out[out.length - 1].value).not.toBeCloseTo(tp, 8);
+  });
 });

@@ -28,12 +28,20 @@ is:
 2. AN AUDIT ROUND THAT LEFT NO COMMIT. The bookkeeping check's only evidence is
    commit subjects on this branch. A round that found nothing, or whose fixes
    were folded into a commit whose subject does not name a round, is invisible
-   to it. It is also scoped to the highest round declared for still-OPEN work,
-   so a round on a phase with a lower count than some other open phase will not
-   trip it either. It catches the case that actually happened; it is not a
-   proof that the count is right.
+   to it. It catches the case that actually happened; it is not a proof that
+   the count is right. It is also blind once the work MERGES, by design: the
+   range it reads is empty from then on, which is what stops it holding up a
+   banner nobody can clear.
 
-3. `audit_clean` AT ALL. Nothing here can verify the assertion that a round came
+3. A BASE REF THAT DOES NOT RESOLVE -- except that it no longer fails silently.
+   Round 1 finding 1: with no `origin/main` and no `main` (a `--single-branch`
+   or `--depth 1` clone does this) the check cannot run at all, and it used to
+   return None, which renders as "No drift" -- a clean bill for a check that
+   never happened, the exact observable the base-ref fix exists to remove. It
+   now says so in the UNAUDITED block instead. It still exits 0: git being
+   unavailable is not evidence of drift.
+
+4. `audit_clean` AT ALL. Nothing here can verify the assertion that a round came
    back with zero findings. That claim rests entirely on whoever wrote it.
 
 Usage:
@@ -55,6 +63,13 @@ STATE = ROOT / "docs" / "superpowers" / "PROJECT_STATE.json"
 
 # Statuses that mean "the code for this exists".
 SHIPPED = {"shipped", "shipped_unaudited"}
+
+# Rounds running on this branch with NOTHING in the state file counting them
+# warn below this number and are drift at or above it. It is audit_rule's HARD
+# CAP -- three rounds without going clean means STOP AUDITING AND TELL KENNETH
+# -- so the banner that blocks a session is the same threshold the rule already
+# states. Kenneth's call, 2026-09-16.
+UNPHASED_FAIL_ROUND = 3
 
 BOLD, DIM, RED, GREEN, YELLOW, RESET = (
     "\033[1m", "\033[2m", "\033[31m", "\033[32m", "\033[33m", "\033[0m"
@@ -96,6 +111,24 @@ def probe(v: dict) -> tuple[bool, str]:
     return found, ("found " if found else "absent ") + where
 
 
+def _git(*args: str) -> str | None:
+    """Run one git command in ROOT. Returns stdout, or None on any failure.
+
+    Collapsing "git is missing", "git errored" and "git timed out" into one
+    None is deliberate and matches how this probe has always degraded: a check
+    that cries drift whenever git is unavailable trains the reader to scroll
+    past a red banner. The CALLERS distinguish "could not look" from "looked
+    and found nothing" -- see round 1 finding 1.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def _round_numbers_in_branch_subjects(base_ref: str | None) -> tuple[int, list[str]] | None:
     """Highest `round N` mentioned in this branch's commit SUBJECTS.
 
@@ -134,7 +167,318 @@ def _round_numbers_in_branch_subjects(base_ref: str | None) -> tuple[int, list[s
     return best, subjects
 
 
-def audit_bookkeeping_drift(state: dict) -> str | None:
+_BASE_REF_CANDIDATES = ("origin/main", "main")
+
+# Cap on how far back to read the state file when scoping rounds to the current
+# pointer. A branch under audit is a handful of commits; anything past this is a
+# repo shape this probe should degrade on rather than stall a SessionStart.
+_POINTER_SCAN_LIMIT = 100
+
+
+def _resolve_base_ref() -> tuple[str | None, str]:
+    """The ref this branch's rounds are measured against. Asked of git, not of
+    the state file. Returns (ref, detail); ref is None when nothing resolved and
+    detail then says WHY, because the caller has to be able to say so.
+
+    It used to come from `state["main"]`, which was a bare sha when this probe
+    was written (2026-09-07) and became a narrative paragraph two days later
+    (2242f36, "Point the state file at merged main"). From that commit on the
+    ref guard in `_round_numbers_in_branch_subjects` rejected it, so this whole
+    check returned None on EVERY run -- silently, for a week, through F1, F2,
+    Phase G and the bearish direction-conviction gate fix. The check the file
+    documents as its one non-code probe was dead and rendered "No drift".
+
+    The lesson is narrower than "that field was wrong": a field that doubles as
+    prose for a human reader cannot also be a machine input, because the humans
+    will keep writing prose into it and nothing will complain. So ask git.
+
+    TIGHTEST WINS, not a fixed order (round 1 finding 3). Preferring
+    `origin/main` outright was wrong for the shape this project actually
+    produces: it merges with a local `--no-ff` and pushes afterwards, and
+    pushing from these containers has 403'd before now. Between the merge and
+    the push, `origin/main` is the STALE one, so preferring it kept a banner up
+    that the merge was supposed to clear -- and "push to clear it" is not
+    always a route that exists. The ref yielding the FEWEST commits in
+    `ref..HEAD` is the one that already contains the most merged work, which is
+    exactly the base that should not be counted twice. Ties go to the earlier
+    candidate.
+    """
+    measured: list[tuple[int, int, str]] = []
+    for rank, ref in enumerate(_BASE_REF_CANDIDATES):
+        # Each candidate is measured independently: a transient failure on one
+        # must not skip the other. The first version returned None from inside
+        # this loop, which made a timeout on `origin/main` silently discard the
+        # `main` fallback.
+        if _git("rev-parse", "--verify", "--quiet", ref) is None:
+            continue
+        out = _git("rev-list", "--count", f"{ref}..HEAD")
+        if out is None:
+            continue
+        try:
+            measured.append((int(out.strip()), rank, ref))
+        except ValueError:
+            continue
+
+    if not measured:
+        if _git("rev-parse", "--git-dir") is None:
+            return None, "there is no usable git repository here"
+        return None, (
+            "neither origin/main nor main resolves in this checkout -- a "
+            "--single-branch or --depth 1 clone does this, and so does a "
+            "repository with no commits on it yet"
+        )
+    measured.sort()
+    ref = measured[0][2]
+    return ref, f"base {ref}"
+
+
+_TARGET_UNREADABLE = object()   # a historical blob that is not a state file
+_TARGET_ABSENT = object()       # parses fine, but this target is not in it
+
+
+def _target_identity(state: dict) -> tuple[str, str] | None:
+    """The (pool, key) pair naming whatever `active_phase` RESOLVES to, or None
+    when it resolves to nothing.
+
+    None covers both the unset pointer and the truthy one that names something
+    in neither pool -- a typo, or an `already_shipped` entry renamed while the
+    pointer still holds the old string. Those were separate cases until round 1
+    of STATE-PROBE-NULL-POINTER, and keeping them separate was the bug: the
+    dangling pointer took the NARROWING path here and the UNPHASED path in
+    `audit_bookkeeping_drift` at the same time, so the escalation ran against a
+    window the same nonsense value had just emptied. A pointer that resolves to
+    nothing is the ABSENCE of a target, exactly as a null one is.
+    """
+    active = state.get("active_phase")
+    if not active:
+        return None
+    for ph in state.get("phases", []):
+        if isinstance(ph, dict) and ph.get("id") == active:
+            return "phase", active
+    for item in state.get("already_shipped", []):
+        if isinstance(item, dict) and item.get("name") == active:
+            return "shipped", active
+    return None
+
+
+def _entry_rounds(entries, pool: str, key: str) -> int | None:
+    """This target's `audit_rounds` inside one `phases`/`already_shipped` list,
+    or None when the list does not carry it. A non-int count is a malformed
+    entry rather than a high-water mark, so it reads as 0."""
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("id" if pool == "phase" else "name") == key:
+            value = entry.get("audit_rounds")
+            ok = isinstance(value, int) and not isinstance(value, bool)
+            return value if ok else 0
+    return None
+
+
+def _declared_rounds_at(blob: str, identity: tuple[str, str]):
+    """This target's `audit_rounds` in one HISTORICAL state file.
+
+    Returns an int, `_TARGET_ABSENT` when the file parsed but does not carry
+    this target, or `_TARGET_UNREADABLE` when it could not be parsed at all.
+    Absence is NOT zero: it marks the commit before the piece existed, and that
+    distinction is what keeps a new piece from answering for the rounds of the
+    piece before it.
+    """
+    try:
+        old = json.loads(blob)
+    except ValueError:
+        return _TARGET_UNREADABLE
+    if not isinstance(old, dict):
+        return _TARGET_UNREADABLE
+
+    pool, key = identity
+    entries = old.get("phases" if pool == "phase" else "already_shipped", [])
+    if not isinstance(entries, list):
+        return _TARGET_UNREADABLE
+    rounds = _entry_rounds(entries, pool, key)
+    return _TARGET_ABSENT if rounds is None else rounds
+
+
+def _target_scoped_base(base_ref: str, state: dict) -> str:
+    """Narrow `base_ref..HEAD` to the span the ACTIVE TARGET'S OWN COUNT covers.
+
+    ROUND 1 FINDING 2 (of STATE-PROBE-REVIVAL) is why any narrowing exists.
+    `_round_numbers_in_branch_subjects` takes the highest round over the whole
+    branch while the pointer resolves exactly one piece, and nothing tied the
+    two together -- so a branch carrying two pieces answered for the earlier
+    one's round numbers, drawing a red banner on an entirely honest file whose
+    printed remedy could only be satisfied by writing a number known to be
+    false. That fix is preserved here; only its KEY has changed.
+
+    IT USED TO KEY ON THE POINTER'S CURRENT VALUE, and that was the root cause
+    of three findings across three consecutive rounds. `active_phase` is
+    hand-written state in the very file whose honesty this check exists to
+    test, so every escape was a variant of "move the pointer":
+
+      - Round 3: clearing the pointer to `null` made the clearing commit the
+        excluded boundary and collapsed the window to empty. Four rounds and a
+        recorded undercount rendered "No drift" at exit 0.
+      - Round 1 of the fix for that (option A), finding 1: RE-POINTING at the
+        same piece with the false count left intact did the same thing, and
+        needed no commit at all -- a working-tree edit was enough, because the
+        walk hit `was != active` on the newest committed state file and fell
+        through to `HEAD`, making `HEAD..HEAD` empty.
+      - The same round, finding 2: a pointer that was truthy but resolved to
+        nothing took the narrowing path AND the unphased path together.
+
+    KENNETH CHOSE THE STRUCTURAL FIX on 2026-09-16 over patching those doors
+    one at a time, on the evidence that three consecutive fixes had each
+    contained the next instance of the same shape.
+
+    SO THE BOUNDARY IS THE COMMIT THAT INTRODUCED THE ENTRY, and nothing else.
+    Everything after it is this piece's to answer for.
+
+    IT WAS BRIEFLY THE COUNT'S OWN HISTORY TOO -- "the newest commit where this
+    target's `audit_rounds` was LOWER than the value now declared" -- and that
+    shipped at d5fcbce as a REGRESSION, caught by the next round and reverted
+    here. The reasoning behind it was inverted: raising `declared` makes MORE
+    historical commits qualify as "lower", and since the newest qualifying one
+    wins, raising the count moved the boundary FORWARD. In this repo's actual
+    style, where every branch commit touches this file, the newest state-file
+    commit almost always declares less than the live one -- so it became the
+    boundary, the window collapsed, and EVERY undercount above zero rendered
+    "No drift" at exit 0. It was strictly worse than the code it replaced, and
+    it was worse in the direction this probe exists to refuse. Measured: five
+    rounds in the subjects, file declaring anything from 1 to 4, silent.
+
+    The introducing commit cannot be moved that way. It is where the entry
+    APPEARED, not what the entry SAYS, so recording a number -- true or false,
+    committed or not -- leaves it exactly where it was.
+
+    What that buys, case by case:
+
+      - The pointer's value no longer scopes anything. Clearing it, re-pointing
+        at the piece, or misspelling it changes only WHICH target resolves, and
+        when none resolves `_target_identity` returns None and this function
+        does not narrow at all, so the unphased banner fires over the whole
+        branch.
+      - The two-piece branch stays fixed. A piece that has just opened is
+        ABSENT from every commit before it, so its boundary is the commit that
+        introduced it and the previous piece's rounds fall outside.
+
+    THE ACCEPTED COST, stated rather than discovered: a piece whose entry
+    predates the branch point is never ABSENT inside the range, so it gets NO
+    narrowing and answers for the whole branch -- including an earlier piece's
+    round numbers, on a file that is telling the truth. That is a false ALARM,
+    it is visible, and it clears by merging or by recording the count. It is
+    the deliberate trade for never going silent on an undercount, and it is the
+    original Phase A catch's behaviour.
+
+    AND ONE ROUTE REMAINS OPEN, KENNETH'S CALL, NOT PATCHED HERE: the entry's
+    NAME and PRESENCE are still hand-written in the audited file, so renaming an
+    `already_shipped` entry, moving it between `phases` and `already_shipped`,
+    or dropping and restoring it makes every older commit read as ABSENT and
+    resets the boundary to that commit. See the round record in
+    PROJECT_STATE.json. Fixing it is not another patch of this shape: the round
+    that found it argues a boundary computed from the audited file's own
+    contents cannot both scope out a previous piece and detect an undercount of
+    the current one, because both are the same edit.
+
+    The boundary commit is EXCLUDED, since `git log sha..HEAD` excludes `sha`
+    itself. A commit that both lowers the count and carries a round of the new
+    count's work would be missed, but that ordering is backwards: the count is
+    lowered when a piece opens, before it has had a round.
+    """
+    identity = _target_identity(state)
+    if identity is None:
+        # Nothing resolves, so there is nothing to scope to. Answer for the
+        # whole branch and let the unphased path speak -- see the three
+        # findings above, every one of which reached silence through this case.
+        return base_ref
+
+    try:
+        rel = STATE.relative_to(ROOT).as_posix()
+    except ValueError:
+        # The state file is not under ROOT (only reachable when a caller has
+        # repointed one of them). Cannot locate its history, so cannot narrow:
+        # fall back to the full range rather than guess a boundary.
+        return base_ref
+
+    out = _git("log", "--format=%H", f"{base_ref}..HEAD", "--", rel)
+    if out is None:
+        return base_ref
+
+    shas = out.split()          # newest first
+    truncated = len(shas) > _POINTER_SCAN_LIMIT
+    boundary: str | None = None
+
+    for sha in shas[:_POINTER_SCAN_LIMIT]:
+        blob = _git("show", f"{sha}:{rel}")
+        if blob is None:
+            continue
+        rounds = _declared_rounds_at(blob, identity)
+        if rounds is _TARGET_UNREADABLE:
+            continue            # not a boundary to trust
+        if rounds is _TARGET_ABSENT:
+            # The piece does not exist yet here, so the boundary is the commit
+            # that INTRODUCED it -- `boundary`, the oldest one walked that
+            # still carries it -- and not this one. Round 2 finding 1 again in
+            # a new key: opening a piece while recording the PREVIOUS piece's
+            # last round is one commit in this repo's style ("Record round 2
+            # clean; open piece two"), so including it would hand a brand-new
+            # piece the round number of the piece before it.
+            #
+            # `boundary` is None when even the newest COMMITTED state file
+            # lacks this entry -- the piece exists only in the working tree.
+            # There is then no history to scope by, so refuse to narrow rather
+            # than answer for the commits that happen to follow the newest
+            # state-file commit. Narrowing there would be a fresh escape of
+            # exactly the family this rework closed: invent an entry, point at
+            # it, declare 0, and the window empties.
+            return boundary if boundary is not None else base_ref
+        boundary = sha          # confirmed to carry this entry
+
+    if truncated and boundary is not None:
+        # The window ran out before the count was seen to be lower, so the
+        # boundary may lie beyond it. Fall back to the oldest commit CONFIRMED
+        # to carry the declared count rather than widening to the full range,
+        # which would be the pre-fix false positive rather than a safe
+        # degradation.
+        return boundary
+    return base_ref
+
+def _pointer_target(state: dict) -> tuple[dict | None, str]:
+    """Resolve `active_phase` against BOTH pools that carry audit counts.
+
+    It was resolved against `phases` alone, which is why work that is not a
+    phase had nowhere to point: O4, G5-1 and the bearish gate fix are scoped
+    pieces, and a piece cannot set a pointer that only accepts phase ids. The
+    audit_rule says in as many words that it "applies to `already_shipped`
+    entries identically", and those entries carry the same
+    `audit_rounds`/`audit_clean` pair, so an entry there is just as valid a
+    target. Matched on `name`, because they have no `id`.
+
+    Returns (entry, label). `entry` is None when the pointer is unset or names
+    something in neither pool; `label` describes the pointer either way, so the
+    message can say which of those two it was.
+    """
+    active = state.get("active_phase")
+    if not active:
+        # ROUND 1 FINDING 8: `""`, `0` and `False` all land here and all
+        # reported as "null", so a reader grepping this file for the value they
+        # saw would not find it. The null wording stays for the null case.
+        if active is None:
+            return None, "active_phase is null"
+        return None, f"active_phase is {active!r}, which is falsy and names nothing"
+    for ph in state["phases"]:
+        if ph["id"] == active:
+            return ph, f"Phase {ph['id']} ({ph['name']})"
+    for item in state.get("already_shipped", []):
+        if item.get("name") == active:
+            return item, f"shipped item '{item['name']}'"
+    return None, (
+        f"active_phase names '{active}', which is in neither phases nor already_shipped"
+    )
+
+
+def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     """Check the ONE pair of fields no verify probe covers.
 
     `audit_rounds` and `audit_clean` are read, rendered, and drive this
@@ -145,52 +489,125 @@ def audit_bookkeeping_drift(state: dict) -> str | None:
     commit message and never here. This script printed "No drift" throughout.
 
     The evidence git actually holds is that a round produced commits. So: take
-    the highest `round N` in this branch's commit subjects, compare it against
-    the `audit_rounds` declared by `active_phase` -- the phase this branch is
-    building -- and report only when git is ahead. Scoping to that one phase is
-    what makes the check mean anything: Phase D's 13 clean rounds are the global
-    maximum, so comparing against every entry could never fire, and comparing
-    against merely-open work fires forever once the active phase goes clean
-    (round 4 finding 6).
+    the highest `round N` in this branch's commit subjects and compare it
+    against the count declared by whatever `active_phase` points at -- over the
+    span since that target's entry was INTRODUCED, not the whole branch (round 1
+    finding 2: a branch carrying two pieces otherwise answers for the earlier
+    one's round numbers). The pointer itself no longer scopes anything; see
+    `_target_scoped_base`. Scoping to
+    that one target is what makes the comparison mean anything: Phase D's 13
+    clean rounds are the global maximum, so comparing against every entry could
+    never fire, and comparing against merely-open work fires forever once the
+    active target goes clean (round 4 finding 6).
+
+    Returns (severity, message), where severity is "drift" (exit non-zero) or
+    "warn" (printed, exit 0), or None when there is nothing to say.
 
     One-directional on purpose. A file claiming MORE rounds than git shows is
     not evidence of anything: rounds legitimately run without producing a
-    commit, and merged history moves out of `main..HEAD`.
+    commit, and merged history moves out of the range.
     """
-    evidence = _round_numbers_in_branch_subjects(state.get("main"))
+    base_ref, base_detail = _resolve_base_ref()
+    if base_ref is None:
+        # ROUND 1 FINDING 1. This returned None, and None renders as "No drift"
+        # -- a clean bill for a check that never ran, which is the same
+        # observable the base-ref fix exists to remove. Say it could not look.
+        # WARN, not drift: git being unavailable is not evidence of anything,
+        # and a red banner for it would train the reader to scroll past the
+        # real ones.
+        return "warn", (
+            f"Audit bookkeeping COULD NOT RUN: {base_detail}. This is the only "
+            f"check here that reads git rather than a code symbol, so "
+            f"audit_rounds/audit_clean were not verified against anything on "
+            f"this run. That is an UNCHECKED bill, not a clean one."
+        )
+
+    evidence = _round_numbers_in_branch_subjects(_target_scoped_base(base_ref, state))
     if evidence is None:
         return None
     git_max, subjects = evidence
-
-    # ROUND 4 finding 6. The first version of this scoped to work that was still
-    # OPEN (not audit_clean), which fired a PERMANENT false positive on its own
-    # success path: the moment the one phase carrying rounds on this branch was
-    # marked clean, the open pool became the not-started phases, all declaring 0,
-    # so `git_max > 0` reported drift and exited non-zero on EVERY SessionStart.
-    # A red banner that cannot be cleared is worse than no banner -- it trains
-    # the reader to scroll past the real ones.
-    #
-    # Scoping to `active_phase` is what the comparison actually meant all along.
-    # Rounds counted from `main..HEAD` belong to the phase this branch is
-    # building; they say nothing about Phase D's 13 merged rounds, which is why
-    # a global maximum could never fire, and nothing about phases not started.
-    active = state.get("active_phase")
-    if not active:
-        return None  # no pointer: stay silent rather than guess a pool
-    ph = next((p for p in state["phases"] if p["id"] == active), None)
-    if ph is None:
-        return None  # names a phase that no longer exists; silent, not wrong
-
-    declared = ph.get("audit_rounds") or 0
-    if git_max <= declared:
-        return None
-
     shown = "; ".join(subjects[:3])
-    return (
-        f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
-        f"Phase {ph['id']} ({ph['name']}) -- the active phase -- declares {declared}. "
-        f"A round ran and was never written down — subjects: {shown}"
-    )
+
+    target, label = _pointer_target(state)
+
+    if target is None:
+        # UNPHASED ROUNDS -- rounds are running and NOTHING in the file counts
+        # them. This returned None, silently, and that silence is how four
+        # adversarial rounds on the bearish gate fix ran while the render said
+        # "No drift": the work was a scoped piece, so active_phase was null,
+        # and the git evidence computed immediately above was thrown away.
+        #
+        # ROUND 4 FINDING 6 objected to exactly this shape of banner, and the
+        # objection still stands where it applies: a red banner that cannot be
+        # cleared trains the reader to scroll past the real ones. This one CAN
+        # be cleared, by two separate routes -- point active_phase at the phase
+        # or already_shipped entry these rounds belong to and record the count
+        # there, or merge, after which the range is empty and this goes quiet
+        # on its own. Finding 6's case had neither route: it compared against a
+        # pool of not-started phases that no action could satisfy.
+        severity = "drift" if git_max >= UNPHASED_FAIL_ROUND else "warn"
+        cap = (
+            f"audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND} rounds without going "
+            f"clean: STOP AUDITING AND TELL KENNETH -- that is evidence the batch "
+            f"is too big to audit, not that it needs another round."
+            if severity == "drift" else
+            f"Escalates to drift at round {UNPHASED_FAIL_ROUND}, audit_rule's HARD CAP."
+        )
+        return severity, (
+            f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, "
+            f"and nothing in PROJECT_STATE.json is counting them ({label}). Point "
+            f"active_phase at the phase or already_shipped entry these rounds belong "
+            f"to, and record the count there. {cap} Subjects: {shown}"
+        )
+
+    declared = target.get("audit_rounds") or 0
+    if git_max > declared:
+        return "drift", (
+            f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
+            f"{label} -- the active target -- declares {declared}. "
+            f"A round ran and was never written down — subjects: {shown}"
+        )
+
+    # THE HARD CAP ON THE RESOLVED PATH. It used to live only in the `target is
+    # None` branch above, which made it effectively OPT-OUT: once a pointer
+    # resolved and the declared count kept up with the evidence, this function
+    # returned None at ANY round count, so a piece could run 3, 8 or 30 rounds
+    # without going clean and the script said "No drift" throughout. Worse, the
+    # unphased message's own printed remedy -- point active_phase at the entry
+    # and record the count there -- is precisely the move from the branch that
+    # escalates to the branch that could not. Following the instruction turned
+    # the check off. Phase D's thirteen rounds would never have tripped it.
+    #
+    # READ OFF `git_max`, NOT `declared`. Gating on the self-reported total was
+    # the first version and it made the banner unclearable, which is round 4
+    # finding 6's rule broken by the block that cites it: a piece past three
+    # unclean rounds whose work cannot yet merge had no truthful way back --
+    # going clean is only honest when it IS clean, lowering the count trips the
+    # undercount check, and re-pointing moves the complaint rather than
+    # answering it. Worse, it re-fired forever on work whose cap had already
+    # been escalated to Kenneth and merged, and it fired on a stale pointer
+    # left at a finished piece. Counting what THIS BRANCH still carries keeps
+    # the signal where the unfinished rounds are, and merging empties the range
+    # exactly as it does for the unphased banner above.
+    #
+    # IT CLEARS THE TWO WAYS THE UNPHASED BANNER DOES, which is what keeps it
+    # inside round 4 finding 6's rule that a red banner nobody can clear is
+    # worse than no banner: go clean (the honest end of an audit), or merge,
+    # after which the range is empty, `evidence` is None and this never runs.
+    # Acknowledging it is deliberately NOT a third route -- an acknowledgement
+    # flag would be one more editable field that switches the check off, which
+    # is the exact shape of the three findings the scoping rework just closed.
+    if git_max >= UNPHASED_FAIL_ROUND and not target.get("audit_clean"):
+        return "drift", (
+            f"Audit bookkeeping: {label} -- the active target -- declares {declared} "
+            f"round(s), NONE of them clean, and this branch still carries round "
+            f"{git_max}. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND}: STOP AUDITING "
+            f"AND TELL KENNETH -- that is evidence the batch is too big to audit, not "
+            f"that it needs another round. Clears by going clean, by merging, or by "
+            f"moving active_phase if it is pointing at finished work. Subjects: {shown}"
+        )
+
+    return None
 
 
 def main() -> int:
@@ -268,7 +685,13 @@ def main() -> int:
 
     bookkeeping = audit_bookkeeping_drift(state)
     if bookkeeping:
-        drift.append(bookkeeping)
+        severity, message = bookkeeping
+        # "drift" joins the red block and exits non-zero; "warn" joins the
+        # yellow UNAUDITED block and exits 0. Both blocks print even under
+        # --quiet, so a bookkeeping warning survives the one caller that passes
+        # it. (The SessionStart hook does NOT: it runs the full render. An
+        # earlier version of this comment said otherwise -- round 1 caught it.)
+        (drift if severity == "drift" else unaudited).append(message)
 
     if not quiet:
         print(f"\n  {DIM}SHIPPED* = code exists but has never survived an adversarial round.{RESET}")

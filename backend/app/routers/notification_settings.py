@@ -8,6 +8,8 @@ import yaml
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.services.atomic_yaml import atomic_write_yaml
+
 router = APIRouter(prefix='/settings', tags=['settings'])
 
 # backend/app/routers/  →  .parent = backend/app/  →  .parent = backend/
@@ -23,9 +25,7 @@ def _load_yaml() -> dict:
 
 
 def _save_yaml(data: dict) -> None:
-    _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_SETTINGS_PATH, 'w') as f:
-        yaml.dump(data, f, default_flow_style=False)
+    atomic_write_yaml(_SETTINGS_PATH, data, default_flow_style=False)
 
 
 class GmailConfig(BaseModel):

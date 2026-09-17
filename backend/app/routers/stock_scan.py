@@ -26,6 +26,7 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 
 from app.services.audit import new_rec_id
+from app.scoring.conviction_sizing import conviction_mult
 from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut, StockPipeline, StockAnalysisRequest,
@@ -66,6 +67,7 @@ from app.scoring.first_passage import estimate_stock_first_passage
 from app.scoring.exit_plan import compute_final_stop, compute_target_row
 from app.services.config_loader import (
     load_first_passage_cfg as _fp_cfg, load_exit_plan_cfg,
+    load_direction_conviction_min_trend,
 )
 # _load_config is lru_cached AND cache_cleared by POST /settings/risk, so the
 # risk budget below follows a saved settings change without a restart. A
@@ -134,13 +136,10 @@ def _load_regime_cfg(horizon: str) -> dict:
     return _load_full_scoring_cfg()["regime"][horizon.lower()]
 
 
-def _conviction_mult(conviction_pct: int, sizing: dict) -> float:
-    if not sizing.get("enabled", False):
-        return 1.0
-    full = sizing["full_conviction_pct"]
-    lo = sizing["min_mult"]
-    frac = max(0.0, min(conviction_pct / full, 1.0)) if full else 0.0
-    return lo + (1.0 - lo) * frac
+# Shared with auto_trader via app.scoring.conviction_sizing — the two had
+# drifted to different formulas. Kept as a module-level alias so existing
+# callers and tests importing _conviction_mult from here still resolve.
+_conviction_mult = conviction_mult
 
 router = APIRouter(prefix="/api", tags=["stock-scan"])
 logger = logging.getLogger(__name__)
@@ -197,6 +196,52 @@ _HISTORY_YEARS = 5
 _SCAN_SEM = asyncio.Semaphore(5)
 
 _BACKTEST_TTL = 24 * 3600  # daily — bar history doesn't change within a trading day
+def classify_stock_rejection(reason: str) -> str:
+    """Map a rejection reason to the StockPipeline field that counts it.
+
+    Module-level and total (every input returns exactly one bucket) so the
+    funnel's classification can be tested against the real reason strings
+    without driving a whole scan. That matters more here than it looks: the
+    counters are pure string matching over text produced elsewhere in this
+    file, and `other_rejected` is the RESIDUAL. Reword a producer without
+    updating its predicate and the bucket silently collapses to zero while the
+    residual absorbs it -- the funnel's `scanned == sum of buckets` invariant
+    still holds, so nothing fails, and the UI reports real gate rejections as
+    "errors". Three reasons were doing exactly that before this was centralised:
+    "insufficient intraday history" does not contain "insufficient history",
+    and the two mean_reversion_multi misses start with "no " but never say
+    "setup".
+
+    Order matters only in that the first match wins; the buckets below are
+    mutually exclusive over the reasons this module actually emits, which
+    tests/test_stock_scan_funnel.py pins string by string.
+    """
+    if (
+        "insufficient history" in reason
+        or "insufficient intraday history" in reason
+        or "no price data" in reason
+        or reason.startswith("price $")
+    ):
+        return "failed_history"
+    if reason.startswith("REJECT score="):
+        return "failed_score"
+    if reason.startswith("direction_conviction:"):
+        return "failed_direction"
+    if reason == "regime headwind":
+        return "failed_regime"
+    if (
+        (reason.startswith("no ") and "setup" in reason)
+        or reason.startswith("no mean_reversion_multi:")
+        or reason.startswith("mean_reversion_multi:")
+    ):
+        return "failed_signal"
+    # The confidence gate is a backtest-derived quality gate applied right after
+    # the backtest; it belongs with it rather than among "errors".
+    if reason.startswith("backtest gate:") or reason.startswith("confidence gate "):
+        return "failed_backtest"
+    return "other_rejected"
+
+
 _BACKTEST_CACHE: dict[str, tuple] = {}  # key → (BacktestResult, expires_at)
 _BACKTEST_POOL = concurrent.futures.ProcessPoolExecutor(
     max_workers=max(1, (os.cpu_count() or 2) // 2)
@@ -646,6 +691,15 @@ async def _process_stock(
     benchmark_closes: list[float],
     fund_gate: dict | None = None,
 ) -> PositionCardOut | dict:
+    # Resolved OUTSIDE the `try` below, which converts every exception into a
+    # per-symbol rejection: a malformed threshold has to propagate as an error,
+    # not be reported to the user as though this one symbol had failed to
+    # screen. `_execute_stock_scan_core` resolves the same value once before
+    # dispatching any of these, so in the scan path this has already raised
+    # before the first symbol is touched; the call is kept here so that direct
+    # callers (the test suite) screen on the real gate rather than silently
+    # running with it disabled.
+    _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     async with _SCAN_SEM:
         try:
             end = date.today()
@@ -764,17 +818,41 @@ async def _process_stock(
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
 
-            # Direction conviction filter (Swing/Position only)
-            if req.horizon != "Intraday":
+            # Direction conviction filter — a FLOOR in both directions, never a
+            # ceiling on the bearish side. The trend rule is direction-aware, so
+            # a high trend score on a Bearish scan means a strong DOWNtrend,
+            # which is the setup a put wants; what this gate removes is a LOW
+            # score either way. Thresholds live in scoring_rules.yaml
+            # (horizons.<horizon>.direction_conviction); `None` means exempt,
+            # which is how Intraday is excused rather than by naming it here.
+            # Must stay identical to the options gate in routers/scan.py — both
+            # now read the same resolver, which is what keeps them in step.
+            # `_min_trend` was resolved at the top of this function.
+            if _min_trend is not None:
+                # The `, 50` fallback is KEPT, unlike the `if _c.stockBreakdown
+                # else 50` removed from the options gate. They look like twins
+                # and are not: that one guarded a REQUIRED pydantic field on a
+                # model that is always truthy, so it was provably dead code,
+                # while this one fires for any card whose `rules` carries no
+                # trend entry — which several test fixtures build deliberately
+                # (`rules=[]`) to exercise backtest and signal paths. Raising
+                # here instead breaks four tests that are not about this gate.
+                #
+                # Unreachable in production: score_stock always appends
+                # trend_result (stock_scorer.py:1089) and every _trend_* branch
+                # returns a RuleResult named "trend".
+                #
+                # The 50 DID change meaning when the gate became a floor — at
+                # Bearish/Position it went from rejected (old ceiling of 40) to
+                # passing (floor of 40). That is the bullish side's behaviour,
+                # now mirrored, and it is one instance of a wider problem the
+                # gate has: it reads a single integer and cannot tell a measured
+                # 50 from "no measurement". Tracked as an open question in
+                # PROJECT_STATE.json rather than patched here, because the fix
+                # is a scorer-contract change, not a gate change.
                 _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
-                if req.direction == "Bearish":
-                    _max_trend = 40 if req.horizon == "Position" else 50
-                    if _trend_score > _max_trend:
-                        return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} > {_max_trend} for Bearish {req.horizon}"}
-                elif req.direction == "Bullish":
-                    _min_trend = 40 if req.horizon == "Position" else 30
-                    if _trend_score < _min_trend:
-                        return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend} for Bullish {req.horizon}"}
+                if _trend_score < _min_trend:
+                    return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend:g} for {req.direction} {req.horizon}"}
 
             if req.regime_filter and regime_signal and \
                regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
@@ -1047,6 +1125,25 @@ async def _execute_stock_scan_core(
         except PresetUnavailableError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    # Direction-conviction floor, validated BEFORE the batch quote call and the
+    # SPY benchmark fetch below — a malformed threshold must not cost a
+    # universe-wide round trip first. 500, not 4xx: the request is fine, the
+    # SERVER's YAML is broken and no request can succeed until it is fixed, so
+    # this must not be confused with the genuine 4xx this endpoint already
+    # raises for a bad user override. HTTPException serialises `detail` at any
+    # status, so the message naming the offending key survives to the UI and to
+    # the scheduled path's `record_scheduled_scan_run(error=str(exc))`.
+    #
+    # The explicit log line is NOT redundant: this app installs no exception
+    # handler or logging middleware, and starlette's ExceptionMiddleware returns
+    # an HTTPException WITHOUT logging it — so raising a 500 here would
+    # otherwise leave no server-side trace at all.
+    try:
+        load_direction_conviction_min_trend(req.direction, req.horizon)
+    except ValueError as e:
+        logger.error("STOCK SCAN %s aborted on malformed scoring_rules.yaml: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
     # Pre-fetch all prices in one Tradier call (removes 519 individual HTTP requests)
     try:
         price_map = await asyncio.to_thread(fetch_quotes, symbols)
@@ -1065,7 +1162,8 @@ async def _execute_stock_scan_core(
         pass   # RS column shows None — non-fatal
 
     fund_gate = _resolve_fundamentals_gate(req)
-    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate) for s in symbols]
+    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate)
+             for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []
@@ -1098,50 +1196,27 @@ async def _execute_stock_scan_core(
             "All candidates are CAUTION-grade — consider reducing size or waiting for a clearer signal."
         )
 
-    _hist_kw = ("insufficient history", "no price data")
+    def _bucket(r) -> str:
+        return classify_stock_rejection(r.get("reason", "") if isinstance(r, dict) else "")
+
     _pipeline = StockPipeline(
         scanned=len(symbols),
-        failed_history=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and (
-                any(k in r.get("reason", "") for k in _hist_kw)
-                or r.get("reason", "").startswith("price $")
-            )
-        ),
-        failed_score=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and r.get("reason", "").startswith("REJECT score=")
-        ),
-        failed_signal=sum(
-            1 for r in rejected
-            if isinstance(r, dict)
-            and r.get("reason", "").startswith("no ")
-            and "setup" in r.get("reason", "")
-        ),
-        failed_backtest=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and r.get("reason", "").startswith("backtest gate:")
-        ),
-        failed_regime=sum(
-            1 for r in rejected
-            if isinstance(r, dict) and r.get("reason") == "regime headwind"
-        ),
-        other_rejected=sum(
-            1 for r in rejected
-            if isinstance(r, dict)
-            and not any(k in r.get("reason", "") for k in _hist_kw)
-            and not r.get("reason", "").startswith("price $")
-            and not r.get("reason", "").startswith("REJECT score=")
-            and not (r.get("reason", "").startswith("no ") and "setup" in r.get("reason", ""))
-            and not r.get("reason", "").startswith("backtest gate:")
-            and r.get("reason") != "regime headwind"
-        ),
+        failed_history=sum(1 for r in rejected if _bucket(r) == "failed_history"),
+        failed_score=sum(1 for r in rejected if _bucket(r) == "failed_score"),
+        failed_signal=sum(1 for r in rejected if _bucket(r) == "failed_signal"),
+        failed_backtest=sum(1 for r in rejected if _bucket(r) == "failed_backtest"),
+        failed_regime=sum(1 for r in rejected if _bucket(r) == "failed_regime"),
+        failed_direction=_dir_filtered,
+        failed_shortlist=original_count - len(candidates),
+        other_rejected=sum(1 for r in rejected if _bucket(r) == "other_rejected"),
         candidates=len(candidates),
     )
     logger.info(
-        "STOCK SCAN pipeline: scanned=%d hist_fail=%d score_fail=%d signal_fail=%d bt_fail=%d regime_fail=%d other=%d candidates=%d",
+        "STOCK SCAN pipeline: scanned=%d hist_fail=%d score_fail=%d signal_fail=%d bt_fail=%d regime_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
         _pipeline.scanned, _pipeline.failed_history, _pipeline.failed_score,
-        _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.failed_regime, _pipeline.other_rejected, _pipeline.candidates,
+        _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.failed_regime,
+        _pipeline.failed_direction, _pipeline.failed_shortlist,
+        _pipeline.other_rejected, _pipeline.candidates,
     )
     result = StockScanResult(
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
