@@ -26,7 +26,11 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 
 from app.services.audit import new_rec_id
-from app.scoring.conviction_sizing import conviction_mult
+from app.scoring.conviction_sizing import (
+    SizingConfigError,
+    conviction_mult,
+    resolve_sizing,
+)
 from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut, StockPipeline, StockAnalysisRequest,
@@ -1142,6 +1146,23 @@ async def _execute_stock_scan_core(
         load_direction_conviction_min_trend(req.direction, req.horizon)
     except ValueError as e:
         logger.error("STOCK SCAN %s aborted on malformed scoring_rules.yaml: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # regime_sizing, validated in the same place, for the same reason, and with
+    # the same 500 — but it is the one block on this list that changes MONEY
+    # rather than which names come back: it multiplies the share count every
+    # card below carries. So it is validated ONCE here instead of being left to
+    # the per-symbol worker, where `asyncio.gather(..., return_exceptions=True)`
+    # at :1167 would turn one broken key into a universe of rejected symbols.
+    #
+    # `.get("regime_sizing")` with no default on purpose: an absent block and an
+    # explicitly null one both mean sizing is off (multiplier 1.0), which is a
+    # configuration, not a failure. Only a block that is PRESENT and unusable
+    # refuses the scan — §9.1's fail-closed posture, Kenneth 2026-09-17.
+    try:
+        resolve_sizing(_load_full_scoring_cfg().get("regime_sizing"))
+    except SizingConfigError as e:
+        logger.error("STOCK SCAN %s aborted on unusable regime_sizing: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
     # Pre-fetch all prices in one Tradier call (removes 519 individual HTTP requests)
