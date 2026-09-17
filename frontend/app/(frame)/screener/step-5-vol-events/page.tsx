@@ -18,7 +18,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
-import { resolveIv, formatIv, IV_COLUMN_LABEL, type IvBasis } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { worstStatus, type Status } from '@/lib/status';
@@ -208,13 +208,19 @@ export default function Step5Page() {
     if (pass === gatedRows.length) return head;
     // Ordered most- to least-common cause so the dominant reason reads first.
     const causes: string[] = [];
-    const noIv = n('noIv'), iv = n('iv'), ev = n('event'), both = n('both');
+    const noIv = n('noIv'), ev = n('event'), both = n('both');
     if (noIv) causes.push(`${noIv} with no volatility reading (counted as CAUTION, never as PASS — a missing reading is not a passing one)`);
     // NOT lowercased. `IV` is an initialism, and `.toLowerCase()` rendered it
     // "4 on iv above its threshold" — caught on the first screenshot of this
     // banner, which is the argument for looking at the page rather than only
     // at the tests: every assertion still passed.
-    if (iv)   causes.push(`${iv} on ${IV_COLUMN_LABEL} above its threshold`);
+    // Split by basis, because "4 on IV above its threshold" over a column
+    // headed "IV / IV RANK" is the very mismatch this change removes. The
+    // nouns here are the ones thresholdSentences and ivColumnLabel use.
+    const ivRankFails = gatedRows.filter((g) => g.driver === 'iv' && g.iv.basis === 'rank').length;
+    const ivAbsFails  = gatedRows.filter((g) => g.driver === 'iv' && g.iv.basis === 'absolute').length;
+    if (ivRankFails) causes.push(`${ivRankFails} on IV rank above its threshold`);
+    if (ivAbsFails)  causes.push(`${ivAbsFails} on IV above its threshold`);
     if (ev)   causes.push(`${ev} on an event inside this horizon's window`);
     if (both) causes.push(`${both} on both`);
     return causes.length === 0 ? head : `${head} Driven by: ${causes.join('; ')}.`;
@@ -241,7 +247,7 @@ export default function Step5Page() {
           <span aria-hidden />
           <Text size={11} tone="dim">SYMBOL</Text>
           <Text size={11} tone="dim">NAME</Text>
-          <Text size={11} tone="dim">{IV_COLUMN_LABEL}</Text>
+          <Text size={11} tone="dim">{ivColumnLabel(basesPresent)}</Text>
           <Text size={11} tone="dim">IV PCTL</Text>
           <Text size={11} tone="dim">NEXT EVENT</Text>
           <Text size={11} tone="dim">GATE</Text>

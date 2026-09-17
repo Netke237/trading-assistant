@@ -105,6 +105,18 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* Header cells clip exactly as the body cells do.
+ *
+ * Without this a heading wider than its own track spills over its NEIGHBOUR
+ * instead of being cut: once NAME's track was starved to 0px the word "NAME"
+ * rendered straight across HORIZON's data, reading as "NAMEHORIZON". The body
+ * never had this because .nameCell already clips, which is also why the two
+ * disagreed about the track width in the first place. */
+.tableHeader > * {
+  min-width: 0;
+  overflow: hidden;
+}
+
 /* Sortable column header button */
 .sortBtn {
   background: none;

@@ -37,7 +37,25 @@ import styles from './page.module.css';
 const PAGE_SIZE = 10;
 
 // icon(star+chart) | SYMBOL | NAME | HORIZON | Δ RNK | Δ SCR | SCORE | CONF | STOP | NEXT
-const COLUMNS = '44px 56px 1fr 60px 52px 50px 56px 68px 64px 80px';
+// NAME is `minmax(0, 1fr)`, NOT `1fr`, and the zero is the whole point.
+//
+// A bare `1fr` is `minmax(auto, 1fr)`, so when the grid has no free space to
+// distribute the track falls back to its MIN-CONTENT width — and the header
+// and the body rows have different min-contents. Measured at 1920: the header
+// resolved this track to 30.375px (the word "NAME") while every row resolved
+// it to 0px (`.nameCell` clips its text), so the header sat exactly 30px to
+// the right of its own column from HORIZON onward. Every heading named the
+// wrong column, silently, and only while the table was too narrow to fit --
+// which is why it never showed up on a wide screen or in a test.
+//
+// `minmax(0, 1fr)` removes the content-based minimum, so both resolve
+// identically and the headings stay over their data at every width.
+//
+// This fixes the ALIGNMENT only. The table still needs ~696px of content and
+// the left panel gives it 347px (1440) / 539px (1920), so NAME is starved to
+// zero and the right-hand columns are still clipped -- that is a panel-width
+// decision, pending with Kenneth, not a grid-template one.
+const COLUMNS = '44px 56px minmax(0, 1fr) 60px 52px 50px 56px 68px 64px 80px';
 
 const HORIZON_WEIGHTS: Record<string, { trend: number; pullback: number; trigger: number; event: number; volatility: number }> = {
   Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5,  volatility: 10 },
