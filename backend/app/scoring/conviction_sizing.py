@@ -267,12 +267,40 @@ def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | No
     #
     # REVERSIBLE IN ONE LINE if he wants the clamp back, and section 9.9 is
     # still formally his to close.
-    if not 0.0 <= min_mult <= 1.0:
+    # ZERO IS REFUSED TOO, and it was admitted until 2026-09-17. The bound read
+    # `0.0 <= min_mult`, so `min_mult: 0` passed — a natural way to write "cut
+    # the position to nothing in a hostile regime". It does not cut it to
+    # nothing. conviction_mult returns lo + (1-lo)*frac, which is exactly 0.0 at
+    # conviction <= 0, and stock_scan.py:685 reads
+    # `risk_fixed if risk_fixed else (account * (risk_pct or 0.01))` — 0.0 is
+    # FALSY, so the sized risk falls through to a hardcoded 1%. A 0.5% config
+    # came out at 1%: the setting meant to remove the position DOUBLED it.
+    #
+    # Found by cross-checking this implementation against the rival one built in
+    # another container, whose test named the case outright; no single audit
+    # round on either side caught it. Reproduced against this code before the
+    # fix: resolve_sizing accepted (0.0, 40.0) and conviction_mult(0) returned
+    # 0.0.
+    #
+    # Refusing is the fail-closed answer Kenneth's section 9.1 asks for, and a
+    # zero multiplier has no honest meaning here anyway: "do not trade" is not a
+    # position size, and this path always ends in an order.
+    #
+    # THE FALSY READ AT stock_scan.py:685 IS STILL THERE and is logged, not
+    # fixed — `risk_fixed if risk_fixed` has the same hole for a fixed risk of
+    # 0, and a user-supplied risk_pct of 0 still becomes 1%. Neither is
+    # reachable from THIS path once zero is refused, and widening the change to
+    # chase them is what audit_rule says not to do.
+    if not 0.0 < min_mult <= 1.0:
         raise SizingConfigError(
             f"scoring_rules.yaml: regime_sizing.min_mult is {min_mult}, outside "
-            f"[0, 1] — it is a FRACTION of full size, so a floor above 1 is not "
-            f"a floor at all. Clamping it to 1.0 would size every order at FULL."
+            f"(0, 1] — it is a FRACTION of full size, so a floor above 1 is not "
+            f"a floor at all, and a floor of 0 does not remove the position: it "
+            f"sizes to 0.0, which reads as FALSY downstream and falls through to "
+            f"a hardcoded 1% — doubling a 0.5% config instead of zeroing it."
             + (f" Did you mean {min_mult / 100:g}?" if min_mult > 1 else "")
+            + (" To stop trading in a headwind, disable regime_sizing or raise "
+               "the gate — do not set the floor to zero." if min_mult == 0 else "")
         )
 
     return min_mult, full

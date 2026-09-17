@@ -332,8 +332,16 @@ def test_an_out_of_range_min_mult_refuses_rather_than_clamping_to_full_size():
         conviction_mult(0, _cfg(min_mult=30))
     assert "0.3" in str(exc.value)
 
-    # The boundary values themselves are honourable and must still pass.
-    assert conviction_mult(0, _cfg(min_mult=0.0)) == pytest.approx(0.0)
+    # CORRECTED 2026-09-17. This block used to assert that BOTH boundary values
+    # were "honourable", and pinned `min_mult: 0.0` as yielding 0.0. That claim
+    # was false and this assertion was holding the bug in place: a 0.0
+    # multiplier is FALSY, and stock_scan.py:685's
+    # `risk_fixed if risk_fixed else (account * (risk_pct or 0.01))` falls
+    # through to a hardcoded 1% -- so the value that reads as "remove the
+    # position" DOUBLED a 0.5% config. Zero is now refused; the upper boundary
+    # is genuinely honourable and still passes.
+    with pytest.raises(SizingConfigError):
+        conviction_mult(0, _cfg(min_mult=0.0))
     assert conviction_mult(0, _cfg(min_mult=1.0)) == pytest.approx(1.0)
 
 
@@ -373,3 +381,44 @@ def test_mixed_type_yaml_keys_cannot_escape_as_a_typeerror():
     ):
         with pytest.raises(SizingConfigError):
             resolve_sizing(cfg)
+
+
+def test_a_zero_min_mult_is_refused_because_it_doubles_rather_than_zeroes():
+    """`min_mult: 0` was admitted until 2026-09-17 and is the worst value in the
+    range: it is the natural way to write "cut the position to nothing in a
+    hostile regime", and it does the opposite.
+
+    conviction_mult returns lo + (1-lo)*frac, which is exactly 0.0 at conviction
+    <= 0. stock_scan.py:685 reads
+    `risk_fixed if risk_fixed else (account * (risk_pct or 0.01))`, and 0.0 is
+    falsy, so the sized risk falls through to a hardcoded 1%. A 0.5% config came
+    out at 1% -- doubled, not zeroed.
+
+    Found by cross-checking this module against the rival implementation built in
+    another container; no audit round on either side caught it.
+    """
+    cfg = {"enabled": True, "min_mult": 0.0, "full_conviction_pct": 40}
+    with pytest.raises(SizingConfigError) as exc:
+        resolve_sizing(cfg)
+    msg = str(exc.value)
+    assert "min_mult" in msg
+    # The message must explain the doubling, not just cite a range: a bare
+    # "outside (0, 1]" reads as pedantry against a value that looks reasonable.
+    assert "1%" in msg and "do not set the floor to zero" in msg
+
+    # The bound is exclusive at zero only -- a genuinely tiny floor still works,
+    # so this refuses the trap without removing the ability to size down hard.
+    assert resolve_sizing({**cfg, "min_mult": 0.0001}) == (0.0001, 40.0)
+
+
+def test_the_multiplier_can_no_longer_reach_a_falsy_zero():
+    """The downstream falsy read at stock_scan.py:685 is still there and is
+    logged rather than fixed. This pins the reason that is safe: no admitted
+    config can produce a 0.0 multiplier for it to swallow.
+    """
+    for min_mult in (0.0001, 0.05, 0.3, 0.5, 1.0):
+        cfg = {"enabled": True, "min_mult": min_mult, "full_conviction_pct": 40}
+        for conviction in (-100, -20, 0, 10, 40, 100):
+            mult = conviction_mult(conviction, cfg)
+            assert mult > 0.0, (min_mult, conviction, mult)
+            assert bool(mult) is True, "a falsy multiplier is the whole bug"
