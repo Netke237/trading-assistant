@@ -667,7 +667,8 @@ def test_a_broken_block_refuses_before_the_conviction_lookup(mocker):
     from app.scoring.conviction_sizing import SizingConfigError
 
     mocker.patch.object(at, "_load_scoring_config",
-                        return_value={"enabled": True, "full_conviction_pct": -40})
+                        return_value={"enabled": True, "min_mult": 0.3,
+                                      "full_conviction_pct": -40})
     conviction = mocker.patch("app.services.regime_monitor.get_last_conviction",
                               return_value=None)
     with pytest.raises(SizingConfigError):
@@ -682,7 +683,8 @@ def test_fire_sends_nothing_records_the_refusal_and_stays_disarmed(mocker):
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     execute = mocker.patch("app.services.auto_trader.execute_option_order")
     mocker.patch.object(at, "_load_scoring_config",
-                        return_value={"enabled": True, "min_mult": "half"})
+                        return_value={"enabled": True, "min_mult": "half",
+                                      "full_conviction_pct": 40})
 
     svc = AutoTradeService()
     svc.arm(_sizing_strategy(4))
@@ -708,7 +710,8 @@ def test_the_scan_trigger_alerts_because_nobody_is_reading_it(mocker):
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order")
     mocker.patch.object(at, "_load_scoring_config",
-                        return_value={"enabled": True, "min_mult": "half"})
+                        return_value={"enabled": True, "min_mult": "half",
+                                      "full_conviction_pct": 40})
     alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
 
     svc = AutoTradeService()
@@ -735,6 +738,15 @@ def test_the_alert_reaches_the_channel_that_reaches_a_phone(mocker):
     at._alert_sizing_config_refusal("AAPL", SizingConfigError("min_mult is not a number"))
 
     assert captured["symbol"] == "AAPL"
+    assert captured["alert_type"] == "CONFIG_ERROR", (
+        "the alert's identity is what the email subject and the dedup key are "
+        "built from; TP_HIT here reads 'Bamendjou Portfolio Alert - AAPL: "
+        "Target reached' for a refused order"
+    )
+    assert captured["rec_id"] == "auto-trade-sizing-config", (
+        "symbol-independent on purpose: the FILE is broken, not the symbol, so "
+        "the dedup window collapses a run of scans into one alert"
+    )
     assert captured["type_enabled"] is True, (
         "CONFIG_ERROR is not in enabledTypes, so the global check would drop it"
     )
@@ -767,3 +779,38 @@ def test_the_alert_is_skipped_loudly_when_it_would_crash_on_a_running_loop(caplo
 
     asyncio.run(_from_the_loop())
     assert "NOT alerted" in caplog.text
+
+
+def test_a_suppressed_alert_is_not_mistaken_for_a_delivered_one(mocker, caplog):
+    """notify_alert returns False for the master kill switch, an armed dedup
+    window and a genuine delivery failure alike. Discarding that return makes
+    §9.1's "and alert" half a silent no-op — which is the class of defect this
+    whole change exists to close, so it must not be reintroduced by the fix."""
+    import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+
+    async def _suppressed(**kwargs):
+        return False
+
+    mocker.patch("app.services.notifications.alert_notifier.notify_alert", _suppressed)
+    with caplog.at_level("ERROR", logger="app.services.auto_trader"):
+        at._alert_sizing_config_refusal("AAPL", SizingConfigError("bad"))
+    assert "NOT delivered" in caplog.text
+
+
+def test_a_full_size_multiplier_still_leaves_a_trace(mocker, caplog):
+    """The one outcome worth noticing was the only silent one: every config that
+    resolved to mult 1.0 returned before the log line, so a bad-but-honourable
+    file sized at full with nothing written anywhere. Round 1 measured that."""
+    import app.services.auto_trader as at
+
+    mocker.patch.object(at, "_load_scoring_config", return_value={
+        "enabled": True, "min_mult": 0.3, "full_conviction_pct": 40,
+    })
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=90)
+
+    with caplog.at_level("INFO", logger="app.services.auto_trader"):
+        out = at._apply_vol_sizing(_sizing_strategy(10))
+    assert out.quantity == 10
+    assert "unchanged" in caplog.text
+    assert "mult=1.00" in caplog.text

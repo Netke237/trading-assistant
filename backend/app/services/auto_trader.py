@@ -113,9 +113,15 @@ def _load_scoring_config() -> dict:
     An absent regime_sizing block is NOT a failure and still returns {}: the
     file parsed, and it says sizing is off.
 
-    lru_cache does not cache exceptions, so a fixed file is picked up on the
-    next fire attempt without a restart. A *valid* block is still cached until
-    restart, which is unchanged and is what §9.2 assumes.
+    lru_cache does not cache exceptions, so a file that could not be READ or
+    PARSED is re-read on the next fire attempt. THAT IS NOT TRUE OF A BAD
+    VALUE, and round 1 corrected an earlier claim here that said it was: a
+    block that parses and is then refused by resolve_sizing was already cached
+    by this function, so the refusal stands until the process restarts even
+    after the YAML is fixed. Deliberately not plumbed around: §9.2 is settled
+    ("he never edits while the backend runs; he always restarts", no reload
+    endpoint), so a restart is the documented way this file takes effect at
+    all, and cache invalidation here would be a mechanism §9.2 says to omit.
     """
     try:
         with open(_SCORING_CONFIG_PATH) as f:
@@ -136,7 +142,10 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     """Return a (possibly quantity-adjusted) copy of strategy based on regime conviction.
 
     Reads cached conviction from regime_monitor (no network call).
-    If conviction is None or regime_sizing is disabled, returns strategy unchanged.
+    If conviction is None or regime_sizing is disabled, returns strategy
+    unchanged. RAISES SizingConfigError if the regime_sizing block is present
+    and cannot be honoured — the §9.1 fail-closed posture, which fire() turns
+    into a recorded refusal rather than an order at full size.
     """
     cfg = _load_scoring_config()
     # Validated BEFORE the conviction lookup, and that order is load-bearing:
@@ -158,6 +167,14 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     adjusted_qty = max(1, round(strategy.quantity * mult))
 
     if adjusted_qty == strategy.quantity:
+        # Logged too, and round 1 is why: every case where a bad-but-honourable
+        # config produced mult 1.0 (full size) returned here and left NO trace
+        # at any level, so the one outcome worth noticing was the only silent
+        # one. Includes the honest no-op (conviction at or above full).
+        logger.info(
+            "vol_sizing: %s qty %d unchanged (conviction=%.1f, mult=%.2f)",
+            strategy.symbol, strategy.quantity, directional_conv, mult,
+        )
         return strategy
 
     logger.info(
@@ -177,12 +194,18 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
     is a log line on a box nobody is watching while an armed order silently
     does not happen.
 
-    WHY asyncio.run IS CORRECT HERE AND WOULD BE WRONG IN fire(): this runs in
-    the worker thread `asyncio.to_thread` created, which has no event loop of
-    its own, so a fresh loop is the only way to await an async notifier.
-    fire() is also called directly from the event-loop thread (the /fire
-    endpoint) where asyncio.run raises — hence the guard, and hence this
-    living at the scan-trigger boundary rather than inside fire().
+    WHY asyncio.run IS CORRECT HERE: this runs in the worker thread
+    `asyncio.to_thread` created, which has no event loop of its own, so a
+    fresh loop is the only way to await an async notifier. Keeping it at the
+    scan-trigger boundary rather than inside fire() is what makes that true —
+    fire() is also reachable from the event-loop thread, via the /fire
+    endpoint, where asyncio.run raises.
+
+    THE RUNNING-LOOP GUARD IS UNREACHABLE TODAY and round 1 was right to say
+    so: the only caller is maybe_fire_on_scan, whose only caller is POST
+    /scan through asyncio.to_thread. It stays because the cost of being wrong
+    about that later is §9.1's "and alert" half silently not happening, and a
+    logged skip is the difference between finding that out and not.
 
     type_enabled=True is deliberate and is the documented per-call override:
     CONFIG_ERROR is not one of the portfolio alert types in `enabledTypes`, so
@@ -206,7 +229,7 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
 
     try:
         from app.services.notifications.alert_notifier import notify_alert
-        asyncio.run(notify_alert(
+        delivered = asyncio.run(notify_alert(
             symbol=symbol,
             alert_type="CONFIG_ERROR",
             reason=(
@@ -221,6 +244,17 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
             rec_id="auto-trade-sizing-config",
             type_enabled=True,
         ))
+        if not delivered:
+            # notify_alert returns False for the master kill switch, an armed
+            # dedup window (persisted in alert_dedup.json, so it survives a
+            # restart) and a genuine delivery failure alike. Without this line
+            # "and alert" could be a silent no-op -- which is how this whole
+            # class of defect got here.
+            logger.error(
+                "AutoTrader: sizing-config refusal for %s was NOT delivered by "
+                "any channel (master switch off, dedup window armed, or "
+                "delivery failed). The refusal itself stands.", symbol,
+            )
     except Exception as notify_exc:
         logger.error(
             "AutoTrader: failed to alert the sizing-config refusal for %s "

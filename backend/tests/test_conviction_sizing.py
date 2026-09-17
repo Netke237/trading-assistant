@@ -12,6 +12,7 @@ import yaml
 
 from app.scoring.conviction_sizing import (
     DEFAULT_FULL_CONVICTION_PCT,
+    REQUIRED_KEYS,
     SizingConfigError,
     conviction_mult,
     resolve_sizing,
@@ -84,10 +85,67 @@ def test_disabled_block_returns_unity():
     assert conviction_mult(0, {}) == 1.0
 
 
-def test_partial_block_falls_back_instead_of_raising():
-    """stock_scan's form did sizing["min_mult"] — a KeyError on a partial block."""
-    assert conviction_mult(40, {"enabled": True}) == pytest.approx(1.0)
-    assert conviction_mult(0, {"enabled": True}) == pytest.approx(0.5)
+def test_a_partial_block_refuses_rather_than_inventing_a_floor():
+    """This test used to PIN the defect, and round 1 caught it doing so.
+
+    Its original concern was that stock_scan's form did sizing["min_mult"] and
+    raised KeyError on a partial block. The fallback that replaced the KeyError
+    used min_mult 0.5 while the shipped file says 0.3 — so `min_mul: 0.3`, one
+    dropped character, sized every position 67% larger than the file read, with
+    no log at any level. Refusing satisfies the original concern too: no
+    KeyError, and no invented floor either.
+    """
+    with pytest.raises(SizingConfigError) as exc:
+        conviction_mult(40, {"enabled": True})
+    assert "min_mult" in str(exc.value)
+
+    # The misspelling that motivates this: min_mult goes missing, and the
+    # unrecognised key is named as a hint (it does not decide the refusal —
+    # closing the subtree is section 9.8 and undecided).
+    with pytest.raises(SizingConfigError) as exc:
+        conviction_mult(20, {"enabled": True, "min_mul": 0.3, "full_conviction_pct": 40})
+    assert "min_mult" in str(exc.value)
+    assert "'min_mul'" in str(exc.value)
+
+
+def test_a_populated_block_that_lost_its_enabled_line_refuses(caplog):
+    """G1 of round 1's siblings: read as "sizing off" -> multiplier 1.0 -> FULL
+    SIZE, from a block carrying real sizing values. Present-but-unreadable and
+    deliberately-off produced the same number, which is the collapse this
+    module exists to remove."""
+    for cfg in (
+        {"min_mult": 0.3, "full_conviction_pct": 40},                    # line deleted
+        {"enabeld": True, "min_mult": 0.3, "full_conviction_pct": 40},   # misspelled
+    ):
+        with pytest.raises(SizingConfigError) as exc:
+            conviction_mult(20, cfg)
+        assert "enabled" in str(exc.value)
+
+
+def test_enabled_must_be_a_real_boolean():
+    """A quoted "false" is TRUE to Python. It sizes DOWN rather than up, so it
+    was below the gate — but it is the same unhonourable-value class."""
+    for bad in ("false", "no", 1, 0, None):
+        with pytest.raises(SizingConfigError):
+            conviction_mult(20, {"enabled": bad, "min_mult": 0.3, "full_conviction_pct": 40})
+
+
+@pytest.mark.parametrize("full", [0.40, 0.99, 100.5, 1000])
+def test_full_conviction_pct_outside_the_conviction_scale_refuses(full):
+    """THE gate-level finding of round 1. full_conviction_pct is a point on the
+    0-100 conviction scale while its sibling min_mult is a fraction, so
+    `full_conviction_pct: 0.40` is the natural mistake — and any value at or
+    below the current conviction saturates the ramp at 1.0, i.e. full size, on
+    both paths, with no log line at any level."""
+    with pytest.raises(SizingConfigError) as exc:
+        conviction_mult(20, {"enabled": True, "min_mult": 0.3, "full_conviction_pct": full})
+    assert "full_conviction_pct" in str(exc.value)
+
+
+def test_the_required_keys_are_exactly_the_three_the_ramp_reads():
+    """If a fourth key ever becomes load-bearing, it belongs here — that is what
+    makes a dropped line a refusal instead of a silent default."""
+    assert set(REQUIRED_KEYS) == {"enabled", "min_mult", "full_conviction_pct"}
 
 
 def test_zero_full_conviction_falls_back_to_the_default_scale():
@@ -128,24 +186,38 @@ def test_a_disabled_block_is_off_not_broken():
     assert resolve_sizing({"enabled": False}) is None
 
 
+def _cfg(**over):
+    """A COMPLETE, valid block with one key overridden.
+
+    Built from the full shape on purpose: a partial dict now refuses for the
+    missing key, which would make every case below pass for the wrong reason.
+    """
+    return {"enabled": True, "min_mult": 0.3, "full_conviction_pct": 40, **over}
+
+
 @pytest.mark.parametrize("bad", [
-    {"enabled": True, "full_conviction_pct": -40},
-    {"enabled": True, "full_conviction_pct": "forty"},
-    {"enabled": True, "full_conviction_pct": True},
-    {"enabled": True, "full_conviction_pct": float("nan")},
-    {"enabled": True, "full_conviction_pct": float("inf")},
-    {"enabled": True, "full_conviction_pct": None},
-    {"enabled": True, "full_conviction_pct": [40]},
-    {"enabled": True, "min_mult": "half"},
-    {"enabled": True, "min_mult": True},
-    {"enabled": True, "min_mult": float("nan")},
-    {"enabled": True, "min_mult": None},
+    _cfg(full_conviction_pct=-40),
+    _cfg(full_conviction_pct="forty"),
+    _cfg(full_conviction_pct=True),
+    _cfg(full_conviction_pct=float("nan")),
+    _cfg(full_conviction_pct=float("inf")),
+    _cfg(full_conviction_pct=None),
+    _cfg(full_conviction_pct=[40]),
+    _cfg(min_mult="half"),
+    _cfg(min_mult=True),
+    _cfg(min_mult=float("nan")),
+    _cfg(min_mult=None),
 ])
 def test_an_unusable_block_refuses_instead_of_sizing_full(bad):
     with pytest.raises(SizingConfigError):
         conviction_mult(20, bad)
     with pytest.raises(SizingConfigError):
         resolve_sizing(bad)
+
+
+def test_the_valid_base_really_is_valid():
+    """Otherwise every case above could be passing on the base, not the override."""
+    assert resolve_sizing(_cfg()) == (0.3, 40.0)
 
 
 def test_a_block_that_is_not_a_mapping_refuses():
@@ -155,11 +227,23 @@ def test_a_block_that_is_not_a_mapping_refuses():
         resolve_sizing("enabled: true")
 
 
-def test_a_nan_conviction_cannot_reach_a_broker_quantity():
-    """max()/min() let nan through every range check, and round(nan) raises
-    inside fire() after the order is already committed to."""
-    with pytest.raises(SizingConfigError):
+def test_a_nan_conviction_is_a_data_fault_not_a_config_fault():
+    """ValueError, NOT SizingConfigError, and round 1 is why on both halves.
+
+    The conviction arrives from regime_monitor's cache, not from the file, so
+    reporting it as a broken config sends a phone alert naming
+    `regime_sizing.conviction_pct` — a key that does not exist in
+    scoring_rules.yaml — while the file is correct.
+
+    The earlier rationale here was also false: nan never reached round(). On
+    the parent code `max(0.0, nan)` returns 0.0 and `min(1.0, nan)` returns
+    1.0, so a nan conviction silently produced min_mult. Still wrong, just not
+    the way it was written down.
+    """
+    with pytest.raises(ValueError) as exc:
         conviction_mult(float("nan"), CFG)
+    assert not isinstance(exc.value, SizingConfigError)
+    assert "scoring_rules.yaml" not in str(exc.value)
 
 
 def test_the_error_is_a_runtimeerror_so_existing_handlers_still_map_it():
@@ -173,7 +257,7 @@ def test_the_error_names_the_file_and_the_key():
     """The message is the whole remedy — it reaches the 400 body, the scan's
     500 detail and the alert, and none of those has anything else to go on."""
     with pytest.raises(SizingConfigError) as exc:
-        conviction_mult(20, {"enabled": True, "full_conviction_pct": -40})
+        conviction_mult(20, _cfg(full_conviction_pct=-40))
     assert "scoring_rules.yaml" in str(exc.value)
     assert "full_conviction_pct" in str(exc.value)
 
@@ -183,7 +267,7 @@ def test_an_out_of_range_min_mult_is_still_clamped_and_now_recorded(caplog):
     and refusing instead is open question 9.9, which is Kenneth's call. What is
     new is that the clamped run says so."""
     with caplog.at_level("ERROR", logger="app.scoring.conviction_sizing"):
-        assert conviction_mult(0, {"enabled": True, "min_mult": 1.7}) == pytest.approx(1.0)
+        assert conviction_mult(0, _cfg(min_mult=1.7)) == pytest.approx(1.0)
     assert "min_mult" in caplog.text
 
 

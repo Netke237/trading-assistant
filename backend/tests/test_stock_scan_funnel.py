@@ -401,7 +401,9 @@ def test_the_stock_rejection_reason_names_the_floor_as_an_integer(stock_client):
 # SHARES the response carries rather than which names come back, so it gets
 # the same pre-check the direction-conviction floor above already has.
 
-_BAD_SIZING = {"regime_sizing": {"enabled": True, "full_conviction_pct": -40}}
+_BAD_SIZING = {"regime_sizing": {
+    "enabled": True, "min_mult": 0.3, "full_conviction_pct": -40,
+}}
 
 
 def test_an_unusable_regime_sizing_block_fails_the_stock_scan(stock_client):
@@ -441,8 +443,15 @@ def test_the_sizing_fail_fast_runs_before_the_universe_price_fetch(stock_client)
     {"regime_sizing": {"enabled": False, "full_conviction_pct": "junk"}},
 ])
 def test_sizing_off_does_not_fail_the_scan(stock_client, cfg):
-    """Off is a configuration, not a failure — and junk under a disabled block
-    is inert. Refusing here would restrict more than §9.1 asks for."""
+    """Off is a configuration, not a failure: the up-front check must let it
+    through. Refusing here would restrict more than section 9.1 asks for.
+
+    WHAT THIS DOES NOT PIN, because round 1 measured it: these symbols drop at
+    "insufficient history" and conviction_mult is never called, so this asserts
+    only that the fail-fast does not trip. "Junk under a disabled block is
+    inert" is pinned in test_conviction_sizing.py, at the level where the
+    arithmetic lives.
+    """
     with patch("app.routers.stock_scan._load_full_scoring_cfg", return_value=cfg):
         r = stock_client.post("/api/stock-scan", json={
             "symbols": ["AAA"], "universe": [], "direction": "Bullish",
