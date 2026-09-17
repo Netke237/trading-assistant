@@ -8,7 +8,10 @@ disk — for risk_rules.yaml that is the file the sizing and exit-plan code read
 """
 from __future__ import annotations
 
+import os
+import stat
 import threading
+import time
 
 import pytest
 import yaml
@@ -239,14 +242,23 @@ def test_notification_save_yaml_round_trips(tmp_path, monkeypatch):
     ns_module._save_yaml(payload)
 
     assert yaml.safe_load(target.read_text()) == payload
+    # Assert the SHAPE, not just the round-trip: safe_load is equally happy
+    # with inline flow style, so a dropped default_flow_style=False would
+    # rewrite the user's whole settings.yaml onto one line undetected.
+    text = target.read_text()
+    assert "alert_delivery:\n" in text, f"expected block style, got: {text!r}"
+    assert "{" not in text, f"expected block style, got: {text!r}"
     assert _sidecars(tmp_path) == []
 
 
 # ── end-to-end through the endpoints ────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_post_risk_endpoint_writes_atomically(tmp_path, monkeypatch):
-    """The endpoint path leaves a complete document and no sidecar behind.
+async def test_post_risk_endpoint_still_persists_through_the_helper(tmp_path, monkeypatch):
+    """Rewiring smoke test: the endpoint still saves, and leaves no sidecar.
+
+    Deliberately NOT named for atomicity — it injects no failure and runs no
+    concurrency, so it pins the wiring, not the guarantee.
 
     Driven through the real app the way tests/test_risk_settings.py does — the
     shared `client` fixture builds a slimmed test app that does not mount
@@ -266,3 +278,164 @@ async def test_post_risk_endpoint_writes_atomically(tmp_path, monkeypatch):
     saved = yaml.safe_load(target.read_text())
     assert saved["reward_risk"]["premium_stop_pct"] == 0.45
     assert _sidecars(tmp_path) == []
+
+
+# ── permission preservation (settings.yaml holds plaintext credentials) ─────
+
+def test_hardened_target_keeps_its_mode(tmp_path):
+    """os.replace installs the sidecar's inode, so without carrying the mode
+    across, an operator's `chmod 600 settings.yaml` would be silently reset to
+    0644 on the next Settings save — and that file holds smtp_password and
+    bot_token in plaintext. Both write forms this replaced preserved 0600.
+    """
+    target = tmp_path / "settings.yaml"
+    target.write_text("a: 1\n")
+    os.chmod(target, 0o600)
+
+    atomic_write_yaml(target, {"a": 2}, default_flow_style=False)
+
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert yaml.safe_load(target.read_text()) == {"a": 2}
+
+
+def test_mode_is_carried_before_the_replace(tmp_path, monkeypatch):
+    """The chmod must land on the sidecar BEFORE it is installed, so a sidecar
+    orphaned by a kill is never more readable than its target."""
+    target = tmp_path / "settings.yaml"
+    target.write_text("a: 1\n")
+    os.chmod(target, 0o600)
+
+    modes: list[int] = []
+    real_replace = atomic_yaml.os.replace
+
+    def _record(src, dst):
+        modes.append(stat.S_IMODE(os.stat(src).st_mode))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(atomic_yaml.os, "replace", _record)
+    atomic_write_yaml(target, {"a": 2}, default_flow_style=False)
+
+    assert modes == [0o600], "sidecar was not hardened before being installed"
+
+
+def test_new_file_is_left_at_the_process_umask(tmp_path):
+    """No target to copy from — a first write must behave exactly as the plain
+    open(path, 'w') it replaced, i.e. umask-derived, not forced to 0600."""
+    target = tmp_path / "settings.yaml"
+    reference = tmp_path / "reference.yaml"
+    reference.write_text("x: 1\n")  # same umask, same directory
+
+    atomic_write_yaml(target, {"a": 1}, default_flow_style=False)
+
+    assert stat.S_IMODE(target.stat().st_mode) == stat.S_IMODE(reference.stat().st_mode)
+
+
+# ── sweeping sidecars orphaned by a killed process ──────────────────────────
+
+def test_stale_orphaned_sidecar_is_swept(tmp_path):
+    """A write killed by SIGKILL/OOM between the sidecar write and the replace
+    runs no cleanup, and a unique name means nothing later overwrites it. Left
+    alone, every such death leaks a full plaintext copy of the config."""
+    target = tmp_path / "settings.yaml"
+    orphan = tmp_path / "settings.yaml.99999.88888.tmp"
+    orphan.write_text("leaked: credentials\n")
+    old = time.time() - (atomic_yaml._STALE_SIDECAR_SECONDS + 60)
+    os.utime(orphan, (old, old))
+
+    atomic_write_yaml(target, {"a": 1}, default_flow_style=False)
+
+    assert not orphan.exists(), "orphaned sidecar was not swept"
+    assert yaml.safe_load(target.read_text()) == {"a": 1}
+
+
+def test_fresh_sidecar_of_a_live_writer_is_not_swept(tmp_path):
+    """The sweep must never take an in-flight sidecar out from under a
+    concurrent writer — only ones too old to belong to one."""
+    target = tmp_path / "settings.yaml"
+    in_flight = tmp_path / "settings.yaml.12345.67890.tmp"
+    in_flight.write_text("half written\n")
+
+    atomic_write_yaml(target, {"a": 1}, default_flow_style=False)
+
+    assert in_flight.exists(), "the sweep removed a live writer's sidecar"
+
+
+def test_sweep_leaves_unrelated_files_alone(tmp_path):
+    target = tmp_path / "settings.yaml"
+    old = time.time() - (atomic_yaml._STALE_SIDECAR_SECONDS + 60)
+    keepers = [
+        tmp_path / "risk_rules.yaml.1.2.tmp",   # another file's sidecar
+        tmp_path / "settings.yaml",             # handled below
+        tmp_path / "settings.yaml.bak",         # not a sidecar
+        tmp_path / "unrelated.tmp",             # not ours
+    ]
+    for f in keepers:
+        if f.name != "settings.yaml":
+            f.write_text("keep me\n")
+            os.utime(f, (old, old))
+
+    atomic_write_yaml(target, {"a": 1}, default_flow_style=False)
+
+    for f in keepers:
+        if f.name != "settings.yaml":
+            assert f.exists(), f"sweep wrongly removed {f.name}"
+
+
+def test_sweep_failure_never_fails_a_successful_write(tmp_path, monkeypatch):
+    """The document is already installed by the time the sweep runs; a sweep
+    error must not turn a successful save into a 500."""
+    target = tmp_path / "settings.yaml"
+    monkeypatch.setattr(
+        atomic_yaml.Path, "iterdir",
+        lambda self: (_ for _ in ()).throw(OSError("permission denied")),
+    )
+
+    atomic_write_yaml(target, {"a": 1}, default_flow_style=False)
+
+    assert yaml.safe_load(target.read_text()) == {"a": 1}
+
+
+# ── both halves of the sidecar name are load-bearing ────────────────────────
+
+def test_sidecar_name_includes_the_pid(tmp_path, monkeypatch):
+    """os.fork() children inherit the parent's thread ident (verified: three
+    forked children all reported the same threading.get_ident()), so under
+    `uvicorn --workers N` the tid alone collides across workers — and main.py
+    only logs an error for WEB_CONCURRENCY > 1, it does not refuse to start.
+    The in-process concurrency test cannot see this, so pin it directly.
+    """
+    target = tmp_path / "settings.yaml"
+    seen: list[str] = []
+    real_replace = atomic_yaml.os.replace
+
+    def _record(src, dst):
+        seen.append(os.path.basename(str(src)))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(atomic_yaml.os, "replace", _record)
+    atomic_write_yaml(target, {"a": 1}, default_flow_style=False)
+
+    assert len(seen) == 1
+    assert str(os.getpid()) in seen[0], f"pid missing from sidecar name {seen[0]!r}"
+    assert str(threading.get_ident()) in seen[0], f"tid missing from {seen[0]!r}"
+
+
+def test_sidecar_is_cleaned_up_on_keyboard_interrupt(tmp_path, monkeypatch):
+    """The cleanup catches BaseException, not Exception, on purpose: Ctrl-C and
+    asyncio.CancelledError would otherwise leak a sidecar that, under a unique
+    name, nothing else can ever identify or reclaim."""
+    target = tmp_path / "settings.yaml"
+    target.write_text("a: 1\n")
+
+    def _interrupt(self, content, *a, **kw):
+        with open(self, "w") as fh:
+            fh.write(content)
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(atomic_yaml.Path, "write_text", _interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        atomic_write_yaml(target, {"a": 2}, default_flow_style=False)
+
+    assert _sidecars(tmp_path) == [], "KeyboardInterrupt leaked a sidecar"
+    assert target.read_text() == "a: 1\n"
