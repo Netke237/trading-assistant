@@ -1,7 +1,8 @@
 # O4 — The auto-trade fire path books a position
 
 **Status: SPEC, not built. Written 2026-09-15 on `claude/dev-state-reconstruction-hzmzbi`.**
-**Revised 2026-09-17 after adversarial round 1 (10 gate-level, 13 below-gate) — see §12.**
+**Revised 2026-09-17 after adversarial rounds 1 (10 gate-level, 13 below-gate) and 2
+(11 gate-level, 7 below-gate) — see §12 and §13.**
 
 The investigation this spec is built on is `o4_auto_trade_books_a_position` in
 `docs/superpowers/PROJECT_STATE.json`, specifically its
@@ -205,12 +206,24 @@ a P&L for contracts that do not exist — and on the scan trigger, with no human
 id to reconcile against, every downstream exposure cap and `premium_at_risk` would be computed off
 it.
 
-**So `book_fired_order` books nothing when `result.status` is a known-terminal rejection**
-(case-insensitive `rejected`, `canceled`/`cancelled`, `expired`), and reports it as `book_error`
-naming the status. Anything else — `filled`, `submitted`, `pending`, `ok`, `unknown` — books, because
-the point of §3.2 is to not wait for a fill. An unrecognised status books rather than refuses: this
-check exists to catch a *stated* rejection, not to become a broker-status allowlist that silently
-stops booking when an adapter adds a value. **§8 test 15 pins both directions.**
+**So `book_fired_order` books nothing when `result.status` is a known-terminal rejection**, and
+reports it as `book_error` naming the status.
+
+**The list is per-broker, because round 2 found the generic one missed the actual strings.** All four
+adapters in `ArmRequest.broker`'s `Literal` (`routers/auto_trade.py:17`) raise on HTTP >= 400 and pass
+the body's status through unexamined:
+
+| Broker | Source | Rejection strings |
+|---|---|---|
+| IBKR | `data/ibkr_paper.py:142-147`, `order_status` | **`Inactive`** — the Client Portal API reports a rejected or killed order this way, with the reason in `message`; it does **not** say `Rejected` |
+| Tradier | `data/tradier_paper.py:124-130`, `status` | `rejected`, **`error`** |
+| Alpaca | `data/alpaca_paper_execution.py:65-74`, `status` | `rejected`, `canceled`, `expired` |
+| tastytrade | `data/tastytrade_paper.py:129-133`, `str(response.order.status)` | `Rejected`/`Cancelled` — **UNVERIFIED**: this stringifies an SDK enum and the SDK is not installed here, so whether it yields `"Rejected"` or `"OrderStatus.REJECTED"` is unconfirmed. **Build step 4 confirms it against the installed package before writing the match**, and matches on a substring rather than equality if it is the enum form. |
+
+Matching is case-insensitive. Anything else — `filled`, `submitted`, `pending`, `accepted`, `ok`,
+`unknown` — books, because the point of §3.2 is not to wait for a fill. An unrecognised status books
+rather than refuses: this check catches a *stated* rejection and must not become an allowlist that
+silently stops booking when an adapter adds a value. **§8 test 15 pins both directions, per broker.**
 
 Otherwise, book on submit. All eight existing send paths already do exactly this:
 `step-7-trade-card/page.tsx:1026-1038` and `:1077-1089` call `postOptionOrder` and then
@@ -250,7 +263,7 @@ The full field list, and what each is for, is §4.1.
 ### 4.1 `ArmRequest` grows eleven fields
 
 All snake_case with **no alias**, matching every existing field on this schema and the
-`ArmedStrategy(**req.model_dump())` construction at `routers/auto_trade.py:81` that keys off field
+`ArmedStrategy(**req.model_dump())` construction at `routers/auto_trade.py:83` that keys off field
 *names*. All Optional, all defaulting to the value that reproduces today's behaviour.
 
 | Field | Type | Why it travels |
@@ -345,8 +358,11 @@ When `premium_stop_dollar` is absent, `premium_stop_pct` is passed through as
 (`routers/auto_trade.py:29`) and `AutoTradeArm` already sends the real value from `useRiskStore`
 (`index.tsx:228`) — but nothing said `book_fired_order` passes it into
 `PortfolioPositionCreate.portfolioValue`, which defaults to 50 000 (`portfolio.py:335`). Round 1.
-It only feeds the `risk` result that §5.2 suppresses, so it is inert today and live the moment
-anything reads that result. Pass it.
+It feeds the `risk` result — which §5.2 suppresses for *sizing*, but which §5.2's `over_exposure` flag
+now **reads**. Round 2 caught round 1 calling it "inert today": it is not, and was not by the end of
+the same revision. A wrong `portfolio_value` now produces a wrong `over_exposure`. Pass it. (The
+50 000 default lives on the schema, `schemas/__init__.py:904` — not `portfolio.py:335`, which is the
+consumer.)
 
 ---
 
@@ -357,13 +373,31 @@ anything reads that result. Pass it.
 **New: `backend/app/services/position_writer.py`**
 
 ```python
+@dataclass
+class WriteOutcome:
+    position:       PortfolioPositionModel
+    adjusted_size:  Optional[int]   # what the gate WOULD have resized to; None if it would not
+    over_exposure:  bool            # risk.approved was False — the booking went past a cap
+
 async def create_position(
     body: PortfolioPositionCreate,
     db: AsyncSession,
     *,
     enforce_pre_trade_gates: bool = True,
-) -> tuple[PortfolioPositionModel, Optional[int]]:
+    stop_required: bool = False,
+) -> WriteOutcome:
 ```
+
+**Round 2 rewrote this signature, and the reason is load-bearing.** It was
+`tuple[PortfolioPositionModel, Optional[int]]` = `(position, risk.adjusted_size)`, from which §5.2's
+`over_exposure` flag **cannot be computed**: `approved` and `adjusted_size` are independent in
+`check_position_risk`. `services/portfolio_risk.py:69-74` sets `approved=False` with
+`adjusted_size=None` (max concurrent positions), while `:90-97` sets an `adjusted_size` and `:114-116`
+keeps `approved=True` for that soft reason alone. So `adjusted_size is not None` is neither necessary
+nor sufficient for a breach, and the whole §5.2/§7.1/§7.2/§6.5/test-21 chain that hangs off
+`over_exposure` was unimplementable through the specified interface.
+
+`stop_required` (§6.2) was also missing from this signature, which is where it has to be declared.
 
 It is `add_position`'s body from the duplicate-contract check through `await db.refresh(position)`,
 moved verbatim, returning `(position, risk.adjusted_size)`.
@@ -380,10 +414,21 @@ goes straight to `create_position`, §4.1's eleventh field would have travelled 
 been discarded — leaving **the one send path with no human watching as the only path with no
 approval-audit record**, while §4.1, §7.2 and this section all claimed parity.
 
-So `book_fired_order` calls `log_approval` after a successful `create_position`, wrapped in the same
-never-raise guard the router uses (`:530-535`). Keeping it out of `create_position` preserves step
-1's verbatim boundary and its unedited-suite proof; duplicating one guarded call is the cheaper of
-the two costs. **§8 test 14 pins it.**
+So `book_fired_order` calls `log_approval` after a successful `create_position`, wrapped in a guard
+modelled on the router's (`:529-535`). Keeping it out of `create_position` preserves step 1's verbatim
+boundary and its unedited-suite proof; duplicating one guarded call is the cheaper of the two costs.
+
+**The guard must ROLL BACK, and the router's does not — round 2.** `log_approval` commits
+(`services/audit.py:154-155`). The router's guard swallows the exception without rolling back, which
+is safe there only because the request-scoped session dies immediately after. On the **scan** path the
+session is `run_scan`'s and is written again at `scan.py:1780`
+(`_upsert_session(..., status="complete")`), so a failed commit inside `log_approval` leaves the
+session in a pending-rollback state and `:1780` raises `PendingRollbackError` — which propagates out
+of `run_scan` and **500s the user's scan request**, contradicting both §6.1 and §9.4. The guard is
+therefore `except Exception: await db.rollback(); log…`, not the router's swallow.
+
+**§8 test 14 pins it, parametrised over BOTH paths** — round 2 noted the original test 14 was
+specified against `/fire` only, where there is no subsequent write and the defect is invisible.
 
 **Why extract rather than write a second writer.** §2.7: everything `add_position` does is behaviour
 an auto-trade position should have, and every line of it is the subject of an audit finding. A second
@@ -416,10 +461,10 @@ which is the defect O4 exists to fix, reintroduced one layer up.
 
   | | `_check_exposure` (`auto_trader.py:302-308`) | `add_position` (`portfolio.py:328-336`) |
   |---|---|---|
-  | price basis | `entry_premium`, the armed mid | `entry_price` — **replaced with the live quote** at `:299-301` |
+  | price basis | `entry_premium`, the armed mid | `entry_price` — **replaced with the live quote** at `:302-304` |
   | quantity | `strategy.quantity` | `body.qty` |
-  | portfolio value | `portfolio_value or strategy.portfolio_value` | `body.portfolioValue` |
-  | snapshot vintage | read at `scan.py:1759`, **before** a synchronous broker round-trip | read at `portfolio.py:320-326`, after |
+  | portfolio value | `portfolio_value if portfolio_value is not None else strategy.portfolio_value` (`auto_trader.py:229` — the exact form; the two differ at `0.0`) | `body.portfolioValue` |
+  | snapshot vintage | read at `scan.py:1759`, **before** a synchronous broker round-trip | read at `portfolio.py:314-315`, after |
 
   And `portfolio.py:169-174` states, in its own words, why the second check exists: *"This MUST
   happen before the risk check below … otherwise a position could be approved against one price and
@@ -488,8 +533,9 @@ why the split was never the blocker it looked like.
 
 **It is not the whole answer, and round 1 found the half that was missing: `create_position` takes
 transaction control of a session it does not own.** The verbatim body includes `await db.commit()`
-(`portfolio.py:505`), `await db.rollback()` on `IntegrityError` (`:514`) and `await db.refresh(position)`
-(`:527`). In a router that is safe — the session is request-scoped and the router is its only writer.
+(`portfolio.py:498`), `await db.rollback()` on `IntegrityError` (`:509`) and `await db.refresh(position)`
+(`:527`). (**`:498` and `:509`, not `:505`/`:514`** — round 2 caught those, and caught them in the
+paragraph whose whole subject is citing this seam to the line.) In a router that is safe — the session is request-scoped and the router is its only writer.
 On the scan path `db` belongs to `run_scan`, is shared with `_execute_scan_core` before the fire point
 and with `_upsert_session(db, req, result, "complete")` at `:1780` after. A rollback inside the
 booking would discard anything else pending on that session, and the commit expires every ORM object
@@ -499,10 +545,16 @@ loaded at `:1759`.
 there is nothing pending at the fire point today. It is recorded because it is the first time a
 service function that owns a transaction is handed a session it did not open, and the path it sits on
 already swallows its own failures (§9.4) — so the day someone adds a write to `_execute_scan_core`,
-this becomes silent data loss with no signal. **Step 5 therefore re-reads the snapshot it needs after
-the booking rather than reusing objects loaded before it, and the constraint is written into
-`create_position`'s docstring: it commits, so its caller must own the transaction or expect it to
-end.**
+this becomes silent data loss with no signal.
+
+**Round 2 corrected the mitigation, which had been aimed at the wrong hazard.** It said step 5 should
+"re-read the snapshot it needs after the booking rather than reusing objects loaded before it" — but
+the ORM objects loaded at `scan.py:1759` are consumed into `_portfolio_snapshot` at `:1761`, *before*
+the fire, and `_upsert_session` issues its own query. Nothing after the booking touches an expired
+object, so that mitigation guarded nothing. **The real hazard is a session left in a pending-rollback
+state reaching `:1780`** — see §5.1, where the `log_approval` guard is required to roll back for
+exactly this reason. The constraint is written into `create_position`'s docstring: **it commits, so
+its caller must own the transaction or expect it to end.**
 
 ### 5.4 The fire history gains `rec_id`
 
@@ -519,7 +571,10 @@ which is a readable state: *fired, not booked*.
 window between `fire()` appending (`auto_trader.py:286-294`) and the booking completing spans a live
 quote fetch and a commit, and a re-arm plus a second `maybe_fire_on_scan` can append inside it. So
 `fire()` stamps each history entry with a `fire_id` (`uuid4().hex`), `FiredOrder` carries it, and the
-mutation method matches on that. **Known and accepted:** `AutoTradeState.history` is in-memory and
+mutation method matches on that, and **a miss is a logged no-op, not a raise** — `fire()` appends at
+four sites (`auto_trader.py:235`, `:253`, `:268`, `:286`) and only `:286` is the success entry, so the
+method must tolerate being handed a `fire_id` it cannot find rather than assuming one. Round 2.
+**Known and accepted:** `AutoTradeState.history` is in-memory and
 unbounded (`:66`), so this link does not survive a restart. That is pre-existing, is not O4's to fix,
 and is the reason the `REC-AT-` prefix in §4.3 exists as an independent handle. **§8 test 16.**
 
@@ -578,7 +633,7 @@ A live user cannot reach this: `AutoTradeArm` refuses to arm a card with no stop
 and the request. Reaching it means a pre-O4 client or a direct API call, and those get the loud
 version.
 
-### 6.3 Three more refusals, for the same reason
+### 6.3 Four more refusals, for the same reason
 
 `book_fired_order` also books nothing, and reports why, when:
 
@@ -608,9 +663,16 @@ version.
    than after the router's live-quote replacement, so the refusal does not depend on network
    weather.
 3. **`create_position` raises anything at all** — §6.1.
+4. **`result.order_id` is empty or falsy.** Round 2: `ibkr_paper.place_order` has an
+   `if isinstance(data, list): data = data[0]` branch (`data/ibkr_paper.py:140-141`) that exists
+   because IBKR's order endpoint can answer a **confirmation question** rather than an order — that
+   element carries neither `order_id` nor `order_status`, so the adapter yields `order_id=""`,
+   `status="Unknown"`, and §3.2's "unknown books" default would book a full position **for an order
+   that was never transmitted**. No order id also makes the refusal string below unprintable.
 
 Every refusal produces a `book_error` string that names the order id, so the log line and the API
-response both point at a real order the user can find at the broker.
+response both point at a real order the user can find at the broker — which is the other reason
+refusal 4 exists.
 
 ### 6.4 A duplicate contract is reported, not swallowed and not raised
 
@@ -633,16 +695,47 @@ line as the only trace.
 Two distinct gaps, two fixes:
 
 **(a) The scan trigger has no frontend surface at all.** §5.3 caller 2 said the booking result "is
-logged and nothing else". There is no UI for `maybe_fire_on_scan`; nobody is looking at it. So a
-refusal or an over-exposure booking on that path **raises an in-app alert through the channel the
-product already has for exactly this**: `alert_service.broadcast`, the path
-`portfolio_alert_monitor.py` and `regime_monitor.py` already use, surfaced by the `ws_alerts`
-router. Severity Critical for "order placed, nothing booked"; Warning for a booking that went over
-the exposure cap.
+logged and nothing else". There is no UI for `maybe_fire_on_scan`; nobody is looking at it.
+
+**ROUND 2 KILLED THIS SECTION'S FIRST ANSWER, AND THE CORRECTION IS THE WHOLE POINT OF THE SECTION.**
+Round 1 routed these to `alert_service.broadcast`, calling it "the channel the product already has".
+It is not a channel that reaches anyone: `broadcast` (`services/alert_service.py:22-30`) iterates
+`self._clients`, populated only by `/ws/alerts` (`routers/ws_alerts.py`) — and **nothing in the
+frontend ever connects to it.** The only WebSocket client in the tree is
+`frontend/lib/chartWS.ts:39`. In production `_clients` is empty and `broadcast` is a loop over an
+empty list. The fix for "a channel with no reader" was a different channel with no reader.
+
+`portfolio_alert_monitor.py` does not rely on it either, and that is what round 1 misread: it calls
+**`notify_alert`** (`services/notifications/alert_notifier.py:192` — Gmail + Telegram, deduped across
+callers) to reach a human, and broadcasts afterwards as a best-effort extra wrapped in
+`except: logger.debug`. Round 1 copied the best-effort half and dropped the half that reaches a phone.
+
+**So the channel is `notify_alert`, and `broadcast` is the optional extra.** A refusal or an
+over-exposure booking on either path calls
+`await notify_alert(symbol=…, alert_type=…, reason=…, rec_id=…)` — the same dispatch every portfolio
+alert already uses, which means it inherits the delivery settings, the dedup and the enabled-types
+filter rather than inventing a parallel path. `broadcast` may be called as well, guarded, for the day
+a UI subscribes; nothing may depend on it.
+
+**Severity: `Critical` for "order placed, nothing booked".** There is no `Warning` — `AlertKind` is
+`Literal['Info', 'Action', 'Critical']` (`schemas/__init__.py:19`), so round 1's "Warning for a
+booking that went over the exposure cap" would have raised `ValidationError` **inside a function §6.1
+requires never to raise**, silently dropping the very alert it specified. Over-exposure is `Action`.
+
+**Payload shape is named, not assumed.** The two existing broadcasters disagree — a *list* of
+`AlertItem` (`portfolio_alert_monitor.py:191`) versus a bare dict with `type`/`message`
+(`regime_monitor.py:153-165`). O4 uses `notify_alert`'s keyword signature and, if it broadcasts at
+all, the `AlertItem` list form.
 
 This does **not** contradict §9.4. That non-goal is about `maybe_fire_on_scan` swallowing *fire*
 failures, which stays exactly as it is. This is about *booking* outcomes, which did not exist before
 O4 and therefore cannot be a change to existing behaviour.
+
+**(a2) The §3.2 rejection is covered by this rule too.** §6.3 enumerates four refusals; §3.2 adds a
+fifth (a broker-stated rejection). It is named here explicitly because round 2 found §6.5's original
+enumeration listed only §6.2/§6.3/§6.4 and §5.2 — which read literally excluded the one refusal that
+fires on a **real broker rejection**, while test 22 parametrised over it. Every refusal in §3.2, §6.2,
+§6.3 and §6.4, and every over-exposure booking in §5.2, goes through this channel.
 
 **(b) A pre-O4 client cannot read `booked`.** §6.2's claim that a refusal is "strictly louder than a
 422 at arm time" was false as specified: the loud version was a JSON key that the only clients able
@@ -673,7 +766,9 @@ record and a record that hides a breach.
 
 Additive, so `handleFireNow`'s existing `res.order_id` read is unaffected.
 `frontend/lib/api.ts:640` widens `fireAutoTrade`'s return type to match. (**`:640`, not `:634`** —
-round 1 caught the stale anchor; `:634` is inside `armAutoTrade`'s doc comment.)
+round 1 caught the stale anchor, though its stated reason was also wrong: `:634` is
+`picked_stop_basis?: PickedStopBasis | null;`, a field declaration inside `armAutoTrade`'s request
+type, not a doc comment. Round 2.)
 
 ### 7.2 `AutoTradeArm` sends eleven more fields and surfaces one result
 
@@ -710,9 +805,22 @@ exactly the reasoning §7.2 forbids for five *lesser* fields, applied to the one
 a fractional strike reaching `contractDetails.strike`, or an incomplete `contractDetails` hitting the
 fallback would make one option into two rows, with no 409 and double-counted exposure.
 
-**So `AutoTradeArm` posts `toOptionSymbol(card)` — the same expression — instead of arguing
-equivalence with it.** §2.6's table stops being load-bearing and becomes what it should always have
-been: an explanation of why this change is safe rather than a reason not to make it. **§8 test 17.**
+**So `AutoTradeArm` posts the result of `toOptionSymbol(card)` — instead of arguing equivalence with
+it. It does NOT call that function, and round 2 is why this distinction is spelled out.**
+`toOptionSymbol` is declared at `step-7-trade-card/page.tsx:921`, **inside** `Step7Page` (`:182`,
+closing `:1503`). It is a closure: not exported, not module-scope, and `AutoTradeArm` cannot reach it.
+Round 1's instruction, taken literally, was unimplementable — and the obvious workaround (have
+`AutoTradeArm` call `contractId(...)` itself) is a **second copy of the expression**, which is the
+"argue equivalence" failure mode this paragraph exists to close, one level down. Test 17 as originally
+worded would have gone green on exactly that broken shape.
+
+**The correct form is a sixth prop**, `optionSymbol={toOptionSymbol(card)}`, resolved at the Step-7
+call site precisely as `resolvedInvalidation` is — one derivation, computed where
+`buildPaperPosition` computes it, passed down. (Hoisting `toOptionSymbol` to module scope and
+exporting it is an acceptable alternative; the prop is preferred because it matches the contract the
+other five already follow.) §2.6's table stops being load-bearing and becomes what it should always
+have been: an explanation of why this change is safe rather than a reason not to make it.
+**§8 test 17.**
 
 **Surfaces:** `handleFireNow` already stores `res.order_id`. It additionally reads `res.booked`, and
 when it is `false` renders a **caution**, not an error, beside the order id — the order *worked*;
@@ -722,13 +830,18 @@ the Portfolio page."* Claiming anything less specific here would be the mistake 
 spec warns about. It also renders a caution on `res.over_exposure` (§5.2), naming the cap the booking
 went past.
 
-**Write the check as `res.booked === false`, not `!res.booked`.** Round 1: four existing suites mock
-`fireAutoTrade` as `{ order_id: 'ORD-…' }` with no `booked` key
-(`AutoTradeArm/__tests__/AutoTradeArm.test.tsx:24`, and `step-7-trade-card/__tests__/`'s
-`edited-fields-sync`, `direct-send-stop-gate`, `contracts-sync`). `!res.booked` renders the caution in
-all four and turns them red; `=== false` renders it in none. The explicit comparison is also the
-honest one — `undefined` means "this response predates the key", which is not the same claim as "the
-booking failed".
+**Write the check as `res.booked === false`, not `!res.booked`** — on the merits, not on the evidence
+round 1 gave for it. `undefined` means "this response predates the key", which is a different claim
+from "the booking failed", and only the explicit comparison says so.
+
+**Round 1's supporting evidence was false and is withdrawn.** It claimed four existing suites
+(`AutoTradeArm/__tests__/AutoTradeArm.test.tsx:24` and `step-7-trade-card/__tests__/`'s
+`edited-fields-sync`, `direct-send-stop-gate`, `contracts-sync`) would go red under `!res.booked`.
+They mock `fireAutoTrade`, but **none of them ever clicks Fire** — every `it()` in the first drives
+`Arm`, and the other three never interact with the fire path at all. `handleFireNow`
+(`AutoTradeArm/index.tsx:262-273`) is never reached, so neither branch executes and neither claim
+about those suites is testable. Citing them was the same defect round 1 found in the original test 7:
+evidence that cannot distinguish the thing it is offered as evidence for.
 
 **The success case needs a refresh, and §7 originally said nothing about it.** Every other send path
 books from the client and writes `portfolioStore` in the same action. O4 books **server-side**, so
@@ -736,9 +849,10 @@ without an explicit refresh the new position is invisible on the Portfolio page 
 until the next `syncFromBackend`. On `booked: true`, `handleFireNow` triggers that sync. A booking the
 user cannot see is only marginally better than one that did not happen. Round 1.
 
-The five new props follow `resolvedInvalidation`'s established contract: resolved at the call site
+The **six** new props follow `resolvedInvalidation`'s established contract: resolved at the call site
 by the same expression `buildPaperPosition` uses, so arming and sending cannot describe the same card
-differently. Step 7 is the only call site and it already computes all five.
+differently. Step 7 is the only call site and it already computes all six — the sixth being
+`optionSymbol`, added by round 2.
 
 ---
 
@@ -770,8 +884,13 @@ differently. Step 7 is the only call site and it already computes all five.
    both real callers always pass — `fire()` never reaches the broker in that case. Patching
    `check_position_risk` globally makes `fire()` raise and the test passes for the wrong reason. The
    two calls genuinely take different inputs (§5.2's table), so the double must answer per-call:
-   approve at the `_check_exposure` call, return an `adjusted_size` at the `create_position` call.
-   Assert the row carries the **ordered** quantity, not the adjusted one.
+   approve at the `_check_exposure` call, and answer with the failing shape at the `create_position`
+   call. **Both halves need that treatment, not just the `adjusted_size` one** — round 2: `approved=False`
+   raises at `auto_trader.py:311-313` exactly as `adjusted_size is not None` raises at `:315-321`, so a
+   globally-patched double makes `fire()` raise in both scenarios and the test passes for the wrong
+   reason twice. The per-call split is straightforward: `portfolio.py:22` binds `check_position_risk`
+   at module level while `_check_exposure` imports it lazily (`auto_trader.py:301`), so the two live in
+   separate namespaces. Assert the row carries the **ordered** quantity, not the adjusted one.
 8. **A duplicate contract reports and does not raise.** Book once, fire again for the same contract,
    assert 200, `booked is False`, `book_error` mentions the duplicate, and still exactly one row.
    §6.4.
@@ -787,27 +906,37 @@ differently. Step 7 is the only call site and it already computes all five.
     body's `stop` is the resolved one. The sibling of
     `direct-send-stop-gate.test.tsx`'s existing assertions.
 13. **Frontend — `booked: false` renders the caution.** Fire with a mocked response carrying
-    `booked: false`, assert the copy naming the missing stop alert is on screen. And a response with
-    **no `booked` key at all** renders nothing — the four pre-existing mocks in §7.2 are the fixture,
-    and this is what pins `=== false` against `!res.booked`. §7.2.
+    `booked: false`, assert the copy naming the missing stop alert is on screen. Second case: a
+    response with **no `booked` key at all** renders nothing. **This test must render the component,
+    click Fire, and resolve `fireAutoTrade` with a key-less object** — round 2 found the four existing
+    suites cited for this never reach `handleFireNow`, so reusing them as the fixture would pin
+    nothing and pass identically under either branch. §7.2.
 
 **Round 1 added tests 14–22. Every one of them pins a rule that round 1 found stated but unenforced,
 or enforced but unobserved.**
 
-14. **The audit record exists on this path.** Fire with a `trade_card_snapshot`, assert an
-    `AuditEventModel` row for the booked `rec_id`. Then make `log_approval` raise and assert the
-    position is still booked and the response is still 200. §5.1, §6.1.
-15. **A broker rejection books nothing, and an unknown status books.** Two cases against one mocked
-    adapter: `status="rejected"` → zero rows, `booked False`, `book_error` naming the status;
-    `status="some_new_broker_value"` → one row. The second is the one that matters — it pins that
-    this check is a rejection test, not a status allowlist. §3.2.
+14. **The audit record exists on this path, and a failed one does not poison the session.**
+    Fire with a `trade_card_snapshot`, assert an `AuditEventModel` row for the booked `rec_id`. Then
+    make `log_approval` raise — **parametrised over BOTH call sites**: on `/fire`, assert the position
+    is still booked and the response is still 200; on the **scan** path, assert the scan request still
+    returns 200 and `_upsert_session` still completes. Round 2: the scan half is the one that catches
+    a guard that swallows without rolling back, and the original test 14 omitted it. §5.1, §6.1, §9.4.
+15. **A broker rejection books nothing, and an unknown status books — per broker.** Parametrised over
+    §3.2's table, because round 2 found a generic list misses the real strings: IBKR `Inactive`,
+    Tradier `error` and `rejected`, Alpaca `rejected`/`canceled`/`expired`, tastytrade's enum form
+    once build step 4 confirms it. Each → zero rows, `booked False`, `book_error` naming the status.
+    Then `status="some_new_broker_value"` → one row, which pins that this is a rejection test and not
+    an allowlist. Plus: **`order_id=""` → zero rows** (§6.3.4). §3.2.
 16. **The history back-link finds the right entry.** Fire, and before the booking completes append a
     second history entry (simulating a re-arm inside the window). Assert `rec_id` lands on the entry
     carrying the fired `fire_id`, not on the last one. §5.4.
-17. **Frontend — `AutoTradeArm` posts the same contract expression `buildPaperPosition` writes.**
+17. **Frontend — `AutoTradeArm` posts the `optionSymbol` PROP, with no derivation of its own.**
     Render with a card whose `contractDetails` produce a `toOptionSymbol` that differs from
-    `card.contract` (a lowercase symbol is the cheapest), click Arm, assert the request body's
-    `option_symbol` is the rebuilt one. §7.2, §2.6.
+    `card.contract` (a lowercase symbol is cheapest), pass the prop, click Arm, assert the request
+    body's `option_symbol` is the prop's value. **And assert the component derives nothing**: render
+    with the prop set and `card.contractDetails` absent, and the prop's value must still be posted.
+    Round 2: without that second half the test goes green on a second in-component copy of
+    `contractId(...)`, which is the failure mode §7.2 exists to close. §7.2, §2.6.
 18. **`premium_stop_pct` on the booked row is derived from the dollar stop against the persisted
     entry.** Arm with `premium_stop_dollar` and an `entry_premium` that the live quote then replaces,
     assert the stored fraction is `dollar / persisted_entry` and **not** `dollar / entry_premium`.
@@ -820,13 +949,18 @@ or enforced but unobserved.**
     round 1's first finding.
 20. **An unparseable `option_symbol` books nothing even when `direction` IS sent.** OCC form, explicit
     `direction`, assert zero rows and a `book_error`. §6.3.1.
-21. **An over-cap booking reports itself.** The test-7 portfolio, assert `over_exposure` is true on the
-    response and the in-app alert was raised. §5.2, §6.5.
-22. **Every refusal raises a Critical in-app alert, on both paths.** Parametrise over the refusal
-    reasons (no stop, unparseable contract, duplicate, rejected status, `create_position` raising) and
-    assert `alert_service.broadcast` was called on the `/fire` path and on the scan path. §6.5. This
-    is the rule that turns the other refusals from silent into observed, so it is tested once per
-    reason rather than once.
+21. **An over-cap booking reports itself.** A portfolio making `check_position_risk` return
+    `approved=False` **with `adjusted_size=None`** (`portfolio_risk.py:69-74` — max concurrent
+    positions), assert the row carries the ordered quantity, `over_exposure` is true on the response,
+    and the alert was dispatched. The `adjusted_size=None` shape is deliberate: it is the case that
+    proves `over_exposure` is read from `approved` and not inferred from `adjusted_size`, which round
+    2 found was the unimplementable part. §5.2, §6.5.
+22. **Every refusal dispatches a Critical alert through the channel that reaches a human, on both
+    paths.** Parametrise over the refusal reasons (no stop, unparseable contract, empty `order_id`,
+    duplicate, rejected status, `create_position` raising) and assert **`notify_alert`** was awaited on
+    the `/fire` path and on the scan path. **Asserting `alert_service.broadcast` is explicitly NOT
+    sufficient** — round 2 found it passes against an empty client list, which is production, making
+    it the same class of defect as the original test 7. §6.5.
 
 ---
 
@@ -973,4 +1107,52 @@ found the `stock_scan.py` reference is a comment); §3.1's "`entry_premium` cann
 post-sizing requirement, which it confirmed got *sharper* after `fc451c2d`; §2.6's `int(strike)` table
 at the backend producers; and twelve of the plan's §1 line-number rows. The drift it found was in the
 rows §1 did **not** cover — which is why §1 now covers them.
+
+---
+
+## 13. Adversarial round 2 — 2026-09-17
+
+Scoped to round 1's diff alone (`git diff 740aa2b2 8a471de1 -- docs/superpowers/plans/`), per
+`audit_rule` (2): round N>1 reviews only what changed. **11 gate-level, 7 below-gate.**
+
+**Seven of the eleven gate-level findings were defects in round 1's own fix text.** That is the
+non-convergence signature `audit_rule` describes, and it is recorded plainly rather than buried: the
+sibling `2026-09-16-yaml-config-integrity-plan.md` died of exactly this at four rounds, and it showed
+up here one round earlier.
+
+**The three round-1 fixes that did not work:**
+
+1. **§6.5 routed every refusal into a channel with no subscriber.** `alert_service.broadcast`
+   (`services/alert_service.py:22-30`) iterates a client list populated only by `/ws/alerts`, and
+   **nothing in the frontend connects to it** — the tree's only WebSocket client is
+   `frontend/lib/chartWS.ts:39`. `_clients` is empty in production. The fix for "a channel with no
+   reader" was a different channel with no reader, and test 22 would have passed against it. It also
+   specified severity `Warning`, which is not in `AlertKind` (`schemas/__init__.py:19`) and would have
+   raised `ValidationError` inside a function §6.1 forbids to raise. Now: `notify_alert`
+   (Gmail/Telegram, the call `portfolio_alert_monitor` actually uses to reach a human), severity
+   `Critical`/`Action`, `broadcast` demoted to a guarded extra.
+2. **`over_exposure` was unimplementable through §5.1's interface.** `approved` and `adjusted_size`
+   are independent in `check_position_risk` (`portfolio_risk.py:69-74` vs `:90-97`/`:114-116`), so the
+   returned tuple could not express a breach. §5.1 now returns a `WriteOutcome` — which is also where
+   `stop_required` belonged and had never been declared.
+3. **`toOptionSymbol` is a closure inside `Step7Page`** (`page.tsx:921`, inside `:182`), so "post the
+   same expression" could not be implemented, and the obvious workaround is a second copy of the
+   expression — the exact failure mode the instruction existed to close. Now a sixth prop.
+
+**Also closed:** the `log_approval` guard had to roll back, or a failed audit write leaves
+`run_scan`'s session pending-rollback and 500s the scan at `scan.py:1780` (§5.1); the rejection list
+missed the strings the named brokers actually emit — IBKR says `Inactive`, not `Rejected`, and Tradier
+adds `error` (§3.2); an IBKR confirmation-question response yields an empty `order_id` that would have
+booked a position for an order never transmitted (§6.3.4); §5.3's mitigation guarded a hazard that did
+not exist while missing the one that did; **two more wrong line numbers inside the paragraph whose
+subject is citing lines precisely** (`:505`/`:514` → `:498`/`:509`); a leftover `auto_trade.py:81`
+nineteen lines from the one round 1 fixed, while §12 claimed it corrected; and §7.2's empirical claim
+about four test suites, which was simply false — none of them ever clicks Fire.
+
+**Nothing was waved through, and nothing new was escalated** — §10.3 and §10.4 remain Kenneth's.
+
+**Round 3 is the last round `audit_rule` permits.** If it is not clean, the finding is that this
+document is too big to audit as one unit, and the remedy is to split it — §5.1/§5.2 (the extraction
+and the gate flag) are self-contained and could be built and audited alone, leaving the wire, the
+booking rules and the frontend as a second document.
 

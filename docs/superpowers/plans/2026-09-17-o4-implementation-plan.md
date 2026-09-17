@@ -85,9 +85,12 @@ The spec's §11 order is correct and is kept. What follows is the concrete edit 
   `PortfolioPositionSchema.from_orm_model` at **`:537`** with the `adjustedQty` branch at `:538-539`
   and `return resp` at `:540`. In a step whose entire gate is "verbatim, do not tidy in passing", the
   seam is cited to the line; round 1 caught the original off by one at exactly that boundary.
-- **`create_position` commits.** Give it a docstring saying so: it calls `db.commit()` (`:505`),
-  `db.rollback()` (`:514`) and `db.refresh()` (`:527`), so its caller must own the transaction or
-  expect it to end. Spec §5.3 explains why this matters on the scan path.
+- **`create_position` commits.** Give it a docstring saying so: it calls `db.commit()` (**`:498`**),
+  `db.rollback()` (**`:509`**) and `db.refresh()` (`:527`), so its caller must own the transaction or
+  expect it to end. Spec §5.3 explains why this matters on the scan path. (Round 2 corrected `:505`
+  and `:509` here — wrong numbers in the step whose gate is a line-cited verbatim move.)
+- **Return `WriteOutcome`, not a tuple** (spec §5.1) — `over_exposure` cannot be derived from
+  `adjusted_size`, and `stop_required` is declared here.
 - **Gate:** the whole existing `POST /api/portfolio` suite passes **unedited** (spec test 10). An
   edit needed here means the extraction was unfaithful — revert and redo, do not amend the test.
 
@@ -156,11 +159,21 @@ The spec's §11 order is correct and is kept. What follows is the concrete edit 
 
 ### Step 6 — frontend (spec §7)
 
+**Round 2 found this step carried none of the four frontend changes round 1 added to §7.2. All four
+are now here, and the spec's §11 step 6 and this list must stay in agreement.**
+
 - `AutoTradeArm` sends the eleven fields; `stop` reads **the same expression** `stopMissing` is
-  derived from at `AutoTradeArm/index.tsx:169`. Five new props resolved at the Step-7 call site.
-- `handleFireNow` renders a **caution** (not an error) on `booked: false`, naming the missing stop
-  alert in plain words.
-- `frontend/lib/api.ts` widens `fireAutoTrade`'s return type. Spec tests 12–13.
+  derived from at `AutoTradeArm/index.tsx:169`. **Six** new props resolved at the Step-7 call site.
+- **`option_symbol` comes from a new `optionSymbol` prop**, `toOptionSymbol(card)` resolved at the
+  Step-7 call site — `AutoTradeArm` derives nothing itself. `toOptionSymbol` is a closure inside
+  `Step7Page` (`page.tsx:921`, inside `:182`), so it cannot be imported; a second in-component
+  `contractId(...)` would defeat the point (spec §7.2, test 17).
+- `handleFireNow` renders a **caution** (not an error) on **`res.booked === false`** — not
+  `!res.booked` — naming the missing stop alert in plain words.
+- `handleFireNow` renders a caution on **`res.over_exposure`**, naming the cap the booking went past.
+- On **`booked: true`**, `handleFireNow` triggers `syncFromBackend` (`frontend/lib/portfolioStore.ts:159`)
+  — O4 books server-side, so without it the user sees no position after a successful auto-trade.
+- `frontend/lib/api.ts:640` widens `fireAutoTrade`'s return type (four new keys). Spec tests 12–13, 17.
 
 ---
 
@@ -204,14 +217,25 @@ what changed. Three findings changed the design rather than the prose — §6.2 
 instead of at the write, §4.1's `trade_card_snapshot` was guaranteed to be discarded, and every
 refusal reported into a channel with no reader.
 
-**Round 1 also found two wrong anchors in §1 of this plan**, both in rows the table had not thought to
-cover, and one of them (`auto_trade.py:81` → `:83`) carries §4.1's central argument. §1 now covers
-them, and the frontend anchors it originally skipped.
+**Round 2 ran on 2026-09-17**, scoped to round 1's diff alone. **11 gate-level, 7 below-gate — and
+seven of the eleven were defects in round 1's own fix text.** That is the non-convergence signature
+`audit_rule` names, and it appeared one round earlier here than it did in the sibling plan that died
+of it.
 
-Per `audit_rule`, **this is not clean and the work is not done.** Round 2 runs against *what changed*
-— not the cumulative document, which is the documented way these loops fail to converge (the
-`2026-09-16-yaml-config-integrity-plan.md` on `claude/session-retrieval-continuation-vf056m` died
-exactly that way, at four rounds). The hard cap is three rounds without a clean gate.
+The three worst were all round-1 fixes that did not work: §6.5 routed every refusal to
+`alert_service.broadcast`, which **nothing in the frontend subscribes to** (verified: the only
+WebSocket client in the tree is `chartWS.ts:39`) and specified a `Warning` severity that does not
+exist in `AlertKind` — so the fix for "a channel with no reader" was a different channel with no
+reader; `over_exposure` could not be computed through §5.1's unchanged signature, because `approved`
+and `adjusted_size` are independent in `check_position_risk`; and `toOptionSymbol` is a closure inside
+`Step7Page`, so "post the same expression" was unimplementable as written. Round 2 also found two
+more wrong line numbers **inside the paragraph that exists to correct wrong line numbers**, and a
+leftover `auto_trade.py:81` nineteen lines from the one round 1 fixed while §12 claimed it corrected.
+
+All eleven are closed. **Round 3 is the last one `audit_rule` permits** — three rounds without a clean
+gate is the hard cap, and it means the batch is too big to audit rather than that it needs a fourth.
+If round 3 is not clean, the recommendation is the sibling plan's: **split the document**, do not
+revise it again.
 
 **Two items are Kenneth's before step 1** and are not for a further round to settle: spec §10.3 (should
 the fire path refuse to order into a contract already held — round 1 showed the scan trigger can place
