@@ -104,13 +104,13 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     // getByText finds two nodes and throws -- which is the invariant passing,
     // not failing.
     expect(banner().textContent).toMatch(/1 of them has no volatility reading at all/);
-    // The clause must ANSWER the question ("why CAUTION?"), so it has to name
-    // the sub-verdict -- but scoped to the side it belongs to, never bare. A
-    // bare verdict word here reads as a claim about the head's gate counters.
-    // Pinned as the relationship in `expectVerdictWordsScoped` below; asserted
-    // here only that the answer is actually present.
-    expect(banner().textContent).toMatch(/CAUTION on the volatility side/);
-    expectBannerCoherent(banner().textContent ?? '');
+    // The clause must ANSWER the question ("why CAUTION?"), so the sub-verdict
+    // has to be NAMED -- asserted here only as "the word is present". WHERE it
+    // may appear is the wording contract's job (`expectTailWordingContract`
+    // below), so this assertion does not pin a phrasing that a correct
+    // paraphrase would break.
+    expect(tailOf(banner().textContent ?? '')).toMatch(/CAUTION/);
+    expectTailWordingContract(banner().textContent ?? '');
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -304,97 +304,209 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
   });
 });
 
-/* ---------------------------------------------------------------------------
- * The head/tail relationship, asserted as a RELATIONSHIP.
+/* ===========================================================================
+ * THE HEAD/TAIL PROBLEM, AND WHAT THESE TESTS CAN AND CANNOT PROVE.
  *
- * The banner is one string: a head sentence that counts GATE verdicts, then
- * trailing clauses that talk about something else (the IV SUB-verdict, data
- * quality). Rounds 1-4 all checked fragments of it, which is why every one of
- * them walked past a banner reading "0 CAUTION ... counted as CAUTION".
+ * The banner is ONE string: a head sentence counting GATE verdicts, then
+ * trailing clauses about something else (the IV SUB-verdict, data quality).
+ * Every defect in this area has been the tail contradicting the head, and
+ * SIX adversarial rounds have now walked past one, because each round checked
+ * a fragment of the sentence rather than the sentence against the head.
  *
- * A literal assertion cannot catch that class: it kills exactly the one string
- * that was deleted and stays green for every paraphrase of the same defect.
- * Mutation-checked against these, all of which are the SAME defect reworded:
- *   "it is graded CAUTION internally and can never earn a PASS."   -> must fail
- *   "treated as a CAUTION, it can never earn a PASS."              -> must fail
- *   "counted as CAUTION, never as PASS."                           -> must fail
- *   "can never earn a PASS."                                       -> must fail
- * ------------------------------------------------------------------------- */
+ * Three wordings have failed here, all of them green under the tests of their
+ * day:
+ *   "counted as CAUTION, never as PASS"        -- collided with a "0 CAUTION" head
+ *   "can never earn a PASS, so it can only     -- collided with a "1 PASS" head,
+ *    hold a candidate back"                       and its causal claim was FALSE
+ *   "...so no row shown here can ever be       -- quantified over ALL shown rows
+ *    a PASS"                                      under a "1 PASS" head
+ *
+ * TWO LAYERS, because neither alone is honest:
+ *
+ *  (1) GROUND TRUTH, hand-computed. Every case below declares its expected
+ *      counts, derived BY HAND from the threshold tables, never from the
+ *      page's own helpers. This matters: a previous round justified itself
+ *      with a 406-case sweep that compared the rendered string against truth
+ *      DERIVED FROM THE SAME CONSTRUCTION -- so it could only ever confirm the
+ *      string was built as designed, never that it was COHERENT with the head
+ *      beside it. It passed 406/406 over a self-contradicting banner.
+ *
+ *  (2) A WORDING CONTRACT on the tail. Called that, not "the invariant",
+ *      because it is a set of mechanical rules over English and cannot prove
+ *      the copy is true -- it can only kill the shapes that have actually gone
+ *      wrong. Where it is a literal, it says so.
+ * ======================================================================== */
 
-/** Split the banner into the head sentence (which counts gate verdicts) and
- *  everything after it. */
+/** Split the banner at its head sentence (the one carrying the gate counts). */
 function splitBanner(text: string): { head: string; tail: string } {
   const end = text.indexOf('.');
-  return { head: text.slice(0, end + 1), tail: text.slice(end + 1).trim() };
+  return end < 0
+    ? { head: text, tail: '' }
+    : { head: text.slice(0, end + 1), tail: text.slice(end + 1).trim() };
 }
+const tailOf = (text: string) => splitBanner(text).tail;
 
-/** An explicit marker that a verdict word belongs to one SIDE of the gate
- *  rather than to the gate itself. "no volatility reading" deliberately does
- *  NOT count -- it names the data, not the side that graded it. */
-const SIDE_MARKER = /volatility side|volatility column|on the event side/;
+/* An explicit marker that a verdict word belongs to ONE SIDE of the gate and
+ * not to the gate itself. This IS a literal set, deliberately: there is no way
+ * to detect "is this scoped" mechanically. It is kept broad enough that a
+ * correct paraphrase ("volatility leg") is not punished -- an earlier version
+ * accepted only "volatility side" and so failed correct rewordings while
+ * passing incorrect ones. "no volatility reading" must NOT count: it names the
+ * data, not the side that graded it. */
+const SIDE_MARKER = /volatility (side|column|leg|axis)|on the (event|volatility) side/;
 const VERDICT_WORD = /\b(PASS|CAUTION|REJECT)\b/;
+/* The tail speaks only about the rows with no reading. The moment it quantifies
+ * over the rows on screen it is making a claim the head's counters own. */
+const QUANTIFIES_OVER_ROWS = /\b(no|any|every|all|none)\s+(of\s+the\s+)?(rows?|candidates?)\b/i;
+/* The gate is worstStatus(iv, event): it can only ever go WORSE. A tail that
+ * describes the combination the other way round is asserting the inverse of
+ * the production arithmetic. */
+const WRONG_DIRECTION = /better of|higher still|can be higher|can only improve/i;
 
-/** RULE 1 — every tail sentence that names a gate verdict word must scope it.
- *  RULE 2 — if the head counts a verdict WORSE than the sub-verdict the tail
- *  claims, the tail must say so, rather than leaving the reader to reconcile
- *  "0 CAUTION" with a CAUTION claim, or "1 PASS" with "never PASS". */
-function expectBannerCoherent(text: string) {
+function expectTailWordingContract(text: string) {
   const { head, tail } = splitBanner(text);
   expect(head).toMatch(/shown —/);
   if (tail === '') return;
 
+  // R1 — a verdict word in the tail must be scoped to a side. This is what
+  // kills "counted as CAUTION, never as PASS" under any head at all.
   for (const sentence of tail.split('.').map((x) => x.trim()).filter(Boolean)) {
     if (VERDICT_WORD.test(sentence)) {
-      expect({ sentence, scoped: SIDE_MARKER.test(sentence) })
-        .toEqual({ sentence, scoped: true });
+      expect({ sentence, scopedToASide: SIDE_MARKER.test(sentence) })
+        .toEqual({ sentence, scopedToASide: true });
     }
   }
 
-  const rejects = Number(/(\d+) REJECT/.exec(head)?.[1] ?? '0');
-  if (rejects > 0 && /CAUTION/.test(tail)) {
-    // The tail grades a side CAUTION while the head shows a harder gate
-    // verdict; it must not leave that looking like a contradiction.
-    expect(tail).toMatch(/worse of|lower still|can be worse/);
-  }
+  // R2 — and it must not quantify over the shown rows. R1 alone let
+  // "...so no row shown here can ever be a PASS" through, under a "1 PASS"
+  // head, because the sentence happened to carry a side marker earlier on.
+  expect({ tail, quantifiesOverShownRows: QUANTIFIES_OVER_ROWS.test(tail) })
+    .toEqual({ tail, quantifiesOverShownRows: false });
+
+  // R3 — if it describes how the two sides combine, it must describe
+  // worstStatus and not its inverse.
+  expect({ tail, statesTheCombinationBackwards: WRONG_DIRECTION.test(tail) })
+    .toEqual({ tail, statesTheCombinationBackwards: false });
+}
+
+/** Thresholds for ALL THREE horizons, so nothing silently falls through to the
+ *  module FALLBACK -- the trap this file's own `setup` comment documents. */
+function setupHorizon(candidates: TradeCardData[], horizon: string) {
+  useScanStore.setState({
+    scanResult: { candidates, rejected: [], scan_id: 'x', timestamp: '' } as any,
+    context: { direction: 'Bullish', horizon } as any,
+  } as any);
+  useIvThresholdsStore.setState({
+    thresholds: {
+      Intraday: { abs_pass_max: null, abs_caution_max: null, rank_pass_max: null, rank_caution_max: null },
+      Swing:    { abs_pass_max: 34, abs_caution_max: 55, rank_pass_max: 34, rank_caution_max: 55 },
+      Position: { abs_pass_max: 44, abs_caution_max: 65, rank_pass_max: 44, rank_caution_max: 65 },
+    },
+    loaded: true,
+  } as any);
+  useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: true } as any);
+}
+
+/** A candidate carrying a real IV RANK reading. */
+function rankCandidate(symbol: string, ivRank: number, overrides: Partial<TradeCardData> = {}) {
+  return makeCandidate(symbol, {
+    contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45,
+                       theta: -0.05, ivRank, ivPercentile: ivRank, dte: 90 } as any,
+    ...overrides,
+  });
 }
 
 describe('the banner never counts two different things in one breath', () => {
-  // Each row is a DISTINCT gate/sub-verdict combination -- no setup here
-  // duplicates one already covered above.
-  const cases: Array<{ name: string; candidates: () => TradeCardData[]; head: RegExp }> = [
+  /* Windows, for the hand-computation in each row below:
+   *   Swing    IV rank PASS <=34, CAUTION <=55 | event REJECT <21d, CAUTION <45d
+   *   Position IV rank PASS <=44, CAUTION <=65 | event REJECT <30d, CAUTION <60d
+   *   Intraday no IV gate at all               | event REJECT  <1d, CAUTION  <3d
+   * gate = worstStatus(ivStatus, eventStatus); a row with no reading is
+   * CAUTION on the IV side unless the horizon does not gate on volatility,
+   * where it is PASS and the trailing clause is suppressed entirely. */
+  const cases: Array<{
+    name: string; horizon: string; candidates: () => TradeCardData[];
+    head: string; noReadingRows: number;
+  }> = [
     {
-      name: 'every unreadable row REJECTed by an event (head shows 0 CAUTION)',
-      candidates: () => [
-        noIvCandidate('AAA', { nextEventDays: 3 }),
-        noIvCandidate('BBB', { nextEventDays: 3 }),
-      ],
-      head: /^2 shown — 0 PASS, 0 CAUTION, 2 REJECT\.$/,
+      name: 'every unreadable row REJECTed by an event — head shows 0 CAUTION',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [noIvCandidate('AAA', { nextEventDays: 3 }), noIvCandidate('BBB', { nextEventDays: 3 })],
+      // both: iv CAUTION, event REJECT (3 < 21) -> REJECT
+      head: '2 shown — 0 PASS, 0 CAUTION, 2 REJECT.', noReadingRows: 2,
     },
     {
-      name: 'a readable PASS row beside an unreadable REJECTed one (head shows 1 PASS)',
-      candidates: () => [makeCandidate('AAA'), noIvCandidate('BBB', { nextEventDays: 3 })],
-      head: /^2 shown — 1 PASS, 0 CAUTION, 1 REJECT\.$/,
+      name: 'a readable PASS row beside an unreadable REJECTed one — head shows 1 PASS',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 10), noIvCandidate('BBB', { nextEventDays: 3 })],
+      // rank 10 <= 34 -> PASS, no event -> PASS | iv CAUTION + event REJECT -> REJECT
+      head: '2 shown — 1 PASS, 0 CAUTION, 1 REJECT.', noReadingRows: 1,
     },
     {
-      name: 'an unreadable row with no event, where the gate verdict IS caution',
-      candidates: () => [noIvCandidate('AAA')],
-      head: /^1 shown — 0 PASS, 1 CAUTION, 0 REJECT\.$/,
+      name: 'a PASS row beside an unreadable CAUTION one — head shows both, and NO reject',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 10), noIvCandidate('BBB')],
+      // THE SHAPE WITH NO REJECT AT ALL: an earlier contract skipped its whole
+      // reconciliation branch here, which is exactly where a PASS collision lives.
+      head: '2 shown — 1 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 1,
+    },
+    {
+      name: 'a READABLE caution beside an unreadable one — same badge, opposite meanings',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 45), noIvCandidate('BBB')],
+      // rank 45: >34 and <=55 -> CAUTION | unreadable -> CAUTION
+      head: '2 shown — 0 PASS, 2 CAUTION, 0 REJECT.', noReadingRows: 1,
+    },
+    {
+      name: 'an IV-REJECTed readable row beside an unreadable one',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 95), noIvCandidate('BBB')],
+      // rank 95 > 55 -> REJECT | unreadable -> CAUTION
+      head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 1,
+    },
+    {
+      name: 'POSITION horizon, unreadable row inside the caution window only',
+      horizon: 'Position (1-3m)',
+      candidates: () => [noIvCandidate('AAA', { nextEventDays: 40 })],
+      // iv CAUTION | event 40: not <30, but <60 -> CAUTION -> CAUTION
+      head: '1 shown — 0 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 1,
+    },
+    {
+      name: 'POSITION horizon, its own thresholds and not Swing’s',
+      horizon: 'Position (1-3m)',
+      candidates: () => [rankCandidate('AAA', 50), noIvCandidate('BBB', { nextEventDays: 20 })],
+      // rank 50 on Position: <=65 -> CAUTION (on Swing it would be CAUTION too,
+      // but 20d would REJECT on Position and CAUTION on Swing -- so this row
+      // fails if the page ever reads the wrong horizon's window)
+      head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 1,
     },
   ];
 
   for (const c of cases) {
     it(`stays coherent with its own head — ${c.name}`, () => {
-      setup(c.candidates());
+      setupHorizon(c.candidates(), c.horizon);
       render(<Step5Page />);
       const text = banner().textContent ?? '';
       const { head, tail } = splitBanner(text);
 
-      // Exact, computed from the fixture -- not an alternation hedging over
-      // states the code cannot reach.
-      expect(head).toMatch(c.head);
-      // The fact the banner exists to surface is present in every one of these.
-      expect(tail).toMatch(/no volatility reading at all/);
-      expectBannerCoherent(text);
+      // Hand-computed above, asserted exactly.
+      expect(head).toBe(c.head);
+      expect(tail).toMatch(
+        new RegExp(`${c.noReadingRows} of them ha(s|ve) no volatility reading at all`),
+      );
+      expectTailWordingContract(text);
     });
   }
+
+  it('suppresses the clause entirely where the horizon does not gate on volatility', () => {
+    // Intraday has no IV gate, so an unreadable row costs nothing and the
+    // trailing sentence must not appear at all -- there is no sub-verdict to
+    // reconcile, and claiming one would be the same defect in reverse.
+    setupHorizon([noIvCandidate('AAA')], 'Intraday (0-2d)');
+    render(<Step5Page />);
+    const text = banner().textContent ?? '';
+    expect(splitBanner(text).head).toBe('1 shown — 1 PASS, 0 CAUTION, 0 REJECT.');
+    expect(text).not.toMatch(/no volatility reading at all/);
+    expectTailWordingContract(text);
+  });
 });

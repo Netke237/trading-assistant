@@ -391,7 +391,12 @@ Silently removing regression guards while the suite stays green is precisely the
 
 ## 4. Verification
 
-- `cd backend && python -m pytest -q` — baseline is **2611 collected** (2610 passed / 1 skipped).
+- `cd backend && python -m pytest -q` — baseline was **2611 collected** (2610 passed / 1 skipped)
+  when this plan was written, and that number was already stale in the diff that added the
+  plan. Take the baseline by RUNNING it on your own branch point before you change anything;
+  a written count here goes stale the moment any branch adds a test. (For reference: 2638
+  collected / 2637 passed / 1 skipped on claude/session-retrieval-continuation-vf056m at the
+  round-6 fix commit.)
   Expect that plus the new cases. Of §2.3's sites, exactly **four go red** if a site is missed
   (`test_auto_trade.py:10`, `:57`, `test_premium_stop_per_position.py:373`, and the five 200-asserting
   POSTs behind `test_phase_g_arm_pick.py`'s `_arm_body`). The rest **pass silently on the wrong
@@ -399,7 +404,8 @@ Silently removing regression guards while the suite stays green is precisely the
   by reading them, not by running them.
 - `cd frontend && npm run typecheck` — must be silent. A required `direction` on the
   `armAutoTrade` request type means a forgotten payload field fails here.
-- `cd frontend && npm run test` — 134 suites / 1701 tests baseline, plus the new
+- `cd frontend && npm run test` — 134 suites / 1701 tests when written, same staleness caveat
+  as above (134 / 1709 on this branch at the round-6 fix commit); measure your own, plus the new
   `AutoTradeArm` assertions.
 - `python3 scripts/state.py` — exits 0, no drift. **This does not hold for free, and it does
   not hold at all unless §5's step 3 is done in the same commit as the fix.**

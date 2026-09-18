@@ -28,6 +28,7 @@ Each sets direction="Bearish" or exercises the short path. This is a convenience
 runner, not a proof of bearish coverage: `pytest` with no arguments remains the
 only thing that runs everything.
 """
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -80,43 +81,77 @@ def _merge(expr: str, addition: str) -> str:
     return f"({expr}) and ({addition})"
 
 
+# Short options that take NO value, so they may legally bundle in front of -k.
+# Anything else in a bundle is ambiguous (`-p`, `-m`, `-c`, `-o`, `-W` all TAKE a
+# value, so `-pk` means `-p k`, not `-p -k`) and is refused rather than guessed.
+VALUELESS_SHORTS = set("xvqslfd")
+
+# `-k`, or any bundle of valueless shorts ending in k: -k, -kEXPR, -k=EXPR,
+# -xk EXPR, -xkEXPR, -vk=EXPR ...
+_K_ARG = re.compile(r"^-([A-Za-z]*)k(.*)$")
+
+
 def build_args(extra):
     """Split caller args into the merged -k expression and everything else.
 
     Kept a module-level function purely so it can be tested -- `scripts/` is not
-    collected by `pytest tests`, so the previous inline version of this loop had
-    no test of any kind behind it.
+    collected by `pytest tests`, so every earlier version of this loop had no
+    test of any kind behind it, and two separate defects shipped that way.
     """
     expr = BEARISH_EXPR
     rest = []
     i = 0
     while i < len(extra):
         arg = extra[i]
-        if arg == "-k":
-            # NOT `i + 1 < len(extra)` alone. That consumed the next token
-            # unconditionally, including one that is plainly a flag: argparse
-            # refuses to do this and pytest errors with "expected one argument",
-            # but this script swallowed it -- `-k -v` merged to `(bearish) and
-            # (-v)`, deselected all 2611 tests and exited 5, which in CI reads
-            # as "nothing matched" rather than "you made a mistake".
-            if i + 1 >= len(extra) or extra[i + 1].startswith("-"):
-                raise KeywordArgError("-k expects an expression, not a flag or nothing")
-            expr = _merge(expr, extra[i + 1])
-            i += 2
-            continue
-        # BOTH attached forms. `-k=EXPR` was handled and the bare attached
-        # `-kEXPR` -- which argparse accepts and pytest honours -- was not: it
-        # fell through to `rest`, landed after the script's own -k, and pytest's
-        # last-wins rule dropped the bearish filter entirely. Measured before
-        # the fix: `-kstructural` collected 51 tests, the whole repo's
-        # structural suite, bullish included.
-        if arg.startswith("-k") and len(arg) > 2:
-            expr = _merge(expr, arg[3:] if arg[2] == "=" else arg[2:])
+        m = _K_ARG.match(arg)
+        if m is None:
+            rest.append(arg)
             i += 1
             continue
-        rest.append(arg)
-        i += 1
+
+        bundle, tail = m.group(1), m.group(2)
+
+        # BUNDLED SHORT OPTIONS. `-xk structural` is how a human actually types
+        # this, argparse accepts it, pytest honours it -- and matching only on
+        # `startswith("-k")` missed every one of them. They fell through to
+        # `rest`, landed AFTER the script's own -k, and pytest's last-wins rule
+        # dropped the bearish filter. Measured: `-xk structural` collected 51
+        # tests (the repo's whole structural suite, TestBullish cases included)
+        # against 6 for the correctly narrowed form, and exited 0.
+        if any(c not in VALUELESS_SHORTS for c in bundle):
+            raise KeywordArgError(
+                f"cannot tell where -k starts in {arg!r}: it bundles a short option "
+                "that takes a value. Pass -k as its own argument."
+            )
+
+        if tail == "":
+            # NOT `i + 1 < len(extra)` alone. That consumed the next token
+            # unconditionally, including one that is plainly a flag: argparse
+            # refuses this and pytest errors with "expected one argument", but
+            # this script swallowed it -- `-k -v` merged to `(bearish) and (-v)`,
+            # deselected all 2611 tests and exited 5, which in CI reads as
+            # "nothing matched" rather than as a mistake.
+            if i + 1 >= len(extra) or extra[i + 1].startswith("-"):
+                raise KeywordArgError("-k expects an expression, not a flag or nothing")
+            addition, step = extra[i + 1], 2
+        else:
+            addition, step = (tail[1:] if tail.startswith("=") else tail), 1
+
+        expr = _merge(expr, addition)
+        if bundle:
+            rest.append(f"-{bundle}")
+        i += step
     return expr, rest
+
+
+def build_cmd(executable, extra):
+    """The full pytest command. Split out from __main__ so the ORDERING can be
+    tested: the defect these guards exist for was never in the expression alone,
+    it was a caller -k reaching `rest` and landing AFTER the script's own -k,
+    where pytest's last-wins rule silently discarded the narrower filter.
+    """
+    expr, rest = build_args(extra)
+    return [executable, "-m", "pytest", "tests", "-k", expr, *rest]
 
 
 if __name__ == "__main__":
@@ -127,10 +162,9 @@ if __name__ == "__main__":
     # structural tests in the repo, bullish ones included, under a script whose
     # name promises the opposite.
     try:
-        expr, rest = build_args(sys.argv[1:])
+        cmd = build_cmd(sys.executable, sys.argv[1:])
     except KeywordArgError as exc:
         print(f"run_bearish_tests.py: {exc}", file=sys.stderr)
         sys.exit(2)
 
-    cmd = [sys.executable, "-m", "pytest", "tests", "-k", expr, *rest]
     sys.exit(subprocess.call(cmd, cwd=backend_root))
