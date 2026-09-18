@@ -26,7 +26,7 @@ which caches `compute_omm(closes, direction="Bullish").conviction_pct`
 The `conviction_label` bands at ±15/±40 confirm the sign convention.
 
 `AutoTradeArm/index.tsx:203` is the **only** production caller of `armAutoTrade`, and it
-hardcodes `action: 'BUY'` at `:206` with the accurate comment *"long single-leg option (call
+hardcodes `action: 'BUY'` at `:207` with the accurate comment *"long single-leg option (call
 or put) is always buy-to-open"*. A bearish options trade in this app is a **long put** —
 which is `BUY`. `auto_trader.arm(...)` likewise has exactly one production call site
 (`routers/auto_trade.py:83`); there is no scheduler or scan-driven arm path. Therefore:
@@ -154,8 +154,22 @@ trap for the next reader.
 # [-100, +100]), so the bearish mirror is -conviction, NOT 100 - conviction.
 # Direction is carried explicitly from the card: `action` is always BUY for a
 # long single-leg option and never encoded direction.
+if strategy.direction not in ("Bullish", "Bearish"):
+    raise ValueError(
+        f"ArmedStrategy.direction must be 'Bullish' or 'Bearish', got "
+        f"{strategy.direction!r} -- it decides position size and there is no safe default"
+    )
 directional_conv = conviction if strategy.direction == "Bullish" else -conviction
 ```
+
+**The explicit `raise` is not belt-and-braces; without it this expression fails OPEN to
+bearish** (round 2, finding 6). `ArmedStrategy` is a plain `@dataclass` (`auto_trader.py:24-25`),
+so its `Literal[...]` annotation is **not enforced at runtime** — only `ArmRequest` validates.
+A bare `... if direction == "Bullish" else -conviction` silently maps `"bullish"`, `"Bulish"`,
+`""` and `None` to the bearish branch. 23 test sites construct `ArmedStrategy` directly, as
+would any future non-HTTP producer. §2.1 spends a paragraph arguing that a `"Bullish"` default
+would reintroduce exactly the silent mis-direction this change removes; shipping the same
+silent-default shape pointed the other way would make that argument cover only the HTTP door.
 
 The `action`-based inference is **removed**, not kept alongside. Once direction is explicit,
 `action` carries no directional meaning and a second source of truth is how these drift apart.
@@ -167,12 +181,22 @@ not return `action`). Once direction decides position size, a wrong direction on
 trade is otherwise undetectable until the fill. One line, and it is the observability half of
 the loud-failure argument above.
 
+**`frontend/lib/api.ts` — `getAutoTradeStatus` response type**
+Add `direction` to it as well (`api.ts:643-644` types the response `{ armed; symbol; option;
+last_order }`). Round 2, finding 8: adding the field to the endpoint and not to its only
+declared reader means nothing in the app can actually read it, which defeats the observability
+justification above. **Known gap, deliberately not closed here:** the history entries appended
+in `auto_trader.py` (`:379-389` and the fire/cap blocks) carry no `direction`, so a *fired*
+trade's direction stays unrecorded and `last_order` will not show it. Recording it there is
+O4's territory (that is the path that will book a position); noted so the next reader does not
+mistake `last_order` for direction evidence.
+
 **`frontend/lib/api.ts` — `armAutoTrade` request type**
 Add `direction: 'Bullish' | 'Bearish'` (required, so a caller that forgets fails typecheck
 rather than at runtime).
 
 **`frontend/components/organisms/AutoTradeArm/index.tsx:203`**
-Add `direction: card.direction` to the payload — **not** `card.direction ?? 'Bullish'`, which
+Add `direction: card.direction` to the payload (the `action: 'BUY'` line is `:207`) — **not** `card.direction ?? 'Bullish'`, which
 typechecks and silently reinstates this exact defect. Update the `action: 'BUY'` comment: it
 stays `BUY` and that remains correct, but it no longer implies bullishness.
 
@@ -206,7 +230,16 @@ the old assertion carried). Rename it accordingly.
 | 6 | Bullish | +40 | 4 | 4 | regression guard: bullish behaviour unchanged |
 | 7 | Bullish | −40 | 1 | 1 | regression guard |
 
-Plus: `POST /auto-trade/arm` without `direction` → **422** (the loud-failure guarantee of §2.1).
+**Plus two tests that are not in the table, and the first is the one round 2 caught missing:**
+
+- **`action` no longer influences sizing.** `test_auto_trader.py:514` is repo-wide the *only*
+  sizing test that constructs `action="SELL"`, and §2.2 rewrites it to `"BUY"`. After that,
+  **nothing pins that `action` has stopped affecting size** — someone reinstating
+  `strategy.action` in that expression would break no test, which is precisely the drift §2.1
+  removes the inference to prevent. Add: `action="SELL"`, `direction="Bullish"`,
+  conviction `+80`, `quantity=4` → after the fix `mult(+80) = 1.00` → **4**; before the fix
+  `mult(100 − 80 = 20) = 0.65` → `round(2.6)` = **3**. Discriminating in both directions.
+- `POST /auto-trade/arm` without `direction` → **422** (the loud-failure guarantee of §2.1).
 
 **Frontend test** (round 1, finding 6 — the change exists to make the browser send this field,
 and nothing in the original plan pinned that). `AutoTradeArm/__tests__/AutoTradeArm.test.tsx`
@@ -225,40 +258,70 @@ The original plan counted only `ArmedStrategy(...)` and got the count wrong, and
 mentioned the request side at all. Both are enumerated here. **A required field with no
 default breaks every site that omits it**, and the HTTP sites fail as 422s.
 
-**(a) `ArmedStrategy(...)` — 23 real constructions, not 26.** Three of the original 26 grep
-hits are docstring prose (`test_phase_g_arm_pick.py:11`, `:127`,
-`test_premium_stop_per_position.py:368`), not code.
+**(a) `ArmedStrategy(...)` — 24 real constructions repo-wide.** Scope stated, because round 1's
+"26" and round 2's correction of it were both scope errors as much as counting errors.
+`grep -rn "ArmedStrategy(" --include=*.py .` over the **whole repo** yields 29 hits: **5 are
+prose** in comments/docstrings (`test_phase_g_arm_pick.py:11`, `:127`,
+`test_premium_stop_per_position.py:368`, `backend/app/services/auto_trader.py:43`,
+`backend/app/routers/auto_trade.py:48`) and **24 are real constructions** — 23 in
+`backend/tests/`, plus **one in production**.
 
 | File | Real constructions | Shape |
 |---|---|---|
 | `test_auto_trader.py` | 20 (`:15,34,55,83,105,126,157,213,236,260,286,302,453,478,503,532,552,568,583,606`) | direct kwargs, except `:302` and `:606` which are helper `return`s |
 | `test_phase_g_arm_pick.py` | 1 (`:83`, `ArmedStrategy(**base)`) | edit the `base` dict in `_strategy()` — one edit |
 | `test_premium_stop_per_position.py` | 2 (`:293` `ArmedStrategy(**base)`; `:378` `ArmedStrategy(**req.model_dump())`) | `:293` is one dict edit; **`:378` needs no `direction=` at all** — it inherits from the `ArmRequest` at `:373` |
+| **`backend/app/routers/auto_trade.py` (production)** | 1 (`:83`, `ArmedStrategy(**req.model_dump())`) | **needs no `direction=`** — same inheritance as `:378`. Listed because a section headed "every construction a required field breaks" that names the test twin and omits the production original is not an inventory |
 
-All are keyword-based, so no positional breakage. Each gets the direction its option right
-implies, so the fixtures stop being self-contradictory.
+All are keyword-based or `**`-unpacked — a scripted check for positional `ArmedStrategy(...)`
+calls returns zero — so no positional breakage. Each test fixture gets the direction its option
+right implies, so they stop being self-contradictory.
 
 **(b) `ArmRequest` / HTTP arm bodies — the half the original plan missed entirely.**
 
-| Site | Count | Effect if not fixed |
-|---|---|---|
-| `test_auto_trade.py` (**a different file from `test_auto_trader.py`, never mentioned in the original plan**) — POST bodies at `:10`, `:32`, `:44`, `:57` | 4 | `:10` asserts `!= 422` → **fails**. `:44` asserts `== 200` → **fails**, and its `finally` disarm then runs against a never-armed singleton |
-| `test_phase_g_arm_pick.py` — `_arm_body()` base dict at `:62-70`, feeding 7 POSTs (`:129,153,170,189,213,229,331`) | 1 edit, 7 sites | `:129,153,170,189,331` assert `200` → **all fail**. One dict edit fixes all seven |
-| `test_premium_stop_per_position.py` — `ArmRequest(` at `:373`, `:389`, and the parametrised tuple at `:852` | 3 | `ValidationError` on construction → **fails** |
+Every site here must gain `direction`. But **only some of them go red if you forget** — the
+rest pass, wrongly, and §2.3(c) is about those. Round 2 caught the round-1 rewrite getting this
+split backwards on three lines and transposing two more, so each site below is labelled with
+its *actual* verified behaviour:
 
-**(c) Four regression guards that would keep passing for the wrong reason.** A missing required
+| Site | Test | Assertion | If `direction` is omitted |
+|---|---|---|---|
+| `test_auto_trade.py:10` (**a different file from `test_auto_trader.py`, absent from the original plan**) | `test_arm_accepts_tastytrade_paper_broker_key` | `!= 422` (`:15`) | **FAILS** — red |
+| `test_auto_trade.py:32` | `test_arm_rejects_zero_quantity` (def `:26`) | `== 422` (`:37`) | passes silently → see (c) |
+| `test_auto_trade.py:44` | `test_arm_rejects_negative_quantity` (def `:41`) | `== 422` (`:49`) | passes silently → see (c) |
+| `test_auto_trade.py:57` | `test_arm_disarm_clears_armed_state` (def `:53`) | `== 200` (`:62`) | **FAILS** — red, and its `try/finally` disarm (`:72`) then runs against a never-armed singleton |
+| `test_phase_g_arm_pick.py:62-70` — `_arm_body()` base dict, feeding 7 POSTs (`:129,153,170,189,213,229,331`) | — | `:129,153,170,189,331` assert `200`; `:213,229` assert `422` | the five 200s **FAIL**; the two 422s pass silently → see (c). **One dict edit fixes all seven** |
+| `test_premium_stop_per_position.py:373` | `test_arm_request_carries_the_pct_into_the_strategy` | bare `ArmRequest(...)` | **FAILS** — `ValidationError` |
+| `test_premium_stop_per_position.py:389` | `test_arm_request_rejects_meaningless_percentages` | `with pytest.raises(ValidationError)` (`:387-393`) | passes silently → see (c) |
+| `test_premium_stop_per_position.py:852` | `test_order_schemas_reject_a_non_positive_limit_price` | `with pytest.raises(ValidationError)` (`:858`) | passes silently → see (c) |
+
+**`:389` and `:852` do not fail.** They wrap construction in `pytest.raises(ValidationError)`,
+and a missing required field raises exactly that — so they go green on the wrong exception.
+An earlier draft of this section predicted red tests there; a reader working it top-to-bottom
+would have waited for a failure that never comes.
+
+**(c) Six regression guards that would keep passing for the wrong reason.** A missing required
 field raises *before* any other bound is evaluated, so these stay green while what they guard
-goes dark. Each body must gain `direction`:
+goes dark — this is the silent half of (b), and the dangerous one. Each body must gain
+`direction`:
 
-- `test_auto_trade.py:32` `test_arm_rejects_zero_quantity` and `:38`
-  `test_arm_rejects_negative_quantity` — both assert 422. Without `direction` in the body they
-  422 on the missing field, and `Field(..., ge=1)` on `quantity` could be deleted entirely with
-  both still passing.
+- `test_auto_trade.py:32` `test_arm_rejects_zero_quantity` (def `:26`) and `:44`
+  `test_arm_rejects_negative_quantity` (def `:41`) — both assert 422. Without `direction` in the
+  body they 422 on the missing field, and `Field(..., ge=1)` on `quantity` could be deleted
+  entirely with both still passing.
 - `test_premium_stop_per_position.py:389` `test_arm_request_rejects_meaningless_percentages` —
   the `gt=0, lt=1` bound on `premium_stop_pct` stops being tested.
 - `test_premium_stop_per_position.py:852` — the non-positive `limit_price` case; `Field(default=None, gt=0)` stops being tested.
 - Same shape at `test_phase_g_arm_pick.py:213` and `:229`, which assert 422 on bad `picked_*`
-  values — covered by the single `_arm_body()` edit in (b).
+  values (parametrised into 6 and 4 cases respectively) — covered by the single `_arm_body()`
+  edit in (b).
+
+Not a finding, but worth stating so the implementer does not re-derive it:
+`test_premium_stop_per_position.py:849-853` shares one `base` dict across `StockOrderRequest`,
+`OptionOrderRequest` and `ArmRequest`. Neither broker schema declares `model_config`
+(`backend/app/routers/broker.py` has zero `extra=` hits), so they inherit pydantic's default
+`extra='ignore'` and adding `direction` to the shared base is harmless to the two that do not
+declare it.
 
 Silently removing regression guards while the suite stays green is precisely the failure mode
 §2.1 invokes G5-1 to argue against.
@@ -284,7 +347,7 @@ Silently removing regression guards while the suite stays green is precisely the
 
   | | symbol | bars | lookback/window |
   |---|---|---|---|
-  | auto-trader (`regime_monitor.py:181-184`) | hardcoded **`"SPX"`** | 600 daily | `compute_omm` **defaults** |
+  | auto-trader (`regime_monitor.py:180`, `:184`) | hardcoded **`"SPX"`** | 600 daily | `compute_omm` **defaults** |
   | scan (`stock_scan.py:403-407`) | **the scanned symbol's own** | 15-min or daily per `rcfg["timeframe"]` | per-horizon `rcfg["lookback"]/["window"]/["min_obs"]` |
 
   So after this fix the card and the auto-trader can still size the same armed trade
@@ -297,32 +360,57 @@ Silently removing regression guards while the suite stays green is precisely the
 ## 4. Verification
 
 - `cd backend && python -m pytest -q` — baseline is **2611 collected** (2610 passed / 1 skipped).
-  Expect that plus the new cases, with **zero** failures from §2.3's inventory. If any site in
-  §2.3 was missed it surfaces here as a 422 or `ValidationError`, not as a subtle wrong number.
+  Expect that plus the new cases. Of §2.3's sites, exactly **four go red** if a site is missed
+  (`test_auto_trade.py:10`, `:57`, `test_premium_stop_per_position.py:373`, and the five 200-asserting
+  POSTs behind `test_phase_g_arm_pick.py`'s `_arm_body`). The rest **pass silently on the wrong
+  exception** — so a green suite does NOT prove §2.3 was worked through. Check (c)'s six guards
+  by reading them, not by running them.
 - `cd frontend && npm run typecheck` — must be silent. A required `direction` on the
   `armAutoTrade` request type means a forgotten payload field fails here.
 - `cd frontend && npm run test` — 134 suites / 1701 tests baseline, plus the new
   `AutoTradeArm` assertions.
-- `python3 scripts/state.py` — exits 0, no drift. **See §5: this does not hold for free.**
+- `python3 scripts/state.py` — exits 0, no drift. **This does not hold for free, and it does
+  not hold at all unless §5's step 3 is done in the same commit as the fix.**
 
-## 5. Bookkeeping — required, not optional (round 1, finding 5)
+## 5. Bookkeeping — what is already done, and the one step that must ride with the fix
 
-`active_phase` in `docs/superpowers/PROJECT_STATE.json` is `null` (verified).
-`scripts/state.py`'s `audit_bookkeeping_drift` (`:481-560`) with `_pointer_target() → None`
-returns severity `"drift"` — **non-zero exit** — as soon as this branch's commit subjects reach
-`UNPHASED_FAIL_ROUND = 3` (`state.py:72`). Today it exits 0 only because the branch carries no
-round-numbered subjects for unphased work. This piece is being driven by
-`K-adversarial-audit-loop`, which produces exactly such subjects. §4's "exits 0" is therefore
-a claim this plan must earn, in a repo whose CLAUDE.md opens with *nothing is done until an
-adversarial round comes back clean*.
+Round 1 found that `scripts/state.py` would block on this piece. That has been **acted on, not
+just planned**, so this section now records live state rather than prescribing what it
+prescribed in round 1 — round 2 caught it asserting three repo facts that its own execution had
+already falsified.
 
-Two state-file edits belong to this piece:
+**Done (committed on this branch):**
 
-1. **Register the piece** — add its `phases`/`already_shipped` entry with a `verify` probe
-   (pattern `strategy.direction == "Bullish"` against
-   `backend/app/services/auto_trader.py`), and set `active_phase` to it, so the round counter
-   has a pointer and `state.py` keeps exiting 0.
-2. **Correct `pending_kenneth[1]`** — it currently prescribes `-conviction` on the **SELL**
-   branch as the fix. §1.2 proves that branch is unreachable from the UI, so that change would
-   alter no real trade while appearing to close the bug. This correction is independent of the
-   implementation and lands first.
+1. **`AUTOTRADE-DIRECTION-SIZING` is registered** in `docs/superpowers/PROJECT_STATE.json`'s
+   `phases`, `status: in_progress`, `audit_clean: false`, with a presence probe for
+   `strategy.direction == "Bullish"` against `backend/app/services/auto_trader.py`.
+   `active_phase` points at it. It is **no longer null** — the `target is None` branch
+   (`state.py:533-560`) that round 1 reasoned about is unreachable today.
+2. **`pending_kenneth[1]` is corrected.** It had prescribed `-conviction` on the unreachable
+   `SELL` branch; the correction is prepended and the original entry preserved verbatim
+   beneath it, per this file's convention. (The original's own mis-citation of the mis-pinning
+   test as `:513` — the def is at `:514` — is left as written, because the preserved text is a
+   record of what was believed, not a live claim.)
+
+**Still required, and both are easy to lose:**
+
+3. **Flip `status` to `shipped` in the same commit that lands the fix.** This is the blocker
+   round 2 found and it is not optional. `state.py:625-635` computes
+   `declared_shipped = ph["status"] in SHIPPED` (`SHIPPED = {"shipped","shipped_unaudited"}`,
+   `:65`), and `"in_progress"` is not in it. The probe is a regex presence test, so **the
+   moment §2.1's line lands, the pattern is found**, `declared_shipped != actual_shipped`, the
+   phase joins `drift`, and **`state.py` exits 1**. The absent-by-design probe is a deliberate
+   trip-wire; a plan that trips it and never says to reset it fails its own §4.
+4. **Bump `audit_rounds` every round, in the round's own commit.**
+   `audit_bookkeeping_drift` falls through to `if git_max > declared: return "drift"`, where
+   `git_max` is the highest round number in this branch's commit subjects
+   (`_round_numbers_in_branch_subjects`, `:157-167`, regex `\bround\s+(\d+)`,
+   case-insensitive). A commit saying "round 2" against a declared `audit_rounds: 1` is drift
+   and exits 1 on its own, independently of step 3.
+
+   Note the hard cap that sits behind this: at `git_max >= 3` with `audit_clean` still false,
+   `state.py` reports audit_rule's HARD CAP — **three rounds without going clean means stop and
+   tell Kenneth**, not run a fourth. This plan is at round 2. If round 3 does not come back
+   clean, that is the rule to follow, and the round-4 precedent set on the Step-5 gate banner
+   (crossed knowingly, on a shrinking target, with the justification written down) is the only
+   shape in which it has ever been crossed.
