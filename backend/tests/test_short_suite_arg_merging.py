@@ -20,6 +20,8 @@ tests into the very set the script is meant to run. The first version of this
 file put 12 argument-parser tests into it.
 """
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -111,7 +113,7 @@ class TestItRefusesRatherThanRunningTheWrongThing:
     def test_a_bundle_holding_a_value_taking_option_is_refused_not_guessed(self, argv):
         # -p/-r/-c all TAKE a value, so `-pk` means `-p k`, not `-p -k`.
         # Guessing either way is a silent wrong answer; refuse instead.
-        with pytest.raises(KeywordArgError, match="bundles a short option"):
+        with pytest.raises(KeywordArgError, match="takes a value"):
             build_args(argv)
 
 
@@ -129,3 +131,93 @@ class TestEverythingElseIsPassedThrough:
 
     def test_repeated_k_args_all_narrow_cumulatively(self):
         assert build_args(["-k", "structural", "-kstop"])[0] == f"(({BASE}) and (structural)) and (stop)"
+
+
+class TestTheBaseSetItself:
+    """THE GAP THAT MADE EVERY OTHER TEST IN THIS FILE SELF-REFERENTIAL.
+
+    Every assertion above is written against `BASE = runner.BEARISH_EXPR`, so
+    they pin the merge SHAPE and never the thing being merged. Measured: editing
+    the constant to "bearish or bullish" -- a one-token change that makes this
+    script run the opposite direction's suite at exit 0, the precise defect class
+    of six prior rounds -- left all 27 tests GREEN.
+    """
+
+    def test_the_base_expression_is_the_literal_direction_keyword(self):
+        assert runner.BEARISH_EXPR == "bearish"
+
+    def test_the_merged_expression_starts_from_that_keyword(self):
+        expr, _ = build_args(["-k", "structural"])
+        assert expr == "(bearish) and (structural)"
+
+
+class TestTheAttachedFormWithASecondK:
+    """REGRESSION, round 1 of this target's loop. `_K_ARG`'s quantifier was
+    greedy, so it bound to the LAST k in the token: `-kbreakout` yielded
+    bundle='kbrea', which contains a value-taking short, and the script REFUSED
+    an expression argparse and pytest both accept. Every keyword in this repo
+    with a second k was affected."""
+
+    @pytest.mark.parametrize("word", ["breakout", "stock", "backtest", "markov", "risk", "k"])
+    def test_an_attached_expression_containing_k_is_not_refused(self, word):
+        expr, rest = build_args([f"-k{word}"])
+        assert expr == f"({BASE}) and ({word})"
+        assert rest == []
+
+    def test_a_bundle_before_such_an_expression_still_splits(self):
+        expr, rest = build_args(["-xkbreakout"])
+        assert expr == f"({BASE}) and (breakout)"
+        assert rest == ["-x"]
+
+    def test_a_single_dash_option_merely_containing_k_reads_as_k(self):
+        # `-key` IS `-k ey` to argparse, and this is the only single-dash form
+        # that actually exercises the regex -- the existing pass-through cases
+        # are double-dashed and fail on their second character.
+        expr, rest = build_args(["-key"])
+        assert expr == f"({BASE}) and (ey)"
+        assert rest == []
+
+
+class TestTheEndOfOptionsMarker:
+    def test_a_k_after_a_double_dash_belongs_to_pytest(self):
+        # Everything after `--` is positional by argparse's rule, so a -k beyond
+        # it must not be intercepted. Previously `--` matched no branch, fell to
+        # `rest` AFTER the injected -k, and the -k the caller had explicitly
+        # marked positional was merged anyway.
+        expr, rest = build_args(["--", "-k", "structural"])
+        assert expr == BASE
+        assert rest == ["--", "-k", "structural"]
+
+
+class TestTheScriptAsActuallyInvoked:
+    """THE WIRING, which nothing above touches. Every other test in this file
+    calls build_args/build_cmd directly, so `__main__` -- where the refusal is
+    caught, reported and turned into an exit code -- had ZERO coverage. Both of
+    these mutations survived the whole suite:
+
+        sys.exit(4) -> sys.exit(0)           27 passed
+        delete the try/except entirely       27 passed
+
+    i.e. "refuses loudly" was held by nobody having edited five lines. These are
+    subprocess tests because that is the only thing that can observe an exit
+    code, and the headline claim of this whole piece ("6, not 51") was until now
+    verified only by a human at a terminal.
+    """
+
+    def _run(self, *args):
+        return subprocess.run(
+            [sys.executable, str(_SCRIPT), *args],
+            capture_output=True, text=True,
+        )
+
+    def test_a_bundled_selector_narrows_to_the_intersection(self):
+        # The exact form that collected 51 tests at exit 0 across three rounds.
+        r = self._run("-xk", "structural", "--collect-only", "-q")
+        assert r.returncode == 0, r.stderr
+        assert "6/" in r.stdout, r.stdout[-400:]
+
+    def test_an_unbalanced_expression_refuses_loudly_rather_than_running(self):
+        r = self._run("-k", "a) or (b", "--collect-only", "-q")
+        assert r.returncode == 4, f"rc={r.returncode} out={r.stdout[-200:]}"
+        assert "run_bearish_tests.py:" in r.stderr
+        assert "tests collected" not in r.stdout

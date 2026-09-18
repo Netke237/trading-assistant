@@ -1,6 +1,11 @@
 """Run the bearish-path test suite.
 
-Usage: python scripts/run_bearish_tests.py [extra pytest args]
+Usage: .venv/bin/python scripts/run_bearish_tests.py [extra pytest args]
+
+`-k` IS INTERCEPTED, not passed through: the caller's expression is merged as
+`(bearish) and (yours)` so it NARROWS rather than replaces, and repeated -k is
+cumulative rather than pytest's last-wins. An expression with unbalanced parens,
+or a bundle whose letters are ambiguous, is refused with exit 4.
 
 SELECTION IS BY KEYWORD, NOT A HARDCODED LIST. The script first shipped with a
 fixed list of six `tests/test_*bearish*.py` modules and was wrong on day one:
@@ -81,14 +86,32 @@ def _merge(expr: str, addition: str) -> str:
     return f"({expr}) and ({addition})"
 
 
-# Short options that take NO value, so they may legally bundle in front of -k.
-# Anything else in a bundle is ambiguous (`-p`, `-m`, `-c`, `-o`, `-W` all TAKE a
-# value, so `-pk` means `-p k`, not `-p -k`) and is refused rather than guessed.
-VALUELESS_SHORTS = set("xvqslfd")
+# THE DANGEROUS LETTERS, not the safe ones. This was a whitelist of "valueless"
+# shorts, set("xvqslfd"), and it was wrong on day one in both directions -- the
+# exact failure its own module docstring opens by condemning. `f` and `d` are
+# not pytest options in this environment at all (no pytest-xdist), so `-fk EXPR`
+# built a command pytest rejects; while `-h` IS a real valueless flag and was
+# missing, so `-hk EXPR` was refused for no reason.
+#
+# Inverted, it only has to name the letters whose bundling is genuinely
+# AMBIGUOUS: a short that TAKES a value means `-pk` is `-p k`, not `-p -k`.
+# These are pytest's own value-taking shorts. Any OTHER letter is passed
+# through to pytest, which errors loudly if it is not a real flag -- a bounded,
+# visible failure, where a false refusal blocks a legitimate run.
+VALUE_TAKING_SHORTS = set("kmcoprW")
 
-# `-k`, or any bundle of valueless shorts ending in k: -k, -kEXPR, -k=EXPR,
-# -xk EXPR, -xkEXPR, -vk=EXPR ...
-_K_ARG = re.compile(r"^-([A-Za-z]*)k(.*)$")
+# `-k`, or any bundle of shorts ending in k: -k, -kEXPR, -k=EXPR, -xk EXPR,
+# -xkEXPR, -vk=EXPR ...
+#
+# THE QUANTIFIER IS LAZY, AND THAT IS LOAD-BEARING. Greedy, `[A-Za-z]*` binds to
+# the LAST k in the token, so `-kbreakout` (k-b-r-e-a-k-o-u-t) backtracked to the
+# SECOND k and yielded bundle='kbrea' -- which contains `k`, a value-taking
+# short, so the script refused an ordinary expression that argparse and pytest
+# both accept (`pytest -kbreakout` collects 26). Every keyword in this repo
+# carrying a second k was affected: breakout, stock, backtest, markov, risk.
+# Lazy binds the option letter left-to-right, exactly as argparse consumes a
+# bundle.
+_K_ARG = re.compile(r"^-([A-Za-z]*?)k(.*)$")
 
 
 def build_args(extra):
@@ -103,6 +126,14 @@ def build_args(extra):
     i = 0
     while i < len(extra):
         arg = extra[i]
+        if arg == "--":
+            # END OF OPTIONS. Everything after `--` is positional by argparse's
+            # own rule, so a -k beyond it belongs to pytest verbatim and must not
+            # be merged into ours. Previously `--` matched no branch and fell to
+            # `rest`, landing AFTER the injected -k, and the -k the user had
+            # explicitly marked as positional was intercepted anyway.
+            rest.extend(extra[i:])
+            break
         m = _K_ARG.match(arg)
         if m is None:
             rest.append(arg)
@@ -118,10 +149,15 @@ def build_args(extra):
         # dropped the bearish filter. Measured: `-xk structural` collected 51
         # tests (the repo's whole structural suite, TestBullish cases included)
         # against 6 for the correctly narrowed form, and exited 0.
-        if any(c not in VALUELESS_SHORTS for c in bundle):
+        ambiguous = sorted(c for c in bundle if c in VALUE_TAKING_SHORTS)
+        if ambiguous:
+            # The message names the ACTUAL letter. It used to say "it bundles a
+            # short option that takes a value" for every refusal, including
+            # `-kbreakout`, which bundles nothing -- sending the reader hunting
+            # for a bundle that was not there.
             raise KeywordArgError(
-                f"cannot tell where -k starts in {arg!r}: it bundles a short option "
-                "that takes a value. Pass -k as its own argument."
+                f"cannot tell where -k starts in {arg!r}: -{ambiguous[0]} takes a value, "
+                f"so {arg!r} may mean '-{ambiguous[0]} k...'. Pass -k as its own argument."
             )
 
         if tail == "":
@@ -129,7 +165,7 @@ def build_args(extra):
             # unconditionally, including one that is plainly a flag: argparse
             # refuses this and pytest errors with "expected one argument", but
             # this script swallowed it -- `-k -v` merged to `(bearish) and (-v)`,
-            # deselected all 2611 tests and exited 5, which in CI reads as
+            # deselected the whole suite and exited 5, which in CI reads as
             # "nothing matched" rather than as a mistake.
             if i + 1 >= len(extra) or extra[i + 1].startswith("-"):
                 raise KeywordArgError("-k expects an expression, not a flag or nothing")
@@ -165,6 +201,11 @@ if __name__ == "__main__":
         cmd = build_cmd(sys.executable, sys.argv[1:])
     except KeywordArgError as exc:
         print(f"run_bearish_tests.py: {exc}", file=sys.stderr)
-        sys.exit(2)
+        # 4, NOT 2. This IS a usage error, and 4 is pytest's own code for one.
+        # 2 is pytest's ExitCode.INTERRUPTED, so a CI step branching on the exit
+        # code could not tell "the wrapper refused your -k" from "the run was
+        # interrupted" -- the refusal path emits exactly one machine-readable
+        # signal and it was ambiguous.
+        sys.exit(4)
 
     sys.exit(subprocess.call(cmd, cwd=backend_root))
