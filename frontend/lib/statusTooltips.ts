@@ -128,6 +128,15 @@ export function regimeNoDataTooltip(reason: 'insufficient_data' | 'unavailable' 
  *  while resolveIv guarantees `value == null` exactly when `basis === 'none'`.
  *  Change that invariant either way and the two disagree about the same row
  *  again, which is verbatim the defect this was built to remove.
+ *
+ *  ROUND 3 CLOSED THE HOLE THAT KEPT REOPENING IT: this type could not express
+ *  a PASS row's data situation at all -- a PASS row zeroes all three flags --
+ *  so every caller that needed it derived it again, and round 2's fix put that
+ *  third derivation inside gateDriverPhrase's own parameter list. The facts are
+ *  now CARRIED (`hasIv`, `ivGated`) instead of re-derived, and nothing in this
+ *  file takes a volatility argument with a default. Three rounds, one lesson:
+ *  when a shared type cannot say the thing, callers say it themselves, and they
+ *  say it differently.
  */
 export interface GateDrivers {
   /** The IV side is at least as bad as the gate. False on a PASS row. */
@@ -138,6 +147,18 @@ export interface GateDrivers {
    *  Distinct from `iv` alone: "the market prices this richly" and "nobody
    *  answered" wear the same CAUTION badge and mean opposite things. */
   ivMissing: boolean;
+  /** Whether this ROW had a volatility reading at all. Carried rather than
+   *  re-derived because a PASS row zeroes the three flags above and so cannot
+   *  express "passed, and there was no reading" -- which is what sent round 3's
+   *  callers back to deriving it themselves for a THIRD time. */
+  hasIv: boolean;
+  /** Whether THIS HORIZON gates on volatility at all. A property of the
+   *  HORIZON, not of the row, and the two are not interchangeable: Intraday
+   *  gates on neither basis, so `ivStatusFor` returns PASS for any reading it
+   *  is handed, including a rank of 95. Anything that wants to say "the
+   *  volatility side was checked and cleared" must consult THIS, never `hasIv`
+   *  -- see gateDriverPhrase. */
+  ivGated: boolean;
 }
 
 export function gateDrivers(args: {
@@ -146,29 +167,51 @@ export function gateDrivers(args: {
   gate: Status;
   /** False when neither a rank nor an absolute level was available. */
   hasIv: boolean;
+  /** False on a horizon with no IV gate on EITHER basis (Intraday today). */
+  ivGated: boolean;
 }): GateDrivers {
+  const { hasIv, ivGated } = args;
   // A PASS row has no driver. Attributing one is how the tooltip came to tell
-  // clean rows they were "driven by both".
-  if (args.gate === 'PASS') return { iv: false, event: false, ivMissing: false };
+  // clean rows they were "driven by both". The two facts above survive it,
+  // because "why is this PASS" still has two different answers.
+  if (args.gate === 'PASS') return { iv: false, event: false, ivMissing: false, hasIv, ivGated };
   const iv = args.ivStatus === args.gate;
   const event = args.proxStatus === args.gate;
-  return { iv, event, ivMissing: iv && !args.hasIv };
+  return { iv, event, ivMissing: iv && !hasIv, hasIv, ivGated };
 }
 
 /** How `gateDrivers` reads in prose, so the tooltip and the banner also share
  *  their WORDS and not merely their arithmetic. `ivNoun` is the basis-aware
  *  name ("IV rank" or "IV") the column heading and threshold sentence use. */
-export function gateDriverPhrase(d: GateDrivers, ivNoun: string, hasIv = true): string {
+export function gateDriverPhrase(d: GateDrivers, ivNoun: string): string {
   const parts: string[] = [];
   if (d.iv) parts.push(d.ivMissing ? 'no volatility reading' : ivNoun);
   if (d.event) parts.push('event proximity');
   if (parts.length > 0) return parts.join(' and ');
-  // A PASSING row with NO reading is only reachable where the horizon does not
-  // gate on volatility (Intraday). Saying "clear on both" there put "IV: no
-  // data" and "clear" in one sentence -- the same conflation running backwards.
-  return hasIv
+
+  // Everything below is a PASS row, and the question is what its clean badge
+  // is CLAIMING. Round 2 wrote two sentences here and chose between them on
+  // `hasIv` -- the row's data -- while both sentences are assertions about the
+  // HORIZON. Round 3 measured the gap: on Intraday, where the IV gate is off,
+  // ivStatusFor returns PASS for any figure it is given, so a row at IV rank 95
+  // -- the top of that name's own 52-week range, the most expensive premium it
+  // gets -- took the hasIv branch and was told "this row is clear on both",
+  // one line under a banner reading "IV gate disabled for this horizon". The
+  // tooltip asserted a check had passed that the page said was never run, on
+  // the badge a trader hovers to ask exactly that question.
+  //
+  // So ask the horizon first. "Clear on both" is only sayable where both sides
+  // were actually judged.
+  if (!d.ivGated) {
+    return 'nothing — the event window is clear, and this horizon does not gate on volatility';
+  }
+  return d.hasIv
     ? 'nothing — this row is clear on both'
-    : 'nothing — the event window is clear, and this horizon does not gate on volatility';
+    // Gated, PASSING, and no reading. Unreachable from step 5 today (its page
+    // downgrades an unreadable row to CAUTION on any gating horizon), and
+    // written out rather than left to a default because the last two rounds
+    // were both spent on states this type could not express.
+    : 'nothing — the event window is clear, and the volatility side had no reading to judge';
 }
 
 export function eventVolGateTooltip(args: {
@@ -202,7 +245,7 @@ export function eventVolGateTooltip(args: {
   const evPart = nextEventDays == null
     ? 'no known upcoming event'
     : `next event in ${nextEventDays}d vs. this horizon's reject <${evReject}d / caution <${evCaution}d window (${proxStatus})`;
-  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun, ivRank != null)}.`;
+  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun)}.`;
 }
 
 /** Bare win-rate cells that sit next to (but separately from) a GATE badge — several

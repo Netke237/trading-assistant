@@ -182,7 +182,14 @@ export default function Step5Page() {
     // with no antecedent anywhere in the sentence, and suppressing the single
     // distinction this feature exists to make. Flags let one row be counted under
     // every cause that genuinely applies to it.
-    const drivers: GateDrivers = gateDrivers({ ivStatus: ivSt, proxStatus, gate, hasIv });
+    // `ivGated` is the HORIZON's fact and `hasIv` is the ROW's, and round 3
+    // proved they are not interchangeable: the tooltip chose its PASS sentence
+    // on the row's and so told an Intraday row at IV rank 95 it was "clear on
+    // both", under a banner saying the IV gate is disabled here. Both now
+    // travel WITH the verdict instead of being re-derived at the far end.
+    const drivers: GateDrivers = gateDrivers({
+      ivStatus: ivSt, proxStatus, gate, hasIv, ivGated: !gateDisabled,
+    });
     return { r, c, iv, hasIv, ivSt, proxStatus, gate, drivers };
   }), [watchlist, candidateMap, ivStatusFor, evReject, evCaution, gateDisabled]);
 
@@ -260,7 +267,20 @@ export default function Step5Page() {
       // sum to the non-PASS count. Said out loud, because on screen there was no
       // cue at all and "17 causes for 12 rows" reads as a bug.
       const sum = causes.reduce((a, c) => a + c.n, 0);
-      const overlap = sum > caution + reject ? ' (a row can have more than one)' : '';
+      // AGAINST THE ROWS THESE CLAUSES ACTUALLY DESCRIBE, not against every
+      // non-PASS row. Round 3: the missing-reading count moved out of `causes`
+      // into its own trailing sentence one round earlier, but this comparison
+      // kept the old denominator -- and a row whose ONLY driver is a missing
+      // reading adds 0 to `sum` while still adding 1 to `caution + reject`. So
+      // each such row cancelled out a genuine double-count and DELETED the
+      // disclaimer. Measured: 10 rows driven by both IV rank and an event plus
+      // 11 unreadable rows printed "10 ...; 10 ..." with no cue -- 31
+      // attributions over 21 rows -- while the same 10 overlapping rows with 9
+      // unreadable ones printed the cue. The overlap was byte-identical; two
+      // unrelated rows removed the warning. On this app that is the COMMON
+      // case, because a true percentile needs IBKR or tastytrade to answer.
+      const driven = count((g) => (g.drivers.iv && !g.drivers.ivMissing) || g.drivers.event);
+      const overlap = sum > driven ? ' (a row can have more than one)' : '';
       parts.push(`Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`);
     }
     if (noReading > 0) {

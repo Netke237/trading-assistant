@@ -224,4 +224,76 @@ describe('a row can be driven by more than one thing', () => {
     expect(t).toMatch(/2 on IV rank above its threshold/);
     expect(t).toMatch(/1 on IV above its threshold/);
   });
+
+  it('ROUND 3: an unreadable row cannot delete the overlap warning from rows it has nothing to do with', () => {
+    // THE FINDING. Round 2 moved the missing-reading count OUT of the driver
+    // list into its own trailing sentence, but left this guard comparing the
+    // driver total against every non-PASS row. A row whose only driver is a
+    // missing reading adds 0 to the drivers and 1 to that denominator, so each
+    // one cancels a genuine double-count and SUPPRESSES the disclaimer.
+    //
+    // BOTH doubles-driven rows here are identical between this test and the one
+    // above; only the two unreadable rows differ. Without the fix this prints
+    // "1 on IV rank above its threshold; 1 on an event inside this horizon's
+    // window" -- 4 attributions over 3 rows -- with no cue that they overlap.
+    setup([
+      makeCandidate('BOTH', {
+        nextEventDays: 3,
+        contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, ivRank: 90, ivPercentile: 90, dte: 90 } as any,
+      }),
+      noIvCandidate('NOIV1'),
+      noIvCandidate('NOIV2'),
+    ]);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    expect(t).toMatch(/Driven by \(a row can have more than one\)/);
+    // And the counts it qualifies are still the real ones.
+    expect(t).toMatch(/3 shown — 0 PASS, 2 CAUTION, 1 REJECT/);
+    expect(t).toMatch(/2 of them have no volatility reading at all/);
+  });
+
+  it('ROUND 3: does NOT cry overlap when the causes really are disjoint', () => {
+    // The guard is one-directional by construction (a row can never be counted
+    // under both rank and absolute), and this pins that the fix did not simply
+    // turn the cue on permanently -- which would make it noise and tell the
+    // reader nothing.
+    setup([
+      makeCandidate('RNK', {
+        contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, ivRank: 90, ivPercentile: 90, dte: 90 } as any,
+      }),
+      makeCandidate('EV', { nextEventDays: 3 }),
+      noIvCandidate('NOIV'),
+    ]);
+    render(<Step5Page />);
+    expect(banner().textContent).not.toMatch(/a row can have more than one/);
+  });
+});
+
+describe('ROUND 3: a horizon that does not gate on volatility never claims it cleared one', () => {
+  // END-TO-END THROUGH THE REAL PAGE ON PURPOSE. The round-3 mutation showed
+  // the production wiring was unpinned: deleting the tooltip's third argument
+  // entirely -- reverting round 2's fix where it actually ships -- left all
+  // 1695 tests green, because the only test for that branch called
+  // gateDriverPhrase directly. These go through Step5Page, so the argument the
+  // page hands the classifier is part of what is pinned.
+  //
+  // Intraday's thresholds are all null and getIvPassMax falls through to the
+  // module FALLBACK for any null it is given, so this case rests on FALLBACK
+  // rather than on the fixture. Said out loud because round 2's headline
+  // bookkeeping finding was a fixture that silently did nothing.
+  it('does not tell an Intraday row at IV rank 95 that it is "clear on both"', () => {
+    setup([
+      makeCandidate('RICH', {
+        contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, ivRank: 95, ivPercentile: 95, dte: 90 } as any,
+      }),
+    ], 'Intraday (0-2d)');
+    render(<Step5Page />);
+    // The banner says the gate is off...
+    expect(screen.getByText(/IV gate disabled for this horizon/)).toBeInTheDocument();
+    // ...so nothing one line below it may say the volatility side was cleared.
+    const tip = screen.getByText(/Gate shows the worse of/);
+    expect(tip.textContent).toMatch(/IV rank 95 \(PASS\)/);          // the figure still shows
+    expect(tip.textContent).toMatch(/does not gate on volatility/);
+    expect(tip.textContent).not.toMatch(/clear on both/);
+  });
 });
