@@ -346,47 +346,107 @@ function splitBanner(text: string): { head: string; tail: string } {
 }
 const tailOf = (text: string) => splitBanner(text).tail;
 
-/* An explicit marker that a verdict word belongs to ONE SIDE of the gate and
- * not to the gate itself. This IS a literal set, deliberately: there is no way
- * to detect "is this scoped" mechanically. It is kept broad enough that a
- * correct paraphrase ("volatility leg") is not punished -- an earlier version
- * accepted only "volatility side" and so failed correct rewordings while
- * passing incorrect ones. "no volatility reading" must NOT count: it names the
- * data, not the side that graded it. */
-const SIDE_MARKER = /volatility (side|column|leg|axis)|on the (event|volatility) side/;
+/* ── THE WORDING CONTRACT, REBUILT IN TARGET A ROUND 1 ────────────────────
+ * The previous version was three literal/synonym lists, and a list is always
+ * one synonym behind. It was MEASURED accepting all three of these, 21/21
+ * GREEN:
+ *   "graded PASS on the volatility side alone, never CAUTION there."
+ *        the exact SEMANTIC INVERSE of page.tsx's `gateDisabled ? 'PASS'
+ *        : 'CAUTION'` -- the banner telling the reader a missing reading
+ *        PASSES the volatility gate.
+ *   "...so nothing shown above can read PASS."
+ *        round 6's own defect, one noun outside the old QUANTIFIES_OVER_ROWS,
+ *        rendered under a head reading "1 PASS".
+ *   "the kinder of that and the event window, so it can be better still."
+ *        the combination backwards, one synonym outside WRONG_DIRECTION.
+ * ...while REJECTING this, which is correct copy in the page's OWN noun:
+ *   "graded CAUTION on the IV leg alone, never PASS on that leg."
+ *
+ * So the rules below are POSITIVE: they state what the tail MUST be and fail
+ * everything else, instead of naming wordings that have already gone wrong.
+ * What they encode comes from production, not from today's sentence:
+ *   - the clause renders ONLY when the horizon gates on volatility (page.tsx
+ *     counts `gateDisabled ? 0 : rows-without-a-reading`), so on that side an
+ *     unreadable row is CAUTION and is NOT PASS;
+ *   - the gate is worstStatus(iv, event), so it can only ever go WORSE.
+ */
+
+/** Which side graded the row. BOTH of the page's own nouns for it are accepted
+ *  -- it writes "IV rank" and `ivNoun` elsewhere, so an editor writing "IV leg"
+ *  is writing correct copy, and the old rule punished exactly that. "no
+ *  volatility reading" must still NOT count: that names the data, not the side
+ *  that graded it. */
+const SIDE_MARKER = /\b(volatility|IV)\s+(side|column|leg|axis)\b|\bon the (event|volatility|IV) side\b/i;
 const VERDICT_WORD = /\b(PASS|CAUTION|REJECT)\b/;
-/* The tail speaks only about the rows with no reading. The moment it quantifies
- * over the rows on screen it is making a claim the head's counters own. */
-const QUANTIFIES_OVER_ROWS = /\b(no|any|every|all|none)\s+(of\s+the\s+)?(rows?|candidates?)\b/i;
-/* The gate is worstStatus(iv, event): it can only ever go WORSE. A tail that
- * describes the combination the other way round is asserting the inverse of
- * the production arithmetic. */
-const WRONG_DIRECTION = /better of|higher still|can be higher|can only improve/i;
+/** Turns the token after it into a DENIAL. The window is three words, which is
+ *  deliberate: "never PASS" and "not graded PASS" are denials, while "nothing
+ *  shown above can read PASS" ASSERTS PASS -- correctly, because that sentence
+ *  does assert it of the shown rows. */
+const NEGATOR = /\b(never|not|no|nothing|none|cannot|can't|without)\b/i;
+/** The HEAD owns the counts. A sentence carrying a verdict must not reach out
+ *  and describe the rows the head is counting. */
+const REFERS_TO_SHOWN_SET = /\b(shown|above|below|these|those|listed|displayed|on screen)\b/i;
+const WORSE_DIRECTION  = /\b(worse|worst|lower|harsher|stricter)\b/i;
+const BETTER_DIRECTION = /\b(better|kinder|higher|improves?|improved|gentler|milder|softer)\b/i;
+
+/** Every occurrence of `word` in `text`, split into the ones being ASSERTED and
+ *  the ones being DENIED, by looking three words back for a negator. This is
+ *  what makes the contract structural rather than a co-occurrence check: the
+ *  inverse sentence contains the same two verdict words as the correct one. */
+function assertedAndDenied(text: string, word: RegExp): { asserted: string[]; denied: string[] } {
+  const asserted: string[] = [];
+  const denied: string[] = [];
+  const re = new RegExp(word.source, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const before = text.slice(0, m.index).trim().split(/\s+/).slice(-3).join(' ');
+    (NEGATOR.test(before) ? denied : asserted).push(m[0].toUpperCase());
+  }
+  return { asserted, denied };
+}
+const uniqSorted = (xs: string[]) => [...new Set(xs)].sort();
 
 function expectTailWordingContract(text: string) {
   const { head, tail } = splitBanner(text);
   expect(head).toMatch(/shown —/);
   if (tail === '') return;
 
-  // R1 — a verdict word in the tail must be scoped to a side. This is what
-  // kills "counted as CAUTION, never as PASS" under any head at all.
-  for (const sentence of tail.split('.').map((x) => x.trim()).filter(Boolean)) {
-    if (VERDICT_WORD.test(sentence)) {
-      expect({ sentence, scopedToASide: SIDE_MARKER.test(sentence) })
-        .toEqual({ sentence, scopedToASide: true });
-    }
+  const sentences = tail.split('.').map((x) => x.trim()).filter(Boolean);
+  const verdictRe = new RegExp(VERDICT_WORD.source, 'i');
+  const verdictSentences = sentences.filter((x) => verdictRe.test(x));
+
+  // R1 — every sentence carrying a verdict word says WHICH SIDE graded it.
+  for (const sentence of verdictSentences) {
+    expect({ sentence, scopedToASide: SIDE_MARKER.test(sentence) })
+      .toEqual({ sentence, scopedToASide: true });
   }
 
-  // R2 — and it must not quantify over the shown rows. R1 alone let
-  // "...so no row shown here can ever be a PASS" through, under a "1 PASS"
-  // head, because the sentence happened to carry a side marker earlier on.
-  expect({ tail, quantifiesOverShownRows: QUANTIFIES_OVER_ROWS.test(tail) })
-    .toEqual({ tail, quantifiesOverShownRows: false });
+  // R2 — and it does not reach into the set the HEAD is counting.
+  for (const sentence of verdictSentences) {
+    expect({ sentence, describesTheShownRows: REFERS_TO_SHOWN_SET.test(sentence) })
+      .toEqual({ sentence, describesTheShownRows: false });
+  }
 
-  // R3 — if it describes how the two sides combine, it must describe
-  // worstStatus and not its inverse.
-  expect({ tail, statesTheCombinationBackwards: WRONG_DIRECTION.test(tail) })
-    .toEqual({ tail, statesTheCombinationBackwards: false });
+  // R3 — THE POSITIVE RULE, and the one all three surviving mutations broke.
+  // The sub-verdict the tail ASSERTS must be the one page.tsx computes for an
+  // unreadable row on a gating horizon (CAUTION), and PASS must be DENIED
+  // rather than merely present. Co-occurrence is not enough: the inverse
+  // sentence co-occurs just as well, which is how it shipped green.
+  const verdicts = assertedAndDenied(verdictSentences.join('. '), VERDICT_WORD);
+  expect({ tail, asserts: uniqSorted(verdicts.asserted), denies: uniqSorted(verdicts.denied) })
+    .toEqual({ tail, asserts: ['CAUTION'], denies: ['PASS'] });
+
+  // R4 — the reconciliation sentence MUST EXIST and must describe worstStatus.
+  // REQUIRED, not merely un-contradicted: deleting it outright left the old
+  // contract green, so a later round could revert this whole fix without a
+  // single red test.
+  const worse  = assertedAndDenied(tail, WORSE_DIRECTION);
+  const better = assertedAndDenied(tail, BETTER_DIRECTION);
+  expect({
+    tail,
+    saysTheGateCanOnlyGetWorse: worse.asserted.length > 0,
+    statesItBackwards:          better.asserted.length > 0,
+  }).toEqual({ tail, saysTheGateCanOnlyGetWorse: true, statesItBackwards: false });
 }
 
 /** Thresholds for ALL THREE horizons, so nothing silently falls through to the
@@ -474,11 +534,35 @@ describe('the banner never counts two different things in one breath', () => {
     {
       name: 'POSITION horizon, its own thresholds and not Swing’s',
       horizon: 'Position (1-3m)',
-      candidates: () => [rankCandidate('AAA', 50), noIvCandidate('BBB', { nextEventDays: 20 })],
-      // rank 50 on Position: <=65 -> CAUTION (on Swing it would be CAUTION too,
-      // but 20d would REJECT on Position and CAUTION on Swing -- so this row
-      // fails if the page ever reads the wrong horizon's window)
+      candidates: () => [rankCandidate('AAA', 50), noIvCandidate('BBB', { nextEventDays: 25 })],
+      // 25 DAYS, NOT 20, AND THE DIFFERENCE IS THE WHOLE POINT OF THIS CASE.
+      // At 20d this case did not discriminate at all: Swing's reject_days is 21
+      // and the comparison is strict `<`, so 20 REJECTs on Swing TOO, and rank
+      // 50 is CAUTION under both bands (Swing <=55, Position <=65) -- the head
+      // came out byte-identical under the wrong horizon. Proven: forcing
+      // horizonKey to 'Swing' left all 21 tests in this file green.
+      //   25d: Position -> 25 < 30 -> REJECT.  Swing -> not <21, but <45 -> CAUTION.
+      // so reading Swing's window here yields '0 PASS, 2 CAUTION, 0 REJECT'.
       head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 1,
+    },
+    {
+      // THE BOUNDARY, WHICH NOTHING IN THIS FILE PINNED. Flipping BOTH of
+      // page.tsx's `value <= max` comparisons to `<` left all three step-5
+      // suites green -- a row sitting exactly on its threshold could flip
+      // PASS->CAUTION with no test going red. Every other case here uses an
+      // interior rank (10, 45, 47, 50, 90, 95).
+      name: 'IV rank exactly ON the Swing PASS boundary — 34 is PASS, not CAUTION',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 34), noIvCandidate('BBB')],
+      // rank 34 <= 34 -> PASS (inclusive). BBB unreadable -> CAUTION, no event -> PASS.
+      head: '2 shown — 1 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 1,
+    },
+    {
+      name: 'IV rank exactly ON the Swing CAUTION boundary — 55 is CAUTION, not REJECT',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 55), noIvCandidate('BBB')],
+      // rank 55: >34, and <=55 -> CAUTION (inclusive). 56 would REJECT.
+      head: '2 shown — 0 PASS, 2 CAUTION, 0 REJECT.', noReadingRows: 1,
     },
   ];
 
@@ -491,9 +575,19 @@ describe('the banner never counts two different things in one breath', () => {
 
       // Hand-computed above, asserted exactly.
       expect(head).toBe(c.head);
-      expect(tail).toMatch(
-        new RegExp(`${c.noReadingRows} of them ha(s|ve) no volatility reading at all`),
-      );
+      // DIGIT-ANCHORED. Unanchored, "12 of them have ..." CONTAINS
+      // "2 of them have ...", so a banner counting 12 unreadable rows satisfied
+      // an expectation of 2 -- on the one assertion carrying this whole
+      // feature's headline claim. NOT anchored at ^: the tail legitimately
+      // opens with the "Driven by: ..." causes sentence, so the count clause is
+      // not always first.
+      if (c.noReadingRows > 0) {
+        expect(tail).toMatch(
+          new RegExp(`(?<!\\d)${c.noReadingRows} of them ha(s|ve) no volatility reading at all\\b`),
+        );
+      } else {
+        expect(tail).not.toMatch(/no volatility reading at all/);
+      }
       expectTailWordingContract(text);
     });
   }
