@@ -138,6 +138,15 @@ export interface GateDrivers {
    *  Distinct from `iv` alone: "the market prices this richly" and "nobody
    *  answered" wear the same CAUTION badge and mean opposite things. */
   ivMissing: boolean;
+  /** Whether a reading existed at all. CARRIED HERE rather than re-derived by
+   *  each consumer: the tooltip used to compute it from `ivRank != null` while
+   *  the page used `iv.basis !== 'none'`, which agree only while resolveIv keeps
+   *  those coincident -- the exact second-derivation this type exists to remove.
+   *  Needed separately from `ivMissing`, which is forced false on a PASS row. */
+  hasIv: boolean;
+  /** Whether this horizon gates on volatility at all. False on Intraday, where a
+   *  PASS says only that nothing was checked. */
+  ivGated: boolean;
 }
 
 export function gateDrivers(args: {
@@ -146,29 +155,46 @@ export function gateDrivers(args: {
   gate: Status;
   /** False when neither a rank nor an absolute level was available. */
   hasIv: boolean;
+  /** False where the horizon has no IV thresholds at all (Intraday). */
+  ivGated: boolean;
 }): GateDrivers {
+  const { hasIv, ivGated } = args;
   // A PASS row has no driver. Attributing one is how the tooltip came to tell
   // clean rows they were "driven by both".
-  if (args.gate === 'PASS') return { iv: false, event: false, ivMissing: false };
+  if (args.gate === 'PASS') {
+    return { iv: false, event: false, ivMissing: false, hasIv, ivGated };
+  }
+  // BOTH sides are `=== gate`, not `!== 'PASS'`. A CAUTION sitting under a
+  // REJECT is not driving that REJECT, and reporting it as a driver both
+  // misattributes the row and inflates the banner's bucket for that cause.
   const iv = args.ivStatus === args.gate;
   const event = args.proxStatus === args.gate;
-  return { iv, event, ivMissing: iv && !args.hasIv };
+  return { iv, event, ivMissing: iv && !hasIv, hasIv, ivGated };
 }
 
 /** How `gateDrivers` reads in prose, so the tooltip and the banner also share
- *  their WORDS and not merely their arithmetic. `ivNoun` is the basis-aware
- *  name ("IV rank" or "IV") the column heading and threshold sentence use. */
-export function gateDriverPhrase(d: GateDrivers, ivNoun: string, hasIv = true): string {
+ *  their arithmetic's WORDING for a SINGLE row. The banner does not call this --
+ *  it aggregates counts and needs its own phrasing -- so this is not a shared
+ *  vocabulary, and an earlier version of this comment claiming it was is wrong.
+ *  `ivNoun` is the basis-aware name ("IV rank" or "IV") the column heading and
+ *  threshold sentence use. */
+export function gateDriverPhrase(d: GateDrivers, ivNoun: string): string {
   const parts: string[] = [];
   if (d.iv) parts.push(d.ivMissing ? 'no volatility reading' : ivNoun);
   if (d.event) parts.push('event proximity');
   if (parts.length > 0) return parts.join(' and ');
-  // A PASSING row with NO reading is only reachable where the horizon does not
-  // gate on volatility (Intraday). Saying "clear on both" there put "IV: no
-  // data" and "clear" in one sentence -- the same conflation running backwards.
-  return hasIv
+  // NOTHING DROVE THIS ROW -- but "clear on both" is only true when volatility
+  // was actually checked. On a horizon with no IV thresholds, a PASS says the
+  // check never ran, and the row may be sitting at 90% IV. Claiming it is
+  // "clear" there is the same conflation this module exists to remove, running
+  // in the opposite direction, and it was reachable one line under a header
+  // reading "IV gate disabled for this horizon".
+  if (!d.ivGated) {
+    return 'nothing — the event window is clear, and this horizon does not gate on volatility';
+  }
+  return d.hasIv
     ? 'nothing — this row is clear on both'
-    : 'nothing — the event window is clear, and this horizon does not gate on volatility';
+    : 'nothing — the event window is clear, and no volatility reading was available';
 }
 
 export function eventVolGateTooltip(args: {
@@ -181,14 +207,15 @@ export function eventVolGateTooltip(args: {
   proxStatus: Status;
   evReject: number;
   evCaution: number;
-  gate: Status;
   /** Computed ONCE by the caller (the page's gate memo) and passed in, so the
-   *  banner and this tooltip cannot derive it differently. */
+   *  banner and this tooltip cannot derive it differently.
+   *
+   *  `gate` USED TO BE A PARAMETER HERE and is gone: nothing read it once the
+   *  drivers arrived precomputed, so a caller could hand over a `gate` that
+   *  disagreed with the `drivers` beside it and no compiler, lint or test would
+   *  notice. A field that cannot be wrong is better than one nothing checks. */
   drivers: GateDrivers;
 }): string {
-  // `gate` stays in the argument type -- callers pass the row's verdict and it
-  // documents what `drivers` was derived from -- but it is no longer destructured
-  // here: since drivers arrive precomputed, nothing in this function reads it.
   const { ivRank, ivBasis, ivStatus, nextEventDays, proxStatus, evReject, evCaution, drivers } = args;
   // Name the quantity actually being judged. An absolute IV shown as "IV rank"
   // is the misreading Phase A exists to end: 45% IV is not the 45th percentile
@@ -202,7 +229,7 @@ export function eventVolGateTooltip(args: {
   const evPart = nextEventDays == null
     ? 'no known upcoming event'
     : `next event in ${nextEventDays}d vs. this horizon's reject <${evReject}d / caution <${evCaution}d window (${proxStatus})`;
-  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun, ivRank != null)}.`;
+  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun)}.`;
 }
 
 /** Bare win-rate cells that sit next to (but separately from) a GATE badge — several

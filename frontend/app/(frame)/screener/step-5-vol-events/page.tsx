@@ -182,7 +182,7 @@ export default function Step5Page() {
     // with no antecedent anywhere in the sentence, and suppressing the single
     // distinction this feature exists to make. Flags let one row be counted under
     // every cause that genuinely applies to it.
-    const drivers: GateDrivers = gateDrivers({ ivStatus: ivSt, proxStatus, gate, hasIv });
+    const drivers: GateDrivers = gateDrivers({ ivStatus: ivSt, proxStatus, gate, hasIv, ivGated: !gateDisabled });
     return { r, c, iv, hasIv, ivSt, proxStatus, gate, drivers };
   }), [watchlist, candidateMap, ivStatusFor, evReject, evCaution, gateDisabled]);
 
@@ -193,6 +193,9 @@ export default function Step5Page() {
   // same quantity their own way is how this codebase has repeatedly regressed."
   const basesPresent = useMemo(() => {
     const seen = new Set<IvBasis>();
+    // The `!== 'none'` guard is load-bearing even though ivColumnLabel ignores
+    // 'none' today: this list is the page's answer to "which bases are on
+    // screen", and a 'none' in it is a row with no reading claiming to be one.
     for (const g of gatedRows) if (g.iv.basis !== 'none') seen.add(g.iv.basis);
     return [...seen];
   }, [gatedRows]);
@@ -256,20 +259,35 @@ export default function Step5Page() {
 
     const parts = [head];
     if (causes.length > 0) {
-      // A row can be driven by its volatility AND an event, so these need not
-      // sum to the non-PASS count. Said out loud, because on screen there was no
-      // cue at all and "17 causes for 12 rows" reads as a bug.
-      const sum = causes.reduce((a, c) => a + c.n, 0);
-      const overlap = sum > caution + reject ? ' (a row can have more than one)' : '';
+      // THE DENOMINATOR IS ROWS THAT ACTUALLY CARRY A CAUSE, not every non-PASS
+      // row. Comparing against `caution + reject` padded it with rows that
+      // contribute to no bucket at all (a row whose only problem is a missing
+      // reading is excluded from all three), which HID real double-counting:
+      // 5 IV-rank failures + 5 event rejects + 5 unreadable rows over 10 rows
+      // printed no cue, and a reader would reasonably conclude those were 15
+      // different rows. The no-reading clause overlaps the driver list too, so
+      // it counts toward the comparison even though it is printed separately.
+      const sum = causes.reduce((a, c) => a + c.n, 0) + noReading;
+      const attributed = count((g) => g.drivers.iv || g.drivers.event || (!g.hasIv && !gateDisabled));
+      const overlap = sum > attributed ? ' (a row can have more than one)' : '';
       parts.push(`Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`);
     }
     if (noReading > 0) {
+      // DOES NOT SAY "counted as CAUTION". The head sentence counts GATE
+      // verdicts, so "0 CAUTION" and "counted as CAUTION" appeared one line
+      // apart and read as the page contradicting itself -- the CAUTION being
+      // described was the IV sub-verdict, which the sentence never said. What
+      // the reader needs is the consequence, not the internal grade.
+      const subject =
+        noReading === total
+          ? (total === 1 ? 'The one candidate shown has' : `All ${total} have`)
+          : `${noReading} of the ${total} ${noReading === 1 ? 'has' : 'have'}`;
       parts.push(
-        `${noReading} of them ${noReading === 1 ? 'has' : 'have'} no volatility reading at all — ` +
-        'counted as CAUTION, never as PASS. A missing reading is not a passing one.',
+        `${subject} no volatility reading at all` +
+        ' — an absent reading can never earn a PASS, so it can only hold a candidate back.',
       );
     }
-    return parts.length === 1 ? head : parts.join(' ');
+    return parts.join(' ');
   }, [gatedRows, gateDisabled]);
 
   return (
@@ -353,7 +371,6 @@ export default function Step5Page() {
                   proxStatus,
                   evReject,
                   evCaution,
-                  gate,
                   // The SAME object the banner counted. Passing raw fields and
                   // letting the tooltip re-derive them is how the two came to
                   // disagree about one row in the first place.

@@ -103,8 +103,8 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     // "no volatility reading" too, because both read gateDrivers. An unscoped
     // getByText finds two nodes and throws -- which is the invariant passing,
     // not failing.
-    expect(banner().textContent).toMatch(/1 of them has no volatility reading at all/);
-    expect(banner().textContent).toMatch(/A missing reading is not a passing one/);
+    expect(banner().textContent).toMatch(/The one candidate shown has no volatility reading at all/);
+    expect(banner().textContent).toMatch(/can never earn a PASS/);
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -124,7 +124,7 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     ]);
     render(<Step5Page />);
     const summary = screen.getByText(/2 shown —/);
-    expect(summary.textContent).toMatch(/1 of them has no volatility reading at all/);
+    expect(summary.textContent).toMatch(/1 of the 2 has no volatility reading at all/);
     expect(summary.textContent).toMatch(/1 on an event inside this horizon's window/);
   });
 
@@ -147,7 +147,7 @@ describe('a row can be driven by more than one thing', () => {
     ]);
     render(<Step5Page />);
     const t = banner().textContent ?? '';
-    expect(t).toMatch(/2 of them have no volatility reading at all/);
+    expect(t).toMatch(/All 2 have no volatility reading at all/);
     expect(t).toMatch(/2 on an event inside this horizon's window/);
     expect(t).not.toMatch(/on both/);
   });
@@ -187,7 +187,7 @@ describe('a row can be driven by more than one thing', () => {
     const t = banner().textContent ?? '';
     expect(t).toMatch(/2 shown — 0 PASS, 0 CAUTION, 2 REJECT/);
     expect(t).toMatch(/2 on an event inside this horizon's window/);
-    expect(t).toMatch(/2 of them have no volatility reading at all/);
+    expect(t).toMatch(/All 2 have no volatility reading at all/);
   });
 
   it('flags that the causes can overlap, so they need not sum to the rows', () => {
@@ -223,5 +223,87 @@ describe('a row can be driven by more than one thing', () => {
     const t = banner().textContent ?? '';
     expect(t).toMatch(/2 on IV rank above its threshold/);
     expect(t).toMatch(/1 on IV above its threshold/);
+  });
+});
+
+describe('the banner must not contradict itself or hide double counting', () => {
+  it('never says "counted as CAUTION" beside a head reading "0 CAUTION"', () => {
+    // Rendered on this file's own round-2 fixture, the banner read
+    // "0 PASS, 0 CAUTION, 2 REJECT. ... counted as CAUTION, never as PASS."
+    // The head counts GATE verdicts; the clause was quoting the IV sub-verdict,
+    // and never said so. One line apart, it read as the page contradicting
+    // itself. The clause now states the consequence, not the internal grade.
+    setup([noIvCandidate('AAA', { nextEventDays: 3 }), noIvCandidate('BBB', { nextEventDays: 3 })]);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    expect(t).toMatch(/0 PASS, 0 CAUTION, 2 REJECT/);
+    expect(t).not.toMatch(/counted as CAUTION/);
+    expect(t).toMatch(/can never earn a PASS/);
+  });
+
+  it('shows the overlap cue when the causes outnumber the rows that carry one', () => {
+    // The cue's denominator was every non-PASS row, which padded it with rows
+    // contributing to no bucket at all and hid genuine double counting: five
+    // IV-rank failures + five event rejects + five unreadable rows over ten rows
+    // printed NO cue, reading as fifteen different rows.
+    const rows: any[] = [];
+    for (let i = 0; i < 2; i++) {
+      rows.push(makeCandidate(`BOTH${i}`, {
+        nextEventDays: 3,
+        contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, ivRank: 90, ivPercentile: 90, dte: 90 } as any,
+      }));
+    }
+    for (let i = 0; i < 2; i++) rows.push(noIvCandidate(`NR${i}`));
+    setup(rows);
+    render(<Step5Page />);
+    expect(banner().textContent).toMatch(/Driven by \(a row can have more than one\)/);
+  });
+
+  it('omits the cue when every cause belongs to a different row', () => {
+    setup([
+      makeCandidate('EV', { nextEventDays: 3 }),
+      makeCandidate('RNK', {
+        contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, ivRank: 90, ivPercentile: 90, dte: 90 } as any,
+      }),
+    ]);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    expect(t).toMatch(/Driven by:/);
+    expect(t).not.toMatch(/a row can have more than one/);
+  });
+});
+
+describe('Intraday — the horizon that does not gate on volatility', () => {
+  // NO TEST RENDERED A GATE-DISABLED HORIZON before round 3, and three separate
+  // mutations survived the whole 1695-test suite because of it: making the
+  // no-reading count ignore gateDisabled, hardcoding gateDisabled to false, and
+  // reverting the "ROUND 6 finding 3" fix that this page still carries a
+  // 15-line comment about. setup() has always taken a horizon parameter and no
+  // test ever passed a non-Swing value to it.
+  const INTRADAY = 'Intraday (0-2d)';
+
+  it('does not count a missing reading against a candidate when nothing gates on it', () => {
+    // On Swing this same candidate is CAUTION and the banner says so. Here the
+    // check never runs, so holding it against the candidate would be inventing
+    // a penalty.
+    setup([noIvCandidate('AAA')], INTRADAY);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    expect(t).toMatch(/1 shown — 1 PASS, 0 CAUTION, 0 REJECT/);
+    expect(t).not.toMatch(/no volatility reading/);
+  });
+
+  it('still counts a missing reading on a horizon that DOES gate', () => {
+    // The paired assertion, so the test above cannot pass by the clause simply
+    // never rendering.
+    setup([noIvCandidate('AAA')], 'Swing (5-15d)');
+    render(<Step5Page />);
+    expect(banner().textContent).toMatch(/no volatility reading at all/);
+  });
+
+  it('announces that the IV gate is off rather than inventing a verdict', () => {
+    setup([noIvCandidate('AAA')], INTRADAY);
+    render(<Step5Page />);
+    expect(screen.getByText(/IV gate disabled for this horizon/)).toBeInTheDocument();
   });
 });

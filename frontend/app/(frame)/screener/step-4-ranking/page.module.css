@@ -52,7 +52,7 @@
  * case: a bare minmax(0, 1fr) collapses NAME to zero the moment the grid has
  * no slack, so scrolling would reveal the right-hand columns while the company
  * names stayed invisible -- scrolling to see a column that is not there. The
- * floor sits just under the 103px that 1920 resolves naturally, so it costs
+ * floor sits just under the 100.95px that 1920 resolves naturally, so it costs
  * nothing where the table already fits.
  *
  * HORIZON is a constant: cardToRow sets it from the scan CONTEXT, so every row
