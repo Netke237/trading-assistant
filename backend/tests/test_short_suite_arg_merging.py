@@ -20,6 +20,7 @@ tests into the very set the script is meant to run. The first version of this
 file put 12 argument-parser tests into it.
 """
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -109,7 +110,15 @@ class TestItRefusesRatherThanRunningTheWrongThing:
         with pytest.raises(KeywordArgError):
             build_args(argv)
 
-    @pytest.mark.parametrize("argv", [["-pk", "x"], ["-rk", "x"], ["-ck", "x"]])
+    # ALL the value-taking letters, not three of seven. Dropping W, m or o from
+    # VALUE_TAKING_SHORTS each left the whole suite green -- and each dropped
+    # letter is a real mis-split, since argparse reads `-Wk EXPR` as `-W k` and
+    # the caller's expression then becomes a positional path. W is the one the
+    # regex's [A-Za-z] class was widened for and the one with no test.
+    @pytest.mark.parametrize(
+        "argv",
+        [["-pk", "x"], ["-rk", "x"], ["-ck", "x"], ["-mk", "x"], ["-ok", "x"], ["-Wk", "x"]],
+    )
     def test_a_bundle_holding_a_value_taking_option_is_refused_not_guessed(self, argv):
         # -p/-r/-c all TAKE a value, so `-pk` means `-p k`, not `-p -k`.
         # Guessing either way is a silent wrong answer; refuse instead.
@@ -178,6 +187,20 @@ class TestTheAttachedFormWithASecondK:
         assert rest == []
 
 
+class TestTheRefusalNamesTheRightOption:
+    """argparse consumes a bundle LEFT TO RIGHT, so the option that swallows the
+    rest is the FIRST value-taking letter. `sorted()` named the alphabetically
+    first one, so `-rpk` was reported as "-p takes a value, so '-rpk' may mean
+    '-p k...'" -- a reading argparse never performs. Nothing pinned the message
+    beyond "takes a value", so `sorted(` -> `list(` survived the whole suite."""
+
+    @pytest.mark.parametrize("argv, named", [("-rpk", "-r"), ("-ock", "-o"), ("-pk", "-p")])
+    def test_it_names_the_leading_value_taking_option(self, argv, named):
+        with pytest.raises(KeywordArgError) as exc:
+            build_args([argv, "x"])
+        assert f"{named} takes a value" in str(exc.value)
+
+
 class TestTheEndOfOptionsMarker:
     def test_a_k_after_a_double_dash_belongs_to_pytest(self):
         # Everything after `--` is positional by argparse's rule, so a -k beyond
@@ -210,11 +233,51 @@ class TestTheScriptAsActuallyInvoked:
             capture_output=True, text=True,
         )
 
+    @staticmethod
+    def _collected(stdout: str) -> int:
+        m = re.search(r"(\d+)/\d+ tests collected", stdout)
+        assert m, f"no collection line in: {stdout[-400:]}"
+        return int(m.group(1))
+
     def test_a_bundled_selector_narrows_to_the_intersection(self):
-        # The exact form that collected 51 tests at exit 0 across three rounds.
+        # DERIVED, NOT A MAGIC SUBSTRING, and both halves of that matter.
+        #   `assert "6/" in stdout` was a SUBSTRING match, so it passed for 16,
+        #   26, 36... Measured: widening the base to "bearish or level" made the
+        #   script collect 16 -- ten of them outside the direction set, at exit
+        #   0 -- and this test, the one that exists to watch the OUTCOME, passed.
+        #   It was also hardcoded to today's count. The total already moved from
+        #   2638 to 2651 during this loop, so a single new test whose node id
+        #   carries both words would have broken CI in a file unrelated to it.
+        # Ground truth is computed the same way a human would check it.
+        truth = subprocess.run(
+            [sys.executable, "-m", "pytest", "tests", "-k", "(bearish) and (structural)",
+             "--collect-only", "-q"],
+            capture_output=True, text=True, cwd=_SCRIPT.parent.parent,
+        )
+        expected = self._collected(truth.stdout)
+
         r = self._run("-xk", "structural", "--collect-only", "-q")
         assert r.returncode == 0, r.stderr
-        assert "6/" in r.stdout, r.stdout[-400:]
+        assert self._collected(r.stdout) == expected
+
+        # And it must be a strict NARROWING of the caller's own filter, which is
+        # the property six rounds were actually chasing.
+        plain = subprocess.run(
+            [sys.executable, "-m", "pytest", "tests", "-k", "structural", "--collect-only", "-q"],
+            capture_output=True, text=True, cwd=_SCRIPT.parent.parent,
+        )
+        assert expected < self._collected(plain.stdout)
+
+    def test_it_works_when_invoked_from_outside_backend(self):
+        # `cwd=backend_root` in __main__ was unpinned: these tests inherit
+        # pytest's cwd (backend/), so removing it left the suite green while a
+        # caller running the script from the repo root would break.
+        r = subprocess.run(
+            [sys.executable, str(_SCRIPT), "-xk", "structural", "--collect-only", "-q"],
+            capture_output=True, text=True, cwd=_SCRIPT.parent.parent.parent,
+        )
+        assert r.returncode == 0, r.stderr
+        assert self._collected(r.stdout) > 0
 
     def test_an_unbalanced_expression_refuses_loudly_rather_than_running(self):
         r = self._run("-k", "a) or (b", "--collect-only", "-q")

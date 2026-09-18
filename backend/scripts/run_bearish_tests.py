@@ -98,6 +98,11 @@ def _merge(expr: str, addition: str) -> str:
 # These are pytest's own value-taking shorts. Any OTHER letter is passed
 # through to pytest, which errors loudly if it is not a real flag -- a bounded,
 # visible failure, where a false refusal blocks a legitimate run.
+# `k` is UNREACHABLE here and deliberately kept: the lazy quantifier makes
+# `bundle` the prefix BEFORE the first k, so it can never contain one. It stays
+# so the set remains a truthful list of pytest's value-taking shorts, and so a
+# future edit to the regex cannot silently make `-kk...` ambiguous without this
+# catching it.
 VALUE_TAKING_SHORTS = set("kmcoprW")
 
 # `-k`, or any bundle of shorts ending in k: -k, -kEXPR, -k=EXPR, -xk EXPR,
@@ -127,11 +132,16 @@ def build_args(extra):
     while i < len(extra):
         arg = extra[i]
         if arg == "--":
-            # END OF OPTIONS. Everything after `--` is positional by argparse's
-            # own rule, so a -k beyond it belongs to pytest verbatim and must not
-            # be merged into ours. Previously `--` matched no branch and fell to
-            # `rest`, landing AFTER the injected -k, and the -k the user had
-            # explicitly marked as positional was intercepted anyway.
+            # END OF OPTIONS -- AND THIS BRANCH EXISTS TO FAIL LOUDLY, NOT TO
+            # SUPPORT `--`. Measured: pytest 8.1.1 rejects a bare `--` outright
+            # ("unrecognized arguments: --", exit 4) in every placement, so a
+            # post-`--` -k can never reach a successful run. What the branch
+            # buys is that we do not INTERCEPT it: previously `--` matched no
+            # branch and fell through to `rest`, landing after the injected -k,
+            # so a -k the caller had explicitly marked positional was merged
+            # into ours anyway. Passing the tail through verbatim keeps the
+            # caller's mistake theirs and keeps pytest's error honest -- and
+            # dropping the marker here re-opens last-wins widening.
             rest.extend(extra[i:])
             break
         m = _K_ARG.match(arg)
@@ -149,15 +159,21 @@ def build_args(extra):
         # dropped the bearish filter. Measured: `-xk structural` collected 51
         # tests (the repo's whole structural suite, TestBullish cases included)
         # against 6 for the correctly narrowed form, and exited 0.
-        ambiguous = sorted(c for c in bundle if c in VALUE_TAKING_SHORTS)
+        # `next`, NOT `sorted`. argparse consumes a bundle LEFT TO RIGHT, so the
+        # option that actually swallows the rest is the FIRST value-taking letter
+        # in the bundle. sorted() named the alphabetically-first one, which for
+        # any multi-letter bundle is a reading argparse never performs: `-rpk`
+        # means `-r pk`, and the message said "-p takes a value, so '-rpk' may
+        # mean '-p k...'". Fixed only for single-letter bundles before.
+        ambiguous = next((c for c in bundle if c in VALUE_TAKING_SHORTS), None)
         if ambiguous:
             # The message names the ACTUAL letter. It used to say "it bundles a
             # short option that takes a value" for every refusal, including
             # `-kbreakout`, which bundles nothing -- sending the reader hunting
             # for a bundle that was not there.
             raise KeywordArgError(
-                f"cannot tell where -k starts in {arg!r}: -{ambiguous[0]} takes a value, "
-                f"so {arg!r} may mean '-{ambiguous[0]} k...'. Pass -k as its own argument."
+                f"cannot tell where -k starts in {arg!r}: -{ambiguous} takes a value, "
+                f"so {arg!r} may mean '-{ambiguous} k...'. Pass -k as its own argument."
             )
 
         if tail == "":
@@ -201,11 +217,15 @@ if __name__ == "__main__":
         cmd = build_cmd(sys.executable, sys.argv[1:])
     except KeywordArgError as exc:
         print(f"run_bearish_tests.py: {exc}", file=sys.stderr)
-        # 4, NOT 2. This IS a usage error, and 4 is pytest's own code for one.
-        # 2 is pytest's ExitCode.INTERRUPTED, so a CI step branching on the exit
-        # code could not tell "the wrapper refused your -k" from "the run was
-        # interrupted" -- the refusal path emits exactly one machine-readable
-        # signal and it was ambiguous.
+        # 4, NOT 2. This IS a usage error and 4 is pytest's own code for one;
+        # 2 is pytest's ExitCode.INTERRUPTED. STATED HONESTLY, BECAUSE THE FIRST
+        # VERSION OF THIS COMMENT OVERSOLD IT: 4 does not disambiguate either.
+        # It reaches the caller from the PASS-THROUGH path routinely (`-Kstructural`,
+        # any `--` form), so a CI step branching on the code alone still cannot
+        # tell "the wrapper refused your -k" from "pytest rejected your args".
+        # Only the `run_bearish_tests.py:` prefix on stderr does. 4 is chosen
+        # because it is the truthful CLASS of error, not because it is unique.
+        # Verified before changing it: nothing in this repo depended on 2.
         sys.exit(4)
 
     sys.exit(subprocess.call(cmd, cwd=backend_root))
