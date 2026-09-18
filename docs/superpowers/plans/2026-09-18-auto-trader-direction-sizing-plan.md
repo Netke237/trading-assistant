@@ -1,8 +1,32 @@
 # Auto-trader: size bearish trades off the bearish conviction frame
 
 **Date:** 2026-09-18
-**Piece:** Regime conviction sizing is inverted for bearish auto-trades.
-**Status:** PLAN — revised after adversarial round 1 (14 findings, all accepted). Not implemented.
+**Piece:** A — regime conviction sizing is inverted for bearish auto-trades.
+**Status:** PLAN, ENGINEERING CONVERGED. Three adversarial rounds. Not implemented.
+
+> **SPLIT 2026-09-18 ON KENNETH'S DECISION, AFTER ROUND 3 FIRED THE HARD CAP.**
+> Three rounds, none clean — and audit_rule says that is evidence the batch is too big to
+> audit, not that it needs a fourth round. Round 3 recomputed every number here and **all of
+> them hold**: the multiplier table, the blast-radius table, all seven rows of the test table,
+> the rewritten `:514` fixture, and the inventory (29 grep hits, 5 prose, 24 real constructions
+> at exactly the cited lines, zero positional calls by AST walk, nothing missing repo-wide).
+> What was **not** converging was two areas that are not about position sizing, each of which
+> produced the blocker in consecutive rounds. Both are now their own pieces:
+>
+> - **Piece B — `2026-09-18-B-armed-strategy-runtime-validation.md`.** The runtime guard on
+>   `ArmedStrategy.direction`. Round 2 prescribed a bare `raise ValueError`; round 3 found it
+>   lands in `fire()`'s `sizing_data_blocked` bucket with a false log line and a shared
+>   `rec_id` that can suppress a genuine config refusal, and that it sits after both full-size
+>   early returns — absent exactly where the blast radius is largest.
+> - **Piece C — `2026-09-18-C-state-py-gates-for-split-audit-loops.md`.** Round 3's BLOCKER:
+>   §4's "exits 0" is unreachable at the fix commit, because `git_max >= 3 and not
+>   audit_clean` fires on this branch's round-3 subjects, and the only reconciling value is a
+>   bookkeeping falsehood.
+>
+> **This document is now Piece A alone: the sizing fix proper.** §2.1's `raise` block and §5
+> are retained below as the RECORD of what rounds 1-3 established, but they are no longer this
+> piece's prescriptions — B and C own them. §4's last bullet cannot be satisfied until C is
+> settled.
 
 ---
 
@@ -161,6 +185,14 @@ if strategy.direction not in ("Bullish", "Bearish"):
     )
 directional_conv = conviction if strategy.direction == "Bullish" else -conviction
 ```
+
+> **MOVED TO PIECE B — NOT THIS PIECE'S PRESCRIPTION.** The `raise` above and the paragraph
+> below are kept as the record of what rounds 1-2 established. Round 3 found the raise lands in
+> `fire()`'s `sizing_data_blocked` bucket with a false log line and a shared `rec_id`, and sits
+> after both full-size early returns. See
+> `2026-09-18-B-armed-strategy-runtime-validation.md`. **Piece A ships without it**, and is then
+> correct through the HTTP door (pydantic validates `ArmRequest`) and silently bearish-on-
+> malformed for direct constructors — the residual risk B exists to close.
 
 **The explicit `raise` is not belt-and-braces; without it this expression fails OPEN to
 bearish** (round 2, finding 6). `ArmedStrategy` is a plain `@dataclass` (`auto_trader.py:24-25`),
@@ -372,7 +404,14 @@ Silently removing regression guards while the suite stays green is precisely the
 - `python3 scripts/state.py` — exits 0, no drift. **This does not hold for free, and it does
   not hold at all unless §5's step 3 is done in the same commit as the fix.**
 
-## 5. Bookkeeping — what is already done, and the one step that must ride with the fix
+## 5. Bookkeeping — MOVED TO PIECE C
+
+> **NOT THIS PIECE'S PRESCRIPTION.** Round 3's BLOCKER is that steps 3 and 4 below **cannot
+> both be satisfied**: flipping `status` to `shipped` is necessary but not sufficient, because
+> `git_max >= 3 and not audit_clean` also fires on this branch's round-3 subjects, and the only
+> combination that exits 0 asserts `audit_clean=TRUE` at a commit where the CODE has had zero
+> rounds. See `2026-09-18-C-state-py-gates-for-split-audit-loops.md`. The section is kept below
+> verbatim as the record of what rounds 1-2 established and acted on.
 
 Round 1 found that `scripts/state.py` would block on this piece. That has been **acted on, not
 just planned**, so this section now records live state rather than prescribing what it
