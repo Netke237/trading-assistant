@@ -10,7 +10,7 @@
  * (a true percentile exists only when IBKR or tastytrade answered).
  */
 import { render, screen } from '@testing-library/react';
-import Step5Page from '../page';
+import Step5Page, { missingReadingClause, type MissingReadingClaim } from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
 import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK } from '@/lib/eventThresholdsStore';
@@ -105,12 +105,11 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     // not failing.
     expect(banner().textContent).toMatch(/1 of them has no volatility reading at all/);
     // The clause must ANSWER the question ("why CAUTION?"), so the sub-verdict
-    // has to be NAMED -- asserted here only as "the word is present". WHERE it
-    // may appear is the wording contract's job (`expectTailWordingContract`
-    // below), so this assertion does not pin a phrasing that a correct
-    // paraphrase would break.
+    // has to be NAMED. Which word, on which side, and in which direction the
+    // gate combines are all the claim's job now, asserted exactly on the line
+    // below -- so this stays a presence check and pins no phrasing.
     expect(tailOf(banner().textContent ?? '')).toMatch(/CAUTION/);
-    expectTailWordingContract(banner().textContent ?? '');
+    expectMissingReadingClause(banner().textContent ?? '', 1);
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -346,107 +345,54 @@ function splitBanner(text: string): { head: string; tail: string } {
 }
 const tailOf = (text: string) => splitBanner(text).tail;
 
-/* ── THE WORDING CONTRACT, REBUILT IN TARGET A ROUND 1 ────────────────────
- * The previous version was three literal/synonym lists, and a list is always
- * one synonym behind. It was MEASURED accepting all three of these, 21/21
- * GREEN:
- *   "graded PASS on the volatility side alone, never CAUTION there."
- *        the exact SEMANTIC INVERSE of page.tsx's `gateDisabled ? 'PASS'
- *        : 'CAUTION'` -- the banner telling the reader a missing reading
- *        PASSES the volatility gate.
- *   "...so nothing shown above can read PASS."
- *        round 6's own defect, one noun outside the old QUANTIFIES_OVER_ROWS,
- *        rendered under a head reading "1 PASS".
- *   "the kinder of that and the event window, so it can be better still."
- *        the combination backwards, one synonym outside WRONG_DIRECTION.
- * ...while REJECTING this, which is correct copy in the page's OWN noun:
- *   "graded CAUTION on the IV leg alone, never PASS on that leg."
+/* ── THE CONTRACT, ROUND 2: STOP GRADING ENGLISH ─────────────────────────
+ * ROUND 2 DELETED THE REGEX RULES ENTIRELY. Round 1 replaced three literal
+ * lists with four "positive" rules and the very next round broke four of them
+ * with a full green suite: "on the event side" (wrong side), "so it can be
+ * easier still" (a worst-of getting easier), "In the worst case, open the
+ * column" (the reconciliation sentence deleted, one list word left behind to
+ * satisfy the rule), and "not never PASS" (double negation read as an
+ * assertion). It also REJECTED correct copy -- "rows with no reading count
+ * CAUTION on the IV side, never PASS there" -- because the three-word negation
+ * window cannot tell a negator that negates the verdict from one that merely
+ * sits near it, and in this sentence family the subject IS "no reading".
  *
- * So the rules below are POSITIVE: they state what the tail MUST be and fail
- * everything else, instead of naming wordings that have already gone wrong.
- * What they encode comes from production, not from today's sentence:
- *   - the clause renders ONLY when the horizon gates on volatility (page.tsx
- *     counts `gateDisabled ? 0 : rows-without-a-reading`), so on that side an
- *     unreadable row is CAUTION and is NOT PASS;
- *   - the gate is worstStatus(iv, event), so it can only ever go WORSE.
+ * Four consecutive rounds faulted that one class. The rules were not the
+ * defect; grading prose with regexes was. So the meaning moved INTO DATA
+ * (page.tsx's MissingReadingClaim) and the clause is now generated from it.
+ * This file no longer inspects English at all: it computes the claim the page
+ * OUGHT to be making, renders the clause from that claim with the page's own
+ * builder, and demands the banner contain exactly that.
+ *
+ * WHY THAT IS NOT JUST A LITERAL PIN BY ANOTHER NAME: the builder is shared,
+ * so an edit to the SKELETON moves expectation and actual together. The
+ * skeleton is therefore pinned separately, by one exact-string test, and a
+ * second test proves no verdict word is hardcoded inside the builder. Between
+ * them: reword freely, and you cannot change what it says.
  */
 
-/** Which side graded the row. BOTH of the page's own nouns for it are accepted
- *  -- it writes "IV rank" and `ivNoun` elsewhere, so an editor writing "IV leg"
- *  is writing correct copy, and the old rule punished exactly that. "no
- *  volatility reading" must still NOT count: that names the data, not the side
- *  that graded it. */
-const SIDE_MARKER = /\b(volatility|IV)\s+(side|column|leg|axis)\b|\bon the (event|volatility|IV) side\b/i;
-const VERDICT_WORD = /\b(PASS|CAUTION|REJECT)\b/;
-/** Turns the token after it into a DENIAL. The window is three words, which is
- *  deliberate: "never PASS" and "not graded PASS" are denials, while "nothing
- *  shown above can read PASS" ASSERTS PASS -- correctly, because that sentence
- *  does assert it of the shown rows. */
-const NEGATOR = /\b(never|not|no|nothing|none|cannot|can't|without)\b/i;
-/** The HEAD owns the counts. A sentence carrying a verdict must not reach out
- *  and describe the rows the head is counting. */
-const REFERS_TO_SHOWN_SET = /\b(shown|above|below|these|those|listed|displayed|on screen)\b/i;
-const WORSE_DIRECTION  = /\b(worse|worst|lower|harsher|stricter)\b/i;
-const BETTER_DIRECTION = /\b(better|kinder|higher|improves?|improved|gentler|milder|softer)\b/i;
+/** What page.tsx must claim for an unreadable row. Derived, not copied: the
+ *  clause renders only when the horizon gates on volatility (page.tsx forces
+ *  the count to 0 otherwise), and there an unreadable row is graded
+ *  `gateDisabled ? 'PASS' : 'CAUTION'` -- so CAUTION, never PASS -- while the
+ *  gate itself is worstStatus(iv, event), which can only go worse. */
+const EXPECTED_CLAIM: MissingReadingClaim = {
+  side:        'volatility',
+  asserted:    'CAUTION',
+  denied:      'PASS',
+  combination: 'worse',
+};
 
-/** Every occurrence of `word` in `text`, split into the ones being ASSERTED and
- *  the ones being DENIED, by looking three words back for a negator. This is
- *  what makes the contract structural rather than a co-occurrence check: the
- *  inverse sentence contains the same two verdict words as the correct one. */
-function assertedAndDenied(text: string, word: RegExp): { asserted: string[]; denied: string[] } {
-  const asserted: string[] = [];
-  const denied: string[] = [];
-  const re = new RegExp(word.source, 'gi');
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const before = text.slice(0, m.index).trim().split(/\s+/).slice(-3).join(' ');
-    (NEGATOR.test(before) ? denied : asserted).push(m[0].toUpperCase());
-  }
-  return { asserted, denied };
-}
-const uniqSorted = (xs: string[]) => [...new Set(xs)].sort();
-
-function expectTailWordingContract(text: string) {
-  const { head, tail } = splitBanner(text);
+/** The banner must carry EXACTLY the clause the expected claim generates, or
+ *  none at all when nothing is unreadable. No English is graded here. */
+function expectMissingReadingClause(text: string, noReadingRows: number) {
+  const { head } = splitBanner(text);
   expect(head).toMatch(/shown —/);
-  if (tail === '') return;
-
-  const sentences = tail.split('.').map((x) => x.trim()).filter(Boolean);
-  const verdictRe = new RegExp(VERDICT_WORD.source, 'i');
-  const verdictSentences = sentences.filter((x) => verdictRe.test(x));
-
-  // R1 — every sentence carrying a verdict word says WHICH SIDE graded it.
-  for (const sentence of verdictSentences) {
-    expect({ sentence, scopedToASide: SIDE_MARKER.test(sentence) })
-      .toEqual({ sentence, scopedToASide: true });
+  if (noReadingRows === 0) {
+    expect(text).not.toContain('no volatility reading at all');
+    return;
   }
-
-  // R2 — and it does not reach into the set the HEAD is counting.
-  for (const sentence of verdictSentences) {
-    expect({ sentence, describesTheShownRows: REFERS_TO_SHOWN_SET.test(sentence) })
-      .toEqual({ sentence, describesTheShownRows: false });
-  }
-
-  // R3 — THE POSITIVE RULE, and the one all three surviving mutations broke.
-  // The sub-verdict the tail ASSERTS must be the one page.tsx computes for an
-  // unreadable row on a gating horizon (CAUTION), and PASS must be DENIED
-  // rather than merely present. Co-occurrence is not enough: the inverse
-  // sentence co-occurs just as well, which is how it shipped green.
-  const verdicts = assertedAndDenied(verdictSentences.join('. '), VERDICT_WORD);
-  expect({ tail, asserts: uniqSorted(verdicts.asserted), denies: uniqSorted(verdicts.denied) })
-    .toEqual({ tail, asserts: ['CAUTION'], denies: ['PASS'] });
-
-  // R4 — the reconciliation sentence MUST EXIST and must describe worstStatus.
-  // REQUIRED, not merely un-contradicted: deleting it outright left the old
-  // contract green, so a later round could revert this whole fix without a
-  // single red test.
-  const worse  = assertedAndDenied(tail, WORSE_DIRECTION);
-  const better = assertedAndDenied(tail, BETTER_DIRECTION);
-  expect({
-    tail,
-    saysTheGateCanOnlyGetWorse: worse.asserted.length > 0,
-    statesItBackwards:          better.asserted.length > 0,
-  }).toEqual({ tail, saysTheGateCanOnlyGetWorse: true, statesItBackwards: false });
+  expect(text).toContain(missingReadingClause(noReadingRows, EXPECTED_CLAIM));
 }
 
 /** Thresholds for ALL THREE horizons, so nothing silently falls through to the
@@ -558,6 +504,21 @@ describe('the banner never counts two different things in one breath', () => {
       head: '2 shown — 1 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 1,
     },
     {
+      // ROUND 2 FINDING F4, AND IT WAS A BUG IN THE CONTRACT ITSELF, not a
+      // coverage gap: no case had noReadingRows 0 with a non-empty tail, and
+      // the old R3 demanded asserts === ['CAUTION'] unconditionally -- so this
+      // perfectly correct banner, whose tail is only the "Driven by:" sentence,
+      // FAILED it. The `else` branch was unreachable dead code written for a
+      // case the contract would have rejected. It is a real rendered shape and
+      // it is now covered.
+      name: 'every row readable — a tail with causes and NO missing-reading clause',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 45), rankCandidate('BBB', 10, { nextEventDays: 3 })],
+      // rank 45: >34, <=55 -> CAUTION, no event -> PASS -> CAUTION
+      // rank 10: <=34 -> PASS, event 3 < 21 -> REJECT -> REJECT
+      head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 0,
+    },
+    {
       name: 'IV rank exactly ON the Swing CAUTION boundary — 55 is CAUTION, not REJECT',
       horizon: 'Swing (5-15d)',
       candidates: () => [rankCandidate('AAA', 55), noIvCandidate('BBB')],
@@ -588,7 +549,7 @@ describe('the banner never counts two different things in one breath', () => {
       } else {
         expect(tail).not.toMatch(/no volatility reading at all/);
       }
-      expectTailWordingContract(text);
+      expectMissingReadingClause(text, c.noReadingRows);
     });
   }
 
@@ -601,6 +562,76 @@ describe('the banner never counts two different things in one breath', () => {
     const text = banner().textContent ?? '';
     expect(splitBanner(text).head).toBe('1 shown — 1 PASS, 0 CAUTION, 0 REJECT.');
     expect(text).not.toMatch(/no volatility reading at all/);
-    expectTailWordingContract(text);
+    // ZERO, and this call is now meaningful rather than vacuous. Under the old
+    // contract a clause-less banner hit `if (tail === '') return;` and asserted
+    // nothing -- while a clause-less banner WITH a "Driven by:" tail failed R3
+    // outright, because R3 demanded asserts === ['CAUTION'] unconditionally.
+    expectMissingReadingClause(text, 0);
+  });
+});
+
+
+describe('the clause builder carries the meaning, so the prose cannot drift from it', () => {
+  /* These two are the whole reason the derived comparison above is not merely a
+   * literal pin wearing a hat. The comparison shares the builder with the page,
+   * so an edit to the SKELETON moves expectation and actual together and stays
+   * green. The first test pins the skeleton exactly -- the one place in this
+   * file where a literal string belongs. The second proves no verdict word or
+   * direction word is hardcoded INSIDE the builder, so the claim really is what
+   * decides what the banner says. */
+
+  it('renders the agreed skeleton, word for word', () => {
+    expect(missingReadingClause(1, {
+      side: 'volatility', asserted: 'CAUTION', denied: 'PASS', combination: 'worse',
+    })).toBe(
+      '1 of them has no volatility reading at all — graded CAUTION on the volatility ' +
+      'side alone, never PASS there. The gate verdict above is the worse of that and ' +
+      'the event window, so it can be lower still.',
+    );
+  });
+
+  it('interpolates every meaning-bearing word from the claim, hardcoding none', () => {
+    // Deliberately absurd values: if ANY of these four words is a literal in the
+    // builder rather than a field, this fails.
+    const s = missingReadingClause(2, {
+      side: 'event', asserted: 'REJECT', denied: 'CAUTION', combination: 'better',
+    });
+    expect(s).toContain('2 of them have no volatility reading at all');
+    expect(s).toContain('graded REJECT on the event side alone, never CAUTION there');
+    expect(s).toContain('the better of that and the event window, so it can be higher still');
+  });
+});
+
+describe('the fixture is actually read, and Position has its own IV band', () => {
+  it('uses the INJECTED thresholds, not the module FALLBACK', () => {
+    // ROUND 2 FINDING: setupHorizon's values were byte-identical to
+    // ivThresholdsStore's FALLBACK, so `thresholds[k] ?? FALLBACK[k]` could not
+    // tell which side answered. Proven: making getIvPassMax/getIvCautionMax
+    // ignore the store entirely and read FALLBACK left all 38 step-5 tests
+    // green. These thresholds are deliberately NOT the fallback's.
+    setupHorizon([rankCandidate('AAA', 25)], 'Swing (5-15d)');
+    useIvThresholdsStore.setState({
+      thresholds: {
+        Intraday: { rank_pass_max: null, rank_caution_max: null, abs_pass_max: null, abs_caution_max: null },
+        Swing:    { rank_pass_max: 20, rank_caution_max: 30, abs_pass_max: 20, abs_caution_max: 30 },
+        Position: { rank_pass_max: 44, rank_caution_max: 65, abs_pass_max: 44, abs_caution_max: 65 },
+      },
+      loaded: true,
+    } as any);
+    render(<Step5Page />);
+    // rank 25 is PASS under the FALLBACK (<=34) and CAUTION under the injected
+    // band (>20, <=30). If the store is bypassed this reads "1 PASS".
+    expect(banner().textContent).toContain('1 shown — 0 PASS, 1 CAUTION, 0 REJECT.');
+  });
+
+  it('grades a Position row on POSITION\'s IV band, not Swing\'s', () => {
+    // ROUND 2 FINDING: the case named "its own thresholds and not Swing's"
+    // discriminated on the EVENT window only -- its rank 50 is CAUTION under
+    // both bands, so Position's 44/65 was pinned by nothing. Rank 40 is PASS on
+    // Position (<=44) and CAUTION on Swing (>34), so routing Position's IV
+    // lookup to Swing now fails here.
+    setupHorizon([rankCandidate('AAA', 40)], 'Position (1-3m)');
+    render(<Step5Page />);
+    expect(banner().textContent).toContain('1 shown — 1 PASS, 0 CAUTION, 0 REJECT.');
   });
 });

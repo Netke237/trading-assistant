@@ -21,6 +21,55 @@ import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThr
 import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
+
+/* ── THE MISSING-READING CLAUSE ───────────────────────────────────────────
+ * THE MEANING LIVES IN THE DATA, NOT IN THE PROSE, and that is the whole
+ * point of this shape. Four consecutive adversarial rounds faulted the same
+ * class: the clause was free English, its tests were regex rules over that
+ * English, and every round the rules were one synonym behind. Measured, each
+ * shipping a full green suite:
+ *   "graded PASS ... never CAUTION"      the semantic INVERSE of the gate
+ *   "on the event side"                  the wrong side entirely
+ *   "so it can be easier still"          a worst-of that gets easier
+ *   "In the worst case, open the column" the reconciliation sentence deleted,
+ *                                        with one list word left behind
+ * Every verdict word and both direction words below are INTERPOLATED from the
+ * claim. A reworded clause can therefore say the same thing differently, but
+ * it cannot say something different -- to do that you must change the claim,
+ * and the claim is what the test computes independently. The skeleton itself
+ * is pinned by one exact-string test, which is the only place a literal
+ * belongs.
+ */
+export type MissingReadingClaim = {
+  /** Which side of the gate graded the row. */
+  side: 'volatility' | 'event';
+  /** The sub-verdict that side gives an unreadable row. */
+  asserted: Status;
+  /** The sub-verdict it explicitly does NOT give. */
+  denied: Status;
+  /** How the two sides combine. `worstStatus` is 'worse'. */
+  combination: 'worse' | 'better';
+};
+
+const SIDE_LABEL = {
+  volatility: 'the volatility side',
+  event:      'the event side',
+} as const;
+
+const COMBINATION_LABEL = {
+  worse:  { of: 'worse',  travel: 'lower'  },
+  better: { of: 'better', travel: 'higher' },
+} as const;
+
+export function missingReadingClause(n: number, claim: MissingReadingClaim): string {
+  const { of, travel } = COMBINATION_LABEL[claim.combination];
+  return (
+    `${n} of them ${n === 1 ? 'has' : 'have'} no volatility reading at all — ` +
+    `graded ${claim.asserted} on ${SIDE_LABEL[claim.side]} alone, never ${claim.denied} there. ` +
+    `The gate verdict above is the ${of} of that and the event window, ` +
+    `so it can be ${travel} still.`
+  );
+}
 import { worstStatus, type Status } from '@/lib/status';
 import { eventVolGateTooltip, gateDrivers, type GateDrivers } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
@@ -284,28 +333,19 @@ export default function Step5Page() {
       parts.push(`Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`);
     }
     if (noReading > 0) {
-      parts.push(
-        `${noReading} of them ${noReading === 1 ? 'has' : 'have'} no volatility reading at all — ` +
-        // THE CLAUSE MUST SCOPE ITS OWN VERDICT WORD. The head sentence above
-        // counts GATE verdicts; this clause talks about the IV SUB-verdict. Two
-        // different things, one line apart, so every verdict word here has to
-        // say which of the two it belongs to or it reads as a contradiction:
-        //   - "counted as CAUTION, never as PASS" (rounds 1-4) collided with a
-        //     head reading "0 CAUTION" on any scan where an event REJECTed the
-        //     unreadable rows.
-        //   - "can never earn a PASS, so it can only hold a candidate back"
-        //     (the first attempt at this fix) moved the collision rather than
-        //     removing it: it collided with a head reading "1 PASS" instead,
-        //     and its causal tail was measurably FALSE -- on an event-REJECTed
-        //     row the missing reading held the verdict back by nothing, and
-        //     swapping in a perfect reading leaves the gate byte-identical.
-        // So: name the sub-verdict, say which side it is on, and state the
-        // relationship to the gate explicitly. That answers the question this
-        // banner was built for ("why CAUTION?") without asserting anything the
-        // head denies.
-        'graded CAUTION on the volatility side alone, never PASS there. The gate ' +
-        'verdict above is the worse of that and the event window, so it can be lower still.',
-      );
+      // The clause the head sentence sits above. Every meaning-bearing word is
+      // carried by this object; see missingReadingClause above for why.
+      //   asserted/denied: page.tsx grades an unreadable row `gateDisabled ?
+      //     'PASS' : 'CAUTION'`, and this clause only renders when the horizon
+      //     DOES gate on volatility (noReading is forced to 0 otherwise), so on
+      //     that side it is CAUTION and never PASS.
+      //   combination: the gate is worstStatus(iv, event) -- worse, never better.
+      parts.push(missingReadingClause(noReading, {
+        side:        'volatility',
+        asserted:    'CAUTION',
+        denied:      'PASS',
+        combination: 'worse',
+      }));
     }
     return parts.length === 1 ? head : parts.join(' ');
   }, [gatedRows, gateDisabled]);
