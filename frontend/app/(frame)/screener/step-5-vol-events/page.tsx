@@ -286,14 +286,25 @@ export default function Step5Page() {
     if (noReading > 0) {
       parts.push(
         `${noReading} of them ${noReading === 1 ? 'has' : 'have'} no volatility reading at all — ` +
-        // NOT "counted as CAUTION". The head sentence above counts GATE
-        // verdicts, so on any scan where the unreadable rows are REJECTed by an
-        // event it reads "0 CAUTION" — and this clause, quoting the IV
-        // SUB-verdict without ever saying so, then said "counted as CAUTION"
-        // one line below it. Two different things counted, and the page reading
-        // as though it contradicted itself. What the trader needs here is the
-        // consequence, not the internal grade.
-        'an absent reading can never earn a PASS, so it can only hold a candidate back.',
+        // THE CLAUSE MUST SCOPE ITS OWN VERDICT WORD. The head sentence above
+        // counts GATE verdicts; this clause talks about the IV SUB-verdict. Two
+        // different things, one line apart, so every verdict word here has to
+        // say which of the two it belongs to or it reads as a contradiction:
+        //   - "counted as CAUTION, never as PASS" (rounds 1-4) collided with a
+        //     head reading "0 CAUTION" on any scan where an event REJECTed the
+        //     unreadable rows.
+        //   - "can never earn a PASS, so it can only hold a candidate back"
+        //     (the first attempt at this fix) moved the collision rather than
+        //     removing it: it collided with a head reading "1 PASS" instead,
+        //     and its causal tail was measurably FALSE -- on an event-REJECTed
+        //     row the missing reading held the verdict back by nothing, and
+        //     swapping in a perfect reading leaves the gate byte-identical.
+        // So: name the sub-verdict, say which side it is on, and state the
+        // relationship to the gate explicitly. That answers the question this
+        // banner was built for ("why CAUTION?") without asserting anything the
+        // head denies.
+        'graded CAUTION on the volatility side alone, never PASS there. The gate ' +
+        'verdict above is the worse of that and the event window, so it can be lower still.',
       );
     }
     return parts.length === 1 ? head : parts.join(' ');

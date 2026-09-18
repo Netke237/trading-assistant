@@ -65,5 +65,8 @@ and implementable; what is not settled is how the repo's own instrument reports 
 without someone writing a false value into `PROJECT_STATE.json`.
 
 **Do not resolve this by editing a field to make a banner go green.** The banner is the
-instrument working. `state.py` exits 1 on this branch today **by design** — `git_max` reached 3
-with `audit_clean` false — and that clears by going clean or by merging, never by an edit.
+instrument working. `state.py` exits 1 **on the sizing branch** (`claude/auto-trader-direction-sizing-2026-09-18`)
+**by design** — `git_max` reached 3 with `audit_clean` false — and that clears by going clean or
+by merging, never by an edit. (It exits **0** on the branch this file was ported onto, so "this
+branch" was ambiguous as written; the number belongs to the sizing branch, not to whichever
+branch happens to carry the document.)

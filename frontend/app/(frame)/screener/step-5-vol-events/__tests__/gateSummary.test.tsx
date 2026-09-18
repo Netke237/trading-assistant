@@ -104,11 +104,13 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     // getByText finds two nodes and throws -- which is the invariant passing,
     // not failing.
     expect(banner().textContent).toMatch(/1 of them has no volatility reading at all/);
-    // Was /A missing reading is not a passing one/, which sat in the same
-    // sentence as "counted as CAUTION" -- removed because that phrase
-    // contradicted the head on any scan reading "0 CAUTION". The assertion
-    // still pins that the clause states the CONSEQUENCE and not merely the fact.
-    expect(banner().textContent).toMatch(/can never earn a PASS/);
+    // The clause must ANSWER the question ("why CAUTION?"), so it has to name
+    // the sub-verdict -- but scoped to the side it belongs to, never bare. A
+    // bare verdict word here reads as a claim about the head's gate counters.
+    // Pinned as the relationship in `expectVerdictWordsScoped` below; asserted
+    // here only that the answer is actually present.
+    expect(banner().textContent).toMatch(/CAUTION on the volatility side/);
+    expectBannerCoherent(banner().textContent ?? '');
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -302,39 +304,97 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
   });
 });
 
-describe('the banner must not count two different things in one breath', () => {
-  it('never says "counted as CAUTION" under a head reading "0 CAUTION"', () => {
-    // The head counts GATE verdicts; the trailing clause was quoting the IV
-    // SUB-verdict and never said so. On this input they sat one line apart and
-    // the page read as though it contradicted itself:
-    //   "2 shown — 0 PASS, 0 CAUTION, 2 REJECT. ... counted as CAUTION, never
-    //    as PASS."
-    // Reachable on any scan where the unreadable rows are REJECTed by an event,
-    // which is the case the clause was added for in the first place. Four
-    // adversarial rounds passed over it because every assertion checked a
-    // fragment rather than the whole sentence.
-    setup([
-      noIvCandidate('AAA', { nextEventDays: 3 }),   // no reading AND inside the 21d reject window
-      noIvCandidate('BBB', { nextEventDays: 3 }),
-    ]);
-    render(<Step5Page />);
-    const t = banner().textContent ?? '';
+/* ---------------------------------------------------------------------------
+ * The head/tail relationship, asserted as a RELATIONSHIP.
+ *
+ * The banner is one string: a head sentence that counts GATE verdicts, then
+ * trailing clauses that talk about something else (the IV SUB-verdict, data
+ * quality). Rounds 1-4 all checked fragments of it, which is why every one of
+ * them walked past a banner reading "0 CAUTION ... counted as CAUTION".
+ *
+ * A literal assertion cannot catch that class: it kills exactly the one string
+ * that was deleted and stays green for every paraphrase of the same defect.
+ * Mutation-checked against these, all of which are the SAME defect reworded:
+ *   "it is graded CAUTION internally and can never earn a PASS."   -> must fail
+ *   "treated as a CAUTION, it can never earn a PASS."              -> must fail
+ *   "counted as CAUTION, never as PASS."                           -> must fail
+ *   "can never earn a PASS."                                       -> must fail
+ * ------------------------------------------------------------------------- */
 
-    expect(t).toMatch(/0 PASS, 0 CAUTION, 2 REJECT/);
-    expect(t).toMatch(/no volatility reading at all/);
-    // The invariant, stated as a relationship rather than a literal: whenever
-    // the head reports no CAUTION rows, nothing below may claim a CAUTION.
-    expect(t).not.toMatch(/counted as CAUTION/);
-    expect(t).toMatch(/can never earn a PASS/);
-  });
+/** Split the banner into the head sentence (which counts gate verdicts) and
+ *  everything after it. */
+function splitBanner(text: string): { head: string; tail: string } {
+  const end = text.indexOf('.');
+  return { head: text.slice(0, end + 1), tail: text.slice(end + 1).trim() };
+}
 
-  it('still reports the missing reading when the gate verdict IS caution', () => {
-    // The paired case, so the test above cannot pass by the clause simply
-    // never rendering.
-    setup([noIvCandidate('AAA')]);
-    render(<Step5Page />);
-    const t = banner().textContent ?? '';
-    expect(t).toMatch(/1 PASS, 1 CAUTION, 0 REJECT|0 PASS, 1 CAUTION, 0 REJECT/);
-    expect(t).toMatch(/no volatility reading at all/);
-  });
+/** An explicit marker that a verdict word belongs to one SIDE of the gate
+ *  rather than to the gate itself. "no volatility reading" deliberately does
+ *  NOT count -- it names the data, not the side that graded it. */
+const SIDE_MARKER = /volatility side|volatility column|on the event side/;
+const VERDICT_WORD = /\b(PASS|CAUTION|REJECT)\b/;
+
+/** RULE 1 — every tail sentence that names a gate verdict word must scope it.
+ *  RULE 2 — if the head counts a verdict WORSE than the sub-verdict the tail
+ *  claims, the tail must say so, rather than leaving the reader to reconcile
+ *  "0 CAUTION" with a CAUTION claim, or "1 PASS" with "never PASS". */
+function expectBannerCoherent(text: string) {
+  const { head, tail } = splitBanner(text);
+  expect(head).toMatch(/shown —/);
+  if (tail === '') return;
+
+  for (const sentence of tail.split('.').map((x) => x.trim()).filter(Boolean)) {
+    if (VERDICT_WORD.test(sentence)) {
+      expect({ sentence, scoped: SIDE_MARKER.test(sentence) })
+        .toEqual({ sentence, scoped: true });
+    }
+  }
+
+  const rejects = Number(/(\d+) REJECT/.exec(head)?.[1] ?? '0');
+  if (rejects > 0 && /CAUTION/.test(tail)) {
+    // The tail grades a side CAUTION while the head shows a harder gate
+    // verdict; it must not leave that looking like a contradiction.
+    expect(tail).toMatch(/worse of|lower still|can be worse/);
+  }
+}
+
+describe('the banner never counts two different things in one breath', () => {
+  // Each row is a DISTINCT gate/sub-verdict combination -- no setup here
+  // duplicates one already covered above.
+  const cases: Array<{ name: string; candidates: () => TradeCardData[]; head: RegExp }> = [
+    {
+      name: 'every unreadable row REJECTed by an event (head shows 0 CAUTION)',
+      candidates: () => [
+        noIvCandidate('AAA', { nextEventDays: 3 }),
+        noIvCandidate('BBB', { nextEventDays: 3 }),
+      ],
+      head: /^2 shown — 0 PASS, 0 CAUTION, 2 REJECT\.$/,
+    },
+    {
+      name: 'a readable PASS row beside an unreadable REJECTed one (head shows 1 PASS)',
+      candidates: () => [makeCandidate('AAA'), noIvCandidate('BBB', { nextEventDays: 3 })],
+      head: /^2 shown — 1 PASS, 0 CAUTION, 1 REJECT\.$/,
+    },
+    {
+      name: 'an unreadable row with no event, where the gate verdict IS caution',
+      candidates: () => [noIvCandidate('AAA')],
+      head: /^1 shown — 0 PASS, 1 CAUTION, 0 REJECT\.$/,
+    },
+  ];
+
+  for (const c of cases) {
+    it(`stays coherent with its own head — ${c.name}`, () => {
+      setup(c.candidates());
+      render(<Step5Page />);
+      const text = banner().textContent ?? '';
+      const { head, tail } = splitBanner(text);
+
+      // Exact, computed from the fixture -- not an alternation hedging over
+      // states the code cannot reach.
+      expect(head).toMatch(c.head);
+      // The fact the banner exists to surface is present in every one of these.
+      expect(tail).toMatch(/no volatility reading at all/);
+      expectBannerCoherent(text);
+    });
+  }
 });

@@ -19,7 +19,8 @@ directional_conv = conviction if strategy.direction == "Bullish" else -convictio
 ```
 
 **fails OPEN to bearish.** `"bullish"`, `"Bulish"`, `""` and `None` all silently take the
-`else` branch. 23 test sites construct `ArmedStrategy` directly, as would any future non-HTTP
+`else` branch. 26 test sites construct `ArmedStrategy` directly (test_auto_trader.py 20,
+test_phase_g_arm_pick.py 3, test_premium_stop_per_position.py 3), as would any future non-HTTP
 producer.
 
 This matters because Piece A's own argument for making `direction` **required with no default**

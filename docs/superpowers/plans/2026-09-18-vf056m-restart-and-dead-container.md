@@ -113,9 +113,24 @@ Piece A satisfies its own §4 on the way *out* is still open.
 
 ## 5. Still true, and still open
 
-- The live defect is untouched: `backend/app/services/auto_trader.py:176`
-  mirrors bearish conviction as `100 - conviction` on a signed `[-100, +100]`
-  scale. Every bearish auto-trade is sized wrong from armed quantity 2 upward.
+- The live defect is untouched, but THIS NOTE ORIGINALLY NAMED THE WRONG
+  BRANCH and the correction is the whole point of the sizing piece. Read
+  `2026-09-18-auto-trader-direction-sizing-plan.md` §1.1 and §1.2, and
+  `PROJECT_STATE.json`'s `pending_kenneth[1]`, not the sentence this bullet
+  used to carry.
+  - RETRACTED: "`auto_trader.py:176` mirrors bearish conviction as
+    `100 - conviction` on a signed scale". The arithmetic is wrong, but it sits
+    on the SELL branch, and `strategy.action` is `"BUY"` for every armed trade
+    -- `AutoTradeArm/index.tsx:207` is the only production caller of
+    `armAutoTrade` and hardcodes it (correctly: a bearish trade here is a LONG
+    PUT, which is buy-to-open), and `routers/auto_trade.py:83` is the only
+    production call site of `auto_trader.arm`. So that branch is unreachable
+    from the UI and "fixing" it would change no live trade while appearing to
+    close the bug.
+  - STANDS: the BUY branch feeds the signed conviction straight into
+    `conviction_mult`, so a bearish arm is sized on a negative conviction. It
+    reaches live broker order sizes and bites from armed quantity 2 upward; at
+    qty 1 -- common for a single-leg option arm -- it has no effect at all.
 - Pieces B and C remain open questions, in their own files.
 - `claude/auto-trader-direction-sizing-2026-09-18` is unmerged and is the only
   place the plan's round-by-round history exists. Do not delete it.
