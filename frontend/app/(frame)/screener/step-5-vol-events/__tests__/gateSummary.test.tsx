@@ -386,13 +386,33 @@ const EXPECTED_CLAIM: MissingReadingClaim = {
 /** The banner must carry EXACTLY the clause the expected claim generates, or
  *  none at all when nothing is unreadable. No English is graded here. */
 function expectMissingReadingClause(text: string, noReadingRows: number) {
-  const { head } = splitBanner(text);
+  const { head, tail } = splitBanner(text);
   expect(head).toMatch(/shown —/);
+
+  /* THE CLAUSE IS THE ONLY PLACE THE TAIL MAY NAME A VERDICT, and that second
+   * half is what round 3 caught missing. `toContain` pinned the clause
+   * substring and left every OTHER sentence in the tail unconstrained, so
+   * appending `parts.push('In practice these rows are safe to treat as a
+   * PASS.')` to page.tsx shipped 43/43 GREEN -- the banner contradicting, one
+   * sentence later, what the clause had just said and what the head counts.
+   * Round 1's rules would each have caught that; round 2 deleted them and did
+   * not say so.
+   *
+   * This rule is about WHERE a verdict word may appear, not how it is worded,
+   * so it does not reintroduce the prose-grading the rounds kept faulting. The
+   * head owns the counts; the generated clause owns the sub-verdict; nothing
+   * else in the tail may name either. The causes sentence names none today. */
+  const verdictsIn = (x: string) => x.match(/\b(PASS|CAUTION|REJECT)\b/g) ?? [];
+
   if (noReadingRows === 0) {
-    expect(text).not.toContain('no volatility reading at all');
+    expect(tail).not.toContain('no volatility reading at all');
+    expect(verdictsIn(tail)).toEqual([]);
     return;
   }
-  expect(text).toContain(missingReadingClause(noReadingRows, EXPECTED_CLAIM));
+
+  const clause = missingReadingClause(noReadingRows, EXPECTED_CLAIM);
+  expect(tail).toContain(clause);
+  expect(verdictsIn(tail.split(clause).join(' '))).toEqual([]);
 }
 
 /** Thresholds for ALL THREE horizons, so nothing silently falls through to the
@@ -590,6 +610,21 @@ describe('the clause builder carries the meaning, so the prose cannot drift from
     );
   });
 
+  it('renders the agreed skeleton in the PLURAL too', () => {
+    // ROUND 3 FINDING: the guard pinned n=1 with the production claim and n=2
+    // with an absurd one, so nothing pinned the production instantiation for
+    // n >= 2. A conditional swapping asserted/denied at n >= 3 shipped 43/43
+    // green -- and n >= 3 is the app's real case; page.tsx's own comments
+    // describe "3 of 12" and "11 unreadable rows".
+    expect(missingReadingClause(3, {
+      side: 'volatility', asserted: 'CAUTION', denied: 'PASS', combination: 'worse',
+    })).toBe(
+      '3 of them have no volatility reading at all — graded CAUTION on the volatility ' +
+      'side alone, never PASS there. The gate verdict above is the worse of that and ' +
+      'the event window, so it can be lower still.',
+    );
+  });
+
   it('interpolates every meaning-bearing word from the claim, hardcoding none', () => {
     // Deliberately absurd values: if ANY of these four words is a literal in the
     // builder rather than a field, this fails.
@@ -633,5 +668,32 @@ describe('the fixture is actually read, and Position has its own IV band', () =>
     setupHorizon([rankCandidate('AAA', 40)], 'Position (1-3m)');
     render(<Step5Page />);
     expect(banner().textContent).toContain('1 shown — 1 PASS, 0 CAUTION, 0 REJECT.');
+  });
+});
+
+
+describe('EXPECTED_CLAIM is answerable to the page, not just to the page\'s source', () => {
+  it('names the verdict the head actually counts for an unreadable row', () => {
+    /* ROUND 3 FINDING, AND IT FALSIFIED THIS FILE'S OWN DOCSTRING. EXPECTED_CLAIM
+     * was documented "Derived, not copied" and was copied -- a second hand-written
+     * copy of page.tsx's call site, tied to no observable behaviour. Measured:
+     * swapping asserted/denied in BOTH places (the "just fix the constant to
+     * match" move) shipped 43/43 green and rendered "graded PASS on the volatility
+     * side alone, never CAUTION there" -- verbatim the first entry in page.tsx's
+     * own list of measured past failures.
+     *
+     * ONE unreadable row, no event: the event side is PASS, so the gate verdict
+     * IS the volatility sub-verdict. The head therefore counts this row under the
+     * claim's ASSERTED verdict and not under its DENIED one -- which ties both
+     * fields to something the page renders rather than to something a human
+     * retyped. */
+    setupHorizon([noIvCandidate('AAA')], 'Swing (5-15d)');
+    render(<Step5Page />);
+    const head = splitBanner(banner().textContent ?? '').head;
+    const countOf = (verdict: string) =>
+      Number(new RegExp(`(\\d+) ${verdict}\\b`).exec(head)?.[1] ?? NaN);
+
+    expect(countOf(EXPECTED_CLAIM.asserted)).toBe(1);
+    expect(countOf(EXPECTED_CLAIM.denied)).toBe(0);
   });
 });
