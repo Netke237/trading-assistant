@@ -51,8 +51,14 @@ if __name__ == "__main__":
             expr = f"({expr}) and ({extra[i + 1]})"
             i += 2
             continue
-        if arg.startswith("-k="):
-            expr = f"({expr}) and ({arg[3:]})"
+        # Covers BOTH attached forms. `-k=EXPR` was handled and the bare
+        # attached `-kEXPR` -- which argparse accepts and pytest honours -- was
+        # not: it fell through to `rest`, landed after the script's own -k, and
+        # pytest's last-wins rule dropped the bearish filter entirely.
+        # Measured before the fix: `-kstructural` collected 51 tests, the whole
+        # repo's structural suite, bullish included.
+        if arg.startswith("-k") and len(arg) > 2:
+            expr = f"({expr}) and ({arg[3:] if arg[2] == '=' else arg[2:]})"
             i += 1
             continue
         rest.append(arg)
