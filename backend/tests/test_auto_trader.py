@@ -16,7 +16,7 @@ def test_arm_sets_state():
         broker="ibkr_paper",
         symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY",
+        action="BUY", direction="Bullish",
         quantity=1,
         order_type="LMT",
         limit_price=2.50,
@@ -34,7 +34,7 @@ def test_disarm_clears_state():
     armed = ArmedStrategy(
         broker="tradier_paper", symbol="NVDA",
         option_symbol="NVDA260620C00130000",
-        action="BUY", quantity=2, order_type="MKT",
+        action="BUY", direction="Bullish", quantity=2, order_type="MKT",
         limit_price=None, conid=None,
         entry_premium=3.00,
     )
@@ -55,7 +55,7 @@ def test_fire_executes_and_disarms(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50,
     )
@@ -83,7 +83,7 @@ def test_armed_strategy_has_entry_premium_and_portfolio_value():
     s = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=50_000.0,
     )
@@ -105,7 +105,7 @@ def test_fire_blocked_when_exposure_cap_breached(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=30.0, conid=None,
         entry_premium=30.0, portfolio_value=50_000.0,
     )
@@ -126,7 +126,7 @@ def test_fire_passes_when_within_cap(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=50_000.0,
     )
@@ -157,7 +157,7 @@ def test_fire_no_snapshot_skips_check(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=30.0, conid=None,
         entry_premium=30.0, portfolio_value=200_000.0,   # would fail cap if snapshot provided
     )
@@ -213,7 +213,7 @@ def test_maybe_fire_on_scan_disarms_stale_order(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50,
         armed_at=stale_time,
@@ -236,7 +236,7 @@ def test_fire_blocked_records_cap_blocked_history(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=30.0, conid=None,
         entry_premium=30.0, portfolio_value=50_000.0,
     )
@@ -260,7 +260,7 @@ def test_fire_failed_order_records_order_failed_history(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50,
     )
@@ -286,7 +286,7 @@ def test_maybe_fire_on_scan_fires_fresh_order(mocker):
     armed = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50,
         # armed_at defaults to now via field(default_factory=...)
@@ -302,7 +302,7 @@ def _make_armed(symbol="AAPL", premium=2.50, qty=1, pv=100_000.0):
     return ArmedStrategy(
         broker="ibkr_paper", symbol=symbol,
         option_symbol=f"{symbol}260620C00185000",
-        action="BUY", quantity=qty, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=qty, order_type="LMT",
         limit_price=premium, conid=None,
         entry_premium=premium, portfolio_value=pv,
     )
@@ -453,7 +453,7 @@ def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
     strategy = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=2, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=2, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
     )
@@ -478,7 +478,7 @@ def test_vol_sizing_keeps_full_quantity_at_high_conviction(mocker):
     strategy = ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=4, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=4, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
     )
@@ -503,7 +503,7 @@ def test_vol_sizing_skipped_when_conviction_is_none(mocker):
     svc.arm(ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=3, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=3, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
     ))
@@ -511,36 +511,131 @@ def test_vol_sizing_skipped_when_conviction_is_none(mocker):
     assert captured.get("quantity") == 3
 
 
-def test_vol_sizing_sell_reduced_in_strongly_bullish_market(mocker):
-    """SELL at conviction=80 → bearish_conv=20, full=40 → ramp mult=0.65 → 4 rounds to 3.
+# ── Direction-aware sizing: the bearish frame ─────────────────────────────────
+#
+# `conviction` is the SIGNED BULLISH frame, [-100, +100]. Sizing used to pick its
+# frame from `action`, which is always "BUY" for a long single-leg option — a
+# bearish trade in this app is a long PUT — so every bearish trade was sized off
+# the bullish ramp, inverted: largest into the regime that opposes it.
+#
+# EVERY TEST BELOW ARMS quantity=4, AND THAT IS LOAD-BEARING. `_apply_vol_sizing`
+# does `max(1, round(quantity * mult))`, so at quantity=1 the multipliers 0.30,
+# 0.65 and 1.00 ALL round to 1 and every assertion here would read `1` with the
+# bug still in place. At 4 they separate: 0.30 -> 1, 0.65 -> 3, 1.00 -> 4.
+#
+# Quantity is also the only observable worth asserting: `_apply_vol_sizing`
+# returns an ArmedStrategy and nothing in the changed code returns a multiplier,
+# so calling `conviction_mult` directly would not exercise this path at all —
+# the negation lives here, not in conviction_sizing.py.
 
-    Under the old clamp form this was 0.5 (4 -> 2). The clamp bound for every
-    conviction from 0 to 20, so conviction 1 and conviction 19 sized identically;
-    the ramp grades them. See app/scoring/conviction_sizing.py.
+def _fired_quantity(mocker, *, direction: str, conviction: float,
+                    quantity: int = 4, action: str = "BUY") -> int:
+    """Arm one trade, fire it, and return the quantity that reached the broker.
+
+    The option right follows `direction` so the fixture is not self-contradictory:
+    a bearish single-leg option is a long put.
     """
     from app.data.ibkr_paper import OrderResult
     captured = {}
     def mock_execute(s):
         captured["quantity"] = s.quantity
-        return OrderResult("s4", "ok", "ibkr_paper")
+        return OrderResult("dir", "ok", "ibkr_paper")
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=80)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=conviction)
 
+    right = "C" if direction == "Bullish" else "P"
     svc = AutoTradeService()
     svc.arm(ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
-        option_symbol="AAPL260620P00185000",
-        action="SELL", quantity=4, order_type="LMT",
+        option_symbol=f"AAPL260620{right}00185000",
+        action=action, direction=direction, quantity=quantity, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
     ))
     svc.fire()
-    assert captured.get("quantity") == 3, (
-        "SELL in strongly bullish market (conviction=80) must reduce 4 to 3 "
-        "(ramp mult 0.65), not stay at 4"
-    )
+    return captured.get("quantity")
+
+
+def test_vol_sizing_bearish_cut_to_floor_in_strongly_bullish_market(mocker):
+    """A long put armed into conviction=+80 is cut to the floor, not sized full.
+
+    This replaces `test_vol_sizing_sell_reduced_in_strongly_bullish_market`, which
+    armed action="SELL" on a PUT — a SHORT put, which is a BULLISH position — and
+    then asserted it must be reduced in a bullish market. It passed, and it was
+    asserting the wrong thing about a branch no production caller can reach.
+
+    Bearish at +80 mirrors to -80, which clamps to the 0.30 floor:
+    round(4 * 0.30) = 1.
+    """
+    assert _fired_quantity(mocker, direction="Bearish", conviction=80) == 1
+
+
+def test_vol_sizing_bearish_floors_when_regime_strongly_opposes(mocker):
+    """Bearish at +40 (regime strongly opposes): mirror -40 -> 0.30 floor -> 1.
+
+    With the `action`-based inference this returned 4 — FULL SIZE into the regime
+    most opposed to the trade. This is the row where the defect was largest.
+    """
+    assert _fired_quantity(mocker, direction="Bearish", conviction=40) == 1
+
+
+def test_vol_sizing_bearish_floors_when_regime_opposes(mocker):
+    """Bearish at +20: mirror -20 -> below the ramp -> 0.30 floor -> 1 (bug gave 3)."""
+    assert _fired_quantity(mocker, direction="Bearish", conviction=20) == 1
+
+
+def test_vol_sizing_bearish_scales_up_when_regime_favours(mocker):
+    """Bearish at -20: mirror +20 -> mid-ramp 0.65 -> round(2.6) = 3 (bug gave 1).
+
+    THE ONLY CASE INSIDE THE RAMP. Every other row here sits on the floor or the
+    cap, so this is the one that would notice a later change to
+    `full_conviction_pct` (40 today) rather than silently absorbing it.
+    """
+    assert _fired_quantity(mocker, direction="Bearish", conviction=-20) == 3
+
+
+def test_vol_sizing_bearish_full_size_when_regime_strongly_favours(mocker):
+    """Bearish at -40: mirror +40 -> cap 1.00 -> 4 (bug gave 1 — the inverse)."""
+    assert _fired_quantity(mocker, direction="Bearish", conviction=-40) == 4
+
+
+def test_vol_sizing_bearish_at_neutral_conviction_sits_on_the_floor(mocker):
+    """Bearish at 0 -> mirror 0 -> 0.30 floor -> 1.
+
+    BOUNDARY PIN, NOT BUG COVERAGE. The ramp is one-sided (`min_mult` applies to
+    everything at or below 0), so neutral is the floor for both directions and
+    this row reads the same with the bug in place. It is here to pin that the
+    mirror of 0 is 0 — i.e. that nobody reintroduces an offset like
+    `100 - conviction`, under which neutral would clamp to FULL size.
+    """
+    assert _fired_quantity(mocker, direction="Bearish", conviction=0) == 1
+
+
+def test_vol_sizing_bullish_full_size_at_high_conviction_unchanged(mocker):
+    """Regression guard: bullish behaviour is untouched. +40 -> cap 1.00 -> 4."""
+    assert _fired_quantity(mocker, direction="Bullish", conviction=40) == 4
+
+
+def test_vol_sizing_bullish_floors_at_negative_conviction_unchanged(mocker):
+    """Regression guard: bullish at -40 -> 0.30 floor -> 1, as before."""
+    assert _fired_quantity(mocker, direction="Bullish", conviction=-40) == 1
+
+
+def test_vol_sizing_ignores_action_entirely(mocker):
+    """`action` must no longer influence size, in either direction.
+
+    The rewritten test above was repo-wide the ONLY sizing test constructing
+    action="SELL". Without this one, someone reinstating `strategy.action` in the
+    sizing expression would break no test — which is exactly the drift removing
+    the inference exists to prevent.
+
+    action="SELL" with direction="Bullish" at conviction=+80: the direction
+    decides, so mult(+80) caps at 1.00 -> 4. Under the old expression SELL took
+    the `100 - 80 = 20` branch -> 0.65 -> round(2.6) = 3. Discriminating.
+    """
+    assert _fired_quantity(mocker, direction="Bullish", conviction=80, action="SELL") == 4
 
 
 # ── entry_premium guard (Task 5) ──────────────────────────────────────────────
@@ -553,7 +648,7 @@ def test_arm_raises_if_entry_premium_is_zero():
             broker="ibkr_paper",
             symbol="AAPL",
             option_symbol="AAPL260620C00185000",
-            action="BUY",
+            action="BUY", direction="Bullish",
             quantity=1,
             order_type="LMT",
             limit_price=2.50,
@@ -569,7 +664,7 @@ def test_arm_raises_if_entry_premium_negative():
             broker="ibkr_paper",
             symbol="AAPL",
             option_symbol="AAPL260620C00185000",
-            action="BUY",
+            action="BUY", direction="Bullish",
             quantity=1,
             order_type="LMT",
             limit_price=2.50,
@@ -584,7 +679,7 @@ def test_arm_succeeds_with_positive_entry_premium():
         broker="ibkr_paper",
         symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY",
+        action="BUY", direction="Bullish",
         quantity=1,
         order_type="LMT",
         limit_price=2.50,
@@ -606,7 +701,7 @@ def _sizing_strategy(quantity: int = 4) -> ArmedStrategy:
     return ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=quantity, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=quantity, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
     )

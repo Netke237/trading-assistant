@@ -1,6 +1,6 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
-              PickedMethod, PickedStopBasis } from '@/types/domain';
+              PickedMethod, PickedStopBasis, Direction } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -606,6 +606,15 @@ export const api = {
   armAutoTrade: (req: {
     broker: string; symbol: string; option_symbol: string;
     action: 'BUY' | 'SELL'; quantity: number;
+    /** The trade's own direction, carried from the card. REQUIRED -- not
+     *  optional and not defaulted -- so a caller that forgets fails typecheck
+     *  here rather than arming a wrongly-sized trade. The backend decides
+     *  position size off this: `action` is always 'BUY' for a long single-leg
+     *  option (a bearish trade is a long PUT), so it never encoded direction,
+     *  and inferring direction from it sized every bearish trade off the
+     *  bullish conviction frame. Never write `card.direction ?? 'Bullish'`
+     *  here -- that typechecks and silently reinstates that exact defect. */
+    direction: Direction;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
     entry_premium?: number;
     portfolio_value?: number;
@@ -641,7 +650,13 @@ export const api = {
     post<{ order_id: string; status: string }>('/auto-trade/fire', {}),
 
   getAutoTradeStatus: () =>
-    get<{ armed: boolean; symbol: string | null; option: string | null; last_order: unknown }>('/auto-trade/status'),
+    get<{ armed: boolean; symbol: string | null; option: string | null;
+          /** null when nothing is armed. Declared because the endpoint returns it
+           *  and this is its only declared reader -- an armed trade's direction
+           *  now decides its size, so a wrong one is otherwise invisible until
+           *  the fill. `last_order` does NOT carry it: history entries record no
+           *  direction (that is O4's territory). */
+          direction: Direction | null; last_order: unknown }>('/auto-trade/status'),
 
   // Phase 4: Chart alert CRUD
   createAlertRule: (body: {

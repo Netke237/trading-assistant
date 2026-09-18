@@ -204,7 +204,15 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         broker,
         symbol:          card.symbol,
         option_symbol:   contractId,
-        action:          'BUY',   // long single-leg option (call or put) is always buy-to-open
+        // Still BUY, and still correct -- but it no longer implies BULLISH. A
+        // long single-leg option is always buy-to-open whether it is a call or
+        // a put, so `action` carries no directional meaning at all.
+        action:          'BUY',
+        // The card's own direction, carried so the backend sizes the trade off
+        // the matching conviction frame. NOT `card.direction ?? 'Bullish'`:
+        // `TradeCardData.direction` is required, and a fallback here would
+        // typecheck while silently reinstating the defect this closes.
+        direction:       card.direction,
         // Floored defensively: `contracts` comes from the shared per-symbol
         // Contracts map (Feature 7), which a caller could in principle write
         // a sub-1 value into (e.g. Feature 3's Apply button before its own

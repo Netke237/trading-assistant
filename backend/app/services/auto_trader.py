@@ -27,6 +27,20 @@ class ArmedStrategy:
     symbol:          str
     option_symbol:   str
     action:          Literal["BUY", "SELL"]
+    # The trade's own direction, carried from the card rather than inferred.
+    # Required and non-defaulted, which is legal here because every field above
+    # is non-defaulted too and `entry_premium` below is the first with a default.
+    #
+    # THIS DATACLASS IS THE CARRIER, NOT THE VALIDATOR: `Literal` is not enforced
+    # at runtime on a plain dataclass, so only `ArmRequest` (pydantic) actually
+    # refuses a bad value. A direct constructor passing "bullish", "" or None
+    # therefore still lands on the bearish branch in `_apply_vol_sizing` below.
+    # Closing that hole is its own piece (docs/superpowers/plans/
+    # 2026-09-18-B-armed-strategy-runtime-validation.md) because the obvious
+    # `raise ValueError` lands in fire()'s `sizing_data_blocked` bucket with a
+    # false log line, and sits after both full-size early returns -- absent
+    # exactly where the blast radius is largest.
+    direction:       Literal["Bullish", "Bearish"]
     quantity:        int
     order_type:      Literal["MKT", "LMT"]
     limit_price:     Optional[float]
@@ -171,9 +185,18 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     if conviction is None:
         return strategy
 
-    # Direction-aware: BUY scales with bullish conviction; SELL scales with bearish conviction
-    # (bearish conviction = 100 - bullish conviction, capped to full_conviction scale)
-    directional_conv = conviction if strategy.action == "BUY" else (100 - conviction)
+    # Direction-aware: `conviction` is the SIGNED BULLISH FRAME
+    # (regime_omm.conviction over P(Bull) - P(Bear), scaled to [-100, +100]), so
+    # the bearish mirror is -conviction, NOT 100 - conviction. On a signed scale
+    # `100 - conviction` is a mirror of an unsigned [0, 100] one: with
+    # full_conviction_pct at 40 it clamps to 1.0 for every conviction <= 40, i.e.
+    # FULL SIZE in essentially every regime.
+    #
+    # Direction is carried explicitly from the card. It is NOT inferred from
+    # `action`, which is always "BUY" for a long single-leg option and never
+    # encoded direction -- that inference is the defect this replaces, and
+    # keeping it alongside would be a second source of truth for the same fact.
+    directional_conv = conviction if strategy.direction == "Bullish" else -conviction
     mult = conviction_mult(directional_conv, cfg)
     adjusted_qty = max(1, round(strategy.quantity * mult))
 

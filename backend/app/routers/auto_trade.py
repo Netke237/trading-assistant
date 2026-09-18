@@ -18,6 +18,24 @@ class ArmRequest(BaseModel):
     symbol:          str
     option_symbol:   str
     action:          Literal["BUY", "SELL"]
+    # REQUIRED, NO DEFAULT -- this is the whole point of the field.
+    #
+    # `action` never encoded direction and cannot: a bearish options trade in
+    # this app is a LONG PUT, which is BUY, and AutoTradeArm/index.tsx hardcodes
+    # `action: 'BUY'` for every arm. So `_apply_vol_sizing` inferring direction
+    # from `action` sized every bearish trade off the BULLISH conviction frame --
+    # the ramp exactly inverted, largest into the regime that opposes the trade.
+    #
+    # A default of "Bullish" would reintroduce precisely that silent
+    # mis-direction, and it is the same failure shape as the documented G5-1
+    # hole (extra='ignore' letting a misspelled key arm with NULLs). Required
+    # means a body without `direction` is a 422 AT ARM TIME -- loud, before
+    # anything is armed -- rather than a wrong size at fire time.
+    #
+    # ROLLOUT: the two sides must deploy together. A backend ahead of the
+    # frontend, or a cached older client bundle, turns every Arm click into a
+    # 422 with no fallback. That is the accepted cost of failing loudly at arm.
+    direction:       Literal["Bullish", "Bearish"]
     quantity:        int = Field(..., ge=1)
     order_type:      Literal["MKT", "LMT"] = "LMT"
     # gt=0 -- ROUND 9, same reasoning as broker.py's two order schemas: a
@@ -119,6 +137,16 @@ async def status() -> dict:
         "symbol": state.strategy.symbol if state.strategy else None,
         "option": state.strategy.option_symbol if state.strategy else None,
         "broker": state.strategy.broker if state.strategy else None,
+        # Once direction decides position size, a WRONG direction on an armed
+        # trade is otherwise undetectable until the fill. This is the
+        # observability half of arming loudly.
+        #
+        # KNOWN GAP, deliberately not closed here: the history entries appended
+        # in auto_trader.py carry no `direction`, so a FIRED trade's direction
+        # stays unrecorded and `last_order` below will not show it. Recording it
+        # there belongs to O4 (the path that will book a position) -- noted so
+        # nobody mistakes `last_order` for direction evidence.
+        "direction": state.strategy.direction if state.strategy else None,
         "history_count": len(state.history),
         "last_order": state.history[-1] if state.history else None,
     }
