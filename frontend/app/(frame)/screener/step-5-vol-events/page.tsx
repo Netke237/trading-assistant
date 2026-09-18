@@ -286,7 +286,14 @@ export default function Step5Page() {
     if (noReading > 0) {
       parts.push(
         `${noReading} of them ${noReading === 1 ? 'has' : 'have'} no volatility reading at all — ` +
-        'counted as CAUTION, never as PASS. A missing reading is not a passing one.',
+        // NOT "counted as CAUTION". The head sentence above counts GATE
+        // verdicts, so on any scan where the unreadable rows are REJECTed by an
+        // event it reads "0 CAUTION" — and this clause, quoting the IV
+        // SUB-verdict without ever saying so, then said "counted as CAUTION"
+        // one line below it. Two different things counted, and the page reading
+        // as though it contradicted itself. What the trader needs here is the
+        // consequence, not the internal grade.
+        'an absent reading can never earn a PASS, so it can only hold a candidate back.',
       );
     }
     return parts.length === 1 ? head : parts.join(' ');

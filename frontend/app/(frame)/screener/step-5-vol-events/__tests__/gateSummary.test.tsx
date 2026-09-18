@@ -104,7 +104,11 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     // getByText finds two nodes and throws -- which is the invariant passing,
     // not failing.
     expect(banner().textContent).toMatch(/1 of them has no volatility reading at all/);
-    expect(banner().textContent).toMatch(/A missing reading is not a passing one/);
+    // Was /A missing reading is not a passing one/, which sat in the same
+    // sentence as "counted as CAUTION" -- removed because that phrase
+    // contradicted the head on any scan reading "0 CAUTION". The assertion
+    // still pins that the clause states the CONSEQUENCE and not merely the fact.
+    expect(banner().textContent).toMatch(/can never earn a PASS/);
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -295,5 +299,42 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
     expect(tip.textContent).toMatch(/IV rank 95 \(PASS\)/);          // the figure still shows
     expect(tip.textContent).toMatch(/does not gate on volatility/);
     expect(tip.textContent).not.toMatch(/clear on both/);
+  });
+});
+
+describe('the banner must not count two different things in one breath', () => {
+  it('never says "counted as CAUTION" under a head reading "0 CAUTION"', () => {
+    // The head counts GATE verdicts; the trailing clause was quoting the IV
+    // SUB-verdict and never said so. On this input they sat one line apart and
+    // the page read as though it contradicted itself:
+    //   "2 shown — 0 PASS, 0 CAUTION, 2 REJECT. ... counted as CAUTION, never
+    //    as PASS."
+    // Reachable on any scan where the unreadable rows are REJECTed by an event,
+    // which is the case the clause was added for in the first place. Four
+    // adversarial rounds passed over it because every assertion checked a
+    // fragment rather than the whole sentence.
+    setup([
+      noIvCandidate('AAA', { nextEventDays: 3 }),   // no reading AND inside the 21d reject window
+      noIvCandidate('BBB', { nextEventDays: 3 }),
+    ]);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+
+    expect(t).toMatch(/0 PASS, 0 CAUTION, 2 REJECT/);
+    expect(t).toMatch(/no volatility reading at all/);
+    // The invariant, stated as a relationship rather than a literal: whenever
+    // the head reports no CAUTION rows, nothing below may claim a CAUTION.
+    expect(t).not.toMatch(/counted as CAUTION/);
+    expect(t).toMatch(/can never earn a PASS/);
+  });
+
+  it('still reports the missing reading when the gate verdict IS caution', () => {
+    // The paired case, so the test above cannot pass by the clause simply
+    // never rendering.
+    setup([noIvCandidate('AAA')]);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    expect(t).toMatch(/1 PASS, 1 CAUTION, 0 REJECT|0 PASS, 1 CAUTION, 0 REJECT/);
+    expect(t).toMatch(/no volatility reading at all/);
   });
 });
