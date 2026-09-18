@@ -39,7 +39,7 @@ const PAGE_SIZE = 10;
 // icon(star+chart) | SYMBOL | NAME | HORIZON | Δ RNK | Δ SCR | SCORE | CONF | STOP | NEXT
 // Every fixed track trimmed and the gap cut to 8px so all ten columns fit
 // beside a chart that is still worth looking at (page.module.css .split has
-// the measurements). Fixed tracks total 418px; at 1920 that leaves NAME 103px.
+// the measurements). Fixed tracks total 418px; at 1920 that leaves NAME 101px.
 //
 // NAME is `minmax(100px, 1fr)`, and NEITHER bound is incidental.
 //
@@ -54,8 +54,10 @@ const PAGE_SIZE = 10;
 // The 100px floor is what makes the laptop's horizontal scroll honest. Under
 // `minmax(0, 1fr)` NAME collapses to zero as soon as the grid runs out of
 // slack, so scrolling would uncover SCORE and STOP while the company names
-// stayed invisible. The floor sits just below the 103px that 1920 resolves on
-// its own, so it changes nothing where the table already fits.
+// stayed invisible. The floor sits just below the 100.95px that 1920 resolves
+// on its own -- 0.95px of slack, not the 3px an earlier version of this comment
+// claimed -- so it is already binding at 1919px and at 1905 (a 1920 monitor with
+// a classic vertical scrollbar) NAME sits exactly on it.
 const COLUMNS = '36px 52px minmax(100px, 1fr) 44px 40px 40px 44px 52px 52px 58px';
 
 const HORIZON_WEIGHTS: Record<string, { trend: number; pullback: number; trigger: number; event: number; volatility: number }> = {
@@ -290,7 +292,6 @@ export default function Step4Page() {
                 key={row.symbol}
                 status={row.status}
                 columns={COLUMNS}
-                className={styles.denseRow}
                 selected={row.symbol === selectedSym}
                 onClick={() => {
                   setSelectedSym(row.symbol);

@@ -26,16 +26,27 @@
  * fits COMPLETELY. That is bought by trimming every fixed column and dropping
  * the row gap from 12px to 8px, NOT by removing a column: all ten survive.
  *
- * Measured at 48%, gap 8, 418px of fixed tracks:
- *   1920  panel 649  NAME 103px  chart 687px   fits, no scrollbar
- *   2560  panel 956  NAME 410px  chart 1020px  fits, no scrollbar
- *   1440  panel 419  NAME 100px  chart 437px   SCROLLS ~227px
+ * Measured at 48%, gap 8, 418px of fixed tracks. These numbers were CORRECTED
+ * by an adversarial round -- the originals were computed from the formula and
+ * three of them were wrong:
+ *   2560  panel 956  NAME 408px  chart 1020px  fits, no scrollbar
+ *   1920  panel 649  NAME 101px  chart  687px  fits, with 0.95px to spare
+ *   1440  panel 419  NAME 100px  chart  437px  SCROLLS 201px
+ *
+ * The 1920 figure was written as "103px, so the 100px floor costs nothing".
+ * It is 100.95px: the floor is already binding at 1919px, and at 1905 -- a
+ * 1920 monitor with a classic vertical scrollbar -- NAME is pinned to exactly
+ * its 100px floor. It still costs nothing, but by under a pixel, not by three.
  *
  * AT LAPTOP WIDTH IT SCROLLS, which is Kenneth's own second option and
  * replaces the stacking that shipped an hour earlier. The side-by-side
- * proportion he likes is kept at every width; below ~1630px the table simply
- * cannot fit beside a usable chart, so the panel scrolls instead of the layout
- * rearranging itself under him.
+ * proportion he likes is kept at every width; below the fit threshold the panel
+ * scrolls instead of the layout rearranging itself under him.
+ *
+ * THE FIT THRESHOLD IS ~1855px, not the ~1630px this comment first claimed.
+ * Measured: the panel already overflows by 29px at 1800, 77px at 1700 and 110px
+ * at 1630. The original figure understated the scrolling band by roughly 225px
+ * of viewport, i.e. it described a 1680-wide laptop as fitting when it does not.
  *
  * NAME is minmax(100px, 1fr), and the 100 is load-bearing in the scrolling
  * case: a bare minmax(0, 1fr) collapses NAME to zero the moment the grid has
@@ -68,6 +79,12 @@
   min-height: 0;
   overflow-x: auto;
   min-width: 0;
+
+  /* ONE source for the gap, inherited by .tableHeader and by every TableRow
+   * inside this panel. Both halves of the grid invariant -- the track template
+   * (COLUMNS in page.tsx) and the gap -- are now single definitions rather than
+   * two literals that have to be kept equal by hand. */
+  --table-row-gap: 8px;
 }
 
 .rightPanel {
@@ -129,18 +146,9 @@
 .tableHeader {
   display: grid;
   align-items: center;
-  gap: var(--space-3);
-  column-gap: 8px;
+  gap: var(--table-row-gap, var(--space-3));
   padding: 0 var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-/* Body rows carry this so their column gap matches .tableHeader's. TableRow's
- * own gap is var(--space-3) and is shared with every other table in the app,
- * so it is overridden HERE rather than there. If these two ever disagree the
- * headings drift off their data -- the exact defect fixed earlier today. */
-.denseRow {
-  column-gap: 8px;
 }
 
 /* Header cells clip exactly as the body cells do.

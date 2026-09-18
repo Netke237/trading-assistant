@@ -6,7 +6,15 @@
 .row {
   display: grid;
   align-items: center;
-  gap: var(--space-3);
+  /* An ANCESTOR sets --table-row-gap when a table needs a tighter one; every
+   * other table keeps --space-3. A custom property INHERITS, so the header and
+   * its rows cannot end up with different gaps -- which a class override could
+   * not guarantee: `.denseRow` and `.row` are both single-class selectors, so
+   * the winner was whichever CSS chunk webpack emitted last, and a reordered
+   * import or a client-side route transition could silently flip it. The
+   * failure mode is the headings drifting off their data, which is the exact
+   * defect this table was just fixed for. */
+  gap: var(--table-row-gap, var(--space-3));
   min-height: 44px;
   padding: 0 var(--space-3) 0 10px; /* left padding accounts for 2px border */
   border-bottom: 1px solid var(--border-subtle);

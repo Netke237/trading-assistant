@@ -1,4 +1,4 @@
-import { resolveIv, formatIv, ivSortValue, stripLegacyIvFields, IV_COLUMN_LABEL, ivColumnLabel } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivSortValue, stripLegacyIvFields, IV_COLUMN_LABEL, ivColumnLabel, ivBasesOf } from '@/lib/ivBasis';
 import { getIvPassMax, getIvCautionMax, FALLBACK } from '@/lib/ivThresholdsStore';
 
 describe('resolveIv', () => {
@@ -199,5 +199,44 @@ describe('ivColumnLabel — the heading names the bases actually on screen', () 
   it("ignores 'none' — a row with no reading says nothing about the basis", () => {
     expect(ivColumnLabel(['none'])).toBe('IV');
     expect(ivColumnLabel(['none', 'rank'])).toBe('IV RANK');
+  });
+});
+
+describe('ivBasesOf — what actually feeds the column heading', () => {
+  // This function had ZERO coverage when it shipped: replacing its whole body
+  // with `return []` left the entire 1685-test suite green, while silently
+  // reverting all four tables to the neutral "IV" heading -- the exact state the
+  // change was made to fix.
+  it('reports the single basis when every row agrees', () => {
+    expect(ivBasesOf([{ ivRank: 30 }, { ivRank: 40 }])).toEqual(['rank']);
+    expect(ivBasesOf([{ iv: 42 }, { iv: 38 }])).toEqual(['absolute']);
+  });
+
+  it('reports BOTH when the rows disagree — the case the heading exists for', () => {
+    expect(ivBasesOf([{ ivRank: 30 }, { iv: 42 }]).sort()).toEqual(['absolute', 'rank']);
+    expect(ivColumnLabel(ivBasesOf([{ ivRank: 30 }, { iv: 42 }]))).toBe('IV / IV RANK');
+  });
+
+  it('omits rows with no reading rather than inventing a basis', () => {
+    expect(ivBasesOf([{}, { ivRank: null, iv: null }])).toEqual([]);
+    expect(ivColumnLabel(ivBasesOf([{}]))).toBe(IV_COLUMN_LABEL);
+  });
+
+  it('survives nulls and an empty list', () => {
+    expect(ivBasesOf([null, undefined, { ivRank: 5 }])).toEqual(['rank']);
+    expect(ivBasesOf([])).toEqual([]);
+  });
+
+  it('keeps resolveIv\'s asymmetry: rank 0 is real, absolute 0 is missing', () => {
+    // Pinned here too because the heading is downstream of it: an absolute 0 is
+    // a missing-data sentinel, a rank of 0 is the bottom of the 52-week range.
+    expect(ivBasesOf([{ ivRank: 0 }])).toEqual(['rank']);
+    expect(ivBasesOf([{ iv: 0 }])).toEqual([]);
+  });
+
+  it('end-to-end: a mixed table is headed differently from a single-basis one', () => {
+    expect(ivColumnLabel(ivBasesOf([{ ivRank: 10 }]))).toBe('IV RANK');
+    expect(ivColumnLabel(ivBasesOf([{ iv: 44 }]))).toBe('IV');
+    expect(ivColumnLabel(ivBasesOf([{ iv: 44 }, { ivRank: 10 }]))).toBe('IV / IV RANK');
   });
 });

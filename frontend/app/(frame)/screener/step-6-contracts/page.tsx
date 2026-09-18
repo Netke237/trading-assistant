@@ -13,7 +13,7 @@ import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { contractLabel, type OptionContract, type TradeCardData } from '@/types/domain';
-import { resolveIv, formatIv, ivSortValue, IV_COLUMN_LABEL } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivSortValue, ivColumnLabel, ivBasesOf } from '@/lib/ivBasis';
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
 
@@ -325,7 +325,7 @@ export default function Step6Page() {
                       <SortBtn label="DTE"      k="dte"          sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                       <SortBtn label="DELTA"    k="delta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="PRICE"    k="price"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label={IV_COLUMN_LABEL} k="ivRank" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+                      <SortBtn label={ivColumnLabel(ivBasesOf(contracts))} k="ivRank" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="IV PCTL"  k="ivPercentile" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="Θ/DAY"    k="theta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="SPREAD"   k="spread"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />

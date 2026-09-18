@@ -8,6 +8,23 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* Header cells clip like the body's do. Without this a heading wider than its
+ * own track spills over its NEIGHBOUR instead of being cut. */
+.tableHeader > * {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The company name clips instead of widening its track. This page rendered it
+ * bare, so a long name set the NAME column's min-content and pushed every
+ * heading after it off its own data (see COLUMNS in page.tsx). */
+.nameCell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* IV rank cell: number + mini horizontal bar stacked vertically */
 .ivRankCell {
   display: flex;

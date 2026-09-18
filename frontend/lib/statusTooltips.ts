@@ -110,6 +110,110 @@ export function regimeNoDataTooltip(reason: 'insufficient_data' | 'unavailable' 
 
 /** Step 5 Vol+Events GATE badge — composes which of IV rank vs. event proximity
  *  drove the worst-status result, quoting the live per-horizon window. */
+/** Which factor(s) put a Step 5 row at the verdict it has.
+ *
+ *  SHARED ON PURPOSE. The page's banner and this file's per-row tooltip both
+ *  answer "why is this CAUTION?", and until an adversarial round caught it they
+ *  answered it with two INDEPENDENT classifications that disagreed on screen:
+ *  a row with no volatility reading at all was counted by the banner as "no
+ *  volatility reading" and simultaneously told by its own tooltip that it was
+ *  "Driven by: IV" -- the precise conflation the banner exists to end. A PASSING
+ *  row was told it was "driven by both", because the tooltip had no PASS branch
+ *  and attributed a cause to every row including the clean ones.
+ *
+ *  One function decides it, and the CALLER computes it once and hands the result
+ *  to the tooltip. Round 2 caught the halfway version: both sides called
+ *  gateDrivers, but each derived `hasIv` its own way -- the page from
+ *  `iv.basis !== 'none'`, the tooltip from `ivRank != null`. Those agree only
+ *  while resolveIv guarantees `value == null` exactly when `basis === 'none'`.
+ *  Change that invariant either way and the two disagree about the same row
+ *  again, which is verbatim the defect this was built to remove.
+ *
+ *  ROUND 3 CLOSED THE HOLE THAT KEPT REOPENING IT: this type could not express
+ *  a PASS row's data situation at all -- a PASS row zeroes all three flags --
+ *  so every caller that needed it derived it again, and round 2's fix put that
+ *  third derivation inside gateDriverPhrase's own parameter list. The facts are
+ *  now CARRIED (`hasIv`, `ivGated`) instead of re-derived, and nothing in this
+ *  file takes a volatility argument with a default. Three rounds, one lesson:
+ *  when a shared type cannot say the thing, callers say it themselves, and they
+ *  say it differently.
+ */
+export interface GateDrivers {
+  /** The IV side is at least as bad as the gate. False on a PASS row. */
+  iv: boolean;
+  /** Event proximity is at least as bad as the gate. False on a PASS row. */
+  event: boolean;
+  /** The IV side drives because there is NO reading, not because one failed.
+   *  Distinct from `iv` alone: "the market prices this richly" and "nobody
+   *  answered" wear the same CAUTION badge and mean opposite things. */
+  ivMissing: boolean;
+  /** Whether this ROW had a volatility reading at all. Carried rather than
+   *  re-derived because a PASS row zeroes the three flags above and so cannot
+   *  express "passed, and there was no reading" -- which is what sent round 3's
+   *  callers back to deriving it themselves for a THIRD time. */
+  hasIv: boolean;
+  /** Whether THIS HORIZON gates on volatility at all. A property of the
+   *  HORIZON, not of the row, and the two are not interchangeable: Intraday
+   *  gates on neither basis, so `ivStatusFor` returns PASS for any reading it
+   *  is handed, including a rank of 95. Anything that wants to say "the
+   *  volatility side was checked and cleared" must consult THIS, never `hasIv`
+   *  -- see gateDriverPhrase. */
+  ivGated: boolean;
+}
+
+export function gateDrivers(args: {
+  ivStatus: Status;
+  proxStatus: Status;
+  gate: Status;
+  /** False when neither a rank nor an absolute level was available. */
+  hasIv: boolean;
+  /** False on a horizon with no IV gate on EITHER basis (Intraday today). */
+  ivGated: boolean;
+}): GateDrivers {
+  const { hasIv, ivGated } = args;
+  // A PASS row has no driver. Attributing one is how the tooltip came to tell
+  // clean rows they were "driven by both". The two facts above survive it,
+  // because "why is this PASS" still has two different answers.
+  if (args.gate === 'PASS') return { iv: false, event: false, ivMissing: false, hasIv, ivGated };
+  const iv = args.ivStatus === args.gate;
+  const event = args.proxStatus === args.gate;
+  return { iv, event, ivMissing: iv && !hasIv, hasIv, ivGated };
+}
+
+/** How `gateDrivers` reads in prose, so the tooltip and the banner also share
+ *  their WORDS and not merely their arithmetic. `ivNoun` is the basis-aware
+ *  name ("IV rank" or "IV") the column heading and threshold sentence use. */
+export function gateDriverPhrase(d: GateDrivers, ivNoun: string): string {
+  const parts: string[] = [];
+  if (d.iv) parts.push(d.ivMissing ? 'no volatility reading' : ivNoun);
+  if (d.event) parts.push('event proximity');
+  if (parts.length > 0) return parts.join(' and ');
+
+  // Everything below is a PASS row, and the question is what its clean badge
+  // is CLAIMING. Round 2 wrote two sentences here and chose between them on
+  // `hasIv` -- the row's data -- while both sentences are assertions about the
+  // HORIZON. Round 3 measured the gap: on Intraday, where the IV gate is off,
+  // ivStatusFor returns PASS for any figure it is given, so a row at IV rank 95
+  // -- the top of that name's own 52-week range, the most expensive premium it
+  // gets -- took the hasIv branch and was told "this row is clear on both",
+  // one line under a banner reading "IV gate disabled for this horizon". The
+  // tooltip asserted a check had passed that the page said was never run, on
+  // the badge a trader hovers to ask exactly that question.
+  //
+  // So ask the horizon first. "Clear on both" is only sayable where both sides
+  // were actually judged.
+  if (!d.ivGated) {
+    return 'nothing — the event window is clear, and this horizon does not gate on volatility';
+  }
+  return d.hasIv
+    ? 'nothing — this row is clear on both'
+    // Gated, PASSING, and no reading. Unreachable from step 5 today (its page
+    // downgrades an unreadable row to CAUTION on any gating horizon), and
+    // written out rather than left to a default because the last two rounds
+    // were both spent on states this type could not express.
+    : 'nothing — the event window is clear, and the volatility side had no reading to judge';
+}
+
 export function eventVolGateTooltip(args: {
   /** The resolved volatility figure — a percentile or an absolute IV
    *  depending on `ivBasis`, or null when neither was available. */
@@ -121,8 +225,14 @@ export function eventVolGateTooltip(args: {
   evReject: number;
   evCaution: number;
   gate: Status;
+  /** Computed ONCE by the caller (the page's gate memo) and passed in, so the
+   *  banner and this tooltip cannot derive it differently. */
+  drivers: GateDrivers;
 }): string {
-  const { ivRank, ivBasis, ivStatus, nextEventDays, proxStatus, evReject, evCaution, gate } = args;
+  // `gate` stays in the argument type -- callers pass the row's verdict and it
+  // documents what `drivers` was derived from -- but it is no longer destructured
+  // here: since drivers arrive precomputed, nothing in this function reads it.
+  const { ivRank, ivBasis, ivStatus, nextEventDays, proxStatus, evReject, evCaution, drivers } = args;
   // Name the quantity actually being judged. An absolute IV shown as "IV rank"
   // is the misreading Phase A exists to end: 45% IV is not the 45th percentile
   // of this name's own range (PHASE-A-NULL-IVRANK-2026-09-06).
@@ -135,8 +245,7 @@ export function eventVolGateTooltip(args: {
   const evPart = nextEventDays == null
     ? 'no known upcoming event'
     : `next event in ${nextEventDays}d vs. this horizon's reject <${evReject}d / caution <${evCaution}d window (${proxStatus})`;
-  const driver = gate === ivStatus && gate !== proxStatus ? ivNoun : gate === proxStatus && gate !== ivStatus ? 'event proximity' : 'both';
-  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${driver}.`;
+  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun)}.`;
 }
 
 /** Bare win-rate cells that sit next to (but separately from) a GATE badge — several

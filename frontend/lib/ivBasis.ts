@@ -50,8 +50,12 @@ export function resolveIv(src: IvSource | null | undefined): ResolvedIv {
 
 /** Column heading covering a table whose rows may not share a basis.
  *
- *  A COMPROMISE, and callers that know their rows' bases should prefer
- *  `ivColumnLabel` below. Heading a column `IV` while some of its cells hold a
+ *  A COMPROMISE, and the LAST RESORT -- every table in the app now derives its
+ *  heading with `ivColumnLabel(ivBasesOf(rows))` instead. This constant survives
+ *  only as that function's neutral fallback when there are no rows to describe.
+ *  It was left in place on three of four tables when `ivColumnLabel` landed,
+ *  which had step 5 heading the column "IV / IV RANK" and step 6 heading the
+ *  same quantity "IV", one Next click apart. Heading a column `IV` while some of its cells hold a
  *  percentile is the ambiguity Phase A exists to remove, and it put the table
  *  at odds with prose that DID name the basis: Step 5's own banner says
  *  "IV rank ≤ 34 → PASS" over a column headed "IV", which reads as two
@@ -67,6 +71,25 @@ export const IV_COLUMN_LABEL = 'IV';
  *                column, and NOT what this heading covers
  *  The first two share one column because only one of them exists per row, so
  *  the heading has to say which are actually present rather than assume. */
+/** The distinct bases actually present in a collection of rows.
+ *
+ *  Exists so the four tables that show this column can all reach
+ *  `ivColumnLabel` from whatever they already render. Without it the new
+ *  heading was adopted by ONE page and the other three kept the old constant,
+ *  which left the app saying "IV / IV RANK" on step 5 and "IV" on step 6 for
+ *  the same quantity, one Next click apart. */
+export function ivBasesOf(rows: readonly (IvSource | null | undefined)[]): IvBasis[] {
+  // Covered in ivBasis.test.ts. It shipped with none, and a body of `return []`
+  // passed the entire suite while silently reverting all four tables to the
+  // neutral heading -- the state this function exists to prevent.
+  const seen = new Set<IvBasis>();
+  for (const r of rows) {
+    const b = resolveIv(r).basis;
+    if (b !== 'none') seen.add(b);
+  }
+  return [...seen];
+}
+
 export function ivColumnLabel(bases: readonly IvBasis[]): string {
   const rank = bases.includes('rank');
   const absolute = bases.includes('absolute');

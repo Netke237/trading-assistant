@@ -9,7 +9,7 @@
  * Gate = worst of (IV status, event proximity status).
  */
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -22,17 +22,33 @@ import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis'
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { worstStatus, type Status } from '@/lib/status';
-import { eventVolGateTooltip } from '@/lib/statusTooltips';
+import { eventVolGateTooltip, gateDrivers, type GateDrivers } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
-const COLUMNS = '24px 32px 72px 1fr 120px 70px 110px 80px';
+// NAME is `minmax(0, 1fr)`, never a bare `1fr`. Step 4 had this exact defect,
+// and this file was edited by the very commit that fixed it there and left it
+// here. `1fr` is `minmax(auto, 1fr)`: with no free space the track falls back to
+// MIN-CONTENT, and the header's min-content is the word "NAME" while each row's
+// is the longest word of a company name -- and this page's NAME cell had no
+// clipping wrapper at all, so its min-content was LARGER than step 4's ever was.
+// Measured at the app's own MinWidthGate floor, which is 1280px (MIN_WIDTH in
+// components/MinWidthGate/index.tsx -- NOT the 1200 this comment first said, and
+// not the 1200 CLAUDE.md said until it was corrected alongside this): header 94px vs row
+// track 114.8px on "T-Mobile US Telecommunications", putting IV, IV PCTL, NEXT
+// EVENT and GATE 21px off their own data; 173px off on a long single-word name.
+const COLUMNS = '24px 32px 72px minmax(0, 1fr) 120px 70px 110px 80px';
 
-/** Why a row is not PASS. 'noIv' is deliberately NOT folded into 'iv': an absent
- *  volatility reading and a volatility reading that failed its threshold wear the
- *  same CAUTION badge but mean opposite things, and only one of them is a fact
- *  about the trade. */
-type GateDriver = 'pass' | 'iv' | 'noIv' | 'event' | 'both';
+/** Module-level so the "no scan yet" case is a STABLE reference. `?? []` built a
+ *  fresh array every render, so before a scan landed every memo below it
+ *  (watchlist, candidateMap, gatedRows, gateSummary) recomputed on every single
+ *  render and the "computed ONCE" claim held only after a scan. */
+const NO_CANDIDATES: TradeCardData[] = [];
+
+/* Why a row is not PASS is decided by `gateDrivers` (lib/statusTooltips.ts),
+ * which the per-row tooltip calls too. It was a local enum here and a separate
+ * expression there, and an adversarial round caught the two disagreeing on
+ * screen about the same row. */
 
 function cardToRow(c: TradeCardData): WatchlistRow {
   return {
@@ -54,7 +70,7 @@ function cardToRow(c: TradeCardData): WatchlistRow {
 export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
-  const candidates           = scanResultCandidates ?? [];
+  const candidates           = scanResultCandidates ?? NO_CANDIDATES;
   const ivThresholds = useIvThresholdsStore((s) => s.thresholds);
   const eventThresholds = useEventThresholdsStore((s) => s.thresholds);
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
@@ -76,36 +92,19 @@ export default function Step5Page() {
   // implied volatility (`iv`), and each is judged by its own threshold set
   // (PHASE-A-NULL-IVRANK-2026-09-06). Thresholds are therefore resolved
   // per row, by basis — not once for the page.
-  function ivStatusFor(value: number, basis: IvBasis): Status {
+  // useCallback so the gate memo can DECLARE this rather than close over it.
+  // The memo's deps were hand-maintained to match this function's real inputs
+  // and held only by coincidence -- `next lint` flagged the missing dependency,
+  // and any future edit reading a fourth value here would have produced a stale
+  // gate with no warning at the call site.
+  const ivStatusFor = useCallback((value: number, basis: IvBasis): Status => {
     const passMax = getIvPassMax(horizonKey, ivThresholds, basis);
     if (passMax === null) return 'PASS';   // Intraday: no IV gate
     if (value <= passMax) return 'PASS';
     const cautionMax = getIvCautionMax(horizonKey, ivThresholds, basis);
     if (cautionMax !== null && value <= cautionMax) return 'CAUTION';
     return 'REJECT';
-  }
-
-  // The header sentence can only quote the thresholds that actually apply to
-  // the rows on screen, so derive the bases present rather than assuming one.
-  const basesPresent = useMemo(() => {
-    const seen = new Set<IvBasis>();
-    for (const r of watchlist) {
-      const b = resolveIv(candidateMap[r.symbol]?.contractDetails).basis;
-      if (b !== 'none') seen.add(b);
-    }
-    return [...seen];
-  }, [watchlist, candidateMap]);
-
-  const thresholdSentences = basesPresent
-    .map((b) => {
-      const passMax = getIvPassMax(horizonKey, ivThresholds, b);
-      if (passMax === null) return null;
-      const cautionMax = getIvCautionMax(horizonKey, ivThresholds, b);
-      const noun = b === 'rank' ? 'IV rank' : 'IV';
-      return `${noun} ≤ ${passMax} → PASS; ≤ ${cautionMax ?? '—'} → CAUTION; above → REJECT.`;
-    })
-    .filter((x): x is string => x !== null)
-    .join(' ');
+  }, [horizonKey, ivThresholds]);
 
   // Whether this horizon gates on IV at all is a property of the HORIZON, so it
   // has to be asked of the thresholds directly. Deriving it from an empty
@@ -118,24 +117,16 @@ export default function Step5Page() {
     getIvPassMax(horizonKey, ivThresholds, 'absolute') === null &&
     getIvPassMax(horizonKey, ivThresholds, 'rank') === null;
 
-  const gateSentence =
-    gateDisabled                ? 'IV gate disabled for this horizon.'
-    : candidates.length === 0   ? 'Run a scan to see the volatility and event gates.'
-    : thresholdSentences !== '' ? thresholdSentences
-    // Candidates are on screen but not one of them carries a volatility
-    // reading. Stated as the plain fact only: what an absent reading then does
-    // to the gate is decided per row below, and differs by horizon.
-    :                             'No volatility reading for these candidates.';
-
-
   // Per-row gate, computed ONCE. It used to live inline in the render map, which
   // meant the header could not say anything about the verdicts underneath it --
   // the page stated the thresholds and then left the user to read a column of
   // badges and infer why. Kenneth asked the obvious question of a CAUTION badge
   // ("why? because of percentile?") and the page had no answer above the fold.
   // The per-row tooltip (eventVolGateTooltip) already explains ONE row on hover;
-  // this memo is what lets the banner explain ALL of them at once, and both now
-  // read the same `driver` vocabulary so they cannot disagree.
+  // this memo is what lets the banner explain ALL of them at once. Both call the
+  // SAME classifier (gateDrivers) -- a shared call site, not a comment promising
+  // they agree, which is what the previous version of this line was and was
+  // wrong.
   const gatedRows = useMemo(() => watchlist.map((r) => {
     const c = candidateMap[r.symbol];
     // A percentile if one exists, otherwise the absolute IV — resolved
@@ -185,13 +176,53 @@ export default function Step5Page() {
     // unreadable -- and on this app the second is the common case, because a true
     // percentile only exists when IBKR or tastytrade answered
     // (PHASE-A-NULL-IVRANK-2026-09-06).
-    const driver: GateDriver =
-      gate === 'PASS'                        ? 'pass'
-      : ivSt === gate && proxStatus === gate ? 'both'
-      : ivSt === gate                        ? (hasIv ? 'iv' : 'noIv')
-      :                                        'event';
-    return { r, c, iv, hasIv, ivSt, proxStatus, gate, driver };
-  }), [watchlist, candidateMap, horizonKey, ivThresholds, evReject, evCaution, gateDisabled]);
+    // FLAGS, not an exclusive enum. The enum tested "both drive" BEFORE splitting
+    // a missing reading from a failed one, so a row that was CAUTION on a missing
+    // IV *and* on event proximity collapsed to 'both' -- printing "2 on both"
+    // with no antecedent anywhere in the sentence, and suppressing the single
+    // distinction this feature exists to make. Flags let one row be counted under
+    // every cause that genuinely applies to it.
+    // `ivGated` is the HORIZON's fact and `hasIv` is the ROW's, and round 3
+    // proved they are not interchangeable: the tooltip chose its PASS sentence
+    // on the row's and so told an Intraday row at IV rank 95 it was "clear on
+    // both", under a banner saying the IV gate is disabled here. Both now
+    // travel WITH the verdict instead of being re-derived at the far end.
+    const drivers: GateDrivers = gateDrivers({
+      ivStatus: ivSt, proxStatus, gate, hasIv, ivGated: !gateDisabled,
+    });
+    return { r, c, iv, hasIv, ivSt, proxStatus, gate, drivers };
+  }), [watchlist, candidateMap, ivStatusFor, evReject, evCaution, gateDisabled]);
+
+
+  // DERIVED FROM gatedRows rather than looping the watchlist and calling
+  // resolveIv all over again. Two memos computing the same quantity is exactly
+  // what this file's module header warns about: "two editors each computing the
+  // same quantity their own way is how this codebase has repeatedly regressed."
+  const basesPresent = useMemo(() => {
+    const seen = new Set<IvBasis>();
+    for (const g of gatedRows) if (g.iv.basis !== 'none') seen.add(g.iv.basis);
+    return [...seen];
+  }, [gatedRows]);
+
+  const thresholdSentences = basesPresent
+    .map((b) => {
+      const passMax = getIvPassMax(horizonKey, ivThresholds, b);
+      if (passMax === null) return null;
+      const cautionMax = getIvCautionMax(horizonKey, ivThresholds, b);
+      const noun = b === 'rank' ? 'IV rank' : 'IV';
+      return `${noun} ≤ ${passMax} → PASS; ≤ ${cautionMax ?? '—'} → CAUTION; above → REJECT.`;
+    })
+    .filter((x): x is string => x !== null)
+    .join(' ');
+
+  const gateSentence =
+    gateDisabled                ? 'IV gate disabled for this horizon.'
+    : candidates.length === 0   ? 'Run a scan to see the volatility and event gates.'
+    : thresholdSentences !== '' ? thresholdSentences
+    // Candidates are on screen but not one of them carries a volatility
+    // reading. Stated as the plain fact only: what an absent reading then does
+    // to the gate is decided per row below, and differs by horizon.
+    :                             'No volatility reading for these candidates.';
 
 
   // The banner's second sentence: what the badges below actually say, and why.
@@ -199,32 +230,67 @@ export default function Step5Page() {
   // because "3 of 12 have no volatility reading" is the sentence that stops a
   // user reading a data gap as a verdict on the trade.
   const gateSummary = useMemo(() => {
-    if (gatedRows.length === 0) return '';
-    const n = (d: GateDriver) => gatedRows.filter((g) => g.driver === d).length;
+    const total = gatedRows.length;
+    if (total === 0) return '';
     const pass = gatedRows.filter((g) => g.gate === 'PASS').length;
     const caution = gatedRows.filter((g) => g.gate === 'CAUTION').length;
     const reject = gatedRows.filter((g) => g.gate === 'REJECT').length;
-    const head = `${gatedRows.length} shown — ${pass} PASS, ${caution} CAUTION, ${reject} REJECT.`;
-    if (pass === gatedRows.length) return head;
-    // Ordered most- to least-common cause so the dominant reason reads first.
-    const causes: string[] = [];
-    const noIv = n('noIv'), ev = n('event'), both = n('both');
-    if (noIv) causes.push(`${noIv} with no volatility reading (counted as CAUTION, never as PASS — a missing reading is not a passing one)`);
-    // NOT lowercased. `IV` is an initialism, and `.toLowerCase()` rendered it
-    // "4 on iv above its threshold" — caught on the first screenshot of this
-    // banner, which is the argument for looking at the page rather than only
-    // at the tests: every assertion still passed.
-    // Split by basis, because "4 on IV above its threshold" over a column
-    // headed "IV / IV RANK" is the very mismatch this change removes. The
-    // nouns here are the ones thresholdSentences and ivColumnLabel use.
-    const ivRankFails = gatedRows.filter((g) => g.driver === 'iv' && g.iv.basis === 'rank').length;
-    const ivAbsFails  = gatedRows.filter((g) => g.driver === 'iv' && g.iv.basis === 'absolute').length;
-    if (ivRankFails) causes.push(`${ivRankFails} on IV rank above its threshold`);
-    if (ivAbsFails)  causes.push(`${ivAbsFails} on IV above its threshold`);
-    if (ev)   causes.push(`${ev} on an event inside this horizon's window`);
-    if (both) causes.push(`${both} on both`);
-    return causes.length === 0 ? head : `${head} Driven by: ${causes.join('; ')}.`;
-  }, [gatedRows]);
+    const head = `${total} shown — ${pass} PASS, ${caution} CAUTION, ${reject} REJECT.`;
+
+    // TWO DIFFERENT QUESTIONS, and an adversarial round showed why they must not
+    // share one list. "What decided the verdict" is the driver; "what could not
+    // be read" is data quality. While they were one list, a scan where every row
+    // was REJECTED by an event said NOTHING about the rows that also had no
+    // volatility reading -- because `drivers.iv` is only true when the IV side is
+    // AT the gate, and a missing reading is CAUTION, which is not REJECT. The
+    // banner's whole reason for existing vanished in the case it was built for.
+    const count = (f: (g: (typeof gatedRows)[number]) => boolean) => gatedRows.filter(f).length;
+    const causes = [
+      { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'rank'),
+        text: 'on IV rank above its threshold' },
+      { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'absolute'),
+        text: 'on IV above its threshold' },
+      { n: count((g) => g.drivers.event),
+        text: "on an event inside this horizon's window" },
+    ].filter((c) => c.n > 0).sort((a, b) => b.n - a.n);
+
+    // Counted whether or not it drove the verdict, and deliberately NOT part of
+    // the sorted list -- it trails as its own sentence so the sort can never
+    // demote the one fact this banner exists to surface. Excluded where the
+    // horizon does not gate on volatility at all, because there a missing
+    // reading costs the candidate nothing.
+    const noReading = gateDisabled ? 0 : count((g) => !g.hasIv);
+
+    const parts = [head];
+    if (causes.length > 0) {
+      // A row can be driven by its volatility AND an event, so these need not
+      // sum to the non-PASS count. Said out loud, because on screen there was no
+      // cue at all and "17 causes for 12 rows" reads as a bug.
+      const sum = causes.reduce((a, c) => a + c.n, 0);
+      // AGAINST THE ROWS THESE CLAUSES ACTUALLY DESCRIBE, not against every
+      // non-PASS row. Round 3: the missing-reading count moved out of `causes`
+      // into its own trailing sentence one round earlier, but this comparison
+      // kept the old denominator -- and a row whose ONLY driver is a missing
+      // reading adds 0 to `sum` while still adding 1 to `caution + reject`. So
+      // each such row cancelled out a genuine double-count and DELETED the
+      // disclaimer. Measured: 10 rows driven by both IV rank and an event plus
+      // 11 unreadable rows printed "10 ...; 10 ..." with no cue -- 31
+      // attributions over 21 rows -- while the same 10 overlapping rows with 9
+      // unreadable ones printed the cue. The overlap was byte-identical; two
+      // unrelated rows removed the warning. On this app that is the COMMON
+      // case, because a true percentile needs IBKR or tastytrade to answer.
+      const driven = count((g) => (g.drivers.iv && !g.drivers.ivMissing) || g.drivers.event);
+      const overlap = sum > driven ? ' (a row can have more than one)' : '';
+      parts.push(`Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`);
+    }
+    if (noReading > 0) {
+      parts.push(
+        `${noReading} of them ${noReading === 1 ? 'has' : 'have'} no volatility reading at all — ` +
+        'counted as CAUTION, never as PASS. A missing reading is not a passing one.',
+      );
+    }
+    return parts.length === 1 ? head : parts.join(' ');
+  }, [gatedRows, gateDisabled]);
 
   return (
     <div className={styles.main}>
@@ -253,7 +319,7 @@ export default function Step5Page() {
           <Text size={11} tone="dim">GATE</Text>
         </div>
 
-        {gatedRows.map(({ r, c, iv, hasIv, ivSt, proxStatus, gate }) => {
+        {gatedRows.map(({ r, c, iv, hasIv, ivSt, proxStatus, gate, drivers }) => {
           const pctl = c?.contractDetails?.ivPercentile;
           const shownIv = formatIv(iv, r.symbol);
           return (
@@ -261,7 +327,9 @@ export default function Step5Page() {
               <OpenChartButton symbol={r.symbol} />
               <WatchStar symbol={r.symbol} size="sm" />
               <Data size={13} weight={500}>{r.symbol}</Data>
-              <Text size={12} tone="secondary">{r.company}</Text>
+              <div className={pageStyles.nameCell}>
+                <Text size={12} tone="secondary">{r.company}</Text>
+              </div>
 
               {/* IV rank + inline mini bar */}
               <div className={pageStyles.ivRankCell} title={shownIv.title}>
@@ -306,6 +374,10 @@ export default function Step5Page() {
                   evReject,
                   evCaution,
                   gate,
+                  // The SAME object the banner counted. Passing raw fields and
+                  // letting the tooltip re-derive them is how the two came to
+                  // disagree about one row in the first place.
+                  drivers,
                 })}
               />
             </TableRow>
