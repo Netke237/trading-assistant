@@ -41,22 +41,45 @@ describe('gateDrivers', () => {
     expect(d).toEqual({ iv: false, event: true, ivMissing: false });
     expect(gateDriverPhrase(d, 'IV rank')).toBe('event proximity');
   });
+
+  it('does NOT blame the event when it is merely bad, but not AT the gate', () => {
+    // The `event` flag was the one this file did not pin: round 2 loosened it to
+    // `proxStatus !== 'PASS'` and every test still passed. That wrong version is
+    // user-visible -- this row would read "Driven by: IV rank and event
+    // proximity" and be counted in the banner's event bucket, when the event is
+    // a CAUTION and the REJECT came from the IV side alone.
+    const d = gateDrivers({ ivStatus: 'REJECT', proxStatus: 'CAUTION', gate: 'REJECT', hasIv: true });
+    expect(d).toEqual({ iv: true, event: false, ivMissing: false });
+    expect(gateDriverPhrase(d, 'IV rank')).toBe('IV rank');
+  });
+
+  it('a PASSING row with no reading is not told it is "clear on both"', () => {
+    // Reachable on Intraday, where the horizon does not gate on IV at all, and
+    // where a missing reading is the common case. "IV: no data" and "clear on
+    // both" in one sentence is the same conflation running backwards.
+    const d = gateDrivers({ ivStatus: 'PASS', proxStatus: 'PASS', gate: 'PASS', hasIv: false });
+    const phrase = gateDriverPhrase(d, 'IV', false);
+    expect(phrase).toMatch(/does not gate on volatility/);
+    expect(phrase).not.toMatch(/clear on both/);
+  });
 });
 
 describe('eventVolGateTooltip speaks the same vocabulary as the banner', () => {
   it('a row with no reading is not blamed on "IV"', () => {
+    const drivers = gateDrivers({ ivStatus: 'CAUTION', proxStatus: 'PASS', gate: 'CAUTION', hasIv: false });
     const t = eventVolGateTooltip({
       ivRank: null, ivBasis: 'none', ivStatus: 'CAUTION',
-      nextEventDays: null, proxStatus: 'PASS', evReject: 21, evCaution: 45, gate: 'CAUTION',
+      nextEventDays: null, proxStatus: 'PASS', evReject: 21, evCaution: 45, gate: 'CAUTION', drivers,
     });
     expect(t).toMatch(/Driven by: no volatility reading\./);
     expect(t).not.toMatch(/Driven by: IV\./);
   });
 
   it('a PASS row is not told it is driven by anything', () => {
+    const drivers = gateDrivers({ ivStatus: 'PASS', proxStatus: 'PASS', gate: 'PASS', hasIv: true });
     const t = eventVolGateTooltip({
       ivRank: 10, ivBasis: 'rank', ivStatus: 'PASS',
-      nextEventDays: null, proxStatus: 'PASS', evReject: 21, evCaution: 45, gate: 'PASS',
+      nextEventDays: null, proxStatus: 'PASS', evReject: 21, evCaution: 45, gate: 'PASS', drivers,
     });
     expect(t).not.toMatch(/Driven by: both/);
     expect(t).toMatch(/clear on both/);

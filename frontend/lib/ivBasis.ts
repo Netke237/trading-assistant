@@ -79,6 +79,9 @@ export const IV_COLUMN_LABEL = 'IV';
  *  which left the app saying "IV / IV RANK" on step 5 and "IV" on step 6 for
  *  the same quantity, one Next click apart. */
 export function ivBasesOf(rows: readonly (IvSource | null | undefined)[]): IvBasis[] {
+  // Covered in ivBasis.test.ts. It shipped with none, and a body of `return []`
+  // passed the entire suite while silently reverting all four tables to the
+  // neutral heading -- the state this function exists to prevent.
   const seen = new Set<IvBasis>();
   for (const r of rows) {
     const b = resolveIv(r).basis;

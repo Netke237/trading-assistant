@@ -32,7 +32,9 @@ import pageStyles from './page.module.css';
 // MIN-CONTENT, and the header's min-content is the word "NAME" while each row's
 // is the longest word of a company name -- and this page's NAME cell had no
 // clipping wrapper at all, so its min-content was LARGER than step 4's ever was.
-// Measured at the app's own 1200px MinWidthGate floor: header track 94px vs row
+// Measured at the app's own MinWidthGate floor, which is 1280px (MIN_WIDTH in
+// components/MinWidthGate/index.tsx -- NOT the 1200 this comment first said, and
+// not the 1200 CLAUDE.md said until it was corrected alongside this): header 94px vs row
 // track 114.8px on "T-Mobile US Telecommunications", putting IV, IV PCTL, NEXT
 // EVENT and GATE 21px off their own data; 173px off on a long single-word name.
 const COLUMNS = '24px 32px 72px minmax(0, 1fr) 120px 70px 110px 80px';
@@ -221,36 +223,54 @@ export default function Step5Page() {
   // because "3 of 12 have no volatility reading" is the sentence that stops a
   // user reading a data gap as a verdict on the trade.
   const gateSummary = useMemo(() => {
-    if (gatedRows.length === 0) return '';
+    const total = gatedRows.length;
+    if (total === 0) return '';
     const pass = gatedRows.filter((g) => g.gate === 'PASS').length;
     const caution = gatedRows.filter((g) => g.gate === 'CAUTION').length;
     const reject = gatedRows.filter((g) => g.gate === 'REJECT').length;
-    const head = `${gatedRows.length} shown — ${pass} PASS, ${caution} CAUTION, ${reject} REJECT.`;
-    if (pass === gatedRows.length) return head;
+    const head = `${total} shown — ${pass} PASS, ${caution} CAUTION, ${reject} REJECT.`;
 
-    // A row driven by BOTH its volatility and an event is counted under both
-    // causes, so these need not sum to the non-PASS count. That is deliberate:
-    // the alternative was a 'both' bucket that named neither of them.
-    // `IV` is not lowercased -- it is an initialism, and an earlier
-    // `.toLowerCase()` rendered "4 on iv above its threshold" past every test.
+    // TWO DIFFERENT QUESTIONS, and an adversarial round showed why they must not
+    // share one list. "What decided the verdict" is the driver; "what could not
+    // be read" is data quality. While they were one list, a scan where every row
+    // was REJECTED by an event said NOTHING about the rows that also had no
+    // volatility reading -- because `drivers.iv` is only true when the IV side is
+    // AT the gate, and a missing reading is CAUTION, which is not REJECT. The
+    // banner's whole reason for existing vanished in the case it was built for.
     const count = (f: (g: (typeof gatedRows)[number]) => boolean) => gatedRows.filter(f).length;
     const causes = [
-      { n: count((g) => g.drivers.ivMissing),
-        text: 'with no volatility reading (counted as CAUTION, never as PASS — a missing reading is not a passing one)' },
       { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'rank'),
         text: 'on IV rank above its threshold' },
       { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'absolute'),
         text: 'on IV above its threshold' },
       { n: count((g) => g.drivers.event),
         text: "on an event inside this horizon's window" },
-    ];
-    // ACTUALLY sorted now. The previous version pushed in a fixed order beneath a
-    // comment claiming it led with the dominant cause, so a scan of 40 with one
-    // missing reading and thirty event rejects opened on the rarest one.
-    const listed = causes.filter((c) => c.n > 0).sort((a, b) => b.n - a.n)
-      .map((c) => `${c.n} ${c.text}`);
-    return listed.length === 0 ? head : `${head} Driven by: ${listed.join('; ')}.`;
-  }, [gatedRows]);
+    ].filter((c) => c.n > 0).sort((a, b) => b.n - a.n);
+
+    // Counted whether or not it drove the verdict, and deliberately NOT part of
+    // the sorted list -- it trails as its own sentence so the sort can never
+    // demote the one fact this banner exists to surface. Excluded where the
+    // horizon does not gate on volatility at all, because there a missing
+    // reading costs the candidate nothing.
+    const noReading = gateDisabled ? 0 : count((g) => !g.hasIv);
+
+    const parts = [head];
+    if (causes.length > 0) {
+      // A row can be driven by its volatility AND an event, so these need not
+      // sum to the non-PASS count. Said out loud, because on screen there was no
+      // cue at all and "17 causes for 12 rows" reads as a bug.
+      const sum = causes.reduce((a, c) => a + c.n, 0);
+      const overlap = sum > caution + reject ? ' (a row can have more than one)' : '';
+      parts.push(`Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`);
+    }
+    if (noReading > 0) {
+      parts.push(
+        `${noReading} of them ${noReading === 1 ? 'has' : 'have'} no volatility reading at all — ` +
+        'counted as CAUTION, never as PASS. A missing reading is not a passing one.',
+      );
+    }
+    return parts.length === 1 ? head : parts.join(' ');
+  }, [gatedRows, gateDisabled]);
 
   return (
     <div className={styles.main}>
@@ -279,7 +299,7 @@ export default function Step5Page() {
           <Text size={11} tone="dim">GATE</Text>
         </div>
 
-        {gatedRows.map(({ r, c, iv, hasIv, ivSt, proxStatus, gate }) => {
+        {gatedRows.map(({ r, c, iv, hasIv, ivSt, proxStatus, gate, drivers }) => {
           const pctl = c?.contractDetails?.ivPercentile;
           const shownIv = formatIv(iv, r.symbol);
           return (
@@ -334,6 +354,10 @@ export default function Step5Page() {
                   evReject,
                   evCaution,
                   gate,
+                  // The SAME object the banner counted. Passing raw fields and
+                  // letting the tooltip re-derive them is how the two came to
+                  // disagree about one row in the first place.
+                  drivers,
                 })}
               />
             </TableRow>

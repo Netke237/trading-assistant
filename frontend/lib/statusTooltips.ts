@@ -121,8 +121,13 @@ export function regimeNoDataTooltip(reason: 'insufficient_data' | 'unavailable' 
  *  row was told it was "driven by both", because the tooltip had no PASS branch
  *  and attributed a cause to every row including the clean ones.
  *
- *  One function now decides it for both. A comment claiming they agree is not
- *  worth the line it is written on; a single call site is.
+ *  One function decides it, and the CALLER computes it once and hands the result
+ *  to the tooltip. Round 2 caught the halfway version: both sides called
+ *  gateDrivers, but each derived `hasIv` its own way -- the page from
+ *  `iv.basis !== 'none'`, the tooltip from `ivRank != null`. Those agree only
+ *  while resolveIv guarantees `value == null` exactly when `basis === 'none'`.
+ *  Change that invariant either way and the two disagree about the same row
+ *  again, which is verbatim the defect this was built to remove.
  */
 export interface GateDrivers {
   /** The IV side is at least as bad as the gate. False on a PASS row. */
@@ -153,11 +158,17 @@ export function gateDrivers(args: {
 /** How `gateDrivers` reads in prose, so the tooltip and the banner also share
  *  their WORDS and not merely their arithmetic. `ivNoun` is the basis-aware
  *  name ("IV rank" or "IV") the column heading and threshold sentence use. */
-export function gateDriverPhrase(d: GateDrivers, ivNoun: string): string {
+export function gateDriverPhrase(d: GateDrivers, ivNoun: string, hasIv = true): string {
   const parts: string[] = [];
   if (d.iv) parts.push(d.ivMissing ? 'no volatility reading' : ivNoun);
   if (d.event) parts.push('event proximity');
-  return parts.length === 0 ? 'nothing — this row is clear on both' : parts.join(' and ');
+  if (parts.length > 0) return parts.join(' and ');
+  // A PASSING row with NO reading is only reachable where the horizon does not
+  // gate on volatility (Intraday). Saying "clear on both" there put "IV: no
+  // data" and "clear" in one sentence -- the same conflation running backwards.
+  return hasIv
+    ? 'nothing — this row is clear on both'
+    : 'nothing — the event window is clear, and this horizon does not gate on volatility';
 }
 
 export function eventVolGateTooltip(args: {
@@ -171,8 +182,14 @@ export function eventVolGateTooltip(args: {
   evReject: number;
   evCaution: number;
   gate: Status;
+  /** Computed ONCE by the caller (the page's gate memo) and passed in, so the
+   *  banner and this tooltip cannot derive it differently. */
+  drivers: GateDrivers;
 }): string {
-  const { ivRank, ivBasis, ivStatus, nextEventDays, proxStatus, evReject, evCaution, gate } = args;
+  // `gate` stays in the argument type -- callers pass the row's verdict and it
+  // documents what `drivers` was derived from -- but it is no longer destructured
+  // here: since drivers arrive precomputed, nothing in this function reads it.
+  const { ivRank, ivBasis, ivStatus, nextEventDays, proxStatus, evReject, evCaution, drivers } = args;
   // Name the quantity actually being judged. An absolute IV shown as "IV rank"
   // is the misreading Phase A exists to end: 45% IV is not the 45th percentile
   // of this name's own range (PHASE-A-NULL-IVRANK-2026-09-06).
@@ -185,12 +202,7 @@ export function eventVolGateTooltip(args: {
   const evPart = nextEventDays == null
     ? 'no known upcoming event'
     : `next event in ${nextEventDays}d vs. this horizon's reject <${evReject}d / caution <${evCaution}d window (${proxStatus})`;
-  // Was a second, independent classification that contradicted the page banner
-  // (see gateDrivers). It also had no PASS branch, so a clean row was told it
-  // was "Driven by: both", and no notion of a MISSING reading, so the one case
-  // the banner exists to separate out was reported here as plain "IV".
-  const drivers = gateDrivers({ ivStatus, proxStatus, gate, hasIv: ivRank != null });
-  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun)}.`;
+  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun, ivRank != null)}.`;
 }
 
 /** Bare win-rate cells that sit next to (but separately from) a GATE badge — several

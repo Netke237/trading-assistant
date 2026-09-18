@@ -334,4 +334,4 @@ cd backend && pytest                              # all tests
 pytest tests/test_alternatives.py                # single module
 ```
 
-Min-width gate: 1200px (`MinWidthGate.tsx`) — shows a "rotate / resize" message below that.
+Min-width gate: 1280px (`MIN_WIDTH` in `MinWidthGate/index.tsx`) — shows a "rotate / resize" message below that. (Documented as 1200px until 2026-09-18; the code has always said 1280.)
