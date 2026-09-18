@@ -19,7 +19,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { GENERIC_STATUS_TOOLTIP, contractScoreTooltip } from '@/lib/statusTooltips';
-import { resolveIv, formatIv, IV_COLUMN_LABEL } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivColumnLabel, ivBasesOf } from '@/lib/ivBasis';
 import { api, type CompositeWatch } from '@/lib/api';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
@@ -483,7 +483,7 @@ function ContractsTab({
         <SortBtn label="DTE"   active={sortKey === 'dte'}   dir={sortDir} onClick={() => onSort('dte')} />
         <SortBtn label="PRICE" active={sortKey === 'price'} dir={sortDir} onClick={() => onSort('price')} align="right" />
         <Text size={11} tone="dim" className={styles.right}>DELTA</Text>
-        <Text size={11} tone="dim" className={styles.right}>{IV_COLUMN_LABEL}</Text>
+        <Text size={11} tone="dim" className={styles.right}>{ivColumnLabel(ivBasesOf(contracts))}</Text>
         <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
         <SortBtn label="SCORE" active={sortKey === 'score'} dir={sortDir} onClick={() => onSort('score')} align="right" />
       </div>

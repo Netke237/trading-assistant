@@ -60,6 +60,20 @@ function noIvCandidate(symbol: string, overrides: Partial<TradeCardData> = {}) {
   });
 }
 
+/** The banner element itself. Needed because the per-row tooltip deliberately
+ *  shares the banner's wording now, so a bare getByText matches both. */
+function banner(): HTMLElement {
+  return screen.getByText(/shown —/);
+}
+
+afterEach(() => {
+  // setup() writes three global Zustand stores; without this the file leaks its
+  // state into whatever else runs in the same jest worker.
+  useScanStore.setState({ scanResult: undefined, context: undefined } as any);
+  useIvThresholdsStore.setState({ thresholds: {}, loaded: false } as any);
+  useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: false } as any);
+});
+
 describe('Step 5 banner — the gate summary says WHY, not just what', () => {
   it('counts the verdicts on screen', () => {
     setup([makeCandidate('AAA'), makeCandidate('BBB')]);
@@ -72,8 +86,12 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     // cause is that nobody answered, not that the option is expensive.
     setup([noIvCandidate('AAA')]);
     render(<Step5Page />);
-    expect(screen.getByText(/no volatility reading/)).toBeInTheDocument();
-    expect(screen.getByText(/a missing reading is not a passing one/)).toBeInTheDocument();
+    // Scoped to the BANNER on purpose: the per-row tooltip now says
+    // "no volatility reading" too, because both read gateDrivers. An unscoped
+    // getByText finds two nodes and throws -- which is the invariant passing,
+    // not failing.
+    expect(banner().textContent).toMatch(/with no volatility reading/);
+    expect(banner().textContent).toMatch(/a missing reading is not a passing one/);
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -82,8 +100,8 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
       contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, ivRank: 45, ivPercentile: 45, dte: 90 } as any,
     })]);
     render(<Step5Page />);
-    expect(screen.getByText(/above its threshold/)).toBeInTheDocument();
-    expect(screen.queryByText(/no volatility reading/)).not.toBeInTheDocument();
+    expect(banner().textContent).toMatch(/above its threshold/);
+    expect(banner().textContent).not.toMatch(/no volatility reading/);
   });
 
   it('separates an event-driven row from an IV-driven one in the same scan', () => {
@@ -101,5 +119,58 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     setup([]);
     render(<Step5Page />);
     expect(screen.queryByText(/shown —/)).not.toBeInTheDocument();
+  });
+});
+
+describe('a row can be driven by more than one thing', () => {
+  it('counts a row under BOTH causes instead of a "both" bucket that names neither', () => {
+    // The regression this replaces: the old exclusive enum tested "both drive"
+    // BEFORE splitting a missing reading from a failed one, so this row printed
+    // "2 on both" -- two of what, the sentence never said -- and the
+    // missing-reading distinction, the entire point of the banner, vanished.
+    setup([
+      noIvCandidate('AAA', { nextEventDays: 30 }),   // no reading AND event in the 45d caution window
+      noIvCandidate('BBB', { nextEventDays: 30 }),
+    ]);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    expect(t).toMatch(/2 with no volatility reading/);
+    expect(t).toMatch(/2 on an event inside this horizon's window/);
+    expect(t).not.toMatch(/on both/);
+  });
+
+  it('leads with the most common cause, not the first one in the source', () => {
+    // The old code pushed causes in a fixed order under a comment claiming it
+    // sorted them, so one missing reading led a list of thirty event rejects.
+    const rows = [noIvCandidate('AAA')];
+    for (let i = 0; i < 4; i++) {
+      rows.push(makeCandidate(`EV${i}`, { nextEventDays: 30 }));  // event-driven only
+    }
+    setup(rows);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    const evAt = t.indexOf('on an event');
+    const noIvAt = t.indexOf('with no volatility reading');
+    expect(evAt).toBeGreaterThanOrEqual(0);
+    expect(noIvAt).toBeGreaterThanOrEqual(0);
+    expect(evAt).toBeLessThan(noIvAt);   // 4 events outrank 1 missing reading
+  });
+
+  it('distinguishes a rank failure from an absolute-IV failure', () => {
+    // Guards the split at its own wording: the previous assertion was
+    // /above its threshold/, which matches both branches identically, so
+    // swapping the two counts would not have failed a test.
+    setup([
+      makeCandidate('RNK', {
+        contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, ivRank: 45, ivPercentile: 45, dte: 90 } as any,
+      }),
+      makeCandidate('ABS', {
+        contractDetails: { strike: 100, expiry: '2026-12-01', right: 'C', mid: 1, delta: 0.45, theta: -0.05, iv: 48, dte: 90 } as any,
+      }),
+    ]);
+    render(<Step5Page />);
+    const t = banner().textContent ?? '';
+    expect(t).toMatch(/1 on IV rank above its threshold/);
+    expect(t).toMatch(/1 on IV above its threshold/);
   });
 });

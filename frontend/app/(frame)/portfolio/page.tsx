@@ -25,7 +25,7 @@ import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
 import type { PortfolioPosition } from '@/types/domain';
-import { resolveIv, formatIv, IV_COLUMN_LABEL, type IvBasis } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivColumnLabel, ivBasesOf, type IvBasis } from '@/lib/ivBasis';
 import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
 
@@ -348,7 +348,7 @@ export default function PortfolioPage() {
             <Text size={11} tone="dim">DTE</Text>
             <Text size={11} tone="dim" className={styles.right}>ENTRY → NOW</Text>
             <Text size={11} tone="dim" className={styles.right}>P&L</Text>
-            <Text size={11} tone="dim" className={styles.right}>{IV_COLUMN_LABEL}</Text>
+            <Text size={11} tone="dim" className={styles.right}>{ivColumnLabel(ivBasesOf(positions))}</Text>
             <Text size={11} tone="dim" className={styles.right}>Δ</Text>
             <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
             <Text size={11} tone="dim">STATUS</Text>

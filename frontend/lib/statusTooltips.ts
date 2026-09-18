@@ -110,6 +110,56 @@ export function regimeNoDataTooltip(reason: 'insufficient_data' | 'unavailable' 
 
 /** Step 5 Vol+Events GATE badge — composes which of IV rank vs. event proximity
  *  drove the worst-status result, quoting the live per-horizon window. */
+/** Which factor(s) put a Step 5 row at the verdict it has.
+ *
+ *  SHARED ON PURPOSE. The page's banner and this file's per-row tooltip both
+ *  answer "why is this CAUTION?", and until an adversarial round caught it they
+ *  answered it with two INDEPENDENT classifications that disagreed on screen:
+ *  a row with no volatility reading at all was counted by the banner as "no
+ *  volatility reading" and simultaneously told by its own tooltip that it was
+ *  "Driven by: IV" -- the precise conflation the banner exists to end. A PASSING
+ *  row was told it was "driven by both", because the tooltip had no PASS branch
+ *  and attributed a cause to every row including the clean ones.
+ *
+ *  One function now decides it for both. A comment claiming they agree is not
+ *  worth the line it is written on; a single call site is.
+ */
+export interface GateDrivers {
+  /** The IV side is at least as bad as the gate. False on a PASS row. */
+  iv: boolean;
+  /** Event proximity is at least as bad as the gate. False on a PASS row. */
+  event: boolean;
+  /** The IV side drives because there is NO reading, not because one failed.
+   *  Distinct from `iv` alone: "the market prices this richly" and "nobody
+   *  answered" wear the same CAUTION badge and mean opposite things. */
+  ivMissing: boolean;
+}
+
+export function gateDrivers(args: {
+  ivStatus: Status;
+  proxStatus: Status;
+  gate: Status;
+  /** False when neither a rank nor an absolute level was available. */
+  hasIv: boolean;
+}): GateDrivers {
+  // A PASS row has no driver. Attributing one is how the tooltip came to tell
+  // clean rows they were "driven by both".
+  if (args.gate === 'PASS') return { iv: false, event: false, ivMissing: false };
+  const iv = args.ivStatus === args.gate;
+  const event = args.proxStatus === args.gate;
+  return { iv, event, ivMissing: iv && !args.hasIv };
+}
+
+/** How `gateDrivers` reads in prose, so the tooltip and the banner also share
+ *  their WORDS and not merely their arithmetic. `ivNoun` is the basis-aware
+ *  name ("IV rank" or "IV") the column heading and threshold sentence use. */
+export function gateDriverPhrase(d: GateDrivers, ivNoun: string): string {
+  const parts: string[] = [];
+  if (d.iv) parts.push(d.ivMissing ? 'no volatility reading' : ivNoun);
+  if (d.event) parts.push('event proximity');
+  return parts.length === 0 ? 'nothing — this row is clear on both' : parts.join(' and ');
+}
+
 export function eventVolGateTooltip(args: {
   /** The resolved volatility figure — a percentile or an absolute IV
    *  depending on `ivBasis`, or null when neither was available. */
@@ -135,8 +185,12 @@ export function eventVolGateTooltip(args: {
   const evPart = nextEventDays == null
     ? 'no known upcoming event'
     : `next event in ${nextEventDays}d vs. this horizon's reject <${evReject}d / caution <${evCaution}d window (${proxStatus})`;
-  const driver = gate === ivStatus && gate !== proxStatus ? ivNoun : gate === proxStatus && gate !== ivStatus ? 'event proximity' : 'both';
-  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${driver}.`;
+  // Was a second, independent classification that contradicted the page banner
+  // (see gateDrivers). It also had no PASS branch, so a clean row was told it
+  // was "Driven by: both", and no notion of a MISSING reading, so the one case
+  // the banner exists to separate out was reported here as plain "IV".
+  const drivers = gateDrivers({ ivStatus, proxStatus, gate, hasIv: ivRank != null });
+  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${gateDriverPhrase(drivers, ivNoun)}.`;
 }
 
 /** Bare win-rate cells that sit next to (but separately from) a GATE badge — several
