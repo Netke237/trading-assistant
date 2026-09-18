@@ -4,6 +4,17 @@
 **Revised 2026-09-17 after adversarial rounds 1 (10 gate-level, 13 below-gate) and 2
 (11 gate-level, 7 below-gate) — see §12 and §13.**
 
+> **NOT CONVERGED. DO NOT BUILD FROM THIS AS-IS.** Being on `main` means this document is
+> stored, not that it is settled. Round 2's fixes have never been re-audited — there was no
+> round 3. And round 2 is not a normal round: **seven of its eleven gate-level findings were
+> defects in round 1's own fix text**, three round-1 fixes being unimplementable as written.
+> That is the non-convergence signature, and it showed up here a round earlier than in the
+> sibling YAML-config plan that died of it at the hard cap. The standing recommendation is to
+> **split this document along its seams** — it specifies a backend write path, a risk/refusal
+> interface, a notification channel and a frontend prop in one 1158-line artefact, and the
+> findings cluster where those meet — rather than revise it whole again. `audit_rule` puts one
+> change at one layer, or roughly 500 lines.
+
 The investigation this spec is built on is `o4_auto_trade_books_a_position` in
 `docs/superpowers/PROJECT_STATE.json`, specifically its
 `verified_2026_09_15_do_not_re_derive` list. Everything in that list is treated here as measured and
