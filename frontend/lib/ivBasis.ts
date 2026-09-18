@@ -48,8 +48,34 @@ export function resolveIv(src: IvSource | null | undefined): ResolvedIv {
   return { value: null, basis: 'none' };
 }
 
-/** Column heading covering a table whose rows may not share a basis. */
+/** Column heading covering a table whose rows may not share a basis.
+ *
+ *  A COMPROMISE, and callers that know their rows' bases should prefer
+ *  `ivColumnLabel` below. Heading a column `IV` while some of its cells hold a
+ *  percentile is the ambiguity Phase A exists to remove, and it put the table
+ *  at odds with prose that DID name the basis: Step 5's own banner says
+ *  "IV rank ≤ 34 → PASS" over a column headed "IV", which reads as two
+ *  different quantities to anyone who has not read ivBasis.ts. */
 export const IV_COLUMN_LABEL = 'IV';
+
+/** The heading for a column whose rows carry exactly the bases in `bases`.
+ *
+ *  Three different quantities are on this screen and they are easy to conflate:
+ *    IV          absolute implied volatility, in volatility points ("42.0%")
+ *    IV rank     where that sits in the name's own 52-week range ("31 rank")
+ *    IV pctl     the share of the last year spent BELOW today's IV — its own
+ *                column, and NOT what this heading covers
+ *  The first two share one column because only one of them exists per row, so
+ *  the heading has to say which are actually present rather than assume. */
+export function ivColumnLabel(bases: readonly IvBasis[]): string {
+  const rank = bases.includes('rank');
+  const absolute = bases.includes('absolute');
+  if (rank && absolute) return 'IV / IV RANK';
+  if (rank) return 'IV RANK';
+  // Absolute-only AND the empty case both land here: with no rows to describe,
+  // the neutral heading is the honest one.
+  return IV_COLUMN_LABEL;
+}
 
 /** How a single resolved figure reads in a cell.
  *

@@ -18,7 +18,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
-import { resolveIv, formatIv, IV_COLUMN_LABEL, type IvBasis } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { worstStatus, type Status } from '@/lib/status';
@@ -27,6 +27,12 @@ import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
 const COLUMNS = '24px 32px 72px 1fr 120px 70px 110px 80px';
+
+/** Why a row is not PASS. 'noIv' is deliberately NOT folded into 'iv': an absent
+ *  volatility reading and a volatility reading that failed its threshold wear the
+ *  same CAUTION badge but mean opposite things, and only one of them is a fact
+ *  about the trade. */
+type GateDriver = 'pass' | 'iv' | 'noIv' | 'event' | 'both';
 
 function cardToRow(c: TradeCardData): WatchlistRow {
   return {
@@ -121,6 +127,105 @@ export default function Step5Page() {
     // to the gate is decided per row below, and differs by horizon.
     :                             'No volatility reading for these candidates.';
 
+
+  // Per-row gate, computed ONCE. It used to live inline in the render map, which
+  // meant the header could not say anything about the verdicts underneath it --
+  // the page stated the thresholds and then left the user to read a column of
+  // badges and infer why. Kenneth asked the obvious question of a CAUTION badge
+  // ("why? because of percentile?") and the page had no answer above the fold.
+  // The per-row tooltip (eventVolGateTooltip) already explains ONE row on hover;
+  // this memo is what lets the banner explain ALL of them at once, and both now
+  // read the same `driver` vocabulary so they cannot disagree.
+  const gatedRows = useMemo(() => watchlist.map((r) => {
+    const c = candidateMap[r.symbol];
+    // A percentile if one exists, otherwise the absolute IV — resolved
+    // through lib/ivBasis.ts so this page and the backend agree on which
+    // quantity is in hand (PHASE-A-NULL-IVRANK-2026-09-06). Note a rank
+    // of 0 is a REAL reading (bottom of the 52-week range, i.e. very
+    // cheap premium); only the absolute level treats 0 as missing.
+    const iv = resolveIv(c?.contractDetails);
+    const hasIv = iv.basis !== 'none';
+    // Unknown IV must not be treated as better than a clean read — this page's
+    // own copy states "Gate = worst of IV and event proximity," so an unknown
+    // IV is downgraded to CAUTION (not NO_DATA) specifically so it always
+    // participates correctly in worstStatus's PASS/CAUTION/REJECT comparison
+    // instead of falling through to NO_DATA, which worstStatus ranks below PASS.
+    // ROUND 6 finding 3. When there IS a reading, ivStatusFor already returns
+    // PASS on a horizon with no IV gate. With no reading this short-circuited
+    // straight to CAUTION and never asked the question, so on Intraday — where
+    // the gate is disabled by design — this page cautioned about a check that
+    // was never going to run while the Step 7 rail, fixed for exactly this in
+    // round 4, said PASS. Two screens, one candidate, contradicting verdicts.
+    // `gateDisabled` above is the page-level answer and is stricter than the
+    // rail's (it requires BOTH bases to be ungated rather than substituting
+    // one), so it is the right thing to consult here.
+    const ivSt: Status = hasIv
+      ? ivStatusFor(iv.value as number, iv.basis)
+      : gateDisabled ? 'PASS' : 'CAUTION';
+    // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
+    // already fetched above via useEventThresholdsStore) — not a fixed cutoff. The
+    // generic eventProximity() helper (frontend/lib/date.ts) is intentionally
+    // NOT used here: it backs the EventFlag badge's fixed 3d/7d "how soon"
+    // color and has no notion of scan horizon, which previously caused this
+    // gate to silently ignore the Position/Swing/Intraday window shown in
+    // this page's own header sentence above.
+    // Strict `<` (not `<=`) matches backend stock_scorer.py's _rule_event exactly
+    // (`worst_days < ec["reject_days"]` / `< ec["caution_days"]`) — an event landing
+    // exactly on the boundary day scores CAUTION/PASS server-side, not REJECT/CAUTION.
+    const proxStatus: Status =
+      r.nextEventDays == null       ? 'PASS'
+      : r.nextEventDays < evReject  ? 'REJECT'
+      : r.nextEventDays < evCaution ? 'CAUTION'
+      : 'PASS';
+    const gate: Status = worstStatus(ivSt, proxStatus);
+    // WHY this row is not PASS, in the banner's vocabulary. `hasIv === false` is
+    // called out separately from a genuine IV verdict because they are different
+    // facts with the same badge: one is "the market says this is expensive", the
+    // other is "nobody answered". Conflating them is what makes a CAUTION column
+    // unreadable -- and on this app the second is the common case, because a true
+    // percentile only exists when IBKR or tastytrade answered
+    // (PHASE-A-NULL-IVRANK-2026-09-06).
+    const driver: GateDriver =
+      gate === 'PASS'                        ? 'pass'
+      : ivSt === gate && proxStatus === gate ? 'both'
+      : ivSt === gate                        ? (hasIv ? 'iv' : 'noIv')
+      :                                        'event';
+    return { r, c, iv, hasIv, ivSt, proxStatus, gate, driver };
+  }), [watchlist, candidateMap, horizonKey, ivThresholds, evReject, evCaution, gateDisabled]);
+
+
+  // The banner's second sentence: what the badges below actually say, and why.
+  // Counting rather than prose because the honest answer is usually a mix, and
+  // because "3 of 12 have no volatility reading" is the sentence that stops a
+  // user reading a data gap as a verdict on the trade.
+  const gateSummary = useMemo(() => {
+    if (gatedRows.length === 0) return '';
+    const n = (d: GateDriver) => gatedRows.filter((g) => g.driver === d).length;
+    const pass = gatedRows.filter((g) => g.gate === 'PASS').length;
+    const caution = gatedRows.filter((g) => g.gate === 'CAUTION').length;
+    const reject = gatedRows.filter((g) => g.gate === 'REJECT').length;
+    const head = `${gatedRows.length} shown — ${pass} PASS, ${caution} CAUTION, ${reject} REJECT.`;
+    if (pass === gatedRows.length) return head;
+    // Ordered most- to least-common cause so the dominant reason reads first.
+    const causes: string[] = [];
+    const noIv = n('noIv'), ev = n('event'), both = n('both');
+    if (noIv) causes.push(`${noIv} with no volatility reading (counted as CAUTION, never as PASS — a missing reading is not a passing one)`);
+    // NOT lowercased. `IV` is an initialism, and `.toLowerCase()` rendered it
+    // "4 on iv above its threshold" — caught on the first screenshot of this
+    // banner, which is the argument for looking at the page rather than only
+    // at the tests: every assertion still passed.
+    // Split by basis, because "4 on IV above its threshold" over a column
+    // headed "IV / IV RANK" is the very mismatch this change removes. The
+    // nouns here are the ones thresholdSentences and ivColumnLabel use.
+    const ivRankFails = gatedRows.filter((g) => g.driver === 'iv' && g.iv.basis === 'rank').length;
+    const ivAbsFails  = gatedRows.filter((g) => g.driver === 'iv' && g.iv.basis === 'absolute').length;
+    if (ivRankFails) causes.push(`${ivRankFails} on IV rank above its threshold`);
+    if (ivAbsFails)  causes.push(`${ivAbsFails} on IV above its threshold`);
+    if (ev)   causes.push(`${ev} on an event inside this horizon's window`);
+    if (both) causes.push(`${both} on both`);
+    return causes.length === 0 ? head : `${head} Driven by: ${causes.join('; ')}.`;
+  }, [gatedRows]);
+
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
@@ -131,6 +236,9 @@ export default function Step5Page() {
           {' '}Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
+        {gateSummary !== '' && (
+          <Text size={12} tone="secondary">{gateSummary}</Text>
+        )}
       </div>
 
       <div className={`${styles.stepBody} ${styles.stepBody_noPad}`}>
@@ -139,57 +247,15 @@ export default function Step5Page() {
           <span aria-hidden />
           <Text size={11} tone="dim">SYMBOL</Text>
           <Text size={11} tone="dim">NAME</Text>
-          <Text size={11} tone="dim">{IV_COLUMN_LABEL}</Text>
+          <Text size={11} tone="dim">{ivColumnLabel(basesPresent)}</Text>
           <Text size={11} tone="dim">IV PCTL</Text>
           <Text size={11} tone="dim">NEXT EVENT</Text>
           <Text size={11} tone="dim">GATE</Text>
         </div>
 
-        {watchlist.map((r) => {
-          const c = candidateMap[r.symbol];
+        {gatedRows.map(({ r, c, iv, hasIv, ivSt, proxStatus, gate }) => {
           const pctl = c?.contractDetails?.ivPercentile;
-          // A percentile if one exists, otherwise the absolute IV — resolved
-          // through lib/ivBasis.ts so this page and the backend agree on which
-          // quantity is in hand (PHASE-A-NULL-IVRANK-2026-09-06). Note a rank
-          // of 0 is a REAL reading (bottom of the 52-week range, i.e. very
-          // cheap premium); only the absolute level treats 0 as missing.
-          const iv = resolveIv(c?.contractDetails);
-          const hasIv = iv.basis !== 'none';
           const shownIv = formatIv(iv, r.symbol);
-          // Unknown IV must not be treated as better than a clean read — this page's
-          // own copy states "Gate = worst of IV and event proximity," so an unknown
-          // IV is downgraded to CAUTION (not NO_DATA) specifically so it always
-          // participates correctly in worstStatus's PASS/CAUTION/REJECT comparison
-          // instead of falling through to NO_DATA, which worstStatus ranks below PASS.
-          // ROUND 6 finding 3. When there IS a reading, ivStatusFor already returns
-          // PASS on a horizon with no IV gate. With no reading this short-circuited
-          // straight to CAUTION and never asked the question, so on Intraday — where
-          // the gate is disabled by design — this page cautioned about a check that
-          // was never going to run while the Step 7 rail, fixed for exactly this in
-          // round 4, said PASS. Two screens, one candidate, contradicting verdicts.
-          // `gateDisabled` above is the page-level answer and is stricter than the
-          // rail's (it requires BOTH bases to be ungated rather than substituting
-          // one), so it is the right thing to consult here.
-          const ivSt: Status = hasIv
-            ? ivStatusFor(iv.value as number, iv.basis)
-            : gateDisabled ? 'PASS' : 'CAUTION';
-          // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
-          // already fetched above via useEventThresholdsStore) — not a fixed cutoff. The
-          // generic eventProximity() helper (frontend/lib/date.ts) is intentionally
-          // NOT used here: it backs the EventFlag badge's fixed 3d/7d "how soon"
-          // color and has no notion of scan horizon, which previously caused this
-          // gate to silently ignore the Position/Swing/Intraday window shown in
-          // this page's own header sentence above.
-          // Strict `<` (not `<=`) matches backend stock_scorer.py's _rule_event exactly
-          // (`worst_days < ec["reject_days"]` / `< ec["caution_days"]`) — an event landing
-          // exactly on the boundary day scores CAUTION/PASS server-side, not REJECT/CAUTION.
-          const proxStatus: Status =
-            r.nextEventDays == null       ? 'PASS'
-            : r.nextEventDays < evReject  ? 'REJECT'
-            : r.nextEventDays < evCaution ? 'CAUTION'
-            : 'PASS';
-          const gate: Status = worstStatus(ivSt, proxStatus);
-
           return (
             <TableRow key={r.symbol} status={gate} columns={COLUMNS}>
               <OpenChartButton symbol={r.symbol} />

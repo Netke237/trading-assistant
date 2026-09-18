@@ -1,4 +1,4 @@
-import { resolveIv, formatIv, ivSortValue, stripLegacyIvFields, IV_COLUMN_LABEL } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivSortValue, stripLegacyIvFields, IV_COLUMN_LABEL, ivColumnLabel } from '@/lib/ivBasis';
 import { getIvPassMax, getIvCautionMax, FALLBACK } from '@/lib/ivThresholdsStore';
 
 describe('resolveIv', () => {
@@ -171,5 +171,33 @@ describe('stripLegacyIvFields', () => {
     const row = { ivRank: 45, ivPercentile: 0 };
     stripLegacyIvFields(row);
     expect(row).toEqual({ ivRank: 45, ivPercentile: 0 });
+  });
+});
+
+describe('ivColumnLabel — the heading names the bases actually on screen', () => {
+  // Step 5's banner said "IV rank ≤ 34 → PASS" over a column headed "IV".
+  // Two names for one column reads as two quantities, and there genuinely ARE
+  // three on that screen (absolute IV, IV rank, IV percentile), so the
+  // ambiguity was not harmless.
+  it('names the rank basis when every row carries a rank', () => {
+    expect(ivColumnLabel(['rank'])).toBe('IV RANK');
+  });
+
+  it('stays plain IV when every row carries an absolute level', () => {
+    expect(ivColumnLabel(['absolute'])).toBe('IV');
+  });
+
+  it('names BOTH when the rows disagree — the case that made the old heading wrong', () => {
+    expect(ivColumnLabel(['rank', 'absolute'])).toBe('IV / IV RANK');
+    expect(ivColumnLabel(['absolute', 'rank'])).toBe('IV / IV RANK');
+  });
+
+  it('falls back to the neutral heading with nothing to describe', () => {
+    expect(ivColumnLabel([])).toBe(IV_COLUMN_LABEL);
+  });
+
+  it("ignores 'none' — a row with no reading says nothing about the basis", () => {
+    expect(ivColumnLabel(['none'])).toBe('IV');
+    expect(ivColumnLabel(['none', 'rank'])).toBe('IV RANK');
   });
 });
