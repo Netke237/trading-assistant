@@ -103,6 +103,23 @@ export type CauseKey = keyof typeof CAUSE_LABEL;
 export type GateCounts = { total: number; pass: number; caution: number; reject: number };
 export type GateCause  = { n: number; key: CauseKey };
 
+/** One band per IV basis on screen, as the threshold sentence states them. */
+export type IvBand = { basis: IvBasis; passMax: number; cautionMax: number | null };
+
+/* THE NUMBERS ARE THE CLAIM HERE, and round 2 measured them ungraded: shifting
+ * the PASS max by 20 in this sentence -- so the page said "IV rank <= 54 -> PASS"
+ * while rejecting at 34 -- shipped 1740/1740, because the pin was a regex with
+ * `\d+` holes in it. Same defect the four claim fields were rebuilt to remove,
+ * left standing on the numbers beside them. Now: a builder over published
+ * bands, pinned by equality, with the bands themselves checked against the
+ * store the gate reads. */
+export function ivThresholdSentence(bands: IvBand[]): string {
+  return bands
+    .map((b) => `${b.basis === 'rank' ? 'IV rank' : 'IV'} \u2264 ${b.passMax} \u2192 PASS; `
+      + `\u2264 ${b.cautionMax ?? '\u2014'} \u2192 CAUTION; above \u2192 REJECT.`)
+    .join(' ');
+}
+
 export function headSentence(c: GateCounts): string {
   return `${c.total} shown \u2014 ${c.pass} PASS, ${c.caution} CAUTION, ${c.reject} REJECT.`;
 }
@@ -126,6 +143,35 @@ type GateSummary = {
   causes: { list: GateCause[]; overlap: boolean } | null;
   missing: { rows: number; claim: MissingReadingClaim } | null;
 };
+
+/* THE CLAIM IS A MODULE CONSTANT, and it is out here rather than inside the
+ * memo on purpose. Round 2 of the structural loop measured why: with the claim
+ * built inside the memo it could SEE `noReading`, and a claim that told the
+ * truth at or below 25 rows and inverted above it shipped 67/67 green --
+ * rendering all four of the failures listed above, in one sentence. Three
+ * rounds had each moved that wall outward (n>=3, then >20, then >25) and each
+ * time the next round found it one step further out.
+ *
+ * Out here the claim has nothing to be keyed ON: no row, no count, no scan.
+ * The test imports this exact object and every render in the suite is checked
+ * against it. BEING HONEST ABOUT THE RESIDUAL: TypeScript cannot stop someone
+ * writing `noReading > N ? somethingElse : MISSING_READING_CLAIM` at the call
+ * site, so this is not a proof. What closes it for the PRODUCT is the pair of
+ * this constant and a fixture rendering more unreadable rows than the largest
+ * universe can produce -- above that n there is no scan left to hide in. */
+export const MISSING_READING_CLAIM: MissingReadingClaim = Object.freeze({
+  //   side:     an unreadable row's verdict is set on the IV branch of the gate
+  //             (`hasIv ? ... : gateDisabled ? 'PASS' : 'CAUTION'`); the event
+  //             branch never sees `hasIv` at all.
+  side:        'volatility',
+  //   asserted/denied: the two arms of that one ternary. The clause renders
+  //             only where the horizon DOES gate on volatility, so the live arm
+  //             is CAUTION and PASS is the arm such a row cannot reach.
+  asserted:    'CAUTION',
+  denied:      'PASS',
+  //   combination: the gate is worstStatus(iv, event) -- worse, never better.
+  combination: 'worse',
+});
 
 export function missingReadingClause(n: number, claim: MissingReadingClaim): string {
   const { of, travel } = COMBINATION_LABEL[claim.combination];
@@ -319,16 +365,14 @@ export default function Step5Page() {
     return [...seen];
   }, [gatedRows]);
 
-  const thresholdSentences = basesPresent
+  const ivBands: IvBand[] = basesPresent
     .map((b) => {
       const passMax = getIvPassMax(horizonKey, ivThresholds, b);
       if (passMax === null) return null;
-      const cautionMax = getIvCautionMax(horizonKey, ivThresholds, b);
-      const noun = b === 'rank' ? 'IV rank' : 'IV';
-      return `${noun} ≤ ${passMax} → PASS; ≤ ${cautionMax ?? '—'} → CAUTION; above → REJECT.`;
+      return { basis: b, passMax, cautionMax: getIvCautionMax(horizonKey, ivThresholds, b) };
     })
-    .filter((x): x is string => x !== null)
-    .join(' ');
+    .filter((x): x is IvBand => x !== null);
+  const thresholdSentences = ivThresholdSentence(ivBands);
 
   const gateSentence =
     gateDisabled                ? 'IV gate disabled for this horizon.'
@@ -413,21 +457,29 @@ export default function Step5Page() {
     //             (noReading is forced to 0 otherwise), so the live arm is
     //             CAUTION and PASS is the arm this row cannot reach.
     //   combination: the gate is worstStatus(iv, event) -- worse, never better.
-    const missing = noReading === 0 ? null : {
-      rows: noReading,
-      claim: {
-        side:        'volatility',
-        asserted:    'CAUTION',
-        denied:      'PASS',
-        combination: 'worse',
-      } as MissingReadingClaim,
-    };
+    const missing = noReading === 0 ? null : { rows: noReading, claim: MISSING_READING_CLAIM };
 
     return { counts, causes: causesPart, missing };
   }, [gatedRows, gateDisabled]);
 
   return (
-    <div className={styles.main}>
+    /* THE WHOLE COMPONENT IS THE CONTRACT'S REGION, not one div inside it.
+       Round 2 measured the cost of a region: widening it from the summary line
+       to the header simply moved the edge, and a contradicting sentence one
+       line BELOW the header shipped 1740/1740 green. The tests now enumerate
+       every node under this root that puts text on screen or carries prose in
+       an attribute, and every one of them must be declared with a pin. The
+       gate config is published here because three sentences quote it and
+       nothing compared them with the numbers actually applied. */
+    <div
+      className={styles.main}
+      data-testid="step-5"
+      data-ev-reject={evReject}
+      data-ev-caution={evCaution}
+      data-iv-gated={String(!gateDisabled)}
+      data-candidates={candidates.length}
+      data-horizon={horizonKey}
+    >
       {/* EVERYTHING THIS PAGE SAYS ABOUT THE GATE, IN ONE TESTABLE REGION.
           Round 1 of the structural loop measured the cost of scoping the
           contract to the summary line alone: appending "Rows with no volatility
@@ -438,11 +490,29 @@ export default function Step5Page() {
           header's whole text as the sum of its lines -- so a gloss cannot be
           added anywhere in here without becoming a part that must be pinned. */}
       <div className={styles.stepHeader} data-testid="step-5-header">
-        <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
-        <Title as="h1" size={24}>Volatility + Events</Title>
+        <span data-line="label"><span data-part="step-label">
+          <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
+        </span></span>
+        <span data-line="title"><span data-part="page-title">
+          <Title as="h1" size={24}>Volatility + Events</Title>
+        </span></span>
         <span data-line="thresholds">
           <Text size={13} tone="secondary">
-            <span data-part="iv-thresholds">{gateSentence}</span>
+            {/* WHICH BRANCH, published. Round 2: reordering this ternary so a
+                GATED horizon printed "IV gate disabled for this horizon."
+                shipped 67/67 green -- the pin was an alternation over the four
+                sayable sentences and graded which are sayable, never which is
+                correct for the state. */}
+            <span
+              data-part="iv-thresholds"
+              data-iv-bands={JSON.stringify(ivBands)}
+              data-branch={
+                gateDisabled              ? 'disabled'
+                : candidates.length === 0 ? 'no-scan'
+                : thresholdSentences !== '' ? 'thresholds'
+                :                             'no-reading'
+              }
+            >{gateSentence}</span>
             {' '}
             <span data-part="event-window">
               Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
@@ -499,7 +569,13 @@ export default function Step5Page() {
       </div>
 
       <div className={`${styles.stepBody} ${styles.stepBody_noPad}`}>
-        <div className={pageStyles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
+        <div
+          className={pageStyles.tableHeader}
+          style={{ gridTemplateColumns: COLUMNS }}
+          data-colheaders={JSON.stringify(
+            ['SYMBOL', 'NAME', ivColumnLabel(basesPresent), 'IV PCTL', 'NEXT EVENT', 'GATE'],
+          )}
+        >
           <span aria-hidden />
           <span aria-hidden />
           <Text size={11} tone="dim">SYMBOL</Text>
@@ -514,16 +590,36 @@ export default function Step5Page() {
           const pctl = c?.contractDetails?.ivPercentile;
           const shownIv = formatIv(iv, r.symbol);
           return (
+            /* EVERY CELL DECLARES WHAT IT IS AND PUBLISHES WHAT IT RENDERS.
+               Round 2 put a lying `title` on the IV cell and on the event cell,
+               a lying `aria-label` one element above the claim, and a lying
+               tooltip on every row -- all 67/67 green, because the contract
+               looked only at `[data-part]` inside the header. Each cell below
+               is now a declared node whose text and attributes are pinned
+               against its own published data, and anything undeclared under
+               the page root is red. */
             <TableRow key={r.symbol} status={gate} columns={COLUMNS}>
-              <OpenChartButton symbol={r.symbol} />
-              <WatchStar symbol={r.symbol} size="sm" />
-              <Data size={13} weight={500}>{r.symbol}</Data>
-              <div className={pageStyles.nameCell}>
+              <span data-cell="chart" data-symbol={r.symbol}>
+                <OpenChartButton symbol={r.symbol} />
+              </span>
+              <span data-cell="watch" data-symbol={r.symbol}>
+                <WatchStar symbol={r.symbol} size="sm" />
+              </span>
+              <span data-cell="symbol" data-value={r.symbol}>
+                <Data size={13} weight={500}>{r.symbol}</Data>
+              </span>
+              <div className={pageStyles.nameCell} data-cell="company" data-value={r.company}>
                 <Text size={12} tone="secondary">{r.company}</Text>
               </div>
 
               {/* IV rank + inline mini bar */}
-              <div className={pageStyles.ivRankCell} title={shownIv.title}>
+              <div
+                className={pageStyles.ivRankCell}
+                title={shownIv.title}
+                data-cell="iv"
+                data-iv-basis={iv.basis}
+                data-iv-value={iv.value === null ? '' : String(iv.value)}
+              >
                 <Data size={13} weight={500}>{shownIv.text}</Data>
                 {shownIv.suffix !== '' && (
                   <Text size={10} tone="dim">{shownIv.suffix}</Text>
@@ -548,11 +644,19 @@ export default function Step5Page() {
                   writes null for that, so the guard had nothing left to catch and
                   only destroyed information. step-6-contracts already gets this
                   right, so the two pages disagreed about one field. */}
-              <Data size={13} weight={500}>{pctl != null ? pctl : '—'}</Data>
+              <span data-cell="pctl" data-value={pctl != null ? String(pctl) : ''}>
+                <Data size={13} weight={500}>{pctl != null ? pctl : '—'}</Data>
+              </span>
 
-              {r.nextEventDays != null
-                ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
-                : <Text size={11} tone="dim">—</Text>}
+              <span
+                data-cell="event"
+                data-days={r.nextEventDays != null ? String(r.nextEventDays) : ''}
+                data-label={r.nextEventLabel ?? ''}
+              >
+                {r.nextEventDays != null
+                  ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
+                  : <Text size={11} tone="dim">—</Text>}
+              </span>
 
               {/* THESE ARE PRODUCT DATA, NOT TEST HOOKS, and the distinction
                   matters because the tests treat them as observations of the
@@ -583,6 +687,7 @@ export default function Step5Page() {
                   `display: contents` so the badge stays the grid item. */}
               <span
                 className={pageStyles.gateCell}
+                data-cell="gate"
                 data-row={r.symbol}
                 data-side-volatility={ivSt}
                 data-side-event={proxStatus}

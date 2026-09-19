@@ -11,9 +11,13 @@
  */
 import { cleanup, render, screen } from '@testing-library/react';
 import Step5Page, {
-  missingReadingClause, headSentence, causesSentence, CAUSE_LABEL,
-  type MissingReadingClaim, type GateCause, type GateCounts, type CauseKey,
+  missingReadingClause, headSentence, causesSentence, ivThresholdSentence,
+  CAUSE_LABEL, MISSING_READING_CLAIM,
+  type MissingReadingClaim, type GateCause, type GateCounts, type CauseKey, type IvBand,
 } from '../page';
+import { STATUS_LABEL } from '@/lib/status';
+import { formatIv, type IvBasis } from '@/lib/ivBasis';
+import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';
 import { worstStatus, type Status } from '@/lib/status';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
@@ -116,49 +120,75 @@ function claimFrom(el: HTMLElement): { rows: number; claim: MissingReadingClaim 
   };
 }
 
-/** EVERY sentence this page may say about the gate, in render order, and the
- *  pin that holds each one to its own published data. A part is legal only if
- *  it appears here, and appearing here means SUPPLYING A PIN -- adding a name
- *  to a list was not enough. Round 1 of the structural loop measured that: with
- *  a bare name whitelist, a two-line edit (a `data-part="note"` span in
- *  page.tsx saying "In practice these rows are safe to treat as a PASS." plus
- *  that name in the list) shipped 51/51 GREEN, which is the same two-file move
- *  rounds 3 and 4 measured at 45/45 for `side` and `combination`.
- *
- *  WHAT THIS DOES AND DOES NOT BUY. It does not make a coordinated two-file
- *  edit impossible -- nothing can, since the tests are the spec and both live
- *  in the repo. It makes the lie have to be WRITTEN DOWN as a pin, next to
- *  five pins that all derive their text from published data, which is the
- *  loudest signal available. What it does close completely is the one-sided
- *  version: free text added to the page and to nothing else. */
+/** EVERY sentence this page may say, in render order, and the pin that holds
+ *  each one to its own published data. A part is legal only if it appears here,
+ *  and appearing here means SUPPLYING A PIN -- adding a name to a list was not
+ *  enough. Round 1 measured that: a lying `data-part="note"` span plus its name
+ *  in a bare whitelist shipped 51/51 GREEN. */
 const PART_PINS: Record<string, (el: HTMLElement) => void> = {
-  /* FIXED PRODUCT COPY, pinned by an anchored alternation over the four
-   * branches gateSentence can produce. This IS pinning prose, and deliberately:
-   * the lesson of rounds 1-4 was that FUZZY rules cannot grade a DERIVED claim,
-   * not that fixed copy must go ungraded. Anchored at both ends, so nothing can
-   * be appended to any branch. */
-  'iv-thresholds': (el) => expect(el.textContent).toMatch(
-    /^(?:IV gate disabled for this horizon\.|Run a scan to see the volatility and event gates\.|No volatility reading for these candidates\.|IV(?: rank)? \u2264 \d+ \u2192 PASS; \u2264 (?:\d+|\u2014) \u2192 CAUTION; above \u2192 REJECT\.(?: IV(?: rank)? \u2264 \d+ \u2192 PASS; \u2264 (?:\d+|\u2014) \u2192 CAUTION; above \u2192 REJECT\.)*)$/,
-  ),
-  'event-window': (el) => expect(el.textContent).toMatch(
-    /^Earnings within \d+ days \u2192 CAUTION; within \d+ days \u2192 REJECT\.$/,
-  ),
+  'step-label': (el) => expect(el.textContent).toBe('STEP 5 OF 7'),
+  'page-title': (el) => expect(el.textContent).toBe('Volatility + Events'),
+
+  /* WHICH BRANCH, AND WHETHER IT IS THE RIGHT ONE FOR THE STATE. Round 2
+   * measured the previous pin -- an anchored alternation over the four sayable
+   * sentences -- letting a GATED horizon print "IV gate disabled for this
+   * horizon." at 67/67 green: it graded which sentences were sayable, never
+   * which one the page was entitled to say. The branch is published now and
+   * checked against the gate config the page is actually applying. */
+  'iv-thresholds': (el) => {
+    const root = page();
+    const ivGated = root.getAttribute('data-iv-gated') === 'true';
+    const candidates = Number(root.getAttribute('data-candidates'));
+    const bands = JSON.parse(el.getAttribute('data-iv-bands') as string) as IvBand[];
+
+    // THE BRANCH THE PAGE IS ENTITLED TO TAKE, from the state it publishes.
+    expect(el.getAttribute('data-branch')).toBe(
+      !ivGated           ? 'disabled'
+      : candidates === 0 ? 'no-scan'
+      : bands.length > 0 ? 'thresholds'
+      :                    'no-reading',
+    );
+
+    // ...and the sentence that branch must say, by EQUALITY. No `\d+` holes.
+    const SAYS: Record<string, () => string> = {
+      'disabled':   () => 'IV gate disabled for this horizon.',
+      'no-scan':    () => 'Run a scan to see the volatility and event gates.',
+      'no-reading': () => 'No volatility reading for these candidates.',
+      'thresholds': () => ivThresholdSentence(bands),
+    };
+    expect(el.textContent).toBe(SAYS[el.getAttribute('data-branch') as string]());
+
+    /* AND THE BANDS ARE THE ONES THE GATE READS. Without this the sentence is
+     * pinned only to its own published data, which is the circularity the whole
+     * loop exists to remove. The boundary cases in the table below then tie the
+     * same numbers to actual row verdicts. */
+    const horizon = root.getAttribute('data-horizon') as string;
+    // NO CAST. `k` narrows to 'rank' | 'abs', so the template literals below type
+    // as the real keys of HorizonIvThresholds. The cast that was here asserted an
+    // index signature the interface does not have, which tsc rejected outright --
+    // and a cast to a looser shape would have been the same false-confidence move
+    // this loop keeps removing from the assertions themselves.
+    const store = useIvThresholdsStore.getState().thresholds;
+    for (const b of bands) {
+      const k = b.basis === 'rank' ? 'rank' : 'abs';
+      expect([b.basis, b.passMax, b.cautionMax])
+        .toEqual([b.basis, store[horizon]?.[`${k}_pass_max`], store[horizon]?.[`${k}_caution_max`]]);
+    }
+  },
+
   'gate-rule': (el) => expect(el.textContent).toBe('Gate = worst of IV and event proximity.'),
 
   // THE COUNTS AND NOTHING ELSE: equality against the page's own builder, run
   // over the counts the part publishes. The counts themselves are tied to the
-  // rows on screen in `expectGateCopy` below.
+  // rows on screen in `expectPageCopy` below.
   'head': (el) => expect(el.textContent).toBe(
     headSentence(JSON.parse(el.getAttribute('data-counts') as string) as GateCounts),
   ),
 
-  /* EQUALITY, NOT PUNCTUATION. This part used to be held to "one sentence"
-   * (`/^[^.]*\.$/`) and round 1 measured that rule admitting
+  /* EQUALITY, NOT PUNCTUATION. Round 1 measured a "one sentence" rule admitting
    * "; these rows are safe to trade as if they were clean." at 51/51 green
-   * while REJECTING a true sentence that happened to end in a full stop --
-   * round 4's finding reproduced verbatim at one edit site. The words now come
-   * from CAUSE_LABEL, which is pinned whole by its own test, and the counts
-   * from the published keys. */
+   * while REJECTING a true sentence at the same site -- round 4's finding
+   * reproduced. The words come from CAUSE_LABEL, pinned whole by its own test. */
   'causes': (el) => expect(el.textContent).toBe(
     causesSentence(
       JSON.parse(el.getAttribute('data-causes') as string) as GateCause[],
@@ -166,24 +196,213 @@ const PART_PINS: Record<string, (el: HTMLElement) => void> = {
     ),
   ),
 
-  // THE SENTENCE IS THE CLAIM RENDERED, AND NOTHING ELSE -- so the element
-  // cannot carry one meaning in its attributes and a different one in its words.
+  // THE SENTENCE IS THE CLAIM RENDERED, AND THE CLAIM IS THE MODULE CONSTANT.
   'missing-reading': (el) => {
     const claimed = claimFrom(el);
+    expect(claimed.claim).toEqual(MISSING_READING_CLAIM);
     expect(el.textContent).toBe(missingReadingClause(claimed.rows, claimed.claim));
   },
 };
 
 /** The order the page must render them in. */
 const PART_ORDER = [
-  'iv-thresholds', 'event-window', 'gate-rule', 'head', 'causes', 'missing-reading',
+  'step-label', 'page-title',
+  'iv-thresholds', 'event-window', 'gate-rule',
+  'head', 'causes', 'missing-reading',
 ] as const;
 
-/** The whole header region -- every word this page says about the gate, not
- *  just the summary line. Round 1 measured the cost of the narrower scope: a
- *  contradicting sentence one line above the banner shipped 1724/1724 green. */
+/* ── THE ROW CELLS ────────────────────────────────────────────────────────
+ * Each declares what it is and publishes what it renders, so its words can be
+ * pinned against its own data. Round 2 put a lying `title` on the IV cell and
+ * on the event cell, and a lying tooltip on every row -- 67/67 green each,
+ * because the contract looked only inside the header.
+ *
+ * WHERE A SHARED ATOM OWNS THE SUBTREE (WatchStar, OpenChartButton) the pin
+ * checks what THIS PAGE can inject through props, and the atom's own fixed copy
+ * is listed because a closed statement needs it. That couples this file to
+ * those atoms' wording: if one changes, one line here changes with it. That is
+ * the price of "nothing undeclared may speak", and it is worth paying. */
+const CELL_PINS: Record<string, (el: HTMLElement, row: HTMLElement) => void> = {
+  chart: (el) => {
+    expect(el.textContent).toBe('📈');
+    expect(titlesIn(el)).toEqual(['Open in Chart']);
+  },
+  watch: (el) => {
+    const sym = el.getAttribute('data-symbol') as string;
+    expect(el.textContent).toBe('');
+    expect(titlesIn(el).every((t) => t === 'Add to watchlist' || t === 'In watchlist')).toBe(true);
+    expect(ariaLabelsIn(el).every(
+      (a) => a === `Add ${sym} to watchlist` || a === `Remove ${sym} from watchlist`,
+    )).toBe(true);
+  },
+  symbol:  (el) => expect(el.textContent).toBe(el.getAttribute('data-value')),
+  company: (el) => expect(el.textContent).toBe(el.getAttribute('data-value')),
+
+  iv: (el) => {
+    const basis = el.getAttribute('data-iv-basis') as IvBasis;
+    const raw = el.getAttribute('data-iv-value') as string;
+    const sym = (el.closest('[data-status]')?.querySelector('[data-cell="symbol"]')
+      ?.getAttribute('data-value')) as string;
+    const shown = formatIv({ basis, value: raw === '' ? null : Number(raw) } as never, sym);
+    expect(el.textContent).toBe(`${shown.text}${shown.suffix}`);
+    expect(el.getAttribute('title')).toBe(shown.title);
+  },
+
+  pctl: (el) => {
+    const v = el.getAttribute('data-value') as string;
+    expect(el.textContent).toBe(v === '' ? '—' : v);
+    expect(titlesIn(el)).toEqual([]);
+  },
+
+  event: (el) => {
+    const days = el.getAttribute('data-days') as string;
+    const label = el.getAttribute('data-label') as string;
+    expect(el.textContent).toBe(days === '' ? '—' : `${days}d`);
+    expect(titlesIn(el)).toEqual(days === '' || label === '' ? [] : [label]);
+  },
+
+  /* THE BADGE AND THE TOOLTIP, both against the row's own published data.
+   * The tooltip is the thing a trader hovers to ask "why CAUTION?" and round 2
+   * appended "A missing volatility reading is graded PASS on the volatility
+   * side; this row is safe to treat as clean." to every one of them at
+   * 1740/1740 green. Rebuilt from the published sub-verdicts here, so an
+   * appended word has nothing to come from. */
+  gate: (el) => {
+    const gate = el.getAttribute('data-gate') as Status;
+    const ivSt = el.getAttribute('data-side-volatility') as Status;
+    const evSt = el.getAttribute('data-side-event') as Status;
+    const root = page();
+    const row = el.closest('[data-status]') as HTMLElement;
+    const ivCell = row.querySelector('[data-cell="iv"]') as HTMLElement;
+    const evCell = row.querySelector('[data-cell="event"]') as HTMLElement;
+    const basis = ivCell.getAttribute('data-iv-basis') as IvBasis;
+    const rawIv = ivCell.getAttribute('data-iv-value') as string;
+    const days = evCell.getAttribute('data-days') as string;
+
+    expect(el.querySelector('[role="tooltip"]')?.textContent).toBe(eventVolGateTooltip({
+      ivRank: rawIv === '' ? null : Number(rawIv),
+      ivBasis: basis,
+      ivStatus: ivSt,
+      nextEventDays: days === '' ? null : Number(days),
+      proxStatus: evSt,
+      evReject: Number(root.getAttribute('data-ev-reject')),
+      evCaution: Number(root.getAttribute('data-ev-caution')),
+      gate,
+      drivers: gateDrivers({
+        ivStatus: ivSt, proxStatus: evSt, gate,
+        hasIv: basis !== 'none',
+        ivGated: root.getAttribute('data-iv-gated') === 'true',
+      }),
+    }));
+
+    // The badge's own word, beside the verdict it was given.
+    const badge = [...el.querySelectorAll('span')]
+      .map((x) => x.textContent).filter((t) => t === STATUS_LABEL[gate]);
+    expect(badge.length).toBeGreaterThan(0);
+  },
+};
+
+const PROSE_ATTRS = ['title', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-hidden'] as const;
+
+function attrsIn(el: HTMLElement, name: string): string[] {
+  return [el, ...el.querySelectorAll<HTMLElement>('*')]
+    .map((x) => x.getAttribute(name))
+    .filter((v): v is string => v !== null);
+}
+const titlesIn     = (el: HTMLElement) => attrsIn(el, 'title');
+const ariaLabelsIn = (el: HTMLElement) => attrsIn(el, 'aria-label');
+
+/** The component root. The contract's region is the PAGE, not a div inside it. */
+function page(): HTMLElement {
+  return screen.getByTestId('step-5');
+}
+
+/** The header region, still named for the tests that only care about the copy. */
 function gateCopy(): HTMLElement {
   return screen.getByTestId('step-5-header');
+}
+
+/** Own text: the node's OWN text children, not its descendants'. */
+function ownText(el: Element): string {
+  return [...el.childNodes]
+    .filter((n) => n.nodeType === 3)
+    .map((n) => n.textContent ?? '')
+    .join('')
+    .trim();
+}
+
+/** A readable name for a node that failed to be declared. */
+function nodeId(el: HTMLElement): string {
+  const attrs = ['data-part', 'data-cell', 'data-line', 'data-status']
+    .map((a) => (el.getAttribute(a) === null ? '' : `${a}="${el.getAttribute(a)}"`))
+    .filter(Boolean).join(' ');
+  return `<${el.tagName.toLowerCase()}${attrs === '' ? '' : ' ' + attrs}> ${JSON.stringify(
+    (ownText(el) || PROSE_ATTRS.map((a) => el.getAttribute(a)).filter(Boolean).join('|')).slice(0, 60),
+  )}`;
+}
+
+/** Which declared owner a speaking node belongs to. Order matters: a cell is
+ *  inside a row, so cells are asked first. */
+const OWNERS: Array<{ name: string; of: (el: HTMLElement) => HTMLElement | null }> = [
+  { name: 'part', of: (el) => el.closest('[data-part]') },
+  { name: 'colheaders', of: (el) => el.closest('[data-colheaders]') },
+  { name: 'cell', of: (el) => el.closest('[data-cell]') },
+  { name: 'row', of: (el) => (el.hasAttribute('data-status') ? el : null) },
+];
+
+/** THE CONTRACT: nothing undeclared may speak, anywhere under the page root.
+ *
+ *  THIS IS THE THIRD SHAPE OF IT, and the first two were both REGIONS. The
+ *  first graded `[data-line="summary"]`; round 1 put a contradicting sentence
+ *  one line above it and shipped 1724/1724. The second graded the header;
+ *  round 2 put the same sentence one line BELOW it and shipped 1740/1740, then
+ *  found five more outside: every row tooltip, two row-cell `title`s, an
+ *  `aria-label` one element up from the claim, and an `aria-hidden` that
+ *  deletes the true clause for screen-reader users. Widening the region was
+ *  the losing move three rounds running.
+ *
+ *  So this is not a region. Every element under the root that puts text on
+ *  screen or carries prose in an attribute must resolve to a DECLARED owner
+ *  with a PIN, and the pin derives its expectation from that owner's own
+ *  published data. Anything undeclared is red wherever it is. */
+function expectPageCopy() {
+  const root = page();
+  const owners = new Map<HTMLElement, string>();
+
+  for (const el of root.querySelectorAll<HTMLElement>('*')) {
+    const speaks = ownText(el) !== ''
+      || PROSE_ATTRS.some((a) => el.getAttribute(a) !== null);
+    if (!speaks) continue;
+
+    const hit = OWNERS.map((o) => [o.name, o.of(el)] as const).find(([, owner]) => owner !== null);
+    // Named in the expectation so a failure says WHICH node is undeclared.
+    expect(hit === undefined ? nodeId(el) : 'declared').toBe('declared');
+    owners.set(hit![1] as HTMLElement, hit![0]);
+  }
+
+  for (const [owner, kind] of owners) {
+    if (kind === 'part') {
+      const name = owner.getAttribute('data-part') as string;
+      const pin = PART_PINS[name];
+      expect(typeof pin === 'function' ? 'pinned' : `UNPINNED PART: ${name}`).toBe('pinned');
+      pin(owner);
+    } else if (kind === 'colheaders') {
+      expect([...owner.children].map((c) => c.textContent).filter((t) => t !== ''))
+        .toEqual(JSON.parse(owner.getAttribute('data-colheaders') as string));
+    } else if (kind === 'cell') {
+      const name = owner.getAttribute('data-cell') as string;
+      const pin = CELL_PINS[name];
+      expect(typeof pin === 'function' ? 'pinned' : `UNPINNED CELL: ${name}`).toBe('pinned');
+      pin(owner, owner.closest('[data-status]') as HTMLElement);
+    } else {
+      // THE TINT, against the verdict its own badge carries. Round 2 tinted
+      // rows with the event sub-verdict and shipped 1740/1740 -- a PASS band
+      // beside a REJECT badge -- because nothing read the third consumer of
+      // `gate`.
+      expect(owner.getAttribute('data-status'))
+        .toBe(owner.querySelector('[data-cell="gate"]')?.getAttribute('data-gate'));
+    }
+  }
 }
 
 /** The claim the page is MAKING, read off the DOM rather than retyped here.
@@ -517,13 +736,17 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
  *  and at production n, in "every field of the claim is answerable to the page"
  *  at the foot of this file. */
 function expectGateCopy(rows: number) {
+  // NOTHING UNDECLARED MAY SPEAK, anywhere under the page root. Everything
+  // below this line is the extra structure the HEADER has on top of that.
+  expectPageCopy();
+
   const header = gateCopy();
   const lines = [...header.querySelectorAll<HTMLElement>('[data-line]')];
-  expect(lines.length).toBeGreaterThan(0);
-  // NO `expect(parts.head).toBeDefined()` here. It was provably inert -- the
-  // counts check below dereferences the head and throws without it, so deleting
-  // it never changed red to green. An assertion that cannot fail alone is
-  // noise, and round 1 was right to call it out.
+  // NO `expect(lines.length).toBeGreaterThan(0)` and no `expect(parts.head)
+  // .toBeDefined()`. Both were constant-true: the threshold line renders
+  // unconditionally and the counts check below throws without the head. Round 1
+  // removed two inert assertions on that ground and round 2 caught a third that
+  // had survived; an assertion that cannot fail alone is noise.
 
   const ordered = [...header.querySelectorAll<HTMLElement>('[data-part]')];
   const names = ordered.map((el) => el.getAttribute('data-part') as string);
@@ -550,17 +773,19 @@ function expectGateCopy(rows: number) {
     const own = [...line.querySelectorAll<HTMLElement>('[data-part]')];
     expect(line.textContent).toBe(own.map((el) => el.textContent).join(' '));
   }
-  expect(header.textContent).toBe(
-    ['STEP 5 OF 7', 'Volatility + Events', ...lines.map((l) => l.textContent)].join(''),
-  );
+  // The header is the sum of its lines, and the step label and page title are
+  // lines like any other now -- so neither is a literal in this assertion.
+  expect(header.textContent).toBe(lines.map((l) => l.textContent).join(''));
 
-  /* NO SECOND VOICE. The pins above are on `textContent`; a `title` or an
-   * `aria-label` on the same element is user-visible (on hover, or to a screen
-   * reader) and would be graded by nothing at all. */
-  for (const el of ordered) {
-    for (const attr of ['title', 'aria-label', 'aria-describedby']) {
-      expect([el.getAttribute('data-part'), attr, el.getAttribute(attr)])
-        .toEqual([el.getAttribute('data-part'), attr, null]);
+  /* NO SECOND VOICE, ANYWHERE IN THE HEADER -- not just on the part element.
+   * Round 2 moved a lying `title` and `aria-label` ONE ELEMENT UP, onto the
+   * `[data-line]` wrapper, and shipped 67/67; and put an `aria-label` on a
+   * child of the claim plus `aria-hidden` on the claim itself, deleting the
+   * true sentence for screen-reader users while sighted ones still saw it.
+   * Every element in the region, every prose attribute, nothing allowed. */
+  for (const el of [header, ...header.querySelectorAll<HTMLElement>('*')]) {
+    for (const attr of PROSE_ATTRS) {
+      expect([nodeId(el), attr, el.getAttribute(attr)]).toEqual([nodeId(el), attr, null]);
     }
   }
 
