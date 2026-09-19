@@ -10,7 +10,10 @@
  * (a true percentile exists only when IBKR or tastytrade answered).
  */
 import { cleanup, render, screen } from '@testing-library/react';
-import Step5Page, { missingReadingClause, type MissingReadingClaim } from '../page';
+import Step5Page, {
+  missingReadingClause, headSentence, causesSentence, CAUSE_LABEL,
+  type MissingReadingClaim, type GateCause, type GateCounts, type CauseKey,
+} from '../page';
 import { worstStatus, type Status } from '@/lib/status';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
@@ -77,29 +80,24 @@ function noIvCandidate(symbol: string, overrides: Partial<TradeCardData> = {}) {
  *  it deliberately shares the banner's wording, so an unscoped query finds
  *  two nodes and throws. */
 function banner(): HTMLElement {
-  return screen.getByTestId('gate-summary');
+  const el = gateCopy().querySelector<HTMLElement>('[data-line="summary"]');
+  if (el === null) throw new Error('the page rendered no gate-summary line');
+  return el;
 }
 
-/** EVERY sentence the banner is allowed to carry, in render order. A new one
- *  has to be added here, which is the point: round 3 measured a gloss appended
- *  to the banner ("In practice these rows are safe to treat as a PASS.")
- *  shipping green beside a clause that said the opposite. */
-const BANNER_PARTS = ['head', 'causes', 'missing-reading'] as const;
-
-/** The banner's sentences, keyed by `data-part`. */
+/** Every sentence in the header region, keyed by `data-part`. Scoped to the
+ *  WHOLE header, not the summary line: a gloss added to the threshold sentence
+ *  above it is exactly what round 1 measured shipping 1724/1724 green. */
 function partsOf(): Record<string, HTMLElement> {
   const out: Record<string, HTMLElement> = {};
-  for (const el of banner().querySelectorAll<HTMLElement>('[data-part]')) {
+  for (const el of gateCopy().querySelectorAll<HTMLElement>('[data-part]')) {
     out[el.getAttribute('data-part') as string] = el;
   }
   return out;
 }
 
-/** The claim the page is MAKING, read off the DOM rather than retyped here.
- *  Null when the banner carries no missing-reading sentence at all. */
-function claimOf(): { rows: number; claim: MissingReadingClaim } | null {
-  const el = banner().querySelector<HTMLElement>('[data-part="missing-reading"]');
-  if (el === null) return null;
+/** The claim an element publishes, read off its attributes. */
+function claimFrom(el: HTMLElement): { rows: number; claim: MissingReadingClaim } {
   const read = (name: string): string => {
     const v = el.getAttribute(`data-claim-${name}`);
     // A field the page stops rendering must fail loudly here, not arrive as
@@ -116,6 +114,83 @@ function claimOf(): { rows: number; claim: MissingReadingClaim } | null {
       combination: read('combination'),
     } as MissingReadingClaim,
   };
+}
+
+/** EVERY sentence this page may say about the gate, in render order, and the
+ *  pin that holds each one to its own published data. A part is legal only if
+ *  it appears here, and appearing here means SUPPLYING A PIN -- adding a name
+ *  to a list was not enough. Round 1 of the structural loop measured that: with
+ *  a bare name whitelist, a two-line edit (a `data-part="note"` span in
+ *  page.tsx saying "In practice these rows are safe to treat as a PASS." plus
+ *  that name in the list) shipped 51/51 GREEN, which is the same two-file move
+ *  rounds 3 and 4 measured at 45/45 for `side` and `combination`.
+ *
+ *  WHAT THIS DOES AND DOES NOT BUY. It does not make a coordinated two-file
+ *  edit impossible -- nothing can, since the tests are the spec and both live
+ *  in the repo. It makes the lie have to be WRITTEN DOWN as a pin, next to
+ *  five pins that all derive their text from published data, which is the
+ *  loudest signal available. What it does close completely is the one-sided
+ *  version: free text added to the page and to nothing else. */
+const PART_PINS: Record<string, (el: HTMLElement) => void> = {
+  /* FIXED PRODUCT COPY, pinned by an anchored alternation over the four
+   * branches gateSentence can produce. This IS pinning prose, and deliberately:
+   * the lesson of rounds 1-4 was that FUZZY rules cannot grade a DERIVED claim,
+   * not that fixed copy must go ungraded. Anchored at both ends, so nothing can
+   * be appended to any branch. */
+  'iv-thresholds': (el) => expect(el.textContent).toMatch(
+    /^(?:IV gate disabled for this horizon\.|Run a scan to see the volatility and event gates\.|No volatility reading for these candidates\.|IV(?: rank)? \u2264 \d+ \u2192 PASS; \u2264 (?:\d+|\u2014) \u2192 CAUTION; above \u2192 REJECT\.(?: IV(?: rank)? \u2264 \d+ \u2192 PASS; \u2264 (?:\d+|\u2014) \u2192 CAUTION; above \u2192 REJECT\.)*)$/,
+  ),
+  'event-window': (el) => expect(el.textContent).toMatch(
+    /^Earnings within \d+ days \u2192 CAUTION; within \d+ days \u2192 REJECT\.$/,
+  ),
+  'gate-rule': (el) => expect(el.textContent).toBe('Gate = worst of IV and event proximity.'),
+
+  // THE COUNTS AND NOTHING ELSE: equality against the page's own builder, run
+  // over the counts the part publishes. The counts themselves are tied to the
+  // rows on screen in `expectGateCopy` below.
+  'head': (el) => expect(el.textContent).toBe(
+    headSentence(JSON.parse(el.getAttribute('data-counts') as string) as GateCounts),
+  ),
+
+  /* EQUALITY, NOT PUNCTUATION. This part used to be held to "one sentence"
+   * (`/^[^.]*\.$/`) and round 1 measured that rule admitting
+   * "; these rows are safe to trade as if they were clean." at 51/51 green
+   * while REJECTING a true sentence that happened to end in a full stop --
+   * round 4's finding reproduced verbatim at one edit site. The words now come
+   * from CAUSE_LABEL, which is pinned whole by its own test, and the counts
+   * from the published keys. */
+  'causes': (el) => expect(el.textContent).toBe(
+    causesSentence(
+      JSON.parse(el.getAttribute('data-causes') as string) as GateCause[],
+      el.getAttribute('data-overlap') === 'true',
+    ),
+  ),
+
+  // THE SENTENCE IS THE CLAIM RENDERED, AND NOTHING ELSE -- so the element
+  // cannot carry one meaning in its attributes and a different one in its words.
+  'missing-reading': (el) => {
+    const claimed = claimFrom(el);
+    expect(el.textContent).toBe(missingReadingClause(claimed.rows, claimed.claim));
+  },
+};
+
+/** The order the page must render them in. */
+const PART_ORDER = [
+  'iv-thresholds', 'event-window', 'gate-rule', 'head', 'causes', 'missing-reading',
+] as const;
+
+/** The whole header region -- every word this page says about the gate, not
+ *  just the summary line. Round 1 measured the cost of the narrower scope: a
+ *  contradicting sentence one line above the banner shipped 1724/1724 green. */
+function gateCopy(): HTMLElement {
+  return screen.getByTestId('step-5-header');
+}
+
+/** The claim the page is MAKING, read off the DOM rather than retyped here.
+ *  Null when the banner carries no missing-reading sentence at all. */
+function claimOf(): { rows: number; claim: MissingReadingClaim } | null {
+  const el = gateCopy().querySelector<HTMLElement>('[data-part="missing-reading"]');
+  return el === null ? null : claimFrom(el);
 }
 
 /** Both sides of the gate, named exactly as the claim's `side` field names
@@ -177,7 +252,7 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     // checked against behaviour at the foot of this file -- so this stays a
     // presence check on the sentence and pins no phrasing.
     expect(partsOf()['missing-reading'].textContent).toMatch(/CAUTION/);
-    expectMissingReadingClaim(1);
+    expectGateCopy(1);
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -407,7 +482,8 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
  *      that claim is tied to rendered behaviour at the foot of this file.
  * ======================================================================== */
 
-/** THE STRUCTURAL CONTRACT ON THE BANNER. No English is graded here at all.
+/** THE STRUCTURAL CONTRACT ON EVERYTHING THIS PAGE SAYS ABOUT THE GATE. No
+ *  English is graded except fixed product copy, and that is anchored.
  *
  *  THE CONTRACT IT REPLACES, AND WHY IT HAD TO GO. Four rounds tried to prove
  *  the prose correct: literal lists, then four "positive" regex rules, then a
@@ -415,87 +491,109 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
  *  "no verdict word may appear outside the clause" rule. Round 4 measured the
  *  last one ADMITTING false copy -- "safe to trade as if they were clean" names
  *  no verdict word, so it passed while contradicting the clause one sentence
- *  later -- and REJECTING true copy, 11 red on a statement true of the page,
- *  AT THE SAME TIME. A rule that does both is not a strict rule; it is the
- *  wrong shape.
+ *  later -- and REJECTING true copy, 11 red on a statement true of the page, AT
+ *  THE SAME TIME. A rule that does both is not strict; it is the wrong shape.
  *
- *  What is pinned instead:
- *    1. the banner says exactly the sum of its enumerated parts, so a sentence
- *       cannot be appended and no bare text node can sit between them;
- *    2. the claim is read off the DOM and its row count compared NUMERICALLY;
- *    3. the sentence EQUALS that same claim rendered -- not `toContain` it.
- *  What the claim's four fields MEAN is pinned separately, against behaviour,
- *  in "every field of the claim is answerable to the page" at the foot of this
- *  file. */
-function expectMissingReadingClaim(rows: number) {
-  const parts = partsOf();
-  expect(parts.head).toBeDefined();
-  // THE COUNTS AND NOTHING ELSE, anchored at both ends. The case table pins the
-  // head's exact text, but only where it declares one; this shape holds for
-  // every caller, so a gloss appended to the head cannot survive anywhere.
-  expect(parts.head.textContent).toMatch(
-    /^\d+ shown \u2014 \d+ PASS, \d+ CAUTION, \d+ REJECT\.$/,
+ *  ROUND 1 OF THE STRUCTURAL LOOP FOUND THREE MORE, ALL MEASURED GREEN, and
+ *  each one is why a line below exists:
+ *    - a contradicting sentence one line ABOVE the banner: 1724/1724 green,
+ *      because the contract was scoped to one `data-testid`;
+ *    - "; these rows are safe to trade as if they were clean." appended to the
+ *      causes sentence: 51/51 green, because that part was held to a
+ *      PUNCTUATION rule -- which rejected a TRUE sentence at the same site;
+ *    - a `data-part="note"` gloss plus its name in a whitelist: 51/51 green,
+ *      because membership is not truth.
+ *
+ *  What is pinned now:
+ *    1. every part is one the page is allowed to say, in the declared order,
+ *       and each has a PIN that derives its words from its own published data;
+ *    2. each line says exactly the sum of its parts, and the header says
+ *       exactly the sum of its lines -- so no sentence can be added anywhere in
+ *       the header without becoming a part;
+ *    3. the head's counts are checked against the ROWS on screen;
+ *    4. the claim's row count is compared NUMERICALLY;
+ *    5. no part smuggles a second voice through `title` or `aria-*`.
+ *  What the claim's four fields MEAN is pinned separately, against behaviour
+ *  and at production n, in "every field of the claim is answerable to the page"
+ *  at the foot of this file. */
+function expectGateCopy(rows: number) {
+  const header = gateCopy();
+  const lines = [...header.querySelectorAll<HTMLElement>('[data-line]')];
+  expect(lines.length).toBeGreaterThan(0);
+  // NO `expect(parts.head).toBeDefined()` here. It was provably inert -- the
+  // counts check below dereferences the head and throws without it, so deleting
+  // it never changed red to green. An assertion that cannot fail alone is
+  // noise, and round 1 was right to call it out.
+
+  const ordered = [...header.querySelectorAll<HTMLElement>('[data-part]')];
+  const names = ordered.map((el) => el.getAttribute('data-part') as string);
+
+  /* EVERY PART IS DECLARED, IN ORDER. `filter` rather than a membership check,
+   * so this one line pins the whitelist AND the order: an undeclared part is
+   * dropped from the expectation and an out-of-order one is reordered, and
+   * either way the comparison goes red. */
+  expect(names).toEqual(PART_ORDER.filter((n) => names.includes(n)));
+
+  /* ...AND DECLARING ONE MEANS PINNING IT. A name in a list was not enough:
+   * round 1 shipped a lying `data-part="note"` at 51/51 green that way. */
+  for (const el of ordered) {
+    const pin = PART_PINS[el.getAttribute('data-part') as string];
+    expect(typeof pin).toBe('function');
+    pin(el);
+  }
+
+  /* EACH LINE IS THE SUM OF ITS PARTS, AND THE HEADER THE SUM OF ITS LINES.
+   * Between them, stray text anywhere in the header fails: the single space is
+   * the only separator the page renders inside a line, and the step label and
+   * title are the only text outside the lines. */
+  for (const line of lines) {
+    const own = [...line.querySelectorAll<HTMLElement>('[data-part]')];
+    expect(line.textContent).toBe(own.map((el) => el.textContent).join(' '));
+  }
+  expect(header.textContent).toBe(
+    ['STEP 5 OF 7', 'Volatility + Events', ...lines.map((l) => l.textContent)].join(''),
   );
 
-  /* THE BANNER IS EXACTLY THESE SENTENCES AND NOTHING ELSE. Round 3 measured
-   * the hole: under a `toContain` pin, appending `parts.push('In practice these
-   * rows are safe to treat as a PASS.')` to page.tsx shipped 43/43 GREEN -- the
-   * banner contradicting, one sentence later, what the clause had just said and
-   * what the head counts.
-   *
-   * TWO ASSERTIONS, AND THE FIRST DRAFT OF THIS HELPER HAD ONLY THE SECOND.
-   * Measured while writing it: with the sum-of-parts line alone, rendering the
-   * same "safe to treat as a PASS" gloss as its own `data-part` shipped 51/51
-   * green -- because an extra sentence that is a part still sums. So the part
-   * NAMES are whitelisted and ordered first, and only then does the container
-   * have to say the sum of them. Between the two: a new sentence must be a part
-   * (or the sum fails on the stray text) and no part but these three may exist
-   * (or the whitelist fails). The single space is the only separator the page
-   * renders. */
-  const ordered = [...banner().querySelectorAll<HTMLElement>('[data-part]')];
-  const names = ordered.map((el) => el.getAttribute('data-part'));
-  // `filter` rather than a membership check so this one line pins the whitelist
-  // AND the order: an unknown part is dropped from the expectation and an
-  // out-of-order one is reordered, and either way the comparison goes red.
-  expect(names).toEqual(BANNER_PARTS.filter((n) => names.includes(n)));
-
-  expect(banner().textContent).toBe(ordered.map((el) => el.textContent).join(' '));
-
-  /* AND THE CAUSES SENTENCE IS ONE SENTENCE. Without this the gloss simply
-   * moves inside an existing part. The other two are already closed to that:
-   * the head is shape-pinned above and the missing-reading part is pinned by
-   * EQUALITY below. The causes sentence is the one the tests only ever match by
-   * fragment, so text appended to IT would survive everything else here. It
-   * ends at its only full stop; an appended sentence puts one in the middle. The
-   * rule is SHAPE only -- one sentence -- so the wording stays free to change.
-   * (The missing-reading clause legitimately has TWO sentences, which is why
-   * this rule is scoped to causes rather than applied to every part.) */
-  if (parts.causes !== undefined) {
-    expect(parts.causes.textContent).toMatch(/^[^.]*\.$/);
+  /* NO SECOND VOICE. The pins above are on `textContent`; a `title` or an
+   * `aria-label` on the same element is user-visible (on hover, or to a screen
+   * reader) and would be graded by nothing at all. */
+  for (const el of ordered) {
+    for (const attr of ['title', 'aria-label', 'aria-describedby']) {
+      expect([el.getAttribute('data-part'), attr, el.getAttribute(attr)])
+        .toEqual([el.getAttribute('data-part'), attr, null]);
+    }
   }
+
+  /* THE HEAD'S COUNTS ARE THE ROWS ON SCREEN. Without this the head is pinned
+   * only to its own published data, which is the circularity this whole loop
+   * exists to remove. Every rendered row publishes its gate verdict. */
+  const counts = JSON.parse(
+    partsOf().head.getAttribute('data-counts') as string,
+  ) as GateCounts;
+  const gates = [...document.querySelectorAll<HTMLElement>('[data-gate]')]
+    .map((el) => el.getAttribute('data-gate'));
+  expect({
+    total:   gates.length,
+    pass:    gates.filter((g) => g === 'PASS').length,
+    caution: gates.filter((g) => g === 'CAUTION').length,
+    reject:  gates.filter((g) => g === 'REJECT').length,
+  }).toEqual(counts);
 
   const claimed = claimOf();
 
   if (rows === 0) {
     expect(claimed).toBeNull();
-    expect(banner().textContent).not.toContain('no volatility reading at all');
+    expect(header.textContent).not.toContain('no volatility reading at all');
     return;
   }
 
   expect(claimed).not.toBeNull();
   /* NUMERIC, so there is no substring left to anchor. The previous pin was a
-   * regex over the sentence and needed a `(?<!\\d)` lookbehind, because
+   * regex over the sentence and needed a `(?<!\d)` lookbehind, because
    * unanchored, "12 of them have ..." CONTAINS "2 of them have ..." -- and that
    * lookbehind lived in one parameterised loop rather than in this helper, so
    * every other caller was unprotected. `Number` has no such failure mode. */
   expect(claimed!.rows).toBe(rows);
-
-  /* THE SENTENCE IS THE CLAIM RENDERED, AND NOTHING ELSE. Equality, against the
-   * claim the page published beside it -- so the element cannot carry one
-   * meaning in its attributes and a different one in its words. */
-  expect(parts['missing-reading'].textContent).toBe(
-    missingReadingClause(claimed!.rows, claimed!.claim),
-  );
 }
 
 /** Thresholds for ALL THREE horizons, so nothing silently falls through to the
@@ -536,6 +634,14 @@ describe('the banner never counts two different things in one breath', () => {
   const cases: Array<{
     name: string; horizon: string; candidates: () => TradeCardData[];
     head: string; noReadingRows: number;
+    /** The causes sentence's data, hand-computed: `[count, key]` in render
+     *  order, or null where the page must print no causes sentence at all.
+     *  ROUND 1 OF THE STRUCTURAL LOOP: the table declared the head and the
+     *  unreadable count and said NOTHING about this sentence, so suppressing
+     *  it whenever more than two rows were unreadable shipped 67/67 green --
+     *  and a large unreadable count beside real drivers is the shape this app
+     *  renders every scan. */
+    causes: Array<[number, CauseKey]> | null;
   }> = [
     {
       name: 'every unreadable row REJECTed by an event — head shows 0 CAUTION',
@@ -543,6 +649,7 @@ describe('the banner never counts two different things in one breath', () => {
       candidates: () => [noIvCandidate('AAA', { nextEventDays: 3 }), noIvCandidate('BBB', { nextEventDays: 3 })],
       // both: iv CAUTION, event REJECT (3 < 21) -> REJECT
       head: '2 shown — 0 PASS, 0 CAUTION, 2 REJECT.', noReadingRows: 2,
+      causes: [[2, 'event']],
     },
     {
       name: 'a readable PASS row beside an unreadable REJECTed one — head shows 1 PASS',
@@ -550,6 +657,7 @@ describe('the banner never counts two different things in one breath', () => {
       candidates: () => [rankCandidate('AAA', 10), noIvCandidate('BBB', { nextEventDays: 3 })],
       // rank 10 <= 34 -> PASS, no event -> PASS | iv CAUTION + event REJECT -> REJECT
       head: '2 shown — 1 PASS, 0 CAUTION, 1 REJECT.', noReadingRows: 1,
+      causes: [[1, 'event']],
     },
     {
       name: 'a PASS row beside an unreadable CAUTION one — head shows both, and NO reject',
@@ -558,6 +666,7 @@ describe('the banner never counts two different things in one breath', () => {
       // THE SHAPE WITH NO REJECT AT ALL: an earlier contract skipped its whole
       // reconciliation branch here, which is exactly where a PASS collision lives.
       head: '2 shown — 1 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 1,
+      causes: null,
     },
     {
       name: 'a READABLE caution beside an unreadable one — same badge, opposite meanings',
@@ -565,6 +674,7 @@ describe('the banner never counts two different things in one breath', () => {
       candidates: () => [rankCandidate('AAA', 45), noIvCandidate('BBB')],
       // rank 45: >34 and <=55 -> CAUTION | unreadable -> CAUTION
       head: '2 shown — 0 PASS, 2 CAUTION, 0 REJECT.', noReadingRows: 1,
+      causes: [[1, 'ivRank']],
     },
     {
       name: 'an IV-REJECTed readable row beside an unreadable one',
@@ -572,6 +682,7 @@ describe('the banner never counts two different things in one breath', () => {
       candidates: () => [rankCandidate('AAA', 95), noIvCandidate('BBB')],
       // rank 95 > 55 -> REJECT | unreadable -> CAUTION
       head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 1,
+      causes: [[1, 'ivRank']],
     },
     {
       name: 'POSITION horizon, unreadable row inside the caution window only',
@@ -579,6 +690,7 @@ describe('the banner never counts two different things in one breath', () => {
       candidates: () => [noIvCandidate('AAA', { nextEventDays: 40 })],
       // iv CAUTION | event 40: not <30, but <60 -> CAUTION -> CAUTION
       head: '1 shown — 0 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 1,
+      causes: [[1, 'event']],
     },
     {
       name: 'POSITION horizon, its own thresholds and not Swing’s',
@@ -588,11 +700,12 @@ describe('the banner never counts two different things in one breath', () => {
       // At 20d this case did not discriminate at all: Swing's reject_days is 21
       // and the comparison is strict `<`, so 20 REJECTs on Swing TOO, and rank
       // 50 is CAUTION under both bands (Swing <=55, Position <=65) -- the head
-      // came out byte-identical under the wrong horizon. Proven: forcing
-      // horizonKey to 'Swing' left all 21 tests in this file green.
+      // came out byte-identical under the wrong horizon. Proven at the time,
+      // against the 21 tests this file then held (it has grown since).
       //   25d: Position -> 25 < 30 -> REJECT.  Swing -> not <21, but <45 -> CAUTION.
       // so reading Swing's window here yields '0 PASS, 2 CAUTION, 0 REJECT'.
       head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 1,
+      causes: [[1, 'ivRank'], [1, 'event']],
     },
     {
       // THE BOUNDARY, WHICH NOTHING IN THIS FILE PINNED. Flipping BOTH of
@@ -605,6 +718,7 @@ describe('the banner never counts two different things in one breath', () => {
       candidates: () => [rankCandidate('AAA', 34), noIvCandidate('BBB')],
       // rank 34 <= 34 -> PASS (inclusive). BBB unreadable -> CAUTION, no event -> PASS.
       head: '2 shown — 1 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 1,
+      causes: null,
     },
     {
       // ROUND 2 FINDING F4, AND IT WAS A BUG IN THE CONTRACT ITSELF, not a
@@ -620,6 +734,26 @@ describe('the banner never counts two different things in one breath', () => {
       // rank 45: >34, <=55 -> CAUTION, no event -> PASS -> CAUTION
       // rank 10: <=34 -> PASS, event 3 < 21 -> REJECT -> REJECT
       head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 0,
+      causes: [[1, 'ivRank'], [1, 'event']],
+    },
+    {
+      // ROUND 1 OF THE STRUCTURAL LOOP: no fixture anywhere combined a LARGE
+      // missing-reading count with a non-empty causes list -- the n=4 and n=12
+      // cases both happened to have zero causes. Measured: suppressing the
+      // "Driven by" sentence whenever more than 2 rows were unreadable shipped
+      // 51/51 green. This is the shape the app actually renders, because a true
+      // percentile needs IBKR or tastytrade to answer while events are known for
+      // everything.
+      name: 'TWELVE unreadable rows AND five event-driven ones — both sentences at once',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [
+        ...Array.from({ length: 12 }, (_, i) => noIvCandidate(`U${i}`)),
+        ...Array.from({ length: 5 }, (_, i) => rankCandidate(`E${i}`, 10, { nextEventDays: 3 })),
+      ],
+      // twelve unreadable -> CAUTION each; five readable rank 10 (PASS) with an
+      // event 3 < 21 -> REJECT each.
+      head: '17 shown — 0 PASS, 12 CAUTION, 5 REJECT.', noReadingRows: 12,
+      causes: [[5, 'event']],
     },
     {
       // ROUND 4 FINDING: every case here counted 1 or 2 unreadable rows, and the
@@ -634,6 +768,7 @@ describe('the banner never counts two different things in one breath', () => {
       ],
       // rank 10 <= 34 -> PASS, no event -> PASS | four unreadable -> CAUTION each
       head: '5 shown — 1 PASS, 4 CAUTION, 0 REJECT.', noReadingRows: 4,
+      causes: null,
     },
     {
       // TWELVE, because "12 of them have ..." CONTAINS "2 of them have ..." and
@@ -643,6 +778,7 @@ describe('the banner never counts two different things in one breath', () => {
       horizon: 'Swing (5-15d)',
       candidates: () => Array.from({ length: 12 }, (_, i) => noIvCandidate(`U${i}`)),
       head: '12 shown — 0 PASS, 12 CAUTION, 0 REJECT.', noReadingRows: 12,
+      causes: null,
     },
     {
       name: 'IV rank exactly ON the Swing CAUTION boundary — 55 is CAUTION, not REJECT',
@@ -650,6 +786,7 @@ describe('the banner never counts two different things in one breath', () => {
       candidates: () => [rankCandidate('AAA', 55), noIvCandidate('BBB')],
       // rank 55: >34, and <=55 -> CAUTION (inclusive). 56 would REJECT.
       head: '2 shown — 0 PASS, 2 CAUTION, 0 REJECT.', noReadingRows: 1,
+      causes: [[1, 'ivRank']],
     },
   ];
 
@@ -661,7 +798,16 @@ describe('the banner never counts two different things in one breath', () => {
       // Hand-computed above, asserted exactly, against the head's OWN element
       // rather than a split of the whole line on its first full stop.
       expect(partsOf().head.textContent).toBe(c.head);
-      expectMissingReadingClaim(c.noReadingRows);
+
+      // AGAINST THE PUBLISHED DATA, not the sentence: PART_PINS already holds
+      // the sentence to exactly this data, so pinning the data pins both.
+      const causesEl = partsOf().causes;
+      const published = causesEl === undefined ? null
+        : (JSON.parse(causesEl.getAttribute('data-causes') as string) as GateCause[])
+            .map((x) => [x.n, x.key]);
+      expect(published).toEqual(c.causes);
+
+      expectGateCopy(c.noReadingRows);
     });
   }
 
@@ -678,7 +824,7 @@ describe('the banner never counts two different things in one breath', () => {
     // outright, because R3 demanded asserts === ['CAUTION'] unconditionally.
     // It also proves the ABSENCE structurally now: no missing-reading part at
     // all, not merely a phrase the banner happens not to contain.
-    expectMissingReadingClaim(0);
+    expectGateCopy(0);
   });
 });
 
@@ -749,9 +895,10 @@ describe('the fixture is actually read, and Position has its own IV band', () =>
   it('uses the INJECTED thresholds, not the module FALLBACK', () => {
     // ROUND 2 FINDING: setupHorizon's values were byte-identical to
     // ivThresholdsStore's FALLBACK, so `thresholds[k] ?? FALLBACK[k]` could not
-    // tell which side answered. Proven: making getIvPassMax/getIvCautionMax
-    // ignore the store entirely and read FALLBACK left all 38 step-5 tests
-    // green. These thresholds are deliberately NOT the fallback's.
+    // tell which side answered. Proven at the time, against the 38 step-5 tests
+    // that then existed (the count has grown since): making getIvPassMax /
+    // getIvCautionMax ignore the store entirely and read FALLBACK left every one
+    // of them green. These thresholds are deliberately NOT the fallback's.
     setupHorizon([rankCandidate('AAA', 25)], 'Swing (5-15d)');
     useIvThresholdsStore.setState({
       thresholds: {
@@ -794,95 +941,128 @@ describe('every field of the claim is answerable to the page, not to a constant'
    * THERE IS NO COPY HERE ANY MORE. Each test reads the claim OFF THE DOM and
    * checks one field against something the page renders under a fixture built
    * to discriminate that field. The hand-written literals below are fixture
-   * inputs and expected PAGE behaviour, never the claim. */
+   * inputs and expected PAGE behaviour, never the claim.
+   *
+   * AND EVERY ONE RUNS AT PRODUCTION n. Round 1 of the structural loop found
+   * these ties all used a single unreadable row while the n-wall was pinned
+   * only on the BUILDER -- so a claim that told the truth at n<3 and lied above
+   * it shipped 51/51 GREEN, rendering, at n=12:
+   *   "12 shown - 0 PASS, 12 CAUTION, 0 REJECT. 12 of them have no volatility
+   *    reading at all - graded PASS on the event side alone, never CAUTION
+   *    there. The gate verdict above is the better of that and the event
+   *    window, so it can be higher still."
+   * which is THREE of the four failures page.tsx's header lists as already
+   * shipped, in one sentence, under a head that says 0 PASS. n=25 is in the set
+   * because the same round measured the clause being dropped entirely above 20
+   * rows -- also 51/51 green -- and >20 unreadable is this app's ordinary
+   * shape, not its edge case. */
+  const PRODUCTION_N = [1, 4, 12, 25];
 
-  /** The fixture the clause describes, on a horizon that DOES gate on
-   *  volatility: one row, no reading, and no event at all -- so the event side
-   *  cannot be what graded it. Returns the claim the page made. */
-  function unreadableRowNoEvent(): MissingReadingClaim {
-    setupHorizon([noIvCandidate('AAA')], 'Swing (5-15d)');
+  /** n rows with no volatility reading and no event at all, on a horizon that
+   *  DOES gate on volatility -- so the event side cannot be what graded them.
+   *  Returns the claim the page made, having checked it is about these n rows. */
+  function unreadableRowsNoEvent(n: number): MissingReadingClaim {
+    setupHorizon(Array.from({ length: n }, (_, i) => noIvCandidate(`U${i}`)), 'Swing (5-15d)');
     render(<Step5Page />);
     const claimed = claimOf();
     expect(claimed).not.toBeNull();
+    expect(claimed!.rows).toBe(n);
     return claimed!.claim;
   }
 
-  it('names the SIDE that actually graded the row, and only that side', () => {
-    const claim = unreadableRowNoEvent();
-    // The fixture discriminates: the two sides really do disagree here, so
-    // `graded` below cannot come out holding both of them.
-    expect(sideVerdict('AAA', 'volatility')).not.toBe(sideVerdict('AAA', 'event'));
-    // ENUMERATED over both sides rather than asserted on the named one, so
-    // naming the wrong side fails instead of merely going unchecked.
-    const graded = SIDES.filter((side) => sideVerdict('AAA', side) === claim.asserted);
-    expect(graded).toEqual([claim.side]);
-  });
+  describe.each(PRODUCTION_N)('at n = %i unreadable rows', (n) => {
+    it('names the SIDE that actually graded the rows, and only that side', () => {
+      const claim = unreadableRowsNoEvent(n);
+      // The fixture discriminates: the two sides really do disagree here, so
+      // `graded` below cannot come out holding both of them.
+      expect(sideVerdict('U0', 'volatility')).not.toBe(sideVerdict('U0', 'event'));
+      // ENUMERATED over both sides rather than asserted on the named one, so
+      // naming the wrong side fails instead of merely going unchecked.
+      const graded = SIDES.filter((side) => sideVerdict('U0', side) === claim.asserted);
+      expect(graded).toEqual([claim.side]);
+    });
 
-  it('ASSERTS the verdict that side gives, and the head counts the row under it', () => {
-    const claim = unreadableRowNoEvent();
-    expect(sideVerdict('AAA', claim.side)).toBe(claim.asserted);
-    /* AND THE HEAD AGREES. The event side is PASS here, so the gate verdict IS
-     * the volatility sub-verdict and the head must count this one row under the
-     * claim's asserted verdict -- which ties the field to a number the user can
-     * see, not only to an attribute beside it. */
-    const head = partsOf().head.textContent ?? '';
-    const countOf = (verdict: string) =>
-      Number(new RegExp(`(\\d+) ${verdict}\\b`).exec(head)?.[1] ?? NaN);
-    expect(countOf(claim.asserted)).toBe(1);
-    expect(countOf(claim.denied)).toBe(0);
-  });
+    it('ASSERTS the verdict that side gives, and the head counts every row under it', () => {
+      const claim = unreadableRowsNoEvent(n);
+      // EVERY row, not just the first -- a claim true of one row and false of
+      // the other n-1 would otherwise pass.
+      for (let i = 0; i < n; i += 1) {
+        expect(sideVerdict(`U${i}`, claim.side)).toBe(claim.asserted);
+      }
+      /* AND THE HEAD AGREES. The event side is PASS here, so each gate verdict
+       * IS that row's volatility sub-verdict and the head must count all n
+       * under the claim's asserted verdict -- which ties the field to numbers
+       * the user can see, not only to attributes beside them. */
+      const head = partsOf().head.textContent ?? '';
+      const countOf = (verdict: string) =>
+        Number(new RegExp(`(\\d+) ${verdict}\\b`).exec(head)?.[1] ?? NaN);
+      expect(countOf(claim.asserted)).toBe(n);
+      expect(countOf(claim.denied)).toBe(0);
+    });
 
-  it('DENIES the verdict the same row gets where volatility does not gate', () => {
-    /* THE ROUND-4 HOLE, CLOSED. The head cross-check above pins `denied` only to
-     * "a verdict this row did not get", and there are two of those -- so
-     * changing denied PASS -> REJECT shipped green.
-     *
-     * `denied` is not "some other verdict". It is the OTHER ARM of the single
-     * ternary that grades an unreadable row, `gateDisabled ? 'PASS' :
-     * 'CAUTION'`. So render the SAME candidate on Intraday, where the horizon
-     * does not gate on volatility, and read that arm off the page instead of
-     * off a constant. */
-    const claim = unreadableRowNoEvent();
-    cleanup();   // or both renders are in the document and rowOf takes the first
+    it('DENIES the verdict the same rows get where volatility does not gate', () => {
+      /* THE ROUND-4 HOLE, CLOSED. The head cross-check above pins `denied` only
+       * to "a verdict these rows did not get", and there are two of those -- so
+       * changing denied PASS -> REJECT shipped green.
+       *
+       * `denied` is not "some other verdict". It is the OTHER ARM of the single
+       * ternary that grades an unreadable row, `gateDisabled ? 'PASS' :
+       * 'CAUTION'`. So render the SAME candidates on Intraday, where the
+       * horizon does not gate on volatility, and read that arm off the page
+       * instead of off a constant. */
+      const claim = unreadableRowsNoEvent(n);
+      cleanup();   // or both renders are in the document and rowOf takes the first
 
-    setupHorizon([noIvCandidate('AAA')], 'Intraday (0-2d)');
-    render(<Step5Page />);
-    expect(sideVerdict('AAA', claim.side)).toBe(claim.denied);
-    // ...and the clause is suppressed there, so the page never asserts, on the
-    // horizon where it is true, the verdict it denies on the horizon where the
-    // clause renders.
-    expect(claimOf()).toBeNull();
-  });
+      setupHorizon(
+        Array.from({ length: n }, (_, i) => noIvCandidate(`U${i}`)),
+        'Intraday (0-2d)',
+      );
+      render(<Step5Page />);
+      for (let i = 0; i < n; i += 1) {
+        expect(sideVerdict(`U${i}`, claim.side)).toBe(claim.denied);
+      }
+      // ...and the clause is suppressed there, so the page never asserts, on
+      // the horizon where it is true, the verdict it denies where it renders.
+      expect(claimOf()).toBeNull();
+    });
 
-  it('COMBINES the two sides the way the rendered gate actually combines them', () => {
-    /* Round 4: swapping `combination` in page.tsx and in the test's copy of the
-     * claim shipped 45/45 green, because nothing ever compared the field to a
-     * gate. It does now, on the only kind of fixture where `worse` and `better`
-     * predict DIFFERENT gates -- one where the two sides disagree. Unreadable
-     * (volatility CAUTION) plus an event 3 days out, inside Swing's reject
-     * window of 21 (event REJECT):  worse -> REJECT,  better -> CAUTION. */
-    setupHorizon([noIvCandidate('AAA', { nextEventDays: 3 })], 'Swing (5-15d)');
-    render(<Step5Page />);
-    const claimed = claimOf();
-    expect(claimed).not.toBeNull();
+    it('COMBINES the two sides the way the rendered gate actually combines them', () => {
+      /* Round 4: swapping `combination` in page.tsx and in the test's copy of
+       * the claim shipped 45/45 green, because nothing ever compared the field
+       * to a gate. It does now, on the only kind of fixture where `worse` and
+       * `better` predict DIFFERENT gates -- one where the two sides disagree.
+       * Unreadable (volatility CAUTION) plus an event 3 days out, inside
+       * Swing's reject window of 21 (event REJECT):
+       *   worse -> REJECT,  better -> CAUTION. */
+      setupHorizon(
+        Array.from({ length: n }, (_, i) => noIvCandidate(`U${i}`, { nextEventDays: 3 })),
+        'Swing (5-15d)',
+      );
+      render(<Step5Page />);
+      const claimed = claimOf();
+      expect(claimed).not.toBeNull();
+      expect(claimed!.rows).toBe(n);
 
-    const vol = sideVerdict('AAA', 'volatility');
-    const ev  = sideVerdict('AAA', 'event');
-    expect(vol).not.toBe(ev);                       // the fixture discriminates
+      const vol = sideVerdict('U0', 'volatility');
+      const ev  = sideVerdict('U0', 'event');
+      expect(vol).not.toBe(ev);                     // the fixture discriminates
 
-    const worse  = worstStatus(vol, ev);
-    const better = worse === vol ? ev : vol;        // defined because the two differ
-    expect(worse).not.toBe(better);                 // ...so the two answers differ too
-
-    expect(gateOf('AAA')).toBe(claimed!.claim.combination === 'worse' ? worse : better);
+      const worse  = worstStatus(vol, ev);
+      const better = worse === vol ? ev : vol;      // defined because the two differ
+      // No `expect(worse).not.toBe(better)` -- it FOLLOWS from `vol !== ev` two
+      // lines above and so could never fail on its own. That line is the real
+      // guard that the two predictions differ; this one was a tautology.
+      expect(gateOf('U0')).toBe(claimed!.claim.combination === 'worse' ? worse : better);
+    });
   });
 
   it('makes the SAME claim about every scan, whatever the rows look like', () => {
-    /* The four ties above each use one purpose-built fixture. Nothing in them
-     * stops the page emitting a claim that happens to fit each fixture and
-     * differs between them -- which would be a per-scan opinion, not the fixed
+    /* The ties above each use a purpose-built fixture. Nothing in them stops
+     * the page emitting a claim that happens to fit each fixture and differs
+     * between them -- which would be a per-scan opinion, not the fixed
      * statement about how this gate works that the sentence presents itself as.
-     * Byte-identical across three unrelated shapes. */
+     * Byte-identical across six unrelated shapes, spanning n from 1 to 25, with
+     * and without a causes sentence beside it. */
     const shapes: Array<[string, () => TradeCardData[], string]> = [
       ['one unreadable row, nothing else',
         () => [noIvCandidate('AAA')], 'Swing (5-15d)'],
@@ -892,6 +1072,15 @@ describe('every field of the claim is answerable to the page, not to a constant'
       ['unreadable beside readable, Position',
         () => [rankCandidate('AAA', 50), noIvCandidate('BBB', { nextEventDays: 25 })],
         'Position (1-3m)'],
+      ['four unreadable',
+        () => Array.from({ length: 4 }, (_, i) => noIvCandidate(`U${i}`)), 'Swing (5-15d)'],
+      ['twelve unreadable beside five event-driven',
+        () => [
+          ...Array.from({ length: 12 }, (_, i) => noIvCandidate(`U${i}`)),
+          ...Array.from({ length: 5 }, (_, i) => rankCandidate(`E${i}`, 10, { nextEventDays: 3 })),
+        ], 'Swing (5-15d)'],
+      ['twenty-five unreadable, past every fixture this file used to hold',
+        () => Array.from({ length: 25 }, (_, i) => noIvCandidate(`U${i}`)), 'Swing (5-15d)'],
     ];
 
     const seen: Array<[string, MissingReadingClaim]> = [];
@@ -900,7 +1089,10 @@ describe('every field of the claim is answerable to the page, not to a constant'
       setupHorizon(candidates(), horizon);
       render(<Step5Page />);
       const claimed = claimOf();
-      expect(claimed).not.toBeNull();
+      // PRESENT AT ALL, at every one of these sizes. Round 1 measured the
+      // clause being dropped above 20 rows at 51/51 green, because 12 was the
+      // largest fixture in the file.
+      expect([name, claimed !== null]).toEqual([name, true]);
       seen.push([name, claimed!.claim]);
     }
 
@@ -908,5 +1100,37 @@ describe('every field of the claim is answerable to the page, not to a constant'
     for (const [name, claim] of seen.slice(1)) {
       expect([name, claim]).toEqual([name, seen[0][1]]);
     }
+  });
+});
+
+describe('the banner speaks a closed vocabulary, pinned whole', () => {
+  /* The per-part pins in PART_PINS compare each sentence with its own builder
+   * run over its own published data, which means a gloss appended INSIDE a
+   * builder would move expectation and actual together. These are the literal
+   * pins that stop that -- the same role the clause skeleton's exact-string
+   * test plays, for the two sentences that gained builders in this round. */
+
+  it('pins every cause phrase the banner can say', () => {
+    // A new phrase has to be a new entry, and free text appended to an existing
+    // one fails here. Round 1 measured the alternative: with the causes
+    // sentence held to a punctuation rule, "; these rows are safe to trade as
+    // if they were clean." shipped 51/51 green.
+    expect(CAUSE_LABEL).toEqual({
+      ivRank: 'on IV rank above its threshold',
+      ivAbs:  'on IV above its threshold',
+      event:  "on an event inside this horizon's window",
+    });
+  });
+
+  it('renders the head sentence, word for word', () => {
+    expect(headSentence({ total: 12, pass: 3, caution: 4, reject: 5 }))
+      .toBe('12 shown \u2014 3 PASS, 4 CAUTION, 5 REJECT.');
+  });
+
+  it('renders the causes sentence, word for word, with and without the overlap cue', () => {
+    expect(causesSentence([{ n: 3, key: 'ivRank' }, { n: 1, key: 'event' }], false))
+      .toBe("Driven by: 3 on IV rank above its threshold; 1 on an event inside this horizon's window.");
+    expect(causesSentence([{ n: 2, key: 'ivAbs' }], true))
+      .toBe('Driven by (a row can have more than one): 2 on IV above its threshold.');
   });
 });

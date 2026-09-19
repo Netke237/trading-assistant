@@ -79,13 +79,51 @@ const COMBINATION_LABEL = {
   better: { of: 'better', travel: 'higher' },
 } as const;
 
+/* ── THE BANNER'S CLOSED VOCABULARY ───────────────────────────────
+ * ROUND 1 OF THE STRUCTURAL LOOP FOUND THE CLAIM WAS THE ONLY PART TREATED
+ * THIS WAY, and that the others were graded by punctuation. Measured: with the
+ * causes sentence held to "one sentence" (`/^[^.]*\.$/`), appending
+ * "; these rows are safe to trade as if they were clean." shipped 51/51 GREEN
+ * -- a semicolon buys any lie -- while appending a TRUE sentence with a full
+ * stop went red. That is round 4's finding reproduced verbatim against the
+ * replacement: false copy admitted and true copy rejected, at one edit site.
+ *
+ * So every cause the banner can name is a KEY, and its words live in one
+ * table that a single test pins by equality. A new phrase has to be a new
+ * entry here, and free text appended to an existing one fails that pin. The
+ * counts beside them come from the rows; the sentence is a rendering of both.
+ */
+export const CAUSE_LABEL = {
+  ivRank: 'on IV rank above its threshold',
+  ivAbs:  'on IV above its threshold',
+  event:  "on an event inside this horizon's window",
+} as const;
+export type CauseKey = keyof typeof CAUSE_LABEL;
+
+export type GateCounts = { total: number; pass: number; caution: number; reject: number };
+export type GateCause  = { n: number; key: CauseKey };
+
+export function headSentence(c: GateCounts): string {
+  return `${c.total} shown \u2014 ${c.pass} PASS, ${c.caution} CAUTION, ${c.reject} REJECT.`;
+}
+
+export function causesSentence(causes: GateCause[], overlap: boolean): string {
+  // A row can be driven by its volatility AND an event, so these need not sum
+  // to the non-PASS count. Said out loud, because on screen there was no cue at
+  // all and "17 causes for 12 rows" reads as a bug.
+  const cue = overlap ? ' (a row can have more than one)' : '';
+  return `Driven by${cue}: ${causes.map((c) => `${c.n} ${CAUSE_LABEL[c.key]}`).join('; ')}.`;
+}
+
 /** The banner's second line, before it is words. `causes` and `missing` are
  *  independently optional: a scan can be entirely readable (causes, no claim),
  *  entirely unreadable with nothing else driving it (claim, no causes), or
- *  both. Each becomes its own `data-part` element. */
+ *  both. Each becomes its own `data-part` element, carrying the data it was
+ *  rendered from, so the tests can pin every part by EQUALITY against that
+ *  data rather than by a rule over its English. */
 type GateSummary = {
-  head: string;
-  causes: string | null;
+  counts: GateCounts;
+  causes: { list: GateCause[]; overlap: boolean } | null;
   missing: { rows: number; claim: MissingReadingClaim } | null;
 };
 
@@ -320,7 +358,7 @@ export default function Step5Page() {
     const pass = gatedRows.filter((g) => g.gate === 'PASS').length;
     const caution = gatedRows.filter((g) => g.gate === 'CAUTION').length;
     const reject = gatedRows.filter((g) => g.gate === 'REJECT').length;
-    const head = `${total} shown — ${pass} PASS, ${caution} CAUTION, ${reject} REJECT.`;
+    const counts: GateCounts = { total, pass, caution, reject };
 
     // TWO DIFFERENT QUESTIONS, and an adversarial round showed why they must not
     // share one list. "What decided the verdict" is the driver; "what could not
@@ -330,14 +368,14 @@ export default function Step5Page() {
     // AT the gate, and a missing reading is CAUTION, which is not REJECT. The
     // banner's whole reason for existing vanished in the case it was built for.
     const count = (f: (g: (typeof gatedRows)[number]) => boolean) => gatedRows.filter(f).length;
-    const causes = [
-      { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'rank'),
-        text: 'on IV rank above its threshold' },
-      { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'absolute'),
-        text: 'on IV above its threshold' },
-      { n: count((g) => g.drivers.event),
-        text: "on an event inside this horizon's window" },
-    ].filter((c) => c.n > 0).sort((a, b) => b.n - a.n);
+    // KEYS, not phrases. The words live in CAUSE_LABEL, which one test pins by
+    // equality -- see THE BANNER'S CLOSED VOCABULARY above for the measurement
+    // that forced this.
+    const causes: GateCause[] = ([
+      { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'rank'), key: 'ivRank' },
+      { n: count((g) => g.drivers.iv && !g.drivers.ivMissing && g.iv.basis === 'absolute'), key: 'ivAbs' },
+      { n: count((g) => g.drivers.event), key: 'event' },
+    ] as GateCause[]).filter((c) => c.n > 0).sort((a, b) => b.n - a.n);
 
     // Counted whether or not it drove the verdict, and deliberately NOT part of
     // the sorted list -- it trails as its own sentence so the sort can never
@@ -346,11 +384,8 @@ export default function Step5Page() {
     // reading costs the candidate nothing.
     const noReading = gateDisabled ? 0 : count((g) => !g.hasIv);
 
-    let causesSentence: string | null = null;
+    let causesPart: { list: GateCause[]; overlap: boolean } | null = null;
     if (causes.length > 0) {
-      // A row can be driven by its volatility AND an event, so these need not
-      // sum to the non-PASS count. Said out loud, because on screen there was no
-      // cue at all and "17 causes for 12 rows" reads as a bug.
       const sum = causes.reduce((a, c) => a + c.n, 0);
       // AGAINST THE ROWS THESE CLAUSES ACTUALLY DESCRIBE, not against every
       // non-PASS row. Round 3: the missing-reading count moved out of `causes`
@@ -365,8 +400,7 @@ export default function Step5Page() {
       // unrelated rows removed the warning. On this app that is the COMMON
       // case, because a true percentile needs IBKR or tastytrade to answer.
       const driven = count((g) => (g.drivers.iv && !g.drivers.ivMissing) || g.drivers.event);
-      const overlap = sum > driven ? ' (a row can have more than one)' : '';
-      causesSentence = `Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`;
+      causesPart = { list: causes, overlap: sum > driven };
     }
     // The claim the head sentence sits above. Every meaning-bearing word of the
     // rendered clause is carried by this object, and the object itself reaches
@@ -389,60 +423,78 @@ export default function Step5Page() {
       } as MissingReadingClaim,
     };
 
-    return { head, causes: causesSentence, missing };
+    return { counts, causes: causesPart, missing };
   }, [gatedRows, gateDisabled]);
 
   return (
     <div className={styles.main}>
-      <div className={styles.stepHeader}>
+      {/* EVERYTHING THIS PAGE SAYS ABOUT THE GATE, IN ONE TESTABLE REGION.
+          Round 1 of the structural loop measured the cost of scoping the
+          contract to the summary line alone: appending "Rows with no volatility
+          reading are graded PASS on the volatility side and may be traded as
+          clean." to the sentence one line ABOVE it shipped the FULL 1724-test
+          suite green, directly contradicting the clause below it. The header is
+          now `data-line` rows of `data-part` sentences, and the tests pin the
+          header's whole text as the sum of its lines -- so a gloss cannot be
+          added anywhere in here without becoming a part that must be pinned. */}
+      <div className={styles.stepHeader} data-testid="step-5-header">
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Volatility + Events</Title>
-        <Text size={13} tone="secondary">
-          {gateSentence}
-          {' '}Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
-          Gate = worst of IV and event proximity.
-        </Text>
-        {/* ONE ELEMENT PER SENTENCE, and the separators are the only text this
-            container holds directly -- so the test can enumerate `[data-part]`
-            and assert the container says exactly the sum of its parts. The
-            joined-string version could not: `parts.push('...safe to treat as a
-            PASS.')` shipped 43/43 green. The single spaces below keep the
-            rendered line byte-identical to that version. */}
-        {gateSummary !== null && (
-          <div data-testid="gate-summary">
-            <span data-part="head">
-              <Text size={12} tone="secondary">{gateSummary.head}</Text>
+        <span data-line="thresholds">
+          <Text size={13} tone="secondary">
+            <span data-part="iv-thresholds">{gateSentence}</span>
+            {' '}
+            <span data-part="event-window">
+              Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
             </span>
-            {gateSummary.causes !== null && (
-              <>
-                {' '}
-                <span data-part="causes">
-                  <Text size={12} tone="secondary">{gateSummary.causes}</Text>
-                </span>
-              </>
-            )}
-            {gateSummary.missing !== null && (
-              <>
-                {' '}
-                {/* THE CLAIM ITSELF, in the DOM. The sentence beside it is this
-                    same claim rendered; the tests read these attributes and
-                    check each one against what the page does, not against a
-                    constant retyped in the test file. */}
-                <span
-                  data-part="missing-reading"
-                  data-claim-rows={gateSummary.missing.rows}
-                  data-claim-side={gateSummary.missing.claim.side}
-                  data-claim-asserted={gateSummary.missing.claim.asserted}
-                  data-claim-denied={gateSummary.missing.claim.denied}
-                  data-claim-combination={gateSummary.missing.claim.combination}
-                >
-                  <Text size={12} tone="secondary">
+            {' '}
+            <span data-part="gate-rule">Gate = worst of IV and event proximity.</span>
+          </Text>
+        </span>
+        {gateSummary !== null && (
+          <span data-line="summary">
+            {/* ONE ELEMENT PER SENTENCE, EACH CARRYING THE DATA IT WAS RENDERED
+                FROM, and the single spaces are the only text these lines hold
+                directly -- so a test can enumerate `[data-part]`, pin each
+                part's words against its own published data, and require the
+                line to say exactly the sum of them. */}
+            <Text size={12} tone="secondary">
+              <span data-part="head" data-counts={JSON.stringify(gateSummary.counts)}>
+                {headSentence(gateSummary.counts)}
+              </span>
+              {gateSummary.causes !== null && (
+                <>
+                  {' '}
+                  <span
+                    data-part="causes"
+                    data-causes={JSON.stringify(gateSummary.causes.list)}
+                    data-overlap={String(gateSummary.causes.overlap)}
+                  >
+                    {causesSentence(gateSummary.causes.list, gateSummary.causes.overlap)}
+                  </span>
+                </>
+              )}
+              {gateSummary.missing !== null && (
+                <>
+                  {' '}
+                  {/* THE CLAIM ITSELF, in the DOM. The sentence beside it is
+                      this same claim rendered; the tests read these attributes
+                      and check each one against what the page does, not against
+                      a constant retyped in the test file. */}
+                  <span
+                    data-part="missing-reading"
+                    data-claim-rows={gateSummary.missing.rows}
+                    data-claim-side={gateSummary.missing.claim.side}
+                    data-claim-asserted={gateSummary.missing.claim.asserted}
+                    data-claim-denied={gateSummary.missing.claim.denied}
+                    data-claim-combination={gateSummary.missing.claim.combination}
+                  >
                     {missingReadingClause(gateSummary.missing.rows, gateSummary.missing.claim)}
-                  </Text>
-                </span>
-              </>
-            )}
-          </div>
+                  </span>
+                </>
+              )}
+            </Text>
+          </span>
         )}
       </div>
 
@@ -502,7 +554,24 @@ export default function Step5Page() {
                 ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}
 
-              {/* THE TWO SIDES OF THE GATE, PUBLISHED SEPARATELY AND KEYED BY
+              {/* THESE ARE PRODUCT DATA, NOT TEST HOOKS, and the distinction
+                  matters because the tests treat them as observations of the
+                  page. What they publish is the gate's own reasoning -- the two
+                  sub-verdicts behind the badge -- which the tooltip beside them
+                  already states in prose. `data-gate` and the badge's `status`
+                  read the SAME variable in the same JSX, and both pinning
+                  `data-gate` and pinning the badge go red on mutation, so the
+                  coupling is not merely asserted here.
+
+                  NOT VERIFIED IN JEST: `display: contents`. jest maps
+                  `*.module.css` to an empty object, so `pageStyles.gateCell` is
+                  `undefined` under test and the class never lands. The layout
+                  reasoning was checked by hand against TableRow.module.css
+                  (no `> *` or `:last-child` rules, so promoting the badge back
+                  to grid item is safe), but a dropped or misspelt class name
+                  would not be caught by anything. e2e is where that belongs.
+
+                  THE TWO SIDES OF THE GATE, PUBLISHED SEPARATELY AND KEYED BY
                   THE CLAIM'S OWN SIDE NAMES. `data-side-${side}` is how a test
                   turns the claim's `side` field into an observation: exactly
                   one side may carry the asserted verdict, and it must be the
