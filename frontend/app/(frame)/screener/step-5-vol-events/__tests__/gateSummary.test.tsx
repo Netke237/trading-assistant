@@ -9,8 +9,9 @@
  * and mean opposite things, and on this app the missing one is the common case
  * (a true percentile exists only when IBKR or tastytrade answered).
  */
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import Step5Page, { missingReadingClause, type MissingReadingClaim } from '../page';
+import { worstStatus, type Status } from '@/lib/status';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
 import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK } from '@/lib/eventThresholdsStore';
@@ -68,10 +69,76 @@ function noIvCandidate(symbol: string, overrides: Partial<TradeCardData> = {}) {
   });
 }
 
-/** The banner element itself. Needed because the per-row tooltip deliberately
- *  shares the banner's wording now, so a bare getByText matches both. */
+/** The whole gate-summary line. BY TEST ID, not by text: the banner is three
+ *  separate elements now, and `getByText` returns only the element DIRECTLY
+ *  holding the matched text -- which would be one sentence out of three.
+ *  (`getNodeText` reads a node's own text children, not its descendants'.)
+ *  Scoping to this container also keeps the per-row tooltip out of the match:
+ *  it deliberately shares the banner's wording, so an unscoped query finds
+ *  two nodes and throws. */
 function banner(): HTMLElement {
-  return screen.getByText(/shown —/);
+  return screen.getByTestId('gate-summary');
+}
+
+/** EVERY sentence the banner is allowed to carry, in render order. A new one
+ *  has to be added here, which is the point: round 3 measured a gloss appended
+ *  to the banner ("In practice these rows are safe to treat as a PASS.")
+ *  shipping green beside a clause that said the opposite. */
+const BANNER_PARTS = ['head', 'causes', 'missing-reading'] as const;
+
+/** The banner's sentences, keyed by `data-part`. */
+function partsOf(): Record<string, HTMLElement> {
+  const out: Record<string, HTMLElement> = {};
+  for (const el of banner().querySelectorAll<HTMLElement>('[data-part]')) {
+    out[el.getAttribute('data-part') as string] = el;
+  }
+  return out;
+}
+
+/** The claim the page is MAKING, read off the DOM rather than retyped here.
+ *  Null when the banner carries no missing-reading sentence at all. */
+function claimOf(): { rows: number; claim: MissingReadingClaim } | null {
+  const el = banner().querySelector<HTMLElement>('[data-part="missing-reading"]');
+  if (el === null) return null;
+  const read = (name: string): string => {
+    const v = el.getAttribute(`data-claim-${name}`);
+    // A field the page stops rendering must fail loudly here, not arrive as
+    // `undefined` and quietly satisfy a comparison with another `undefined`.
+    if (v === null) throw new Error(`the banner publishes no data-claim-${name}`);
+    return v;
+  };
+  return {
+    rows: Number(read('rows')),
+    claim: {
+      side:        read('side'),
+      asserted:    read('asserted'),
+      denied:      read('denied'),
+      combination: read('combination'),
+    } as MissingReadingClaim,
+  };
+}
+
+/** Both sides of the gate, named exactly as the claim's `side` field names
+ *  them -- so a test can turn that field into an observation with no decode
+ *  table standing between the two. */
+const SIDES = ['volatility', 'event'] as const;
+
+function rowOf(symbol: string): HTMLElement {
+  const el = document.querySelector<HTMLElement>(`[data-row="${symbol}"]`);
+  if (el === null) throw new Error(`no rendered row for ${symbol}`);
+  return el;
+}
+
+function sideVerdict(symbol: string, side: MissingReadingClaim['side']): Status {
+  const v = rowOf(symbol).getAttribute(`data-side-${side}`);
+  if (v === null) throw new Error(`row ${symbol} publishes no ${side} sub-verdict`);
+  return v as Status;
+}
+
+function gateOf(symbol: string): Status {
+  const v = rowOf(symbol).getAttribute('data-gate');
+  if (v === null) throw new Error(`row ${symbol} publishes no gate verdict`);
+  return v as Status;
 }
 
 afterEach(() => {
@@ -106,10 +173,11 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
     expect(banner().textContent).toMatch(/1 of them has no volatility reading at all/);
     // The clause must ANSWER the question ("why CAUTION?"), so the sub-verdict
     // has to be NAMED. Which word, on which side, and in which direction the
-    // gate combines are all the claim's job now, asserted exactly on the line
-    // below -- so this stays a presence check and pins no phrasing.
-    expect(tailOf(banner().textContent ?? '')).toMatch(/CAUTION/);
-    expectMissingReadingClause(banner().textContent ?? '', 1);
+    // gate combines are the claim's job now -- published as attributes and
+    // checked against behaviour at the foot of this file -- so this stays a
+    // presence check on the sentence and pins no phrasing.
+    expect(partsOf()['missing-reading'].textContent).toMatch(/CAUTION/);
+    expectMissingReadingClaim(1);
   });
 
   it('does NOT blame a missing reading when the reading exists and failed its threshold', () => {
@@ -128,7 +196,7 @@ describe('Step 5 banner — the gate summary says WHY, not just what', () => {
       makeCandidate('BBB', { nextEventDays: 3 }),             // REJECT, event inside 21d
     ]);
     render(<Step5Page />);
-    const summary = screen.getByText(/2 shown —/);
+    const summary = banner();
     expect(summary.textContent).toMatch(/1 of them has no volatility reading at all/);
     expect(summary.textContent).toMatch(/1 on an event inside this horizon's window/);
   });
@@ -330,89 +398,104 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
  *      string was built as designed, never that it was COHERENT with the head
  *      beside it. It passed 406/406 over a self-contradicting banner.
  *
- *  (2) A WORDING CONTRACT on the tail. Called that, not "the invariant",
- *      because it is a set of mechanical rules over English and cannot prove
- *      the copy is true -- it can only kill the shapes that have actually gone
- *      wrong. Where it is a literal, it says so.
+ *  (2) A STRUCTURAL CONTRACT on the rest of the line. NOT a wording contract:
+ *      four rounds of mechanical rules over English failed, and round 4
+ *      measured the last of them admitting false copy and rejecting true copy
+ *      at once. The banner is now enumerated parts and the missing-reading
+ *      part carries its claim as `data-claim-*` attributes, so these tests
+ *      assert what the page CLAIMS and never parse what it SAYS. Each field of
+ *      that claim is tied to rendered behaviour at the foot of this file.
  * ======================================================================== */
 
-/** Split the banner at its head sentence (the one carrying the gate counts). */
-function splitBanner(text: string): { head: string; tail: string } {
-  const end = text.indexOf('.');
-  return end < 0
-    ? { head: text, tail: '' }
-    : { head: text.slice(0, end + 1), tail: text.slice(end + 1).trim() };
-}
-const tailOf = (text: string) => splitBanner(text).tail;
-
-/* ── THE CONTRACT, ROUND 2: STOP GRADING ENGLISH ─────────────────────────
- * ROUND 2 DELETED THE REGEX RULES ENTIRELY. Round 1 replaced three literal
- * lists with four "positive" rules and the very next round broke four of them
- * with a full green suite: "on the event side" (wrong side), "so it can be
- * easier still" (a worst-of getting easier), "In the worst case, open the
- * column" (the reconciliation sentence deleted, one list word left behind to
- * satisfy the rule), and "not never PASS" (double negation read as an
- * assertion). It also REJECTED correct copy -- "rows with no reading count
- * CAUTION on the IV side, never PASS there" -- because the three-word negation
- * window cannot tell a negator that negates the verdict from one that merely
- * sits near it, and in this sentence family the subject IS "no reading".
+/** THE STRUCTURAL CONTRACT ON THE BANNER. No English is graded here at all.
  *
- * Four consecutive rounds faulted that one class. The rules were not the
- * defect; grading prose with regexes was. So the meaning moved INTO DATA
- * (page.tsx's MissingReadingClaim) and the clause is now generated from it.
- * This file no longer inspects English at all: it computes the claim the page
- * OUGHT to be making, renders the clause from that claim with the page's own
- * builder, and demands the banner contain exactly that.
+ *  THE CONTRACT IT REPLACES, AND WHY IT HAD TO GO. Four rounds tried to prove
+ *  the prose correct: literal lists, then four "positive" regex rules, then a
+ *  data-driven clause compared with `toContain`, then that plus a three-token
+ *  "no verdict word may appear outside the clause" rule. Round 4 measured the
+ *  last one ADMITTING false copy -- "safe to trade as if they were clean" names
+ *  no verdict word, so it passed while contradicting the clause one sentence
+ *  later -- and REJECTING true copy, 11 red on a statement true of the page,
+ *  AT THE SAME TIME. A rule that does both is not a strict rule; it is the
+ *  wrong shape.
  *
- * WHY THAT IS NOT JUST A LITERAL PIN BY ANOTHER NAME: the builder is shared,
- * so an edit to the SKELETON moves expectation and actual together. The
- * skeleton is therefore pinned separately, by one exact-string test, and a
- * second test proves no verdict word is hardcoded inside the builder. Between
- * them: reword freely, and you cannot change what it says.
- */
+ *  What is pinned instead:
+ *    1. the banner says exactly the sum of its enumerated parts, so a sentence
+ *       cannot be appended and no bare text node can sit between them;
+ *    2. the claim is read off the DOM and its row count compared NUMERICALLY;
+ *    3. the sentence EQUALS that same claim rendered -- not `toContain` it.
+ *  What the claim's four fields MEAN is pinned separately, against behaviour,
+ *  in "every field of the claim is answerable to the page" at the foot of this
+ *  file. */
+function expectMissingReadingClaim(rows: number) {
+  const parts = partsOf();
+  expect(parts.head).toBeDefined();
+  // THE COUNTS AND NOTHING ELSE, anchored at both ends. The case table pins the
+  // head's exact text, but only where it declares one; this shape holds for
+  // every caller, so a gloss appended to the head cannot survive anywhere.
+  expect(parts.head.textContent).toMatch(
+    /^\d+ shown \u2014 \d+ PASS, \d+ CAUTION, \d+ REJECT\.$/,
+  );
 
-/** What page.tsx must claim for an unreadable row. Derived, not copied: the
- *  clause renders only when the horizon gates on volatility (page.tsx forces
- *  the count to 0 otherwise), and there an unreadable row is graded
- *  `gateDisabled ? 'PASS' : 'CAUTION'` -- so CAUTION, never PASS -- while the
- *  gate itself is worstStatus(iv, event), which can only go worse. */
-const EXPECTED_CLAIM: MissingReadingClaim = {
-  side:        'volatility',
-  asserted:    'CAUTION',
-  denied:      'PASS',
-  combination: 'worse',
-};
-
-/** The banner must carry EXACTLY the clause the expected claim generates, or
- *  none at all when nothing is unreadable. No English is graded here. */
-function expectMissingReadingClause(text: string, noReadingRows: number) {
-  const { head, tail } = splitBanner(text);
-  expect(head).toMatch(/shown —/);
-
-  /* THE CLAUSE IS THE ONLY PLACE THE TAIL MAY NAME A VERDICT, and that second
-   * half is what round 3 caught missing. `toContain` pinned the clause
-   * substring and left every OTHER sentence in the tail unconstrained, so
-   * appending `parts.push('In practice these rows are safe to treat as a
-   * PASS.')` to page.tsx shipped 43/43 GREEN -- the banner contradicting, one
-   * sentence later, what the clause had just said and what the head counts.
-   * Round 1's rules would each have caught that; round 2 deleted them and did
-   * not say so.
+  /* THE BANNER IS EXACTLY THESE SENTENCES AND NOTHING ELSE. Round 3 measured
+   * the hole: under a `toContain` pin, appending `parts.push('In practice these
+   * rows are safe to treat as a PASS.')` to page.tsx shipped 43/43 GREEN -- the
+   * banner contradicting, one sentence later, what the clause had just said and
+   * what the head counts.
    *
-   * This rule is about WHERE a verdict word may appear, not how it is worded,
-   * so it does not reintroduce the prose-grading the rounds kept faulting. The
-   * head owns the counts; the generated clause owns the sub-verdict; nothing
-   * else in the tail may name either. The causes sentence names none today. */
-  const verdictsIn = (x: string) => x.match(/\b(PASS|CAUTION|REJECT)\b/g) ?? [];
+   * TWO ASSERTIONS, AND THE FIRST DRAFT OF THIS HELPER HAD ONLY THE SECOND.
+   * Measured while writing it: with the sum-of-parts line alone, rendering the
+   * same "safe to treat as a PASS" gloss as its own `data-part` shipped 51/51
+   * green -- because an extra sentence that is a part still sums. So the part
+   * NAMES are whitelisted and ordered first, and only then does the container
+   * have to say the sum of them. Between the two: a new sentence must be a part
+   * (or the sum fails on the stray text) and no part but these three may exist
+   * (or the whitelist fails). The single space is the only separator the page
+   * renders. */
+  const ordered = [...banner().querySelectorAll<HTMLElement>('[data-part]')];
+  const names = ordered.map((el) => el.getAttribute('data-part'));
+  // `filter` rather than a membership check so this one line pins the whitelist
+  // AND the order: an unknown part is dropped from the expectation and an
+  // out-of-order one is reordered, and either way the comparison goes red.
+  expect(names).toEqual(BANNER_PARTS.filter((n) => names.includes(n)));
 
-  if (noReadingRows === 0) {
-    expect(tail).not.toContain('no volatility reading at all');
-    expect(verdictsIn(tail)).toEqual([]);
+  expect(banner().textContent).toBe(ordered.map((el) => el.textContent).join(' '));
+
+  /* AND THE CAUSES SENTENCE IS ONE SENTENCE. Without this the gloss simply
+   * moves inside an existing part. The other two are already closed to that:
+   * the head is shape-pinned above and the missing-reading part is pinned by
+   * EQUALITY below. The causes sentence is the one the tests only ever match by
+   * fragment, so text appended to IT would survive everything else here. It
+   * ends at its only full stop; an appended sentence puts one in the middle. The
+   * rule is SHAPE only -- one sentence -- so the wording stays free to change.
+   * (The missing-reading clause legitimately has TWO sentences, which is why
+   * this rule is scoped to causes rather than applied to every part.) */
+  if (parts.causes !== undefined) {
+    expect(parts.causes.textContent).toMatch(/^[^.]*\.$/);
+  }
+
+  const claimed = claimOf();
+
+  if (rows === 0) {
+    expect(claimed).toBeNull();
+    expect(banner().textContent).not.toContain('no volatility reading at all');
     return;
   }
 
-  const clause = missingReadingClause(noReadingRows, EXPECTED_CLAIM);
-  expect(tail).toContain(clause);
-  expect(verdictsIn(tail.split(clause).join(' '))).toEqual([]);
+  expect(claimed).not.toBeNull();
+  /* NUMERIC, so there is no substring left to anchor. The previous pin was a
+   * regex over the sentence and needed a `(?<!\\d)` lookbehind, because
+   * unanchored, "12 of them have ..." CONTAINS "2 of them have ..." -- and that
+   * lookbehind lived in one parameterised loop rather than in this helper, so
+   * every other caller was unprotected. `Number` has no such failure mode. */
+  expect(claimed!.rows).toBe(rows);
+
+  /* THE SENTENCE IS THE CLAIM RENDERED, AND NOTHING ELSE. Equality, against the
+   * claim the page published beside it -- so the element cannot carry one
+   * meaning in its attributes and a different one in its words. */
+  expect(parts['missing-reading'].textContent).toBe(
+    missingReadingClause(claimed!.rows, claimed!.claim),
+  );
 }
 
 /** Thresholds for ALL THREE horizons, so nothing silently falls through to the
@@ -539,6 +622,29 @@ describe('the banner never counts two different things in one breath', () => {
       head: '2 shown — 0 PASS, 1 CAUTION, 1 REJECT.', noReadingRows: 0,
     },
     {
+      // ROUND 4 FINDING: every case here counted 1 or 2 unreadable rows, and the
+      // only pins above n=2 were exact-string tests of the BUILDER. n >= 4 is
+      // this app's real case -- page.tsx's own comments describe "3 of 12" and
+      // "11 unreadable rows" -- and it had never been rendered through the page.
+      name: 'FOUR unreadable rows beside a readable PASS — the app\'s real shape',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [
+        rankCandidate('AAA', 10),
+        noIvCandidate('B1'), noIvCandidate('B2'), noIvCandidate('B3'), noIvCandidate('B4'),
+      ],
+      // rank 10 <= 34 -> PASS, no event -> PASS | four unreadable -> CAUTION each
+      head: '5 shown — 1 PASS, 4 CAUTION, 0 REJECT.', noReadingRows: 4,
+    },
+    {
+      // TWELVE, because "12 of them have ..." CONTAINS "2 of them have ..." and
+      // the count assertion used to be a substring match. It is numeric now, and
+      // this case is what proves the two-digit path is actually exercised.
+      name: 'TWELVE unreadable rows — a two-digit count, which no case reached',
+      horizon: 'Swing (5-15d)',
+      candidates: () => Array.from({ length: 12 }, (_, i) => noIvCandidate(`U${i}`)),
+      head: '12 shown — 0 PASS, 12 CAUTION, 0 REJECT.', noReadingRows: 12,
+    },
+    {
       name: 'IV rank exactly ON the Swing CAUTION boundary — 55 is CAUTION, not REJECT',
       horizon: 'Swing (5-15d)',
       candidates: () => [rankCandidate('AAA', 55), noIvCandidate('BBB')],
@@ -551,25 +657,11 @@ describe('the banner never counts two different things in one breath', () => {
     it(`stays coherent with its own head — ${c.name}`, () => {
       setupHorizon(c.candidates(), c.horizon);
       render(<Step5Page />);
-      const text = banner().textContent ?? '';
-      const { head, tail } = splitBanner(text);
 
-      // Hand-computed above, asserted exactly.
-      expect(head).toBe(c.head);
-      // DIGIT-ANCHORED. Unanchored, "12 of them have ..." CONTAINS
-      // "2 of them have ...", so a banner counting 12 unreadable rows satisfied
-      // an expectation of 2 -- on the one assertion carrying this whole
-      // feature's headline claim. NOT anchored at ^: the tail legitimately
-      // opens with the "Driven by: ..." causes sentence, so the count clause is
-      // not always first.
-      if (c.noReadingRows > 0) {
-        expect(tail).toMatch(
-          new RegExp(`(?<!\\d)${c.noReadingRows} of them ha(s|ve) no volatility reading at all\\b`),
-        );
-      } else {
-        expect(tail).not.toMatch(/no volatility reading at all/);
-      }
-      expectMissingReadingClause(text, c.noReadingRows);
+      // Hand-computed above, asserted exactly, against the head's OWN element
+      // rather than a split of the whole line on its first full stop.
+      expect(partsOf().head.textContent).toBe(c.head);
+      expectMissingReadingClaim(c.noReadingRows);
     });
   }
 
@@ -579,14 +671,14 @@ describe('the banner never counts two different things in one breath', () => {
     // reconcile, and claiming one would be the same defect in reverse.
     setupHorizon([noIvCandidate('AAA')], 'Intraday (0-2d)');
     render(<Step5Page />);
-    const text = banner().textContent ?? '';
-    expect(splitBanner(text).head).toBe('1 shown — 1 PASS, 0 CAUTION, 0 REJECT.');
-    expect(text).not.toMatch(/no volatility reading at all/);
+    expect(partsOf().head.textContent).toBe('1 shown — 1 PASS, 0 CAUTION, 0 REJECT.');
     // ZERO, and this call is now meaningful rather than vacuous. Under the old
     // contract a clause-less banner hit `if (tail === '') return;` and asserted
     // nothing -- while a clause-less banner WITH a "Driven by:" tail failed R3
     // outright, because R3 demanded asserts === ['CAUTION'] unconditionally.
-    expectMissingReadingClause(text, 0);
+    // It also proves the ABSENCE structurally now: no missing-reading part at
+    // all, not merely a phrase the banner happens not to contain.
+    expectMissingReadingClaim(0);
   });
 });
 
@@ -610,19 +702,35 @@ describe('the clause builder carries the meaning, so the prose cannot drift from
     );
   });
 
-  it('renders the agreed skeleton in the PLURAL too', () => {
-    // ROUND 3 FINDING: the guard pinned n=1 with the production claim and n=2
-    // with an absurd one, so nothing pinned the production instantiation for
-    // n >= 2. A conditional swapping asserted/denied at n >= 3 shipped 43/43
-    // green -- and n >= 3 is the app's real case; page.tsx's own comments
-    // describe "3 of 12" and "11 unreadable rows".
-    expect(missingReadingClause(3, {
-      side: 'volatility', asserted: 'CAUTION', denied: 'PASS', combination: 'worse',
-    })).toBe(
-      '3 of them have no volatility reading at all — graded CAUTION on the volatility ' +
-      'side alone, never PASS there. The gate verdict above is the worse of that and ' +
-      'the event window, so it can be lower still.',
-    );
+  it('changes NOTHING but the count and its verb as n grows', () => {
+    /* ROUND 3 FOUND THE WALL AND ROUND 4 FOUND THE PATCH FOR IT WAS ALSO A
+     * WALL. Originally n=1 was pinned with the production claim and n=2 with an
+     * absurd one, so nothing pinned the production instantiation for n >= 2 and
+     * a conditional swapping asserted/denied at n >= 3 shipped 43/43 green. The
+     * patch was a second exact-string pin at n=3 -- which merely moved the wall
+     * to n >= 4, and n >= 4 is this app's REAL case: page.tsx's own comments
+     * describe "3 of 12" and "11 unreadable rows".
+     *
+     * A PROPERTY, NOT ANOTHER SAMPLE, so there is no n left to hide behind: the
+     * output at every n must be the n=1 output with only the leading count and
+     * its verb substituted. Run over two unrelated claims, so it pins the
+     * builder's SHAPE and not any particular claim's words. */
+    const stripCount = (x: string) => x.replace(/^\d+ of them (has|have) /, '');
+
+    for (const claim of [
+      { side: 'volatility', asserted: 'CAUTION', denied: 'PASS',    combination: 'worse'  },
+      { side: 'event',      asserted: 'REJECT',  denied: 'CAUTION', combination: 'better' },
+    ] as MissingReadingClaim[]) {
+      const reference = stripCount(missingReadingClause(1, claim));
+      // The strip really fired; otherwise every comparison below is vacuous.
+      expect(reference).not.toBe(missingReadingClause(1, claim));
+
+      for (const n of [1, 2, 3, 4, 5, 11, 12, 99]) {
+        const rendered = missingReadingClause(n, claim);
+        expect(rendered.startsWith(`${n} of them ${n === 1 ? 'has' : 'have'} `)).toBe(true);
+        expect(stripCount(rendered)).toBe(reference);
+      }
+    }
   });
 
   it('interpolates every meaning-bearing word from the claim, hardcoding none', () => {
@@ -672,28 +780,133 @@ describe('the fixture is actually read, and Position has its own IV band', () =>
 });
 
 
-describe('EXPECTED_CLAIM is answerable to the page, not just to the page\'s source', () => {
-  it('names the verdict the head actually counts for an unreadable row', () => {
-    /* ROUND 3 FINDING, AND IT FALSIFIED THIS FILE'S OWN DOCSTRING. EXPECTED_CLAIM
-     * was documented "Derived, not copied" and was copied -- a second hand-written
-     * copy of page.tsx's call site, tied to no observable behaviour. Measured:
-     * swapping asserted/denied in BOTH places (the "just fix the constant to
-     * match" move) shipped 43/43 green and rendered "graded PASS on the volatility
-     * side alone, never CAUTION there" -- verbatim the first entry in page.tsx's
-     * own list of measured past failures.
-     *
-     * ONE unreadable row, no event: the event side is PASS, so the gate verdict
-     * IS the volatility sub-verdict. The head therefore counts this row under the
-     * claim's ASSERTED verdict and not under its DENIED one -- which ties both
-     * fields to something the page renders rather than to something a human
-     * retyped. */
+describe('every field of the claim is answerable to the page, not to a constant', () => {
+  /* WHY THIS DESCRIBE EXISTS, AND IT IS MEASURED. Until the claim became
+   * structure, this file held EXPECTED_CLAIM -- a second hand-written copy of
+   * page.tsx's call site, documented "Derived, not copied" and copied. Round 3
+   * measured what that bought for `asserted`/`denied`: swapping them in BOTH
+   * places, the "just fix the constant to match" move, shipped 43/43 green and
+   * rendered "graded PASS on the volatility side alone, never CAUTION there" --
+   * verbatim the first entry in page.tsx's own list of measured past failures.
+   * Round 4 measured the same for `side` and for `combination`, 45/45 green
+   * each, after a head cross-check had been added for the first two.
+   *
+   * THERE IS NO COPY HERE ANY MORE. Each test reads the claim OFF THE DOM and
+   * checks one field against something the page renders under a fixture built
+   * to discriminate that field. The hand-written literals below are fixture
+   * inputs and expected PAGE behaviour, never the claim. */
+
+  /** The fixture the clause describes, on a horizon that DOES gate on
+   *  volatility: one row, no reading, and no event at all -- so the event side
+   *  cannot be what graded it. Returns the claim the page made. */
+  function unreadableRowNoEvent(): MissingReadingClaim {
     setupHorizon([noIvCandidate('AAA')], 'Swing (5-15d)');
     render(<Step5Page />);
-    const head = splitBanner(banner().textContent ?? '').head;
+    const claimed = claimOf();
+    expect(claimed).not.toBeNull();
+    return claimed!.claim;
+  }
+
+  it('names the SIDE that actually graded the row, and only that side', () => {
+    const claim = unreadableRowNoEvent();
+    // The fixture discriminates: the two sides really do disagree here, so
+    // `graded` below cannot come out holding both of them.
+    expect(sideVerdict('AAA', 'volatility')).not.toBe(sideVerdict('AAA', 'event'));
+    // ENUMERATED over both sides rather than asserted on the named one, so
+    // naming the wrong side fails instead of merely going unchecked.
+    const graded = SIDES.filter((side) => sideVerdict('AAA', side) === claim.asserted);
+    expect(graded).toEqual([claim.side]);
+  });
+
+  it('ASSERTS the verdict that side gives, and the head counts the row under it', () => {
+    const claim = unreadableRowNoEvent();
+    expect(sideVerdict('AAA', claim.side)).toBe(claim.asserted);
+    /* AND THE HEAD AGREES. The event side is PASS here, so the gate verdict IS
+     * the volatility sub-verdict and the head must count this one row under the
+     * claim's asserted verdict -- which ties the field to a number the user can
+     * see, not only to an attribute beside it. */
+    const head = partsOf().head.textContent ?? '';
     const countOf = (verdict: string) =>
       Number(new RegExp(`(\\d+) ${verdict}\\b`).exec(head)?.[1] ?? NaN);
+    expect(countOf(claim.asserted)).toBe(1);
+    expect(countOf(claim.denied)).toBe(0);
+  });
 
-    expect(countOf(EXPECTED_CLAIM.asserted)).toBe(1);
-    expect(countOf(EXPECTED_CLAIM.denied)).toBe(0);
+  it('DENIES the verdict the same row gets where volatility does not gate', () => {
+    /* THE ROUND-4 HOLE, CLOSED. The head cross-check above pins `denied` only to
+     * "a verdict this row did not get", and there are two of those -- so
+     * changing denied PASS -> REJECT shipped green.
+     *
+     * `denied` is not "some other verdict". It is the OTHER ARM of the single
+     * ternary that grades an unreadable row, `gateDisabled ? 'PASS' :
+     * 'CAUTION'`. So render the SAME candidate on Intraday, where the horizon
+     * does not gate on volatility, and read that arm off the page instead of
+     * off a constant. */
+    const claim = unreadableRowNoEvent();
+    cleanup();   // or both renders are in the document and rowOf takes the first
+
+    setupHorizon([noIvCandidate('AAA')], 'Intraday (0-2d)');
+    render(<Step5Page />);
+    expect(sideVerdict('AAA', claim.side)).toBe(claim.denied);
+    // ...and the clause is suppressed there, so the page never asserts, on the
+    // horizon where it is true, the verdict it denies on the horizon where the
+    // clause renders.
+    expect(claimOf()).toBeNull();
+  });
+
+  it('COMBINES the two sides the way the rendered gate actually combines them', () => {
+    /* Round 4: swapping `combination` in page.tsx and in the test's copy of the
+     * claim shipped 45/45 green, because nothing ever compared the field to a
+     * gate. It does now, on the only kind of fixture where `worse` and `better`
+     * predict DIFFERENT gates -- one where the two sides disagree. Unreadable
+     * (volatility CAUTION) plus an event 3 days out, inside Swing's reject
+     * window of 21 (event REJECT):  worse -> REJECT,  better -> CAUTION. */
+    setupHorizon([noIvCandidate('AAA', { nextEventDays: 3 })], 'Swing (5-15d)');
+    render(<Step5Page />);
+    const claimed = claimOf();
+    expect(claimed).not.toBeNull();
+
+    const vol = sideVerdict('AAA', 'volatility');
+    const ev  = sideVerdict('AAA', 'event');
+    expect(vol).not.toBe(ev);                       // the fixture discriminates
+
+    const worse  = worstStatus(vol, ev);
+    const better = worse === vol ? ev : vol;        // defined because the two differ
+    expect(worse).not.toBe(better);                 // ...so the two answers differ too
+
+    expect(gateOf('AAA')).toBe(claimed!.claim.combination === 'worse' ? worse : better);
+  });
+
+  it('makes the SAME claim about every scan, whatever the rows look like', () => {
+    /* The four ties above each use one purpose-built fixture. Nothing in them
+     * stops the page emitting a claim that happens to fit each fixture and
+     * differs between them -- which would be a per-scan opinion, not the fixed
+     * statement about how this gate works that the sentence presents itself as.
+     * Byte-identical across three unrelated shapes. */
+    const shapes: Array<[string, () => TradeCardData[], string]> = [
+      ['one unreadable row, nothing else',
+        () => [noIvCandidate('AAA')], 'Swing (5-15d)'],
+      ['unreadable rows REJECTed by events',
+        () => [noIvCandidate('AAA', { nextEventDays: 3 }), noIvCandidate('BBB', { nextEventDays: 3 })],
+        'Swing (5-15d)'],
+      ['unreadable beside readable, Position',
+        () => [rankCandidate('AAA', 50), noIvCandidate('BBB', { nextEventDays: 25 })],
+        'Position (1-3m)'],
+    ];
+
+    const seen: Array<[string, MissingReadingClaim]> = [];
+    for (const [name, candidates, horizon] of shapes) {
+      cleanup();
+      setupHorizon(candidates(), horizon);
+      render(<Step5Page />);
+      const claimed = claimOf();
+      expect(claimed).not.toBeNull();
+      seen.push([name, claimed!.claim]);
+    }
+
+    // Named in the comparison so a failure says WHICH shape drifted.
+    for (const [name, claim] of seen.slice(1)) {
+      expect([name, claim]).toEqual([name, seen[0][1]]);
+    }
   });
 });

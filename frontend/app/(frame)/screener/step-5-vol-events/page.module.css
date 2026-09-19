@@ -50,3 +50,10 @@
 .ivFill_PASS    { background: var(--pass);    }
 .ivFill_CAUTION { background: var(--caution); }
 .ivFill_REJECT  { background: var(--reject);  }
+
+/* Carries the row's two sub-verdicts as data attributes without becoming a grid
+   item itself — `display: contents` keeps the StatusBadge the direct child of
+   the row grid, so the GATE column measures exactly as it did before. */
+.gateCell {
+  display: contents;
+}

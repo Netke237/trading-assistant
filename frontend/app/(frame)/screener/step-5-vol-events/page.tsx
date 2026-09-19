@@ -22,23 +22,41 @@ import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis'
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 
-/* ── THE MISSING-READING CLAUSE ───────────────────────────────────────────
- * THE MEANING LIVES IN THE DATA, NOT IN THE PROSE, and that is the whole
- * point of this shape. Four consecutive adversarial rounds faulted the same
- * class: the clause was free English, its tests were regex rules over that
- * English, and every round the rules were one synonym behind. Measured, each
- * shipping a full green suite:
+/* ── THE MISSING-READING CLAIM ──────────────────────────────────
+ * THE MEANING IS RENDERED AS DATA. The four fields below go into the DOM as
+ * `data-claim-*` attributes on the element that carries the sentence, and the
+ * sentence is that same claim run through `missingReadingClause`. The tests
+ * read the attributes; the English is a rendering of them, not the carrier.
+ *
+ * WHY, AND THE EVIDENCE IS TEN ROUNDS DEEP. Four consecutive adversarial
+ * rounds tried to prove the PROSE correct and each closed one hole while
+ * opening another: regex whitelists, then "positive" regex rules, then a
+ * data-driven clause compared with `toContain`, then that plus a three-token
+ * "no verdict word outside the clause" rule. Round 4 measured that last rule
+ * ADMITTING false copy ("safe to trade as if they were clean", green) and
+ * REJECTING true copy (11 red on a statement true of the page) at the same
+ * time. Each of these shipped a full green suite:
  *   "graded PASS ... never CAUTION"      the semantic INVERSE of the gate
  *   "on the event side"                  the wrong side entirely
  *   "so it can be easier still"          a worst-of that gets easier
  *   "In the worst case, open the column" the reconciliation sentence deleted,
  *                                        with one list word left behind
- * Every verdict word and both direction words below are INTERPOLATED from the
- * claim. A reworded clause can therefore say the same thing differently, but
- * it cannot say something different -- to do that you must change the claim,
- * and the claim is what the test computes independently. The skeleton itself
- * is pinned by one exact-string test, which is the only place a literal
- * belongs.
+ * The rules were not the defect; grading English with regexes was.
+ *
+ * WHAT REPLACES THEM. Every field below is answerable to something the page
+ * RENDERS, not to a constant a human retyped in the test file:
+ *   side        → each row publishes `data-side-volatility` and
+ *                 `data-side-event`; exactly one of them equals `asserted` on
+ *                 the row the clause describes, and it must be the one named.
+ *   asserted    → that same attribute, plus the head's count for the verdict.
+ *   denied      → the OTHER branch of the same ternary, observed by rendering
+ *                 the same row on a horizon where volatility does not gate.
+ *   combination → a row whose two sides genuinely disagree: `worse` and
+ *                 `better` predict different gates, and only one is rendered.
+ * A reworded clause can therefore say the same thing differently, but it
+ * cannot say something different -- to do that you must change the claim, and
+ * every field of the claim is pinned to behaviour. The skeleton itself is
+ * pinned by one exact-string test, which is the only place a literal belongs.
  */
 export type MissingReadingClaim = {
   /** Which side of the gate graded the row. */
@@ -60,6 +78,16 @@ const COMBINATION_LABEL = {
   worse:  { of: 'worse',  travel: 'lower'  },
   better: { of: 'better', travel: 'higher' },
 } as const;
+
+/** The banner's second line, before it is words. `causes` and `missing` are
+ *  independently optional: a scan can be entirely readable (causes, no claim),
+ *  entirely unreadable with nothing else driving it (claim, no causes), or
+ *  both. Each becomes its own `data-part` element. */
+type GateSummary = {
+  head: string;
+  causes: string | null;
+  missing: { rows: number; claim: MissingReadingClaim } | null;
+};
 
 export function missingReadingClause(n: number, claim: MissingReadingClaim): string {
   const { of, travel } = COMBINATION_LABEL[claim.combination];
@@ -274,13 +302,21 @@ export default function Step5Page() {
     :                             'No volatility reading for these candidates.';
 
 
-  // The banner's second sentence: what the badges below actually say, and why.
+  // The banner's second line: what the badges below actually say, and why.
   // Counting rather than prose because the honest answer is usually a mix, and
   // because "3 of 12 have no volatility reading" is the sentence that stops a
   // user reading a data gap as a verdict on the trade.
-  const gateSummary = useMemo(() => {
+  //
+  // A STRUCTURE, NOT A JOINED STRING. Each sentence is rendered as its own
+  // `data-part` element and the missing-reading one carries its claim as
+  // `data-claim-*` attributes, so a test can assert what the banner CLAIMS
+  // without parsing what it SAYS -- and so an extra sentence cannot be
+  // appended without adding a part the composition check enumerates. Round 3
+  // measured the alternative: appending "In practice these rows are safe to
+  // treat as a PASS." to a `parts.push` list shipped 43/43 green.
+  const gateSummary = useMemo<GateSummary | null>(() => {
     const total = gatedRows.length;
-    if (total === 0) return '';
+    if (total === 0) return null;
     const pass = gatedRows.filter((g) => g.gate === 'PASS').length;
     const caution = gatedRows.filter((g) => g.gate === 'CAUTION').length;
     const reject = gatedRows.filter((g) => g.gate === 'REJECT').length;
@@ -310,7 +346,7 @@ export default function Step5Page() {
     // reading costs the candidate nothing.
     const noReading = gateDisabled ? 0 : count((g) => !g.hasIv);
 
-    const parts = [head];
+    let causesSentence: string | null = null;
     if (causes.length > 0) {
       // A row can be driven by its volatility AND an event, so these need not
       // sum to the non-PASS count. Said out loud, because on screen there was no
@@ -330,24 +366,30 @@ export default function Step5Page() {
       // case, because a true percentile needs IBKR or tastytrade to answer.
       const driven = count((g) => (g.drivers.iv && !g.drivers.ivMissing) || g.drivers.event);
       const overlap = sum > driven ? ' (a row can have more than one)' : '';
-      parts.push(`Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`);
+      causesSentence = `Driven by${overlap}: ${causes.map((c) => `${c.n} ${c.text}`).join('; ')}.`;
     }
-    if (noReading > 0) {
-      // The clause the head sentence sits above. Every meaning-bearing word is
-      // carried by this object; see missingReadingClause above for why.
-      //   asserted/denied: page.tsx grades an unreadable row `gateDisabled ?
-      //     'PASS' : 'CAUTION'`, and this clause only renders when the horizon
-      //     DOES gate on volatility (noReading is forced to 0 otherwise), so on
-      //     that side it is CAUTION and never PASS.
-      //   combination: the gate is worstStatus(iv, event) -- worse, never better.
-      parts.push(missingReadingClause(noReading, {
+    // The claim the head sentence sits above. Every meaning-bearing word of the
+    // rendered clause is carried by this object, and the object itself reaches
+    // the DOM; see THE MISSING-READING CLAIM above for why.
+    //   side:     the unreadable row's verdict is set on the IV branch below
+    //             (`hasIv ? ... : gateDisabled ? 'PASS' : 'CAUTION'`), and the
+    //             event branch never sees `hasIv` at all.
+    //   asserted/denied: those are the two arms of that one ternary. This
+    //             clause renders only where the horizon DOES gate on volatility
+    //             (noReading is forced to 0 otherwise), so the live arm is
+    //             CAUTION and PASS is the arm this row cannot reach.
+    //   combination: the gate is worstStatus(iv, event) -- worse, never better.
+    const missing = noReading === 0 ? null : {
+      rows: noReading,
+      claim: {
         side:        'volatility',
         asserted:    'CAUTION',
         denied:      'PASS',
         combination: 'worse',
-      }));
-    }
-    return parts.length === 1 ? head : parts.join(' ');
+      } as MissingReadingClaim,
+    };
+
+    return { head, causes: causesSentence, missing };
   }, [gatedRows, gateDisabled]);
 
   return (
@@ -360,8 +402,47 @@ export default function Step5Page() {
           {' '}Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
-        {gateSummary !== '' && (
-          <Text size={12} tone="secondary">{gateSummary}</Text>
+        {/* ONE ELEMENT PER SENTENCE, and the separators are the only text this
+            container holds directly -- so the test can enumerate `[data-part]`
+            and assert the container says exactly the sum of its parts. The
+            joined-string version could not: `parts.push('...safe to treat as a
+            PASS.')` shipped 43/43 green. The single spaces below keep the
+            rendered line byte-identical to that version. */}
+        {gateSummary !== null && (
+          <div data-testid="gate-summary">
+            <span data-part="head">
+              <Text size={12} tone="secondary">{gateSummary.head}</Text>
+            </span>
+            {gateSummary.causes !== null && (
+              <>
+                {' '}
+                <span data-part="causes">
+                  <Text size={12} tone="secondary">{gateSummary.causes}</Text>
+                </span>
+              </>
+            )}
+            {gateSummary.missing !== null && (
+              <>
+                {' '}
+                {/* THE CLAIM ITSELF, in the DOM. The sentence beside it is this
+                    same claim rendered; the tests read these attributes and
+                    check each one against what the page does, not against a
+                    constant retyped in the test file. */}
+                <span
+                  data-part="missing-reading"
+                  data-claim-rows={gateSummary.missing.rows}
+                  data-claim-side={gateSummary.missing.claim.side}
+                  data-claim-asserted={gateSummary.missing.claim.asserted}
+                  data-claim-denied={gateSummary.missing.claim.denied}
+                  data-claim-combination={gateSummary.missing.claim.combination}
+                >
+                  <Text size={12} tone="secondary">
+                    {missingReadingClause(gateSummary.missing.rows, gateSummary.missing.claim)}
+                  </Text>
+                </span>
+              </>
+            )}
+          </div>
         )}
       </div>
 
@@ -421,6 +502,23 @@ export default function Step5Page() {
                 ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}
 
+              {/* THE TWO SIDES OF THE GATE, PUBLISHED SEPARATELY AND KEYED BY
+                  THE CLAIM'S OWN SIDE NAMES. `data-side-${side}` is how a test
+                  turns the claim's `side` field into an observation: exactly
+                  one side may carry the asserted verdict, and it must be the
+                  one the claim names. Before this, `side` and `combination`
+                  were circular -- swapping either in page.tsx AND in the test's
+                  copy of the claim shipped 45/45 green, rendering "graded PASS
+                  on the volatility side alone, never CAUTION there", verbatim
+                  the first entry in this file's own list of past failures.
+                  `display: contents` so the badge stays the grid item. */}
+              <span
+                className={pageStyles.gateCell}
+                data-row={r.symbol}
+                data-side-volatility={ivSt}
+                data-side-event={proxStatus}
+                data-gate={gate}
+              >
               <StatusBadge
                 status={gate}
                 tooltip={eventVolGateTooltip({
@@ -438,6 +536,7 @@ export default function Step5Page() {
                   drivers,
                 })}
               />
+              </span>
             </TableRow>
           );
         })}
