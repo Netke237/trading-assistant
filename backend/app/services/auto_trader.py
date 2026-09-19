@@ -268,7 +268,56 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     # `conviction is None` below returns the strategy unchanged (full size), so
     # validating after it would let a broken config through on every fire that
     # happens before regime_monitor has cached anything.
-    if resolve_sizing(cfg) is None:
+    #
+    # THE RESULT IS HELD, NOT RETURNED ON. Piece 2 round 1 finding 1: this used
+    # to `return strategy` right here, and `_apply_regime_gate` sits further
+    # down, so `regime_sizing.enabled: false` -- a DIFFERENT, independently
+    # configured feature -- silently switched the headwind gate off too and the
+    # trade fired at FULL armed quantity, which is worse than the pre-gate
+    # behaviour it replaced (that at least sized down to min_mult). Measured:
+    # MSFT Bearish, cached conviction +80, Stable, regime_gate untouched at
+    # enabled/-40/require_stable -> REFUSED with sizing on, FIRED qty 4 with
+    # sizing off. conviction_sizing.py's own SizingConfigError text advises "To
+    # stop trading in a headwind, disable regime_sizing or raise the gate", so
+    # following the advice in the codebase disabled the gate.
+    sizing_off = resolve_sizing(cfg) is None
+
+    from app.services.regime_monitor import get_last_conviction
+    conviction = get_last_conviction()
+
+    # THE GATE RUNS FIRST AND RUNS REGARDLESS OF `sizing_off`. It is a refusal,
+    # not a size, so it does not belong behind a size switch. It still needs the
+    # conviction -- there is nothing to threshold without one -- so a missing
+    # conviction abstains here exactly as it does inside the gate itself.
+    if conviction is not None:
+        # Direction-aware: `conviction` is the SIGNED BULLISH FRAME
+        # (regime_omm.conviction over P(Bull) - P(Bear), scaled to [-100, +100]),
+        # so the bearish mirror is -conviction, NOT 100 - conviction. On a signed
+        # scale `100 - conviction` is a mirror of an unsigned [0, 100] one: with
+        # full_conviction_pct at 40, `(100 - conviction) / 40` saturates whenever
+        # `100 - conviction >= 40`, i.e. for every conviction <= 60 -- FULL SIZE
+        # in essentially every regime. (<= 60, not <= 40: the tight bound,
+        # because a comment whose job is to be checkable has to survive being
+        # checked.)
+        #
+        # Direction is carried explicitly from the card. It is NOT inferred from
+        # `action`, which is always "BUY" for a long single-leg option and never
+        # encoded direction -- that inference is the defect this replaces, and
+        # keeping it alongside would be a second source of truth for the same
+        # fact.
+        directional_conv = conviction if strategy.direction == "Bullish" else -conviction
+        #
+        # THE GATE, wired 2026-09-19 on Kenneth's explicit instruction. The
+        # mirror above is the first and only place the conviction exists in the
+        # TRADE's own frame -- which is the frame `regime_gate`'s thresholds are
+        # written in. The scan gets there by calling
+        # compute_omm(direction=req.direction); this path gets there by
+        # mirroring a cached bullish number, and before `direction` existed it
+        # could not get there at all. That is why the gap was unreachable until
+        # this piece.
+        _apply_regime_gate(strategy, directional_conv, conviction)
+
+    if sizing_off:
         # Logged for the same reason as the unchanged-quantity line below: this
         # returns at FULL SIZE, and round 2 caught it as the one full-size path
         # still leaving no trace. It is the "off versus broken" case a reader
@@ -281,34 +330,9 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         )
         return strategy
 
-    from app.services.regime_monitor import get_last_conviction
-    conviction = get_last_conviction()
     if conviction is None:
         return strategy
 
-    # Direction-aware: `conviction` is the SIGNED BULLISH FRAME
-    # (regime_omm.conviction over P(Bull) - P(Bear), scaled to [-100, +100]), so
-    # the bearish mirror is -conviction, NOT 100 - conviction. On a signed scale
-    # `100 - conviction` is a mirror of an unsigned [0, 100] one: with
-    # full_conviction_pct at 40, `(100 - conviction) / 40` saturates whenever
-    # `100 - conviction >= 40`, i.e. for every conviction <= 60 -- FULL SIZE in
-    # essentially every regime. (<= 60, not <= 40: the tight bound, because a
-    # comment whose job is to be checkable has to survive being checked.)
-    #
-    # Direction is carried explicitly from the card. It is NOT inferred from
-    # `action`, which is always "BUY" for a long single-leg option and never
-    # encoded direction -- that inference is the defect this replaces, and
-    # keeping it alongside would be a second source of truth for the same fact.
-    directional_conv = conviction if strategy.direction == "Bullish" else -conviction
-    #
-    # THE GATE, wired 2026-09-19 on Kenneth's explicit instruction. It is applied
-    # HERE, immediately after the mirror, because this is the first and only
-    # place the conviction exists in the TRADE's own frame -- which is the frame
-    # `regime_gate`'s thresholds are written in. The scan gets there by calling
-    # compute_omm(direction=req.direction); this path gets there by mirroring a
-    # cached bullish number, and before `direction` existed it could not get
-    # there at all. That is why the gap was unreachable until this piece.
-    _apply_regime_gate(strategy, directional_conv, conviction)
     #
     # SUPERSEDED, ROUND 1 finding 4 -- kept as the record of why this was once
     # deferred and what changed. `regime_gate` IS NOW APPLIED (line above). The

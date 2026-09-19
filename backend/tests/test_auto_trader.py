@@ -1136,3 +1136,38 @@ def test_regime_gate_does_not_fire_when_disabled(mocker, tmp_path, monkeypatch):
     })
     qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Stable")
     assert qty == 1
+
+
+def test_regime_gate_still_refuses_when_regime_sizing_is_disabled(mocker, monkeypatch):
+    """`regime_sizing.enabled: false` must NOT switch the headwind gate off.
+
+    Piece 2 round 1 finding 1. `_apply_regime_gate` lives inside
+    `_apply_vol_sizing`, which used to `return strategy` as soon as
+    `resolve_sizing` reported sizing off — so turning off one feature silently
+    turned off a different, independently configured one, and the trade went to
+    the broker at the FULL armed quantity. That is worse than the behaviour the
+    gate replaced, which at least sized a headwind trade down to min_mult.
+
+    Measured before the fix: this exact setup FIRED qty 4. The sharp edge is
+    that conviction_sizing.py's own SizingConfigError text advises "To stop
+    trading in a headwind, disable regime_sizing or raise the gate" — following
+    the codebase's own advice disabled the gate.
+
+    The other gate tests all mock `_load_regime_gate_config` wholesale and so
+    never exercise this axis; this one leaves the gate config real and moves
+    only `regime_sizing.enabled`.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeHeadwindError
+
+    doc = at._load_scoring_doc()
+    real_sizing = dict(doc.get("regime_sizing") or {})
+    monkeypatch.setitem(doc, "regime_sizing", {**real_sizing, "enabled": False})
+
+    # Sanity: sizing really is off down this path, so the test would pass
+    # vacuously if the gate had simply moved rather than been decoupled.
+    from app.scoring.conviction_sizing import resolve_sizing
+    assert resolve_sizing(at._load_scoring_config()) is None
+
+    with pytest.raises(RegimeHeadwindError, match="regime headwind"):
+        _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Stable")
