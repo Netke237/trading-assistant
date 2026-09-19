@@ -63,7 +63,11 @@ def _arm_body(**extra) -> dict:
     base = {
         "broker": "tastytrade_paper", "symbol": "AAPL",
         "option_symbol": "AAPL260620C00185000",
-        "action": "BUY", "quantity": 1, "order_type": "LMT",
+        # A CALL (…C00185000), so the position is Bullish. Every fixture here
+        # states the direction its option RIGHT implies, which is what stopped
+        # them being self-contradictory: `action` is BUY for a long call and a
+        # long put alike and never encoded direction.
+        "action": "BUY", "direction": "Bullish", "quantity": 1, "order_type": "LMT",
         "limit_price": 2.50, "entry_premium": 2.50,
     }
     base.update(extra)
@@ -75,7 +79,7 @@ def _strategy(**extra) -> ArmedStrategy:
     base = dict(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", quantity=1, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None, entry_premium=2.50,
         **{k: v for k, v in PICK.items()},
     )

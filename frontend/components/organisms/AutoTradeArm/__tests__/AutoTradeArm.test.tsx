@@ -337,3 +337,45 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
     expect(payload.picked_row_option_price).toBe(7.1);
   });
 });
+
+describe("the armed payload carries the CARD's direction", () => {
+  /* THE ONE THING THIS WHOLE PIECE EXISTS TO GUARANTEE, and until now nothing
+   * pinned it. The backend sizes off `direction`; if the browser never sends it,
+   * or sends a constant, the fix is inert — and a missing field would be caught
+   * only by `tsc`, and only until someone writes `card.direction ?? 'Bullish'`,
+   * which typechecks and silently restores the exact defect: every bearish trade
+   * sized off the bullish frame.
+   *
+   * Both directions are asserted on purpose. A single Bullish case would pass
+   * against a hardcoded 'Bullish' literal, which is the failure mode worth
+   * catching — the old code hardcoded `action: 'BUY'` and that is what made
+   * `action` useless as a direction signal in the first place. */
+
+  beforeEach(() => {
+    // Same setup the sibling describes use: the Arm button only renders in
+    // 'armed' auto-mode, and portfolioValue must be set or the exposure check
+    // short-circuits before the payload is built.
+    act(() => {
+      useRiskStore.setState((st) => ({ limits: { ...st.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it.each([['Bullish'], ['Bearish']] as const)(
+    'sends direction=%s when that is what the card says',
+    async (direction) => {
+      render(
+        <AutoTradeArm
+          card={{ ...mockCard, direction }}
+          broker="ibkr_paper"
+          methodPick={pick()}
+        />,
+      );
+      fireEvent.click(screen.getByText(/^Arm —/));
+
+      await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+      expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].direction).toBe(direction);
+    },
+  );
+});

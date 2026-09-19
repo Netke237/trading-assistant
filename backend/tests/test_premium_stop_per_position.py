@@ -286,8 +286,8 @@ def _armed(**kw):
     from app.services.auto_trader import ArmedStrategy
     base = dict(
         broker="tradier_paper", symbol="AAPL", option_symbol="AAPL260516C00190000",
-        action="BUY", quantity=1, order_type="LMT", limit_price=5.0, conid=None,
-        entry_premium=5.0,
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
+        limit_price=5.0, conid=None, entry_premium=5.0,
     )
     base.update(kw)
     return ArmedStrategy(**base)
@@ -372,7 +372,7 @@ def test_arm_request_carries_the_pct_into_the_strategy():
 
     req = ArmRequest(
         broker="tradier_paper", symbol="AAPL",
-        option_symbol="AAPL260516C00190000", action="BUY", quantity=1,
+        option_symbol="AAPL260516C00190000", action="BUY", direction="Bullish", quantity=1,
         premium_stop_pct=0.30,
     )
     assert ArmedStrategy(**req.model_dump()).premium_stop_pct == 0.30
@@ -388,7 +388,7 @@ def test_arm_request_rejects_meaningless_percentages(bad):
     with pytest.raises(ValidationError):
         ArmRequest(
             broker="tradier_paper", symbol="AAPL",
-            option_symbol="AAPL260516C00190000", action="BUY", quantity=1,
+            option_symbol="AAPL260516C00190000", action="BUY", direction="Bullish", quantity=1,
             premium_stop_pct=bad,
         )
 
