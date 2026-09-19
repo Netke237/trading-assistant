@@ -19,7 +19,9 @@ import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
 import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
-import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
+import {
+  useEventThresholdsStore, getEventWindow, type HorizonEventThresholds,
+} from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 
 /* ── THE MISSING-READING CLAIM ──────────────────────────────────
@@ -118,6 +120,22 @@ export function ivThresholdSentence(bands: IvBand[]): string {
     .map((b) => `${b.basis === 'rank' ? 'IV rank' : 'IV'} \u2264 ${b.passMax} \u2192 PASS; `
       + `\u2264 ${b.cautionMax ?? '\u2014'} \u2192 CAUTION; above \u2192 REJECT.`)
     .join(' ');
+}
+
+/* THE BOUNDARY IS PART OF THE CLAIM, and this sentence got it wrong while
+ * every other statement of the same window got it right. It read "Earnings
+ * within {caution} days -> CAUTION; within {reject} days -> REJECT", which
+ * reads INCLUSIVE -- so the page announced an earnings date landing exactly on
+ * day 21 as a REJECT. The ternary forty lines below grades it CAUTION (strict
+ * `<`), the row tooltip one pixel away words it `reject <21d / caution <45d`,
+ * and backend stock_scorer.py's _rule_event applies `< reject_days` too. Three
+ * agreeing consumers and one sentence contradicting all of them, with no test
+ * on the event boundary at all -- the IV boundary has a table of its own.
+ * Stated now as the inequality the stack actually applies, the way the IV
+ * sentence above states `<=` and the tooltip states `<`. */
+export function eventWindowSentence(w: HorizonEventThresholds): string {
+  return `Earnings < ${w.reject_days}d \u2192 REJECT; < ${w.caution_days}d \u2192 CAUTION; `
+    + `else \u2192 PASS.`;
 }
 
 export function headSentence(c: GateCounts): string {
@@ -246,7 +264,8 @@ export default function Step5Page() {
   // Fetched from the backend (/api/config/event-thresholds), which reads the same
   // scoring_rules.yaml block score_stock()'s _rule_event uses — so this gate always
   // matches the reject/caution window that already shaped the candidate's score.
-  const { reject_days: evReject, caution_days: evCaution } = getEventWindow(horizonKey, eventThresholds);
+  const eventWindow = getEventWindow(horizonKey, eventThresholds);
+  const { reject_days: evReject, caution_days: evCaution } = eventWindow;
 
   // The volatility figure behind each row is EITHER a true percentile
   // (`ivRank`, present only when IBKR or tastytrade answered) OR an absolute
@@ -514,9 +533,7 @@ export default function Step5Page() {
               }
             >{gateSentence}</span>
             {' '}
-            <span data-part="event-window">
-              Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
-            </span>
+            <span data-part="event-window">{eventWindowSentence(eventWindow)}</span>
             {' '}
             <span data-part="gate-rule">Gate = worst of IV and event proximity.</span>
           </Text>

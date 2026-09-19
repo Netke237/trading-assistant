@@ -12,6 +12,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import Step5Page, {
   missingReadingClause, headSentence, causesSentence, ivThresholdSentence,
+  eventWindowSentence,
   CAUSE_LABEL, MISSING_READING_CLAIM,
   type MissingReadingClaim, type GateCause, type GateCounts, type CauseKey, type IvBand,
 } from '../page';
@@ -21,7 +22,9 @@ import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';
 import { worstStatus, type Status } from '@/lib/status';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
-import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK } from '@/lib/eventThresholdsStore';
+import {
+  useEventThresholdsStore, getEventWindow, FALLBACK as EVENT_FALLBACK,
+} from '@/lib/eventThresholdsStore';
 import type { TradeCardData } from '@/types/domain';
 
 function makeCandidate(symbol: string, overrides: Partial<TradeCardData> = {}): TradeCardData {
@@ -173,6 +176,57 @@ const PART_PINS: Record<string, (el: HTMLElement) => void> = {
       const k = b.basis === 'rank' ? 'rank' : 'abs';
       expect([b.basis, b.passMax, b.cautionMax])
         .toEqual([b.basis, store[horizon]?.[`${k}_pass_max`], store[horizon]?.[`${k}_caution_max`]]);
+    }
+  },
+
+  /* THE WINDOW THE GATE APPLIES, NOT THE ONE THE SENTENCE FANCIES. Three
+   * things quote this window -- this sentence, the root attributes every row
+   * tooltip is rebuilt from, and the ternary that grades every row -- and
+   * nothing compared them, exactly as nothing compared the IV bands before the
+   * pin above it was written. The sentence is built from the STORE here, never
+   * from the element's own attributes: reading it back off the node it renders
+   * is the circularity this loop exists to remove. */
+  'event-window': (el) => {
+    const root = page();
+    const horizon = root.getAttribute('data-horizon') as string;
+    const w = getEventWindow(horizon, useEventThresholdsStore.getState().thresholds);
+
+    // 1. The sentence, by equality, over the window the gate reads.
+    expect(el.textContent).toBe(eventWindowSentence(w));
+
+    /* 2. The pair the row tooltips quote is that same window. Measured as
+     *    LARGELY REDUNDANT and kept deliberately: publishing `evReject + 1`
+     *    here is caught eight ways over by the gate cell's tooltip pin, which
+     *    rebuilds the tooltip from these very attributes. It is the only thing
+     *    holding them where NO row renders -- the no-scan branch, where that
+     *    pin never runs -- and it is one comparison. */
+    expect([root.getAttribute('data-ev-reject'), root.getAttribute('data-ev-caution')])
+      .toEqual([String(w.reject_days), String(w.caution_days)]);
+
+    /* 3. ...and every row on screen got the verdict THIS SENTENCE PROMISES it.
+     *    Strict `<`, because that is what the sentence now says. It used to say
+     *    "Earnings within {caution} days -> CAUTION; within {reject} days ->
+     *    REJECT" -- an inclusive reading of a window the gate, the tooltip and
+     *    backend _rule_event all apply exclusively -- so a row sitting exactly
+     *    on day 21 was announced REJECT and graded CAUTION, and nothing here
+     *    went red. This turns the claim into an observation over whatever rows
+     *    the scenario rendered; the two boundary cases below put a row ON each
+     *    edge so the comparison is not vacuous.
+     *
+     *    AND IT IS THE ONLY THING CATCHING A MASKED SUB-VERDICT. `gate` is
+     *    worstStatus(iv, event), so on an IV-REJECTed row the event side can be
+     *    corrupted invisibly: flipping the gate's far-event branch from PASS to
+     *    CAUTION leaves gate, head, causes and tooltip identical. Measured --
+     *    with this loop the mutation fails 2 tests, without it 1, and the one
+     *    it stops failing is the IV-REJECT row added below for exactly this. */
+    for (const row of root.querySelectorAll<HTMLElement>('[data-status]')) {
+      const raw = row.querySelector('[data-cell="event"]')?.getAttribute('data-days') ?? '';
+      if (raw === '') continue;
+      const days = Number(raw);
+      expect([raw, row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-event')])
+        .toEqual([raw, days < w.reject_days ? 'REJECT'
+                     : days < w.caution_days ? 'CAUTION'
+                     : 'PASS']);
     }
   },
 
@@ -1006,6 +1060,49 @@ describe('the banner never counts two different things in one breath', () => {
       causes: null,
     },
     {
+      /* THE EVENT BOUNDARY, WHICH NOTHING IN THIS FILE PINNED -- the IV
+       * boundary two cases up has had a table entry since round 3 and its
+       * event twin had none. Every event fixture in this file uses an interior
+       * day count (3, 25, 30, 40), so flipping page.tsx's `< evReject` to
+       * `<=` left all three step-5 suites green, and the banner's own sentence
+       * ("within 21 days -> REJECT") asserted the inclusive reading against a
+       * gate, a tooltip and a backend rule that are all exclusive. */
+      name: 'earnings exactly ON the Swing REJECT boundary — day 21 is CAUTION, not REJECT',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 10, { nextEventDays: 21 }), rankCandidate('BBB', 10)],
+      // rank 10 <= 34 -> PASS both. AAA: 21 is NOT < 21, but IS < 45 -> CAUTION.
+      head: '2 shown — 1 PASS, 1 CAUTION, 0 REJECT.', noReadingRows: 0,
+      causes: [[1, 'event']],
+    },
+    {
+      name: 'earnings exactly ON the Swing CAUTION boundary — day 45 is PASS, not CAUTION',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 10, { nextEventDays: 45 }), rankCandidate('BBB', 10)],
+      // 45 is NOT < 45 -> PASS. The far edge of the window, where the sentence
+      // stops making a claim at all.
+      head: '2 shown — 2 PASS, 0 CAUTION, 0 REJECT.', noReadingRows: 0,
+      causes: null,
+    },
+    {
+      /* THE MASKED SUB-VERDICT. `gate` is worstStatus(iv, event), so on a row
+       * whose IV is already REJECT the event side can be corrupted without the
+       * gate, the head, the causes or the tooltip moving at all -- the tooltip
+       * is rebuilt from the same published attribute that would carry the lie.
+       * No fixture had that shape (every IV-REJECT row here has no event at
+       * all), which left the event sub-verdict checkable only where it happened
+       * to decide the gate. This row is where PART_PINS' event-window pin earns
+       * its keep: flipping the gate's far-event branch from PASS to CAUTION
+       * changes nothing on screen except an attribute that now disagrees with
+       * the sentence above it. */
+      name: 'an IV-REJECTed row with a far-out event — the event side still has to be right',
+      horizon: 'Swing (5-15d)',
+      candidates: () => [rankCandidate('AAA', 90, { nextEventDays: 60 }), rankCandidate('BBB', 10)],
+      // rank 90 > 55 -> REJECT. 60 is not < 21 and not < 45 -> event PASS.
+      // gate = worst(REJECT, PASS) = REJECT, and the event side is invisible in it.
+      head: '2 shown — 1 PASS, 0 CAUTION, 1 REJECT.', noReadingRows: 0,
+      causes: [[1, 'ivRank']],
+    },
+    {
       name: 'IV rank exactly ON the Swing CAUTION boundary — 55 is CAUTION, not REJECT',
       horizon: 'Swing (5-15d)',
       candidates: () => [rankCandidate('AAA', 55), noIvCandidate('BBB')],
@@ -1050,6 +1147,43 @@ describe('the banner never counts two different things in one breath', () => {
     // It also proves the ABSENCE structurally now: no missing-reading part at
     // all, not merely a phrase the banner happens not to contain.
     expectGateCopy(0);
+  });
+});
+
+
+describe('the event window sentence states the boundary it is actually graded on', () => {
+  /* WITHOUT THESE THE PIN IN PART_PINS IS A LITERAL PIN WEARING A HAT, and it
+   * was measured as one: the pin builds its expectation with the SAME builder
+   * the page renders with, so swapping the two numbers inside
+   * `eventWindowSentence` -- the page then saying "< 45d -> REJECT; < 21d ->
+   * CAUTION" over a gate that does the opposite -- shipped 54/54 GREEN, and so
+   * did replacing both with hardcoded `21d`/`45d`, which is wrong on every
+   * horizon but Swing. Expectation and actual moved together. Same trap, and
+   * same answer, as the clause builder below: pin the skeleton literally once,
+   * then prove the numbers come from the argument. */
+
+  it('renders the agreed skeleton, word for word', () => {
+    expect(eventWindowSentence({ reject_days: 21, caution_days: 45 }))
+      .toBe('Earnings < 21d \u2192 REJECT; < 45d \u2192 CAUTION; else \u2192 PASS.');
+  });
+
+  it('takes BOTH numbers from its argument \u2014 neither is baked in', () => {
+    // Position's real window. A builder hardcoding Swing's 21/45 passes the
+    // test above and fails this one, which is the whole point of having two.
+    expect(eventWindowSentence({ reject_days: 30, caution_days: 60 }))
+      .toBe('Earnings < 30d \u2192 REJECT; < 60d \u2192 CAUTION; else \u2192 PASS.');
+  });
+
+  it('says what the gate does at the edge \u2014 the day named is NOT in the band', () => {
+    /* The sentence's `<` is a claim about day 21 specifically, and it is the
+     * claim the old "within 21 days" wording got backwards. Asserted here
+     * against the gate's own arithmetic so the wording and the grading cannot
+     * be changed apart: page.tsx grades `days < reject_days`, backend
+     * stock_scorer.py's _rule_event grades `worst_days < ec["reject_days"]`,
+     * and the row tooltip words it `reject <21d`. */
+    const w = { reject_days: 21, caution_days: 45 };
+    expect(eventWindowSentence(w)).toContain(`< ${w.reject_days}d`);
+    expect(eventWindowSentence(w)).not.toContain(`within ${w.reject_days}`);
   });
 });
 
