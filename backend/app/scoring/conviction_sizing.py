@@ -314,9 +314,28 @@ def conviction_mult(conviction_pct: float, sizing: Mapping[str, Any] | None) -> 
     present but unusable this raises `SizingConfigError` rather than returning
     1.0, because 1.0 is full size.
 
-    Conviction is clamped into [0, full_conviction_pct] before scaling, so a
-    headwind (negative conviction) floors at min_mult rather than going below
-    it, and conviction above full_conviction_pct caps at 1.0.
+    THE RAMP IS TWO-SIDED, over [-full_conviction_pct, +full_conviction_pct].
+    Kenneth's decision, 2026-09-19. It was one-sided -- `max(0, conv/full)` --
+    which meant every conviction at or below 0 produced min_mult, so a trade the
+    regime OPPOSED slightly and one it opposed overwhelmingly were sized
+    identically. Headwind carried no gradient at all; only tailwind did.
+
+    The endpoints are unchanged and that is what makes this safe to reason
+    about: -full and below still gives min_mult, +full and above still gives
+    1.0. What changes is the middle. Neutral conviction (0) is now the midpoint
+    of the ramp, 0.65 on the shipped block, where it used to be the floor 0.30.
+
+    THAT IS A LIVE SIZING CHANGE ON BOTH CALL SITES, deliberately: this function
+    is the single ramp the scan card and the auto-trader share, and the
+    anti-drift tests hold them to the same function object precisely so a change
+    here cannot reach one and not the other. A neutral-regime trade now sizes
+    roughly twice what it did.
+
+    The reject boundary lines up with the ramp by construction on the shipped
+    config: `regime_gate.headwind_reject_pct` is -40 and `full_conviction_pct`
+    is 40, so the graded band is exactly the band that survives the gate. That
+    is a property of these values, not an invariant -- the two keys are
+    independent and nothing enforces the correspondence.
     """
     resolved = resolve_sizing(sizing)
     if resolved is None:
@@ -336,6 +355,8 @@ def conviction_mult(conviction_pct: float, sizing: Mapping[str, Any] | None) -> 
     if not math.isfinite(conv):
         raise ValueError(f"conviction_pct is not finite ({conviction_pct!r})")
 
-    frac = max(0.0, min(conv / full, 1.0))
+    # (conv + full) / (2 * full): maps -full -> 0, 0 -> 0.5, +full -> 1.
+    # `full` is guaranteed > 0 by resolve_sizing, so 2 * full cannot be zero.
+    frac = max(0.0, min((conv + full) / (2.0 * full), 1.0))
 
     return lo + (1.0 - lo) * frac

@@ -291,7 +291,10 @@ def test_vol_sizing_rewrites_the_quantity_without_dropping_the_pick(mocker):
     mocker.patch.object(at, "_load_scoring_config", return_value={
         "enabled": True, "min_mult": 0.5, "full_conviction_pct": 40,
     })
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=20.0)
+    # 0.0, not 20.0: on the two-sided ramp with min_mult 0.5, conviction 20
+    # gives 0.875 and round(4 * 0.875) is 4 — the resize branch this test
+    # needs would not be entered at all. Neutral gives 0.75 -> 3.
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=0.0)
 
     resized = at._apply_vol_sizing(_strategy(quantity=4))
     assert resized.quantity != 4, "the fixture must actually exercise the resize branch"

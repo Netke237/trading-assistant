@@ -438,7 +438,14 @@ def test_fire_proceeds_when_market_open(mocker):
 # ── Vol-scaled sizing (Task 8) ─────────────────────────────────────────────────
 
 def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
-    """conviction=20, full=40, min_mult=0.3 → ramp mult=0.65 → 2 rounds to 1."""
+    """NEUTRAL conviction, full=40, min_mult=0.3 → mult 0.65 → 2 rounds to 1.
+
+    Was conviction=20 under the one-sided ramp, where 20 gave 0.65. Two-sided,
+    20 gives 0.825 and a qty-2 order no longer reduces at all — so the fixture
+    moved to the conviction that still exercises this branch rather than the
+    assertion moving to match. The branch under test is "a sub-full conviction
+    rewrites the quantity", and neutral is now the honest example of one.
+    """
     from app.data.ibkr_paper import OrderResult
     captured = {}
     def mock_execute(s):
@@ -447,7 +454,7 @@ def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=20)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=0)
 
     svc = AutoTradeService()
     strategy = ArmedStrategy(
@@ -591,9 +598,15 @@ def test_vol_sizing_bearish_floors_when_regime_strongly_opposes(mocker):
     assert _fired_quantity(mocker, direction="Bearish", conviction=40) == 1
 
 
-def test_vol_sizing_bearish_floors_when_regime_opposes(mocker):
-    """Bearish at +20: mirror -20 -> below the ramp -> 0.30 floor -> 1 (bug gave 3)."""
-    assert _fired_quantity(mocker, direction="Bearish", conviction=20) == 1
+def test_vol_sizing_bearish_is_GRADED_when_the_regime_opposes(mocker):
+    """Bearish at +20: mirror -20 -> 0.475 -> round(1.9) = 2.
+
+    RENAMED, because it no longer floors and that is the whole point of the
+    two-sided ramp. Under the one-sided form every opposed conviction collapsed
+    to min_mult, so -1 and -100 sized the same. Now the opposed half grades:
+    this sits between the floor at -40 and the midpoint at 0.
+    """
+    assert _fired_quantity(mocker, direction="Bearish", conviction=20) == 2
 
 
 def test_vol_sizing_bearish_scales_up_when_regime_favours(mocker):
@@ -611,16 +624,15 @@ def test_vol_sizing_bearish_full_size_when_regime_strongly_favours(mocker):
     assert _fired_quantity(mocker, direction="Bearish", conviction=-40) == 4
 
 
-def test_vol_sizing_bearish_at_neutral_conviction_sits_on_the_floor(mocker):
-    """Bearish at 0 -> mirror 0 -> 0.30 floor -> 1.
+def test_vol_sizing_bearish_at_neutral_conviction_sits_mid_ramp(mocker):
+    """Bearish at 0 -> mirror -0 -> the ramp's MIDPOINT 0.65 -> round(2.6) = 3.
 
-    BOUNDARY PIN, NOT BUG COVERAGE. The ramp is one-sided (`min_mult` applies to
-    everything at or below 0), so neutral is the floor for both directions and
-    this row reads the same with the bug in place. It is here to pin that the
-    mirror of 0 is 0 — i.e. that nobody reintroduces an offset like
-    `100 - conviction`, under which neutral would clamp to FULL size.
+    Still the pin that the mirror of 0 is 0, which is what stops anyone
+    reintroducing an offset like `100 - conviction` (under which neutral would
+    saturate at FULL size). What changed is where neutral sits: the floor under
+    the one-sided ramp, the midpoint under the two-sided one.
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=0) == 1
+    assert _fired_quantity(mocker, direction="Bearish", conviction=0) == 3
 
 
 def test_vol_sizing_bullish_full_size_at_high_conviction_unchanged(mocker):
@@ -1090,7 +1102,7 @@ def test_regime_gate_lets_the_caution_band_fire(mocker):
     Sizing already floors it.
     """
     qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=20, stability="Stable")
-    assert qty == 1
+    assert qty == 2, "fires, and the two-sided ramp grades it rather than flooring it"
 
 
 def test_regime_gate_applies_to_bullish_trades_too(mocker):

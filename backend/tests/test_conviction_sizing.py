@@ -42,7 +42,15 @@ def test_no_inlined_formula_survives_in_either_caller():
 # ── Shape ─────────────────────────────────────────────────────────────────────
 
 def test_endpoints():
-    assert conviction_mult(0, CFG) == pytest.approx(0.3)
+    """The ramp's ENDS, which is what this test is for — and they moved.
+
+    Two-sided since 2026-09-19: the floor is now reached at -full, not at 0.
+    Neutral is the midpoint. The endpoints themselves are unchanged in VALUE
+    (min_mult at the bottom, 1.0 at the top); what changed is which conviction
+    sits at each.
+    """
+    assert conviction_mult(-40, CFG) == pytest.approx(0.3)
+    assert conviction_mult(0, CFG) == pytest.approx(0.65)
     assert conviction_mult(40, CFG) == pytest.approx(1.0)
 
 
@@ -52,8 +60,17 @@ def test_above_full_conviction_caps_at_one():
 
 
 def test_headwind_floors_at_min_mult_and_never_below():
-    assert conviction_mult(-1, CFG) == pytest.approx(0.3)
+    """The floor still holds; it just starts at -full instead of at 0.
+
+    -1 deliberately does NOT floor any more. That was the defect: a trade the
+    regime opposed by 1 and one it opposed by 100 were sized identically, so
+    headwind carried no gradient. Below -full it clamps, and never goes under
+    min_mult — which is the half of this test's name that is an invariant.
+    """
+    assert conviction_mult(-1, CFG) == pytest.approx(0.64125)
+    assert conviction_mult(-40, CFG) == pytest.approx(0.3)
     assert conviction_mult(-50, CFG) == pytest.approx(0.3)
+    assert conviction_mult(-1000, CFG) == pytest.approx(0.3)
 
 
 def test_there_is_no_dead_zone():
@@ -67,8 +84,11 @@ def test_there_is_no_dead_zone():
 
 
 def test_ramp_matches_hand_computed_table():
-    expected = {0: 0.300, 5: 0.3875, 10: 0.475, 15: 0.5625,
-                20: 0.650, 25: 0.7375, 30: 0.825, 35: 0.9125, 40: 1.0}
+    # Hand-computed on the two-sided ramp: lo + (1-lo) * (conv+full)/(2*full),
+    # with lo=0.3 and full=40. The table now spans BOTH halves, because the
+    # point of the change is that the negative half is no longer flat.
+    expected = {-40: 0.300, -30: 0.3875, -20: 0.475, -10: 0.5625,
+                0: 0.650, 10: 0.7375, 20: 0.825, 30: 0.9125, 40: 1.0}
     for conv, want in expected.items():
         assert conviction_mult(conv, CFG) == pytest.approx(want), f"conviction {conv}"
 
@@ -155,10 +175,16 @@ def test_the_bound_sits_on_the_fraction_ambiguity_not_one_step_inside_it():
     with pytest.raises(SizingConfigError) as exc:
         conviction_mult(20, _cfg(full_conviction_pct=1.0))
     assert "Did you mean 100?" in str(exc.value)
+    # Unchanged by the two-sided ramp: this refuses in resolve_sizing, before
+    # any arithmetic, so the ramp's shape cannot reach it either way.
 
     assert conviction_mult(20, _cfg(full_conviction_pct=1.01)) == pytest.approx(1.0)
+    # Two-sided: (20 + 100) / (2 * 100) = 0.6, not 20/100 = 0.2. The point of
+    # this line is that a full_conviction_pct just above the refused range is
+    # HONOURED rather than floored, and that still holds — only the number the
+    # honoured scale produces has moved.
     assert conviction_mult(20, _cfg(full_conviction_pct=100)) == pytest.approx(
-        0.3 + 0.7 * 0.2)
+        0.3 + 0.7 * 0.6)
 
 
 def test_the_two_halves_of_the_bound_say_different_things():
@@ -197,7 +223,12 @@ def test_zero_full_conviction_falls_back_to_the_default_scale():
     conviction 20, full falling back to 40.
     """
     cfg = {"enabled": True, "min_mult": 0.5, "full_conviction_pct": 0}
-    assert conviction_mult(20, cfg) == pytest.approx(0.75)
+    # 0.875 on the two-sided ramp, where the decision was taken on 0.75 under
+    # the one-sided one: (20 + 40) / 80 = 0.75 of the way up, min_mult 0.5.
+    # The RULING is unaffected — it is about which `full` is used when the
+    # configured one is zero, not about the ramp's shape — so the fallback
+    # assertion below is the load-bearing half of this test.
+    assert conviction_mult(20, cfg) == pytest.approx(0.875)
     assert resolve_sizing(cfg) == (0.5, DEFAULT_FULL_CONVICTION_PCT)
 
 
@@ -363,7 +394,7 @@ def test_shipped_config_is_the_ramp_at_0_3():
     assert cfg["enabled"] is True
     assert cfg["min_mult"] == 0.3
     assert cfg["full_conviction_pct"] == 40
-    assert conviction_mult(20, cfg) == pytest.approx(0.65)
+    assert conviction_mult(20, cfg) == pytest.approx(0.825)
 
 
 def test_mixed_type_yaml_keys_cannot_escape_as_a_typeerror():
