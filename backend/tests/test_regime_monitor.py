@@ -96,18 +96,36 @@ def test_conviction_cache_set_and_get():
 
 @pytest.mark.asyncio
 async def test_update_conviction_cache_stores_value(mocker):
-    """_update_conviction_cache must call set_last_conviction when OMM returns a value."""
+    """_update_conviction_cache caches BOTH halves of one compute_omm result.
+
+    The inner `_compute` returns `(conviction_pct, stability)` since 2026-09-19,
+    when the fire path's regime_gate needed the stability its conviction was
+    measured with. This test previously mocked a bare 37.0; under the tuple
+    contract that unpack raises, and `_update_conviction_cache`'s broad
+    `except Exception` logs at DEBUG and moves on — so the cache silently stopped
+    updating and only this assertion noticed. Worth knowing: that handler will
+    swallow any future shape change here just as quietly.
+    """
     mock_loop = MagicMock()
     # run_in_executor is called as `await loop.run_in_executor(None, fn)` — must be a coroutine
-    mock_loop.run_in_executor = AsyncMock(return_value=37.0)
+    mock_loop.run_in_executor = AsyncMock(return_value=(37.0, "Stable"))
     mocker.patch("app.services.regime_monitor.asyncio.get_running_loop", return_value=mock_loop)
 
-    set_conv_spy = mocker.patch("app.services.regime_monitor.set_last_conviction")
+    set_regime_spy = mocker.patch("app.services.regime_monitor.set_last_regime")
 
     from app.services.regime_monitor import _update_conviction_cache
     await _update_conviction_cache()
 
-    set_conv_spy.assert_called_once_with(37.0)
+    set_regime_spy.assert_called_once_with(37.0, "Stable")
+
+
+def test_set_last_regime_caches_both_halves_together():
+    """The pair is one fact, so it is set by one call and read back consistently."""
+    from app.services.regime_monitor import (
+        set_last_regime, get_last_conviction, get_last_stability,
+    )
+    set_last_regime(-62.0, "Fragile")
+    assert (get_last_conviction(), get_last_stability()) == (-62.0, "Fragile")
 
 
 @pytest.mark.asyncio

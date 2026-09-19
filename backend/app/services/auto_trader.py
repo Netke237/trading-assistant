@@ -22,6 +22,20 @@ _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules
 logger = logging.getLogger(__name__)
 
 
+class RegimeHeadwindError(RuntimeError):
+    """The regime opposes this trade hard enough that the scan would have dropped it.
+
+    A RuntimeError so `/auto-trade/fire` maps it to a 400 exactly as the exposure
+    cap does. DELIBERATELY NOT a ValueError and not SizingConfigError: round 3 of
+    the plan audit measured what happens when a new refusal is dropped into an
+    existing bucket -- it files under `sizing_data_blocked`, logs "the regime
+    conviction is not a usable number" (which is false; the conviction is fine
+    and is exactly why we are refusing), and pages under a shared rec_id that can
+    suppress a genuine config refusal. Its own type, its own history status, its
+    own message.
+    """
+
+
 @dataclass
 class ArmedStrategy:
     broker:          str
@@ -116,8 +130,8 @@ _SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring
 
 
 @functools.lru_cache(maxsize=1)
-def _load_scoring_config() -> dict:
-    """Load the regime_sizing block from scoring_rules.yaml (cached).
+def _load_scoring_doc() -> dict:
+    """Load and validate scoring_rules.yaml itself (cached).
 
     Raises SizingConfigError if the file cannot be read or parsed. It used to
     swallow that into an empty dict, which reads as "sizing disabled" and so
@@ -151,7 +165,93 @@ def _load_scoring_config() -> dict:
             f"{_SCORING_CONFIG_PATH} did not parse to a mapping "
             f"(got {type(doc).__name__})"
         )
-    return doc.get("regime_sizing", {})
+    return doc
+
+
+def _load_scoring_config() -> dict:
+    """The `regime_sizing` block. Kept as its own name because every existing
+    caller and test means this block by it.
+
+    UNCACHED ON PURPOSE -- the cache moved UP to `_load_scoring_doc`, where the
+    file read is. Caching here as well would mean two caches over one file, and
+    a caller clearing one would get a stale answer from the other. That is not
+    hypothetical: it is exactly what broke three fail-closed tests the moment
+    this split was made, because they cleared this function's cache and the doc
+    underneath stayed warm. Tests now clear `_load_scoring_doc.cache_clear()`.
+
+    The property the fail-closed posture depends on still holds: lru_cache does
+    not cache exceptions, and the raise happens inside the cached doc loader, so
+    an unreadable file is re-read on the next fire attempt.
+    """
+    return _load_scoring_doc().get("regime_sizing", {})
+
+
+def _load_regime_gate_config() -> dict:
+    """The `regime_gate` block, from the SAME read as regime_sizing.
+
+    A second `open()` here would be a second reader of one file, which is how
+    two call sites come to disagree about what it says -- the defect
+    conviction_sizing.py exists to prevent, one layer down. An absent block
+    returns {} and the gate treats that as disabled, matching `_regime_cap`,
+    which requires `enabled` to be truthy before it caps anything.
+    """
+    return _load_scoring_doc().get("regime_gate", {})
+
+
+def _apply_regime_gate(strategy: ArmedStrategy, directional_conv: float,
+                       raw_conviction: float) -> None:
+    """Refuse a fire the scan's `regime_gate` would have hard-dropped.
+
+    THE RULE IS NOT REIMPLEMENTED -- it is the same function the scan uses.
+    `stock_scorer._regime_cap` returns the status cap the gate imposes, and a
+    cap of REJECT is the scan's hard drop. Calling it rather than re-deriving
+    `<= headwind_reject_pct` here is deliberate: two copies of a threshold rule
+    is exactly how the scan card and the auto-trader came to size the same setup
+    1.5x apart, which is the defect `conviction_sizing.py` exists to prevent.
+
+    CAUTION IS NOT A REFUSAL HERE, and that asymmetry is real rather than an
+    oversight. On the scan a CAUTION cap demotes a candidate's status, which a
+    human then reads. An armed trade has no status left to demote -- it is
+    fire-or-not -- so the caution band is logged and fires, and only the REJECT
+    band refuses. Sizing already handles the middle: every conviction at or
+    below 0 in the trade's frame floors at min_mult.
+    """
+    from app.scoring.stock_scorer import _regime_cap
+    from app.services.regime_monitor import get_last_stability
+
+    gate = _load_regime_gate_config()
+    if not gate.get("enabled", False):
+        return
+
+    stability = get_last_stability()
+    if stability is None:
+        # The conviction cache was filled by `set_last_conviction` alone, or by
+        # an older build. Refusing on a guess would invent a rule; firing
+        # silently would hide one. Neither: fire, and say the gate abstained.
+        logger.warning(
+            "regime_gate: %s %s NOT evaluated — conviction %.1f is cached "
+            "without the stability it was measured with, and "
+            "require_stable_for_reject is %s",
+            strategy.symbol, strategy.direction, raw_conviction,
+            gate.get("require_stable_for_reject", True),
+        )
+        return
+
+    cap = _regime_cap(int(round(directional_conv)), stability, gate)
+    if cap == "REJECT":
+        raise RegimeHeadwindError(
+            f"regime headwind: conviction {directional_conv:+.0f} in this trade's "
+            f"own frame is at or below headwind_reject_pct "
+            f"({gate.get('headwind_reject_pct')}) with a {stability} regime — "
+            f"the scan would have dropped this setup"
+        )
+    if cap == "CAUTION":
+        logger.info(
+            "regime_gate: %s %s fires into a headwind (conviction=%.1f, "
+            "directional=%+.1f, %s) — CAUTION band, not a refusal",
+            strategy.symbol, strategy.direction, raw_conviction,
+            directional_conv, stability,
+        )
 
 
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
@@ -201,7 +301,17 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     # keeping it alongside would be a second source of truth for the same fact.
     directional_conv = conviction if strategy.direction == "Bullish" else -conviction
     #
-    # DEFERRED, ROUND 1 finding 4 -- `regime_gate` IS NOT APPLIED HERE. The
+    # THE GATE, wired 2026-09-19 on Kenneth's explicit instruction. It is applied
+    # HERE, immediately after the mirror, because this is the first and only
+    # place the conviction exists in the TRADE's own frame -- which is the frame
+    # `regime_gate`'s thresholds are written in. The scan gets there by calling
+    # compute_omm(direction=req.direction); this path gets there by mirroring a
+    # cached bullish number, and before `direction` existed it could not get
+    # there at all. That is why the gap was unreachable until this piece.
+    _apply_regime_gate(strategy, directional_conv, conviction)
+    #
+    # SUPERSEDED, ROUND 1 finding 4 -- kept as the record of why this was once
+    # deferred and what changed. `regime_gate` IS NOW APPLIED (line above). The
     # block directly above `regime_sizing` in scoring_rules.yaml carries
     # headwind_caution_pct: -15 / headwind_reject_pct: -40, and the scan path
     # enforces it (stock_scan.py -- CAUTION, then a hard "regime headwind"
@@ -425,6 +535,30 @@ class AutoTradeService:
         # still maps it to a 400 and maybe_fire_on_scan can single it out to alert.
         try:
             strategy = _apply_vol_sizing(strategy)
+        except RegimeHeadwindError as exc:
+            # ITS OWN BRANCH, ITS OWN STATUS. Folding this into the handler
+            # below would file a refusal we CHOSE under a status meaning "the
+            # conviction is unusable", and log that the number is bad when the
+            # number is good and is precisely why we refused. A post-mortem
+            # could not tell a headwind refusal from a data fault, and the
+            # remedies are opposites: "the market moved against this trade" vs
+            # "the regime feed is broken".
+            with self._lock:
+                self._state.history.append({
+                    "order_id":        None,
+                    "status":          "regime_headwind_blocked",
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
+                })
+            logger.error(
+                "AutoTrader fire REFUSED for %s %s — %s",
+                strategy.symbol, strategy.direction, exc,
+            )
+            raise
         except (SizingConfigError, ValueError) as exc:
             # ValueError too, and round 2 is why. Round 1 correctly stopped
             # reporting a bad CONVICTION as a broken config file (the message

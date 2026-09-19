@@ -732,12 +732,12 @@ def test_an_unreadable_scoring_file_refuses_instead_of_firing_full(mocker, tmp_p
     from app.scoring.conviction_sizing import SizingConfigError
 
     mocker.patch.object(at, "_SCORING_CONFIG_PATH", tmp_path / "gone.yaml")
-    at._load_scoring_config.cache_clear()
+    at._load_scoring_doc.cache_clear()
     try:
         with pytest.raises(SizingConfigError):
             at._load_scoring_config()
     finally:
-        at._load_scoring_config.cache_clear()
+        at._load_scoring_doc.cache_clear()
 
 
 def test_a_file_that_parses_to_a_non_mapping_refuses(mocker, tmp_path):
@@ -747,12 +747,12 @@ def test_a_file_that_parses_to_a_non_mapping_refuses(mocker, tmp_path):
     bad = tmp_path / "scoring_rules.yaml"
     bad.write_text("- not\n- a mapping\n")
     mocker.patch.object(at, "_SCORING_CONFIG_PATH", bad)
-    at._load_scoring_config.cache_clear()
+    at._load_scoring_doc.cache_clear()
     try:
         with pytest.raises(SizingConfigError):
             at._load_scoring_config()
     finally:
-        at._load_scoring_config.cache_clear()
+        at._load_scoring_doc.cache_clear()
 
 
 def test_an_absent_block_is_still_sizing_off_not_a_failure(mocker, tmp_path):
@@ -763,12 +763,12 @@ def test_an_absent_block_is_still_sizing_off_not_a_failure(mocker, tmp_path):
     ok = tmp_path / "scoring_rules.yaml"
     ok.write_text("some_other_block:\n  a: 1\n")
     mocker.patch.object(at, "_SCORING_CONFIG_PATH", ok)
-    at._load_scoring_config.cache_clear()
+    at._load_scoring_doc.cache_clear()
     try:
         assert at._load_scoring_config() == {}
         assert at._apply_vol_sizing(_sizing_strategy(4)).quantity == 4
     finally:
-        at._load_scoring_config.cache_clear()
+        at._load_scoring_doc.cache_clear()
 
 
 def test_a_broken_block_refuses_before_the_conviction_lookup(mocker):
@@ -991,3 +991,136 @@ def test_sizing_off_by_configuration_still_leaves_a_trace(mocker, caplog):
         out = at._apply_vol_sizing(_sizing_strategy(7))
     assert out.quantity == 7
     assert "off by configuration" in caplog.text
+
+
+# ── regime_gate on the fire path (2026-09-19, Kenneth's instruction) ──────────
+#
+# THESE TESTS EXIST BECAUSE THE GATE IS OTHERWISE INERT UNDER TEST. It abstains
+# when stability is uncached, and no other test in this file caches it — so
+# every assertion above passes with the gate present or absent. Without the
+# cases below, wiring it would have been unobservable.
+
+def _fire_with_regime(mocker, *, direction: str, conviction: float,
+                      stability: str | None, quantity: int = 4):
+    """Arm and fire with BOTH halves of the regime cached. Returns (qty|None, svc)."""
+    from app.data.ibkr_paper import OrderResult
+    captured = {}
+    def mock_execute(s):
+        captured["quantity"] = s.quantity
+        return OrderResult("gate", "ok", "ibkr_paper")
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=conviction)
+    mocker.patch("app.services.regime_monitor.get_last_stability", return_value=stability)
+
+    right = "C" if direction == "Bullish" else "P"
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol=f"AAPL260620{right}00185000",
+        action="BUY", direction=direction, quantity=quantity, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=100_000.0,
+    ))
+    svc.fire()
+    return captured.get("quantity"), svc
+
+
+def test_regime_gate_refuses_a_trade_the_scan_would_have_dropped(mocker):
+    """Bearish into conviction +80 is -80 in its own frame: past the reject floor.
+
+    Before this was wired the same trade fired at min_mult — `max(1, ...)`
+    guarantees at least one contract, so "sized to nothing" still sent an order.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+    with pytest.raises(RegimeHeadwindError, match="regime headwind"):
+        _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Stable")
+
+
+def test_regime_gate_refusal_is_recorded_and_sends_nothing(mocker):
+    """The refusal must leave a trace AND leave nothing armed. Both, not either."""
+    from app.services.auto_trader import RegimeHeadwindError
+    from app.data.ibkr_paper import OrderResult
+    sent = []
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 side_effect=lambda s: sent.append(s) or OrderResult("x", "ok", "ibkr_paper"))
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=80)
+    mocker.patch("app.services.regime_monitor.get_last_stability", return_value="Stable")
+
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL", option_symbol="AAPL260620P00185000",
+        action="BUY", direction="Bearish", quantity=4, order_type="LMT",
+        limit_price=2.50, conid=None, entry_premium=2.50, portfolio_value=100_000.0,
+    ))
+    with pytest.raises(RegimeHeadwindError):
+        svc.fire()
+
+    assert sent == [], "a refused fire must not reach the broker"
+    last = svc.get_state().history[-1]
+    assert last["status"] == "regime_headwind_blocked", last
+    assert last["order_id"] is None
+    assert svc.get_state().armed is False, "disarm happens before the refusal"
+
+
+def test_regime_gate_honours_require_stable_for_reject(mocker):
+    """Same headwind, Fragile regime: the scan does NOT hard-drop, so neither do we.
+
+    This is why stability had to be cached rather than assumed. Applying the
+    conviction half alone would refuse here — a stricter gate wearing the same
+    name as the scan's.
+    """
+    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Fragile")
+    assert qty == 1, "fires, floored by sizing"
+
+
+def test_regime_gate_rejects_exactly_at_the_threshold(mocker):
+    """headwind_reject_pct is -40 and the comparison is `<=`, so -40 itself rejects."""
+    from app.services.auto_trader import RegimeHeadwindError
+    with pytest.raises(RegimeHeadwindError):
+        _fire_with_regime(mocker, direction="Bearish", conviction=40, stability="Stable")
+
+
+def test_regime_gate_lets_the_caution_band_fire(mocker):
+    """-20 is past headwind_caution_pct but not the reject floor: it fires.
+
+    An armed trade has no status left to demote, so CAUTION is logged and fires.
+    Sizing already floors it.
+    """
+    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=20, stability="Stable")
+    assert qty == 1
+
+
+def test_regime_gate_applies_to_bullish_trades_too(mocker):
+    """The gate reads the MIRRORED number, so it is direction-agnostic.
+
+    A bullish trade at conviction -80 faces exactly the headwind a bearish trade
+    faces at +80. If this passed while the bearish case refused, the gate would
+    be re-deriving direction instead of reading the frame it was given.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+    with pytest.raises(RegimeHeadwindError):
+        _fire_with_regime(mocker, direction="Bullish", conviction=-80, stability="Stable")
+
+
+def test_regime_gate_abstains_when_stability_was_never_cached(mocker):
+    """No stability -> no evaluation, and it fires rather than guessing.
+
+    Refusing on a guess would invent a rule the scan does not have; firing
+    silently would hide that the gate never ran. It fires and logs a warning.
+    """
+    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=80, stability=None)
+    assert qty == 1
+
+
+def test_regime_gate_does_not_fire_when_disabled(mocker, tmp_path, monkeypatch):
+    """`enabled: false` means the gate is off, not that it defaults to refusing."""
+    import app.services.auto_trader as at
+    monkeypatch.setattr(at, "_load_regime_gate_config", lambda: {
+        "enabled": False, "headwind_caution_pct": -15,
+        "headwind_reject_pct": -40, "require_stable_for_reject": True,
+    })
+    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Stable")
+    assert qty == 1
