@@ -379,3 +379,49 @@ describe("the armed payload carries the CARD's direction", () => {
     },
   );
 });
+
+describe('the ARMED state shows the direction the backend reports', () => {
+  /* ROUND 1 finding 6. `direction` was added to /auto-trade/status and declared
+   * in `api.ts` — and read by nothing, which is how a field ends up existing
+   * without doing anything. The router comment justifies the key by saying a
+   * wrong direction on an armed trade is "otherwise undetectable until the
+   * fill"; that is only true if the armed UI actually renders it.
+   *
+   * The value asserted is the SERVER's, not the card's. Echoing `card.direction`
+   * here would redisplay what this component sent, which cannot disagree with
+   * itself and so could never catch the mis-arm this readback exists to catch —
+   * hence the deliberately mismatched card below. */
+
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((st) => ({ limits: { ...st.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, armedDirection: null, lastOrderId: null });
+    });
+  });
+
+  it('renders the backend direction, not the card it was rendered with', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({
+      armed: true, symbol: 'NVDA', option: null, broker: 'ibkr_paper',
+      direction: 'Bearish', history_count: 0, last_order: null,
+    });
+
+    render(
+      // Card says Bullish; the server says Bearish. The server wins — if this
+      // rendered the card, that disagreement would be invisible, which is the
+      // whole failure this guards.
+      <AutoTradeArm card={{ ...mockCard, direction: 'Bullish' }} broker="ibkr_paper" methodPick={pick()} />,
+    );
+
+    expect(await screen.findByText(/Armed .*Bearish.* waiting for next trigger/)).toBeInTheDocument();
+  });
+
+  it('falls back to the bare label when the backend reports no direction', async () => {
+    // A backend that predates the field, or any null: the component must not
+    // render "Armed undefined" or crash.
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({ armed: true, direction: null });
+
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+
+    expect(await screen.findByText('Armed — waiting for next trigger')).toBeInTheDocument();
+  });
+});

@@ -532,8 +532,18 @@ def _fired_quantity(mocker, *, direction: str, conviction: float,
                     quantity: int = 4, action: str = "BUY") -> int:
     """Arm one trade, fire it, and return the quantity that reached the broker.
 
-    The option right follows `direction` so the fixture is not self-contradictory:
-    a bearish single-leg option is a long put.
+    The option right follows `direction`, so for the default action="BUY" the
+    fixture is a coherent position: a bearish single-leg option is a long put.
+
+    THAT COHERENCE DOES NOT EXTEND TO action="SELL", and ROUND 1 finding 7 was
+    right to say so. With `effect` hardcoded to OPEN, SELL+Bullish builds a
+    right="C" sell-to-open — a short call, a BEARISH position wearing a
+    "Bullish" label, the mirror image of the incoherence this piece retired.
+    Exactly one caller passes SELL (`test_vol_sizing_ignores_action_entirely`)
+    and it does so deliberately, to prove the sizing expression ignores
+    `action`. It is reachable only through this dataclass: `ArmRequest.action`
+    is now Literal["BUY"], so that body is a 422 at the HTTP door
+    (test_auto_trade.py::test_arm_refuses_sell_because_it_would_be_a_naked_short).
     """
     from app.data.ibkr_paper import OrderResult
     captured = {}
@@ -634,6 +644,13 @@ def test_vol_sizing_ignores_action_entirely(mocker):
     action="SELL" with direction="Bullish" at conviction=+80: the direction
     decides, so mult(+80) caps at 1.00 -> 4. Under the old expression SELL took
     the `100 - 80 = 20` branch -> 0.65 -> round(2.6) = 3. Discriminating.
+
+    This constructs ArmedStrategy DIRECTLY and that is now the only way to
+    reach it: ROUND 1 finding 3 narrowed `ArmRequest.action` to Literal["BUY"],
+    because SELL + the hardcoded effect="OPEN" is a naked short. So this row is
+    a guard on the sizing expression, NOT a claim that a SELL arm is reachable
+    or sane — the position it describes is incoherent on purpose, and the HTTP
+    door refuses it. See `_fired_quantity`'s docstring.
     """
     assert _fired_quantity(mocker, direction="Bullish", conviction=80, action="SELL") == 4
 

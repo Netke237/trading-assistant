@@ -132,7 +132,8 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
 };
 
 export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null }: AutoTradeArmProps) {
-  const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
+  const { autoMode, setAutoMode, armed, armedDirection, applyArmedStatus,
+          lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
 
@@ -141,7 +142,16 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     api.getAutoTradeStatus()
       .then((status) => {
         if (!active) return;
-        setArmed(status.armed);
+        // ONE call: `armed` and its direction are a single fact from a single
+        // response and must never be observable half-applied. The store no
+        // longer exposes a way to set either alone.
+        //
+        // The direction is the BACKEND's, deliberately NOT `card.direction`.
+        // ROUND 1 finding 6: direction now decides position size and the armed
+        // window was the one place that fact was invisible. Echoing the card
+        // would only ever redisplay what this component sent, which cannot
+        // disagree and so cannot catch anything; the server's value can.
+        applyArmedStatus(status.armed, status.direction);
         if (status.armed) setAutoMode('armed');
       })
       .catch(() => {
@@ -150,7 +160,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     return () => {
       active = false;
     };
-  }, [setArmed, setAutoMode]);
+  }, [applyArmedStatus, setAutoMode]);
 
   // ONE premium, read once: it is both what the arm request books as the
   // entry and the denominator the premium-stop fraction is derived against.
@@ -247,7 +257,11 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // accepting it as one.
         ...armPickedFieldsFrom(methodPick ?? null),
       });
-      setArmed(true);
+      // `card.direction` is the right value HERE and only here: the arm POST
+      // above carried exactly it and the server accepted it, so this is the
+      // confirmed armed direction rather than an unverified echo. The effect
+      // above still overwrites it with the server's own value on next read.
+      applyArmedStatus(true, card.direction);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -259,7 +273,9 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     setWorking(true); setError(null);
     try {
       await api.disarmAutoTrade();
-      setArmed(false);
+      // Clears the direction with it -- a stale direction on a disarmed
+      // trader is the half-state this action exists to make impossible.
+      applyArmedStatus(false, null);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -272,7 +288,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     try {
       const res = await api.fireAutoTrade();
       setLastOrderId(res.order_id);
-      setArmed(false);
+      applyArmedStatus(false, null);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -313,7 +329,11 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
           ) : (
             <>
               <StatusBadge status="CAUTION" tooltip="Auto-trade is armed — the next matching signal will submit a live order automatically. Always CAUTION while armed, regardless of scan status, because unattended execution carries elevated risk." />
-              <Text size={12} tone="caution">Armed — waiting for next trigger</Text>
+              <Text size={12} tone="caution">
+                {armedDirection
+                  ? `Armed ${card.symbol} ${armedDirection} — waiting for next trigger`
+                  : 'Armed — waiting for next trigger'}
+              </Text>
               <button type="button" className={styles.btn} onClick={handleDisarm} disabled={working}>
                 Disarm
               </button>

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
+from app.schemas import Direction
 from app.services.premium_stop import resolve_premium_stop_pct
 from app.scoring.conviction_sizing import (
     SizingConfigError,
@@ -40,7 +41,7 @@ class ArmedStrategy:
     # `raise ValueError` lands in fire()'s `sizing_data_blocked` bucket with a
     # false log line, and sits after both full-size early returns -- absent
     # exactly where the blast radius is largest.
-    direction:       Literal["Bullish", "Bearish"]
+    direction:       Direction
     quantity:        int
     order_type:      Literal["MKT", "LMT"]
     limit_price:     Optional[float]
@@ -189,14 +190,31 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     # (regime_omm.conviction over P(Bull) - P(Bear), scaled to [-100, +100]), so
     # the bearish mirror is -conviction, NOT 100 - conviction. On a signed scale
     # `100 - conviction` is a mirror of an unsigned [0, 100] one: with
-    # full_conviction_pct at 40 it clamps to 1.0 for every conviction <= 40, i.e.
-    # FULL SIZE in essentially every regime.
+    # full_conviction_pct at 40, `(100 - conviction) / 40` saturates whenever
+    # `100 - conviction >= 40`, i.e. for every conviction <= 60 -- FULL SIZE in
+    # essentially every regime. (<= 60, not <= 40: the tight bound, because a
+    # comment whose job is to be checkable has to survive being checked.)
     #
     # Direction is carried explicitly from the card. It is NOT inferred from
     # `action`, which is always "BUY" for a long single-leg option and never
     # encoded direction -- that inference is the defect this replaces, and
     # keeping it alongside would be a second source of truth for the same fact.
     directional_conv = conviction if strategy.direction == "Bullish" else -conviction
+    #
+    # DEFERRED, ROUND 1 finding 4 -- `regime_gate` IS NOT APPLIED HERE. The
+    # block directly above `regime_sizing` in scoring_rules.yaml carries
+    # headwind_caution_pct: -15 / headwind_reject_pct: -40, and the scan path
+    # enforces it (stock_scan.py -- CAUTION, then a hard "regime headwind"
+    # drop). This path reads only `regime_sizing`, so a trade at -80 in its own
+    # frame is sized to min_mult and STILL FIRES: `max(1, ...)` guarantees at
+    # least one contract. The scan would have refused the same setup.
+    #
+    # Not closed in this piece on purpose: wiring it makes trades that fire
+    # today stop firing, which is a real-money behaviour change and Kenneth's
+    # call, not an audit-fix. Before this piece the auto-trader COULD NOT
+    # evaluate headwind for a bearish trade -- it had no direction -- so this
+    # gap only becomes reachable now. That is why it is written down here
+    # rather than left for the next reader to rediscover.
     mult = conviction_mult(directional_conv, cfg)
     adjusted_qty = max(1, round(strategy.quantity * mult))
 
@@ -206,14 +224,25 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         # at any level, so the one outcome worth noticing was the only silent
         # one. Includes the honest no-op (conviction at or above full).
         logger.info(
-            "vol_sizing: %s qty %d unchanged (conviction=%.1f, mult=%.2f)",
-            strategy.symbol, strategy.quantity, directional_conv, mult,
+            # `direction` and the RAW conviction are both printed, and that is
+            # the point: `directional_conv` is POST-mirror, so Bearish@+80 and
+            # Bullish@-80 both render as -80.0 and are indistinguishable. Since
+            # direction now decides size, a post-mortem has to be able to tell
+            # which one it was.
+            "vol_sizing: %s %s qty %d unchanged (conviction=%.1f, "
+            "directional=%.1f, mult=%.2f)",
+            strategy.symbol, strategy.direction, strategy.quantity,
+            conviction, directional_conv, mult,
         )
         return strategy
 
     logger.info(
-        "vol_sizing: %s qty %d → %d (conviction=%.1f, mult=%.2f)",
-        strategy.symbol, strategy.quantity, adjusted_qty, directional_conv, mult,
+        # Same reason as the unchanged line above: raw conviction AND direction,
+        # because the post-mirror number alone cannot say which trade this was.
+        "vol_sizing: %s %s qty %d → %d (conviction=%.1f, directional=%.1f, "
+        "mult=%.2f)",
+        strategy.symbol, strategy.direction, strategy.quantity, adjusted_qty,
+        conviction, directional_conv, mult,
     )
     return _dc_replace(strategy, quantity=adjusted_qty)
 
@@ -337,7 +366,13 @@ class AutoTradeService:
         with self._lock:
             self._state.armed = True
             self._state.strategy = strategy
-        logger.info("AutoTrader armed: %s %s", strategy.action, strategy.symbol)
+        logger.info(
+            # `direction`, not `action`: this piece established that `action`
+            # carries no directional meaning (and it is now narrowed to "BUY",
+            # so it is a constant). Direction is what decides the size.
+            "AutoTrader armed: %s %s qty %d",
+            strategy.symbol, strategy.direction, strategy.quantity,
+        )
 
     def disarm(self) -> None:
         with self._lock:

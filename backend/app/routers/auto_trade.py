@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.schemas import PickedMethod, PickedStopBasis
+from app.schemas import Direction, PickedMethod, PickedStopBasis
 from app.services.auto_trader import auto_trader, ArmedStrategy
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
@@ -17,7 +17,20 @@ class ArmRequest(BaseModel):
     broker:          Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
     symbol:          str
     option_symbol:   str
-    action:          Literal["BUY", "SELL"]
+    # NARROWED TO "BUY" -- ROUND 1 finding 3. `effect` is not a field here;
+    # `execute_option_order` hardcodes effect="OPEN", so "SELL" on this endpoint
+    # was a SELL-TO-OPEN: a naked short option, which nothing in this app ever
+    # intends. The frontend has only ever sent "BUY" (AutoTradeArm/index.tsx),
+    # and no other caller exists, so this narrowing removes a door rather than
+    # a feature.
+    #
+    # It also settles an inconsistency this piece created. Once sizing stopped
+    # reading `action`, the old expression's incidental damping of the SELL
+    # branch (`100 - conviction`) went away, so a naked short would have been
+    # sized at FULL conviction. Keeping `action` wide while declaring it
+    # meaningless was the worst of both: meaningless for sizing, still able to
+    # open an unintended position.
+    action:          Literal["BUY"]
     # REQUIRED, NO DEFAULT -- this is the whole point of the field.
     #
     # `action` never encoded direction and cannot: a bearish options trade in
@@ -35,7 +48,14 @@ class ArmRequest(BaseModel):
     # ROLLOUT: the two sides must deploy together. A backend ahead of the
     # frontend, or a cached older client bundle, turns every Arm click into a
     # 422 with no fallback. That is the accepted cost of failing loudly at arm.
-    direction:       Literal["Bullish", "Bearish"]
+    #
+    # "Loudly" is now literally true on screen, which ROUND 1 finding 8 caught it
+    # not being: `apiError` in frontend/lib/api.ts dropped pydantic's `loc`, so
+    # this 422 rendered as `API /auto-trade/arm → 422: Field required` naming no
+    # field at all. It now reads `direction: Field required`. The backend test
+    # asserts "direction" in resp.text; that assertion was true all along and the
+    # only consumer was throwing the information away.
+    direction:       Direction
     quantity:        int = Field(..., ge=1)
     order_type:      Literal["MKT", "LMT"] = "LMT"
     # gt=0 -- ROUND 9, same reasoning as broker.py's two order schemas: a

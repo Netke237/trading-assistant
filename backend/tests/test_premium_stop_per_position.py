@@ -853,7 +853,18 @@ def test_order_schemas_reject_a_non_positive_limit_price(bad):
     ):
         base = {
             "broker": "tradier_paper", "symbol": "AAPL", "action": "BUY",
-            "effect": "OPEN", "quantity": 1, "limit_price": bad, **extra,
+            "effect": "OPEN", "quantity": 1, "limit_price": bad,
+            # ROUND 1 finding 1. `direction` is REQUIRED on ArmRequest, and a
+            # missing required field raises before any other bound is
+            # evaluated -- so without this key the ArmRequest row below raised
+            # for the MISSING DIRECTION and this test passed for the wrong
+            # reason. `ArmRequest.limit_price`'s `gt=0` could have been deleted
+            # outright with the suite still green, and that schema reaches a
+            # broker without passing through either order schema above.
+            # Harmless to the two models that do not declare it: both ignore
+            # unknown keys here.
+            "direction": "Bullish",
+            **extra,
         }
         with pytest.raises(ValidationError):
             model(**base)

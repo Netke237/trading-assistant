@@ -387,6 +387,31 @@ Silently removing regression guards while the suite stays green is precisely the
   `conviction_sizing.py`'s module docstring exists to prevent. Out of scope here; it needs its
   own piece.
 
+- **`regime_gate` IS NOT WIRED INTO THE FIRE PATH — named, not closed** (ROUND 1 of the code
+  audit, finding 4). `scoring_rules.yaml` carries `regime_gate: {headwind_caution_pct: -15,
+  headwind_reject_pct: -40}` directly above `regime_sizing`, and the **scan path enforces it**
+  (`stock_scan.py` — CAUTION, then a hard `"regime headwind"` drop). `_apply_vol_sizing` reads
+  **only** `regime_sizing`. Post-fix, a Bearish trade at bullish conviction +80 — i.e. −80 in
+  its own frame, twice past `headwind_reject_pct` — is sized to `min_mult` and **still fires**,
+  because `max(1, round(qty * mult))` guarantees at least one contract. The scan would have
+  refused the identical setup.
+
+  This became reachable *because of* this piece: before it, the auto-trader could not evaluate
+  headwind for a bearish trade at all, having no direction to evaluate it against. It is left
+  open deliberately — wiring the gate makes trades that fire today stop firing, which is a
+  real-money behaviour change and Kenneth's decision, not an audit fix. Recorded at the call
+  site in `auto_trader.py` as well as here.
+
+- **The corrected ramp is one-sided** (same round, finding 12 — a property of unchanged code
+  that bounds what this piece buys). `conviction_mult`'s `frac = max(0.0, min(conv/full, 1.0))`
+  collapses the entire opposed half of the domain onto a single multiplier. A Bearish trade is
+  therefore sized **identically** at bullish conviction +1 and +100, and identically at +40 and
+  +80. The defect this piece fixes was "the ramp is inverted"; what replaces it is a two-state
+  function — floor when opposed, graded only when favoured. That is arguably correct (you do
+  not want to *increase* size into a headwind), but it means the `regime_gate` above is the
+  only thing that could distinguish a mild headwind from a severe one, and it is not wired.
+  The two findings are one decision.
+
 ---
 
 ## 4. Verification

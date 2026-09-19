@@ -62,8 +62,28 @@ async function apiError(path: string, res: Response): Promise<never> {
       // entirely and used to fall through to the raw JSON text, dumping a
       // machine-formatted validation payload straight into a caller's error
       // UI. Join the human-readable `msg` fields instead.
+      // `loc` is included, not just `msg` — ROUND 1 finding 8. Pydantic's
+      // message for a missing required field is the bare string "Field
+      // required", so dropping `loc` rendered every such 422 as
+      // `API /auto-trade/arm → 422: Field required` with no clue WHICH field.
+      // That is the exact error a stale client bundle hits when it posts an
+      // arm body without `direction`, and the rollout note in
+      // routers/auto_trade.py calls that failure "loud" — it is only loud if
+      // the operator can see the field name.
       const messages = json.detail
-        .map((e: unknown) => (e && typeof e === 'object' && 'msg' in e ? String((e as { msg: unknown }).msg) : null))
+        .map((e: unknown) => {
+          if (!e || typeof e !== 'object' || !('msg' in e)) return null;
+          const msg = String((e as { msg: unknown }).msg);
+          const rawLoc = (e as { loc?: unknown }).loc;
+          // Drop pydantic's leading "body"/"query" frame — it is noise in a UI
+          // string. What remains is the field path, e.g. ["body","direction"]
+          // → "direction". A loc of just ["body"] leaves nothing, so fall back
+          // to the bare message rather than rendering an empty prefix.
+          const path = Array.isArray(rawLoc)
+            ? rawLoc.filter((seg) => seg !== 'body' && seg !== 'query').join('.')
+            : '';
+          return path ? `${path}: ${msg}` : msg;
+        })
         .filter((m: string | null): m is string => m != null);
       detail = messages.length > 0 ? messages.join('; ') : text;
     }
@@ -650,13 +670,18 @@ export const api = {
     post<{ order_id: string; status: string }>('/auto-trade/fire', {}),
 
   getAutoTradeStatus: () =>
+    // Models ALL SEVEN keys the endpoint returns. It used to declare five:
+    // adding `direction` while leaving `broker` and `history_count` undeclared
+    // would have left this contract selectively complete for no reason, and
+    // this was the moment it was being edited anyway (ROUND 1 finding 10).
     get<{ armed: boolean; symbol: string | null; option: string | null;
-          /** null when nothing is armed. Declared because the endpoint returns it
-           *  and this is its only declared reader -- an armed trade's direction
-           *  now decides its size, so a wrong one is otherwise invisible until
-           *  the fill. `last_order` does NOT carry it: history entries record no
-           *  direction (that is O4's territory). */
-          direction: Direction | null; last_order: unknown }>('/auto-trade/status'),
+          broker: string | null;
+          /** null when nothing is armed. An armed trade's direction now decides
+           *  its size, so a wrong one is otherwise invisible until the fill.
+           *  `last_order` does NOT carry it: history entries record no direction
+           *  (that is O4's territory). */
+          direction: Direction | null;
+          history_count: number; last_order: unknown }>('/auto-trade/status'),
 
   // Phase 4: Chart alert CRUD
   createAlertRule: (body: {
