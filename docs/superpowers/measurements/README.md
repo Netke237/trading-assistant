@@ -49,3 +49,24 @@ Q7's stop-premium fractions (0.80 / 0.70 / 0.60) are **not** measured here.
 They are a decided number with a stated revisit trigger, on a Phase B basis that
 is not built — see `PROJECT_STATE.json` open question 0 and
 `plans/2026-09-02-gate-basis-spec.md:39`.
+
+## `scan-funnel.jsonl`
+
+One row per options scan: the pipeline funnel counts, why the score gate
+rejected (confidence / regime / fundamentals, from each reject's breakdown),
+contract-rule reasons by symbol, the candidates, and the Step-1 regime captured
+at the same time. The regime is there on purpose: the same floor means
+different things in different regimes, so a single day's counts cannot separate
+"floor too high" from "the market is not offering that side". Bullish rows are a
+reference, not a target for the bearish pass-rate.
+
+## `scans/<date>/`
+
+The raw material behind the funnel rows, for analysis without re-running
+anything: `*.request.json` is the exact `POST /api/scan` body sent,
+`*.result.json` the full `ScanResult` returned — every candidate with its
+contract, plan and breakdowns, and every rejected symbol with its reason and
+per-rule score breakdown (trend, pullback, trigger, event, vol, confidence,
+regime, fundamentals). A score-gate reject's cause is read from that breakdown:
+`confidence` below the request's `confidence_reject_below`, `regime` 0, or
+`fundamentals` below `fundamentals_reject_below`.
