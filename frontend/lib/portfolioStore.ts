@@ -10,6 +10,7 @@ import { persist } from 'zustand/middleware';
 import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride, AlertOverrides, TpMethod, PickedMethod, PickedStopBasis } from '@/types/domain';
 import { useRiskStore } from '@/lib/riskStore';
 import { stripLegacyIvFields } from '@/lib/ivBasis';
+import { validationMessages } from '@/lib/pydanticError';
 
 type BackendPosition = {
   id: string;
@@ -298,16 +299,21 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
  *  already applies to `floorStop` and `premiumStopDollar`.
  *
  *  Normalises every shape to a string so no consumer has to. Validation errors
- *  are rendered as their `msg` text, which is what a human can act on; the
- *  field location is dropped because these are all single-position posts. */
+ *  are rendered through lib/pydanticError.ts, the same helper `apiError` uses,
+ *  so the identical wire shape cannot render two different ways depending on
+ *  which call site produced it.
+ *
+ *  That helper NAMES THE FIELD. This comment used to say the location was
+ *  "dropped because these are all single-position posts", which does not
+ *  follow: a single position posts several `gt=0` fields, and they fail with
+ *  byte-identical messages, so the old output repeated one sentence per bad
+ *  field and named none of them. */
 function errorDetail(body: unknown, status: number): string {
   const d = (body as { detail?: unknown } | null | undefined)?.detail;
   if (typeof d === 'string' && d.trim() !== '') return d;
   if (Array.isArray(d)) {
-    const msgs = d
-      .map((e) => (e && typeof e === 'object' ? (e as { msg?: unknown }).msg : undefined))
-      .filter((m): m is string => typeof m === 'string' && m.trim() !== '');
-    if (msgs.length) return msgs.join('; ');
+    const msgs = validationMessages(d);
+    if (msgs) return msgs;
   }
   if (d && typeof d === 'object') {
     const msg = (d as { msg?: unknown }).msg;

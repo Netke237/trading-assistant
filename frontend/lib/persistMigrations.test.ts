@@ -1,5 +1,5 @@
 import { migrateAlerts } from './alertStore';
-import { migrateAutoTrade } from './autoTradeStore';
+import { migrateAutoTrade, useAutoTradeStore } from './autoTradeStore';
 import { migrateRisk } from './riskStore';
 import { migrateStructure } from './structureStore';
 
@@ -76,5 +76,34 @@ describe('persist migrations', () => {
   it('autoTrade migration never restores the armed mode', () => {
     expect(migrateAutoTrade({ autoMode: 'armed' }, 1).autoMode).toBe('manual');
     expect(migrateAutoTrade({ autoMode: 'post_scan' }, 1).autoMode).toBe('post_scan');
+  });
+
+  it('autoTrade never persists any armed-window state', () => {
+    // The store's own comment treats this exclusion as a SAFETY property: an
+    // auto-trade that resumed "armed" across a browser restart would fire on
+    // the next scan as a surprise trade. Nothing asserted it, so someone
+    // "completing" `partialize` later would resurrect that hazard with the
+    // suite green. The armed window is server-owned — /auto-trade/status is
+    // the source of truth — which is also why adding `armedDirection` and
+    // `armedSymbol` needed no `version` bump under CLAUDE.md's rule: that rule
+    // governs new PERSISTED fields, and these are deliberately not persisted.
+    const partialize = useAutoTradeStore.persist.getOptions().partialize!;
+    const persisted = partialize({
+      ...useAutoTradeStore.getState(),
+      armed: true,
+      armedDirection: 'Bearish',
+      armedSymbol: 'NVDA',
+      lastOrderId: 'order-123',
+      autoMode: 'armed',
+    }) as Record<string, unknown>;
+
+    expect(persisted).not.toHaveProperty('armed');
+    expect(persisted).not.toHaveProperty('armedDirection');
+    expect(persisted).not.toHaveProperty('armedSymbol');
+    expect(persisted).not.toHaveProperty('lastOrderId');
+    // ...and 'armed' never survives as a mode either, belt and braces with the
+    // migration above: partialize guards a live write, migrate guards a read of
+    // something already on disk.
+    expect(persisted.autoMode).toBe('manual');
   });
 });

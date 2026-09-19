@@ -140,11 +140,14 @@ async def test_arm_carries_direction_through_to_the_armed_strategy_and_status():
             })
             assert resp.status_code == 200, resp.text
 
-            # The carry itself.
-            assert auto_trader._state.strategy is not None
-            assert auto_trader._state.strategy.direction == "Bearish"
+            # The carry itself. Read through get_state(), which takes the
+            # service lock and returns a copy, rather than touching the private
+            # `_state` — the same way test_phase_g_arm_pick.py reads it.
+            armed = auto_trader.get_state().strategy
+            assert armed is not None
+            assert armed.direction == "Bearish"
             # ...and that `action` did NOT become the source of truth again.
-            assert auto_trader._state.strategy.action == "BUY"
+            assert armed.action == "BUY"
 
             # The status endpoint's new key. Without this assertion the whole
             # `"direction": ...` line could be deleted from the router and the

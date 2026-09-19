@@ -380,48 +380,105 @@ describe("the armed payload carries the CARD's direction", () => {
   );
 });
 
-describe('the ARMED state shows the direction the backend reports', () => {
-  /* ROUND 1 finding 6. `direction` was added to /auto-trade/status and declared
-   * in `api.ts` — and read by nothing, which is how a field ends up existing
-   * without doing anything. The router comment justifies the key by saying a
-   * wrong direction on an armed trade is "otherwise undetectable until the
-   * fill"; that is only true if the armed UI actually renders it.
+describe('the ARMED state shows what the BACKEND has armed', () => {
+  /* ROUND 1 finding 6 added `direction` to /auto-trade/status; ROUND 2 findings
+   * 2, 3 and 4 are why this block was rewritten.
    *
-   * The value asserted is the SERVER's, not the card's. Echoing `card.direction`
-   * here would redisplay what this component sent, which cannot disagree with
-   * itself and so could never catch the mis-arm this readback exists to catch —
-   * hence the deliberately mismatched card below. */
+   * The values rendered are the SERVER's. Echoing the card would redisplay what
+   * this component sent, which cannot disagree with itself and so could never
+   * catch a mis-arm. Symbol and direction must come from the SAME source: step-7
+   * renders this component with no `key`, so CandidateNav swaps `card` without
+   * remounting, and a server direction paired with a local `card.symbol` asserts
+   * "Armed TSLA Bullish" for a trade armed on AAPL. */
 
   beforeEach(() => {
     act(() => {
       useRiskStore.setState((st) => ({ limits: { ...st.limits, portfolioValue: 73_000 } }));
-      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, armedDirection: null, lastOrderId: null });
+      useAutoTradeStore.setState({
+        autoMode: 'armed', armed: false, armedDirection: null, armedSymbol: null, lastOrderId: null,
+      });
     });
+    (api.armAutoTrade as jest.Mock).mockClear();
   });
 
-  it('renders the backend direction, not the card it was rendered with', async () => {
+  it('renders the backend symbol AND direction, not the card it was rendered with', async () => {
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({
       armed: true, symbol: 'NVDA', option: null, broker: 'ibkr_paper',
       direction: 'Bearish', history_count: 0, last_order: null,
     });
 
+    // Card disagrees on BOTH axes. Asserted as one exact string rather than a
+    // regex with `.*` between the parts — the earlier version of this test used
+    // /Armed .*Bearish.*/ and rendered "Armed AAPL Bearish" while passing,
+    // which is the whole bug it was supposed to be guarding.
     render(
-      // Card says Bullish; the server says Bearish. The server wins — if this
-      // rendered the card, that disagreement would be invisible, which is the
-      // whole failure this guards.
-      <AutoTradeArm card={{ ...mockCard, direction: 'Bullish' }} broker="ibkr_paper" methodPick={pick()} />,
+      <AutoTradeArm card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
+                    broker="ibkr_paper" methodPick={pick()} />,
     );
 
-    expect(await screen.findByText(/Armed .*Bearish.* waiting for next trigger/)).toBeInTheDocument();
+    expect(await screen.findByText('Armed NVDA Bearish — waiting for next trigger')).toBeInTheDocument();
+    expect(screen.queryByText(/Armed AAPL/)).not.toBeInTheDocument();
   });
 
-  it('falls back to the bare label when the backend reports no direction', async () => {
-    // A backend that predates the field, or any null: the component must not
-    // render "Armed undefined" or crash.
-    (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({ armed: true, direction: null });
+  it.each([
+    ['direction is null',   { armed: true, symbol: 'NVDA', direction: null }],
+    ['direction is absent', { armed: true, symbol: 'NVDA' }],
+    ['symbol is absent',    { armed: true, direction: 'Bearish' }],
+  ])('falls back to the bare label when %s', async (_label, status) => {
+    // The absent-key rows are the "backend predates the field" case the rollout
+    // note contemplates — `undefined`, not null. Both names come from the
+    // server or neither does, so a half-answer renders the bare label rather
+    // than "Armed undefined Bearish".
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce(status);
 
     render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
 
     expect(await screen.findByText('Armed — waiting for next trigger')).toBeInTheDocument();
+  });
+
+  it('re-reads the backend after arming instead of trusting the card', async () => {
+    /* ROUND 2 finding 4. The mount effect's deps are referentially-stable store
+     * actions, so it runs once per mount and never re-reads. Without an explicit
+     * refetch on the arm path, the label showed `card.direction` on exactly the
+     * path that matters — the user having just armed — while the comments and
+     * tests claimed it showed the backend's. */
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockResolvedValueOnce({ armed: false })                                    // mount
+      .mockResolvedValueOnce({ armed: true, symbol: 'NVDA', direction: 'Bearish' }); // after arm
+
+    render(
+      <AutoTradeArm card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
+                    broker="ibkr_paper" methodPick={pick()} />,
+    );
+    fireEvent.click(await screen.findByText(/^Arm —/));
+
+    // The server's values win over the optimistic card echo.
+    expect(await screen.findByText('Armed NVDA Bearish — waiting for next trigger')).toBeInTheDocument();
+  });
+
+  it('does NOT let a status read issued before arming clobber the armed state', async () => {
+    /* ROUND 2 finding 3, the most dangerous of the three: the operator sees an
+     * "Arm" button and believes nothing is armed, while the backend is armed and
+     * will fire on the next trigger. The old `active` flag guarded unmount only,
+     * which is a different race entirely. */
+    let releaseMountRead: (v: unknown) => void = () => {};
+    const pendingMountRead = new Promise((resolve) => { releaseMountRead = resolve; });
+
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockReturnValueOnce(pendingMountRead)                                       // mount: held open
+      .mockResolvedValueOnce({ armed: true, symbol: 'AAPL', direction: 'Bullish' }); // post-arm
+
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(await screen.findByText(/^Arm —/));
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+
+    // Now the mount read lands, stale, insisting nothing is armed.
+    await act(async () => {
+      releaseMountRead({ armed: false, direction: null, symbol: null });
+      await pendingMountRead;
+    });
+
+    expect(useAutoTradeStore.getState().armed).toBe(true);
+    expect(screen.queryByText(/^Arm —/)).not.toBeInTheDocument();
   });
 });

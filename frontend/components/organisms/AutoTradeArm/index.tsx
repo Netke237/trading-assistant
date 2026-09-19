@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
@@ -132,35 +132,43 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
 };
 
 export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null }: AutoTradeArmProps) {
-  const { autoMode, setAutoMode, armed, armedDirection, applyArmedStatus,
+  const { autoMode, setAutoMode, armed, armedDirection, armedSymbol, applyArmedStatus,
           lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    api.getAutoTradeStatus()
-      .then((status) => {
-        if (!active) return;
-        // ONE call: `armed` and its direction are a single fact from a single
-        // response and must never be observable half-applied. The store no
-        // longer exposes a way to set either alone.
-        //
-        // The direction is the BACKEND's, deliberately NOT `card.direction`.
-        // ROUND 1 finding 6: direction now decides position size and the armed
-        // window was the one place that fact was invisible. Echoing the card
-        // would only ever redisplay what this component sent, which cannot
-        // disagree and so cannot catch anything; the server's value can.
-        applyArmedStatus(status.armed, status.direction);
-        if (status.armed) setAutoMode('armed');
-      })
-      .catch(() => {
-        // Keep the safe local defaults when the backend is unavailable.
-      });
-    return () => {
-      active = false;
-    };
+  // Monotonic counter guarding against a STALE status response. ROUND 2
+  // finding 3 demonstrated the hazard: a read issued on mount that resolves
+  // AFTER the user has armed used to apply its `armed: false` over the fresh
+  // `armed: true`, showing an "Arm" button while the backend was armed and
+  // would fire on the next trigger. The old `active` flag guarded UNMOUNT,
+  // which is a different race and does not cover this one. Every local
+  // armed-state change bumps this, so a read issued before it is discarded on
+  // arrival instead of overwriting newer truth with older.
+  const statusSeq = useRef(0);
+
+  const refreshStatus = useCallback(async () => {
+    const seq = statusSeq.current;
+    try {
+      const status = await api.getAutoTradeStatus();
+      if (seq !== statusSeq.current) return;   // superseded while in flight
+      // ONE call: `armed`, its direction and its symbol are a single fact from
+      // a single response and must never be observable half-applied. The store
+      // exposes no way to set any of them alone.
+      //
+      // These are the BACKEND's values, deliberately NOT the card's. ROUND 1
+      // finding 6: direction now decides position size and the armed window was
+      // the one place that fact was invisible. Echoing the card would only
+      // redisplay what this component sent, which cannot disagree with itself
+      // and so could never catch a mis-arm; the server's value can.
+      applyArmedStatus(status.armed, status.direction, status.symbol);
+      if (status.armed) setAutoMode('armed');
+    } catch {
+      // Keep the safe local defaults when the backend is unavailable.
+    }
   }, [applyArmedStatus, setAutoMode]);
+
+  useEffect(() => { void refreshStatus(); }, [refreshStatus]);
 
   // ONE premium, read once: it is both what the arm request books as the
   // entry and the denominator the premium-stop fraction is derived against.
@@ -257,11 +265,19 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // accepting it as one.
         ...armPickedFieldsFrom(methodPick ?? null),
       });
-      // `card.direction` is the right value HERE and only here: the arm POST
-      // above carried exactly it and the server accepted it, so this is the
-      // confirmed armed direction rather than an unverified echo. The effect
-      // above still overwrites it with the server's own value on next read.
-      applyArmedStatus(true, card.direction);
+      // Invalidate any status read still in flight (ROUND 2 finding 3) before
+      // publishing the new state, so a stale `armed: false` cannot land on top.
+      statusSeq.current += 1;
+      // Optimistic, and explicitly provisional: the POST above carried exactly
+      // these values and the server accepted them, so they are the best guess
+      // until the server speaks for itself.
+      applyArmedStatus(true, card.direction, card.symbol);
+      // ...which it now does. ROUND 2 finding 4: the mount effect's deps are
+      // referentially-stable store actions, so it runs ONCE per mount and never
+      // re-reads. Without this line the armed label showed `card.direction` on
+      // the one path that matters -- the user having just armed -- while both
+      // the comments and the tests claimed it showed the backend's. Now it does.
+      void refreshStatus();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -273,9 +289,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     setWorking(true); setError(null);
     try {
       await api.disarmAutoTrade();
-      // Clears the direction with it -- a stale direction on a disarmed
+      statusSeq.current += 1;
+      // Clears direction and symbol with it -- a stale pair on a disarmed
       // trader is the half-state this action exists to make impossible.
-      applyArmedStatus(false, null);
+      applyArmedStatus(false, null, null);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -288,7 +305,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     try {
       const res = await api.fireAutoTrade();
       setLastOrderId(res.order_id);
-      applyArmedStatus(false, null);
+      statusSeq.current += 1;
+      applyArmedStatus(false, null, null);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -330,8 +348,15 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
             <>
               <StatusBadge status="CAUTION" tooltip="Auto-trade is armed — the next matching signal will submit a live order automatically. Always CAUTION while armed, regardless of scan status, because unattended execution carries elevated risk." />
               <Text size={12} tone="caution">
-                {armedDirection
-                  ? `Armed ${card.symbol} ${armedDirection} — waiting for next trigger`
+                {/* BOTH names come from the server, or neither does. ROUND 2
+                    finding 2: pairing the server's direction with the local
+                    `card.symbol` produced a confidently wrong sentence --
+                    step-7 renders this component with no `key`, so stepping
+                    through candidates swaps `card` without remounting, and the
+                    panel would assert "Armed TSLA Bullish" for a trade armed on
+                    AAPL, Disarm button beside it. */}
+                {armedSymbol && armedDirection
+                  ? `Armed ${armedSymbol} ${armedDirection} — waiting for next trigger`
                   : 'Armed — waiting for next trigger'}
               </Text>
               <button type="button" className={styles.btn} onClick={handleDisarm} disabled={working}>

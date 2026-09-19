@@ -33,6 +33,35 @@ describe('apiError — FastAPI/Pydantic error body formatting', () => {
     );
   });
 
+  it('strips only the LEADING frame, so a field genuinely named "body" survives', async () => {
+    // ROUND 2 finding 1. The first version of this filter dropped 'body' and
+    // 'query' at EVERY depth, and this app has a field literally named `body`:
+    // NoteIn (backend/app/routers/symbol_notes.py), posted to by api.ts's
+    // updateSymbolNote. A 422 there returns loc ["body","body"], the blanket
+    // filter ate both, and the operator got the bare "Field required" — exactly
+    // the defect this prefixing exists to remove, on a live endpoint.
+    mockFetchOnce(422, {
+      detail: [{ loc: ['body', 'body'], msg: 'Field required', type: 'missing' }],
+    });
+    await expect(api.getStockQuote('AAPL')).rejects.toThrow('422: body: Field required');
+  });
+
+  it('strips every FastAPI frame, not just body and query', async () => {
+    // Otherwise a path-param 422 renders as "path.symbol: ..." while a body one
+    // renders as "symbol: ..." — the same rule applied two ways.
+    mockFetchOnce(422, {
+      detail: [{ loc: ['path', 'symbol'], msg: 'Input should be a valid string', type: 'string_type' }],
+    });
+    await expect(api.getStockQuote('AAPL')).rejects.toThrow('422: symbol: Input should be a valid string');
+  });
+
+  it('joins a nested loc into a dotted path', async () => {
+    mockFetchOnce(422, {
+      detail: [{ loc: ['body', 'targets', 0, 'targetPrice'], msg: 'Input should be greater than 0', type: 'greater_than' }],
+    });
+    await expect(api.getStockQuote('AAPL')).rejects.toThrow('targets.0.targetPrice: Input should be greater than 0');
+  });
+
   it('falls back to the bare msg when loc carries no field path', async () => {
     // loc of just ['body'] strips to nothing — the prefix must be omitted
     // rather than rendered as an empty "': '".

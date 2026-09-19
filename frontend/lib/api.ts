@@ -4,6 +4,7 @@ import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCa
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
+import { validationMessages } from '@/lib/pydanticError';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
@@ -57,35 +58,18 @@ async function apiError(path: string, res: Response): Promise<never> {
       detail = json.detail;
     } else if (Array.isArray(json?.detail)) {
       // FastAPI/Pydantic validation errors (e.g. a 422 on a Field(..., gt=0)
-      // violation) shape `detail` as a list of {loc, msg, type} objects, not
-      // a string — the `typeof === 'string'` check above misses this shape
+      // violation) shape `detail` as a list of {loc, msg, type} objects, not a
+      // string — the `typeof === 'string'` check above misses this shape
       // entirely and used to fall through to the raw JSON text, dumping a
-      // machine-formatted validation payload straight into a caller's error
-      // UI. Join the human-readable `msg` fields instead.
-      // `loc` is included, not just `msg` — ROUND 1 finding 8. Pydantic's
-      // message for a missing required field is the bare string "Field
-      // required", so dropping `loc` rendered every such 422 as
-      // `API /auto-trade/arm → 422: Field required` with no clue WHICH field.
-      // That is the exact error a stale client bundle hits when it posts an
-      // arm body without `direction`, and the rollout note in
-      // routers/auto_trade.py calls that failure "loud" — it is only loud if
-      // the operator can see the field name.
-      const messages = json.detail
-        .map((e: unknown) => {
-          if (!e || typeof e !== 'object' || !('msg' in e)) return null;
-          const msg = String((e as { msg: unknown }).msg);
-          const rawLoc = (e as { loc?: unknown }).loc;
-          // Drop pydantic's leading "body"/"query" frame — it is noise in a UI
-          // string. What remains is the field path, e.g. ["body","direction"]
-          // → "direction". A loc of just ["body"] leaves nothing, so fall back
-          // to the bare message rather than rendering an empty prefix.
-          const path = Array.isArray(rawLoc)
-            ? rawLoc.filter((seg) => seg !== 'body' && seg !== 'query').join('.')
-            : '';
-          return path ? `${path}: ${msg}` : msg;
-        })
-        .filter((m: string | null): m is string => m != null);
-      detail = messages.length > 0 ? messages.join('; ') : text;
+      // machine-formatted validation payload straight into a caller's error UI.
+      //
+      // Each message is prefixed with its field (see lib/pydanticError.ts).
+      // Without that, two fields failing the same check render the identical
+      // sentence twice naming neither, and pydantic's message for a MISSING
+      // required field is the bare "Field required" — which is what a stale
+      // client posting an arm body without `direction` produces, and the
+      // rollout note in routers/auto_trade.py calls that failure "loud".
+      detail = validationMessages(json.detail) ?? text;
     }
   } catch { /* not JSON — use raw text */ }
   throw new Error(`API ${path} → ${res.status}${detail ? `: ${detail}` : ''}`);
@@ -625,7 +609,12 @@ export const api = {
 
   armAutoTrade: (req: {
     broker: string; symbol: string; option_symbol: string;
-    action: 'BUY' | 'SELL'; quantity: number;
+    /** 'BUY' only. The backend narrowed `ArmRequest.action` to Literal["BUY"]
+     *  because `effect` is hardcoded to OPEN, making SELL a sell-to-open — a
+     *  naked short. Narrowed here too so `action: 'SELL'` fails TYPECHECK
+     *  rather than arriving as a runtime 422, which is the same standard
+     *  `direction` below is held to. */
+    action: 'BUY'; quantity: number;
     /** The trade's own direction, carried from the card. REQUIRED -- not
      *  optional and not defaulted -- so a caller that forgets fails typecheck
      *  here rather than arming a wrongly-sized trade. The backend decides
@@ -676,11 +665,17 @@ export const api = {
     // this was the moment it was being edited anyway (ROUND 1 finding 10).
     get<{ armed: boolean; symbol: string | null; option: string | null;
           broker: string | null;
-          /** null when nothing is armed. An armed trade's direction now decides
+          /** Null when nothing is armed. An armed trade's direction now decides
            *  its size, so a wrong one is otherwise invisible until the fill.
            *  `last_order` does NOT carry it: history entries record no direction
-           *  (that is O4's territory). */
-          direction: Direction | null;
+           *  (that is O4's territory).
+           *
+           *  OPTIONAL, not merely nullable: a backend predating this field omits
+           *  the key altogether, so the runtime value is `undefined` — which a
+           *  bare `Direction | null` would have promised could not happen. The
+           *  rollout note in routers/auto_trade.py contemplates exactly that
+           *  deployment order. */
+          direction?: Direction | null;
           history_count: number; last_order: unknown }>('/auto-trade/status'),
 
   // Phase 4: Chart alert CRUD
