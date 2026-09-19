@@ -9,6 +9,7 @@ import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import type { ScoringHorizon } from '@/lib/horizonPresets';
 
 // ── Part 3: profile-based scan schedule entries ────────────────────────────
 // Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
@@ -624,6 +625,23 @@ export const api = {
      *  bullish conviction frame. Never write `card.direction ?? 'Bullish'`
      *  here -- that typechecks and silently reinstates that exact defect. */
     direction: Direction;
+    /** The scoring horizon this card was scanned at — 'Intraday' | 'Swing' |
+     *  'Position'. REQUIRED, same standard as `direction` above and for a
+     *  related reason: the backend now measures THIS SYMBOL's own regime at
+     *  fire time to decide the headwind gate, and the horizon picks the window
+     *  it measures in (Intraday 26/1000/60 vs Position 50/750/100 — genuinely
+     *  different measurements). Derive it with `scoringHorizonFromLabel` from
+     *  the scan context rather than hand-writing a literal; never default it
+     *  here, which would typecheck while measuring the wrong window. */
+    horizon: ScoringHorizon;
+    /** The Step-3 Regime Gate thresholds this card's scan was run with,
+     *  snapshotted so a later Step-3 edit cannot retroactively change the rule
+     *  an already-armed trade is judged by — the same freeze `quantity`,
+     *  `premium_stop_pct` and the method pick get. Omitted means the scan used
+     *  the scoring_rules.yaml value. Build them with `regimeGateOverridesFrom`
+     *  so this and the scan request read the controls identically. */
+    regime_headwind_caution_pct?: number;
+    regime_headwind_reject_pct?: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
     entry_premium?: number;
     portfolio_value?: number;

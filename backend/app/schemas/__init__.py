@@ -667,6 +667,26 @@ class ScanRequest(BaseModel):
     # Mirrors StockScanRequest's fields of the same name (schemas/stock_scan.py).
     fundamentals_caution_above: Optional[float] = None
     fundamentals_reject_above:  Optional[float] = None
+    # Per-scan regime-gate overrides — the Step-3 "Headwind caution %" /
+    # "Headwind reject %" controls. Same names, same type, same None-means-YAML
+    # semantics as StockScanRequest's pair (schemas/stock_scan.py:60-61).
+    #
+    # ADDED 2026-09-19 as the OPTIONS half of a control that was only ever wired
+    # to the STOCK scan. Step 3 is shared by both modes and shows these two in
+    # every mode, so setting "Headwind reject %" and running an OPTIONS scan
+    # changed nothing at all. That matters now rather than merely being untidy:
+    # the auto-trader snapshots these onto the armed trade and applies them at
+    # fire (AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19), and the only
+    # producer of an armed trade is the OPTIONS trade card. Without this the
+    # snapshot would carry a threshold the scan behind the card never used --
+    # re-creating the scan-versus-fire disagreement in the other direction.
+    #
+    # DEFAULTS ARE THE YAML VALUES (-15 / -40, executionParamDefaults.ts:37), so
+    # an untouched Step-3 panel leaves this scan's behaviour BYTE-IDENTICAL. It
+    # bites only when the trader deliberately moves the control, which is what
+    # the control is for.
+    regime_headwind_caution_pct: Optional[float] = None
+    regime_headwind_reject_pct:  Optional[float] = None
     # Bearish spread construction params (used by Pass 2 for bearish candidates)
     spread_width:        float = 5.0
     short_leg_delta:     float = 0.30

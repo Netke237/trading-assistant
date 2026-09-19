@@ -83,6 +83,7 @@ from app.services import portfolio_risk
 # No cycle — contracts.py does not import this module.
 from app.routers.contracts import FirstPassageInvalidationOut
 from app.services.regime_omm import compute_omm
+from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
 from app.services.regime_hmm_daily import compute_directional_hmm, alignment
 from app.services.fundamentals_store import get_fundamentals as _get_fundamentals
 from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundamentals, FundamentalHealth
@@ -801,11 +802,14 @@ async def _process_stock(
                 _snap = await _get_fundamentals(symbol, staleness_days=_staleness)
                 _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
 
-            _regime_gate = dict(full_cfg.get("regime_gate") or {})
-            if req.regime_headwind_caution_pct is not None:
-                _regime_gate["headwind_caution_pct"] = req.regime_headwind_caution_pct
-            if req.regime_headwind_reject_pct is not None:
-                _regime_gate["headwind_reject_pct"] = req.regime_headwind_reject_pct
+            # Was four hand-written lines identical to the options scan's;
+            # routed through the shared resolver 2026-09-19 so the two scans and
+            # the auto-trader cannot drift on what an override means.
+            _regime_gate = _resolve_regime_gate(
+                full_cfg.get("regime_gate"),
+                req.regime_headwind_caution_pct,
+                req.regime_headwind_reject_pct,
+            )
 
             card = score_stock(
                 symbol=symbol,

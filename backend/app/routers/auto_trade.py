@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.schemas import Direction, PickedMethod, PickedStopBasis
+from app.schemas import Direction, PickedMethod, PickedStopBasis, Horizon
 from app.services.auto_trader import auto_trader, ArmedStrategy
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
@@ -113,6 +113,34 @@ class ArmRequest(BaseModel):
     picked_row_option_price: Optional[float]           = Field(default=None, gt=0)
     picked_stop_basis:       Optional[PickedStopBasis] = None
     picked_at:               Optional[str]             = None
+    # ── The regime gate's inputs, frozen at arm ─────────────────────────────
+    # AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19.
+    #
+    # REQUIRED, NO DEFAULT, for the reason `direction` above is: the fire path
+    # measures this symbol's own regime through the `regime.<horizon>` window
+    # (lookback / window / min_obs), and the three horizons are genuinely
+    # different measurements -- Intraday 26/1000/60 against Position 50/750/100.
+    # A default would pick one of them silently for a trade that meant another.
+    #
+    # THE ROLLOUT COST IS THE SAME ONE `direction` ACCEPTED and is stated again
+    # rather than assumed known: a backend ahead of the frontend, or a cached
+    # older client bundle, turns every Arm click into a 422. Both sides ship
+    # together. Failing loudly at arm beats measuring the wrong window at fire.
+    horizon:         Horizon
+    # The Step-3 Regime Gate thresholds this card's scan was run with. Omitted
+    # or null means "the scan used the scoring_rules.yaml value", which is what
+    # an untouched Step-3 control means -- so an omission is a real state here
+    # and not a missing field.
+    #
+    # UNBOUNDED ON PURPOSE, and deliberately unlike `premium_stop_pct` and
+    # `limit_price` above. Those tighten against a schema this endpoint
+    # bypasses. These two must be able to carry EXACTLY what the scan carried:
+    # `ScanRequest` and `StockScanRequest` both declare them as plain
+    # `Optional[float]`, and a bound here that the scan does not have would
+    # refuse to arm a card the scan itself produced -- which is the same
+    # scan-versus-fire disagreement this field exists to remove.
+    regime_headwind_caution_pct: Optional[float] = None
+    regime_headwind_reject_pct:  Optional[float] = None
 
 
 @router.post("/arm")

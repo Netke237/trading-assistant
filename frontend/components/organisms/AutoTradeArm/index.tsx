@@ -5,6 +5,9 @@ import { Text } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
+import { useScanStore } from '@/lib/scanStore';
+import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
+import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
 import { api } from '@/lib/api';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import { armPickedFieldsFrom } from '@/lib/cardEdits';
@@ -231,6 +234,29 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // `TradeCardData.direction` is required, and a fallback here would
         // typecheck while silently reinstating the defect this closes.
         direction:       card.direction,
+        // ── The regime gate's inputs, frozen at arm ─────────────────────────
+        // AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19. The backend
+        // measures THIS SYMBOL's own regime at fire time instead of reading a
+        // cached market-wide SPX number, and these two fields tell it WHICH
+        // measurement and BY WHAT RULE — so a refusal is the scan's own verdict
+        // on this setup rather than a different question with the same name.
+        //
+        // Read from the store at SUBMIT time, not from a render-time snapshot:
+        // this is the same `getState()` shape `portfolio_value` below already
+        // uses, and for the same reason — the value that matters is the one in
+        // force when the trade is armed.
+        //
+        // `scoringHorizonFromLabel` and not `context.horizon.split(' ')[0]`:
+        // the context string is a display form ("Position (90–105d)"), and the
+        // label helper is the one place that mapping is defined. A null context
+        // (nothing scanned this session) falls back to the helper's own default
+        // rather than to a literal written here.
+        horizon:         scoringHorizonFromLabel(useScanStore.getState().context?.horizon),
+        // Spread, not two hand-written keys, and through the shared reader, so
+        // the snapshot cannot disagree with what the scan request sent.
+        // Absent keys stay absent: omitted means "the scan used the YAML
+        // value", which is exactly what an untouched Step-3 control means.
+        ...regimeGateOverridesFrom(useScanStore.getState().scanOverrides),
         // Floored defensively: `contracts` comes from the shared per-symbol
         // Contracts map (Feature 7), which a caller could in principle write
         // a sub-1 value into (e.g. Feature 3's Apply button before its own

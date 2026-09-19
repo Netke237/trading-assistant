@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { AutoTradeArm } from '@/components/organisms/AutoTradeArm';
 import { useRiskStore } from '@/lib/riskStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
@@ -480,5 +481,92 @@ describe('the ARMED state shows what the BACKEND has armed', () => {
 
     expect(useAutoTradeStore.getState().armed).toBe(true);
     expect(screen.queryByText(/^Arm —/)).not.toBeInTheDocument();
+  });
+});
+
+// ── The regime gate's inputs, frozen at arm ─────────────────────────────────
+// AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19. The backend measures this
+// symbol's OWN regime at fire time instead of reading a cached market-wide
+// number, and it needs two things from the card to reproduce what the scan
+// measured: the horizon (which window) and the Step-3 thresholds (which rule).
+// The backend enforces `horizon`'s presence with a 422; what NOTHING but a test
+// here enforces is that the frontend actually fills the pipe — the same gap
+// piece 4 found, where `premium_stop_pct` existed end to end on the backend and
+// no caller could set it.
+describe('AutoTradeArm — regime gate inputs', () => {
+  beforeEach(() => {
+    act(() => {
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+      useScanStore.setState({ scanOverrides: {} });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it.each([
+    ['Intraday (0–2d)',     'Intraday'],
+    ['Swing (5–15d)',       'Swing'],
+    ['Position (15–45d)',   'Position'],
+    // The long-dated presets all SCORE as Position — scoring_rules.yaml has no
+    // `regime.quarterly` block, and the backend Literal would 422 the label.
+    ['Position (90–105d)',  'Position'],
+  ])('collapses the %s scan context to horizon=%s', async (contextHorizon, expected) => {
+    act(() => {
+      useScanStore.setState({
+        context: {
+          universe: 'SP500', direction: 'Bullish', horizon: contextHorizon,
+          horizonPreset: 'Swing', holdMin: 5, holdMax: 15,
+        },
+      });
+    });
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].horizon).toBe(expected);
+  });
+
+  it('sends the Step-3 headwind thresholds the scan was run with', async () => {
+    act(() => {
+      useScanStore.setState({
+        scanOverrides: { regime_headwind_caution_pct: -25, regime_headwind_reject_pct: -80 },
+      });
+    });
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.regime_headwind_caution_pct).toBe(-25);
+    expect(payload.regime_headwind_reject_pct).toBe(-80);
+  });
+
+  it('omits the thresholds when Step 3 never set them, so the backend reads its YAML', async () => {
+    // undefined, not 0 and not null: omitted is what "the scan used the config
+    // value" means on this endpoint, and 0 is a REAL threshold there.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.regime_headwind_caution_pct).toBeUndefined();
+    expect(payload.regime_headwind_reject_pct).toBeUndefined();
+  });
+
+  it('sends a zero threshold rather than dropping it as falsy', async () => {
+    // 0 sits inside the Step-3 control's own -100..0 range and means "cap on
+    // any headwind at all". A truthiness test anywhere along this path would
+    // silently substitute the YAML -40 — 40 points looser than asked for.
+    act(() => {
+      useScanStore.setState({
+        scanOverrides: { regime_headwind_caution_pct: 0, regime_headwind_reject_pct: 0 },
+      });
+    });
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.regime_headwind_caution_pct).toBe(0);
+    expect(payload.regime_headwind_reject_pct).toBe(0);
   });
 });

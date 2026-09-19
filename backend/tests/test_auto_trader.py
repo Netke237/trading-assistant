@@ -1,5 +1,7 @@
+import json
 import pytest
 from datetime import datetime, timezone
+from pathlib import Path
 from app.services.auto_trader import AutoTradeService, ArmedStrategy, AutoTradeState
 
 
@@ -1005,67 +1007,243 @@ def test_sizing_off_by_configuration_still_leaves_a_trace(mocker, caplog):
     assert "off by configuration" in caplog.text
 
 
-# ── regime_gate on the fire path (2026-09-19, Kenneth's instruction) ──────────
+# ── regime_gate on the fire path ─────────────────────────────────────────────
 #
-# THESE TESTS EXIST BECAUSE THE GATE IS OTHERWISE INERT UNDER TEST. It abstains
-# when stability is uncached, and no other test in this file caches it — so
-# every assertion above passes with the gate present or absent. Without the
-# cases below, wiring it would have been unobservable.
+# REWRITTEN 2026-09-19 for AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19.
+# The previous versions of these tests stubbed `get_last_conviction` /
+# `get_last_stability` and asserted the verdict, which made them blind to the
+# defect piece 2's round 1 actually found: the gate was reading SPX's
+# market-wide regime while the scan gated each symbol on its own. A test that
+# hands the gate its answer cannot notice that the answer came from the wrong
+# instrument.
+#
+# So these drive the gate through REAL BARS and the REAL `compute_omm`, and
+# assert on the three axes the finding named — WHICH SYMBOL is measured, in
+# WHICH horizon window, and under WHICH thresholds.
+#
+# MSFT's fixture is the one that yields a measurable regime here, and only at
+# the Position horizon (Swing's window returns None on 251 bars). That is not a
+# limitation of the test — it is the pair that pins the horizon down: the same
+# symbol and the same direction produce a verdict under Position and an
+# abstention under Swing, which nothing but a real horizon-driven measurement
+# does.
 
-def _fire_with_regime(mocker, *, direction: str, conviction: float,
-                      stability: str | None, quantity: int = 4):
-    """Arm and fire with BOTH halves of the regime cached. Returns (qty|None, svc)."""
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _fixture_bars(symbol: str) -> list[dict]:
+    with open(_FIXTURES / f"{symbol}_candles.json") as f:
+        return json.load(f)
+
+
+def _gate_fire(mocker, *, symbol="MSFT", direction="Bearish", horizon="Position",
+               quantity=4, bars=None, caution_pct=None, reject_pct=None,
+               cached_conviction=None):
+    """Arm and fire with the gate driven by REAL bars through the REAL compute_omm.
+
+    Returns (fired_quantity | None, svc, fetch_spy).
+
+    `cached_conviction` seeds regime_monitor's market-wide cache. It defaults to
+    None precisely so the SIZING arithmetic is a no-op (`conviction is None`
+    returns the strategy unchanged) and every assertion below is about the GATE
+    and nothing else. The tests that care about the cache set it deliberately.
+    """
     from app.data.ibkr_paper import OrderResult
-    captured = {}
+    captured: dict = {}
+
     def mock_execute(s):
         captured["quantity"] = s.quantity
         return OrderResult("gate", "ok", "ibkr_paper")
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=conviction)
-    mocker.patch("app.services.regime_monitor.get_last_stability", return_value=stability)
+    mocker.patch("app.services.regime_monitor.get_last_conviction",
+                 return_value=cached_conviction)
+    fetch_spy = mocker.patch(
+        "app.data.market.fetch_candles",
+        return_value=_fixture_bars(symbol) if bars is None else bars,
+    )
 
     right = "C" if direction == "Bullish" else "P"
     svc = AutoTradeService()
     svc.arm(ArmedStrategy(
-        broker="ibkr_paper", symbol="AAPL",
-        option_symbol=f"AAPL260620{right}00185000",
+        broker="ibkr_paper", symbol=symbol,
+        option_symbol=f"{symbol}260620{right}00185000",
         action="BUY", direction=direction, quantity=quantity, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
+        horizon=horizon,
+        regime_headwind_caution_pct=caution_pct,
+        regime_headwind_reject_pct=reject_pct,
     ))
     svc.fire()
-    return captured.get("quantity"), svc
+    return captured.get("quantity"), svc, fetch_spy
 
 
-def test_regime_gate_refuses_a_trade_the_scan_would_have_dropped(mocker):
-    """Bearish into conviction +80 is -80 in its own frame: past the reject floor.
+def _no_stability_requirement(monkeypatch):
+    """Drop `require_stable_for_reject` only, leaving the thresholds real.
 
-    Before this was wired the same trade fired at min_mult — `max(1, ...)`
-    guarantees at least one contract, so "sized to nothing" still sent an order.
+    MSFT's fixture regime is Fragile, so with the shipped config `_regime_cap`
+    cannot return REJECT at any conviction — the same structural inertness
+    open_questions[0] finding (3) records for the production regime. Turning
+    this one flag off is what makes the REJECT branch reachable from real bars
+    instead of from a stubbed verdict.
+    """
+    import app.services.auto_trader as at
+    real = dict(at._load_regime_gate_config())
+    monkeypatch.setattr(at, "_load_regime_gate_config",
+                        lambda: {**real, "require_stable_for_reject": False})
+
+
+def test_regime_gate_measures_the_traded_symbol_and_not_the_cached_market(mocker):
+    """The finding, stated as a test: a REJECT-grade cached market number must
+    not refuse a trade whose OWN regime passes.
+
+    Cached conviction +80 with a Bearish trade mirrors to -80 — past
+    headwind_reject_pct (-40). Under the old wiring that refused, whatever MSFT
+    itself was doing. MSFT's own Position regime in the Bearish frame is +50, a
+    PASS, so the trade must fire. The audit reproduced exactly this shape
+    (MSFT +50 against a cached market -100, 150 points apart and on opposite
+    sides of zero).
+    """
+    qty, _, fetch_spy = _gate_fire(mocker, symbol="MSFT", direction="Bearish",
+                                   horizon="Position", cached_conviction=80)
+    assert qty is not None, "the symbol's own regime passes, so it must fire"
+    assert fetch_spy.call_args.args[0] == "MSFT", (
+        "the gate must fetch the TRADED symbol's bars, not a market proxy"
+    )
+
+
+def test_regime_gate_refuses_on_the_symbols_own_measured_regime(mocker, monkeypatch):
+    """And the other half: a refusal must come from the symbol's own bars.
+
+    MSFT Bullish at the Position horizon measures -50, at or below
+    headwind_reject_pct (-40). The cache is left EMPTY, so nothing but the
+    fixture can be producing this verdict.
     """
     from app.services.auto_trader import RegimeHeadwindError
-    with pytest.raises(RegimeHeadwindError, match="regime headwind"):
-        _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Stable")
+    _no_stability_requirement(monkeypatch)
+    with pytest.raises(RegimeHeadwindError, match=r"MSFT measured -50"):
+        _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon="Position")
 
 
-def test_regime_gate_refusal_is_recorded_and_sends_nothing(mocker):
+def test_regime_gate_message_names_the_measurement_it_refused_on(mocker, monkeypatch):
+    """The refusal text is evidence, so it must carry the real numbers.
+
+    Round 1 finding 2 was as much about the MESSAGE as the verdict: it asserted
+    "the scan would have dropped this setup" while the scan had passed it. Now
+    that the fire path measures what the scan measures, the claim is true — and
+    the sentence has to say WHICH symbol, WHICH horizon, WHICH frame and WHAT
+    number, or a post-mortem cannot check it.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+    _no_stability_requirement(monkeypatch)
+    with pytest.raises(RegimeHeadwindError) as exc:
+        _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon="Position")
+    msg = str(exc.value)
+    for fragment in ("MSFT", "-50", "Position", "Bullish", "-40", "Fragile"):
+        assert fragment in msg, f"refusal text is missing {fragment!r}: {msg}"
+
+
+def test_regime_gate_uses_the_trades_own_horizon_window(mocker, monkeypatch):
+    """Same symbol, same direction, same bars — a different horizon, a different
+    outcome. Nothing but a genuinely horizon-driven measurement does that.
+
+    Position (lookback 50 / window 750 / min_obs 100) yields -50 on this fixture
+    and refuses. Swing (20 / 500 / 100) returns no result at all on the same 251
+    bars, so the gate abstains and the trade fires. If the horizon were ignored
+    — or defaulted — both cases would land on the same branch.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+    _no_stability_requirement(monkeypatch)
+
+    with pytest.raises(RegimeHeadwindError):
+        _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon="Position")
+
+    qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon="Swing")
+    assert qty == 4, "no measurement at the Swing window -> no gate -> full size"
+
+
+def test_regime_gate_passes_the_horizon_config_and_direction_to_compute_omm(mocker):
+    """Pins the four numbers, because the outcome alone cannot distinguish them.
+
+    A gate that used compute_omm's module defaults (20/500/100) instead of
+    `regime.position` (50/750/100) would still return SOMETHING, and on another
+    fixture might even agree. These are the exact values stock_scan.py and
+    scan.py pass, read from the same YAML block.
+    """
+    import app.services.regime_omm as omm_mod
+    spy = mocker.spy(omm_mod, "compute_omm")
+    _gate_fire(mocker, symbol="MSFT", direction="Bearish", horizon="Position")
+
+    assert spy.call_count == 1
+    kwargs = spy.call_args.kwargs
+    assert kwargs["direction"] == "Bearish", "the TRADE's frame, not a hardcoded Bullish"
+    assert (kwargs["lookback"], kwargs["window"], kwargs["min_obs"]) == (50, 750, 100), (
+        "must be scoring_rules.yaml's regime.position block, not compute_omm's defaults"
+    )
+
+
+def test_step3_reject_threshold_snapshot_overrides_the_yaml(mocker, monkeypatch):
+    """Round 1 finding 3: the Step-3 "Headwind reject %" now reaches the fire path.
+
+    The same trade that refuses at the YAML -40 must fire once the armed
+    strategy carries the trader's own -80, because -50 is not at or below -80.
+    Both halves are asserted: an override that changed nothing would pass the
+    second assertion alone.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+    _no_stability_requirement(monkeypatch)
+
+    with pytest.raises(RegimeHeadwindError):
+        _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon="Position")
+
+    qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                           horizon="Position", reject_pct=-80)
+    assert qty == 4, "the trader's own -80 says fire, so it fires"
+
+
+def test_step3_snapshot_can_also_tighten_the_gate(mocker, monkeypatch):
+    """The override is not a loosen-only knob, and a one-sided test would not say so.
+
+    MSFT Bearish at Position measures +50 — a PASS under any sane threshold.
+    A snapshot of +60 (the control's own range is -100..0, so this is past what
+    the UI can send, and that is the point: the assertion is about the
+    ARITHMETIC being applied, not about the UI's bounds) must refuse it.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+    _no_stability_requirement(monkeypatch)
+    with pytest.raises(RegimeHeadwindError):
+        _gate_fire(mocker, symbol="MSFT", direction="Bearish",
+                   horizon="Position", reject_pct=60)
+
+
+def test_regime_gate_refusal_is_recorded_and_sends_nothing(mocker, monkeypatch):
     """The refusal must leave a trace AND leave nothing armed. Both, not either."""
     from app.services.auto_trader import RegimeHeadwindError
+    _no_stability_requirement(monkeypatch)
+
+    with pytest.raises(RegimeHeadwindError):
+        qty, svc, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                                 horizon="Position")
+
+    # `_gate_fire` raised out of `svc.fire()`, so re-fire a fresh service to get
+    # a handle on the state — the assertions below are about what fire() left
+    # behind, which is identical either way.
     from app.data.ibkr_paper import OrderResult
-    sent = []
+    sent: list = []
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order",
                  side_effect=lambda s: sent.append(s) or OrderResult("x", "ok", "ibkr_paper"))
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=80)
-    mocker.patch("app.services.regime_monitor.get_last_stability", return_value="Stable")
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    mocker.patch("app.data.market.fetch_candles", return_value=_fixture_bars("MSFT"))
 
     svc = AutoTradeService()
     svc.arm(ArmedStrategy(
-        broker="ibkr_paper", symbol="AAPL", option_symbol="AAPL260620P00185000",
-        action="BUY", direction="Bearish", quantity=4, order_type="LMT",
+        broker="ibkr_paper", symbol="MSFT", option_symbol="MSFT260620C00185000",
+        action="BUY", direction="Bullish", quantity=4, order_type="LMT",
         limit_price=2.50, conid=None, entry_premium=2.50, portfolio_value=100_000.0,
+        horizon="Position",
     ))
     with pytest.raises(RegimeHeadwindError):
         svc.fire()
@@ -1080,62 +1258,55 @@ def test_regime_gate_refusal_is_recorded_and_sends_nothing(mocker):
 def test_regime_gate_honours_require_stable_for_reject(mocker):
     """Same headwind, Fragile regime: the scan does NOT hard-drop, so neither do we.
 
-    This is why stability had to be cached rather than assumed. Applying the
-    conviction half alone would refuse here — a stricter gate wearing the same
-    name as the scan's.
+    MSFT's fixture regime is Fragile and the shipped config has
+    `require_stable_for_reject: true`, so -50 caps at CAUTION rather than
+    REJECT. No monkeypatching here — this is the SHIPPED config, and it is why
+    every refusal test above has to drop that flag explicitly.
     """
-    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Fragile")
-    assert qty == 1, "fires, floored by sizing"
+    qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon="Position")
+    assert qty == 4, "Fragile cannot hard-drop, so it fires"
 
 
-def test_regime_gate_rejects_exactly_at_the_threshold(mocker):
-    """headwind_reject_pct is -40 and the comparison is `<=`, so -40 itself rejects."""
-    from app.services.auto_trader import RegimeHeadwindError
-    with pytest.raises(RegimeHeadwindError):
-        _fire_with_regime(mocker, direction="Bearish", conviction=40, stability="Stable")
+def test_regime_gate_abstains_when_the_bars_cannot_be_measured(mocker, caplog):
+    """No bars -> no measurement -> no gate, and it says so out loud.
 
-
-def test_regime_gate_lets_the_caution_band_fire(mocker):
-    """-20 is past headwind_caution_pct but not the reject floor: it fires.
-
-    An armed trade has no status left to demote, so CAUTION is logged and fires.
-    Sizing already floors it.
+    Abstaining is fail-OPEN on purpose: the scan passes `regime_gate=None` when
+    it has no regime signal, so a fire path that refused here would be stricter
+    than the scan under the same name.
     """
-    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=20, stability="Stable")
-    assert qty == 2, "fires, and the two-sided ramp grades it rather than flooring it"
+    with caplog.at_level("WARNING", logger="app.services.auto_trader"):
+        qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                               horizon="Position", bars=[])
+    assert qty == 4
+    assert "NOT evaluated" in caplog.text and "MSFT" in caplog.text
 
 
-def test_regime_gate_applies_to_bullish_trades_too(mocker):
-    """The gate reads the MIRRORED number, so it is direction-agnostic.
+def test_regime_gate_abstains_when_the_armed_strategy_carries_no_horizon(mocker, caplog):
+    """A direct constructor with no horizon must not silently lose the gate.
 
-    A bullish trade at conviction -80 faces exactly the headwind a bearish trade
-    faces at +80. If this passed while the bearish case refused, the gate would
-    be re-deriving direction instead of reading the frame it was given.
+    Unreachable through `/auto-trade/arm` (the field is required there, so a
+    body without it is a 422), but `ArmedStrategy` is a plain dataclass and
+    tests and future non-HTTP producers construct it directly.
     """
-    from app.services.auto_trader import RegimeHeadwindError
-    with pytest.raises(RegimeHeadwindError):
-        _fire_with_regime(mocker, direction="Bullish", conviction=-80, stability="Stable")
+    with caplog.at_level("WARNING", logger="app.services.auto_trader"):
+        qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon=None)
+    assert qty == 4
+    assert "carries no horizon" in caplog.text
 
 
-def test_regime_gate_abstains_when_stability_was_never_cached(mocker):
-    """No stability -> no evaluation, and it fires rather than guessing.
-
-    Refusing on a guess would invent a rule the scan does not have; firing
-    silently would hide that the gate never ran. It fires and logs a warning.
-    """
-    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=80, stability=None)
-    assert qty == 1
-
-
-def test_regime_gate_does_not_fire_when_disabled(mocker, tmp_path, monkeypatch):
+def test_regime_gate_does_not_fire_when_disabled(mocker, monkeypatch):
     """`enabled: false` means the gate is off, not that it defaults to refusing."""
     import app.services.auto_trader as at
     monkeypatch.setattr(at, "_load_regime_gate_config", lambda: {
         "enabled": False, "headwind_caution_pct": -15,
-        "headwind_reject_pct": -40, "require_stable_for_reject": True,
+        "headwind_reject_pct": -40, "require_stable_for_reject": False,
     })
-    qty, _ = _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Stable")
-    assert qty == 1
+    qty, _, fetch_spy = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                                   horizon="Position")
+    assert qty == 4
+    assert fetch_spy.call_count == 0, (
+        "a disabled gate must not pay for bars it will not look at"
+    )
 
 
 def test_regime_gate_still_refuses_when_regime_sizing_is_disabled(mocker, monkeypatch):
@@ -1148,17 +1319,14 @@ def test_regime_gate_still_refuses_when_regime_sizing_is_disabled(mocker, monkey
     the broker at the FULL armed quantity. That is worse than the behaviour the
     gate replaced, which at least sized a headwind trade down to min_mult.
 
-    Measured before the fix: this exact setup FIRED qty 4. The sharp edge is
-    that conviction_sizing.py's own SizingConfigError text advises "To stop
-    trading in a headwind, disable regime_sizing or raise the gate" — following
-    the codebase's own advice disabled the gate.
-
-    The other gate tests all mock `_load_regime_gate_config` wholesale and so
-    never exercise this axis; this one leaves the gate config real and moves
-    only `regime_sizing.enabled`.
+    Measured before that fix: this exact setup FIRED at the full armed quantity.
+    The sharp edge is that conviction_sizing.py's own SizingConfigError text
+    advises "To stop trading in a headwind, disable regime_sizing or raise the
+    gate" — following the codebase's own advice disabled the gate.
     """
     import app.services.auto_trader as at
     from app.services.auto_trader import RegimeHeadwindError
+    _no_stability_requirement(monkeypatch)
 
     doc = at._load_scoring_doc()
     real_sizing = dict(doc.get("regime_sizing") or {})
@@ -1170,4 +1338,24 @@ def test_regime_gate_still_refuses_when_regime_sizing_is_disabled(mocker, monkey
     assert resolve_sizing(at._load_scoring_config()) is None
 
     with pytest.raises(RegimeHeadwindError, match="regime headwind"):
-        _fire_with_regime(mocker, direction="Bearish", conviction=80, stability="Stable")
+        _gate_fire(mocker, symbol="MSFT", direction="Bullish", horizon="Position")
+
+
+def test_regime_gate_never_consults_the_market_wide_conviction_cache(mocker, monkeypatch):
+    """The cache is no longer an input to the gate at all — not even a tiebreak.
+
+    Both halves of the old wiring are moved to values that would flip the old
+    verdict, and neither changes anything: a cached conviction that mirrors to
+    -100 (a REJECT under the old gate) still fires when MSFT's own regime
+    passes, and an absent cache still refuses when MSFT's own regime rejects.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+
+    qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bearish",
+                           horizon="Position", cached_conviction=100)
+    assert qty is not None, "a REJECT-grade cached market number must not refuse"
+
+    _no_stability_requirement(monkeypatch)
+    with pytest.raises(RegimeHeadwindError):
+        _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                   horizon="Position", cached_conviction=None)

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
-from app.schemas import Direction
+from app.schemas import Direction, Horizon
 from app.services.premium_stop import resolve_premium_stop_pct
 from app.scoring.conviction_sizing import (
     SizingConfigError,
@@ -90,6 +90,40 @@ class ArmedStrategy:
     picked_row_option_price: Optional[float] = None
     picked_stop_basis:       Optional[str]   = None
     picked_at:               Optional[str]   = None
+    # ── The regime gate's inputs, frozen at arm time ────────────────────────
+    # AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19.
+    #
+    # `horizon` picks the `regime.<horizon>` block (lookback / window / min_obs)
+    # the fire path measures this symbol's own regime with, so it measures the
+    # SAME thing the scan measured. It is REQUIRED on `ArmRequest`, which is the
+    # only production producer of this dataclass, so None here means a direct
+    # constructor -- a test, or a future non-HTTP producer. The gate ABSTAINS
+    # LOUDLY on None rather than guessing a horizon: a wrong window is a wrong
+    # measurement, and the scan itself applies no gate when it has no regime
+    # signal (`regime_gate=None if not regime_signal`, routers/scan.py:593).
+    #
+    # Optional-with-a-default rather than required-like-`direction` is a
+    # deliberate asymmetry and not an oversight. A missing `direction` picks the
+    # WRONG BRANCH SILENTLY (the `else` is bearish); a missing `horizon` picks NO
+    # branch and says so at WARNING. The cost of requiring it is 31 direct
+    # construction sites; the cost of defaulting it would be a silent wrong
+    # measurement, which is why it is None and not "Swing".
+    horizon:                 Optional[Horizon] = None
+    # The Step-3 Regime Gate thresholds AS THE SCAN RESOLVED THEM, snapshotted.
+    # None means "the scan used the scoring_rules.yaml value", which is what an
+    # untouched Step-3 control means. Frozen at arm for the reason `quantity`,
+    # `premium_stop_pct` and the method pick are frozen: `fire_now()` takes no
+    # body and re-fires whatever was armed, so a later Step-3 edit must not
+    # retroactively change the rule an armed trade is judged by.
+    #
+    # DELIBERATELY UNBOUNDED, unlike `premium_stop_pct` and `limit_price` above.
+    # Those tighten against a schema this endpoint bypasses; these must be able
+    # to carry EXACTLY what the scan carried (`StockScanRequest` and
+    # `ScanRequest` both declare them as plain `Optional[float]`). A bound here
+    # that the scan does not have would refuse to arm a card the scan produced,
+    # which is the same disagreement this whole entry exists to remove.
+    regime_headwind_caution_pct: Optional[float] = None
+    regime_headwind_reject_pct:  Optional[float] = None
     armed_at:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -198,11 +232,195 @@ def _load_regime_gate_config() -> dict:
     return _load_scoring_doc().get("regime_gate", {})
 
 
-def _apply_regime_gate(strategy: ArmedStrategy, directional_conv: float,
-                       raw_conviction: float) -> None:
+def _load_regime_cfg(horizon: str) -> dict:
+    """The `regime.<horizon>` block — lookback / window / min_obs / timeframe.
+
+    Same shape and same source as `stock_scan._load_regime_cfg` and the inline
+    `_scfg["regime"][horizon.lower()]` in `routers/scan.py`. Read off the SAME
+    cached doc as the two blocks above, for the reason stated there: one file,
+    one reader.
+    """
+    return (_load_scoring_doc().get("regime") or {}).get(horizon.lower(), {})
+
+
+def _resolve_regime_gate(strategy: ArmedStrategy) -> dict:
+    """The gate thresholds for THIS trade: YAML, overridden by the arm snapshot.
+
+    THE SAME FUNCTION BOTH SCAN ROUTERS USE, not a fourth hand-written overlay
+    of the same two keys -- see `services/regime_gate.py` for why that is worth
+    a module. It returns a copy, so the cached YAML doc `_load_scoring_doc`
+    hands out by reference is never written through.
+    """
+    from app.services.regime_gate import resolve_regime_gate
+    return resolve_regime_gate(
+        _load_regime_gate_config(),
+        strategy.regime_headwind_caution_pct,
+        strategy.regime_headwind_reject_pct,
+    )
+
+
+# How long the fire path will wait for the bars it needs to measure the regime.
+# Same shape and the same reasoning as `_market_is_open`'s 3s: `fetch_candles`
+# has no built-in timeout, and a hung data source must not hold a fire open
+# indefinitely. Deliberately longer than the price probe's 3s because this is a
+# history request rather than a single quote, and shorter than any broker
+# timeout downstream. On expiry the gate ABSTAINS (see `_measure_trade_regime`),
+# which is the opposite of `_market_is_open`'s conservatism and matches the SCAN
+# instead: a scan with no regime signal applies no regime gate.
+_REGIME_FETCH_DEADLINE_S = 8.0
+
+
+def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
+    """Measure THIS symbol's own regime, in THIS trade's frame, right now.
+
+    Returns `(conviction_pct, stability)` or None when it cannot be measured.
+
+    THIS IS THE FIX FOR PIECE 2 ROUND 1 FINDING 2 (decision
+    AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19). The gate used to read
+    `regime_monitor`'s cached conviction, which is **SPX** measured on
+    `compute_omm`'s module defaults with a hardcoded Bullish frame. The scan
+    that produced the armed card measures the **traded symbol** on the
+    **horizon's** lookback/window/min_obs with the **trade's** direction. Those
+    are not the same fact: on the repo's own fixtures, MSFT Bearish is +50
+    (PASS) while cached SPX mirrors to -100 (REJECT) -- 150 points apart and on
+    opposite sides of zero, on the very number the thresholds compare.
+
+    WHAT IS REPRODUCED HERE, and what is not:
+      - instrument:  the traded symbol            (was: SPX)
+      - window:      regime.<horizon> from YAML   (was: compute_omm defaults)
+      - frame:       compute_omm(direction=...)   (was: a mirrored bullish cache)
+      - bars:        daily, ~252, the same shared `_candles_cache` the options
+        scan fills -- so on a normal fire this is the SAME SERIES the scan saw,
+        not merely a similar one.
+    The residual is the SOURCE, and it is named rather than glossed: the scan
+    prefers DB bars (`historical_store.get_bars`, ~252 trading days) and falls
+    back to `fetch_candles_async`; this path calls the sync `fetch_candles`.
+    Both share `market._candles_cache` keyed per calendar day, so they agree
+    whenever the cache is warm and can differ by provider when it is not. That
+    is a bounded disagreement between two ~252-bar daily series for one symbol
+    on one day -- a different order of thing from SPX-versus-MSFT, and the
+    reason it is documented here instead of being called equivalence.
+
+    NO CONVICTION MIRROR. `compute_omm(direction=...)` already returns
+    `conviction_pct` in the trade's frame (`regime_omm.py`: `conviction(sig,
+    direction)` is `signal if Bullish else -signal`). Mirroring it again would
+    be a double mirror. The mirror in `_apply_vol_sizing` below is for the
+    CACHED bullish number that still feeds SIZING, and the two must not be
+    confused -- see that function's note.
+
+    NETWORK CALL, ON A PATH THAT USED TO PROMISE NONE. Kenneth was told and
+    accepted it when locking the decision. It is bounded by
+    `_REGIME_FETCH_DEADLINE_S` and it runs OUTSIDE the state lock, the same
+    place and the same way `_market_is_open` already does network I/O in
+    `fire()`.
+    """
+    import concurrent.futures
+
+    if not strategy.horizon:
+        # Unreachable through `/auto-trade/arm` -- `ArmRequest.horizon` is
+        # required, so a body without it is a 422 before anything is armed.
+        # A direct constructor can still get here; it is told, at WARNING,
+        # rather than quietly losing the gate.
+        logger.warning(
+            "regime_gate: %s %s NOT evaluated — the armed strategy carries no "
+            "horizon, so there is no regime window to measure it in",
+            strategy.symbol, strategy.direction,
+        )
+        return None
+
+    rcfg = _load_regime_cfg(strategy.horizon)
+    if not rcfg:
+        logger.warning(
+            "regime_gate: %s %s NOT evaluated — scoring_rules.yaml has no "
+            "regime.%s block to measure with",
+            strategy.symbol, strategy.direction, str(strategy.horizon).lower(),
+        )
+        return None
+
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        from app.data.market import fetch_candles
+        future = ex.submit(fetch_candles, strategy.symbol)
+        try:
+            bars = future.result(timeout=_REGIME_FETCH_DEADLINE_S)
+        except concurrent.futures.TimeoutError:
+            ex.shutdown(wait=False)
+            logger.warning(
+                "regime_gate: %s %s NOT evaluated — bars did not arrive within "
+                "%.0fs", strategy.symbol, strategy.direction,
+                _REGIME_FETCH_DEADLINE_S,
+            )
+            return None
+        ex.shutdown(wait=False)
+    except Exception as exc:
+        ex.shutdown(wait=False)
+        logger.warning(
+            "regime_gate: %s %s NOT evaluated — bars unavailable: %s",
+            strategy.symbol, strategy.direction, exc,
+        )
+        return None
+
+    # The scan's own precondition, copied rather than re-invented
+    # (stock_scan.py:405, scan.py:548).
+    min_obs = rcfg.get("min_obs", 10)
+    if not bars or len(bars) < min_obs:
+        logger.warning(
+            "regime_gate: %s %s NOT evaluated — %d bars is under the %d "
+            "min_obs the %s regime needs",
+            strategy.symbol, strategy.direction, len(bars or []), min_obs,
+            strategy.horizon,
+        )
+        return None
+
+    from app.services.regime_omm import compute_omm
+    try:
+        omm = compute_omm(
+            [b["close"] for b in bars],
+            direction=strategy.direction,
+            lookback=rcfg["lookback"],
+            window=rcfg["window"],
+            min_obs=min_obs,
+        )
+    except Exception as exc:
+        # `compute_omm` raises ValueError on a direction it does not recognise,
+        # which a direct constructor can still produce (ArmedStrategy's Literal
+        # is not enforced at runtime -- piece B). Abstaining rather than letting
+        # it escape keeps a malformed direction out of fire()'s
+        # `(SizingConfigError, ValueError)` bucket, where it would be recorded
+        # as `sizing_data_blocked` and logged as an unusable conviction: the
+        # exact false-log defect piece B's round 3 measured and rejected.
+        logger.warning(
+            "regime_gate: %s %s NOT evaluated — regime computation failed: %s",
+            strategy.symbol, strategy.direction, exc,
+        )
+        return None
+
+    if omm is None:
+        # Genuinely not measurable: too short a series, or the current state has
+        # fewer than min_obs observations in the window. The scan's response to
+        # exactly this is `regime_signal = None` -> `regime_gate=None` -> no
+        # gate, so abstaining here is agreement with it, not a hole in it.
+        logger.warning(
+            "regime_gate: %s %s NOT evaluated — compute_omm returned no result "
+            "for the %s window (lookback=%s, window=%s, min_obs=%s)",
+            strategy.symbol, strategy.direction, strategy.horizon,
+            rcfg.get("lookback"), rcfg.get("window"), min_obs,
+        )
+        return None
+
+    return omm.conviction_pct, omm.stability
+
+
+def _apply_regime_gate(strategy: ArmedStrategy) -> None:
     """Refuse a fire the scan's `regime_gate` would have hard-dropped.
 
     THE RULE IS NOT REIMPLEMENTED -- it is the same function the scan uses.
+    NOR ARE ITS INPUTS RE-DERIVED, which is the half round 1 found missing:
+    `_measure_trade_regime` measures the TRADED SYMBOL on the TRADE's horizon
+    window in the TRADE's direction, and `_resolve_regime_gate` applies the
+    Step-3 thresholds the scan was run with. Same function, same instrument,
+    same window, same frame, same thresholds -- so a refusal here really is the
+    scan's own verdict on this setup, which is what the message claims.
     `stock_scorer._regime_cap` returns the status cap the gate imposes, and a
     cap of REJECT is the scan's hard drop. Calling it rather than re-deriving
     `<= headwind_reject_pct` here is deliberate: two copies of a threshold rule
@@ -217,51 +435,60 @@ def _apply_regime_gate(strategy: ArmedStrategy, directional_conv: float,
     below 0 in the trade's frame floors at min_mult.
     """
     from app.scoring.stock_scorer import _regime_cap
-    from app.services.regime_monitor import get_last_stability
 
-    gate = _load_regime_gate_config()
+    gate = _resolve_regime_gate(strategy)
     if not gate.get("enabled", False):
         return
 
-    stability = get_last_stability()
-    if stability is None:
-        # The conviction cache was filled by `set_last_conviction` alone, or by
-        # an older build. Refusing on a guess would invent a rule; firing
-        # silently would hide one. Neither: fire, and say the gate abstained.
-        logger.warning(
-            "regime_gate: %s %s NOT evaluated — conviction %.1f is cached "
-            "without the stability it was measured with, and "
-            "require_stable_for_reject is %s",
-            strategy.symbol, strategy.direction, raw_conviction,
-            gate.get("require_stable_for_reject", True),
-        )
+    measured = _measure_trade_regime(strategy)
+    if measured is None:
+        # Every abstaining branch inside `_measure_trade_regime` has already
+        # logged WHICH one it was, at WARNING, naming the symbol. Abstaining is
+        # fail-OPEN and that is deliberate: the scan applies no regime gate when
+        # it has no regime signal, so a fire path that refused here would be
+        # STRICTER than the scan -- the same class of disagreement, pointing the
+        # other way.
         return
 
-    cap = _regime_cap(int(round(directional_conv)), stability, gate)
+    conviction_pct, stability = measured
+
+    cap = _regime_cap(conviction_pct, stability, gate)
     if cap == "REJECT":
         raise RegimeHeadwindError(
-            f"regime headwind: conviction {directional_conv:+.0f} in this trade's "
-            f"own frame is at or below headwind_reject_pct "
-            f"({gate.get('headwind_reject_pct')}) with a {stability} regime — "
-            f"the scan would have dropped this setup"
+            f"regime headwind: {strategy.symbol} measured {conviction_pct:+d} "
+            f"on its own {strategy.horizon} regime in this trade's "
+            f"{strategy.direction} frame, at or below headwind_reject_pct "
+            f"({gate.get('headwind_reject_pct')}) with a {stability} regime "
+            f"— the scan's own regime_gate rule drops this setup"
         )
     if cap == "CAUTION":
         logger.info(
-            "regime_gate: %s %s fires into a headwind (conviction=%.1f, "
-            "directional=%+.1f, %s) — CAUTION band, not a refusal",
-            strategy.symbol, strategy.direction, raw_conviction,
-            directional_conv, stability,
+            "regime_gate: %s %s fires into a headwind (own %s regime "
+            "conviction=%+d, %s) — CAUTION band, not a refusal",
+            strategy.symbol, strategy.direction, strategy.horizon,
+            conviction_pct, stability,
         )
 
 
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     """Return a (possibly quantity-adjusted) copy of strategy based on regime conviction.
 
-    Reads cached conviction from regime_monitor (no network call).
+    SIZING reads cached conviction from regime_monitor. THE HEADWIND GATE DOES
+    NOT, and since 2026-09-19 THIS FUNCTION MAKES A NETWORK CALL because of it:
+    `_apply_regime_gate` measures the traded symbol's own regime, which means
+    fetching that symbol's bars. The docstring used to promise "no network
+    call"; that promise is retired deliberately, not by accident — Kenneth was
+    told the cost when locking AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19
+    and accepted it. The fetch is bounded by `_REGIME_FETCH_DEADLINE_S` and
+    happens outside the state lock, beside the one `fire()` already makes.
+
     If conviction is None or regime_sizing is disabled, returns strategy
-    unchanged. RAISES SizingConfigError if the regime_sizing block is present
-    and cannot be honoured — the §9.1 fail-closed posture, which fire() turns
-    into a recorded refusal rather than an order at full size.
+    unchanged — but only AFTER the gate has had its say, because the gate is a
+    refusal rather than a size (round 1 finding 1). RAISES SizingConfigError if
+    the regime_sizing block is present and cannot be honoured — the §9.1
+    fail-closed posture, which fire() turns into a recorded refusal rather than
+    an order at full size. RAISES RegimeHeadwindError when the symbol's own
+    regime opposes the trade hard enough that the scan's rule drops it.
     """
     cfg = _load_scoring_config()
     # Validated BEFORE the conviction lookup, and that order is load-bearing:
@@ -285,10 +512,15 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     from app.services.regime_monitor import get_last_conviction
     conviction = get_last_conviction()
 
-    # THE GATE RUNS FIRST AND RUNS REGARDLESS OF `sizing_off`. It is a refusal,
-    # not a size, so it does not belong behind a size switch. It still needs the
-    # conviction -- there is nothing to threshold without one -- so a missing
-    # conviction abstains here exactly as it does inside the gate itself.
+    # THE GATE RUNS FIRST, RUNS REGARDLESS OF `sizing_off`, AND RUNS REGARDLESS
+    # OF THE CACHE. It is a refusal, not a size, so it does not belong behind a
+    # size switch (round 1 finding 1) -- and since round 1 finding 2 it measures
+    # the symbol's own regime itself rather than reading `conviction` below, so
+    # a cold or stale SPX cache neither arms it nor disarms it. It is called
+    # before the `sizing_off` return for that first reason and outside the
+    # `conviction is not None` block for this second one.
+    _apply_regime_gate(strategy)
+
     if conviction is not None:
         # Direction-aware: `conviction` is the SIGNED BULLISH FRAME
         # (regime_omm.conviction over P(Bull) - P(Bear), scaled to [-100, +100]),
@@ -307,16 +539,22 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         # fact.
         directional_conv = conviction if strategy.direction == "Bullish" else -conviction
         #
-        # THE GATE, wired 2026-09-19 on Kenneth's explicit instruction. The
-        # mirror above is the first and only place the conviction exists in the
-        # TRADE's own frame -- which is the frame `regime_gate`'s thresholds are
-        # written in. The scan gets there by calling
-        # compute_omm(direction=req.direction); this path gets there by
-        # mirroring a cached bullish number, and before `direction` existed it
-        # could not get there at all. That is why the gap was unreachable until
-        # this piece.
-        _apply_regime_gate(strategy, directional_conv, conviction)
-
+        # THIS MIRROR IS FOR SIZING ONLY, and after 2026-09-19 that distinction
+        # is load-bearing. The GATE above no longer reads `conviction`: it calls
+        # compute_omm(direction=...) on the symbol's own bars, which returns the
+        # trade's frame directly and needs no mirror. Mirroring a number that is
+        # already in the trade's frame would be a double mirror, which is why
+        # the two must not be merged back together.
+        #
+        # SIZING STILL READS THE MARKET-WIDE CACHE, and that is a KNOWN
+        # DIVERGENCE from the gate one line above, recorded rather than quietly
+        # left: the scan card sizes off the SYMBOL's own conviction
+        # (stock_scan.py:970 passes `regime_signal["conviction_pct"]`), this
+        # path sizes off regime_monitor's SPX number. Round 1 finding 2 named
+        # the gate, Kenneth's decision covered the gate, and moving SIZING onto
+        # the per-symbol number changes POSITION SIZE -- which is piece 3's
+        # subject and its risk budget, not piece 2's. See PROJECT_STATE.json
+        # open_questions for the entry that carries it.
     if sizing_off:
         # Logged for the same reason as the unchanged-quantity line below: this
         # returns at FULL SIZE, and round 2 caught it as the one full-size path
@@ -551,7 +789,11 @@ class AutoTradeService:
             self._state.armed = False
             self._state.strategy = None
 
-        # Vol-scaled sizing: adjust quantity using cached regime conviction (no network call)
+        # Vol-scaled sizing (cached regime conviction) + the headwind gate,
+        # which measures this symbol's own regime and therefore DOES make a
+        # bounded network call — see _apply_vol_sizing's docstring. Placed here,
+        # after the disarm and outside the lock, for the same reason
+        # `_market_is_open` above is: network I/O must not hold the lock.
         # A config this cannot honour refuses the fire (§9.1, fail closed). The
         # order matters: disarm has already happened above, so a refusal here
         # leaves nothing armed and nothing sent — the same shape as the two
