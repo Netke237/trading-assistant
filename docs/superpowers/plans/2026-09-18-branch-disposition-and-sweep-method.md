@@ -333,3 +333,52 @@ and §4's checklist is re-run at the moment of acting. Keep `archive/` and the l
 bullish+bearish options, and stocks SP500 Swing+Position bullish+bearish), and
 `docs/superpowers/measurements/scan-funnel.jsonl` holds 6 rows. On main since `e058e99f`. Nothing
 to sync. This container's local `main` is byte-identical to `origin/main` (`0 0`).
+
+---
+
+## 8. DELETED 2026-09-20 — the first deletions this project has ever performed
+
+**Kenneth ran them from his own machine against `origin/main` at `2e9084ba`, after §4's checklist
+was re-run the same hour** (§7). Eight remote branches, one `git push origin --delete`:
+
+```
+ - [deleted]  claude/gracious-mayer-g738w8
+ - [deleted]  claude/journal-startup-exit-audit-q8aw8v
+ - [deleted]  claude/o4-auto-trade-books-a-position-2026-09-15
+ - [deleted]  claude/previous-session-token-limit-bgs1df
+ - [deleted]  claude/session-continuation-docs-ne4h8w
+ - [deleted]  claude/session-retrieval-continuation-vf056m
+ - [deleted]  claude/terminated-session-details-ozquzb
+ - [deleted]  worktree-agent-a070a8845cd9ddd2c
+```
+
+### 8.1 The evidence each one was deleted on
+
+`ne4h8w`, `vf056m` and `o4-auto-trade-books-a-position` read **ahead=0 / differs=0 / ABSENT=0**
+against `origin/main` — fully merged, nothing to lose. The other five were "ahead" by commit count
+and **fully dealt with by content**: zero files absent from main, and zero files where the branch
+was ahead (direction resolved per §3.3, not assumed).
+
+`terminated-session-details-ozquzb` was the one re-checked hardest, because it carried one file
+absent from main. `PLAN_CHART_DEFERRED_FIXES.md` was rescued on 2026-09-17 to
+`docs/superpowers/plans/2026-08-27-chart-lookback-deferred-fixes.md`, and that rescue was
+**re-verified by diff at the moment of deleting**: 402 lines against the branch's 396, and the diff
+is exactly the six-line rescue header. Content byte-identical.
+
+### 8.2 What survived, and why
+
+| Branch | Why kept |
+|---|---|
+| `claude/session-recovery-version-o2vklp` | **The live branch.** 41 commits ahead of main. Every unmerged line. |
+| `claude/auto-trader-direction-sizing-2026-09-18` | Safe to delete (the live branch contains all 26 of its commits, re-verified) but **deliberately kept as a second copy** until the live branch merges. Its content is not on main. Delete it in the same session that merges. |
+| `archive/vf056m-round3-7753b743` | Deliberate archive of an unclean round; main is ahead on all seven differing files. |
+
+### 8.3 The local sync that preceded it
+
+Kenneth's local `main` was at `e058e99f`, 26 behind. `git rev-list --left-right --count
+main...origin/main` read `0 26` — **left 0, so no local-only commits** — and the fast-forward was
+clean: 11 files, 2911 insertions, 92 deletions. An uncommitted local edit to
+`backend/config/strategy_watches.yaml` was checked first and survived untouched, because none of
+the 26 incoming commits touch that file and it is byte-identical at both ends.
+
+**Run §3.6 and §4 again before the next deletion. This section is the answer for 2026-09-20 only.**
