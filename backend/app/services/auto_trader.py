@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import math
 import threading
 import yaml
 from dataclasses import dataclass, field, replace as _dc_replace
@@ -33,6 +34,34 @@ class RegimeHeadwindError(RuntimeError):
     and is exactly why we are refusing), and pages under a shared rec_id that can
     suppress a genuine config refusal. Its own type, its own history status, its
     own message.
+    """
+
+
+class RegimeGateConfigError(RuntimeError):
+    """`regime_gate` is enabled but cannot be honoured.
+
+    ROUND 1 OF TARGET 2a FOUND THE GATE HAD NO SUCH IDENTITY, and the two ways
+    it failed without one were both measured:
+      - a block missing `headwind_reject_pct` while `enabled: true` reached
+        `_regime_cap`'s direct subscription and raised **KeyError**, which is a
+        LookupError and so matched NO handler in `fire()` -- a bare 500 to the
+        client, NO history row at all, the armed strategy already consumed, and
+        `/auto-trade/status` still showing the PREVIOUS order as last_order.
+        That is verbatim the state fire()'s own round-2 comment calls "strictly
+        worse than what it replaced on both halves of §9.1".
+      - a block that is a list or a string reached `dict(base or {})` and raised
+        **ValueError**, which the sizing handler DID catch -- and filed the
+        refusal as `sizing_data_blocked`, logging "the regime conviction is not
+        a usable number" and paging "regime_sizing cannot be honoured". Both
+        name the wrong block: the conviction was fine and `regime_sizing` was
+        untouched. A scalar block raised TypeError and escaped entirely.
+
+    So: its own type, for the same reason `RegimeHeadwindError` above has one --
+    a refusal must not be filed under a bucket whose remedy is the opposite of
+    the real one. This one means "fix scoring_rules.yaml's regime_gate block";
+    the headwind one means "the market moved against this trade".
+
+    A RuntimeError so `/auto-trade/fire` maps it to a 400, as both neighbours do.
     """
 
 
@@ -122,8 +151,36 @@ class ArmedStrategy:
     # `ScanRequest` both declare them as plain `Optional[float]`). A bound here
     # that the scan does not have would refuse to arm a card the scan produced,
     # which is the same disagreement this whole entry exists to remove.
+    #
+    # ONE OF THESE TWO IS INERT ON THIS PATH, and target 2a round 1 caught the
+    # pair being described as "the thresholds the scan was run with" without
+    # saying so. `regime_headwind_reject_pct` decides whether the fire is
+    # refused. `regime_headwind_caution_pct` decides ONLY whether a log line is
+    # emitted: the caution band fires, and (see `_apply_regime_gate`) carries no
+    # reliable size consequence either. Tightening "Headwind caution %" in
+    # Step 3 changes what the SCAN shows and nothing about what the auto-trader
+    # does. It is still snapshotted, because the value the scan resolved is the
+    # value this trade was judged by and a half-frozen pair is worse than a
+    # frozen one — but a reader must not mistake it for a live control here.
     regime_headwind_caution_pct: Optional[float] = None
     regime_headwind_reject_pct:  Optional[float] = None
+    # What the headwind gate DID, carried onto the fired history row.
+    #
+    # ROUND 1 OF TARGET 2a: abstention is fail-open and used to leave no durable
+    # trace at all -- a fired trade the gate never evaluated produced a history
+    # row byte-identical to one it passed, and the only evidence was a WARNING
+    # in a log nobody keeps. That matters here more than the shape suggests,
+    # because abstention is the DOMINANT outcome on this repo's own fixtures:
+    # 14 of 24 symbol x horizon combinations return no measurement at all. A
+    # week of degraded market data would fire every armed trade ungated and look
+    # exactly like a week of clean passes.
+    #
+    # Set by `_apply_vol_sizing` from `_apply_regime_gate`'s return. Coarse on
+    # purpose: "abstained" does not say WHICH branch abstained, because those
+    # branches live in `_measure_trade_regime`, which is a different audit
+    # target's function. This answers "did the gate run", which is the question
+    # the history could not answer at all.
+    regime_gate_outcome: Optional[str] = None
     armed_at:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -411,8 +468,12 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
     return omm.conviction_pct, omm.stability
 
 
-def _apply_regime_gate(strategy: ArmedStrategy) -> None:
+def _apply_regime_gate(strategy: ArmedStrategy) -> str:
     """Refuse a fire the scan's `regime_gate` would have hard-dropped.
+
+    Returns what it DID -- "disabled", "abstained", "caution" or "passed" --
+    for the fired history row (`ArmedStrategy.regime_gate_outcome`). A REJECT
+    does not return; it raises.
 
     THE RULE IS NOT REIMPLEMENTED -- it is the same function the scan uses.
     NOR ARE ITS INPUTS RE-DERIVED, which is the half round 1 found missing:
@@ -431,14 +492,99 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> None:
     oversight. On the scan a CAUTION cap demotes a candidate's status, which a
     human then reads. An armed trade has no status left to demote -- it is
     fire-or-not -- so the caution band is logged and fires, and only the REJECT
-    band refuses. Sizing already handles the middle: every conviction at or
-    below 0 in the trade's frame floors at min_mult.
+    band refuses.
+
+    WHAT CAUTION DOES *NOT* DO, stated because this docstring used to claim the
+    opposite and target 2a's round 1 caught it: **it carries no reliable size
+    consequence.** The old claim was "sizing already handles the middle: every
+    conviction at or below 0 floors at min_mult", and both halves are false at
+    HEAD:
+      - THE RAMP IS TWO-SIDED since 2026-09-19 (`conviction_sizing.
+        conviction_mult`). On the shipped block a conviction of 0 sizes at
+        **0.65**, not the 0.30 floor; only -full_conviction_pct (-40) and below
+        floors. The whole caution band (-15 to -40) sizes at 0.52 down to 0.31.
+      - SIZING DOES NOT SEE THIS NUMBER AT ALL. It reads `get_last_conviction()`
+        -- the market-wide cached SPX figure -- not the symbol's own measurement
+        this function just took. See `_apply_vol_sizing`'s note on that
+        divergence, which is recorded and scheduled, not accidental.
+    And when `regime_sizing` is off or the cache is cold, `_apply_vol_sizing`
+    returns unchanged, so A CAUTION-BAND TRADE CAN FIRE AT THE FULL ARMED
+    QUANTITY. That is the real position. It is stated rather than fixed because
+    giving CAUTION a size consequence changes position size, which is
+    SIZING-4's subject and its risk budget, not this target's.
+
+    FOLLOWS FROM THAT: `regime_headwind_caution_pct` -- threaded from Step 3
+    through `ArmRequest`, snapshotted onto `ArmedStrategy`, resolved here -- has
+    NO EFFECT ON THIS PATH BEYOND WHETHER A LOG LINE IS EMITTED. Tightening
+    "Headwind caution %" in Step 3 changes what the SCAN shows and nothing about
+    what the auto-trader does. Said here and at the field's declaration so the
+    plumbing does not read as a control that it is not.
     """
     from app.scoring.stock_scorer import _regime_cap
 
+    # SHAPE FIRST, THEN `enabled`, THEN THE THRESHOLDS -- and that order is the
+    # fix for two round-1 findings, not tidiness.
+    #
+    # It used to call `_resolve_regime_gate` (which does `dict(base or {})`)
+    # BEFORE testing `enabled`, so a malformed block blew up even when the
+    # operator had deliberately turned the gate OFF -- and blew up in a way that
+    # named the wrong feature (see `RegimeGateConfigError`). Reading the raw
+    # block and refusing on shape here means the only thing a disabled gate can
+    # do is return.
+    raw = _load_regime_gate_config()
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise RegimeGateConfigError(
+            f"scoring_rules.yaml's regime_gate block is not a mapping (got "
+            f"{type(raw).__name__}) — the headwind gate cannot be evaluated, "
+            f"so {strategy.symbol} is refused rather than fired ungated"
+        )
+    if not raw.get("enabled", False):
+        return "disabled"
+
     gate = _resolve_regime_gate(strategy)
-    if not gate.get("enabled", False):
-        return
+
+    # `_regime_cap` SUBSCRIBES THESE TWO KEYS DIRECTLY (`gate["headwind_reject_pct"]`,
+    # `gate["headwind_caution_pct"]` -- stock_scorer.py). On the scan that is
+    # safe because the block is read whole from YAML; here the caller can also
+    # be an arm-time snapshot, and an absent key raised KeyError -- a
+    # LookupError, which matched no handler in `fire()` and produced a bare 500
+    # with NO history row. Validated HERE rather than by loosening `_regime_cap`
+    # to `.get()`: a missing threshold must be a refusal, and a default inside
+    # the shared rule would silently become a THIRD threshold source.
+    #
+    # NON-FINITE IS REFUSED TOO, and that one is not theoretical: the arm
+    # request declares these as unbounded `Optional[float]`, and the JSON parser
+    # Starlette uses accepts a bare `NaN` token. `conviction_pct <= nan` is
+    # always False, so a NaN reject threshold SILENCES THE GATE COMPLETELY while
+    # leaving it reading `enabled: true`. `resolve_sizing` already refuses
+    # non-finite numbers for `regime_sizing`; the gate had no such check on any
+    # of the three paths that can set these. Refusing a value the gate cannot
+    # apply is the fail-closed half of §9.1. (Whether the ARM endpoint should
+    # also bound these at the schema is a different target's question -- this
+    # check stands wherever the value came from.)
+    for key in ("headwind_reject_pct", "headwind_caution_pct"):
+        if key not in gate:
+            raise RegimeGateConfigError(
+                f"regime_gate is enabled but has no {key} — the headwind rule "
+                f"cannot be evaluated, so {strategy.symbol} is refused rather "
+                f"than fired ungated"
+            )
+        value = gate[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise RegimeGateConfigError(
+                f"regime_gate's {key} is {value!r} ({type(value).__name__}), "
+                f"not a number — the headwind rule cannot be evaluated, so "
+                f"{strategy.symbol} is refused rather than fired ungated"
+            )
+        if not math.isfinite(value):
+            raise RegimeGateConfigError(
+                f"regime_gate's {key} is {value!r}, which no conviction can "
+                f"ever compare against — a non-finite threshold silences the "
+                f"gate while it still reads enabled, so {strategy.symbol} is "
+                f"refused rather than fired ungated"
+            )
 
     measured = _measure_trade_regime(strategy)
     if measured is None:
@@ -448,7 +594,11 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> None:
         # it has no regime signal, so a fire path that refused here would be
         # STRICTER than the scan -- the same class of disagreement, pointing the
         # other way.
-        return
+        #
+        # The RETURN VALUE is what makes that survivable after the fact: it
+        # lands on the fired history row, so a post-mortem can tell a trade the
+        # gate passed from one it never evaluated. It could not, before.
+        return "abstained"
 
     conviction_pct, stability = measured
 
@@ -464,10 +614,14 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> None:
     if cap == "CAUTION":
         logger.info(
             "regime_gate: %s %s fires into a headwind (own %s regime "
-            "conviction=%+d, %s) — CAUTION band, not a refusal",
+            "conviction=%+d, %s) — CAUTION band, not a refusal, and NOT "
+            "necessarily a smaller position: see _apply_regime_gate's docstring",
             strategy.symbol, strategy.direction, strategy.horizon,
             conviction_pct, stability,
         )
+        return "caution"
+
+    return "passed"
 
 
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
@@ -512,14 +666,31 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     from app.services.regime_monitor import get_last_conviction
     conviction = get_last_conviction()
 
-    # THE GATE RUNS FIRST, RUNS REGARDLESS OF `sizing_off`, AND RUNS REGARDLESS
-    # OF THE CACHE. It is a refusal, not a size, so it does not belong behind a
-    # size switch (round 1 finding 1) -- and since round 1 finding 2 it measures
-    # the symbol's own regime itself rather than reading `conviction` below, so
-    # a cold or stale SPX cache neither arms it nor disarms it. It is called
+    # THE GATE RUNS REGARDLESS OF `sizing_off` AND REGARDLESS OF THE CACHE. It
+    # is a refusal, not a size, so it does not belong behind a size switch
+    # (piece 2 round 1 finding 1) -- and since round 1 finding 2 it measures the
+    # symbol's own regime itself rather than reading `conviction` below, so a
+    # cold or stale SPX cache neither arms it nor disarms it. It is called
     # before the `sizing_off` return for that first reason and outside the
     # `conviction is not None` block for this second one.
-    _apply_regime_gate(strategy)
+    #
+    # IT DOES NOT RUN *FIRST*, and this comment used to say it did -- target 2a
+    # round 1. `_load_scoring_config()` and `resolve_sizing()` above run before
+    # it and can both RAISE SizingConfigError. So the decoupling claim holds for
+    # the switch it was written about (`regime_sizing.enabled: false` -> the
+    # gate still evaluates, verified by test), but NOT for a *broken*
+    # regime_sizing block: there the sizing config really does pre-empt the
+    # gate. Nothing fires at full size either way -- both paths refuse -- but
+    # the REPORTED CAUSE is the sizing block, so a headwind trade can be filed
+    # and paged as a config fault. Left in this order because moving the gate
+    # above them would make a fire proceed to an 8-second bar fetch on a config
+    # the process already knows it cannot honour; the cost is a misreported
+    # cause on a narrow path, and it is written down rather than hidden.
+    gate_outcome = _apply_regime_gate(strategy)
+    # Recorded on the strategy HERE, before any of the three early returns
+    # below, so every path that fires carries what the gate did — including the
+    # two that return the strategy unchanged.
+    strategy = _dc_replace(strategy, regime_gate_outcome=gate_outcome)
 
     if conviction is not None:
         # Direction-aware: `conviction` is the SIGNED BULLISH FRAME
@@ -572,21 +743,14 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         return strategy
 
     #
-    # SUPERSEDED, ROUND 1 finding 4 -- kept as the record of why this was once
-    # deferred and what changed. `regime_gate` IS NOW APPLIED (line above). The
-    # block directly above `regime_sizing` in scoring_rules.yaml carries
-    # headwind_caution_pct: -15 / headwind_reject_pct: -40, and the scan path
-    # enforces it (stock_scan.py -- CAUTION, then a hard "regime headwind"
-    # drop). This path reads only `regime_sizing`, so a trade at -80 in its own
-    # frame is sized to min_mult and STILL FIRES: `max(1, ...)` guarantees at
-    # least one contract. The scan would have refused the same setup.
-    #
-    # Not closed in this piece on purpose: wiring it makes trades that fire
-    # today stop firing, which is a real-money behaviour change and Kenneth's
-    # call, not an audit-fix. Before this piece the auto-trader COULD NOT
-    # evaluate headwind for a bearish trade -- it had no direction -- so this
-    # gap only becomes reachable now. That is why it is written down here
-    # rather than left for the next reader to rediscover.
+    # CLOSED, AND THIS IS ONLY THE RECORD OF IT. Piece 2 round 1 finding 4 was
+    # that this path read `regime_sizing` alone, so a trade at -80 in its own
+    # frame WAS sized to min_mult and STILL FIRED (`max(1, ...)` guarantees a
+    # contract) where the scan would have dropped it. That gap is gone: the
+    # `_apply_regime_gate` call ~50 lines above -- before both `return strategy`
+    # statements -- refuses it. Compressed to the past tense in target 2a round
+    # 1, which caught it still asserting all of the above as present fact and
+    # pointing at a "line above" that was neither.
     mult = conviction_mult(directional_conv, cfg)
     adjusted_qty = max(1, round(strategy.quantity * mult))
 
@@ -619,8 +783,9 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     return _dc_replace(strategy, quantity=adjusted_qty)
 
 
-def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
-    """Push a sizing-config refusal to a channel that reaches a phone.
+def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
+                   alert_type: str) -> None:
+    """Push a fire refusal to a channel that reaches a phone. The mechanics only.
 
     §9.1 is "refuse to fire AND alert". The manual trigger needs no help — the
     refusal is the 400 body of POST /auto-trade/fire, with a human reading it.
@@ -628,6 +793,13 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
     `asyncio.to_thread` and discards the outcome, so without this the refusal
     is a log line on a box nobody is watching while an armed order silently
     does not happen.
+
+    SHARED BY EVERY REFUSAL KIND SINCE TARGET 2a ROUND 1, which found the
+    headwind refusal — the one that is EXPECTED to happen in normal operation,
+    unlike a broken YAML file — reaching nobody at all, because it was a
+    RuntimeError and the scan trigger only alerted `(SizingConfigError,
+    ValueError)`. `what` and `reason` are the caller's words; everything below
+    is the same for all of them.
 
     WHY asyncio.run IS CORRECT HERE: this runs in the worker thread
     `asyncio.to_thread` created, which has no event loop of its own, so a
@@ -637,15 +809,17 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
     endpoint, where asyncio.run raises.
 
     THE RUNNING-LOOP GUARD IS UNREACHABLE TODAY and round 1 was right to say
-    so: the only caller is maybe_fire_on_scan, whose only caller is POST
+    so: the only callers are in maybe_fire_on_scan, whose only caller is POST
     /scan through asyncio.to_thread. It stays because the cost of being wrong
     about that later is §9.1's "and alert" half silently not happening, and a
     logged skip is the difference between finding that out and not.
 
     type_enabled=True is deliberate and is the documented per-call override:
-    CONFIG_ERROR is not one of the portfolio alert types in `enabledTypes`, so
-    the global check would drop it. masterEnabled is NOT bypassed — that is
-    Kenneth's account-wide kill switch.
+    these types are not portfolio alert types in `enabledTypes`, so the global
+    check would drop them. masterEnabled is NOT bypassed — that is Kenneth's
+    account-wide kill switch. `alert_notifier._ALERT_TYPE_LABELS` has no entry
+    for them either, so the subject line carries the raw type string; adding
+    labels there is a change to a file outside this work's surface.
 
     Nothing here may raise: the refusal has already happened and has already
     been recorded by fire(). A dead SMTP server must not turn a safe refusal
@@ -657,8 +831,8 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
         pass  # no loop in this thread — a fresh one is safe
     else:
         logger.error(
-            "AutoTrader: sizing-config refusal for %s NOT alerted (an event loop "
-            "is already running in this thread): %s", symbol, exc,
+            "AutoTrader: %s for %s NOT alerted (an event loop is already "
+            "running in this thread): %s", what, symbol, reason,
         )
         return
 
@@ -666,19 +840,9 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
         from app.services.notifications.alert_notifier import notify_alert
         delivered = asyncio.run(notify_alert(
             symbol=symbol,
-            alert_type="CONFIG_ERROR",
-            reason=(
-                f"Auto-trade REFUSED to fire {symbol}: "
-                + ("scoring_rules.yaml's regime_sizing block cannot be honoured"
-                   if isinstance(exc, SizingConfigError)
-                   else "the regime conviction is not a usable number")
-                + f", so the position size is unknown. Nothing was sent and the "
-                  f"auto-trader is disarmed. {exc}"
-            ),
-            # Stable, symbol-independent key: the file is broken, not the
-            # symbol, so the dedup window collapses a run of scans into one
-            # alert instead of one per armed order.
-            rec_id="auto-trade-sizing-config",
+            alert_type=alert_type,
+            reason=reason,
+            rec_id=rec_id,
             type_enabled=True,
         ))
         if not delivered:
@@ -688,15 +852,101 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
             # "and alert" could be a silent no-op -- which is how this whole
             # class of defect got here.
             logger.error(
-                "AutoTrader: sizing-config refusal for %s was NOT delivered by "
-                "any channel (master switch off, dedup window armed, or "
-                "delivery failed). The refusal itself stands.", symbol,
+                "AutoTrader: %s for %s was NOT delivered by any channel "
+                "(master switch off, dedup window armed, or delivery failed). "
+                "The refusal itself stands.", what, symbol,
             )
     except Exception as notify_exc:
         logger.error(
-            "AutoTrader: failed to alert the sizing-config refusal for %s "
-            "(the refusal itself stands): %s", symbol, notify_exc,
+            "AutoTrader: failed to alert the %s for %s (the refusal itself "
+            "stands): %s", what, symbol, notify_exc,
         )
+
+
+# Stable, symbol-independent keys: the FILE is broken, not the symbol, so the
+# dedup window collapses a run of scans into one alert instead of one per armed
+# order. The headwind key below is deliberately the opposite — see there.
+_REC_ID_SIZING = "auto-trade-sizing-config"
+_REC_ID_GATE_CONFIG = "auto-trade-regime-gate-config"
+# PER SYMBOL, and that asymmetry is the point: a headwind refusal is a fact
+# about THIS symbol's regime, not about the installation. Collapsing MSFT's
+# refusal and AAPL's into one alert would hide the second trade that did not
+# happen. Repeated scans against the same symbol still collapse, which is the
+# behaviour the dedup window is for.
+_REC_ID_HEADWIND = "auto-trade-regime-headwind"
+
+
+def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
+    """Alert a sizing-config refusal. Wording only; mechanics in `_alert_refusal`."""
+    _alert_refusal(
+        symbol,
+        "sizing-config refusal",
+        (
+            f"Auto-trade REFUSED to fire {symbol}: "
+            + ("scoring_rules.yaml's regime_sizing block cannot be honoured"
+               if isinstance(exc, SizingConfigError)
+               else "the regime conviction is not a usable number")
+            + f", so the position size is unknown. Nothing was sent and the "
+              f"auto-trader is disarmed. {exc}"
+        ),
+        _REC_ID_SIZING,
+        "CONFIG_ERROR",
+    )
+
+
+def _alert_regime_gate_config_refusal(symbol: str, exc: Exception) -> None:
+    """Alert a malformed/unusable `regime_gate` block.
+
+    ITS OWN WORDING, not `_alert_sizing_config_refusal`'s. Routing it there
+    would page "regime_sizing cannot be honoured" for a fault in a DIFFERENT
+    block that the operator then has no reason to look at — the misattribution
+    target 2a round 1 measured.
+    """
+    _alert_refusal(
+        symbol,
+        "regime-gate config refusal",
+        (
+            f"Auto-trade REFUSED to fire {symbol}: scoring_rules.yaml's "
+            f"regime_gate block is enabled but cannot be evaluated, so the "
+            f"headwind rule could not be applied and the trade was refused "
+            f"rather than fired ungated. Nothing was sent and the auto-trader "
+            f"is disarmed. {exc}"
+        ),
+        _REC_ID_GATE_CONFIG,
+        "CONFIG_ERROR",
+    )
+
+
+def _alert_regime_headwind_refusal(symbol: str, exc: Exception) -> None:
+    """Alert a headwind refusal on the unattended trigger.
+
+    THE REFUSAL THIS PATH EXISTS FOR. The sizing-config alert guards a broken
+    file, which is rare; this guards the gate doing its job, which is the
+    expected case — and until target 2a round 1 it was the only refusal kind
+    with no alert at all, because `RegimeHeadwindError` is a RuntimeError and
+    the trigger's handler named `(SizingConfigError, ValueError)`. The armed
+    order was consumed, the refusal went to the in-memory history, and Kenneth
+    found out by noticing no fill.
+
+    NOT a CONFIG_ERROR: nothing is misconfigured. The message says what the gate
+    measured, because that is the fact a human needs to decide whether to re-arm.
+    """
+    _alert_refusal(
+        symbol,
+        "regime-headwind refusal",
+        (
+            f"Auto-trade REFUSED to fire {symbol}: the regime opposes this "
+            f"trade hard enough that the scan's own regime_gate rule would "
+            f"have dropped the setup. Nothing was sent and the auto-trader is "
+            f"disarmed — re-arm only if you disagree with the measurement. {exc}"
+        ),
+        _REC_ID_HEADWIND,
+        # NOT CONFIG_ERROR: nothing is misconfigured, and a post-mortem that
+        # cannot tell "the file is broken" from "the market moved" is the
+        # defect `RegimeHeadwindError` has its own type to avoid. Carried
+        # through to the notification rather than stopping at the exception.
+        "AUTO_TRADE_REFUSED",
+    )
 
 
 def execute_option_order(strategy: ArmedStrategy):
@@ -825,6 +1075,49 @@ class AutoTradeService:
                 strategy.symbol, strategy.direction, exc,
             )
             raise
+        except RegimeGateConfigError as exc:
+            # ITS OWN BRANCH FOR THE SAME REASON THE ONE ABOVE HAS ONE, and
+            # target 2a round 1 measured what its absence cost. A regime_gate
+            # block that was enabled but missing a threshold reached
+            # `_regime_cap`'s direct subscription and raised KeyError — a
+            # LookupError, caught by NEITHER handler here — so the fire left
+            # this method with the armed strategy already consumed, NO history
+            # row of any kind, and `/auto-trade/status` still reporting the
+            # PREVIOUS order as last_order. A malformed block took the other
+            # route and was filed under `sizing_data_blocked` with a log line
+            # blaming a conviction that was never read.
+            #
+            # `regime_gate_config_blocked` says the true remedy: fix the
+            # regime_gate block. Not "the size is unknown" (it is known — the
+            # armed quantity) and not "the market moved" (it did not).
+            #
+            # WHO READS THESE STATUSES, said plainly because target 2a round 1
+            # asked: NO frontend branch distinguishes any of them — not this
+            # one, not `regime_headwind_blocked`, not `cap_blocked`, which
+            # predates all of this. `/auto-trade/status` returns the row raw as
+            # `last_order` and the UI renders it as one undifferentiated last
+            # order. The distinct statuses earn their keep for the JSON and for
+            # a post-mortem reading the history by hand; the channel that
+            # actually reaches a human is the ALERT on the scan trigger, which
+            # is why each refusal kind now has its own wording there. Building
+            # a UI reader is frontend work and no part of this target.
+            with self._lock:
+                self._state.history.append({
+                    "order_id":        None,
+                    "status":          "regime_gate_config_blocked",
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
+                })
+            logger.error(
+                "AutoTrader fire REFUSED for %s %s — regime_gate is "
+                "misconfigured: %s",
+                strategy.symbol, strategy.direction, exc,
+            )
+            raise
         except (SizingConfigError, ValueError) as exc:
             # ValueError too, and round 2 is why. Round 1 correctly stopped
             # reporting a bad CONVICTION as a broken config file (the message
@@ -921,6 +1214,14 @@ class AutoTradeService:
                 "option":          strategy.option_symbol,
                 "timestamp":       datetime.now(timezone.utc).isoformat(),
                 "premium_at_risk": strategy.entry_premium * strategy.quantity * 100 * stop_pct,
+                # WHAT THE HEADWIND GATE DID: "passed", "caution", "abstained"
+                # or "disabled". Target 2a round 1: a trade the gate never
+                # evaluated (fail-open, and the dominant outcome on this repo's
+                # fixtures) produced a row indistinguishable from one it passed,
+                # so a degraded data feed and a clean week looked identical
+                # afterwards. None only for a strategy that never went through
+                # `_apply_vol_sizing`.
+                "regime_gate":     strategy.regime_gate_outcome,
             })
         logger.info("AutoTrader fired: order %s status %s", result.order_id, result.status)
         return result
@@ -977,6 +1278,18 @@ class AutoTradeService:
         try:
             self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
             logger.info("AutoTrader: fired on scan completion trigger")
+        except RegimeHeadwindError as exc:
+            # THE REFUSAL THIS TRIGGER MOST NEEDS TO REPORT, and until target 2a
+            # round 1 it was the only one that reported nothing: it is a
+            # RuntimeError, so it fell past the handler below into the generic
+            # `except Exception` and became one log line. The armed order was
+            # consumed and Kenneth was never told — while a BROKEN YAML FILE,
+            # the rare case, did page. Ordered above the sizing handler because
+            # these classes are disjoint, so this is about reading order, not
+            # precedence.
+            _alert_regime_headwind_refusal(strategy.symbol, exc)
+        except RegimeGateConfigError as exc:
+            _alert_regime_gate_config_refusal(strategy.symbol, exc)
         except (SizingConfigError, ValueError) as exc:
             # fire() has already logged and recorded it; this trigger has no
             # reader, so it is also the half of §9.1 that says "and alert".
