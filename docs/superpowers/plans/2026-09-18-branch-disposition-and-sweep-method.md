@@ -21,6 +21,11 @@ does not lie. That method is §3. The current answer is §2, and it will go stal
 
 ## 2. Verified disposition, 2026-09-18
 
+> **RE-SWEPT 2026-09-20 against `main` at `e058e99f`. The table below still holds for the five
+> branches it calls 'fully dealt with' — every count reproduced exactly. But it is WRONG about
+> two branches it calls merged, and the sweep that produced it cannot be run in a fresh container
+> without a step this document did not have. See §5 before acting on anything here.**
+
 Every branch below was compared to `main` **file by file, by content hash**, not by commit count.
 
 | Branch | `rev-list` says | Reality |
@@ -134,9 +139,78 @@ content byte-identical, and add a header saying where it came from and that the 
 
 ---
 
+### 3.6 First, prove the clone can answer the question at all
+
+```bash
+git rev-parse --is-shallow-repository    # MUST print false
+git fetch --unshallow --all              # if it prints true
+```
+
+**Added 2026-09-20, and it is the seventh way this question has been got wrong.** Claude Code
+web containers clone SHALLOW. On 2026-09-20 the container held 217 commits of a 1905-commit
+history, and `git merge-base main origin/<branch>` returned **the empty string** for four
+branches — no error, no message, exit status ignored inside a `$(...)`. §3.3's `BASE` was then
+empty, `git diff --name-only "" $B` silently became a diff against the WORKING TREE, and the
+sweep reported 311, 402, 405 and 449 phantom `differs` on branches whose real answer is 0 or 2.
+
+It fails in the dangerous direction: it INVENTS a backlog rather than hiding one, so it does not
+risk a bad deletion — but it makes the sweep useless exactly when someone is trying to clean up,
+and an operator who trusted it would conclude five settled branches were full of unmerged work.
+The tell is a count in the hundreds where §2 recorded single digits. `git fetch --unshallow`
+took under a minute here and restored 1688 commits; after it, every number in §2 reproduced.
+
+**Guard the base explicitly — an empty `BASE` must stop the sweep, not run it:**
+
+```bash
+BASE=$(git merge-base origin/main $B 2>/dev/null)
+[ -z "$BASE" ] && { echo "!! NO MERGE BASE: $B (cannot sweep)"; continue; }
+```
+
+---
+
 ## 4. Checklist before deleting any branch
 
 1. `git fetch --all --prune`, then **enumerate** `git branch -r`.
 2. Run §3.3 for the branch. Resolve every `differs` by reading it.
 3. Confirm **zero** `ABSENT FROM MAIN`, or rescue each per §3.5.
 4. Only then delete — and record it here, with the date and the evidence.
+
+---
+
+## 5. Re-sweep, 2026-09-20, against `main` at `e058e99f`
+
+Run after `git fetch --unshallow` (see §3.6), by content, per file, from the merge-base.
+
+### 5.1 The five "fully dealt with" branches are still fully dealt with
+
+Every count in §2 reproduced exactly: `gracious-mayer-g738w8` 22 ahead / 9 identical / 2 differs,
+`journal-startup-exit-audit-q8aw8v` 14 / 2 / 0, `previous-session-token-limit-bgs1df` 4 / 8 / 5,
+`terminated-session-details-ozquzb` 12 / 11 / 6, `worktree-agent-a070a8845cd9ddd2c` 1 / 1 / 0.
+`PLAN_CHART_DEFERRED_FIXES.md` is still the only file absent from main on `ozquzb`, and is still
+already rescued. **No new finding. Deletion of the five remains SAFE on the evidence, and still
+has not been done.**
+
+### 5.2 §2 IS WRONG ABOUT TWO BRANCHES, AND THIS IS A RESCUE CASE
+
+§2 records `session-continuation-docs-ne4h8w` as "Merged at `fb085887`" and
+`session-retrieval-continuation-vf056m` as "Reached main through `ne4h8w` as ancestors". Both
+were true of the merge. **Both branches then kept being worked on**, and each now carries five
+files absent from main. Three of the five (the `2026-09-18-{auto-trader-direction-sizing-plan,
+B-armed-strategy-runtime-validation,C-state-py-gates-for-split-audit-loops}.md` plans) are carried
+forward on the live sizing branch at NEWER blobs, so they are safe. **Two are not:**
+
+| File | On | Absent from |
+|---|---|---|
+| `backend/tests/test_short_suite_arg_merging.py` | `ne4h8w`, `vf056m` only | main AND the live branch |
+| `docs/superpowers/plans/2026-09-18-vf056m-restart-and-dead-container.md` | `ne4h8w`, `vf056m` only | main AND the live branch |
+
+These are §3.5's exact risk case — a test and a document that exist on no other ref. **Rescue
+both before either branch is deleted.** Neither branch was on the deletion list, which is the
+only reason this has not already cost anything.
+
+### 5.3 `archive/vf056m-round3-7753b743` — leave it
+
+Not in §2's table. One commit ahead, seven files differing, **zero absent from main**. It is a
+deliberate snapshot of the screener-layout work at its unclean round 3; main carries the round-4
+clean version that merged at `fb085887`, and is ahead on every differing file. Its name says
+`archive/`. It is preserved history, not a backlog. Not a deletion candidate.
