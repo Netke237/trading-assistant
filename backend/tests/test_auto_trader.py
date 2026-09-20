@@ -1414,13 +1414,22 @@ def test_regime_gate_refuses_under_the_SHIPPED_config_when_the_regime_is_stable(
 
 
 def test_regime_gate_stability_is_compared_by_the_exact_string_compute_omm_emits(mocker):
-    """The companion to the test above, and the reason it is worth having.
+    """The companion to the test above: the rule matches ONE exact string.
 
-    `_regime_cap` compares `stability == "Stable"`. If `compute_omm` ever emits
-    a different spelling, the gate silently stops rejecting. This pins the
-    comparison from the fire path's side: the same conviction that refuses on
-    "Stable" must NOT refuse on a near-miss, so a drift in either direction
-    shows up here as a failure rather than as a gate that quietly went inert.
+    WHAT THIS DOES NOT DO, corrected in round 2 after the docstring claimed it
+    did: it does NOT protect against `compute_omm` changing its spelling. Both
+    tests in this pair go through `_gate_fire_measured`, which stubs the
+    measurement and hands `_regime_cap` a literal — so if `regime_omm.py` began
+    emitting "STABLE", the test above (feeding "Stable") would still pass and
+    this one (feeding "STABLE") would still pass, while the gate went inert on
+    the fire path. The `_gate_fire` tests cannot cover it either, because no
+    fixture is Stable.
+
+    That coupling is pinned elsewhere — `tests/test_regime_omm.py` and the
+    schema literal in `app/schemas/__init__.py` — so the risk is contained, just
+    not by this pair. What this pair really pins is narrower and still worth
+    having: `_regime_cap`'s comparison is exact-match, so the reject branch
+    cannot be reached by an approximately-right stability value.
     """
     qty, _ = _gate_fire_measured(mocker, (-50, "STABLE"))
     assert qty == 4, (
@@ -1525,7 +1534,7 @@ def test_regime_gate_refuses_a_non_finite_threshold_instead_of_going_silently_in
     the gate had no equivalent on any of the three paths that set these.
     """
     from app.services.auto_trader import RegimeGateConfigError
-    with pytest.raises(RegimeGateConfigError, match="non-finite|never compare"):
+    with pytest.raises(RegimeGateConfigError, match="headwind_reject_pct.*finite"):
         _gate_fire_measured(
             mocker, (-50, "Stable"), monkeypatch=monkeypatch,
             gate_cfg={"enabled": True, "headwind_caution_pct": -15,
@@ -1568,7 +1577,7 @@ def test_the_fired_history_row_records_what_the_gate_did(mocker):
     """"Gate passed" and "gate never ran" used to be the same history row.
 
     Abstention is fail-open and is the DOMINANT outcome on this repo's own
-    fixtures (14 of 24 symbol x horizon combinations), so a degraded data feed
+    fixtures (16 of 24 symbol x horizon x direction combinations), so a degraded data feed
     would fire every armed trade ungated and leave a history indistinguishable
     from a clean week. The only evidence was a WARNING in a log.
     """
@@ -1631,6 +1640,310 @@ def test_a_headwind_refusal_on_the_scan_trigger_alerts(mocker, monkeypatch):
     assert svc.get_state().armed is False
 
 
+def _capture_alerts(mocker):
+    """Drive the REAL `notify_alert` and capture what reaches the CHANNELS.
+
+    THE MOCK BOUNDARY IS THE POINT. The obvious shape — stubbing `notify_alert`
+    and counting calls — cannot test any of this, because the defect under test
+    lives INSIDE `notify_alert`: the dedup key is built there
+    (`f"{rec_id}|{alert_type}"`), the reminder stamping is decided there, and a
+    stub would simply reimplement whatever the test author already believed.
+    A test that asserts against its own copy of the logic passes in exactly the
+    case that matters.
+
+    So only the outermost hop is mocked — `notify_enabled_channels`, the
+    function that actually sends — and everything the production path does
+    above it runs for real: the master switch, the type gate, the dedup window,
+    the persisted first-seen map. A suppressed alert therefore shows up here as
+    a MISSING delivery, which is the observation the whole round-2 critical
+    turns on.
+
+    Returns the list of (subject, plain) tuples that reached a channel.
+    """
+    import app.services.notifications.alert_notifier as an
+    an._fired.clear()
+    an._first_seen.clear()
+    delivered: list = []
+
+    async def _fake_channels(subject, plain, html):
+        delivered.append((subject, plain))
+        return True
+
+    mocker.patch.object(an, "notify_enabled_channels", _fake_channels)
+    mocker.patch.object(an, "_save_dedup", lambda: None)
+    mocker.patch.object(an, "_load_delivery_config", lambda: {"masterEnabled": True})
+    return delivered
+
+
+def test_two_symbols_refused_in_one_dedup_window_produce_two_alerts(mocker):
+    """THE ROUND-2 CRITICAL, as a behavioural test rather than a string assert.
+
+    `notify_alert` builds its dedup key as `f"{rec_id}|{alert_type}"` — the
+    SYMBOL IS NOT IN IT, it only reaches the message body. With a bare constant
+    rec_id, the first headwind refusal alerted and every other symbol's refusal
+    inside the window was silently dropped: MSFT at 09:00 paged, AAPL at 10:30
+    and NVDA at 12:00 did not. The window defaults to four hours, the map is
+    persisted to alert_dedup.json so a restart does not clear it, and
+    `forget_alerts` never sees these keys. §9.1's "and alert" half, reopened for
+    every refusal but the first.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeHeadwindError
+    calls = _capture_alerts(mocker)
+
+    for sym in ("MSFT", "AAPL", "NVDA"):
+        at._alert_regime_headwind_refusal(sym, RegimeHeadwindError(f"{sym} measured -70"))
+
+    assert len(calls) == 3, (
+        "three symbols refused means three trades that did not happen, and "
+        "Kenneth has to hear about all three — this is counted at the CHANNEL, "
+        "downstream of the real dedup gate, so a suppressed alert is a missing "
+        "entry here rather than a call the test counts anyway"
+    )
+    for sym, (subject, _) in zip(("MSFT", "AAPL", "NVDA"), calls):
+        assert sym in subject, subject
+
+
+def test_a_delivered_headwind_alert_does_not_make_the_next_one_a_reminder(mocker):
+    """A refusal is a DISCRETE EVENT, not a standing condition.
+
+    `notify_alert` keeps a persisted `_first_seen` per key and stamps every
+    later send as a "(reminder)" carrying the FIRST occurrence's timestamp plus
+    a "Still active as of" line — correct for a portfolio condition that is
+    still true, wrong for a one-shot refusal weeks later, which then reads as an
+    old nag and gets ignored. Round 2.
+    """
+    import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
+    from app.services.auto_trader import RegimeHeadwindError
+    _capture_alerts(mocker)
+
+    at._alert_regime_headwind_refusal("MSFT", RegimeHeadwindError("MSFT measured -70"))
+    assert an._first_seen == {}, (
+        "a delivered refusal is over; leaving its first-seen record behind is "
+        "what turns the next one into a reminder dated to this one"
+    )
+    assert an._fired == {}, (
+        "and the hold goes with it — a refusal DISARMS the auto-trader, so a "
+        "second refusal of the same symbol means a human deliberately re-armed, "
+        "which is the last thing that should be suppressed"
+    )
+
+
+def test_a_config_refusal_stays_deduped_because_the_file_is_still_broken(mocker):
+    """The deliberate inverse, so `discrete` is not read as "always clear".
+
+    A broken scoring_rules.yaml IS a standing condition: it is still broken on
+    the next scan, the remedy has not changed, and collapsing a run into one
+    alert is the behaviour the dedup window exists for.
+    """
+    import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
+    from app.scoring.conviction_sizing import SizingConfigError
+    calls = _capture_alerts(mocker)
+
+    at._alert_sizing_config_refusal("MSFT", SizingConfigError("min_mult is not a number"))
+    at._alert_sizing_config_refusal("AAPL", SizingConfigError("min_mult is not a number"))
+
+    assert len(calls) == 1, "one broken file, one alert"
+    assert "MSFT" in calls[0][0], calls[0][0]
+    assert an._fired, "the hold stays — unlike a headwind refusal"
+
+
+def test_the_gate_config_alert_is_distinguishable_from_the_sizing_one(mocker):
+    """Two exception types and two dedup keys were bought and then thrown away
+    at the subject line, which is the half a reader sees first.
+
+    `_build_notification` builds the subject from `alert_type`, so while both
+    passed CONFIG_ERROR they arrived as the same "Bamendjou Portfolio Alert —
+    MSFT: CONFIG_ERROR". Round 2.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeGateConfigError
+    from app.scoring.conviction_sizing import SizingConfigError
+    calls = _capture_alerts(mocker)
+
+    at._alert_regime_gate_config_refusal("MSFT", RegimeGateConfigError("no headwind_reject_pct"))
+    at._alert_sizing_config_refusal("MSFT", SizingConfigError("min_mult is not a number"))
+
+    subjects = [subject for subject, _ in calls]
+    assert len(subjects) == 2, subjects
+    assert subjects[0] != subjects[1], (
+        "two exception types and two dedup keys were bought and then thrown "
+        "away at the subject line, which is the half a reader sees first"
+    )
+    assert "REGIME_GATE_CONFIG_ERROR" in subjects[0], subjects[0]
+    assert "CONFIG_ERROR" in subjects[1], subjects[1]
+    assert "regime_gate" in calls[0][1]
+    assert "regime_sizing" in calls[1][1]
+
+
+def test_a_gate_config_refusal_on_the_scan_trigger_alerts_as_itself(mocker, monkeypatch):
+    """The unattended trigger must route this to its OWN alert.
+
+    Round 2: this branch and `_alert_regime_gate_config_refusal` had no test at
+    all, while the sibling headwind branch did — and routing it to
+    `_alert_sizing_config_refusal` is exactly the misattribution the
+    `RegimeGateConfigError` type was introduced to prevent.
+    """
+    import app.services.auto_trader as at
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    monkeypatch.setattr(at, "_load_regime_gate_config",
+                        lambda: {"enabled": True, "headwind_caution_pct": -15})
+    gate_alert = mocker.patch.object(at, "_alert_regime_gate_config_refusal")
+    sizing_alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
+
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper", symbol="MSFT", option_symbol="MSFT260620C00185000",
+        action="BUY", direction="Bullish", quantity=4, order_type="LMT",
+        limit_price=2.50, conid=None, entry_premium=2.50,
+        portfolio_value=100_000.0, horizon="Position",
+    ))
+    svc.maybe_fire_on_scan()
+
+    assert gate_alert.call_count == 1
+    assert gate_alert.call_args.args[0] == "MSFT"
+    assert sizing_alert.call_count == 0, (
+        "paging 'regime_sizing cannot be honoured' would send Kenneth to a "
+        "block that is fine"
+    )
+    assert svc.get_state().history[-1]["status"] == "regime_gate_config_blocked"
+
+
+def test_a_populated_gate_block_that_does_not_say_enabled_refuses(mocker, monkeypatch):
+    """THE ONE CORRUPTION THAT SILENTLY DISABLED THE WHOLE GATE.
+
+    `raw.get("enabled", False)` meant a block that lost its `enabled: true`
+    line, or misspelled it, or carried a null, read as "gate off": the trade
+    went to the broker AT FULL ARMED QUANTITY at a -90 Stable headwind, the
+    history row said "disabled", and NO alert was sent, because a disabled gate
+    is not a refusal and has nothing to report. `resolve_sizing` refuses exactly
+    this shape for the sibling block one layer down. Round 2.
+    """
+    from app.services.auto_trader import RegimeGateConfigError
+    for bad in (
+        {"enable": True, "headwind_caution_pct": -15, "headwind_reject_pct": -40},
+        {"headwind_caution_pct": -15, "headwind_reject_pct": -40},
+        {"enabled": None, "headwind_caution_pct": -15, "headwind_reject_pct": -40},
+        {"enabled": "false", "headwind_caution_pct": -15, "headwind_reject_pct": -40},
+    ):
+        with pytest.raises(RegimeGateConfigError, match="enabled"):
+            _gate_fire_measured(mocker, (-90, "Stable"), monkeypatch=monkeypatch,
+                                gate_cfg=bad)
+
+
+def test_an_absent_gate_block_is_still_simply_no_gate(mocker, monkeypatch):
+    """The boundary of the test above: ABSENT is not CORRUPT.
+
+    An empty/absent `regime_gate` reads as disabled and always has — that is
+    what `_regime_cap` does with it too. Only a POPULATED block that fails to
+    say it is on is a config fault.
+    """
+    qty, svc = _gate_fire_measured(mocker, (-90, "Stable"), monkeypatch=monkeypatch,
+                                   gate_cfg={})
+    assert qty == 4
+    assert svc.get_state().history[-1]["regime_gate"] == "disabled"
+
+
+def test_a_quoted_require_stable_for_reject_refuses_instead_of_disarming_the_gate(mocker, monkeypatch):
+    """`"false"` is TRUE to Python — the value that most needs to mean off.
+
+    `_regime_cap` reads `not gate.get("require_stable_for_reject", True)`, so a
+    quoted "false" reads as ON and the REJECT branch then needs a Stable regime
+    that essentially never occurs. Measured before the fix: a -90 Fragile
+    headwind returned CAUTION and FIRED. Round 1 left this key unvalidated while
+    validating the inert caution threshold to the point of refusing fires.
+    """
+    from app.services.auto_trader import RegimeGateConfigError
+    with pytest.raises(RegimeGateConfigError, match="require_stable_for_reject"):
+        _gate_fire_measured(
+            mocker, (-90, "Fragile"), monkeypatch=monkeypatch,
+            gate_cfg={"enabled": True, "headwind_caution_pct": -15,
+                      "headwind_reject_pct": -40,
+                      "require_stable_for_reject": "false"},
+        )
+
+
+def test_an_unusable_caution_threshold_does_not_refuse_a_fire(mocker, monkeypatch, caplog):
+    """SEVERITY TRACKS CONSEQUENCE, and round 1 got this one backwards.
+
+    `headwind_caution_pct` cannot cause a refusal: `_regime_cap` tests reject
+    FIRST and returns, so this key is read only by trades that already survived,
+    and on this path its whole effect is whether a log line is emitted. Round 1
+    validated it identically to the reject threshold and refused the fire — an
+    availability regression against a state that previously gated correctly, and
+    paged as a broken installation.
+
+    The reject rule must still apply on both sides, which is what the two
+    assertions below are for: a passing trade still fires, and a rejecting one
+    still refuses, with only the caution band gone.
+    """
+    from app.services.auto_trader import RegimeHeadwindError
+    cfg = {"enabled": True, "headwind_caution_pct": float("nan"),
+           "headwind_reject_pct": -40, "require_stable_for_reject": False}
+
+    with caplog.at_level("WARNING", logger="app.services.auto_trader"):
+        qty, _ = _gate_fire_measured(mocker, (50, "Stable"), monkeypatch=monkeypatch,
+                                     gate_cfg=cfg)
+    assert qty == 4, "a passing trade must not be refused over an inert threshold"
+    assert "headwind_caution_pct" in caplog.text and "REJECT rule is unaffected" in caplog.text
+
+    with pytest.raises(RegimeHeadwindError):
+        _gate_fire_measured(mocker, (-50, "Stable"), monkeypatch=monkeypatch,
+                            gate_cfg=cfg)
+
+
+def test_a_missing_caution_threshold_does_not_crash_the_shared_rule(mocker, monkeypatch):
+    """`_regime_cap` subscribes the caution key DIRECTLY, so "ignore it" is not
+    an option — it has to be present and comparable. The sentinel makes the
+    caution band empty rather than absent."""
+    qty, svc = _gate_fire_measured(
+        mocker, (-20, "Stable"), monkeypatch=monkeypatch,
+        gate_cfg={"enabled": True, "headwind_reject_pct": -40,
+                  "require_stable_for_reject": False},
+    )
+    assert qty == 4
+    assert svc.get_state().history[-1]["regime_gate"] == "passed", (
+        "with no usable caution threshold the band is empty, so a trade that "
+        "would have been CAUTION reads as a pass rather than crashing"
+    )
+
+
+def test_an_order_failed_row_records_what_the_gate_did(mocker):
+    """The one refusal-shaped row where the broker call was actually MADE.
+
+    `cap_blocked` and `daily_loss_blocked` provably never reach the broker, so
+    "did the gate run" is moot for them. This row means the submission may have
+    landed. Round 2.
+    """
+    import app.services.auto_trader as at
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    mocker.patch.object(at, "_measure_trade_regime", return_value=None)
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 side_effect=RuntimeError("broker exploded"))
+
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper", symbol="MSFT", option_symbol="MSFT260620C00185000",
+        action="BUY", direction="Bullish", quantity=4, order_type="LMT",
+        limit_price=2.50, conid=None, entry_premium=2.50,
+        portfolio_value=100_000.0, horizon="Position",
+    ))
+    with pytest.raises(RuntimeError):
+        svc.fire()
+
+    last = svc.get_state().history[-1]
+    assert last["status"] == "order_failed"
+    assert last["regime_gate"] == "abstained", (
+        "an order that may have landed while the gate never evaluated is "
+        "exactly the combination a post-mortem needs to see"
+    )
+
+
 def test_the_headwind_alert_is_not_dressed_as_a_config_error(mocker):
     """Its own alert_type and its own dedup key, for the reason the exception
     has its own type: the remedies are opposites."""
@@ -1651,10 +1964,12 @@ def test_the_headwind_alert_is_not_dressed_as_a_config_error(mocker):
         "CONFIG_ERROR would read as a broken installation for a gate that "
         "worked exactly as designed"
     )
-    assert captured["rec_id"] == "auto-trade-regime-headwind", (
+    assert captured["rec_id"] == "auto-trade-regime-headwind:MSFT", (
         "PER SYMBOL, unlike the sizing key: a headwind is a fact about this "
-        "symbol, and collapsing two symbols' refusals would hide the second "
-        "trade that did not happen"
+        "symbol. Round 2: this asserted the bare constant while its own "
+        "message claimed the key was per-symbol — it passed, and the thing it "
+        "said it proved was false. The behavioural version is the test below; "
+        "this one only pins the string."
     )
     assert captured["type_enabled"] is True
     assert "measured -50" in captured["reason"]
