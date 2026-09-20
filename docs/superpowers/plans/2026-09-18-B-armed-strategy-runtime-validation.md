@@ -19,8 +19,19 @@ directional_conv = conviction if strategy.direction == "Bullish" else -convictio
 ```
 
 **fails OPEN to bearish.** `"bullish"`, `"Bulish"`, `""` and `None` all silently take the
-`else` branch. 23 test sites construct `ArmedStrategy` directly, as would any future non-HTTP
-producer.
+`else` branch. **23** test sites construct `ArmedStrategy` directly — `test_auto_trader.py` 20,
+`test_phase_g_arm_pick.py` 1, `test_premium_stop_per_position.py` 2 — as would any future
+non-HTTP producer, plus one production site (`routers/auto_trade.py:83`) for 24 repo-wide.
+
+> **THE COUNT IS 23, NOT 26, AND THE DIFFERENCE IS THE WHOLE REASON THIS LINE CARRIES A
+> NUMBER.** A bare `grep -c "ArmedStrategy("` returns 26 across those three files, but three
+> of those hits are DOCSTRING PROSE, not code: `test_phase_g_arm_pick.py:11` and `:127`, and
+> `test_premium_stop_per_position.py:368` each mention `ArmedStrategy(**req.model_dump())`
+> inside a comment. Counted by walking the AST for `ast.Call` nodes rather than by grepping
+> text: 20 / 1 / 2 in tests, plus `routers/auto_trade.py:83` in production (that file greps
+> as 2, one of which is also a comment). The sizing piece's own round 1 was faulted for the
+> 26 figure and corrected it; this document was ported carrying the uncorrected number.
+> Re-measured 2026-09-19 before editing.
 
 This matters because Piece A's own argument for making `direction` **required with no default**
 is that a `"Bullish"` default would reintroduce silent mis-direction. A silent default pointed
