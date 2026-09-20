@@ -288,3 +288,48 @@ discard those rounds along with the code.
 4. **Method:** §3.3's direction check is not optional, and a `differs` on a PRODUCTION file is the
    one to open first. A count of ABSENT files alone will report a clean sweep over a branch that
    is 2907 insertions ahead.
+
+---
+
+## 7. Re-sweep, 2026-09-20 (second of the day, AFTER the ne4h8w merge)
+
+Run on an unshallowed clone with the empty-`BASE` guard (§3.6), against `main` at `2e9084ba`,
+resolving DIRECTION on every `differs` as §3.3 requires — the step §5 skipped and §6 corrected.
+
+### 7.1 §6 IS NOW CLOSED. Nothing is stranded anywhere.
+
+`claude/session-continuation-docs-ne4h8w` and `claude/session-retrieval-continuation-vf056m`
+both read **ahead=0, differs=0, ABSENT=0**. The `bff42997` merge landed all 24 commits, and the
+two files §5.2 flagged as existing on no other ref — `backend/tests/test_short_suite_arg_merging.py`
+and `docs/superpowers/plans/2026-09-18-vf056m-restart-and-dead-container.md` — are on main. **The
+rescue requirement is discharged. It was never actioned as a rescue; the merge did it.**
+
+### 7.2 One branch carries every unmerged line
+
+| Branch | ahead | Verdict |
+|---|---|---|
+| `claude/session-recovery-version-o2vklp` | 39 | **The live branch.** All unmerged work. |
+| `claude/auto-trader-direction-sizing-2026-09-18` | 26 | **Fully contained in the live branch** (`merge-base --is-ancestor` true). Nothing unique. |
+| `claude/session-continuation-docs-ne4h8w` | 0 | Merged at `bff42997`. |
+| `claude/session-retrieval-continuation-vf056m` | 0 | Merged at `bff42997`. |
+| `claude/o4-auto-trade-books-a-position-2026-09-15` | 0 | Merged. |
+| `claude/gracious-mayer-g738w8` | 22 | Dealt with. No file where the branch is ahead. |
+| `claude/journal-startup-exit-audit-q8aw8v` | 14 | Dealt with. 2 of 2 identical. |
+| `claude/previous-session-token-limit-bgs1df` | 4 | Dealt with. No file where the branch is ahead. |
+| `claude/terminated-session-details-ozquzb` | 12 | Dealt with. Only `PLAN_CHART_DEFERRED_FIXES.md` absent, already rescued 2026-09-17. |
+| `worktree-agent-a070a8845cd9ddd2c` | 1 | Dealt with. 1 of 1 identical. |
+| `archive/vf056m-round3-7753b743` | 1 | Deliberate archive; main ahead on all 7 differing files. |
+
+**Deletion is SAFE on this evidence for all of: `ne4h8w`, `vf056m`, `o4-auto-trade-books-a-position`,
+`gracious-mayer-g738w8`, `journal-startup-exit-audit-q8aw8v`, `previous-session-token-limit-bgs1df`,
+`terminated-session-details-ozquzb`, `worktree-agent-a070a8845cd9ddd2c`, and
+`auto-trader-direction-sizing-2026-09-18`** (the last only because the live branch contains it —
+delete it and the live branch still holds every line). NOTHING HAS BEEN DELETED. Kenneth decides,
+and §4's checklist is re-run at the moment of acting. Keep `archive/` and the live branch.
+
+### 7.3 The bearish scan material is already on main
+
+`docs/superpowers/measurements/scans/2026-09-18/` holds eight request/result pairs (SP500 Position
+bullish+bearish options, and stocks SP500 Swing+Position bullish+bearish), and
+`docs/superpowers/measurements/scan-funnel.jsonl` holds 6 rows. On main since `e058e99f`. Nothing
+to sync. This container's local `main` is byte-identical to `origin/main` (`0 0`).
