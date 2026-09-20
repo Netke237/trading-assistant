@@ -38,7 +38,14 @@ class RegimeHeadwindError(RuntimeError):
 
 
 class RegimeGateConfigError(RuntimeError):
-    """`regime_gate` is enabled but cannot be honoured.
+    """`regime_gate` cannot be read, or cannot be applied as written.
+
+    NOT "is enabled but cannot be honoured", which is what this said until round
+    3: two of the branches that raise it fire precisely when the block does NOT
+    say it is enabled (a populated block missing the key) or when `enabled` is
+    unknowable (the block is not a mapping at all). The lead sentence of a
+    message that reaches a phone must not state the opposite of the fault and
+    send the operator to the wrong line of the file.
 
     ROUND 1 OF TARGET 2a FOUND THE GATE HAD NO SUCH IDENTITY, and the two ways
     it failed without one were both measured:
@@ -581,15 +588,38 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
     # on. Same hazard, same wording, as `resolve_sizing`'s.
     if not raw:
         return "disabled"
-    if "enabled" not in raw or not isinstance(raw["enabled"], bool):
+    # WIDENED IN ROUND 3, because round 2's bool-only check created the very
+    # asymmetry this whole piece exists to remove. `_regime_cap` — THE SHARED
+    # RULE, which the scan also runs — reads `gate.get("enabled", False)`, so
+    # `enabled: 1` is a gate that is ON for the screener: it drops headwind
+    # candidates correctly. The fire path was refusing EVERY armed trade on that
+    # same config and paging "cannot be evaluated". A scan that gates and a fire
+    # path that refuses are two answers to one question, which is exactly the
+    # defect class round 1 finding 3 was about, pointing the other way.
+    #
+    # So: accept what `_regime_cap` reads unambiguously (a real bool, or the
+    # ints 0/1 that YAML produces for `enabled: 1`), and refuse only what is
+    # genuinely ambiguous — a missing key, a null, or a STRING, where `"false"`
+    # is truthy to Python and the one value that most needs to mean off would
+    # read as on.
+    #
+    # THIS IS A NARROWING OF THE FIX, NOT THE WHOLE FIX. The complete answer is
+    # for the shape check to live in whatever BOTH paths read, the way
+    # `resolve_sizing` does one layer down — round 2 cited that precedent and
+    # copied everything about it except the property that made it work. The
+    # shared resolver is `services/regime_gate.py`, which belongs to a different
+    # audit target; until it validates, the fire path can only avoid being
+    # STRICTER than the scan, which is what this does.
+    enabled = raw.get("enabled")
+    if not (isinstance(enabled, bool) or (isinstance(enabled, int) and enabled in (0, 1))):
+        shown = repr(raw["enabled"]) if "enabled" in raw else "<missing>"
         raise RegimeGateConfigError(
-            f"regime_gate is populated but its `enabled` key is "
-            f"{raw.get('enabled', '<missing>')!r} rather than a true/false "
-            f"boolean — a populated gate block that does not say it is on must "
-            f"not be read as off, so {strategy.symbol} is refused rather than "
-            f"fired ungated"
+            f"regime_gate is populated but its `enabled` key is {shown} rather "
+            f"than a true/false boolean — a populated gate block that does not "
+            f"say it is on must not be read as off, so {strategy.symbol} is "
+            f"refused rather than fired ungated"
         )
-    if not raw["enabled"]:
+    if not enabled:
         return "disabled"
 
     gate = _resolve_regime_gate(strategy)
@@ -654,6 +684,7 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
     # key directly, so it has to be present and comparable; -inf satisfies that
     # and makes the caution band empty, which is the honest reading of "this
     # threshold is unusable" for a band whose only output is a log line.
+    caution_band_disabled = False
     caution = gate.get("headwind_caution_pct")
     if not _is_real_number(caution):
         logger.warning(
@@ -663,6 +694,7 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
             caution if "headwind_caution_pct" in gate else None, strategy.symbol,
         )
         gate = {**gate, "headwind_caution_pct": float("-inf")}
+        caution_band_disabled = True
 
     # WHERE THE FAIL-CLOSED HALF STOPS, said plainly because round 2 asked.
     # Everything above refuses: the gate's OWN block is config, and a gate that
@@ -713,6 +745,14 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
         )
         return "caution"
 
+    # A PASS WITH THE CAUTION BAND SWITCHED OFF IS NOT THE SAME PASS, and round
+    # 3 caught the sentinel above erasing the difference: a -20 against a -40
+    # reject threshold came back "passed", so the record said the gate cleared a
+    # trade whose caution rule had never been evaluated. That is the same shape
+    # this field was added to remove, one level in. The only other evidence was
+    # a WARNING, which is exactly the evidence round 1 ruled insufficient.
+    if caution_band_disabled:
+        return "passed:caution-band-disabled"
     return "passed"
 
 
@@ -832,6 +872,19 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         return strategy
 
     if conviction is None:
+        # LOGGED, AND ROUND 3 IS WHY. The `sizing_off` branch above claimed to
+        # be "the one full-size path still leaving no trace"; this was another,
+        # and it is the one the process sits in every time it restarts before
+        # `regime_monitor` has cached anything. Full armed quantity, no record
+        # at any level that sizing was skipped — while the history row's
+        # `regime_gate` field speaks only for the GATE and says nothing about
+        # sizing. Three rounds have now each found one of these, on the same
+        # stated principle: a full-size return must leave a trace.
+        logger.info(
+            "vol_sizing: %s qty %d unchanged — no cached regime conviction "
+            "yet, so no size adjustment was applied",
+            strategy.symbol, strategy.quantity,
+        )
         return strategy
 
     #
@@ -937,19 +990,6 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
             rec_id=rec_id,
             type_enabled=True,
         ))
-        if delivered and discrete:
-            # DISCRETE EVENT: drop this key's dedup and first-seen records so
-            # the NEXT occurrence is a fresh alert rather than a "(reminder)"
-            # stamped with this one's date. `forget_alerts` is the notifier's
-            # own public way to say "that condition is over" — it is what the
-            # portfolio monitor calls when a position closes, and a refusal
-            # that has been delivered is over in exactly that sense.
-            #
-            # Only on `delivered`: a send that failed has already rolled its
-            # own hold back, and clearing again would be clearing someone
-            # else's claim on the key.
-            from app.services.notifications.alert_notifier import forget_alerts
-            forget_alerts({rec_id})
         if not delivered:
             # notify_alert returns False for the master kill switch, an armed
             # dedup window (persisted in alert_dedup.json, so it survives a
@@ -966,6 +1006,37 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
             "AutoTrader: failed to alert the %s for %s (the refusal itself "
             "stands): %s", what, symbol, notify_exc,
         )
+        return
+
+    if delivered and discrete:
+        # DISCRETE EVENT: drop this key's dedup and first-seen records so the
+        # NEXT occurrence is a fresh alert rather than a "(reminder)" stamped
+        # with this one's date. `forget_alerts` is the notifier's own public way
+        # to say "that condition is over" — it is what the portfolio monitor
+        # calls when a position closes, and a refusal that has been delivered is
+        # over in exactly that sense.
+        #
+        # Only on `delivered`: a send that failed has already rolled its own
+        # hold back, and clearing again would be clearing someone else's claim
+        # on the key.
+        #
+        # OUTSIDE THE DELIVERY try, AND IN ITS OWN — round 3. It used to sit
+        # inside the block above, so a failure HERE was logged as "failed to
+        # alert ... (the refusal itself stands)" when the alert had in fact been
+        # delivered. A post-mortem reading that line would conclude §9.1's "and
+        # alert" half did not happen, and would never learn the real
+        # consequence, which is the opposite and worse: the hold is stuck, so
+        # the NEXT refusal of this key is the one that goes unheard.
+        try:
+            from app.services.notifications.alert_notifier import forget_alerts
+            forget_alerts({rec_id})
+        except Exception as clear_exc:
+            logger.error(
+                "AutoTrader: the %s for %s WAS delivered, but clearing its "
+                "dedup hold failed — the next refusal of this key will be "
+                "suppressed for the rest of the window: %s",
+                what, symbol, clear_exc,
+            )
 
 
 # Stable, symbol-independent keys: the FILE is broken, not the symbol, so the
@@ -1023,8 +1094,8 @@ def _alert_regime_gate_config_refusal(symbol: str, exc: Exception) -> None:
         "regime-gate config refusal",
         (
             f"Auto-trade REFUSED to fire {symbol}: scoring_rules.yaml's "
-            f"regime_gate block is enabled but cannot be evaluated, so the "
-            f"headwind rule could not be applied and the trade was refused "
+            f"regime_gate block cannot be read or cannot be applied, so the "
+            f"headwind rule could not be evaluated and the trade was refused "
             f"rather than fired ungated. Nothing was sent and the auto-trader "
             f"is disarmed. {exc}"
         ),

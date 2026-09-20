@@ -1351,7 +1351,8 @@ def _gate_fire_measured(mocker, measured, *, direction="Bullish", quantity=4,
     only ever produce the verdicts this repo's fixtures happen to yield, and
     those are: Fragile, or nothing at all. Measured across every fixture at
     every horizon, the maximum `p_stay` is 0.50 against `regime_omm`'s 0.75
-    Stable threshold, and 14 of 24 symbol x horizon combinations return None.
+    Stable threshold, and 16 of the 24 symbol x horizon x direction
+    combinations return None.
     **No fixture in this repository produces a Stable regime.** With
     `require_stable_for_reject: true` shipped, `_regime_cap` therefore CANNOT
     reject through `_gate_fire`, and every refusal test above has to drop that
@@ -1466,9 +1467,15 @@ def test_regime_gate_caution_band_fires_and_logs_at_the_full_armed_quantity(mock
     FULL SIZE. Asserted rather than described so the claim cannot rot back.
     """
     with caplog.at_level("INFO", logger="app.services.auto_trader"):
-        qty, _ = _gate_fire_measured(mocker, (-20, "Stable"))
+        qty, svc = _gate_fire_measured(mocker, (-20, "Stable"))
     assert qty == 4, "the caution band fires, and carries no size consequence here"
     assert "CAUTION band" in caplog.text and "MSFT" in caplog.text
+    assert svc.get_state().history[-1]["regime_gate"] == "caution", (
+        "round 3: this was the one outcome value nothing asserted, and a "
+        "mutation returning it as 'passed' kept the whole suite green — so the "
+        "only in-process evidence there is would have recorded a trade that "
+        "fired INTO a headwind as one the gate cleared"
+    )
 
 
 def test_regime_gate_refuses_when_a_threshold_key_is_missing(mocker, monkeypatch):
@@ -1588,7 +1595,7 @@ def test_the_fired_history_row_records_what_the_gate_did(mocker):
     qty, svc = _gate_fire_measured(mocker, None)
     assert qty == 4, "abstention is fail-open"
     assert svc.get_state().history[-1]["regime_gate"] == "abstained", (
-        "the durable record must distinguish a trade the gate passed from one "
+        "the record must distinguish a trade the gate passed from one "
         "it never evaluated"
     )
 
@@ -1661,8 +1668,11 @@ def _capture_alerts(mocker):
     Returns the list of (subject, plain) tuples that reached a channel.
     """
     import app.services.notifications.alert_notifier as an
-    an._fired.clear()
-    an._first_seen.clear()
+    # The globals and the on-disk dedup file are isolated for EVERY test by
+    # conftest's `_isolate_alert_dedup_state` — round 3 found this suite
+    # rewriting the real backend/alert_dedup.json and arming two four-hour
+    # suppression windows in it. Nothing is cleared here any more; doing it in
+    # one helper was what made the leak look contained.
     delivered: list = []
 
     async def _fake_channels(subject, plain, html):
@@ -1688,8 +1698,19 @@ def test_two_symbols_refused_in_one_dedup_window_produce_two_alerts(mocker):
     every refusal but the first.
     """
     import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
     from app.services.auto_trader import RegimeHeadwindError
     calls = _capture_alerts(mocker)
+
+    # THE DISCRETE CLEANUP IS SUPPRESSED HERE, AND WITHOUT THAT THIS TEST IS
+    # VACUOUS — round 3 proved it by mutation. `discrete=True` clears the dedup
+    # key after every successful delivery, so with the cleanup live a BARE
+    # CONSTANT rec_id delivers all three alerts too and this test passes on
+    # round 1's exact defect. Holding the cleanup off is what leaves the real
+    # dedup window standing, which is the thing the per-symbol key has to
+    # survive. Re-verified by mutation after this change: reverting
+    # `_headwind_rec_id` to the constant fails this test.
+    mocker.patch.object(an, "forget_alerts", lambda rec_ids: None)
 
     for sym in ("MSFT", "AAPL", "NVDA"):
         at._alert_regime_headwind_refusal(sym, RegimeHeadwindError(f"{sym} measured -70"))
@@ -1906,9 +1927,115 @@ def test_a_missing_caution_threshold_does_not_crash_the_shared_rule(mocker, monk
                   "require_stable_for_reject": False},
     )
     assert qty == 4
-    assert svc.get_state().history[-1]["regime_gate"] == "passed", (
+    assert svc.get_state().history[-1]["regime_gate"] == "passed:caution-band-disabled", (
         "with no usable caution threshold the band is empty, so a trade that "
-        "would have been CAUTION reads as a pass rather than crashing"
+        "would have been CAUTION passes rather than crashing — but it must NOT "
+        "record as an ordinary 'passed', which would say the gate fully "
+        "evaluated a trade whose caution rule it never applied (round 3)"
+    )
+
+
+def test_the_fire_path_accepts_every_enabled_value_the_scan_acts_on(mocker, monkeypatch):
+    """The fire path must not be STRICTER than the shared rule about what "on" means.
+
+    Round 3: round 2's bool-only check refused every armed trade on
+    `enabled: 1` — a config `_regime_cap` reads as ON, and on which the scan
+    correctly drops headwind candidates. A scan that gates and a fire path that
+    refuses are two answers to one question, which is the defect class this
+    whole piece exists to remove, pointing the other way.
+    """
+    from app.scoring.stock_scorer import _regime_cap
+    from app.services.auto_trader import RegimeHeadwindError
+
+    for value in (True, 1):
+        gate = {"enabled": value, "headwind_caution_pct": -15,
+                "headwind_reject_pct": -40, "require_stable_for_reject": False}
+        assert _regime_cap(-90, "Stable", gate) == "REJECT", (
+            f"precondition: the SHARED rule treats enabled={value!r} as on"
+        )
+        with pytest.raises(RegimeHeadwindError):
+            _gate_fire_measured(mocker, (-90, "Stable"), monkeypatch=monkeypatch,
+                                gate_cfg=gate)
+
+    for value in (False, 0):
+        qty, svc = _gate_fire_measured(
+            mocker, (-90, "Stable"), monkeypatch=monkeypatch,
+            gate_cfg={"enabled": value, "headwind_caution_pct": -15,
+                      "headwind_reject_pct": -40},
+        )
+        assert qty == 4 and svc.get_state().history[-1]["regime_gate"] == "disabled", (
+            f"enabled={value!r} is unambiguously off on both paths"
+        )
+
+
+def test_a_delivered_alert_whose_cleanup_fails_is_not_reported_as_a_failed_alert(mocker, caplog):
+    """The two outcomes have opposite remedies, and one was wearing the other's name.
+
+    Round 3: the cleanup sat inside the delivery try, so a failure here logged
+    "failed to alert ... (the refusal itself stands)" — telling a post-mortem
+    that §9.1's "and alert" half did not happen, when it had, and hiding the
+    real consequence: the hold is stuck, so the NEXT refusal is the unheard one.
+    """
+    import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
+    from app.services.auto_trader import RegimeHeadwindError
+
+    def _boom(rec_ids):
+        raise OSError("dedup store unwritable")
+
+    _capture_alerts(mocker)
+    mocker.patch.object(an, "forget_alerts", _boom)
+
+    with caplog.at_level("ERROR", logger="app.services.auto_trader"):
+        at._alert_regime_headwind_refusal("MSFT", RegimeHeadwindError("MSFT measured -70"))
+
+    assert "WAS delivered" in caplog.text, caplog.text
+    assert "next refusal of this key will be suppressed" in caplog.text
+    assert "failed to alert" not in caplog.text, (
+        "the alert succeeded; saying it failed sends the reader after the "
+        "wrong fault entirely"
+    )
+
+
+def test_a_suppressed_delivery_does_not_clear_anyone_elses_hold(mocker):
+    """`delivered and discrete`, not a bare `discrete`.
+
+    Round 3 named this branch untested: a send that failed has already rolled
+    its own hold back, so clearing again would drop a concurrent caller's
+    optimistic claim on the key and permit a double-send.
+    """
+    import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
+    from app.services.auto_trader import RegimeHeadwindError
+
+    cleared: list = []
+    mocker.patch.object(an, "forget_alerts", lambda rec_ids: cleared.append(rec_ids))
+
+    async def _never_delivers(**kwargs):
+        return False
+
+    mocker.patch.object(an, "notify_alert", _never_delivers)
+    at._alert_regime_headwind_refusal("MSFT", RegimeHeadwindError("MSFT measured -70"))
+
+    assert cleared == [], "nothing was delivered, so there is no hold of ours to clear"
+
+
+def test_the_suite_does_not_write_the_real_alert_dedup_file(mocker):
+    """Round 3's operational finding, pinned so it cannot come back.
+
+    A test that reached `notify_alert` or `forget_alerts` unstubbed rewrote
+    backend/alert_dedup.json — the file the running backend loads at import —
+    with whatever the test had left in the globals, and armed its four-hour
+    suppression windows. A backend restarted from the same tree lost every
+    genuine portfolio-alert record and would silently not alert the next config
+    refusal inside the window.
+    """
+    import app.services.notifications.alert_notifier as an
+    from pathlib import Path
+    real = Path(__file__).parent.parent / "alert_dedup.json"
+    assert an._DEDUP_PATH != real, (
+        "conftest's _isolate_alert_dedup_state must redirect the dedup store "
+        "for every test; without it a suite run is a write to production state"
     )
 
 
