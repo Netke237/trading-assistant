@@ -192,6 +192,9 @@ has not been done.**
 
 ### 5.2 §2 IS WRONG ABOUT TWO BRANCHES, AND THIS IS A RESCUE CASE
 
+> **UNDERSTATED. SUPERSEDED BY §6, WRITTEN HOURS LATER THE SAME DAY.** What this section calls
+> two orphan files is the visible corner of 24 unmerged commits. Read §6 first.
+
 §2 records `session-continuation-docs-ne4h8w` as "Merged at `fb085887`" and
 `session-retrieval-continuation-vf056m` as "Reached main through `ne4h8w` as ancestors". Both
 were true of the merge. **Both branches then kept being worked on**, and each now carries five
@@ -214,3 +217,74 @@ Not in §2's table. One commit ahead, seven files differing, **zero absent from 
 deliberate snapshot of the screener-layout work at its unclean round 3; main carries the round-4
 clean version that merged at `fb085887`, and is ahead on every differing file. Its name says
 `archive/`. It is preserved history, not a backlog. Not a deletion candidate.
+
+---
+
+## 6. CORRECTION, 2026-09-20 — §5.2 understated this badly
+
+**This is the eighth wrong answer to this question, and the first one produced by skipping a step
+this very document prescribes.** §5.2 was written after checking only the first case of §3.3 —
+files ABSENT from main. §3.3's second half says: *"For each `differs`, decide direction."* That
+was not done. Doing it changes the answer from "two orphan files to rescue" to "a branch whose
+unmerged work main does not have".
+
+### 6.1 What is actually unmerged
+
+```
+git rev-list --left-right --count origin/main...origin/claude/session-continuation-docs-ne4h8w
+0       24
+git diff --shortstat origin/main origin/claude/session-continuation-docs-ne4h8w
+11 files changed, 2907 insertions(+), 88 deletions(-)
+```
+
+**`origin/main` is a STRICT ANCESTOR of `ne4h8w`.** The branch is main plus 24 commits. It is not
+"merged with a bit of drift"; it is a superset. `fb085887` *is* an ancestor of it — the merge §2
+records really happened — and then **the branch kept being worked on for 24 more commits that
+never came back.**
+
+**`vf056m` is FULLY CONTAINED in `ne4h8w`** (`rev-list --left-right` reads `0 8`). There is one
+branch to deal with here, not two.
+
+### 6.2 The files, by line count — not by numstat
+
+| File | main | `ne4h8w` |
+|---|---|---|
+| `frontend/app/(frame)/screener/step-5-vol-events/page.tsx` | 389 | **737** |
+| `frontend/app/(frame)/screener/step-5-vol-events/__tests__/gateSummary.test.tsx` | 299 | **1495** |
+| `backend/scripts/run_bearish_tests.py` | 62 | **231** |
+| `frontend/components/molecules/TableRow/index.tsx` | 65 | **73** |
+| `backend/tests/test_short_suite_arg_merging.py` | *absent* | **286** |
+| `docs/superpowers/plans/2026-09-18-vf056m-restart-and-dead-container.md` | *absent* | present |
+
+Only `PROJECT_STATE.json` and the three `2026-09-18-*` plan docs also exist on the live sizing
+branch. **The seven other files are on `ne4h8w` alone.**
+
+### 6.3 The orphan test is orphaned from its IMPLEMENTATION, not just from main
+
+`test_short_suite_arg_merging.py` imports `build_args`, `build_cmd` and `KeywordArgError` from
+`scripts/run_bearish_tests.py`, at module scope. **None of those three exist on main's 62-line
+copy of that script** (only `BEARISH_EXPR` does). Copying the test across on its own produces an
+AttributeError at collection. The script's whole hand-rolled argument parser — the thing the test
+exists to pin, after three separate defects each of which silently ran 51 tests instead of 6 and
+exited 0 — is part of the same unmerged 169 lines.
+
+### 6.4 The 24 commits are not scratch work
+
+They carry completed adversarial rounds with recorded verdicts, including `Target B round 3:
+CLEAN at the gate` and `Target A hit the cap: three rounds, none clean, stopping per decisions[0]`
+— i.e. both outcomes this project's audit rule defines, already paid for. Deleting `ne4h8w` would
+discard those rounds along with the code.
+
+### 6.5 What this changes
+
+1. **`ne4h8w` and `vf056m` are NOT deletion candidates and must not be treated as merged.** §2
+   says both are done. Both claims are stale in the direction that loses work.
+2. **This is a MERGE decision, not a rescue.** Copying two files would leave ~2900 lines and a
+   broken import behind. The question for Kenneth is whether `ne4h8w` merges to main — and since
+   main is a strict ancestor, that merge is a fast-forward-shaped `--no-ff`, not a conflict
+   resolution.
+3. **The five branches in §5.1 are unaffected.** Their content re-verified clean, and none of them
+   is `ne4h8w` or `vf056m`.
+4. **Method:** §3.3's direction check is not optional, and a `differs` on a PRODUCTION file is the
+   one to open first. A count of ABSENT files alone will report a clean sweep over a branch that
+   is 2907 insertions ahead.
