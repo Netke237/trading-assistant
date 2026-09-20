@@ -7,6 +7,7 @@ import math
 import threading
 import uuid
 import yaml
+from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1277,6 +1278,21 @@ _RISK_BLOCKED_STATUSES = ("cap_blocked", "daily_loss_blocked")
 # invisible until F3. Named here beside the others so the next reader sees one
 # list of what can land in history, not two.
 _STATUS_STALE_BLOCKED = "stale_blocked"
+# THE LAST-RESORT ROW. The two risk checks below the disarm catch
+# `RuntimeError` -- the class a genuine cap or circuit-breaker refusal is
+# raised as -- and round 5 of target 2a measured what the narrowness costs:
+# `_check_exposure` raising a `TypeError` consumed the armed order, wrote NO
+# row at all, escaped `fire_now`'s `except (ValueError, RuntimeError)` as a
+# 500, and left `/auto-trade/status` still showing the PREVIOUS order as
+# `last_order`. That is the state `RegimeGateConfigError`'s docstring calls
+# strictly worse than what it replaced. Widening those handlers to
+# `except Exception` is the WRONG repair -- it would file a crashed risk
+# engine as `cap_blocked` and tell Kenneth his exposure caps blocked a trade
+# they never evaluated. So the narrow handlers keep their meaning and this
+# row catches the rest: deliberately NOT in `_RISK_BLOCKED_STATUSES`, so it
+# routes to the unclassified alert, which is what it is. A consumed order
+# always leaves a row.
+_STATUS_RISK_CHECK_FAILED = "risk_check_failed"
 
 
 def _clear_config_refusal_holds() -> None:
@@ -1539,6 +1555,24 @@ class AutoTradeService:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._state = AutoTradeState(armed=False, strategy=None)
+        # THE ATTEMPTS THAT PASSED `fire()`'s DISARM, newest last. Written in
+        # the same lock acquisition as the disarm itself, so an entry here
+        # means that attempt took ownership of the armed order.
+        #
+        # This exists to make ONE invariant checkable instead of assumed:
+        # `ArmPreservedError` means "refused before the disarm, nothing
+        # consumed, nothing recorded", and `maybe_fire_on_scan` stays SILENT on
+        # it for that reason alone. Round 5 of target 2a found that invariant
+        # load-bearing and unasserted — a post-disarm raise of that class, or a
+        # refusal class accidentally made a SUBCLASS of it, consumes the armed
+        # order and pages nobody, with the suite still green. Membership is
+        # keyed on `attempt_id`, which is unique per attempt, so unlike reading
+        # the armed slot after the fact it cannot be rewritten by another
+        # thread — the mistake F1 was fixing.
+        #
+        # Bounded because it is a guard, not a record: `history` is the record.
+        # 64 is far more than the number of attempts that can be in flight.
+        self._consumed_attempts: deque[str] = deque(maxlen=64)
 
     def arm(self, strategy: ArmedStrategy) -> None:
         if strategy.entry_premium <= 0:
@@ -1640,6 +1674,9 @@ class AutoTradeService:
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None
+            # OWNERSHIP TAKEN — recorded inside the disarm's own lock
+            # acquisition so the two cannot come apart. See the deque.
+            self._consumed_attempts.append(attempt_id)
 
         # Vol-scaled sizing (cached regime conviction) + the headwind gate,
         # which measures this symbol's own regime and therefore DOES make a
@@ -1771,6 +1808,23 @@ class AutoTradeService:
                         "premium_at_risk": 0.0,
                     })
                 raise
+            except Exception as exc:
+                # NOT A CAP REFUSAL — the check itself failed. See
+                # `_STATUS_RISK_CHECK_FAILED`. Row first, then re-raise
+                # unchanged so nothing downstream sees a different error.
+                with self._lock:
+                    self._state.history.append({
+                        "attempt_id":      attempt_id,
+                        "order_id":        None,
+                        "status":          _STATUS_RISK_CHECK_FAILED,
+                        "broker":          strategy.broker,
+                        "symbol":          strategy.symbol,
+                        "option":          strategy.option_symbol,
+                        "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        "premium_at_risk": 0.0,
+                        "error":           f"exposure check failed: {exc}",
+                    })
+                raise
         # Daily loss circuit breaker — runs after cap check, before order submission.
         # Armed state is already cleared above; circuit breaker blocks permanently (no retry).
         with self._lock:
@@ -1788,6 +1842,24 @@ class AutoTradeService:
                     "option":          strategy.option_symbol,
                     "timestamp":       datetime.now(timezone.utc).isoformat(),
                     "premium_at_risk": 0.0,
+                })
+            raise
+        except Exception as exc:
+            # NOT A CIRCUIT-BREAKER REFUSAL — the check itself failed. The
+            # `float()` ValueError this catches was already acknowledged in a
+            # comment on `_check_daily_loss`; it now leaves a row like every
+            # other consumed attempt. See `_STATUS_RISK_CHECK_FAILED`.
+            with self._lock:
+                self._state.history.append({
+                    "attempt_id":      attempt_id,
+                    "order_id":        None,
+                    "status":          _STATUS_RISK_CHECK_FAILED,
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           f"daily-loss check failed: {exc}",
                 })
             raise
 
@@ -2055,6 +2127,26 @@ class AutoTradeService:
             # between. F1's first two interleavings are both that inference
             # going wrong. The class is decided by which line of `fire()` ran,
             # which no other thread can change.
+            #
+            # THE SILENCE IS NOW CONDITIONAL ON THE INVARIANT ABOVE HOLDING,
+            # because round 5 of target 2a established that nothing was
+            # checking it. Every path at or past the disarm consumed the armed
+            # order and must alert; this class asserts it did not get that far.
+            # If the marker says otherwise — a post-disarm raise of this class,
+            # or a consumed-refusal class made a SUBCLASS of it — then staying
+            # quiet would eat the one event this trigger exists to report, so
+            # the attempt is routed exactly as the generic handler routes it.
+            # A consumed order is never silent, whatever class arrives here.
+            if self._attempt_consumed(attempt_id):
+                logger.error(
+                    "AutoTrader: %s raised ArmPreservedError for %s AFTER the "
+                    "disarm — the armed order was consumed, so this refusal is "
+                    "being alerted rather than treated as preserved. The class "
+                    "invariant (raised only before the disarm) is broken.",
+                    type(exc).__name__, strategy.symbol,
+                )
+                self._alert_for_consumed_attempt(attempt_id, strategy.symbol, exc)
+                return
             logger.info(
                 "AutoTrader: scan trigger did not fire %s, armed order "
                 "preserved — %s", strategy.symbol, exc,
@@ -2076,27 +2168,7 @@ class AutoTradeService:
             # branch above catches every pre-disarm exit `fire()` has, so the
             # old `elif consumed:` guard on the no-row case is gone with the
             # state read that computed it.
-            row = self._fire_attempt_record(attempt_id)
-            status = row.get("status") if row else None
-            # NAMED BY THE ROW, not by the strategy this trigger read. `expect`
-            # already makes them the same order; reading the row means the
-            # alert says what the record says even if that ever stops holding.
-            symbol = row.get("symbol") if row else strategy.symbol
-            if status in _SIZING_STATUSES:
-                _alert_sizing_config_refusal(symbol, exc)
-            elif status in _RISK_BLOCKED_STATUSES:
-                _alert_risk_limit_refusal(symbol, exc, status)
-            elif status == "not_submitted":
-                # ABOVE `order_failed` for readability only — the two statuses
-                # are disjoint, so this is reading order, not precedence, the
-                # same note the headwind/sizing pair above carries.
-                _alert_not_submitted(symbol, exc)
-            elif status == "order_failed":
-                _alert_order_failed(symbol, exc)
-            else:
-                # No row of ours: it failed past the disarm and before anything
-                # was recorded.
-                _alert_unclassified_refusal(symbol, exc)
+            self._alert_for_consumed_attempt(attempt_id, strategy.symbol, exc)
 
     def _fire_attempt_record(self, attempt_id: str) -> dict | None:
         """The history row THIS attempt wrote, or None if it wrote none.
@@ -2123,6 +2195,50 @@ class AutoTradeService:
                 if row.get("attempt_id") == attempt_id:
                     return row
         return None
+
+    def _attempt_consumed(self, attempt_id: str) -> bool:
+        """Did THIS attempt pass `fire()`'s disarm and take the armed order?
+
+        The question `ArmPreservedError`'s silence depends on, asked of a
+        marker written in the disarm's own lock acquisition rather than
+        inferred from shared state afterwards. Unlike "is the slot still
+        armed", this cannot be changed by another thread re-arming, and unlike
+        "did this attempt write a row" it is true even for a consumed attempt
+        that recorded nothing — which is the exact shape of the silent failure
+        round 5 went looking for.
+        """
+        with self._lock:
+            return attempt_id in self._consumed_attempts
+
+    def _alert_for_consumed_attempt(self, attempt_id: str,
+                                    fallback_symbol: str, exc: Exception) -> None:
+        """Route an attempt that CONSUMED the armed order to its alert.
+
+        Extracted from `maybe_fire_on_scan`'s generic handler by round 5 of
+        target 2a so the `ArmPreservedError` branch can reach the same routing
+        when its silence turns out not to be warranted. One router, so the two
+        callers cannot drift into disagreeing about what a status means.
+        """
+        row = self._fire_attempt_record(attempt_id)
+        status = row.get("status") if row else None
+        # NAMED BY THE ROW, not by the strategy the trigger read. `expect`
+        # already makes them the same order; reading the row means the alert
+        # says what the record says even if that ever stops holding.
+        symbol = row.get("symbol") if row else fallback_symbol
+        if status in _SIZING_STATUSES:
+            _alert_sizing_config_refusal(symbol, exc)
+        elif status in _RISK_BLOCKED_STATUSES:
+            _alert_risk_limit_refusal(symbol, exc, status)
+        elif status == "not_submitted":
+            # ABOVE `order_failed` for readability only — the two statuses
+            # are disjoint, so this is reading order, not precedence.
+            _alert_not_submitted(symbol, exc)
+        elif status == "order_failed":
+            _alert_order_failed(symbol, exc)
+        else:
+            # No row of ours: it failed past the disarm and before anything
+            # was recorded.
+            _alert_unclassified_refusal(symbol, exc)
 
     @staticmethod
     @functools.lru_cache(maxsize=1)

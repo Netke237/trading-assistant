@@ -162,7 +162,8 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     """Trigger #1: manually fire the armed strategy with a live exposure check."""
     from app.models.portfolio import PortfolioPositionModel
     from app.services.portfolio_risk import orm_positions_to_risk
-    if not auto_trader.get_state().armed:
+    _armed_state = auto_trader.get_state()
+    if not _armed_state.armed or _armed_state.strategy is None:
         raise HTTPException(status_code=400, detail="AutoTrader not armed — cannot fire")
     result_q = await db.execute(select(PortfolioPositionModel))
     orm_positions = result_q.scalars().all()
@@ -171,6 +172,27 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
         result = auto_trader.fire(
             portfolio_snapshot=portfolio_snapshot,
             portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
+            # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same
+            # contract `maybe_fire_on_scan` passes, and for the same reason.
+            # This handler reads the armed slot, decides something about what
+            # it read (the 400 above), and only then calls: exactly the caller
+            # shape `fire()`'s docstring says `expect` exists for. Without it,
+            # `fire()`'s halt check runs on the symbol read in its first lock
+            # block and the submission happens on whatever the second one
+            # finds, so a re-arm in that window — which spans a 3s network
+            # call — authorizes order B on order A's halt decision.
+            #
+            # NOT REACHABLE OVER HTTP TODAY, and recorded here so the next
+            # reader does not decide it is therefore pointless: `fire_now` is
+            # `async def` but calls `fire()` synchronously, blocking the loop,
+            # so no second request can be parsed inside the window. That is an
+            # accident of this endpoint's shape, not a guard. It stops holding
+            # the moment `fire()` moves behind `asyncio.to_thread` (which this
+            # codebase is already doing for broker order execution), a second
+            # worker shares the state, or any non-HTTP producer calls `arm()`.
+            # A mismatch raises `ArmPreservedError`, which is a RuntimeError,
+            # so the handler below already maps it to the 400 it should be.
+            expect=_armed_state.strategy,
         )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))

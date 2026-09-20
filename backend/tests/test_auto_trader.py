@@ -3106,3 +3106,253 @@ def test_an_expired_arm_refusal_is_still_recorded_when_the_notifier_is_dead(mock
 
     assert svc.get_state().history[-1]["status"] == "stale_blocked"
     assert svc.get_state().armed is False
+
+
+# ---------------------------------------------------------------------------
+# Round 5 of target 2a: the fences the fire()/gate delta was missing.
+#
+# All six of these pin behaviour that already held at HEAD. Round 5 found it
+# held by ACCIDENT rather than by assertion: each mutation named below survived
+# the full 272-test auto-trade suite before these were written.
+# ---------------------------------------------------------------------------
+
+
+def test_the_refusal_classes_are_disjoint_from_the_silent_one(mocker):
+    """No refusal that CONSUMES the armed order may be an `ArmPreservedError`.
+
+    `maybe_fire_on_scan` stays silent on that class alone, on the stated
+    invariant that it is raised only BEFORE `fire()`'s disarm. Making any
+    consumed-refusal class a subclass of it routes a real refusal into the
+    silence -- and round 5 measured `class RegimeHeadwindError(ArmPreservedError)`
+    passing 272/272. The invariant is load-bearing, so it is asserted here.
+    """
+    from app.services.auto_trader import (
+        ArmPreservedError, OrderNotSubmittedError,
+        RegimeHeadwindError, RegimeGateConfigError,
+    )
+    from app.scoring.conviction_sizing import SizingConfigError
+    for cls in (RegimeHeadwindError, RegimeGateConfigError,
+                SizingConfigError, OrderNotSubmittedError):
+        assert not issubclass(cls, ArmPreservedError), (
+            f"{cls.__name__} consumes the armed order, so it must not be "
+            f"caught by maybe_fire_on_scan's deliberate silence"
+        )
+
+
+def test_an_arm_preserved_error_raised_after_the_disarm_still_alerts(mocker):
+    """The silence is conditional on nothing having been consumed.
+
+    THE FAILURE THIS FORBIDS, reproduced by round 5 against the real module: a
+    post-disarm `ArmPreservedError` consumed the armed order and produced ZERO
+    history rows and ZERO alerts -- the only fully silent exit in the module.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import ArmPreservedError
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    # RAISED FROM PAST THE DISARM, and from the one place it escapes with NO
+    # ROW AT ALL: `_apply_vol_sizing` runs after the disarm and its handlers
+    # name `SizingConfigError`, `ValueError`, `RegimeHeadwindError` and
+    # `RegimeGateConfigError` -- this class matches none of them, so it leaves
+    # `fire()` unwrapped and unrecorded. That zero-row shape is why the guard
+    # cannot be "did this attempt write a row"; it has to be a marker taken at
+    # the disarm itself.
+    mocker.patch.object(at, "_apply_vol_sizing",
+                        side_effect=ArmPreservedError("raised too late"))
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    svc.maybe_fire_on_scan()   # must not raise
+
+    assert svc.get_state().armed is False, "the order was consumed"
+    assert unclassified.call_count == 1, (
+        "a consumed armed order must never be silent, whatever class arrives"
+    )
+
+
+def test_every_one_of_the_seven_rows_fire_writes_carries_its_attempt_id(mocker):
+    """The stamp, on all seven rows -- including the two gate refusals.
+
+    The pre-existing `test_every_history_row_...` patches `_apply_vol_sizing`
+    to identity, so no GATE refusal is ever produced: it asserts on 2 of the 7
+    rows and misses `regime_headwind_blocked` and `regime_gate_config_blocked`,
+    two of the four this target owns. Round 5's per-row mutation sweep found
+    exactly those two survive having their `attempt_id` dropped. Driven here
+    through the REAL gate rather than a stub, so the rows are the real ones.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeHeadwindError, RegimeGateConfigError
+
+    def _fire_expecting(exc_type, patch):
+        svc = AutoTradeService()
+        patch(svc)
+        svc.arm(_make_armed(symbol="MSFT"))
+        with pytest.raises(exc_type):
+            svc.fire(attempt_id="attempt-STAMP")
+        row = svc.get_state().history[-1]
+        assert row["attempt_id"] == "attempt-STAMP", (
+            f"{row['status']} row lost its stamp -- maybe_fire_on_scan then "
+            f"cannot correlate this refusal to its attempt and pages "
+            f"unclassified about a refusal it recorded perfectly well"
+        )
+        return row["status"]
+
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+
+    headwind = _fire_expecting(
+        RegimeHeadwindError,
+        lambda svc: mocker.patch.object(
+            at, "_apply_vol_sizing",
+            side_effect=RegimeHeadwindError("regime headwind")),
+    )
+    assert headwind == "regime_headwind_blocked"
+
+    gate_config = _fire_expecting(
+        RegimeGateConfigError,
+        lambda svc: mocker.patch.object(
+            at, "_apply_vol_sizing",
+            side_effect=RegimeGateConfigError("regime_gate block is not a mapping")),
+    )
+    assert gate_config == "regime_gate_config_blocked"
+
+
+def test_a_failing_risk_check_leaves_a_row_instead_of_vanishing(mocker):
+    """A crashed risk check consumed the armed order -- it must still record.
+
+    MEASURED BEFORE THE FIX: `_check_exposure` raising a `TypeError` consumed
+    the arm, wrote NO row, escaped `fire_now`'s `except (ValueError,
+    RuntimeError)` as a 500, and left `/auto-trade/status` still reporting the
+    PREVIOUS order as `last_order`.
+
+    And the attribution matters as much as the row: this must NOT be filed as
+    `cap_blocked`, which would tell Kenneth his exposure caps blocked a trade
+    they never evaluated.
+    """
+    import app.services.auto_trader as at
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    mocker.patch.object(AutoTradeService, "_check_exposure",
+                        staticmethod(mocker.Mock(side_effect=TypeError("risk engine broke"))))
+
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    with pytest.raises(TypeError):
+        svc.fire(attempt_id="attempt-RISK", portfolio_snapshot=[])
+
+    row = svc.get_state().history[-1]
+    assert row["status"] == "risk_check_failed"
+    assert row["status"] != "cap_blocked", "the caps never ran -- do not blame them"
+    assert row["attempt_id"] == "attempt-RISK"
+    assert svc.get_state().armed is False
+
+
+def test_the_early_expect_check_is_present(mocker):
+    """The first of the two `expect` identity checks, pinned.
+
+    It is an OPTIMIZATION -- it saves `_market_is_open`'s 3s fetch when the arm
+    has already moved on -- and the load-bearing one is the second, inside the
+    disarm's lock. Round 5 measured that deleting this one passes 272/272,
+    which means the half a reader is most likely to tidy away has no signal at
+    all. Asserted on the observable: a mismatched `expect` must refuse WITHOUT
+    the halt fetch having run.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import ArmPreservedError
+    halt = mocker.patch.object(at, "_market_is_open", return_value=True)
+
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    with pytest.raises(ArmPreservedError):
+        svc.fire(expect=_make_armed(symbol="MSFT"))   # a DIFFERENT object
+
+    assert halt.call_count == 0, (
+        "the early check exists to refuse before the 3s halt fetch"
+    )
+    assert svc.get_state().armed is True, "a mismatch preserves the arm"
+
+
+def test_which_rows_carry_the_regime_gate_outcome(mocker):
+    """Pins WHICH rows carry `regime_gate`, because nothing did.
+
+    F2 split the credential-expiry failure out of `order_failed` into
+    `not_submitted`, and in doing so stopped that class of attempt carrying the
+    gate's verdict -- the row's comment states the rule it followed ("rides
+    only where an order may be live"), but no test asserted either way, so the
+    change was invisible. This locks the CURRENT rule so the next change to it
+    has to be deliberate. See open_questions: whether `not_submitted` SHOULD
+    carry it is Kenneth's call, not this test's.
+    """
+    import app.services.auto_trader as at
+    from app.data.ibkr_paper import OrderResult
+    from app.services.auto_trader import OrderNotSubmittedError
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+
+    mocker.patch.object(at, "execute_option_order",
+                        return_value=OrderResult("oid", "filled", "ibkr_paper"))
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    svc.fire(attempt_id="a-filled")
+    assert "regime_gate" in svc.get_state().history[-1], (
+        "the filled row carries it: a trade the gate never evaluated must not "
+        "look identical afterwards to one it passed"
+    )
+
+    mocker.patch.object(at, "execute_option_order",
+                        side_effect=OrderNotSubmittedError("credentials expired"))
+    svc.arm(_make_armed(symbol="MSFT"))
+    with pytest.raises(RuntimeError):
+        svc.fire(attempt_id="a-notsub")
+    row = svc.get_state().history[-1]
+    assert row["status"] == "not_submitted"
+    assert "regime_gate" not in row, (
+        "CURRENT rule: the field rides only where an order may be live"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_manual_fire_endpoint_fires_the_order_it_checked(mocker):
+    """`POST /auto-trade/fire` must pass `expect`, like the scan trigger does.
+
+    THE SHAPE `expect` EXISTS FOR, from `fire()`'s own docstring: a caller that
+    reads the armed slot, decides something about what it read, and only then
+    calls. This endpoint does exactly that -- its 400 is that decision -- and
+    F1 migrated `maybe_fire_on_scan` while leaving this caller passing nothing.
+
+    Without it, `fire()` resolves the halt check against the symbol read in its
+    first lock block and submits whatever the second one finds, so a re-arm
+    inside that window -- which spans a 3s network fetch -- authorizes order B
+    on order A's halt decision. Round 5 reproduced that against the real
+    service: `halt check ran for: ['AAPL']`, `order submitted for: ['HALTD']`.
+
+    Not reachable over HTTP today only because `fire_now` blocks the loop; that
+    is this endpoint's shape, not a guard, and it is why this is asserted on
+    the contract rather than raced.
+    """
+    from app.routers import auto_trade as rt
+    from app.data.ibkr_paper import OrderResult
+
+    class _FakeResult:
+        def scalars(self):
+            return self
+        def all(self):
+            return []
+
+    class _FakeDb:
+        async def execute(self, *a, **k):
+            return _FakeResult()
+
+    armed = _make_armed(symbol="MSFT")
+    rt.auto_trader.arm(armed)
+    fire_spy = mocker.patch.object(
+        rt.auto_trader, "fire",
+        return_value=OrderResult("oid", "filled", "ibkr_paper"))
+    try:
+        await rt.fire_now(db=_FakeDb())
+    finally:
+        rt.auto_trader.disarm()
+
+    assert fire_spy.call_count == 1
+    assert fire_spy.call_args.kwargs.get("expect") is armed, (
+        "the endpoint must fire the exact armed order its 400 check read"
+    )
