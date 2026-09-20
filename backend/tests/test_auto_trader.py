@@ -201,10 +201,20 @@ def test_orm_positions_to_risk_skips_zero_qty():
 
 
 def test_maybe_fire_on_scan_disarms_stale_order(mocker):
-    """An order armed more than max_arm_age_minutes ago must be disarmed without firing."""
+    """An order armed more than max_arm_age_minutes ago must be disarmed without firing.
+
+    STUBS THE DELIVERY CHANNEL since F3 put an alert on this path. Without it
+    this test reaches the real `notify_alert` and only stays quiet because the
+    ambient `masterEnabled` happens to be off — so a machine configured with
+    live Gmail or Telegram credentials would have the suite send Kenneth a real
+    page. That is the same class of leak target 2a round 3 found (tests writing
+    real runtime state) and conftest's `_isolate_alert_dedup_state` covers only
+    the dedup file, not the send.
+    """
     from datetime import timedelta
     from app.data.ibkr_paper import OrderResult
 
+    _capture_alerts(mocker)
     svc = AutoTradeService()
     mock_execute = mocker.patch(
         "app.services.auto_trader.execute_option_order",
@@ -2724,3 +2734,375 @@ def test_a_non_valueerror_before_submission_is_also_not_submitted(mocker):
     assert svc.get_state().history[-1]["status"] == "not_submitted"
     assert len(calls) == 1
     assert "MAY HAVE LANDED" not in calls[0][1], calls[0][1]
+
+
+# --------------------------------------------------------------------------
+# F3 of 2A-ALERT round 1 — the stale-arm disarm was the FOURTH silent refusal
+# --------------------------------------------------------------------------
+
+def _stale_armed_service(mocker, *, symbol="MSFT", age_minutes=60):
+    """An armed service whose order has already aged past `max_arm_age_minutes`.
+
+    The age is put on `armed_at` rather than achieved by patching the clock,
+    because the guard compares the two and a test that moves both proves
+    nothing. `max_arm_age_minutes` is left at its real value (30, from
+    risk_rules.yaml) so the default configuration is what is exercised.
+    """
+    from datetime import timedelta
+    import app.services.auto_trader as at
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    svc = AutoTradeService()
+    armed = _make_armed(symbol=symbol)
+    armed.armed_at = datetime.now(timezone.utc) - timedelta(minutes=age_minutes)
+    svc.arm(armed)
+    return at, svc
+
+
+def test_an_expired_arm_alerts_instead_of_dying_silently(mocker):
+    """F3, THE HEADLINE. The staleness guard consumed the armed order and
+    returned BEFORE `maybe_fire_on_scan`'s try, so none of round 1's routing
+    could see it: no history row, no alert, one `logger.warning` inside a
+    worker thread whose return value POST /scan discards.
+
+    Against `max_arm_age_minutes: 30` and a scan cadence in minutes this is
+    plausibly the most frequent way an armed trade dies, which makes it the
+    worst one to have had invisible. Drives the real `notify_alert` so the
+    delivered TEXT is asserted, the same boundary the F2 tests use.
+    """
+    at, svc = _stale_armed_service(mocker)
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    execute.assert_not_called()
+    assert len(calls) == 1, "an expired arm consumed the order — it must reach a human"
+    subject, body = calls[0]
+    assert "MSFT" in subject
+    assert "Nothing was sent" in body, body
+    assert "MAY HAVE LANDED" not in body, (
+        "the guard returns before fire() is even called — no order was built, "
+        "let alone submitted:\n" + body
+    )
+    assert svc.get_state().armed is False
+
+
+def test_an_expired_arm_records_its_own_history_row(mocker):
+    """The ROW, not just the alert. Until F3 the guard wrote nothing at all, so
+    the history showed the arm and then showed nothing — a reader could not
+    distinguish "expired unfired" from "never triggered". The status is its own
+    because the remedy is unique: not a limit to loosen, not a credential to
+    fix, but a decision about whether the trade is still wanted.
+    """
+    at, svc = _stale_armed_service(mocker)
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    # The alert is neutralised at the CHANNEL, not by patching the helper out of
+    # the module. Patching `_alert_stale_arm` would make this test fail on a
+    # pre-fix tree with AttributeError — "that name does not exist yet" — which
+    # is a statement about the fix, not about the defect. Stubbing the channel
+    # instead leaves the assertion below the only thing that can fail.
+    _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    rows = svc.get_state().history
+    assert len(rows) == 1, rows
+    row = rows[0]
+    assert row["status"] == "stale_blocked", row
+    assert row["symbol"] == "MSFT"
+    assert row["order_id"] is None
+    assert row["attempt_id"], "the row must name the attempt, like every other row"
+    # Nothing was at risk, and `_check_daily_loss` sums this field over today's
+    # rows — a non-zero value would spend the daily budget on a trade that
+    # never happened.
+    assert row["premium_at_risk"] == 0.0
+    assert "regime_gate" not in row, (
+        "regime_gate rides only rows whose order may be live; nothing was built here"
+    )
+
+
+def test_an_expired_arm_does_not_consume_an_order_re_armed_underneath_it(mocker):
+    """THE INTERLEAVING THE FIX HAD TO CLOSE TO BE HONEST — F1's third one,
+    on the one path that never got F1's `expect` because it never calls `fire()`.
+
+    `strategy` is read in one lock acquisition and aged outside the lock. The
+    old guard then called `disarm()`, which clears the slot UNCONDITIONALLY. A
+    re-arm in that window therefore had a FRESH order destroyed on the EXPIRED
+    one's age — and once F3 adds a row and an alert, it would also have paged
+    about the expired symbol while silently throwing a live armed order away.
+
+    Simulated at the seam rather than with threads: `_max_arm_age_minutes` is
+    the last call before the lock is taken, so re-arming from inside it places
+    the new order exactly in the window under test, deterministically.
+    """
+    at, svc = _stale_armed_service(mocker, symbol="MSFT")
+    fresh = _make_armed(symbol="AAPL")
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    # Captured at the channel rather than by patching the helper — see
+    # `test_an_expired_arm_records_its_own_history_row` for why that matters.
+    calls = _capture_alerts(mocker)
+
+    def _re_arm_in_the_window():
+        svc.arm(fresh)
+        return 30
+
+    mocker.patch.object(AutoTradeService, "_max_arm_age_minutes",
+                        staticmethod(_re_arm_in_the_window))
+
+    svc.maybe_fire_on_scan()
+
+    state = svc.get_state()
+    assert state.armed is True, "the freshly armed order must survive the other one's expiry"
+    assert state.strategy is fresh
+    execute.assert_not_called()
+    assert calls == [], "nothing was consumed, so there is nothing to report"
+    assert state.history == [], "no order was consumed — no row belongs in history"
+
+
+def test_an_equal_valued_re_arm_is_still_a_different_decision(mocker):
+    """IDENTITY, NOT EQUALITY — and mutation testing is why this test exists:
+    swapping the guard's `is` for `==` left the whole suite green, because the
+    interleaving test above re-arms a DIFFERENT symbol, where the two operators
+    agree.
+
+    `ArmedStrategy` is a dataclass, so a re-arm of the very same contract
+    compares `==` to the order that expired while being a different decision
+    Kenneth made at a different time — its `armed_at` is fresh. Under `==` the
+    guard would mistake it for the expired one and disarm it on the OLD order's
+    age, destroying a brand-new arm that has not aged at all. Same reasoning as
+    `fire()`'s `expect` check, which F1 pinned against this same mutation.
+    """
+    from datetime import timedelta
+    at, svc = _stale_armed_service(mocker, symbol="MSFT")
+    expired = svc.get_state().strategy
+    # Equal in every field the dataclass compares, including armed_at, but a
+    # DIFFERENT OBJECT: the strongest form of the case, since anything weaker
+    # would be separated by `==` and prove nothing about `is`.
+    twin = _make_armed(symbol="MSFT")
+    twin.armed_at = expired.armed_at
+    assert twin == expired and twin is not expired, (
+        "this test is only meaningful if the two compare equal"
+    )
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    calls = _capture_alerts(mocker)
+
+    def _re_arm_in_the_window():
+        svc.arm(twin)
+        return 30
+
+    mocker.patch.object(AutoTradeService, "_max_arm_age_minutes",
+                        staticmethod(_re_arm_in_the_window))
+
+    svc.maybe_fire_on_scan()
+
+    state = svc.get_state()
+    assert state.armed is True, (
+        "the re-armed order was consumed on the expired twin's age — the guard "
+        "compared by value instead of by identity"
+    )
+    assert state.strategy is twin
+    execute.assert_not_called()
+    assert calls == []
+    assert state.history == []
+
+
+def test_a_fresh_arm_is_untouched_by_the_staleness_path(mocker):
+    """The regression guard against over-correcting. An order inside the age
+    limit must still fire normally — the new row, alert and identity check must
+    not leak onto the healthy path.
+    """
+    from app.data.ibkr_paper import OrderResult
+    at, svc = _stale_armed_service(mocker, age_minutes=0)
+    execute = mocker.patch(
+        "app.services.auto_trader.execute_option_order",
+        return_value=OrderResult(order_id="ok", status="PreSubmitted", broker="ibkr_paper"),
+    )
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    execute.assert_called_once()
+    assert calls == [], "a healthy fire must not page anybody"
+    assert all(r["status"] != "stale_blocked" for r in svc.get_state().history)
+
+
+def test_two_symbols_expiring_in_one_dedup_window_both_alert(mocker):
+    """THE ROUND-2 CRITICAL, applied to the refusal kind most able to trigger
+    it: `notify_alert` keys dedup on `f"{rec_id}|{alert_type}"` and the symbol
+    reaches only the body, so a shared key pages the first expiry and drops
+    every other symbol's for the next four hours.
+
+    HONEST ABOUT WHAT THIS PINS, because mutation testing showed it pins less
+    than its name suggests: with `discrete=True` the delivered alert clears its
+    own key, so this stays green even with a bare constant rec_id. It is a
+    genuine end-to-end guard on the OUTCOME (two expiries, two pages) and it
+    would catch the dedup path breaking, but it is NOT what holds the per-symbol
+    key in place. `test_a_failed_dedup_clear_cannot_silence_another_symbol`
+    below is the test that does that, in the one state where the two differ.
+    """
+    at, svc_a = _stale_armed_service(mocker, symbol="MSFT")
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    calls = _capture_alerts(mocker)
+
+    svc_a.maybe_fire_on_scan()
+
+    _, svc_b = _stale_armed_service(mocker, symbol="AAPL")
+    svc_b.maybe_fire_on_scan()
+
+    assert len(calls) == 2, (
+        "the second symbol's expiry was suppressed by the first symbol's dedup "
+        f"window — got {[c[0] for c in calls]}"
+    )
+    assert any("MSFT" in s for s, _ in calls)
+    assert any("AAPL" in s for s, _ in calls)
+
+
+def test_an_expired_arm_does_not_page_under_the_order_failed_subject(mocker):
+    """THE TYPE SPLIT, pinned where it is actually observable: the SUBJECT LINE.
+
+    `_build_notification` builds the subject from the alert TYPE
+    (`_ALERT_TYPE_LABELS.get(alert_type, alert_type)`), and none of the
+    auto-trade types has a label entry, so the raw type string is what lands in
+    Kenneth's inbox. An expiry reusing `AUTO_TRADE_ORDER_FAILED` would therefore
+    arrive under the subject that means "the order may have landed, go and check
+    the broker RIGHT NOW" — the most urgent page this module can send — for the
+    most routine event it has.
+
+    CORRECTED AFTER MUTATION TESTING. This test first asserted that the expiry
+    could not SUPPRESS a later order-failed page, and it passed with the types
+    shared, because `discrete=True` makes the expiry clear the key it just used
+    (`forget_alerts` matches on rec_id across every type). The suppression this
+    was named for cannot happen; the subject collision can, and that is what is
+    asserted now.
+    """
+    import app.services.auto_trader as at_mod
+    at, svc = _stale_armed_service(mocker, symbol="MSFT")
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+    # A genuine may-have-landed page for the SAME symbol, for contrast.
+    at_mod._alert_order_failed("MSFT", RuntimeError("connection reset after submit"))
+
+    assert len(calls) == 2, calls
+    expiry_subject, expiry_body = calls[0]
+    failed_subject, _ = calls[1]
+    assert expiry_subject != failed_subject, (
+        "a routine expiry and a may-have-landed page arrived under the SAME "
+        f"subject line: {expiry_subject!r}"
+    )
+    assert "ORDER_FAILED" not in expiry_subject, expiry_subject
+    assert "EXPIRED" in expiry_subject, expiry_subject
+
+
+def test_a_repeat_expiry_of_the_same_symbol_alerts_again(mocker):
+    """WHY THE ALERT IS `discrete=True`. An expiry is an EVENT, not a standing
+    condition: Kenneth re-arms MSFT, it ages out again forty minutes later, and
+    that second death is as worth knowing as the first. Without the discrete
+    clear the second falls inside the first's four-hour window and is dropped —
+    and because expiry is the routine refusal, that window would be armed
+    almost permanently, which is §9.1's "and alert" half silently off for the
+    most common case.
+    """
+    at, svc = _stale_armed_service(mocker, symbol="MSFT")
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+    # Re-armed, and it expires again inside the same dedup window.
+    _, svc2 = _stale_armed_service(mocker, symbol="MSFT")
+    svc2.maybe_fire_on_scan()
+
+    assert len(calls) == 2, (
+        "the second expiry of the same symbol was suppressed by the first's "
+        "dedup window — an expiry is a discrete event, not a standing condition"
+    )
+    assert "(reminder)" not in calls[1][0], (
+        "the second expiry is a NEW event, not a reminder about the first"
+    )
+
+
+def test_a_failed_dedup_clear_cannot_silence_another_symbol(mocker):
+    """WHY THE REC_ID CARRIES THE SYMBOL even though `discrete=True` normally
+    clears it — the degraded path `_alert_refusal` warns about in its own error
+    branch: "the next refusal of this key will be suppressed for the rest of the
+    window".
+
+    If `forget_alerts` fails, the hold STAYS. With a per-symbol key that costs
+    the one symbol. With a bare constant it costs EVERY symbol's expiry for four
+    hours, persisted across a restart. That is the only state in which the two
+    key choices differ, which is why it needs its own test: mutation testing
+    showed the ordinary two-symbol case green either way.
+    """
+    import app.services.notifications.alert_notifier as an
+    at, svc = _stale_armed_service(mocker, symbol="MSFT")
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    calls = _capture_alerts(mocker)
+    mocker.patch.object(an, "forget_alerts",
+                        side_effect=RuntimeError("dedup file not writable"))
+
+    svc.maybe_fire_on_scan()          # MSFT expires; its hold is NOT cleared
+    _, svc2 = _stale_armed_service(mocker, symbol="AAPL")
+    svc2.maybe_fire_on_scan()         # a DIFFERENT symbol expires
+
+    assert len(calls) == 2, (
+        "AAPL's expiry was silenced by MSFT's stuck dedup hold — the rec_id is "
+        f"not per-symbol. Delivered: {[c[0] for c in calls]}"
+    )
+    assert any("AAPL" in sub for sub, _ in calls)
+
+
+def test_the_expiry_alert_is_sent_without_holding_the_state_lock(mocker):
+    """The comment on that call says "OUTSIDE THE LOCK" — this is what makes it
+    a fact rather than a hope, and mutation testing is why it exists: moving the
+    call inside the lock left the whole suite green.
+
+    It is not a deadlock (the notifier never re-enters this lock), which is
+    exactly why nothing else catches it. It is an AVAILABILITY defect: the alert
+    path runs a fresh event loop and talks to SMTP and Telegram, so holding the
+    state lock across it blocks `get_state`, `arm`, `disarm` and every other
+    scan trigger for the full network timeout. GET /auto-trade/state would hang
+    behind a mail server — the same rule `fire()` follows for `_market_is_open`.
+
+    Probed from inside the delivery call itself, where the lock is either held
+    or it is not, rather than by timing anything.
+    """
+    at, svc = _stale_armed_service(mocker)
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    import app.services.notifications.alert_notifier as an
+    lock_was_free: list = []
+
+    async def _probe_channels(subject, plain, html):
+        got = svc._lock.acquire(blocking=False)
+        lock_was_free.append(got)
+        if got:
+            svc._lock.release()
+        return True
+
+    mocker.patch.object(an, "notify_enabled_channels", _probe_channels)
+    mocker.patch.object(an, "_save_dedup", lambda: None)
+    mocker.patch.object(an, "_load_delivery_config", lambda: {"masterEnabled": True})
+
+    svc.maybe_fire_on_scan()
+
+    assert lock_was_free == [True], (
+        "the expiry alert was dispatched while holding the auto-trader's state "
+        "lock — every reader of that state blocks for the notifier's timeout"
+    )
+
+
+def test_an_expired_arm_refusal_is_still_recorded_when_the_notifier_is_dead(mocker):
+    """The refusal has already happened and the order is already consumed, so a
+    dead SMTP server must not turn it into an exception inside POST /scan's
+    worker thread — nor cost the history row, which is the durable record.
+    """
+    at, svc = _stale_armed_service(mocker)
+    mocker.patch("app.services.auto_trader.execute_option_order")
+    import app.services.notifications.alert_notifier as an
+    mocker.patch.object(an, "notify_alert", side_effect=RuntimeError("SMTP down"))
+
+    svc.maybe_fire_on_scan()   # must not raise
+
+    assert svc.get_state().history[-1]["status"] == "stale_blocked"
+    assert svc.get_state().armed is False

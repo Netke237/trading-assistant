@@ -1235,6 +1235,13 @@ def _alert_regime_headwind_refusal(symbol: str, exc: Exception) -> None:
 _REC_ID_RISK_BLOCKED = "auto-trade-risk-blocked"
 _REC_ID_ORDER_FAILED = "auto-trade-order-failed"
 _REC_ID_NOT_SUBMITTED = "auto-trade-order-not-submitted"
+# PER SYMBOL AND DISCRETE, added by F3. An arm expiring is the most ROUTINE
+# refusal there is -- `max_arm_age_minutes` is 30 and the scan cadence is
+# minutes -- so it is the one most able to fill a four-hour dedup window and
+# silence the next symbol's expiry behind it. Same reasoning as
+# `_REC_ID_HEADWIND` above, which round 2 caught as a comment rather than a
+# fact.
+_REC_ID_STALE_BLOCKED = "auto-trade-arm-expired"
 _REC_ID_UNCLASSIFIED = "auto-trade-refusal-unclassified"
 
 # Three TYPES, not one, because `notify_alert` builds the subject line from the
@@ -1251,12 +1258,25 @@ _ALERT_TYPE_ORDER_FAILED = "AUTO_TRADE_ORDER_FAILED"
 # may-have-landed page could be suppressed by a credential fault minutes
 # earlier — the exact collapse round 2 of target 2a measured the cost of.
 _ALERT_TYPE_NOT_SUBMITTED = "AUTO_TRADE_ORDER_NOT_SUBMITTED"
+# A FIFTH TYPE, on the same rule. This one's remedy is neither a limit nor a
+# credential nor the broker: the trade simply aged out unfired, and the only
+# question is whether Kenneth still wants it, which only he can answer. It also
+# must not share `AUTO_TRADE_ORDER_FAILED`'s dedup key, because an expiry is
+# COMMON and a may-have-landed page is RARE -- collapsing them would let the
+# routine event suppress the urgent one for the rest of the window.
+_ALERT_TYPE_STALE_BLOCKED = "AUTO_TRADE_ARM_EXPIRED"
 _ALERT_TYPE_UNCLASSIFIED = "AUTO_TRADE_REFUSED_UNCLASSIFIED"
 
 # The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
 # routes on them. They are `fire()`'s to define; this is a reader of them.
 _SIZING_STATUSES = ("sizing_config_blocked", "sizing_data_blocked")
 _RISK_BLOCKED_STATUSES = ("cap_blocked", "daily_loss_blocked")
+# THE ONE STATUS `fire()` DOES NOT WRITE. `stale_blocked` is recorded by
+# `maybe_fire_on_scan` itself, because the staleness guard consumes the armed
+# order WITHOUT calling `fire()` at all -- which is exactly how it stayed
+# invisible until F3. Named here beside the others so the next reader sees one
+# list of what can land in history, not two.
+_STATUS_STALE_BLOCKED = "stale_blocked"
 
 
 def _clear_config_refusal_holds() -> None:
@@ -1387,6 +1407,53 @@ def _alert_not_submitted(symbol: str, exc: Exception) -> None:
         ),
         _per_symbol_rec_id(_REC_ID_NOT_SUBMITTED, symbol),
         _ALERT_TYPE_NOT_SUBMITTED,
+        discrete=True,
+    )
+
+
+def _alert_stale_arm(symbol: str, age_minutes: float, max_age: int) -> None:
+    """Alert an armed order that EXPIRED unfired. Says nothing was sent, as FACT.
+
+    F3 OF 2A-ALERT ROUND 1 — THE FOURTH SILENT REFUSAL, and it sat sixty lines
+    above the three `d8a8e2c1` fixed. The staleness guard consumes the armed
+    order and returns BEFORE `maybe_fire_on_scan`'s try, so none of the routing
+    added by round 1 could ever see it: no history row, no alert, one
+    `logger.warning` on a box nobody watches, which POST /scan discards along
+    with the rest of the trigger's outcome. Against `max_arm_age_minutes: 30`
+    (risk_rules.yaml) and a scan cadence in minutes, this is plausibly THE MOST
+    FREQUENT way an armed trade dies — the common case was the unreported one.
+
+    "Nothing was sent" is stated as fact on the strongest grounds of any alert
+    in this module: the guard returns before `fire()` is called at all, so not
+    only was no broker contacted, no order was ever built. This is the same
+    guarantee `_alert_risk_limit_refusal` leans on, one phase EARLIER.
+
+    NOT A FAILURE, AND THE WORDING MUST NOT IMPLY ONE. Expiry is the design
+    working: a 40-minute-old option order is priced off a market that has moved,
+    and firing it is the outcome `max_arm_age_minutes` exists to prevent. The
+    alert's job is to tell Kenneth a trade he set up did NOT happen and is no
+    longer pending, because the failure mode being closed is him believing it is
+    still armed. The remedy is a decision, not a repair, so the message asks for
+    one instead of prescribing it.
+
+    The age and the limit are both carried because together they are the only
+    thing that distinguishes "just missed it" from "armed this and forgot",
+    and they are what tells him whether the limit itself is set wrong.
+    """
+    _alert_refusal(
+        symbol,
+        "expired-arm refusal",
+        (
+            f"Auto-trade did NOT place {symbol}: the armed order EXPIRED before "
+            f"a scan could fire it ({age_minutes:.0f} min old, limit {max_age} "
+            f"min). Nothing was sent, no broker was contacted and NO position "
+            f"was opened — the order is now disarmed and will NOT fire on a "
+            f"later scan. This is the staleness guard working as intended: the "
+            f"quote it was armed on is stale. Re-arm it if you still want the "
+            f"trade."
+        ),
+        _per_symbol_rec_id(_REC_ID_STALE_BLOCKED, symbol),
+        _ALERT_TYPE_STALE_BLOCKED,
         discrete=True,
     )
 
@@ -1843,17 +1910,6 @@ class AutoTradeService:
         if not should_fire or strategy is None:
             return
 
-        # Staleness guard — disarm without firing if the order is too old.
-        max_age = self._max_arm_age_minutes()
-        age_minutes = (datetime.now(timezone.utc) - strategy.armed_at).total_seconds() / 60
-        if age_minutes > max_age:
-            self.disarm()
-            logger.warning(
-                "AutoTrader: disarming stale armed order for %s (armed %.0f min ago, limit %d min)",
-                strategy.symbol, age_minutes, max_age,
-            )
-            return
-
         # THE NAME THIS ATTEMPT WRITES ITS ROW UNDER. Three of the refusals
         # handled below leave `fire()` as a bare RuntimeError and cannot be
         # told apart by class; the row the attempt appended is what
@@ -1870,6 +1926,78 @@ class AutoTradeService:
         # index names a position in a list both threads append to; this names
         # the attempt, and the row carries it.
         attempt_id = uuid.uuid4().hex
+
+        # Staleness guard — disarm without firing if the order is too old.
+        #
+        # GIVEN A ROW AND AN ALERT BY F3 OF ROUND 1. It used to be a bare
+        # `self.disarm()`, a `logger.warning` and a `return` — placed ABOVE the
+        # try, so every routing branch below was structurally blind to it. The
+        # armed order was consumed and the only trace was a log line inside a
+        # worker thread whose return value POST /scan throws away. It is also
+        # the refusal most likely to actually happen, which is the wrong one to
+        # have made invisible.
+        max_age = self._max_arm_age_minutes()
+        age_minutes = (datetime.now(timezone.utc) - strategy.armed_at).total_seconds() / 60
+        if age_minutes > max_age:
+            with self._lock:
+                # IDENTITY-CHECKED, AND IN THE SAME LOCK ACQUISITION AS THE ROW.
+                # `strategy` was read in an earlier acquisition and aged
+                # outside the lock, so without this check a re-arm in that
+                # window has `disarm()` destroy the NEW order on the OLD one's
+                # age — and F3's own row would then name the expired symbol
+                # while a live armed order had just been thrown away. That is
+                # F1's third interleaving, which `fire()` closed with `expect`;
+                # this path never calls `fire()`, so it never got that fix. The
+                # disarm is inlined rather than delegated because `self._lock`
+                # is a plain `threading.Lock` — calling `self.disarm()` from in
+                # here would deadlock — and because the check and the disarm
+                # have to be atomic anyway, which two acquisitions are not.
+                stale_consumed = (self._state.armed
+                                  and self._state.strategy is strategy)
+                if stale_consumed:
+                    self._state.armed = False
+                    self._state.strategy = None
+                    self._state.history.append({
+                        "attempt_id":      attempt_id,
+                        "order_id":        None,
+                        "status":          _STATUS_STALE_BLOCKED,
+                        "broker":          strategy.broker,
+                        "symbol":          strategy.symbol,
+                        "option":          strategy.option_symbol,
+                        "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        # NOTHING IS AT RISK and this is load-bearing, not
+                        # cosmetic: `_check_daily_loss` sums this field over
+                        # today's rows, so a non-zero value here would spend
+                        # part of the daily loss budget on a trade that never
+                        # happened. Same 0.0, for the same reason, as
+                        # `cap_blocked` and `daily_loss_blocked`.
+                        "premium_at_risk": 0.0,
+                        # No `regime_gate` key, by the rule the `order_failed`
+                        # row states: it rides only where an order may be live.
+                        # Nothing was built here, let alone sent.
+                    })
+            if not stale_consumed:
+                # Someone re-armed between the read and here, so this attempt
+                # consumed NOTHING and the new order is still armed for the
+                # next scan. Silent by the same reasoning as the
+                # `ArmPreservedError` branch below: nothing was lost, and this
+                # trigger runs after every scan.
+                logger.info(
+                    "AutoTrader: stale arm for %s was re-armed before it could "
+                    "be disarmed — armed order preserved, not aged out",
+                    strategy.symbol,
+                )
+                return
+            logger.warning(
+                "AutoTrader: disarming stale armed order for %s (armed %.0f min ago, limit %d min)",
+                strategy.symbol, age_minutes, max_age,
+            )
+            # OUTSIDE THE LOCK: `_alert_refusal` runs an event loop and talks to
+            # SMTP/Telegram, which must not happen holding the state lock — the
+            # same rule `fire()` follows for `_market_is_open`. The refusal is
+            # already recorded above, so a dead notifier cannot undo it.
+            _alert_stale_arm(strategy.symbol, age_minutes, max_age)
+            return
 
         try:
             self.fire(portfolio_snapshot=portfolio_snapshot,
