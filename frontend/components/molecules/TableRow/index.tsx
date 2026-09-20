@@ -37,6 +37,14 @@ export function TableRow({
   return (
     <div
       role={onClick ? 'button' : 'row'}
+      /* The status this row is TINTED with. The colour band down the left edge
+         is the first thing the eye reads on these tables, and under jest it is
+         invisible: `*.module.css` maps to `{}`, so STATUS_CLASS[status] is
+         `undefined` whatever the status is. Step 5's audit round 2 measured the
+         consequence -- tinting rows with the event sub-verdict instead of the
+         gate shipped 1740/1740 green, so a row could show a PASS band beside a
+         REJECT badge. Publishing it is what lets a caller pin the two together. */
+      data-status={status}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
       onKeyDown={
