@@ -2329,3 +2329,241 @@ def test_a_good_fire_clears_the_config_refusal_hold(mocker):
     assert "(reminder)" not in calls[1][0], (
         "it is a fresh fault, not a reminder of the one before the good fire"
     )
+
+
+# ---------------------------------------------------------------------------
+# F1 of AUTOTRADE-2A-ALERT-DELIVERY round 1: two scans in one fire window
+# ---------------------------------------------------------------------------
+# `maybe_fire_on_scan` identified its own history row by SLICE INDEX, captured
+# before a call whose window contains `_market_is_open` — a live fetch with a
+# 3s deadline — and nothing serializes two scans (scan.py's own docstring says
+# so). Each test below drives two real triggers into that window with a
+# threading.Barrier, or re-arms inside it, and asserts on what reaches a human.
+# All three FAIL on the slice-and-inspect-state shape they replaced.
+
+def _concurrent_fire_service(mocker, barrier):
+    """An armed service whose market check parks every caller on `barrier`.
+
+    The barrier sits exactly where the old capture-to-row window was widest, so
+    both triggers are guaranteed to be inside it when the first one disarms.
+    """
+    import app.services.auto_trader as at
+
+    def _open(_symbol):
+        barrier.wait()
+        return True
+
+    mocker.patch.object(at, "_market_is_open", _open)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    return at, svc
+
+
+def _run_two_triggers(svc):
+    import threading
+    errors: list = []
+
+    def _go():
+        try:
+            svc.maybe_fire_on_scan()
+        except BaseException as exc:      # a trigger must never raise
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_go) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+    assert not any(t.is_alive() for t in threads), "a trigger deadlocked"
+    assert errors == [], f"maybe_fire_on_scan raised: {errors}"
+
+
+def test_the_loser_of_two_concurrent_triggers_does_not_page_about_the_winners_fill(mocker):
+    """THE WORST OF F1's THREE INTERLEAVINGS, because the page is a lie about a
+    LIVE POSITION. The losing trigger's slice began before either fire, so it
+    picked up the WINNER's `filled` row, matched no refusal branch, and — with
+    the armed slot now empty — fell into the unclassified alert: "the armed
+    order was consumed and no outcome was recorded. No order was recorded as
+    submitted", about an order that had filled as oid-WINNER.
+
+    Nothing was refused here at all. One order filled and the other trigger
+    found nothing armed, which is not an event.
+    """
+    import threading
+    from app.data.ibkr_paper import OrderResult
+    at, svc = _concurrent_fire_service(mocker, threading.Barrier(2, timeout=10))
+    execute = mocker.patch.object(
+        at, "execute_option_order",
+        return_value=OrderResult("oid-WINNER", "filled", "ibkr_paper"))
+    calls = _capture_alerts(mocker)
+
+    _run_two_triggers(svc)
+
+    assert execute.call_count == 1, "the disarm must admit exactly one fire"
+    assert calls == [], (
+        "a filled order is not a refusal — no trigger may page about it"
+    )
+    rows = svc.get_state().history
+    assert [r["status"] for r in rows] == ["filled"]
+    assert svc.get_state().armed is False
+
+
+def test_one_order_failed_row_pages_exactly_once_under_two_triggers(mocker):
+    """"Exactly once per event" broken by the dedup's own cleanup. The winner
+    sends the `order_failed` page and its `discrete=True` cleanup clears the
+    hold; the loser then reads the SAME row through its stale slice and sends
+    an identical second page, which the now-empty window no longer suppresses.
+
+    One broker call errored. One page.
+    """
+    import threading
+    at, svc = _concurrent_fire_service(mocker, threading.Barrier(2, timeout=10))
+    mocker.patch.object(at, "execute_option_order",
+                        side_effect=RuntimeError("broker timeout after submit"))
+    calls = _capture_alerts(mocker)
+
+    _run_two_triggers(svc)
+
+    assert len(calls) == 1, (
+        f"one failed broker call must page once, got {len(calls)}: "
+        f"{[c[0] for c in calls]}"
+    )
+    assert "MAY HAVE LANDED" in calls[0][1]
+    assert [r["status"] for r in svc.get_state().history] == ["order_failed"]
+
+
+def test_a_re_arm_inside_the_window_is_not_fired_on_the_old_orders_age(mocker):
+    """F1's third interleaving — reachable with no thread of the scan's own: a
+    manual POST /auto-trade/fire runs on the event loop while the scan runs in
+    a worker thread.
+
+    The trigger read MSFT and checked MSFT's age. Without `expect`, `fire()`
+    then took whatever was armed when it got the lock — AAPL — and fired it on
+    the strength of a staleness check made against a different order, producing
+    a `cap_blocked` row for AAPL while the alert named MSFT.
+
+    Firing nothing is the fail-closed answer: AAPL stays armed with its own
+    fresh age for the next scan to judge on its own terms.
+    """
+    import app.services.auto_trader as at
+    svc = AutoTradeService()
+    first = _make_armed(symbol="MSFT")
+    second = _make_armed(symbol="AAPL")
+    svc.arm(first)
+
+    def _open(_symbol):
+        svc.disarm()
+        svc.arm(second)
+        return True
+
+    mocker.patch.object(at, "_market_is_open", _open)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    # Only reachable if the attempt fires the re-armed order — it is here so
+    # the pre-fix behaviour this pins produces its recorded `cap_blocked` row.
+    mocker.patch.object(AutoTradeService, "_check_exposure",
+                        side_effect=RuntimeError("Exposure cap breach: ['too big']"))
+    execute = mocker.patch.object(at, "execute_option_order")
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan(portfolio_snapshot=[], portfolio_value=100_000.0)
+
+    execute.assert_not_called()
+    assert svc.get_state().history == [], "nothing was attempted on the new order"
+    assert calls == [], "no order was refused, so nobody is paged"
+    assert svc.get_state().armed is True
+    assert svc.get_state().strategy is second, "the re-armed order survives"
+
+
+def test_a_re_arm_with_an_identical_looking_order_is_still_a_different_decision(mocker):
+    """`expect` is checked by IDENTITY, and this is the difference it makes.
+
+    `dataclasses.replace` with no changes copies every field, `armed_at`
+    included, so the re-armed order is `==` to the one the trigger read and is
+    still a different arming decision made by somebody else. Equality here
+    would fire an order this trigger never looked at.
+    """
+    import app.services.auto_trader as at
+    from dataclasses import replace
+    svc = AutoTradeService()
+    first = _make_armed(symbol="MSFT")
+    twin = replace(first)
+    assert twin == first and twin is not first, "the pin needs an equal, distinct order"
+    svc.arm(first)
+
+    def _open(_symbol):
+        svc.disarm()
+        svc.arm(twin)
+        return True
+
+    mocker.patch.object(at, "_market_is_open", _open)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    execute = mocker.patch.object(at, "execute_option_order")
+
+    svc.maybe_fire_on_scan()
+
+    execute.assert_not_called()
+    assert svc.get_state().strategy is twin, "the re-armed order is left for the next scan"
+
+
+def test_the_attempt_record_ignores_rows_another_attempt_wrote():
+    """The lookup is by stamp, not by position — including when a LATER row
+    belongs to somebody else, which is exactly what `rows[-1]` got wrong."""
+    svc = AutoTradeService()
+    svc._state.history.extend([
+        {"attempt_id": "other-earlier", "status": "filled",      "symbol": "AAPL"},
+        {"attempt_id": "mine",          "status": "cap_blocked", "symbol": "MSFT"},
+        {"attempt_id": "other-later",   "status": "filled",      "symbol": "NVDA"},
+    ])
+
+    row = svc._fire_attempt_record("mine")
+    assert row is not None and row["status"] == "cap_blocked"
+    assert row["symbol"] == "MSFT"
+    assert svc._fire_attempt_record("an-attempt-that-wrote-nothing") is None
+
+
+def test_every_history_row_a_fire_writes_carries_its_attempt_id(mocker):
+    """Both shapes of row `fire()` appends — the order result and a refusal —
+    carry the caller's stamp. Without it on EVERY path the router silently
+    falls back to "this attempt recorded nothing" and pages unclassified."""
+    import app.services.auto_trader as at
+    from app.data.ibkr_paper import OrderResult
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    mocker.patch.object(at, "execute_option_order",
+                        return_value=OrderResult("oid-1", "filled", "ibkr_paper"))
+    svc = AutoTradeService()
+
+    svc.arm(_make_armed(symbol="MSFT"))
+    svc.fire(attempt_id="attempt-GOOD")
+    assert svc.get_state().history[-1]["attempt_id"] == "attempt-GOOD"
+
+    mocker.patch.object(at, "execute_option_order",
+                        side_effect=RuntimeError("broker timeout after submit"))
+    svc.arm(_make_armed(symbol="MSFT"))
+    with pytest.raises(RuntimeError):
+        svc.fire(attempt_id="attempt-BAD")
+    assert svc.get_state().history[-1]["status"] == "order_failed"
+    assert svc.get_state().history[-1]["attempt_id"] == "attempt-BAD"
+
+
+def test_the_pre_disarm_refusals_are_told_apart_by_class_not_by_state(mocker):
+    """The silence is declared at the point of refusal now, not inferred
+    afterwards from an armed slot another thread can rewrite.
+
+    Still a RuntimeError, so `/auto-trade/fire`'s `except (ValueError,
+    RuntimeError)` keeps mapping both to a 400 with the same message text.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import ArmPreservedError
+    assert issubclass(ArmPreservedError, RuntimeError)
+
+    svc = AutoTradeService()
+    with pytest.raises(ArmPreservedError, match="not armed"):
+        svc.fire()
+
+    mocker.patch.object(at, "_market_is_open", return_value=False)
+    svc.arm(_make_armed(symbol="MSFT"))
+    with pytest.raises(ArmPreservedError, match="Market closed"):
+        svc.fire()
+    assert svc.get_state().armed is True, "a preserved order is still armed"

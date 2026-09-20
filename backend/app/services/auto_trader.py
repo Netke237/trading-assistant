@@ -5,6 +5,7 @@ import functools
 import logging
 import math
 import threading
+import uuid
 import yaml
 from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import datetime, timezone
@@ -21,6 +22,30 @@ from app.scoring.conviction_sizing import (
 _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
 logger = logging.getLogger(__name__)
+
+
+class ArmPreservedError(RuntimeError):
+    """`fire()` refused BEFORE the disarm: nothing was consumed, nothing recorded.
+
+    THE ONE FAILURE THE UNATTENDED TRIGGER MUST NOT ALERT ON, and until round 1
+    of target 2a-alert it was identified by INSPECTING SHARED STATE after the
+    fact — `maybe_fire_on_scan` asked whether the armed slot still held the
+    strategy it had read, across a window containing `_market_is_open`'s 3s
+    network call. F1 reproduced what that costs under two concurrent scans: the
+    loser read the WINNER's `filled` row and paged "the armed order was consumed
+    and no outcome was recorded" about an order that had filled.
+
+    A class says the same thing without reading state anybody else can write.
+    The three sites that raise it — not armed (twice, either side of the market
+    check) and market closed/halted — are ALL of `fire()`'s pre-disarm exits,
+    and each deliberately leaves the order armed for the next scan to retry.
+    Everything at or past the disarm consumed the armed order and must alert, so
+    the router below needs no state inspection at all: not this class means
+    consumed.
+
+    A RuntimeError so `/auto-trade/fire` still maps it to a 400, as its
+    neighbours do — the message text the router surfaces is unchanged.
+    """
 
 
 class RegimeHeadwindError(RuntimeError):
@@ -1378,23 +1403,54 @@ class AutoTradeService:
                 history=list(self._state.history),
             )
 
-    def fire(self, portfolio_snapshot: list | None = None, portfolio_value: float | None = None):
+    def fire(self, portfolio_snapshot: list | None = None,
+             portfolio_value: float | None = None,
+             attempt_id: str | None = None,
+             expect: ArmedStrategy | None = None):
         """Execute the armed strategy.
 
         Disarms on the fire attempt (fail-closed). If portfolio_snapshot is
         provided, runs an exposure cap check before executing — raises if the
         caps would be breached. Pass portfolio_snapshot=None to skip the check
         (backward-compat path for tests and callers without DB access).
+
+        `attempt_id` STAMPS EVERY HISTORY ROW THIS ATTEMPT WRITES, so a caller
+        that must find out what its own attempt did can match on it. Target
+        2a-alert round 1, F1: `maybe_fire_on_scan` used to identify its row by
+        SLICE INDEX — `history[history_len:]` captured before the call — and
+        under two concurrent scans the loser read the winner's row. A slice
+        index names a position in a list two threads append to; an id names an
+        attempt. Defaults to a fresh uuid4 so a direct caller (the `/fire`
+        endpoint) still writes well-formed rows without knowing about this.
+
+        `expect` MAKES THE ATTEMPT FIRE ONE PARTICULAR ARMED ORDER OR NONE.
+        Passed by callers that read the armed slot, decided something about
+        what they read, and only then called — `maybe_fire_on_scan` checks the
+        staleness of the order it read. Without it, a disarm-and-re-arm inside
+        the window (a manual POST /auto-trade/fire on the event loop while the
+        scan runs in a worker thread) had this attempt fire AAPL on the
+        strength of MSFT's age check and then alert about MSFT for a row that
+        says AAPL — F1's third interleaving. Identity, not equality: a re-arm
+        with an equal-valued strategy is still a different decision. Mismatch
+        refuses BEFORE the disarm, so the new order stays armed and the next
+        scan gets it.
         """
+        attempt_id = attempt_id or uuid.uuid4().hex
+
         with self._lock:
             if not self._state.armed or self._state.strategy is None:
-                raise RuntimeError("AutoTrader not armed — cannot fire")
+                raise ArmPreservedError("AutoTrader not armed — cannot fire")
+            if expect is not None and self._state.strategy is not expect:
+                raise ArmPreservedError(
+                    "AutoTrader re-armed since this attempt read it "
+                    "— armed state preserved for the next trigger"
+                )
             _symbol = self._state.strategy.symbol
 
         # Halt check outside lock — network call must not hold the lock.
         # Armed state is preserved: we haven't disarmed yet.
         if not _market_is_open(_symbol):
-            raise RuntimeError(
+            raise ArmPreservedError(
                 f"Market closed or {_symbol} halted "
                 f"— armed state preserved for retry"
             )
@@ -1402,7 +1458,17 @@ class AutoTradeService:
         with self._lock:
             # Re-check: another thread may have disarmed while we checked market.
             if not self._state.armed or self._state.strategy is None:
-                raise RuntimeError("AutoTrader not armed — cannot fire")
+                raise ArmPreservedError("AutoTrader not armed — cannot fire")
+            # THE LOAD-BEARING HALF of the `expect` check — the one above is an
+            # early exit that saves a 3s network call. This one closes the
+            # window that actually contains it, and it is inside the SAME lock
+            # acquisition as the disarm, so nothing can re-arm between deciding
+            # and taking ownership.
+            if expect is not None and self._state.strategy is not expect:
+                raise ArmPreservedError(
+                    "AutoTrader re-armed since this attempt read it "
+                    "— armed state preserved for the next trigger"
+                )
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None
@@ -1429,6 +1495,7 @@ class AutoTradeService:
             # "the regime feed is broken".
             with self._lock:
                 self._state.history.append({
+                    "attempt_id":      attempt_id,
                     "order_id":        None,
                     "status":          "regime_headwind_blocked",
                     "broker":          strategy.broker,
@@ -1471,6 +1538,7 @@ class AutoTradeService:
             # a UI reader is frontend work and no part of this target.
             with self._lock:
                 self._state.history.append({
+                    "attempt_id":      attempt_id,
                     "order_id":        None,
                     "status":          "regime_gate_config_blocked",
                     "broker":          strategy.broker,
@@ -1497,6 +1565,7 @@ class AutoTradeService:
             # what it replaced on both halves of §9.1.
             with self._lock:
                 self._state.history.append({
+                    "attempt_id":      attempt_id,
                     "order_id":        None,
                     "status":          ("sizing_config_blocked"
                                         if isinstance(exc, SizingConfigError)
@@ -1524,6 +1593,7 @@ class AutoTradeService:
             except RuntimeError:
                 with self._lock:
                     self._state.history.append({
+                        "attempt_id":      attempt_id,
                         "order_id":        None,
                         "status":          "cap_blocked",
                         "broker":          strategy.broker,
@@ -1542,6 +1612,7 @@ class AutoTradeService:
         except RuntimeError:
             with self._lock:
                 self._state.history.append({
+                    "attempt_id":      attempt_id,
                     "order_id":        None,
                     "status":          "daily_loss_blocked",
                     "broker":          strategy.broker,
@@ -1557,6 +1628,7 @@ class AutoTradeService:
         except Exception as exc:
             with self._lock:
                 self._state.history.append({
+                    "attempt_id":      attempt_id,
                     "order_id":        None,
                     "status":          "order_failed",
                     "broker":          strategy.broker,
@@ -1583,6 +1655,7 @@ class AutoTradeService:
         )
         with self._lock:
             self._state.history.append({
+                "attempt_id":      attempt_id,
                 "order_id":        result.order_id,
                 "status":          result.status,
                 "broker":          result.broker,
@@ -1652,16 +1725,32 @@ class AutoTradeService:
             )
             return
 
-        # WHERE THE HISTORY STOOD BEFORE THIS ATTEMPT. Three of the refusals
+        # THE NAME THIS ATTEMPT WRITES ITS ROW UNDER. Three of the refusals
         # handled below leave `fire()` as a bare RuntimeError and cannot be
         # told apart by class; the row the attempt appended is what
-        # distinguishes them. Captured before the call so a row left by an
-        # EARLIER attempt can never be mistaken for this one's.
-        with self._lock:
-            history_len = len(self._state.history)
+        # distinguishes them.
+        #
+        # WAS `history_len = len(self._state.history)` AND A SLICE, until F1 of
+        # this target's round 1. Nothing serializes two scans — scan.py's own
+        # docstring says so — and the window between that capture and the row
+        # contains `_market_is_open`, a live fetch with a 3s deadline. Two
+        # triggers in that window and the slice hands the loser the WINNER's
+        # row: reproduced with a threading.Barrier on the real code, paging
+        # "the armed order was consumed and no outcome was recorded. No order
+        # was recorded as submitted" about an order that had FILLED. A slice
+        # index names a position in a list both threads append to; this names
+        # the attempt, and the row carries it.
+        attempt_id = uuid.uuid4().hex
 
         try:
-            self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
+            self.fire(portfolio_snapshot=portfolio_snapshot,
+                      portfolio_value=portfolio_value,
+                      attempt_id=attempt_id,
+                      # FIRE THE ORDER THIS TRIGGER READ, OR NOTHING. The
+                      # staleness check above was made against `strategy`;
+                      # without this, a re-arm inside the window has the
+                      # attempt fire the NEW order on the old one's age.
+                      expect=strategy)
             logger.info("AutoTrader: fired on scan completion trigger")
             # The config blocks were read and applied, so any standing
             # config-refusal alert is over — see the helper for why this lives
@@ -1695,6 +1784,24 @@ class AutoTradeService:
             # A sizing ValueError still reaches this same alert, routed on its
             # recorded `sizing_data_blocked` row in the branch below.
             _alert_sizing_config_refusal(strategy.symbol, exc)
+        except ArmPreservedError as exc:
+            # THE DELIBERATE SILENCE, and now the ONLY one. `fire()` refused
+            # before its disarm, so nothing was consumed, nothing was recorded
+            # and the order is still armed for the next scan to retry. This
+            # trigger runs after EVERY scan, so paging here would page on every
+            # scan while the market is shut, and a channel that cries wolf gets
+            # muted.
+            #
+            # PREVIOUSLY INFERRED, NOT DECLARED: this branch used to be an
+            # `elif` on whether the armed slot still held `strategy`, read
+            # AFTER the fact from state another thread may have rewritten in
+            # between. F1's first two interleavings are both that inference
+            # going wrong. The class is decided by which line of `fire()` ran,
+            # which no other thread can change.
+            logger.info(
+                "AutoTrader: scan trigger did not fire %s, armed order "
+                "preserved — %s", strategy.symbol, exc,
+            )
         except Exception as exc:
             logger.error("AutoTrader scan-trigger fire failed: %s", exc)
             # ROUTED ON WHAT THE ATTEMPT RECORDED, because everything reaching
@@ -1705,44 +1812,53 @@ class AutoTradeService:
             # have LANDED A BROKER ORDER — consumed the armed order and told
             # nobody. The same hole round 1 of target 2a found on the headwind
             # refusal, three refusal kinds further along.
-            status, consumed = self._fire_attempt_record(history_len, strategy)
+            #
+            # EVERYTHING HERE CONSUMED THE ARMED ORDER, by elimination: the
+            # branch above catches every pre-disarm exit `fire()` has, so the
+            # old `elif consumed:` guard on the no-row case is gone with the
+            # state read that computed it.
+            row = self._fire_attempt_record(attempt_id)
+            status = row.get("status") if row else None
+            # NAMED BY THE ROW, not by the strategy this trigger read. `expect`
+            # already makes them the same order; reading the row means the
+            # alert says what the record says even if that ever stops holding.
+            symbol = row.get("symbol") if row else strategy.symbol
             if status in _SIZING_STATUSES:
-                _alert_sizing_config_refusal(strategy.symbol, exc)
+                _alert_sizing_config_refusal(symbol, exc)
             elif status in _RISK_BLOCKED_STATUSES:
-                _alert_risk_limit_refusal(strategy.symbol, exc, status)
+                _alert_risk_limit_refusal(symbol, exc, status)
             elif status == "order_failed":
-                _alert_order_failed(strategy.symbol, exc)
-            elif consumed:
-                # No row, but the armed order is gone: it failed past the
-                # disarm and before anything was recorded.
-                _alert_unclassified_refusal(strategy.symbol, exc)
-            # else: still armed, so nothing was consumed and nothing was
-            # refused — `fire()`'s two pre-disarm guards (not armed, and market
-            # closed/halted) preserve it deliberately for retry. Paging on
-            # those would page on every scan while the market is shut.
+                _alert_order_failed(symbol, exc)
+            else:
+                # No row of ours: it failed past the disarm and before anything
+                # was recorded.
+                _alert_unclassified_refusal(symbol, exc)
 
-    def _fire_attempt_record(self, history_len: int,
-                             strategy: ArmedStrategy) -> tuple[str | None, bool]:
-        """What one fire attempt left behind: `(status, consumed)`.
+    def _fire_attempt_record(self, attempt_id: str) -> dict | None:
+        """The history row THIS attempt wrote, or None if it wrote none.
 
-        `status` is the status of the history row the attempt appended, or None
-        if it appended none. `consumed` says whether the armed order is gone —
-        tested by IDENTITY against the strategy this trigger read, so a re-arm
-        between the failure and this call reads as consumed (which it was)
-        rather than as preserved.
+        Matched on `attempt_id`, which `fire()` stamps on every row it appends.
+        Searched from the end because the attempt's own row is the most recent
+        one it could have written, and a concurrent attempt's rows sit either
+        side of it without being candidates.
 
-        The distinction is what keeps the alerts honest: the two guards that
-        fire BEFORE `fire()` disarms — not armed, and market closed/halted —
-        deliberately leave the order armed for retry and record nothing, and
-        are the only failures that must NOT alert. Everything past the disarm
-        must.
+        WHY NOT A SLICE, which is what this did until F1 of round 1: a
+        `history[history_len:]` captured before the call is a claim about
+        POSITIONS in a list two threads append to, and the window it spans
+        holds a 3s network fetch. Its `rows[-1]` returned the winner's row to
+        the loser under two concurrent scans — reproduced, and it paged about a
+        FILLED order. There is no "most recent row" reading that fixes that;
+        the row has to say whose it is.
+
+        No longer reports whether the armed order was consumed. That question
+        was answered by reading the armed slot after the fact, and is now
+        answered by `ArmPreservedError` at the point of refusal instead.
         """
         with self._lock:
-            rows = self._state.history[history_len:]
-            preserved = (self._state.armed
-                         and self._state.strategy is strategy)
-        status = rows[-1].get("status") if rows else None
-        return status, not preserved
+            for row in reversed(self._state.history):
+                if row.get("attempt_id") == attempt_id:
+                    return row
+        return None
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
