@@ -2120,3 +2120,212 @@ def test_regime_gate_never_consults_the_market_wide_conviction_cache(mocker, mon
     with pytest.raises(RegimeHeadwindError):
         _gate_fire(mocker, symbol="MSFT", direction="Bullish",
                    horizon="Position", cached_conviction=None)
+
+
+# ---------------------------------------------------------------------------
+# Round 1 of AUTOTRADE-2A-ALERT-DELIVERY: the refusal kinds that reached nobody
+# ---------------------------------------------------------------------------
+# All three leave fire() as a BARE RuntimeError, so the scan trigger cannot tell
+# them apart by exception class and routes on the history row the attempt
+# recorded instead. Each test drives the REAL maybe_fire_on_scan so the routing
+# itself is under test, not a reimplementation of it.
+
+def _scan_trigger_service(mocker, *, qty=1):
+    """An armed service whose fire path is clear up to the point under test."""
+    import app.services.auto_trader as at
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    # Sizing passes straight through: these tests are about what happens AFTER
+    # it, and a real sizing call would need scoring config they do not exercise.
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT", qty=qty))
+    return at, svc
+
+
+def test_a_cap_blocked_refusal_on_the_scan_trigger_alerts(mocker):
+    """§9.1's "and alert" half for the exposure cap.
+
+    Until round 1 of this target `cap_blocked` fell into the bare
+    `except Exception` and produced one log line on a box nobody watches, while
+    the armed order was consumed and the service disarmed.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    mocker.patch.object(AutoTradeService, "_check_exposure",
+                        side_effect=RuntimeError("Exposure cap breach: ['too big']"))
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    alert = mocker.patch.object(at, "_alert_risk_limit_refusal")
+
+    svc.maybe_fire_on_scan(portfolio_snapshot=[], portfolio_value=100_000.0)
+
+    execute.assert_not_called()
+    assert alert.call_count == 1
+    assert alert.call_args.args[0] == "MSFT"
+    assert alert.call_args.args[2] == "cap_blocked"
+    assert svc.get_state().armed is False
+    assert svc.get_state().history[-1]["status"] == "cap_blocked"
+
+
+def test_a_daily_loss_refusal_on_the_scan_trigger_alerts(mocker):
+    """The same hole, on the circuit breaker that blocks for the REST OF THE DAY
+    — so a silent one costs every remaining trade, not just this one."""
+    at, svc = _scan_trigger_service(mocker)
+    mocker.patch.object(AutoTradeService, "_check_daily_loss",
+                        side_effect=RuntimeError("Daily loss limit reached: 60000 vs 2000"))
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    alert = mocker.patch.object(at, "_alert_risk_limit_refusal")
+
+    svc.maybe_fire_on_scan()
+
+    execute.assert_not_called()
+    assert alert.call_count == 1
+    assert alert.call_args.args[2] == "daily_loss_blocked"
+    assert svc.get_state().armed is False
+
+
+def test_an_order_failed_alert_does_not_claim_nothing_was_sent(mocker):
+    """THE SHARPEST OF THE THREE. `order_failed` means the broker call was MADE
+    and errored, so the submission MAY HAVE LANDED — the row's own comment says
+    so. Telling Kenneth "nothing was sent" would be a false statement about a
+    possibly-live order; telling him nothing at all, which is what happened
+    until this round, left him to find it by noticing an unexpected fill.
+
+    Drives the real notify_alert so the delivered TEXT is what is asserted.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 side_effect=RuntimeError("broker timeout after submit"))
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    assert len(calls) == 1, "an order that may have landed must reach a human"
+    subject, body = calls[0]
+    assert "MSFT" in subject
+    assert "MAY HAVE LANDED" in body, body
+    assert "Nothing was sent" not in body, (
+        "the broker call was made — this alert must not deny it"
+    )
+    assert svc.get_state().history[-1]["status"] == "order_failed"
+
+
+def test_a_risk_config_fault_is_not_paged_as_a_sizing_fault(mocker):
+    """ROUND 1 FINDING 3. `maybe_fire_on_scan` used to catch
+    `(SizingConfigError, ValueError)` around the WHOLE fire path, while fire()'s
+    own handler of that pair wraps only `_apply_vol_sizing`. So a non-numeric
+    value in risk_rules.yaml raised ValueError out of `_check_daily_loss` and
+    was paged as "the regime conviction is not a usable number", sending the
+    operator to a scoring_rules.yaml block that was fine — AND arming the
+    sizing key's four-hour dedup window, so a genuine sizing refusal inside it
+    went unheard.
+
+    The fault also lands past fire()'s disarm and records NO history row, so it
+    must still alert — as the unclassified refusal, which does not guess.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    mocker.patch.object(AutoTradeService, "_risk_config",
+                        return_value={"max_daily_loss_pct": "2%",
+                                      "premium_stop_pct": 0.60})
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    sizing_alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+
+    svc.maybe_fire_on_scan()
+
+    execute.assert_not_called()
+    assert sizing_alert.call_count == 0, (
+        "a risk_rules.yaml fault must not blame scoring_rules.yaml's "
+        "regime_sizing block, nor burn the sizing alert's dedup key"
+    )
+    assert unclassified.call_count == 1
+    assert unclassified.call_args.args[0] == "MSFT"
+    assert svc.get_state().armed is False, "it failed past the disarm"
+
+
+def test_a_genuine_sizing_value_error_still_reaches_the_sizing_alert(mocker):
+    """The other side of the narrowing above: a plain ValueError raised BY the
+    sizing call is still a sizing refusal and must keep its own wording. It is
+    routed on the `sizing_data_blocked` row fire() records, not on its class."""
+    import app.services.auto_trader as at
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+
+    def _bad_conviction(_s):
+        raise ValueError("conviction_pct is not finite (nan)")
+
+    mocker.patch.object(at, "_apply_vol_sizing", _bad_conviction)
+    alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    svc.maybe_fire_on_scan()
+
+    assert alert.call_count == 1, "a sizing ValueError keeps the sizing alert"
+    assert unclassified.call_count == 0
+    assert svc.get_state().history[-1]["status"] == "sizing_data_blocked"
+
+
+def test_a_preserved_armed_order_does_not_alert(mocker):
+    """THE DELIBERATE SILENCE, and the reason the router checks `consumed`
+    rather than alerting on everything that raises.
+
+    `fire()`'s two pre-disarm guards — not armed, and market closed/halted —
+    leave the order ARMED for retry and record nothing. maybe_fire_on_scan runs
+    after EVERY scan, so paging on those would page on every scan while the
+    market is shut, and an alert channel that cries wolf is one that gets muted.
+    """
+    import app.services.auto_trader as at
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=False)
+    calls = _capture_alerts(mocker)
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    svc.maybe_fire_on_scan()
+
+    assert unclassified.call_count == 0
+    assert calls == [], "a preserved armed order is not a refusal"
+    assert svc.get_state().armed is True, "market-closed preserves the order"
+
+
+def test_a_good_fire_clears_the_config_refusal_hold(mocker):
+    """ROUND 1 FINDING 1, and the reason the fix is NOT `discrete=True`.
+
+    The config keys are deliberately NOT discrete — a broken scoring_rules.yaml
+    is a standing condition and collapsing a run of scans into one alert is
+    what the window is for, which
+    `test_a_config_refusal_stays_deduped_because_the_file_is_still_broken`
+    pins. But nothing cleared them EITHER, and `_first_seen` is persisted and
+    outlives the dedup purge, so the next config refusal — however much later,
+    after the file had been fixed and re-broken — arrived stamped "(reminder)"
+    under the FIRST one's date with a false "Still active as of" line.
+
+    A fire that SUCCEEDS proves both blocks were read and applied, so the
+    condition has demonstrably ended. Drives the real notify_alert: without the
+    clear the second refusal is SUPPRESSED, so this reads as a missing
+    delivery rather than a wording difference.
+    """
+    import app.services.auto_trader as at
+    from app.data.ibkr_paper import OrderResult
+    from app.scoring.conviction_sizing import SizingConfigError
+    calls = _capture_alerts(mocker)
+
+    at._alert_sizing_config_refusal("MSFT", SizingConfigError("min_mult is not a number"))
+    assert len(calls) == 1, "the first refusal pages"
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 return_value=OrderResult("oid-1", "ok", "ibkr_paper"))
+    svc = AutoTradeService()
+    svc.arm(_make_armed(symbol="MSFT"))
+    svc.maybe_fire_on_scan()
+    assert svc.get_state().history[-1]["order_id"] == "oid-1", "the fire succeeded"
+
+    at._alert_sizing_config_refusal("AAPL", SizingConfigError("min_mult is not a number"))
+
+    assert len(calls) == 2, (
+        "a breakage AFTER a good fire is a new condition and must page again"
+    )
+    assert "(reminder)" not in calls[1][0], (
+        "it is a fresh fault, not a reminder of the one before the good fire"
+    )

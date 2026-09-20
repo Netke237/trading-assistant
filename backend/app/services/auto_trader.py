@@ -1058,9 +1058,21 @@ _REC_ID_GATE_CONFIG = "auto-trade-regime-gate-config"
 _REC_ID_HEADWIND = "auto-trade-regime-headwind"
 
 
+def _per_symbol_rec_id(prefix: str, symbol: str) -> str:
+    """Dedup identity for a refusal kind that is one event per SYMBOL.
+
+    `notify_alert` keys on `f"{rec_id}|{alert_type}"` and the symbol reaches
+    only the message body, so a refusal kind that can happen to more than one
+    symbol inside one dedup window MUST put the symbol in the rec_id or every
+    symbol after the first is silently dropped. That is round 2's defect, kept
+    in one place here so the next refusal kind cannot reintroduce it.
+    """
+    return f"{prefix}:{symbol}"
+
+
 def _headwind_rec_id(symbol: str) -> str:
     """The dedup identity of a headwind refusal: one per SYMBOL."""
-    return f"{_REC_ID_HEADWIND}:{symbol}"
+    return _per_symbol_rec_id(_REC_ID_HEADWIND, symbol)
 
 
 def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
@@ -1152,6 +1164,155 @@ def _alert_regime_headwind_refusal(symbol: str, exc: Exception) -> None:
         # anyway: a refusal DISARMS the auto-trader, so a second refusal of the
         # same symbol requires a deliberate re-arm — and suppressing the answer
         # to a human's re-arm is the opposite of what the window is for.
+        discrete=True,
+    )
+
+
+# THE THREE REFUSAL KINDS ROUND 1 OF THIS TARGET FOUND STILL REACHING NOBODY.
+# All three leave `fire()` as a bare RuntimeError, so they cannot be told apart
+# by exception class the way the headwind, gate-config and sizing refusals can
+# — `maybe_fire_on_scan` routes them on the history row the attempt recorded
+# instead. Each is per SYMBOL and discrete for the reasons given on the
+# headwind key above: the key must not collapse two symbols' refusals into one
+# alert, and a refusal is an event rather than a standing condition.
+_REC_ID_RISK_BLOCKED = "auto-trade-risk-blocked"
+_REC_ID_ORDER_FAILED = "auto-trade-order-failed"
+_REC_ID_UNCLASSIFIED = "auto-trade-refusal-unclassified"
+
+# Three TYPES, not one, because `notify_alert` builds the subject line from the
+# type and these three have three different remedies: loosen a limit or wait
+# for tomorrow; go and look at the broker RIGHT NOW; and read the log, because
+# the auto-trader does not know what happened. Round 2 of target 2a measured
+# what collapsing two remedies into one subject line costs.
+_ALERT_TYPE_RISK_BLOCKED = "AUTO_TRADE_RISK_BLOCKED"
+_ALERT_TYPE_ORDER_FAILED = "AUTO_TRADE_ORDER_FAILED"
+_ALERT_TYPE_UNCLASSIFIED = "AUTO_TRADE_REFUSED_UNCLASSIFIED"
+
+# The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
+# routes on them. They are `fire()`'s to define; this is a reader of them.
+_SIZING_STATUSES = ("sizing_config_blocked", "sizing_data_blocked")
+_RISK_BLOCKED_STATUSES = ("cap_blocked", "daily_loss_blocked")
+
+
+def _clear_config_refusal_holds() -> None:
+    """A successful fire is the config refusals’ "that condition is over" signal.
+
+    ROUND 1 OF THIS TARGET, and the fix is deliberately NOT `discrete=True` on
+    those two alerts. `notify_alert` stamps every send after the first under a
+    key as a REMINDER carrying `_first_seen`’s ORIGINAL date plus a "Still
+    active as of" line, and `_first_seen` is persisted and outlives the dedup
+    purge — it is cleared only by `forget_alerts`. The config keys are
+    deliberately not discrete because a broken scoring_rules.yaml IS a standing
+    condition and collapsing a run of scans into one alert is what the window
+    is for. But nothing cleared them EITHER, so a genuinely new config fault
+    arrived as "CONFIG_ERROR (reminder) — Triggered: <an older date>" for a
+    fault that began minutes ago. Both the date and the "still active" claim
+    are then false, and a fresh refusal dressed as an old nag is the one most
+    likely to be ignored.
+
+    A fire that SUCCEEDS proves both blocks were read and applied, so the
+    condition those alerts describe has demonstrably ended — the same thing
+    the portfolio monitor means when it calls `forget_alerts` on a closed
+    position. Clearing the hold as well as the stamp is right for the same
+    reason: a breakage AFTER a good fire is new and should page at once.
+
+    KNOWN RESIDUAL, recorded rather than papered over: if no fire ever succeeds
+    between two breakages — the file breaks, Kenneth fixes it, and nothing is
+    armed again until it breaks differently months later — the stamp is still
+    the first occurrence’s. Closing that needs a bounded `_first_seen` lifetime
+    in `alert_notifier.py`, a shared file this target is not scoped to touch.
+
+    Must not raise: the order has already been placed and recorded by the time
+    this runs.
+    """
+    try:
+        from app.services.notifications.alert_notifier import forget_alerts
+        forget_alerts({_REC_ID_SIZING, _REC_ID_GATE_CONFIG})
+    except Exception as exc:
+        logger.error(
+            "AutoTrader: the fire succeeded, but clearing the config-refusal "
+            "alert holds failed — the next config refusal may arrive stamped "
+            "as a reminder of an older one: %s", exc,
+        )
+
+
+def _alert_risk_limit_refusal(symbol: str, exc: Exception, status: str) -> None:
+    """Alert an exposure-cap or daily-loss refusal on the unattended trigger.
+
+    "Nothing was sent" is stated as fact here and that is load-bearing: both
+    statuses are recorded BEFORE `execute_option_order` is reached, which is
+    the same guarantee the `order_failed` row's own comment leans on when it
+    says these two "provably never reached the broker".
+    """
+    which = ("the exposure cap" if status == "cap_blocked"
+             else "the daily loss limit")
+    _alert_refusal(
+        symbol,
+        f"{status} refusal",
+        (
+            f"Auto-trade REFUSED to fire {symbol}: {which} would have been "
+            f"breached. Nothing was sent and the auto-trader is disarmed. "
+            f"{exc}"
+        ),
+        _per_symbol_rec_id(_REC_ID_RISK_BLOCKED, symbol),
+        _ALERT_TYPE_RISK_BLOCKED,
+        discrete=True,
+    )
+
+
+def _alert_order_failed(symbol: str, exc: Exception) -> None:
+    """Alert a broker call that WAS MADE and then errored.
+
+    THE ONE ALERT ON THIS PATH THAT MUST NOT SAY "NOTHING WAS SENT". The
+    `order_failed` row's own comment is explicit that the submission MAY HAVE
+    LANDED, so a position may exist. Saying nothing was sent would be a false
+    statement about a live broker order; saying nothing at all — which is what
+    happened until this round — left Kenneth to find it by noticing a fill he
+    did not expect.
+    """
+    _alert_refusal(
+        symbol,
+        "order-failed refusal",
+        (
+            f"Auto-trade FAILED to place {symbol}: the broker call was made "
+            f"and errored, so THE ORDER MAY HAVE LANDED. Check the broker "
+            f"before re-arming or placing this trade by hand. The auto-trader "
+            f"is disarmed. {exc}"
+        ),
+        _per_symbol_rec_id(_REC_ID_ORDER_FAILED, symbol),
+        _ALERT_TYPE_ORDER_FAILED,
+        discrete=True,
+    )
+
+
+def _alert_unclassified_refusal(symbol: str, exc: Exception) -> None:
+    """Alert a fire that consumed the armed order and recorded NO history row.
+
+    Round 1 of this target: narrowing `maybe_fire_on_scan`'s sizing handler
+    stops a `risk_rules.yaml` fault being paged as a sizing fault, but on its
+    own it would leave that refusal reaching nobody at all — the same hole one
+    file further along. The known way in is a non-numeric value in
+    `risk_rules.yaml`: `_check_daily_loss` calls `float()` on two of its keys
+    and raises ValueError, `fire()`'s guard there catches only RuntimeError,
+    and by then the disarm has already happened.
+
+    DELIBERATELY DOES NOT CLAIM NOTHING WAS SENT. Every way in today is
+    pre-order, but this branch exists precisely for the faults nobody
+    enumerated, and an alert that guesses "nothing was sent" about an unknown
+    fault is the over-claim this target keeps finding. It says only what is
+    known: nothing was RECORDED as sent.
+    """
+    _alert_refusal(
+        symbol,
+        "unclassified refusal",
+        (
+            f"Auto-trade did NOT fire {symbol} and could not classify why: "
+            f"the armed order was consumed and no outcome was recorded. No "
+            f"order was recorded as submitted — verify at the broker before "
+            f"re-arming. The auto-trader is disarmed. {exc}"
+        ),
+        _per_symbol_rec_id(_REC_ID_UNCLASSIFIED, symbol),
+        _ALERT_TYPE_UNCLASSIFIED,
         discrete=True,
     )
 
@@ -1491,9 +1652,21 @@ class AutoTradeService:
             )
             return
 
+        # WHERE THE HISTORY STOOD BEFORE THIS ATTEMPT. Three of the refusals
+        # handled below leave `fire()` as a bare RuntimeError and cannot be
+        # told apart by class; the row the attempt appended is what
+        # distinguishes them. Captured before the call so a row left by an
+        # EARLIER attempt can never be mistaken for this one's.
+        with self._lock:
+            history_len = len(self._state.history)
+
         try:
             self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
             logger.info("AutoTrader: fired on scan completion trigger")
+            # The config blocks were read and applied, so any standing
+            # config-refusal alert is over — see the helper for why this lives
+            # here and not as `discrete=True` on those two alerts.
+            _clear_config_refusal_holds()
         except RegimeHeadwindError as exc:
             # THE REFUSAL THIS TRIGGER MOST NEEDS TO REPORT, and until target 2a
             # round 1 it was the only one that reported nothing: it is a
@@ -1506,14 +1679,70 @@ class AutoTradeService:
             _alert_regime_headwind_refusal(strategy.symbol, exc)
         except RegimeGateConfigError as exc:
             _alert_regime_gate_config_refusal(strategy.symbol, exc)
-        except (SizingConfigError, ValueError) as exc:
+        except SizingConfigError as exc:
             # fire() has already logged and recorded it; this trigger has no
             # reader, so it is also the half of §9.1 that says "and alert".
-            # ValueError is here for the same reason it is in fire() — see the
-            # handler there.
+            #
+            # NARROWED FROM `(SizingConfigError, ValueError)` BY ROUND 1 OF
+            # THIS TARGET. fire()'s own handler of that pair wraps ONLY
+            # `_apply_vol_sizing`, so its attribution is sound; this one
+            # wrapped the WHOLE fire path, so a ValueError from anywhere in it
+            # was paged as "the regime conviction is not a usable number".
+            # Measured: `max_daily_loss_pct: 2%` in risk_rules.yaml sent an
+            # email blaming scoring_rules.yaml's regime_sizing block — a file
+            # that was fine — AND armed the sizing key's dedup window, so a
+            # genuine sizing refusal in the next four hours went unheard.
+            # A sizing ValueError still reaches this same alert, routed on its
+            # recorded `sizing_data_blocked` row in the branch below.
             _alert_sizing_config_refusal(strategy.symbol, exc)
         except Exception as exc:
             logger.error("AutoTrader scan-trigger fire failed: %s", exc)
+            # ROUTED ON WHAT THE ATTEMPT RECORDED, because everything reaching
+            # here is a bare RuntimeError (or a ValueError raised outside the
+            # sizing call) and the class says nothing. Until round 1 of this
+            # target this branch was the log line alone, so `cap_blocked`,
+            # `daily_loss_blocked` and `order_failed` — the last of which may
+            # have LANDED A BROKER ORDER — consumed the armed order and told
+            # nobody. The same hole round 1 of target 2a found on the headwind
+            # refusal, three refusal kinds further along.
+            status, consumed = self._fire_attempt_record(history_len, strategy)
+            if status in _SIZING_STATUSES:
+                _alert_sizing_config_refusal(strategy.symbol, exc)
+            elif status in _RISK_BLOCKED_STATUSES:
+                _alert_risk_limit_refusal(strategy.symbol, exc, status)
+            elif status == "order_failed":
+                _alert_order_failed(strategy.symbol, exc)
+            elif consumed:
+                # No row, but the armed order is gone: it failed past the
+                # disarm and before anything was recorded.
+                _alert_unclassified_refusal(strategy.symbol, exc)
+            # else: still armed, so nothing was consumed and nothing was
+            # refused — `fire()`'s two pre-disarm guards (not armed, and market
+            # closed/halted) preserve it deliberately for retry. Paging on
+            # those would page on every scan while the market is shut.
+
+    def _fire_attempt_record(self, history_len: int,
+                             strategy: ArmedStrategy) -> tuple[str | None, bool]:
+        """What one fire attempt left behind: `(status, consumed)`.
+
+        `status` is the status of the history row the attempt appended, or None
+        if it appended none. `consumed` says whether the armed order is gone —
+        tested by IDENTITY against the strategy this trigger read, so a re-arm
+        between the failure and this call reads as consumed (which it was)
+        rather than as preserved.
+
+        The distinction is what keeps the alerts honest: the two guards that
+        fire BEFORE `fire()` disarms — not armed, and market closed/halted —
+        deliberately leave the order armed for retry and record nothing, and
+        are the only failures that must NOT alert. Everything past the disarm
+        must.
+        """
+        with self._lock:
+            rows = self._state.history[history_len:]
+            preserved = (self._state.armed
+                         and self._state.strategy is strategy)
+        status = rows[-1].get("status") if rows else None
+        return status, not preserved
 
     @staticmethod
     @functools.lru_cache(maxsize=1)
