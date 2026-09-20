@@ -48,6 +48,38 @@ class ArmPreservedError(RuntimeError):
     """
 
 
+class OrderNotSubmittedError(RuntimeError):
+    """The fire failed BEFORE the broker adapter was called: nothing was sent.
+
+    F2 OF 2A-ALERT ROUND 1. `fire()` wrapped the whole of `execute_option_order`
+    in one `except Exception` that wrote `order_failed` — a status whose own
+    comment says the submission MAY HAVE LANDED — and paged "the broker call was
+    made and errored ... Check the broker before re-arming". But three of the
+    four things that call reaches contact nothing at all: building the
+    `BrokerOrder`, building the router out of the credential store, and the two
+    guards in `BrokerRouter.resolve`. The reachable one is mundane and
+    recurring: credentials expire or are rotated,
+    `build_router_from_credentials` omits that adapter without complaint, and
+    `resolve` raises "Unknown broker 'tradier_paper'. Available: []". Measured
+    end to end — the delivered email told Kenneth to go and check a broker that
+    was never opened a socket to, for a position that cannot exist.
+
+    THE BOUNDARY IS `adapter.place_order`, NOT SOMEWHERE MORE CONVENIENT, and it
+    is drawn conservatively. Once that call is entered the auto-trader cannot
+    know whether bytes left the machine, so everything at or past it keeps
+    `order_failed` and keeps saying the order may have landed. This class covers
+    only what is provable from the outside. Both claims are then true statements
+    rather than one blanket guess, which is the whole of the fix: the failure
+    mode being closed is a FALSE alert, so replacing it with the opposite false
+    alert would be no better.
+
+    A RuntimeError so `/auto-trade/fire` maps it to a 400 exactly as its
+    neighbours do — and `fire()` re-raises it as a bare RuntimeError anyway, so
+    the class is a routing signal inside this module, not part of the endpoint's
+    contract.
+    """
+
+
 class RegimeHeadwindError(RuntimeError):
     """The regime opposes this trade hard enough that the scan would have dropped it.
 
@@ -1202,6 +1234,7 @@ def _alert_regime_headwind_refusal(symbol: str, exc: Exception) -> None:
 # alert, and a refusal is an event rather than a standing condition.
 _REC_ID_RISK_BLOCKED = "auto-trade-risk-blocked"
 _REC_ID_ORDER_FAILED = "auto-trade-order-failed"
+_REC_ID_NOT_SUBMITTED = "auto-trade-order-not-submitted"
 _REC_ID_UNCLASSIFIED = "auto-trade-refusal-unclassified"
 
 # Three TYPES, not one, because `notify_alert` builds the subject line from the
@@ -1211,6 +1244,13 @@ _REC_ID_UNCLASSIFIED = "auto-trade-refusal-unclassified"
 # what collapsing two remedies into one subject line costs.
 _ALERT_TYPE_RISK_BLOCKED = "AUTO_TRADE_RISK_BLOCKED"
 _ALERT_TYPE_ORDER_FAILED = "AUTO_TRADE_ORDER_FAILED"
+# A FOURTH TYPE, for the same reason there are three rather than one: the
+# subject line is built from it, and this one's remedy is not "go and look at
+# the broker RIGHT NOW" but "go and fix a credential". Sharing
+# AUTO_TRADE_ORDER_FAILED would also share its dedup key, so a real
+# may-have-landed page could be suppressed by a credential fault minutes
+# earlier — the exact collapse round 2 of target 2a measured the cost of.
+_ALERT_TYPE_NOT_SUBMITTED = "AUTO_TRADE_ORDER_NOT_SUBMITTED"
 _ALERT_TYPE_UNCLASSIFIED = "AUTO_TRADE_REFUSED_UNCLASSIFIED"
 
 # The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
@@ -1267,7 +1307,9 @@ def _alert_risk_limit_refusal(symbol: str, exc: Exception, status: str) -> None:
     "Nothing was sent" is stated as fact here and that is load-bearing: both
     statuses are recorded BEFORE `execute_option_order` is reached, which is
     the same guarantee the `order_failed` row's own comment leans on when it
-    says these two "provably never reached the broker".
+    says these two "provably never reached the broker". `_alert_not_submitted`
+    states it as fact on the same grounds, one phase later — it is reached only
+    from inside `execute_option_order` and only before `adapter.place_order`.
     """
     which = ("the exposure cap" if status == "cap_blocked"
              else "the daily loss limit")
@@ -1294,6 +1336,14 @@ def _alert_order_failed(symbol: str, exc: Exception) -> None:
     statement about a live broker order; saying nothing at all — which is what
     happened until this round — left Kenneth to find it by noticing a fill he
     did not expect.
+
+    NARROWED BY F2 TO WHAT THAT SENTENCE CAN ACTUALLY SUPPORT. It used to fire
+    for everything `execute_option_order` could raise, most of which never
+    contacted a broker, so the one alert that must not deny a possible position
+    was routinely asserting one that could not exist — "check the broker" on an
+    expired credential, every time. Those now raise `OrderNotSubmittedError`
+    and page `_alert_not_submitted` instead. What reaches here is exactly what
+    got past `adapter.place_order`, where the claim is true and conservative.
     """
     _alert_refusal(
         symbol,
@@ -1306,6 +1356,37 @@ def _alert_order_failed(symbol: str, exc: Exception) -> None:
         ),
         _per_symbol_rec_id(_REC_ID_ORDER_FAILED, symbol),
         _ALERT_TYPE_ORDER_FAILED,
+        discrete=True,
+    )
+
+
+def _alert_not_submitted(symbol: str, exc: Exception) -> None:
+    """Alert a fire that never reached the broker. Says so as FACT.
+
+    THE COUNTERPART TO `_alert_order_failed`, added by F2 of round 1, and the
+    pair only works because each states what its own half provably knows.
+    `fire()` reached this branch from `OrderNotSubmittedError`, which is raised
+    strictly before `adapter.place_order` — so no position can exist, and
+    hedging with "check the broker" would keep the wild goose chase F2 is about
+    while merely sounding more careful.
+
+    The exception text is the remedy and is carried verbatim: it names the
+    broker key and, on the common credential path, an empty `Available:` list.
+    That is what tells Kenneth which credential to refresh, which is the whole
+    of the fix on his side.
+    """
+    _alert_refusal(
+        symbol,
+        "not-submitted refusal",
+        (
+            f"Auto-trade could NOT place {symbol}: the order was never "
+            f"submitted — the broker was not contacted at all, so NO position "
+            f"was opened and there is nothing to check for. Nothing was sent "
+            f"and the auto-trader is disarmed. Most often this is an expired "
+            f"or missing broker credential; fix it and re-arm. {exc}"
+        ),
+        _per_symbol_rec_id(_REC_ID_NOT_SUBMITTED, symbol),
+        _ALERT_TYPE_NOT_SUBMITTED,
         discrete=True,
     )
 
@@ -1343,26 +1424,46 @@ def _alert_unclassified_refusal(symbol: str, exc: Exception) -> None:
 
 
 def execute_option_order(strategy: ArmedStrategy):
-    """Execute the armed option order via the broker router. Importable for mocking."""
+    """Execute the armed option order via the broker router. Importable for mocking.
+
+    TWO PHASES, AND THE SEAM BETWEEN THEM IS LOAD-BEARING — see
+    `OrderNotSubmittedError`. Everything inside the `try` contacts nothing: it
+    builds the order object, reads the credential store, and resolves the
+    adapter. Only `place_order`, deliberately OUTSIDE the `try`, can reach a
+    broker, so only it may raise the error `fire()` records as "may have
+    landed". Anything moved across that line changes what Kenneth is told about
+    a possibly-live position, in one direction or the other.
+    """
     from app.services.broker_router import build_router_from_credentials
     from app.data.ibkr_paper import BrokerOrder
-    order = BrokerOrder(
-        symbol=strategy.symbol,
-        action=strategy.action,
-        # Auto-trade is structurally entry-only — arm()/fire() have no existing-position
-        # lookup anywhere, and the only caller (AutoTradeArm/index.tsx) always requests a
-        # buy-to-open. Hardcoded rather than added to ArmRequest/ArmedStrategy so there's
-        # no way to call this endpoint with the wrong effect.
-        effect="OPEN",
-        quantity=strategy.quantity,
-        order_type=strategy.order_type,
-        limit_price=strategy.limit_price,
-        conid=strategy.conid,
-        sec_type="OPT",
-        option_symbol=strategy.option_symbol,
-    )
-    router = build_router_from_credentials()
-    return router.execute(strategy.broker, order)
+    try:
+        order = BrokerOrder(
+            symbol=strategy.symbol,
+            action=strategy.action,
+            # Auto-trade is structurally entry-only — arm()/fire() have no existing-position
+            # lookup anywhere, and the only caller (AutoTradeArm/index.tsx) always requests a
+            # buy-to-open. Hardcoded rather than added to ArmRequest/ArmedStrategy so there's
+            # no way to call this endpoint with the wrong effect.
+            effect="OPEN",
+            quantity=strategy.quantity,
+            order_type=strategy.order_type,
+            limit_price=strategy.limit_price,
+            conid=strategy.conid,
+            sec_type="OPT",
+            option_symbol=strategy.option_symbol,
+        )
+        router = build_router_from_credentials()
+        adapter = router.resolve(strategy.broker)
+    except Exception as exc:
+        # CAUGHT BROADLY ON PURPOSE. The known way in is `resolve`'s ValueError
+        # on expired credentials, but a broken credentials yaml, an adapter
+        # constructor that rejects its arguments, or a field `BrokerOrder`
+        # refuses all fail here too — and every one of them shares the property
+        # that matters, which is that no broker was contacted. Narrowing this to
+        # ValueError would send the rest back to the "may have landed" branch
+        # with the same false claim F2 exists to remove.
+        raise OrderNotSubmittedError(str(exc)) from exc
+    return adapter.place_order(order)
 
 
 class AutoTradeService:
@@ -1625,6 +1726,34 @@ class AutoTradeService:
 
         try:
             result = execute_option_order(strategy)
+        except OrderNotSubmittedError as exc:
+            # ORDERED ABOVE THE HANDLER BELOW, and it has to be: this is a
+            # RuntimeError, so the bare `except Exception` would swallow it and
+            # write the `order_failed` row F2 is about. See the class.
+            with self._lock:
+                self._state.history.append({
+                    "attempt_id":      attempt_id,
+                    "order_id":        None,
+                    "status":          "not_submitted",
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
+                    # NO `regime_gate` HERE, by the rule the `order_failed` row
+                    # below states in its own comment: the field is carried on
+                    # that row alone because it is the one refusal-shaped row
+                    # whose order may be live, so "did the gate run" still has
+                    # a position to be asked about. This row provably has none,
+                    # which puts it with `cap_blocked` and
+                    # `daily_loss_blocked`, where the question is moot.
+                })
+            logger.error(
+                "AutoTrader order NOT SUBMITTED for %s — nothing reached the "
+                "broker: %s", strategy.symbol, exc,
+            )
+            raise RuntimeError(f"Order not submitted: {exc}") from exc
         except Exception as exc:
             with self._lock:
                 self._state.history.append({
@@ -1811,7 +1940,9 @@ class AutoTradeService:
             # `daily_loss_blocked` and `order_failed` — the last of which may
             # have LANDED A BROKER ORDER — consumed the armed order and told
             # nobody. The same hole round 1 of target 2a found on the headwind
-            # refusal, three refusal kinds further along.
+            # refusal, three refusal kinds further along. `not_submitted` joined
+            # them in F2, split OUT of `order_failed` so the two halves of
+            # "did this reach the broker" stop sharing one answer.
             #
             # EVERYTHING HERE CONSUMED THE ARMED ORDER, by elimination: the
             # branch above catches every pre-disarm exit `fire()` has, so the
@@ -1827,6 +1958,11 @@ class AutoTradeService:
                 _alert_sizing_config_refusal(symbol, exc)
             elif status in _RISK_BLOCKED_STATUSES:
                 _alert_risk_limit_refusal(symbol, exc, status)
+            elif status == "not_submitted":
+                # ABOVE `order_failed` for readability only — the two statuses
+                # are disjoint, so this is reading order, not precedence, the
+                # same note the headwind/sizing pair above carries.
+                _alert_not_submitted(symbol, exc)
             elif status == "order_failed":
                 _alert_order_failed(symbol, exc)
             else:

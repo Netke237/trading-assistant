@@ -2567,3 +2567,160 @@ def test_the_pre_disarm_refusals_are_told_apart_by_class_not_by_state(mocker):
     with pytest.raises(ArmPreservedError, match="Market closed"):
         svc.fire()
     assert svc.get_state().armed is True, "a preserved order is still armed"
+
+
+# ---------------------------------------------------------------------------
+# F2: a failure BEFORE the broker was contacted must not be paged as one that
+# may have landed an order. Round 1 of target 2a-alert, decisions[0] item (2).
+# ---------------------------------------------------------------------------
+
+def _expire_the_credentials(mocker):
+    """Make `build_router_from_credentials` return a router with NO adapters.
+
+    THE REAL MECHANISM, NOT A STUBBED EXCEPTION. F2's production trigger is
+    credentials that expire, get rotated, or are cleared out of the store:
+    `build_router_from_credentials` adds an adapter only for a broker whose
+    credentials are present, silently omits the rest, and `BrokerRouter.execute`
+    then raises `ValueError: Unknown broker 'ibkr_paper'. Available: []` at its
+    dict lookup — BEFORE `adapter.place_order`, the only line that can put an
+    order in front of a broker.
+
+    Stubbing `execute_option_order` with a side_effect would test the alert
+    wording against a fiction; this drives the real credential store, the real
+    router build and the real `execute`, so the test fails if any of those three
+    ever stops behaving the way the finding describes.
+    """
+    import app.services.credential_store as cs
+    mocker.patch.object(cs.credential_store, "load", lambda: None)
+    mocker.patch.object(cs.credential_store, "get", lambda key: None)
+    mocker.patch.dict("os.environ", {"TRADIER_PAPER_TOKEN": "",
+                                     "TRADIER_PAPER_ACCOUNT_ID": ""})
+
+
+def test_expired_credentials_do_not_page_as_an_order_that_may_have_landed(mocker):
+    """F2, THE HEADLINE. Credentials go stale, nothing whatsoever is sent, and
+    the old code paged "the broker call was made and errored, so THE ORDER MAY
+    HAVE LANDED. Check the broker before re-arming" — sending Kenneth hunting a
+    position at a broker that was never opened a socket to.
+
+    Drives the real notify_alert so the delivered TEXT is what is asserted, the
+    same boundary `test_an_order_failed_alert_does_not_claim_nothing_was_sent`
+    uses for the opposite claim.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    _expire_the_credentials(mocker)
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    assert len(calls) == 1, "a consumed arm must still reach a human"
+    subject, body = calls[0]
+    assert "MSFT" in subject
+    assert "MAY HAVE LANDED" not in body, (
+        "nothing reached the broker — this alert must not suggest a position "
+        "may exist:\n" + body
+    )
+    assert "Nothing was sent" in body, body
+
+
+def test_a_pre_submission_failure_records_its_own_status(mocker):
+    """The row, not just the wording. `order_failed` is the status whose own
+    comment says the submission may have landed; a failure that provably never
+    reached the broker must not borrow it, or every later reader of the history
+    inherits the same false claim.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    _expire_the_credentials(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    last = svc.get_state().history[-1]
+    assert last["status"] == "not_submitted", last
+    assert last["order_id"] is None
+    assert "ibkr_paper" in last["error"], "the row must name the broker that was unreachable"
+    assert svc.get_state().armed is False
+
+
+def test_a_live_broker_block_is_also_pre_submission(mocker):
+    """The SECOND pre-submission raise inside `execute`, and the one a narrowing
+    that stopped at "wrap router.execute" would have missed: the live-broker
+    guard raises before the adapter lookup, so `ibkr_live` never contacts
+    anything either.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    svc._state.strategy.broker = "ibkr_live"
+    _expire_the_credentials(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    assert svc.get_state().history[-1]["status"] == "not_submitted"
+
+
+def test_a_failure_inside_place_order_still_says_it_may_have_landed(mocker):
+    """THE OTHER SIDE OF THE SPLIT, and the reason it is drawn at
+    `adapter.place_order` rather than anywhere more convenient. Once that call
+    is entered the auto-trader cannot know whether bytes reached the broker, so
+    the conservative claim stands. A fix that moved every error to
+    "nothing was sent" would be the same lie pointing the other way.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    import app.services.broker_router as br
+
+    class _Exploding:
+        def place_order(self, order):
+            raise RuntimeError("connection reset after submit")
+
+    mocker.patch.object(br, "build_router_from_credentials",
+                        lambda: br.BrokerRouter(adapters={"ibkr_paper": _Exploding()}))
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    assert len(calls) == 1
+    assert "MAY HAVE LANDED" in calls[0][1], calls[0][1]
+    assert svc.get_state().history[-1]["status"] == "order_failed"
+
+
+def test_a_pre_submission_failure_is_not_paged_as_unclassified(mocker):
+    """It must route to its OWN alert, not fall through to the unclassified one.
+    "could not classify why" is the right message for a fire that recorded no
+    row at all; here the cause is known exactly and naming it is the whole
+    remedy — the operator has to go and refresh a credential.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    _expire_the_credentials(mocker)
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+    order_failed = mocker.patch.object(at, "_alert_order_failed")
+    not_submitted = mocker.patch.object(at, "_alert_not_submitted")
+
+    svc.maybe_fire_on_scan()
+
+    unclassified.assert_not_called()
+    order_failed.assert_not_called()
+    assert not_submitted.call_count == 1
+    assert not_submitted.call_args.args[0] == "MSFT"
+
+
+def test_a_non_valueerror_before_submission_is_also_not_submitted(mocker):
+    """PINS THE BREADTH OF THE CATCH, which survived a mutation to
+    `except ValueError` when the F2 tests were first written — every one of
+    them came in through `resolve`, so narrowing it changed nothing they
+    measured while quietly sending the rest back to "may have landed".
+
+    Not a hypothetical class: `credential_store.load()` runs `os.chmod` on the
+    credentials file OUTSIDE its own try, and that raises OSError on a file the
+    process cannot re-permission — root-owned after a manual edit, or a
+    read-only mount. It contacts no broker, so it belongs on this side of the
+    line, and its class is the only thing separating it from the ValueErrors.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    import app.services.credential_store as cs
+    mocker.patch.object(cs.credential_store, "load",
+                        side_effect=PermissionError("[Errno 1] chmod: credentials.yaml"))
+    calls = _capture_alerts(mocker)
+
+    svc.maybe_fire_on_scan()
+
+    assert svc.get_state().history[-1]["status"] == "not_submitted"
+    assert len(calls) == 1
+    assert "MAY HAVE LANDED" not in calls[0][1], calls[0][1]
