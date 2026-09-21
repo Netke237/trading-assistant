@@ -3416,6 +3416,10 @@ def test_regime_window_keeps_the_scans_441_day_span_not_the_last_252_bars(mocker
     today = date.today()
     mocker.patch("app.data.market.fetch_candles",
                  return_value=_dated_bars(1250, end=today))
+    # GUARD (i): the end-trim now only runs while today's bar is still being
+    # written, so the session state is part of what this test means and is
+    # pinned rather than inherited from the wall clock the suite runs on.
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=True)
 
     out = at._fetch_scan_window_bars("MSFT")
 
@@ -3492,17 +3496,26 @@ def _weekday_bars(n: int, *, end: date) -> list[dict]:
 
 
 def test_option_a_drops_todays_unclosed_bar(mocker):
-    """The core claim: today's bar never reaches `compute_omm`.
+    """The core claim: an UNCLOSED bar dated today never reaches `compute_omm`.
 
-    On the fire path the market is provably open — `fire()` refuses on
-    `_market_is_open` before `_apply_vol_sizing` can reach the gate — so a bar
-    dated today is still being written by definition.
+    CORRECTED BY GUARD (i)
+    (AUTOTRADE-2B-CORE-F1-GUARD-I-SESSION-TEST-2026-09-21). This docstring used
+    to say "on the fire path the market is provably open — `fire()` refuses on
+    `_market_is_open`". THAT WAS FALSE, and it was the false premise that made
+    the trim unconditional: `_market_is_open` is a price-availability probe, not
+    an hours test. Whether today's bar is still being written is now asked
+    directly, so this test pins the trim under the session state where it is
+    correct and `test_guard_i_*` below pins the state where it is not.
     """
     from app.services import auto_trader as at
 
     today = date.today()
     mocker.patch("app.data.market.fetch_candles",
                  return_value=_dated_bars(400, end=today))
+    # GUARD (i): the end-trim now only runs while today's bar is still being
+    # written, so the session state is part of what this test means and is
+    # pinned rather than inherited from the wall clock the suite runs on.
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=True)
 
     out = at._fetch_scan_window_bars("MSFT")
 
@@ -3559,6 +3572,10 @@ def test_option_a_returns_empty_when_only_todays_bar_exists(mocker):
     today = date.today()
     mocker.patch("app.data.market.fetch_candles",
                  return_value=_dated_bars(1, end=today))
+    # GUARD (i): the end-trim now only runs while today's bar is still being
+    # written, so the session state is part of what this test means and is
+    # pinned rather than inherited from the wall clock the suite runs on.
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=True)
 
     assert at._fetch_scan_window_bars("MSFT") == []
 
@@ -3628,6 +3645,10 @@ def test_option_a_acceptance_holds_with_a_live_partial_bar_in_hand(mocker):
     # that moved — the +0.11% tick round 3 measured flipping the verdict.
     live = stored + [{"time": today.isoformat(), "open": 1.0, "high": 1.0,
                       "low": 1.0, "close": 1.0011, "volume": 1}]
+    # GUARD (i): the end-trim now only runs while today's bar is still being
+    # written, so the session state is part of what this test means and is
+    # pinned rather than inherited from the wall clock the suite runs on.
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=True)
 
     scan_start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
     scan_series = [b for b in stored if b["time"] >= scan_start.isoformat()]
@@ -3640,6 +3661,162 @@ def test_option_a_acceptance_holds_with_a_live_partial_bar_in_hand(mocker):
     )
     assert all(b["close"] == 1.0 for b in gate_series), (
         "the moved close of the open session reached the gate"
+    )
+
+
+# ── GUARD (i): the end-trim is conditional on a REAL session test ────────────
+# Decision AUTOTRADE-2B-CORE-F1-GUARD-I-SESSION-TEST-2026-09-21 (Kenneth).
+# Option A trimmed today's bar unconditionally, on the premise that "on the fire
+# path the market is provably open". That premise was false — `fire()` gates on
+# `_market_is_open`, a PRICE-AVAILABILITY probe that `fetch_price` satisfies
+# around the clock — so after 16:00 ET the gate was discarding a bar that had
+# CLOSED and that the scan had seen. Measured at 0.50% of Position fires
+# flipping, including scan PASS -> gate ABSTAIN, and an abstain fires UNGATED AT
+# FULL ARMED QUANTITY.
+
+
+def _ny(y, m, d, hh, mm=0):
+    from app.services.scheduling_tz import MARKET_TZ
+    return datetime(y, m, d, hh, mm, tzinfo=MARKET_TZ)
+
+
+@pytest.mark.parametrize("now,expected,why", [
+    # 2026-06-10 is a Wednesday; 2026-06-13 a Saturday.
+    (_ny(2026, 6, 10, 10, 0),  True,  "mid-session: the bar is being written"),
+    (_ny(2026, 6, 10, 9, 30),  True,  "the open itself is inside the session"),
+    (_ny(2026, 6, 10, 15, 59), True,  "one minute before the close"),
+    (_ny(2026, 6, 10, 7, 0),   True,  "PRE-OPEN: the session has not started, "
+                                      "so today's bar is not complete either"),
+    (_ny(2026, 6, 10, 16, 30), False, "after the close: today's bar IS the last "
+                                      "completed session and must be KEPT"),
+    (_ny(2026, 6, 10, 23, 59), False, "late evening, same session day"),
+    (_ny(2026, 6, 13, 8, 0),   True,  "weekend before 09:30 — trims, which is "
+                                      "the conservative side and inert (no "
+                                      "feed dates a bar on a Saturday)"),
+])
+def test_guard_i_todays_bar_is_unclosed_tracks_real_session_hours(now, expected, why):
+    """The session test itself, on explicit MARKET_TZ instants.
+
+    Both clauses are load-bearing and both are pinned here: `_market_open`
+    answers mid-session, and the `< 09:30` clause answers PRE-OPEN, which
+    `_market_open` reads as False and which would otherwise keep a bar for a
+    session that has not started — round 3's defect with the sign flipped.
+    """
+    from app.services import auto_trader as at
+
+    assert at._todays_bar_is_unclosed(now) is expected, why
+
+
+def test_guard_i_uses_the_schedulers_session_test_not_the_price_probe(mocker):
+    """The mechanism is the decision, so the mechanism is pinned.
+
+    `_market_is_open` MUST NOT be what decides this: it is a `fetch_price`
+    probe that serves close/previous_close around the clock. The scheduler's
+    `_market_open` is the real MARKET_TZ hours test and is reused rather than
+    copied.
+    """
+    from app.services import auto_trader as at
+
+    price_probe = mocker.patch.object(at, "_market_is_open", return_value=True)
+    session = mocker.patch.object(at, "_market_session_open", return_value=True)
+
+    assert at._todays_bar_is_unclosed(_ny(2026, 6, 10, 10, 0)) is True
+    assert session.call_count == 1, "the real session test was not consulted"
+    assert price_probe.call_count == 0, (
+        "the price-availability probe decided a session-hours question — that "
+        "confusion IS the defect guard (i) closes"
+    )
+
+
+def test_guard_i_keeps_todays_completed_bar_after_the_close(mocker):
+    """THE FIX: after 16:00 ET today's bar is complete, so the gate keeps it.
+
+    This is the case Option A got wrong. The scan reaches today's bar whenever
+    the symbol's stored history is at least one completed session behind
+    (`get_bars` backfills when `last < min(end, _prev_trading_day())`) — a
+    custom-universe name outside the SP500/NDX100/DOW30 prefetch. Dropping it
+    there measured a different series than the scan, and the abstain that
+    followed fires ungated at full armed quantity.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=False)
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(400, end=today))
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert out[-1]["time"] == today.isoformat(), (
+        "a COMPLETED bar dated today was discarded after the close — that is "
+        "F1, the finding guard (i) exists to close"
+    )
+
+
+def test_guard_i_still_drops_todays_bar_while_the_session_is_open(mocker):
+    """The other half: the guard must not give round 3's defect back.
+
+    Same series, same helper, opposite session state — so what changed is the
+    session test and nothing else.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=True)
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(400, end=today))
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert out[-1]["time"] == (today - timedelta(days=1)).isoformat(), (
+        "the still-open bar reached the gate — that is round 3's defect"
+    )
+
+
+def test_guard_i_is_not_consulted_when_the_feed_has_no_todays_bar(mocker):
+    """The normal after-close fire pays nothing for the guard.
+
+    `last_day >= today` is asked FIRST, so a feed whose newest bar is
+    yesterday's close — the common case — never reaches the clock read and
+    cannot be changed by it.
+    """
+    from app.services import auto_trader as at
+
+    spy = mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=True)
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(400, end=date.today() - timedelta(days=1)))
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert out, "the gate measured nothing"
+    assert spy.call_count == 0, (
+        "the session test ran on a feed that has no bar dated today"
+    )
+
+
+def test_guard_i_acceptance_after_close_gate_series_equals_scan_series(mocker):
+    """The acceptance shape, on the side Option A broke.
+
+    The scan's series is reconstructed from `scan.py:1472-1475`'s real
+    construction: `[today - 441d, today]` handed to `historical_store.get_bars`,
+    whose `_read_bars` filters `start <= date <= end`. With the symbol's stored
+    history one session behind — the custom-universe case — that range REACHES
+    today's now-completed bar, and so must the gate's.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    stored = _weekday_bars(700, end=today)
+
+    scan_start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
+    scan_series = [b for b in stored if b["time"] >= scan_start.isoformat()]
+
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=False)
+    mocker.patch("app.data.market.fetch_candles", return_value=stored)
+    gate_series = at._fetch_scan_window_bars("MSFT")
+
+    assert [b["time"] for b in gate_series] == [b["time"] for b in scan_series], (
+        "after the close the gate measured a different series than the scan"
     )
 
 
@@ -3751,6 +3928,10 @@ def test_gate_measures_on_the_window_not_the_tail(mocker):
         return real_compute(closes, **kw)
 
     mocker.patch("app.services.regime_omm.compute_omm", side_effect=_spy_compute)
+    # GUARD (i): the end-trim now only runs while today's bar is still being
+    # written, so the session state is part of what this test means and is
+    # pinned rather than inherited from the wall clock the suite runs on.
+    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=True)
     _gate_fire(mocker, symbol="MSFT", bars=_dated_bars(1250, end=date.today()))
 
     assert seen.get("n") == at._SCAN_BAR_WINDOW_DAYS, (

@@ -9,11 +9,21 @@ import uuid
 import yaml
 from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 from app.schemas import Direction, Horizon
 from app.services.premium_stop import resolve_premium_stop_pct
+from app.services.scheduling_tz import MARKET_TZ
+# The scheduler's real NYSE-hours test, reused rather than re-implemented (guard
+# (i); see `_todays_bar_is_unclosed`). Aliased because `_market_is_open` already
+# lives in this file and means something entirely different -- a price probe --
+# and confusing the two IS the defect this closes. Imported at MODULE level on
+# purpose: an ImportError must be a loud startup failure, not a raise inside
+# `_fetch_scan_window_bars`, which `_measure_trade_regime` catches into an
+# abstain that FIRES UNGATED. No new failure mode at app level either --
+# routers/strategy_watch.py already imports this module at startup.
+from app.services.strategy_watch_scheduler import _market_open as _market_session_open
 from app.scoring.conviction_sizing import (
     SizingConfigError,
     conviction_mult,
@@ -413,6 +423,76 @@ _SCAN_BAR_WINDOW_DAYS = int(1.75 * 252)
 # is never the length the regime is measured on.
 _REGIME_FETCH_BARS = 400
 
+# NYSE regular-session OPEN, in MARKET_TZ. The scheduler's `_market_open`
+# answers "is the session in progress" and does not expose its boundaries, so
+# the one boundary this file needs that it cannot ask for is named here.
+_NYSE_OPEN = dtime(9, 30)
+
+
+def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
+    """True while a bar dated TODAY is still being written.
+
+    GUARD (i), decision AUTOTRADE-2B-CORE-F1-GUARD-I-SESSION-TEST-2026-09-21
+    (Kenneth). Option A's end-trim justified itself with "on the fire path the
+    market is provably open", and THAT PREMISE IS FALSE. `fire()` gates on
+    `_market_is_open`, which is a PRICE-AVAILABILITY probe -- `fetch_price`
+    serves close/previous_close around the clock (market.py:464/:474/:479) and
+    that function's own docstring says the market "appears open". Neither fire
+    path has an hours gate at all. So after 16:00 ET the unconditional trim was
+    dropping a bar that had CLOSED, which the scan had seen: measured at 0.50%
+    of Position fires flipping, including scan PASS -> gate ABSTAIN, and an
+    abstain fires UNGATED AT FULL ARMED QUANTITY.
+
+    THE TEST IS REAL SESSION HOURS IN `MARKET_TZ`, NOT A PRICE PROBE, and it is
+    the scheduler's existing one rather than a second copy: `_market_open`
+    (strategy_watch_scheduler.py:23) is a weekday + 09:30-16:00 America/New_York
+    wall-clock test, tracked via a real IANA zone so it stays correct across
+    both the US's and the operator's own DST transition weeks.
+
+    TWO CLAUSES, AND BOTH ARE LOAD-BEARING -- `_market_open` alone is not the
+    whole question:
+      - MID-SESSION (weekday 09:30-16:00) -- the case the decision names. The
+        bar is provably still being written.
+      - BEFORE THE OPEN (t < 09:30) -- `_market_open` reads False here, and
+        reading that as "closed, so today's bar is complete" would KEEP a bar
+        for a session that has not started. That is round 3's defect with the
+        sign flipped, so pre-open trims exactly as it did before this guard.
+    Everything else -- after 16:00 on a session day -- KEEPS today's bar,
+    which is the whole point of the guard.
+
+    RESIDUALS, NAMED RATHER THAN LEFT FOR THE NEXT READER TO FIND:
+      - HALF DAYS. `_market_open` has no holiday calendar and no early-close
+        table, so on the ~2 sessions a year that close at 13:00 ET a completed
+        bar is still trimmed between 13:00 and 16:00. That is the OLD behaviour
+        surviving on 2 days instead of 365, not a new defect.
+      - FULL HOLIDAYS. `_market_open` reads True 09:30-16:00 on Thanksgiving,
+        so a bar dated today would be trimmed -- but no session ran, so no
+        feed emits one and `last_day >= today` is False. Inert.
+      - WEEKENDS after 09:30 read "complete" here. Same reason: there is no
+        bar dated a Saturday to keep or drop.
+      - `date.today()` is the HOST's date while this test is the MARKET's, and
+        they disagree for part of every day. Traced rather than waved at, and
+        NEITHER LIMB IS CHANGED BY THIS GUARD:
+          * host AHEAD of New York (the operator's own Europe/Berlin, +6):
+            between the host's midnight and NY's, host-today is NY-TOMORROW, so
+            `last_day >= today` is False and the end-trim is skipped before this
+            function is ever called. Those are post-close hours, where keeping
+            the bar is the right answer anyway.
+          * host BEHIND New York (a US-west host, -3): between NY's midnight and
+            the host's, host-today is NY-YESTERDAY, so the trim can act on
+            NY-yesterday's COMPLETED bar. This test reads "unclosed" there
+            (pre-open), so it drops that bar exactly as the unconditional trim
+            did.
+        That second limb is the host-date ANCHOR's residual, not this test's,
+        and it is out of guard (i)'s scope -- the fix for it is anchoring
+        `today` in MARKET_TZ, which is a change to the trim and belongs to
+        whatever target takes it.
+    """
+    now = now or datetime.now(MARKET_TZ)
+    if _market_session_open(now):
+        return True
+    return now.time() < _NYSE_OPEN
+
 
 def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     """Daily bars over the SAME DATE RANGE the scan measures its regime on.
@@ -563,11 +643,15 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     # DIFFERENTLY -- which is the whole subtlety and the reason this is not one
     # expression:
     #
-    #   END   -- drop any bar dated TODAY OR LATER. On the fire path the market
-    #            is provably open (`fire()` refuses on `_market_is_open` before
-    #            `_apply_vol_sizing` ever reaches this), so a bar dated today is
-    #            by construction still being written. Dropping it is exactly
-    #            "the last fully completed trading day".
+    #   END   -- drop any bar dated TODAY OR LATER, BUT ONLY WHILE TODAY'S BAR
+    #            IS STILL BEING WRITTEN (`_todays_bar_is_unclosed`, guard (i),
+    #            decision AUTOTRADE-2B-CORE-F1-GUARD-I-SESSION-TEST-2026-09-21).
+    #            The premise this comment used to carry -- "on the fire path the
+    #            market is provably open" -- WAS FALSE: `fire()`'s
+    #            `_market_is_open` is a price-availability probe, not an hours
+    #            test, so after the close the trim was discarding a COMPLETED
+    #            bar the scan had seen. See that helper for the measured cost
+    #            and for what the real session test does and does not cover.
     #   START -- `date.today() - _SCAN_BAR_WINDOW_DAYS`, WHICH IS THE SCAN'S OWN
     #            `_bar_start` (scan.py:1473), NOT the completed boundary.
     #
@@ -603,8 +687,10 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
 
     # END. Skipped entirely when the feed already ends before today, which is
     # the normal case (the newest bar is yesterday's close) -- so this costs
-    # nothing on the path it does not need to act on.
-    if last_day >= today:
+    # nothing on the path it does not need to act on. The session test is asked
+    # SECOND and only then, so the ordinary after-close fire pays no clock read
+    # at all, and so a feed with no today-dated bar cannot be affected by it.
+    if last_day >= today and _todays_bar_is_unclosed():
         today_iso = today.isoformat()
         kept = [b for b in bars if str(b.get("time", ""))[:10] < today_iso]
     else:
@@ -677,9 +763,11 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
         default. Round 1 found that length difference flipping verdicts across
         the reject threshold on identical price history, so the trim is by
         date; round 3 found the unclosed bar at the far end doing the same, so
-        the window stops before today (decision
-        AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21). The reasoning for both
-        ends lives in that helper.
+        the window stops before today WHILE TODAY'S BAR IS STILL BEING WRITTEN
+        (decision AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21, narrowed by
+        guard (i), AUTOTRADE-2B-CORE-F1-GUARD-I-SESSION-TEST-2026-09-21 -- once
+        the session has closed, today's bar IS the last completed session and is
+        kept). The reasoning for both ends lives in that helper.
 
     THE FRESHNESS HALF OF 2B IS DELIBERATELY GIVEN UP, and the phase's premise
     is narrower than it was. 2B began as "measure the traded symbol FRESHLY at
