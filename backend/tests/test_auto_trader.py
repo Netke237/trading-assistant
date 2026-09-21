@@ -1,6 +1,6 @@
 import json
 import pytest
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from app.services.auto_trader import AutoTradeService, ArmedStrategy, AutoTradeState
 
@@ -3355,4 +3355,131 @@ async def test_the_manual_fire_endpoint_fires_the_order_it_checked(mocker):
     assert fire_spy.call_count == 1
     assert fire_spy.call_args.kwargs.get("expect") is armed, (
         "the endpoint must fire the exact armed order its 400 check read"
+    )
+
+
+# ── 2B round 1 finding 1: the gate must measure the SCAN'S WINDOW ────────────
+# The gate used to call `fetch_candles(symbol)` at its 252-bar default while the
+# scan measured `compute_omm` on every bar in `[today - 441d, today]` (~306).
+# `compute_omm` is length-sensitive at both decision points, so that was not a
+# bounded disagreement: on this repo's own MSFT fixture at Position/Bearish,
+# 251 bars give +50 (PASS) and 240 give -100 (REJECT). These tests pin the
+# window, not the verdict.
+
+def _dated_bars(n: int, *, end: date, close: float = 100.0) -> list[dict]:
+    """`n` consecutive daily bars ending on `end` (weekends included; the trim
+    is by calendar date, so trading-day realism is not what is under test)."""
+    return [
+        {
+            "time": (end - timedelta(days=n - 1 - i)).isoformat(),
+            "open": close, "high": close, "low": close, "close": close,
+            "volume": 1000,
+        }
+        for i in range(n)
+    ]
+
+
+def test_regime_fetch_asks_for_more_than_the_252_default(mocker):
+    """The defect was the ASK, so the ask is what is pinned.
+
+    `fetch_candles` defaults to 252 and slices to it, so a call that omits
+    `bars` can never see the scan's ~306-bar window no matter how the result is
+    trimmed afterwards.
+    """
+    from app.services import auto_trader as at
+
+    spy = mocker.patch("app.data.market.fetch_candles", return_value=[])
+    at._fetch_scan_window_bars("MSFT")
+
+    assert spy.call_count == 1
+    asked = spy.call_args.kwargs.get("bars")
+    if asked is None and len(spy.call_args.args) > 1:
+        asked = spy.call_args.args[1]
+    assert asked is not None, (
+        "fetch_candles must be called with an explicit bar count — its 252 "
+        "default is the defect"
+    )
+    assert asked > 252, f"asked for {asked} bars, which cannot cover ~306"
+
+
+def test_regime_window_keeps_the_scans_441_day_span_not_the_last_252_bars(mocker):
+    """A long series is trimmed to the scan's window, not to 252 bars."""
+    from app.services import auto_trader as at
+
+    today = date.today()
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(1250, end=today))
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert len(out) != 252, "trimmed to fetch_candles' count default, not the window"
+    assert len(out) == at._SCAN_BAR_WINDOW_DAYS + 1, (
+        f"expected the inclusive 441-day window, got {len(out)} bars"
+    )
+    assert out[0]["time"] == (
+        today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)).isoformat(), (
+        "the oldest bar must sit on the window boundary — `_read_bars` filters "
+        "`date >= start`, so the boundary is inclusive"
+    )
+    assert out[-1]["time"] == today.isoformat()
+
+
+def test_regime_window_does_not_empty_on_a_stale_feed(mocker):
+    """A stale series must still be measurable.
+
+    Anchoring the trim on `date.today()` rather than on the newest bar in hand
+    would drop EVERY bar of a feed that has stopped updating. That is not a
+    harmless empty list: it fails `min_obs`, which abstains, and an abstain
+    FIRES UNGATED — so the fail-open limb would be reached by a stale feed
+    rather than by any agreement with the scan.
+    """
+    from app.services import auto_trader as at
+
+    stale_end = date.today() - timedelta(days=500)
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(400, end=stale_end))
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert out, "a stale feed was trimmed to nothing, which abstains and fires"
+    # 400 bars span fewer days than the window, so the whole series survives —
+    # the trim is relative to the series, not to the wall clock.
+    assert len(out) == 400
+    assert out[-1]["time"] == stale_end.isoformat()
+
+
+def test_regime_window_survives_an_unparseable_newest_bar(mocker):
+    """An unparseable anchor degrades to the untrimmed series, never to []."""
+    from app.services import auto_trader as at
+
+    bars = _dated_bars(300, end=date.today())
+    bars[-1] = dict(bars[-1], time="not-a-date")
+    mocker.patch("app.data.market.fetch_candles", return_value=bars)
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert len(out) == 300, "a bad date must not abstain the gate"
+
+
+def test_gate_measures_on_the_window_not_the_tail(mocker):
+    """End-to-end: the series `compute_omm` sees is the window, through fire().
+
+    Pinned through the real gate rather than the helper so a future refactor
+    that reverts to `fetch_candles(symbol)` is caught at the fire path.
+    """
+    from app.services import auto_trader as at
+
+    seen: dict = {}
+    from app.services.regime_omm import compute_omm as real_compute
+
+    def _spy_compute(closes, **kw):
+        seen["n"] = len(closes)
+        return real_compute(closes, **kw)
+
+    mocker.patch("app.services.regime_omm.compute_omm", side_effect=_spy_compute)
+    _gate_fire(mocker, symbol="MSFT", bars=_dated_bars(1250, end=date.today()))
+
+    assert seen.get("n") == at._SCAN_BAR_WINDOW_DAYS + 1, (
+        f"compute_omm saw {seen.get('n')} closes; the gate must measure the "
+        f"scan's window, not fetch_candles' 252-bar tail"
     )

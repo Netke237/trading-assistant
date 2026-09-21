@@ -9,7 +9,7 @@ import uuid
 import yaml
 from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 from app.schemas import Direction, Horizon
@@ -401,6 +401,109 @@ def _resolve_regime_gate(strategy: ArmedStrategy) -> dict:
 # instead: a scan with no regime signal applies no regime gate.
 _REGIME_FETCH_DEADLINE_S = 8.0
 
+# The scan's regime window, mirrored from `routers/scan.py`'s `_bar_start`
+# (`_bar_end - timedelta(days=int(1.75 * 252))`). It is 441 CALENDAR days, which
+# is ~306 TRADING days -- not the "≈ 252 trading days" that file's own comment
+# claims, and not the 252 `fetch_candles` defaults to. See
+# `_fetch_scan_window_bars` for why the difference is not cosmetic.
+_SCAN_BAR_WINDOW_DAYS = int(1.75 * 252)
+
+# Asked for so the DATE trim in `_fetch_scan_window_bars` has the whole window
+# available to trim from, whichever source filled the shared candle cache. This
+# is never the length the regime is measured on.
+_REGIME_FETCH_BARS = 400
+
+
+def _fetch_scan_window_bars(symbol: str) -> list[dict]:
+    """Daily bars over the SAME DATE RANGE the scan measures its regime on.
+
+    THIS IS THE FIX FOR 2B ROUND 1 FINDING 1. `fetch_candles(symbol)` defaults
+    to the most recent **252** bars. The scan does not: it prefers `bars_map`,
+    which is every stored bar in `[today - _SCAN_BAR_WINDOW_DAYS, today]`
+    inclusive, and measures `compute_omm` on all ~306 of them. Handing the gate
+    a 252-bar series instead is not a bounded disagreement, because
+    `compute_omm` is length-sensitive at BOTH of its decision points:
+      - `window_labels.count(current) < min_obs` -- `window` is 500 (Swing) or
+        750 (Position), larger than either series, so the WHOLE series is the
+        window and every extra bar enters the min_obs test; and
+      - `build_transition_matrix_stride`'s `sampled = recent[::lookback]` -- the
+        stride is anchored at index 0, so changing the length RE-PHASES every
+        sample. At Position (lookback=50) the matrix is estimated from ~6
+        samples, so one bar of length difference is a different matrix, not a
+        perturbation of one.
+    Measured on this repo's own MSFT fixture at Position/Bearish: 251 bars give
+    conviction +50 (PASS), 240 give -100 (REJECT), 230 abstain outright. A
+    verdict that turns on where the series happened to be cut is not a
+    measurement of the symbol, which is the whole point of 2B.
+
+    So: ask for enough bars to cover the window from either source, then trim by
+    DATE to the same ~441-day span the scan reads, anchored on the newest bar in
+    hand (see the comment on the trim for why the anchor is the series and not
+    `date.today()`). Trimming by date rather than by count is what makes this
+    source-independent -- the two readers of the shared
+    `market._candles_cache` slice it differently (`fetch_candles` returns
+    `data[-bars:]`, `fetch_candles_async` returns `data` whole), so a
+    count-based match would still diverge on a cache the scan had warmed.
+
+    WHAT THIS DOES NOT CLOSE, named rather than glossed. The scan's own series
+    length varies BY SOURCE, and `scan.py` is outside this phase's paths:
+      - DB bars -- the normal path, since `bars_map` is prefetched for every
+        scanned symbol: ~306 bars over this window. THIS PATH NOW MATCHES IT,
+        by date.
+      - `fetch_candles_async` via Tradier, on a DB miss: 252 bars, because that
+        reader slices `day_list[-bars:]` at its own 252 default.
+      - `fetch_candles_async` via the yfinance fallback: ~1250 bars, cached and
+        returned whole.
+    A fire whose scan took one of the two fallback paths still measures a
+    different-length series than that scan did. That is a real residual, on a
+    symbol the DB had no bars for; it is strictly smaller than what it replaces
+    (which mismatched on EVERY fire, including the normal one) and it cannot be
+    fixed from inside this phase's paths.
+
+    The residual on the matched path is the PROVIDER, and only the provider: the
+    scan's DB bars come from Alpaca/Tiingo and carry an adjusted close, this
+    path reads Tradier/yfinance, so individual closes can differ on a cold
+    cache. That is a genuinely bounded disagreement between two series covering
+    THE SAME TRADING DAYS -- which is what the previous note claimed and what
+    the code did not deliver.
+    """
+    from app.data.market import fetch_candles
+
+    bars = fetch_candles(symbol, bars=_REGIME_FETCH_BARS)
+    if not bars:
+        return bars
+
+    # ANCHORED ON THE SERIES' OWN LAST BAR, NOT ON `date.today()`, and that is
+    # load-bearing rather than incidental. Anchoring on today matches the scan's
+    # `[today - 441d, today]` exactly while the feed is fresh -- and silently
+    # returns ZERO bars the moment it is not, because every bar then falls
+    # before the cutoff. Zero bars is not a safe default here: it fails the
+    # `min_obs` check, which ABSTAINS, and an abstain FIRES UNGATED. So a stale
+    # or halted feed would have converted a measurable symbol into an
+    # unmeasured fire -- the fail-open limb, reached by accident rather than by
+    # the scan's agreement. Anchoring on the last bar keeps the window the same
+    # ~441-day span and degrades to "the most recent 441 days this feed has"
+    # instead of to nothing.
+    #
+    # THE COST, stated: when the feed is fresh the two anchors coincide and this
+    # matches the scan's window exactly; when the feed trails by a day or two
+    # (a weekend, a holiday, a late close) the window is shifted back by that
+    # much, so the oldest bar or two can differ from the scan's. That is a
+    # residual of one or two bars at the far end of the window, against the ~54
+    # this helper exists to stop discarding.
+    try:
+        last_day = date.fromisoformat(str(bars[-1]["time"])[:10])
+    except (ValueError, KeyError, TypeError):
+        # An unparseable date on the newest bar means the trim cannot be
+        # anchored. Hand back the untrimmed series rather than abstaining: a
+        # longer-than-the-scan series is the defect this helper narrows, an
+        # abstain is the fail-open limb, and the former is the safer failure.
+        return bars
+    cutoff = (last_day - timedelta(days=_SCAN_BAR_WINDOW_DAYS)).isoformat()
+    # `_read_bars` filters `date >= start`, so this boundary is inclusive to
+    # match it rather than dropping the window's oldest bar.
+    return [b for b in bars if str(b.get("time", "")) >= cutoff]
+
 
 def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
     """Measure THIS symbol's own regime, in THIS trade's frame, right now.
@@ -421,17 +524,22 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
       - instrument:  the traded symbol            (was: SPX)
       - window:      regime.<horizon> from YAML   (was: compute_omm defaults)
       - frame:       compute_omm(direction=...)   (was: a mirrored bullish cache)
-      - bars:        daily, ~252, the same shared `_candles_cache` the options
-        scan fills -- so on a normal fire this is the SAME SERIES the scan saw,
-        not merely a similar one.
+      - bars:        daily, over the scan's own `[today - 441d, today]` window
+        via `_fetch_scan_window_bars` -- ~306 bars, NOT `fetch_candles`'s 252
+        default. Round 1 found that difference flipping verdicts across the
+        reject threshold on identical price history, so the trim is by date and
+        the reasoning lives in that helper's docstring.
     The residual is the SOURCE, and it is named rather than glossed: the scan
-    prefers DB bars (`historical_store.get_bars`, ~252 trading days) and falls
-    back to `fetch_candles_async`; this path calls the sync `fetch_candles`.
-    Both share `market._candles_cache` keyed per calendar day, so they agree
-    whenever the cache is warm and can differ by provider when it is not. That
-    is a bounded disagreement between two ~252-bar daily series for one symbol
-    on one day -- a different order of thing from SPX-versus-MSFT, and the
-    reason it is documented here instead of being called equivalence.
+    prefers DB bars (`historical_store.get_bars`, Alpaca/Tiingo, adjusted
+    close) and falls back to `fetch_candles_async`; this path calls the sync
+    `fetch_candles` (Tradier/yfinance). On the scan's normal DB path the two
+    now cover THE SAME TRADING DAYS and can differ only by provider on a cold
+    cache. When the scan itself fell back to `fetch_candles_async`, its series
+    length differs from this one by that reader's own slicing, which is a
+    residual `scan.py` owns and this phase's paths cannot reach -- see
+    `_fetch_scan_window_bars`. Either way it is a different order of thing from
+    SPX-versus-MSFT, and the reason it is documented here instead of being
+    called equivalence.
 
     NO CONVICTION MIRROR. `compute_omm(direction=...)` already returns
     `conviction_pct` in the trade's frame (`regime_omm.py`: `conviction(sig,
@@ -471,8 +579,7 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
 
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        from app.data.market import fetch_candles
-        future = ex.submit(fetch_candles, strategy.symbol)
+        future = ex.submit(_fetch_scan_window_bars, strategy.symbol)
         try:
             bars = future.result(timeout=_REGIME_FETCH_DEADLINE_S)
         except concurrent.futures.TimeoutError:
