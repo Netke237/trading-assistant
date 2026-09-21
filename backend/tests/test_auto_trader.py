@@ -3461,6 +3461,109 @@ def test_regime_window_survives_an_unparseable_newest_bar(mocker):
     assert len(out) == 300, "a bad date must not abstain the gate"
 
 
+def _weekday_bars(n: int, *, end: date) -> list[dict]:
+    """`n` weekday bars ending on or before `end`, oldest first."""
+    out, d = [], end
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append({"time": d.isoformat(), "open": 1.0, "high": 1.0,
+                        "low": 1.0, "close": 1.0, "volume": 1})
+        d -= timedelta(days=1)
+    return list(reversed(out))
+
+
+def test_gate_does_not_rewrite_the_shared_candle_cache_when_warm(mocker):
+    """2B round 2 finding 1 — introduced by round 1's own fix.
+
+    `market._candles_cache` is keyed by symbol with NO length dimension, and its
+    two readers disagree about length: `fetch_candles` serves a warm entry only
+    `if len(data) >= bars`, `fetch_candles_async` returns it WHOLE. The gate is
+    the only consumer asking for `_REGIME_FETCH_BARS`, so asking against an
+    entry someone else warmed at 252 misses and REWRITES it.
+
+    That is user-visible: `/api/contracts/structural-stop` reads this cache and
+    `find_structural_stop` is length-sensitive, so a fire would move the stop
+    price the position card prints for every later reader that day.
+    """
+    import app.data.market as market
+    from app.services import auto_trader as at
+
+    today = date.today()
+    warm = _weekday_bars(252, end=today)
+    mocker.patch.dict(market._candles_cache, {"ZZZ": (warm, today.isoformat())},
+                      clear=True)
+    # Force a cache MISS so the real fetch path runs and would write.
+    mocker.patch.object(market, "httpx", **{"get.side_effect": RuntimeError("no net")})
+    mocker.patch.object(market, "_fetch_daily_yf",
+                        side_effect=lambda s: _weekday_bars(600, end=today))
+
+    at._fetch_scan_window_bars("ZZZ")
+
+    after, _stamp = market._candles_cache["ZZZ"]
+    assert after is warm, (
+        "the fire path rewrote the shared candle cache; every later "
+        "fetch_candles_async reader would see a different series, and "
+        "find_structural_stop prints a different stop off it"
+    )
+    assert len(after) == 252
+
+
+def test_gate_leaves_a_cold_candle_cache_cold(mocker):
+    """A cold entry is restored to COLD, not left populated.
+
+    Leaving the gate's wider-than-anyone-wants series behind is the same defect
+    one step later: the next `fetch_candles_async` reader would get ~600 rows
+    where it would otherwise have fetched and cached its own ~252.
+    """
+    import app.data.market as market
+    from app.services import auto_trader as at
+
+    today = date.today()
+    mocker.patch.dict(market._candles_cache, {}, clear=True)
+    mocker.patch.object(market, "httpx", **{"get.side_effect": RuntimeError("no net")})
+    mocker.patch.object(market, "_fetch_daily_yf",
+                        side_effect=lambda s: _weekday_bars(600, end=today))
+
+    out = at._fetch_scan_window_bars("ZZZ")
+
+    assert out, "the gate must still get its series"
+    assert "ZZZ" not in market._candles_cache, (
+        "a cold cache must be left cold — the gate is a reader, not an author"
+    )
+
+
+def test_gate_restores_the_cache_even_when_the_fetch_raises(mocker):
+    """The restore is in a `finally`, and that is reachable, not defensive.
+
+    `_measure_trade_regime` wraps this call in `except Exception -> abstain`, so
+    a provider that raises mid-write is a live path. If the restore sat on the
+    happy path only, a raising fetch would leave a rewritten shared cache behind
+    and the abstain would fire ungated on top of it.
+    """
+    import app.data.market as market
+    from app.services import auto_trader as at
+
+    today = date.today()
+    warm = _weekday_bars(252, end=today)
+    mocker.patch.dict(market._candles_cache, {"ZZZ": (warm, today.isoformat())},
+                      clear=True)
+
+    def _write_then_raise(symbol, bars=252):
+        market._candles_cache[symbol] = (_weekday_bars(600, end=today),
+                                         today.isoformat())
+        raise RuntimeError("provider blew up after caching")
+
+    mocker.patch("app.data.market.fetch_candles", side_effect=_write_then_raise)
+
+    with pytest.raises(RuntimeError):
+        at._fetch_scan_window_bars("ZZZ")
+
+    after, _stamp = market._candles_cache["ZZZ"]
+    assert after is warm, (
+        "a raising fetch left its write in the shared cache"
+    )
+
+
 def test_gate_measures_on_the_window_not_the_tail(mocker):
     """End-to-end: the series `compute_omm` sees is the window, through fire().
 

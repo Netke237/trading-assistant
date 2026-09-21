@@ -467,9 +467,62 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     THE SAME TRADING DAYS -- which is what the previous note claimed and what
     the code did not deliver.
     """
+    import app.data.market as _market
     from app.data.market import fetch_candles
 
-    bars = fetch_candles(symbol, bars=_REGIME_FETCH_BARS)
+    # THE FIRE PATH READS THE SHARED CANDLE CACHE, IT NEVER AUTHORS IT.
+    #
+    # 2B ROUND 2 FINDING 1, and it was introduced by round 1's own fix.
+    # `market._candles_cache` is ONE dict keyed by symbol alone -- it has no
+    # length dimension -- and its two readers disagree about length:
+    # `fetch_candles` serves a warm entry only `if len(data) >= bars` and then
+    # slices `data[-bars:]`, while `fetch_candles_async` returns `data` WHOLE
+    # with no length check at all. This function is the only consumer that asks
+    # for a length nobody else asks for (`_REGIME_FETCH_BARS`, to cover the
+    # scan's window). So asking for 400 against an entry some other caller
+    # warmed at 252 MISSES, refetches over a wider span, and REWRITES the shared
+    # entry with ~480-600 rows -- measured, not theorised.
+    #
+    # That is a wrong number in front of a user, not merely churn.
+    # `/api/contracts/structural-stop` (routers/contracts.py:564) reads this
+    # cache through `fetch_candles_async` and runs `find_structural_stop` over
+    # the WHOLE list, and that function is length-sensitive: on this repo's MSFT
+    # fixture at the same reference price it returns 374.04 at 120-180 bars and
+    # 380.43 at 200-251. So firing one auto-trade would silently move the stop
+    # price the position card prints -- and the premium-vs-stop cost line
+    # computed against it -- for every later reader that calendar day.
+    #
+    # Hence: snapshot the entry, let `fetch_candles` do whatever it needs, and
+    # put the shared cache back exactly as it was found. A cold cache is
+    # restored to COLD rather than left populated, because leaving our
+    # wider-than-anyone-wants series behind is the same defect one step later.
+    #
+    # THE RESTORE CANNOT TELL OUR WRITE FROM SOMEONE ELSE'S, and that limit is
+    # stated rather than papered over: `fetch_candles` returns a SLICE of the
+    # list it caches, so there is no identity to match on. The guard therefore
+    # restores whenever the entry CHANGED. If another request legitimately
+    # re-warmed this symbol inside our fetch window -- reachable, because the 8s
+    # deadline abandons this thread while it keeps running -- our snapshot wins
+    # and that request's entry is reverted. The cost is bounded to serving a
+    # slightly older SAME-DAY series for one symbol, which is the entry every
+    # reader was already using; the alternative is the measured, user-visible
+    # stop change on EVERY fire. That trade is the reason this is a restore and
+    # not a lock.
+    #
+    # This reaches into a private module global deliberately: the alternative is
+    # a `cache=False` parameter on `fetch_candles`, which lives in `app/data/`,
+    # is read by eight other call sites, and is outside this phase's paths.
+    _cache = _market._candles_cache
+    _before = _cache.get(symbol)
+    try:
+        bars = fetch_candles(symbol, bars=_REGIME_FETCH_BARS)
+    finally:
+        if _cache.get(symbol) is not _before:
+            if _before is None:
+                _cache.pop(symbol, None)
+            else:
+                _cache[symbol] = _before
+
     if not bars:
         return bars
 
