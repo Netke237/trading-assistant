@@ -3403,7 +3403,14 @@ def test_regime_fetch_asks_for_more_than_the_252_default(mocker):
 
 
 def test_regime_window_keeps_the_scans_441_day_span_not_the_last_252_bars(mocker):
-    """A long series is trimmed to the scan's window, not to 252 bars."""
+    """A long series is trimmed to the scan's window, not to 252 bars.
+
+    UPDATED BY OPTION A (AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21). The
+    START is unchanged and still sits on the scan's own `_bar_start`
+    (`today - 441d`, inclusive). The END no longer reaches today: the window
+    now stops at the last fully completed session, so the span is 441 bars
+    rather than 442.
+    """
     from app.services import auto_trader as at
 
     today = date.today()
@@ -3413,15 +3420,20 @@ def test_regime_window_keeps_the_scans_441_day_span_not_the_last_252_bars(mocker
     out = at._fetch_scan_window_bars("MSFT")
 
     assert len(out) != 252, "trimmed to fetch_candles' count default, not the window"
-    assert len(out) == at._SCAN_BAR_WINDOW_DAYS + 1, (
-        f"expected the inclusive 441-day window, got {len(out)} bars"
-    )
     assert out[0]["time"] == (
         today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)).isoformat(), (
-        "the oldest bar must sit on the window boundary — `_read_bars` filters "
-        "`date >= start`, so the boundary is inclusive"
+        "the oldest bar must sit on the SCAN's window boundary — `_read_bars` "
+        "filters `date >= start`, so the boundary is inclusive. Option A moved "
+        "the END of the window; moving the START too would shift the cutoff a "
+        "day earlier and re-introduce round 1's length defect."
     )
-    assert out[-1]["time"] == today.isoformat()
+    assert out[-1]["time"] == (today - timedelta(days=1)).isoformat(), (
+        "the newest bar must be the last COMPLETED session, never today's "
+        "still-open bar"
+    )
+    assert len(out) == at._SCAN_BAR_WINDOW_DAYS, (
+        f"expected the 441-day span ending before today, got {len(out)} bars"
+    )
 
 
 def test_regime_window_does_not_empty_on_a_stale_feed(mocker):
@@ -3470,6 +3482,165 @@ def _weekday_bars(n: int, *, end: date) -> list[dict]:
                         "low": 1.0, "close": 1.0, "volume": 1})
         d -= timedelta(days=1)
     return list(reversed(out))
+
+
+# ── OPTION A: the gate measures the series the SCAN measured ─────────────────
+# Decision AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21. Round 3 measured the
+# gate deciding on TODAY'S UNCLOSED BAR, which the scan that armed the card
+# never saw: a +0.11% intraday tick turned a scan-REJECT into an ABSTAIN, and an
+# abstain fires UNGATED AT FULL SIZE.
+
+
+def test_option_a_drops_todays_unclosed_bar(mocker):
+    """The core claim: today's bar never reaches `compute_omm`.
+
+    On the fire path the market is provably open — `fire()` refuses on
+    `_market_is_open` before `_apply_vol_sizing` can reach the gate — so a bar
+    dated today is still being written by definition.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(400, end=today))
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert out, "dropping the unclosed bar must not empty a healthy series"
+    assert all(b["time"] < today.isoformat() for b in out), (
+        "a bar dated today survived the trim — that is the round-3 defect"
+    )
+    assert out[-1]["time"] == (today - timedelta(days=1)).isoformat()
+
+
+def test_option_a_does_not_move_the_window_start(mocker):
+    """The trap Option A had to avoid, pinned so a refactor cannot walk into it.
+
+    The two ends are anchored DIFFERENTLY: the end on the last completed
+    session, the start on `date.today()` exactly as scan.py:1473's `_bar_start`
+    is. Anchoring the span on the completed boundary instead would shift the
+    cutoff one day earlier, and a bar sitting on that extra day would enter the
+    gate's series and not the scan's. Round 1 measured what one bar of length
+    difference does: `recent[::lookback]` re-phases from index 0, so at Position
+    (lookback=50, ~6 samples) it is a different matrix. That extra day is a
+    trading day ~5/7 of the time.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    scan_start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
+    # A bar sitting exactly one day BEFORE the scan's start — the bar a
+    # boundary-anchored span would wrongly have let in.
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(600, end=today))
+
+    out = at._fetch_scan_window_bars("MSFT")
+
+    assert out[0]["time"] == scan_start.isoformat(), (
+        f"window starts at {out[0]['time']}, but the scan starts at "
+        f"{scan_start.isoformat()}"
+    )
+    assert all(b["time"] >= scan_start.isoformat() for b in out), (
+        "a bar older than the scan's own start anchor entered the gate's series"
+    )
+
+
+def test_option_a_returns_empty_when_only_todays_bar_exists(mocker):
+    """No completed data means no measurement — NOT a fall back to the open bar.
+
+    Documented rather than glossed: the empty list fails `min_obs`, which
+    abstains, and an abstain fires ungated. That is the same thing the scan does
+    with a series it cannot measure (`regime_signal = None` -> no gate), and a
+    feed holding only today's bar is a broken feed. Handing the gate back the
+    unclosed bar would be the defect this decision exists to remove.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(1, end=today))
+
+    assert at._fetch_scan_window_bars("MSFT") == []
+
+
+def test_option_a_acceptance_gate_series_equals_scan_series(mocker):
+    """THE ACCEPTANCE TEST Kenneth set: the same series, not merely a correct one.
+
+    "The gate's series and the scan's series are THE SAME SERIES on a live fire
+    during market hours — same newest bar, not just same oldest."
+
+    The scan's side is reconstructed from its real construction rather than
+    asserted: `scan.py:1472-1475` builds `[date.today() - 441d, date.today()]`
+    and hands it to `historical_store.get_bars`, whose `_read_bars` filters
+    `start <= date <= end` over what the DB holds. In the normal case the DB
+    holds through the last completed session (nightly ingestion), so that range
+    yields every stored bar from the scan's start through yesterday.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    # What the DB holds on a normal day: weekday bars through the last
+    # completed session. 700 weekdays comfortably outruns the 441-day window.
+    stored = _weekday_bars(700, end=today - timedelta(days=1))
+
+    # ── The SCAN's series, built the way scan.py builds it ──
+    scan_start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
+    scan_end = today
+    scan_series = [
+        b for b in stored
+        if scan_start.isoformat() <= b["time"] <= scan_end.isoformat()
+    ]
+
+    # ── The GATE's series, through the real helper ──
+    mocker.patch("app.data.market.fetch_candles", return_value=stored)
+    gate_series = at._fetch_scan_window_bars("MSFT")
+
+    assert gate_series, "the gate measured nothing"
+    assert gate_series[-1]["time"] == scan_series[-1]["time"], (
+        "SAME NEWEST BAR is the half round 3 failed: gate ends "
+        f"{gate_series[-1]['time']}, scan ends {scan_series[-1]['time']}"
+    )
+    assert gate_series[0]["time"] == scan_series[0]["time"], (
+        "SAME OLDEST BAR is the half round 1 fixed: gate starts "
+        f"{gate_series[0]['time']}, scan starts {scan_series[0]['time']}"
+    )
+    assert len(gate_series) == len(scan_series), (
+        f"same ends but {len(gate_series)} vs {len(scan_series)} bars — "
+        "compute_omm is length-sensitive at both of its decision points"
+    )
+    assert [b["time"] for b in gate_series] == [b["time"] for b in scan_series]
+
+
+def test_option_a_acceptance_holds_with_a_live_partial_bar_in_hand(mocker):
+    """The live-fire case: the feed HAS today's partial bar and the DB does not.
+
+    This is the shape that produced round 3's finding — the gate's provider
+    (Tradier/yfinance, intraday) serves a bar for the open session while the
+    scan's DB stops at the last close. Before Option A the gate measured a
+    series one bar longer than the scan's, on a bar whose value depended on the
+    instant the trigger landed.
+    """
+    from app.services import auto_trader as at
+
+    today = date.today()
+    stored = _weekday_bars(700, end=today - timedelta(days=1))
+    # The gate's feed additionally carries today's still-open bar, at a price
+    # that moved — the +0.11% tick round 3 measured flipping the verdict.
+    live = stored + [{"time": today.isoformat(), "open": 1.0, "high": 1.0,
+                      "low": 1.0, "close": 1.0011, "volume": 1}]
+
+    scan_start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
+    scan_series = [b for b in stored if b["time"] >= scan_start.isoformat()]
+
+    mocker.patch("app.data.market.fetch_candles", return_value=live)
+    gate_series = at._fetch_scan_window_bars("MSFT")
+
+    assert [b["time"] for b in gate_series] == [b["time"] for b in scan_series], (
+        "the gate measured a different series than the scan during market hours"
+    )
+    assert all(b["close"] == 1.0 for b in gate_series), (
+        "the moved close of the open session reached the gate"
+    )
 
 
 def test_gate_does_not_rewrite_the_shared_candle_cache_when_warm(mocker):
@@ -3582,7 +3753,10 @@ def test_gate_measures_on_the_window_not_the_tail(mocker):
     mocker.patch("app.services.regime_omm.compute_omm", side_effect=_spy_compute)
     _gate_fire(mocker, symbol="MSFT", bars=_dated_bars(1250, end=date.today()))
 
-    assert seen.get("n") == at._SCAN_BAR_WINDOW_DAYS + 1, (
+    assert seen.get("n") == at._SCAN_BAR_WINDOW_DAYS, (
         f"compute_omm saw {seen.get('n')} closes; the gate must measure the "
         f"scan's window, not fetch_candles' 252-bar tail"
     )
+    # Option A (AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21): 441, not 442.
+    # The window still STARTS on the scan's `today - 441d` anchor; it now ENDS
+    # at the last fully completed session instead of on today's open bar.

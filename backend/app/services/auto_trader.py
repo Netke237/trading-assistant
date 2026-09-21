@@ -437,10 +437,11 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     measurement of the symbol, which is the whole point of 2B.
 
     So: ask for enough bars to cover the window from either source, then trim by
-    DATE to the same ~441-day span the scan reads, anchored on the newest bar in
-    hand (see the comment on the trim for why the anchor is the series and not
-    `date.today()`). Trimming by date rather than by count is what makes this
-    source-independent -- the two readers of the shared
+    DATE to the same span the scan reads -- `[date.today() - 441d, the last
+    fully completed session]`, the two ends anchored differently and for
+    different reasons (see the block comment on the trim; the start is the
+    scan's own `_bar_start`, the end is Option A). Trimming by date rather than
+    by count is what makes this source-independent -- the two readers of the shared
     `market._candles_cache` slice it differently (`fetch_candles` returns
     `data[-bars:]`, `fetch_candles_async` returns `data` whole), so a
     count-based match would still diverge on a cache the scan had warmed.
@@ -466,6 +467,27 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     cache. That is a genuinely bounded disagreement between two series covering
     THE SAME TRADING DAYS -- which is what the previous note claimed and what
     the code did not deliver.
+
+    DOES OPTION A LET THE FIRE PATH READ THE STORE INSTEAD OF THE NETWORK? NO,
+    AND THIS IS THE MEASURED ANSWER TO THE QUESTION THE DECISION LEFT OPEN
+    RATHER THAN A HOPE. A is a WINDOW change, not a SOURCE change: this function
+    still calls `market.fetch_candles` and still makes the bounded network call
+    `_measure_trade_regime` documents. Three measured facts block substituting
+    `historical_store.get_bars`, and they are recorded so the next reader does
+    not re-derive them:
+      - `get_bars` is `async def`; the entire fire chain is sync -- `fire()` ->
+        `_apply_vol_sizing` -> `_apply_regime_gate` -> `_measure_trade_regime`
+        -> here. Reaching it needs a loop bridge on the fire path.
+      - `get_bars` is not a read. On a stale symbol it FETCHES and then
+        `_store_bars` + `await db.commit()` (three commit sites). That is the
+        fire path writing shared state every other reader sees -- the same
+        defect class as round 2's candle-cache rewrite, one layer down and
+        durable rather than per-process.
+      - `get_bars(symbol, start, today)` would hand back whatever the DB holds
+        through TODAY, partial bar included, because `_prev_trading_day()` is
+        its fetch-staleness test and never a trim. The end-trim below would
+        still be required.
+    So the network call stays, and the source residual above stays with it.
     """
     import app.data.market as _market
     from app.data.market import fetch_candles
@@ -526,36 +548,108 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     if not bars:
         return bars
 
-    # ANCHORED ON THE SERIES' OWN LAST BAR, NOT ON `date.today()`, and that is
-    # load-bearing rather than incidental. Anchoring on today matches the scan's
-    # `[today - 441d, today]` exactly while the feed is fresh -- and silently
-    # returns ZERO bars the moment it is not, because every bar then falls
-    # before the cutoff. Zero bars is not a safe default here: it fails the
-    # `min_obs` check, which ABSTAINS, and an abstain FIRES UNGATED. So a stale
-    # or halted feed would have converted a measurable symbol into an
-    # unmeasured fire -- the fail-open limb, reached by accident rather than by
-    # the scan's agreement. Anchoring on the last bar keeps the window the same
-    # ~441-day span and degrades to "the most recent 441 days this feed has"
-    # instead of to nothing.
+    # ── OPTION A: THE WINDOW ENDS AT THE LAST FULLY COMPLETED SESSION ────────
     #
-    # THE COST, stated: when the feed is fresh the two anchors coincide and this
-    # matches the scan's window exactly; when the feed trails by a day or two
-    # (a weekend, a holiday, a late close) the window is shifted back by that
-    # much, so the oldest bar or two can differ from the scan's. That is a
-    # residual of one or two bars at the far end of the window, against the ~54
-    # this helper exists to stop discarding.
+    # Decision AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21 (Kenneth). 2B's
+    # round-3 finding was that the gate decided on TODAY'S UNCLOSED BAR -- a bar
+    # the scan that armed the card never saw. Measured, that flipped fire/no-fire
+    # in up to 1.00% of position-Bearish cases: a +0.11% intraday tick turned a
+    # scan-REJECT into an ABSTAIN, and an abstain fires UNGATED AT FULL SIZE. It
+    # also made the refusal message ("the scan's own regime_gate rule drops this
+    # setup") false in exactly those cases, because the scan's rule was not what
+    # ran.
+    #
+    # So the window is trimmed at BOTH ends, and the two ends are anchored
+    # DIFFERENTLY -- which is the whole subtlety and the reason this is not one
+    # expression:
+    #
+    #   END   -- drop any bar dated TODAY OR LATER. On the fire path the market
+    #            is provably open (`fire()` refuses on `_market_is_open` before
+    #            `_apply_vol_sizing` ever reaches this), so a bar dated today is
+    #            by construction still being written. Dropping it is exactly
+    #            "the last fully completed trading day".
+    #   START -- `date.today() - _SCAN_BAR_WINDOW_DAYS`, WHICH IS THE SCAN'S OWN
+    #            `_bar_start` (scan.py:1473), NOT the completed boundary.
+    #
+    # WHY THE START IS NOT ALSO MOVED BACK A DAY, because it is the trap here.
+    # Anchoring the span on the completed boundary instead of on today would
+    # shift the cutoff one day earlier, and a bar sitting on that extra day
+    # would then enter the gate's series and not the scan's. Round 1 measured
+    # what ONE bar of length difference does: `build_transition_matrix_stride`
+    # re-phases `recent[::lookback]` from index 0, so at Position (lookback=50,
+    # ~6 samples) it is a different matrix, not a perturbation of one. That day
+    # is a trading day ~5/7 of the time, so "correcting" both ends together
+    # would have re-introduced round 1's defect on most fires while fixing
+    # round 3's. The scan anchors its start on today; so does this.
+    #
+    # WHY NOT `historical_store._prev_trading_day()`, which the decision names
+    # as the boundary: that helper is `most_recent_trading_day() - 1 day`, and
+    # `get_bars` uses it as a FETCH-STALENESS TEST, never as a trim -- it returns
+    # whatever the DB holds in `[start, today]`. Used as a ceiling it is also
+    # wrong on a weekend: on a Saturday it returns THURSDAY, discarding Friday,
+    # which is fully completed. "Dated before today" needs no weekday arithmetic,
+    # is right on weekends and holidays alike, and is what the decision's words
+    # ("the last fully completed trading day") actually mean.
     try:
         last_day = date.fromisoformat(str(bars[-1]["time"])[:10])
     except (ValueError, KeyError, TypeError):
-        # An unparseable date on the newest bar means the trim cannot be
+        # An unparseable date on the newest bar means neither end can be
         # anchored. Hand back the untrimmed series rather than abstaining: a
         # longer-than-the-scan series is the defect this helper narrows, an
         # abstain is the fail-open limb, and the former is the safer failure.
         return bars
-    cutoff = (last_day - timedelta(days=_SCAN_BAR_WINDOW_DAYS)).isoformat()
+
+    today = date.today()
+
+    # END. Skipped entirely when the feed already ends before today, which is
+    # the normal case (the newest bar is yesterday's close) -- so this costs
+    # nothing on the path it does not need to act on.
+    if last_day >= today:
+        today_iso = today.isoformat()
+        kept = [b for b in bars if str(b.get("time", ""))[:10] < today_iso]
+    else:
+        kept = bars
+
+    if not kept:
+        # Every bar in hand is today's or later, so there is NO completed data
+        # to measure. Returning the untrimmed series would hand the gate back
+        # the unclosed bar this decision exists to remove, so it returns empty
+        # and lets `_measure_trade_regime`'s `min_obs` check abstain with a log
+        # that names the bar count. That abstain fires ungated -- stated plainly
+        # rather than glossed -- but it is the same thing the scan does with a
+        # series it cannot measure (`regime_signal = None` -> no gate), and a
+        # feed holding only today's bar is a broken feed, not a fire decision.
+        return []
+
+    # START. The scan's anchor, not the series'.
     # `_read_bars` filters `date >= start`, so this boundary is inclusive to
     # match it rather than dropping the window's oldest bar.
-    return [b for b in bars if str(b.get("time", "")) >= cutoff]
+    cutoff = (today - timedelta(days=_SCAN_BAR_WINDOW_DAYS)).isoformat()
+    out = [b for b in kept if str(b.get("time", "")) >= cutoff]
+    if out:
+        return out
+
+    # STALE-FEED NET, and this is why the start cannot be anchored on today
+    # UNCONDITIONALLY. A feed that has stopped updating for longer than the
+    # window has EVERY bar falling before a today-anchored cutoff, and empty is
+    # not a safe default: it fails `min_obs`, which abstains, and an abstain
+    # fires ungated -- the fail-open limb reached by a dead feed rather than by
+    # any agreement with the scan. So when today-anchoring would empty the
+    # series, fall back to anchoring the same span on the series' own newest
+    # COMPLETED bar. The window degrades to "the most recent 441 days this feed
+    # has" instead of to nothing.
+    #
+    # NOTE this net only arms when the feed trails by MORE THAN THE WHOLE
+    # WINDOW (441 calendar days). An earlier note here claimed a weekend or a
+    # late close was enough to empty a today-anchored trim; that was overstated
+    # and is corrected rather than left standing -- a bar from yesterday sits
+    # ~440 days inside the cutoff, so ordinary staleness never reaches this.
+    try:
+        anchor = date.fromisoformat(str(kept[-1]["time"])[:10])
+    except (ValueError, KeyError, TypeError):
+        return kept
+    stale_cutoff = (anchor - timedelta(days=_SCAN_BAR_WINDOW_DAYS)).isoformat()
+    return [b for b in kept if str(b.get("time", "")) >= stale_cutoff]
 
 
 def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
@@ -577,11 +671,23 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
       - instrument:  the traded symbol            (was: SPX)
       - window:      regime.<horizon> from YAML   (was: compute_omm defaults)
       - frame:       compute_omm(direction=...)   (was: a mirrored bullish cache)
-      - bars:        daily, over the scan's own `[today - 441d, today]` window
-        via `_fetch_scan_window_bars` -- ~306 bars, NOT `fetch_candles`'s 252
-        default. Round 1 found that difference flipping verdicts across the
-        reject threshold on identical price history, so the trim is by date and
-        the reasoning lives in that helper's docstring.
+      - bars:        daily, over the scan's own start anchor `today - 441d`
+        and ending at the LAST FULLY COMPLETED SESSION via
+        `_fetch_scan_window_bars` -- ~306 bars, NOT `fetch_candles`'s 252
+        default. Round 1 found that length difference flipping verdicts across
+        the reject threshold on identical price history, so the trim is by
+        date; round 3 found the unclosed bar at the far end doing the same, so
+        the window stops before today (decision
+        AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21). The reasoning for both
+        ends lives in that helper.
+
+    THE FRESHNESS HALF OF 2B IS DELIBERATELY GIVEN UP, and the phase's premise
+    is narrower than it was. 2B began as "measure the traded symbol FRESHLY at
+    fire time"; under Option A it is "measure the TRADED SYMBOL rather than the
+    INDEX -- which was always the real defect, SPX-versus-MSFT -- ON THE SAME
+    COMPLETED-BAR SERIES THE SCAN USED". The per-symbol half is untouched. The
+    freshest bar available is discarded on purpose, because it was buying a
+    1-in-100 coin flip rather than information.
     The residual is the SOURCE, and it is named rather than glossed: the scan
     prefers DB bars (`historical_store.get_bars`, Alpaca/Tiingo, adjusted
     close) and falls back to `fetch_candles_async`; this path calls the sync
