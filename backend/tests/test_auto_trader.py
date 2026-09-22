@@ -3693,6 +3693,24 @@ def _ny(y, m, d, hh, mm=0):
     (_ny(2026, 6, 13, 8, 0),   True,  "weekend before 09:30 — trims, which is "
                                       "the conservative side and inert (no "
                                       "feed dates a bar on a Saturday)"),
+    # WEEKEND AFTER 09:30 — the one arm the docstring names explicitly
+    # ("WEEKENDS after 09:30 read complete here") and the only arm round 1
+    # found unpinned. Inert in production because `last_day >= today` is False
+    # on a Saturday, but it is that INERTNESS ARGUMENT that goes unchecked if
+    # the arm itself is never exercised.
+    (_ny(2026, 6, 13, 10, 0),  False, "Saturday mid-'session': `_market_open` "
+                                      "is False on a weekend and 10:00 is not "
+                                      "< 09:30, so this reads complete"),
+    (_ny(2026, 6, 13, 16, 0),  False, "Saturday at the 16:00 boundary — the "
+                                      "weekday inclusivity of `<= 16:00` does "
+                                      "not apply, the weekday test fails first"),
+    (_ny(2026, 6, 13, 20, 0),  False, "Saturday evening"),
+    # F-10, recorded as behaviour rather than described: `_market_open`'s upper
+    # bound is INCLUSIVE, so the bell itself still reads "unclosed".
+    (_ny(2026, 6, 10, 16, 0),  True,  "16:00:00 exactly — `_market_open` is "
+                                      "`<= dtime(16, 0)`, so the bell instant "
+                                      "trims; 16:00:01 (below) keeps"),
+    (_ny(2026, 6, 10, 16, 1),  False, "one minute after the bell"),
 ])
 def test_guard_i_todays_bar_is_unclosed_tracks_real_session_hours(now, expected, why):
     """The session test itself, on explicit MARKET_TZ instants.
@@ -3714,17 +3732,90 @@ def test_guard_i_uses_the_schedulers_session_test_not_the_price_probe(mocker):
     probe that serves close/previous_close around the clock. The scheduler's
     `_market_open` is the real MARKET_TZ hours test and is reused rather than
     copied.
+
+    ROUND 1 F-6: this test used to close with `price_probe.call_count == 0`,
+    which pinned NOTHING — `_market_is_open` takes a required `symbol` and
+    `_todays_bar_is_unclosed` has no symbol to give it, so there is no shape in
+    which it could be called and no mutant the assertion kills. What does the
+    real work is `session.call_count == 1` (it kills an inlined re-implementation
+    of the hours test) and the ARGUMENT check below, which additionally pins
+    F-3's normalisation at the seam where it matters.
     """
     from app.services import auto_trader as at
+    from app.services.scheduling_tz import MARKET_TZ
 
-    price_probe = mocker.patch.object(at, "_market_is_open", return_value=True)
     session = mocker.patch.object(at, "_market_session_open", return_value=True)
 
     assert at._todays_bar_is_unclosed(_ny(2026, 6, 10, 10, 0)) is True
     assert session.call_count == 1, "the real session test was not consulted"
-    assert price_probe.call_count == 0, (
-        "the price-availability probe decided a session-hours question — that "
-        "confusion IS the defect guard (i) closes"
+
+    (passed,) = session.call_args.args
+    assert passed.utcoffset() == _ny(2026, 6, 10, 10, 0).utcoffset(), (
+        "the scheduler's hours test was handed an instant on some other wall "
+        "clock — it reads `now.time()`, so that is a silent wrong answer"
+    )
+    assert passed.tzinfo is MARKET_TZ, (
+        "the instant reaching the hours test was not normalised to MARKET_TZ"
+    )
+
+
+def test_guard_i_normalises_an_aware_instant_to_market_tz():
+    """F-3: the same real instant must give the same answer on any wall clock.
+
+    NY 20:00 is 00:00 UTC the NEXT DAY. Without the `.astimezone(MARKET_TZ)`
+    the `< 09:30` clause reads the UTC wall clock, calls a closed market
+    "pre-open", and trims a bar that closed four hours ago — F1 restored, from
+    nothing worse than a caller choosing a different tzinfo.
+    """
+    from app.services import auto_trader as at
+
+    ny_evening = _ny(2026, 6, 10, 20, 0)
+    as_utc = ny_evening.astimezone(timezone.utc)
+
+    assert as_utc.time() < at._NYSE_OPEN, (
+        "premise check: this instant IS < 09:30 on the UTC wall clock"
+    )
+    assert at._todays_bar_is_unclosed(ny_evening) is False
+    assert at._todays_bar_is_unclosed(as_utc) is False, (
+        "the same instant answered differently depending on its tzinfo"
+    )
+
+
+def test_guard_i_refuses_a_naive_instant():
+    """F-3: naive is ambiguous, so it raises instead of being guessed at.
+
+    MARKET_TZ wall-clock and `.astimezone()`'s host-zone reading are both
+    defensible and differ by the host's offset. Refusing also kills a mutant
+    class outright: a call site that hands the helper a frozen naive literal
+    cannot fail silently.
+    """
+    from app.services import auto_trader as at
+
+    with pytest.raises(ValueError, match="AWARE"):
+        at._todays_bar_is_unclosed(datetime(2026, 6, 10, 12, 0))
+
+
+def test_guard_i_nyse_open_matches_the_schedulers_own_boundary():
+    """F-9: `_NYSE_OPEN` is a SECOND COPY of the scheduler's 09:30.
+
+    The two constants are read by the two clauses of one predicate, so a drift
+    between them opens a gap or an overlap around the open. The scheduler keeps
+    its boundary inline, so this is pinned by behaviour rather than by symbol:
+    one minute before the copy must be pre-open, and the boundary itself must
+    be inside the scheduler's session.
+    """
+    from app.services import auto_trader as at
+    from app.services.strategy_watch_scheduler import _market_open
+
+    boundary = _ny(2026, 6, 10, at._NYSE_OPEN.hour, at._NYSE_OPEN.minute)
+
+    assert _market_open(boundary) is True, (
+        "`_NYSE_OPEN` is not the scheduler's open — the `< _NYSE_OPEN` clause "
+        "and the session test disagree about where the session starts"
+    )
+    assert _market_open(boundary - timedelta(minutes=1)) is False, (
+        "the scheduler's session starts BEFORE `_NYSE_OPEN`, so the minute "
+        "between them is claimed by neither clause"
     )
 
 
@@ -3794,29 +3885,195 @@ def test_guard_i_is_not_consulted_when_the_feed_has_no_todays_bar(mocker):
     )
 
 
-def test_guard_i_acceptance_after_close_gate_series_equals_scan_series(mocker):
-    """The acceptance shape, on the side Option A broke.
+def _clock_at(instant):
+    """A `datetime` stand-in whose `.now(tz)` is a fixed REAL instant.
 
-    The scan's series is reconstructed from `scan.py:1472-1475`'s real
-    construction: `[today - 441d, today]` handed to `historical_store.get_bars`,
-    whose `_read_bars` filters `start <= date <= end`. With the symbol's stored
-    history one session behind — the custom-universe case — that range REACHES
-    today's now-completed bar, and so must the gate's.
+    Patched over `auto_trader.datetime` so what the test controls is the
+    PRODUCTION call site's own clock read, not a stubbed return value. It
+    subclasses `datetime` so `isinstance` and every other classmethod keep
+    working, and it honours `tz` so a mutant reading the clock in some other
+    zone gets that zone's real answer rather than a rigged one.
+    """
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                # What a naive `datetime.now()` would hand back.
+                return instant.astimezone(timezone.utc).replace(tzinfo=None)
+            return instant.astimezone(tz)
+    return _Frozen
+
+
+@pytest.mark.parametrize("ny_now,keeps_todays_bar,why", [
+    (_ny(2026, 6, 10, 12, 0),  False, "MID-SESSION: the bar is being written, "
+                                      "so it must be trimmed — round 3"),
+    (_ny(2026, 6, 10, 7, 0),   False, "PRE-OPEN: the session has not started, "
+                                      "so today's bar is not complete either"),
+    (_ny(2026, 6, 10, 16, 30), True,  "AFTER THE CLOSE: today's bar is the last "
+                                      "completed session — F1, the whole point"),
+    (_ny(2026, 6, 10, 20, 0),  True,  "LATE EVENING: 00:00 UTC the NEXT DAY. A "
+                                      "call site reading the clock in UTC and "
+                                      "an unnormalised helper together call "
+                                      "this 'pre-open' and trim — F1 restored"),
+])
+def test_guard_i_call_site_consults_the_real_clock(mocker, ny_now,
+                                                   keeps_todays_bar, why):
+    """ROUND 1 F-2: THE PRODUCTION WIRING, WITH THE REAL HELPER.
+
+    Every other test here replaces `_todays_bar_is_unclosed` with a MagicMock,
+    which accepts any arguments — so the CALL SITE's argument was invisible and
+    two call-site mutants restored F1 while passing the whole 2787-test suite:
+    passing `datetime.now(timezone.utc)`, and passing a frozen literal. Mutants
+    that survive a green suite are the suite's defect, not the code's.
+
+    This test closes that: the helper is REAL, and what moves between the cases
+    is nothing but the wall clock the call site reads. A call site that reads a
+    frozen instant answers all four cases the same way and dies here; one that
+    hands the helper a naive literal dies on the helper's own contract; one that
+    reads the clock in another zone is normalised and survives, which is now
+    correct rather than lucky (see `test_guard_i_normalises_an_aware_instant`).
+
+    The two axes are deliberately independent: the frozen clock is a Wednesday
+    in June and the feed is dated from the REAL `date.today()`, because the trim
+    anchors its cutoff on the HOST date and its session test on the MARKET
+    clock. Nothing here depends on which day the suite happens to run.
     """
     from app.services import auto_trader as at
 
     today = date.today()
-    stored = _weekday_bars(700, end=today)
+    mocker.patch.object(at, "datetime", _clock_at(ny_now))
+    mocker.patch("app.data.market.fetch_candles",
+                 return_value=_dated_bars(400, end=today))
 
-    scan_start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
-    scan_series = [b for b in stored if b["time"] >= scan_start.isoformat()]
+    out = at._fetch_scan_window_bars("MSFT")
+    newest = out[-1]["time"]
 
-    mocker.patch.object(at, "_todays_bar_is_unclosed", return_value=False)
+    if keeps_todays_bar:
+        assert newest == today.isoformat(), why
+    else:
+        assert newest == (today - timedelta(days=1)).isoformat(), why
+
+
+def _scan_series_times(stored, *, last_stored, start, end):
+    """The scan's series, built the way the scan really builds it.
+
+    `scan.py:1470-1483` calls `historical_store.get_bars(symbol, start, end)`
+    and `scan.py:491` prefers the result. `get_bars` decides on
+    `historical_store.py:230`:
+
+        fetch_needed = (last is None) or (last < min(end, _prev_trading_day()))
+
+    and that one line is THE FACT ROUND 1'S ACCEPTANCE TEST NEVER MODELLED —
+    F-4 — which is precisely the gap F-1 walked through. On a backfill the DB
+    gains everything through `end`; WITHOUT one it keeps only what it already
+    held, and `_read_bars` (historical_store.py:133-148) then filters
+    `start <= date <= end` INCLUSIVE AT BOTH ENDS.
+
+    `_prev_trading_day` is CALLED, not re-derived, so the predicate's
+    load-bearing half cannot drift from production here.
+    """
+    from app.services.historical_store import _prev_trading_day
+
+    fetch_needed = (last_stored is None) or (last_stored < min(end, _prev_trading_day()))
+    ceiling = end if fetch_needed else min(end, last_stored)
+    return [b["time"] for b in stored
+            if start.isoformat() <= b["time"] <= ceiling.isoformat()]
+
+
+def test_guard_i_acceptance_stale_db_gate_series_equals_scan_series(mocker):
+    """THE CASE GUARD (i) FIXES, with both sides built honestly.
+
+    STALE DB — a custom-universe name outside the SP500/NDX100/DOW30 prefetch,
+    whose stored history is more than one completed session behind. There
+    `fetch_needed` is TRUE, `get_bars` backfills through `end = date.today()`,
+    and the scan's own series REACHES today's now-completed bar. After the close
+    the gate must reach it too, and Option A's unconditional trim did not.
+
+    The guard is REAL here and the clock is what puts it after the close, so
+    this asserts the wiring and the boundary together rather than re-running
+    production's own list comprehension against itself.
+    """
+    from app.services import auto_trader as at
+    from app.services.historical_store import _prev_trading_day
+
+    today = date.today()
+    stored = _dated_bars(700, end=today)
+    start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
+    last_stored = _prev_trading_day() - timedelta(days=4)
+
+    scan_times = _scan_series_times(stored, last_stored=last_stored,
+                                    start=start, end=today)
+    assert scan_times[-1] == today.isoformat(), (
+        "premise check: a stale DB backfills, so the SCAN sees today's bar"
+    )
+
+    mocker.patch.object(at, "datetime", _clock_at(_ny(2026, 6, 10, 16, 30)))
     mocker.patch("app.data.market.fetch_candles", return_value=stored)
-    gate_series = at._fetch_scan_window_bars("MSFT")
+    gate_times = [b["time"] for b in at._fetch_scan_window_bars("MSFT")]
 
-    assert [b["time"] for b in gate_series] == [b["time"] for b in scan_series], (
-        "after the close the gate measured a different series than the scan"
+    assert gate_times == scan_times, (
+        "after the close the gate measured a different series than the scan on "
+        "the stale-DB path — that is F1, the finding guard (i) exists to close"
+    )
+
+
+def test_guard_i_acceptance_fresh_db_divergence_is_the_accepted_cost(mocker):
+    """THE COST KENNETH PRICED AND ACCEPTED, PINNED RATHER THAN DESCRIBED.
+
+    Decision AUTOTRADE-2B-CORE-GUARD-I-KEPT-COMMON-PATH-COST-ACCEPTED-2026-09-22
+    (card option 3). On the COMMON nightly-ingested path the DB already holds
+    through `_prev_trading_day()`, so `last < min(end, prev)` is `prev < prev`
+    — FALSE, no backfill — and the scan's series ENDS AT THE PREVIOUS SESSION.
+    The gate's feed is `market.fetch_candles`, which asks with `end =
+    date.today()`, so after the close it carries today's completed bar and
+    guard (i) keeps it. Round 1 measured the mismatch at 0.50%/0.92% of fires
+    flipping, including `scan REJECT -> gate ABSTAIN -> fires UNGATED AT FULL
+    ARMED QUANTITY`.
+
+    THIS TEST ASSERTS THE DIVERGENCE, NOT ITS ABSENCE. Guard (i) is kept, so an
+    accepted cost is a fact about the system and belongs in the suite — a fact
+    nobody pinned is a fact the next round rediscovers as news. It is scoped to
+    the SHAPE (the gate strictly EXTENDS the scan, forward only, ending on
+    today) rather than to a bar count, because on a weekend `_prev_trading_day`
+    is further back and the extension is longer.
+
+    WHEN THE STAMP IS BUILT — the arm-time scan-series end date carried on the
+    card, which supersedes this guard — THIS TEST MUST GO RED. That is the
+    point: closing the cost should force the record to be rewritten, not slip
+    through a suite that never looked.
+    """
+    from app.services import auto_trader as at
+    from app.services.historical_store import _prev_trading_day
+
+    today = date.today()
+    stored = _dated_bars(700, end=today)
+    start = today - timedelta(days=at._SCAN_BAR_WINDOW_DAYS)
+    last_stored = _prev_trading_day()
+
+    scan_times = _scan_series_times(stored, last_stored=last_stored,
+                                    start=start, end=today)
+    assert scan_times[-1] == last_stored.isoformat(), (
+        "premise check: a fresh DB does NOT backfill, so the scan's series "
+        "ends at the previous session"
+    )
+
+    mocker.patch.object(at, "datetime", _clock_at(_ny(2026, 6, 10, 16, 30)))
+    mocker.patch("app.data.market.fetch_candles", return_value=stored)
+    gate_times = [b["time"] for b in at._fetch_scan_window_bars("MSFT")]
+
+    assert gate_times[:len(scan_times)] == scan_times, (
+        "the divergence is not a forward EXTENSION — the gate and the scan "
+        "disagree about bars they both carry, which is a different defect "
+        "than the one the decision accepted"
+    )
+    assert len(gate_times) > len(scan_times), (
+        "the gate no longer carries bars the scan never saw — if that is the "
+        "STAMP landing, this test has done its job: delete it and rewrite "
+        "decisions[0], which records this cost as accepted"
+    )
+    assert gate_times[-1] == today.isoformat(), (
+        "the gate's series does not end on today's completed bar, so the "
+        "accepted cost is not the one described"
     )
 
 

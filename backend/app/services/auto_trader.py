@@ -23,6 +23,16 @@ from app.services.scheduling_tz import MARKET_TZ
 # `_fetch_scan_window_bars`, which `_measure_trade_regime` catches into an
 # abstain that FIRES UNGATED. No new failure mode at app level either --
 # routers/strategy_watch.py already imports this module at startup.
+#
+# THE PRICE, STATED RATHER THAN LEFT TO BE MEASURED (round 1 finding F-8):
+# 0.299s of marginal import time, and it pulls historical_store,
+# notifications/dispatch, strategy_engine and strategy_watch_evaluator into
+# THIS module's import graph. Inert under uvicorn, which imports all of them
+# anyway -- but it is a new import-time failure surface for scripts and narrow
+# test runs that previously needed none of it. The cheaper shape was a
+# three-line hours test in `scheduling_tz.py`, which already owns MARKET_TZ and
+# carries no chain; reusing the scheduler's ONE definition was preferred over a
+# second copy of the boundaries, and that trade is the reason, not an oversight.
 from app.services.strategy_watch_scheduler import _market_open as _market_session_open
 from app.scoring.conviction_sizing import (
     SizingConfigError,
@@ -452,7 +462,15 @@ def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
     TWO CLAUSES, AND BOTH ARE LOAD-BEARING -- `_market_open` alone is not the
     whole question:
       - MID-SESSION (weekday 09:30-16:00) -- the case the decision names. The
-        bar is provably still being written.
+        bar is provably still being written, with ONE EXCEPTION at the edge:
+        `_market_open`'s upper bound is INCLUSIVE (`<= dtime(16, 0)`), so
+        16:00:00.000000 reads unclosed and TRIMS a bar that has just closed,
+        while 16:00:00.000001 reads complete and keeps it. The truth table pins
+        16:00 as True because that is what the code does; the phrase "provably
+        still being written" is false for that one microsecond-wide instant and
+        true everywhere else in the clause. Left as-is rather than moved to `<`:
+        the probability is ~0, and the alternative is a SECOND divergence from
+        the scheduler's boundary for no measurable gain.
       - BEFORE THE OPEN (t < 09:30) -- `_market_open` reads False here, and
         reading that as "closed, so today's bar is complete" would KEEP a bar
         for a session that has not started. That is round 3's defect with the
@@ -460,11 +478,34 @@ def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
     Everything else -- after 16:00 on a session day -- KEEPS today's bar,
     which is the whole point of the guard.
 
+    `now` IS NORMALISED, NOT TRUSTED (round 1 finding F-3). An AWARE instant is
+    converted to MARKET_TZ before either clause reads it, so a caller handing
+    this UTC gets the same answer as one handing it New York -- without that
+    conversion the same real instant reads False at NY 20:00 and True as the
+    identical 00:00+00:00, because `now.time()` is a WALL-CLOCK read and does
+    not care which wall. A NAIVE datetime RAISES rather than being guessed at:
+    reading it as MARKET_TZ wall-clock and letting `.astimezone()` read it as
+    the HOST's zone are both defensible and they differ, so the ambiguity is
+    refused at the door. Consequence worth stating: the DST correctness claimed
+    above is a property of THIS FUNCTION, not merely of its default branch.
+
+    THE RAISE'S OWN RESIDUAL, because this file's exceptions are not free: it
+    is thrown inside `_fetch_scan_window_bars`, whose caller
+    `_measure_trade_regime` catches bare `Exception -> return None`, and that
+    abstain FIRES UNGATED AT FULL ARMED QUANTITY. So a naive argument would be
+    a loud failure in a test run and a SILENT fail-open in production. It is
+    unreachable today -- the one production call site (the end-trim) passes no
+    argument at all and takes the `None` branch -- and it is pinned unreachable
+    by the call-site test, which drives the real helper through that call site.
+    A caller that ever wants to pass an instant must pass an aware one; the
+    contract is enforced where enforcing it is cheap.
+
     RESIDUALS, NAMED RATHER THAN LEFT FOR THE NEXT READER TO FIND:
       - HALF DAYS. `_market_open` has no holiday calendar and no early-close
-        table, so on the ~2 sessions a year that close at 13:00 ET a completed
-        bar is still trimmed between 13:00 and 16:00. That is the OLD behaviour
-        surviving on 2 days instead of 365, not a new defect.
+        table, so on the THREE sessions NYSE normally closes early at 13:00 ET
+        (July 3rd or the observed 5th, the day after Thanksgiving, and Christmas
+        Eve) a completed bar is still trimmed between 13:00 and 16:00. That is
+        the OLD behaviour surviving on 3 days instead of 365, not a new defect.
       - FULL HOLIDAYS. `_market_open` reads True 09:30-16:00 on Thanksgiving,
         so a bar dated today would be trimmed -- but no session ran, so no
         feed emits one and `last_day >= today` is False. Inert.
@@ -476,8 +517,16 @@ def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
           * host AHEAD of New York (the operator's own Europe/Berlin, +6):
             between the host's midnight and NY's, host-today is NY-TOMORROW, so
             `last_day >= today` is False and the end-trim is skipped before this
-            function is ever called. Those are post-close hours, where keeping
-            the bar is the right answer anyway.
+            function is ever called. THAT WINDOW IS NY `[24:00 - offset, 24:00)`,
+            so it lies wholly after the 16:00 close ONLY WHILE `24 - offset >=
+            16`, i.e. offset <= +8h. Berlin (+6) and a UTC host (+0) satisfy it
+            and are the deployments this ships on, so the limb holds HERE -- but
+            it does not generalise to "host ahead of New York": at >= +9h (Tokyo
+            is +13) the window reaches back INTO THE LIVE SESSION, where skipping
+            the trim keeps a genuinely unclosed bar. The BEHAVIOUR there belongs
+            to the `date.today()` anchor this diff scopes out; the BOUND is
+            stated here because a load-bearing comment that overstates its own
+            reach is this target's own definition of a defect.
           * host BEHIND New York (a US-west host, -3): between NY's midnight and
             the host's, host-today is NY-YESTERDAY, so the trim can act on
             NY-yesterday's COMPLETED bar. This test reads "unclosed" there
@@ -488,7 +537,17 @@ def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
         `today` in MARKET_TZ, which is a change to the trim and belongs to
         whatever target takes it.
     """
-    now = now or datetime.now(MARKET_TZ)
+    if now is None:
+        now = datetime.now(MARKET_TZ)
+    elif now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError(
+            "_todays_bar_is_unclosed needs an AWARE instant -- a naive datetime "
+            "is read as MARKET_TZ wall-clock by one plausible reading and as the "
+            "host's own zone by another, and the two disagree by the host's "
+            "offset. Pass datetime.now(MARKET_TZ), or any aware instant."
+        )
+    else:
+        now = now.astimezone(MARKET_TZ)
     if _market_session_open(now):
         return True
     return now.time() < _NYSE_OPEN
