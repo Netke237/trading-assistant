@@ -35,12 +35,17 @@ describe('stockScanFailureReason over a real apiError() throw', () => {
       .toBe('API /api/stock-scan → 422: rsi_oversold must be < 50');
   });
 
-  it("keeps Pydantic's joined validation messages", async () => {
+  it("keeps Pydantic's validation messages, now naming the offending field", async () => {
+    // ROUND 1 finding 8. This exact shape — a MISSING required field — is what
+    // a stale client hitting the newly-required `direction` on /auto-trade/arm
+    // produces, and it is why the format changed: pydantic's message for it is
+    // the bare string "field required", so without the `loc` prefix the operator
+    // saw "422: field required" and had no way to learn WHICH field.
     respondWith(422, { detail: [{ loc: ['body', 'horizon'], msg: 'field required', type: 'missing' }] });
 
     const err = await api.postStockScan({} as never).catch((e: unknown) => e);
 
-    expect(stockScanFailureReason(err)).toBe('API /api/stock-scan → 422: field required');
+    expect(stockScanFailureReason(err)).toBe('API /api/stock-scan → 422: horizon: field required');
   });
 
   it('collapses a gateway HTML body to the status line', async () => {

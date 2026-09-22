@@ -2,11 +2,51 @@
 from __future__ import annotations
 
 from datetime import datetime
+
+from app.services.scheduling_tz import MARKET_TZ
+
+
+def _ny(y, m, d, hh, mm=0):
+    """An aware instant on the market's own wall clock."""
+    return datetime(y, m, d, hh, mm, tzinfo=MARKET_TZ)
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.services.strategy_watch_scheduler import StrategyWatchScheduler
+
+
+# ── `_market_open`'s own boundaries ──────────────────────────────────────────
+# AUTOTRADE-2B core round 1, finding F-8. This module's session test had NO
+# test of its own: every test below patches `_market_open` wholesale, and
+# mutating its 09:30 boundary failed exactly ONE test in the whole suite — one
+# belonging to `auto_trader`'s money gate, which imports this function as
+# `_market_session_open` for guard (i). A scheduler's private constant should
+# not have another module's regression test as its sole pin.
+
+
+@pytest.mark.parametrize("now,expected,why", [
+    # 2026-06-10 is a Wednesday; 2026-06-13 a Saturday, 2026-06-14 a Sunday.
+    (_ny(2026, 6, 10, 9, 29),  False, "one minute before the open"),
+    (_ny(2026, 6, 10, 9, 30),  True,  "the open itself is INSIDE the session"),
+    (_ny(2026, 6, 10, 12, 0),  True,  "mid-session"),
+    (_ny(2026, 6, 10, 15, 59), True,  "one minute before the close"),
+    (_ny(2026, 6, 10, 16, 0),  True,  "the close itself — the bound is `<=`, "
+                                      "INCLUSIVE, and callers depend on which"),
+    (_ny(2026, 6, 10, 16, 1),  False, "one minute after the close"),
+    (_ny(2026, 6, 10, 0, 0),   False, "midnight"),
+    (_ny(2026, 6, 13, 12, 0),  False, "Saturday mid-'session'"),
+    (_ny(2026, 6, 14, 12, 0),  False, "Sunday mid-'session'"),
+    # Tracked via a real IANA zone, so the offset moves with US DST and the
+    # wall-clock boundaries do not. 2026-01-14 is a Wednesday in EST.
+    (_ny(2026, 1, 14, 9, 30),  True,  "the open in EST, not EDT"),
+    (_ny(2026, 1, 14, 16, 1),  False, "after the close in EST"),
+])
+def test_market_open_session_boundaries(now, expected, why):
+    """The 09:30-16:00 America/New_York boundaries, pinned where they live."""
+    from app.services.strategy_watch_scheduler import _market_open
+
+    assert _market_open(now) is expected, why
 
 
 @pytest.mark.asyncio

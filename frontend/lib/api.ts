@@ -1,13 +1,15 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
-              PickedMethod, PickedStopBasis } from '@/types/domain';
+              PickedMethod, PickedStopBasis, Direction } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
+import { validationMessages } from '@/lib/pydanticError';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import type { ScoringHorizon } from '@/lib/horizonPresets';
 
 // ── Part 3: profile-based scan schedule entries ────────────────────────────
 // Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
@@ -57,15 +59,18 @@ async function apiError(path: string, res: Response): Promise<never> {
       detail = json.detail;
     } else if (Array.isArray(json?.detail)) {
       // FastAPI/Pydantic validation errors (e.g. a 422 on a Field(..., gt=0)
-      // violation) shape `detail` as a list of {loc, msg, type} objects, not
-      // a string — the `typeof === 'string'` check above misses this shape
+      // violation) shape `detail` as a list of {loc, msg, type} objects, not a
+      // string — the `typeof === 'string'` check above misses this shape
       // entirely and used to fall through to the raw JSON text, dumping a
-      // machine-formatted validation payload straight into a caller's error
-      // UI. Join the human-readable `msg` fields instead.
-      const messages = json.detail
-        .map((e: unknown) => (e && typeof e === 'object' && 'msg' in e ? String((e as { msg: unknown }).msg) : null))
-        .filter((m: string | null): m is string => m != null);
-      detail = messages.length > 0 ? messages.join('; ') : text;
+      // machine-formatted validation payload straight into a caller's error UI.
+      //
+      // Each message is prefixed with its field (see lib/pydanticError.ts).
+      // Without that, two fields failing the same check render the identical
+      // sentence twice naming neither, and pydantic's message for a MISSING
+      // required field is the bare "Field required" — which is what a stale
+      // client posting an arm body without `direction` produces, and the
+      // rollout note in routers/auto_trade.py calls that failure "loud".
+      detail = validationMessages(json.detail) ?? text;
     }
   } catch { /* not JSON — use raw text */ }
   throw new Error(`API ${path} → ${res.status}${detail ? `: ${detail}` : ''}`);
@@ -605,7 +610,38 @@ export const api = {
 
   armAutoTrade: (req: {
     broker: string; symbol: string; option_symbol: string;
-    action: 'BUY' | 'SELL'; quantity: number;
+    /** 'BUY' only. The backend narrowed `ArmRequest.action` to Literal["BUY"]
+     *  because `effect` is hardcoded to OPEN, making SELL a sell-to-open — a
+     *  naked short. Narrowed here too so `action: 'SELL'` fails TYPECHECK
+     *  rather than arriving as a runtime 422, which is the same standard
+     *  `direction` below is held to. */
+    action: 'BUY'; quantity: number;
+    /** The trade's own direction, carried from the card. REQUIRED -- not
+     *  optional and not defaulted -- so a caller that forgets fails typecheck
+     *  here rather than arming a wrongly-sized trade. The backend decides
+     *  position size off this: `action` is always 'BUY' for a long single-leg
+     *  option (a bearish trade is a long PUT), so it never encoded direction,
+     *  and inferring direction from it sized every bearish trade off the
+     *  bullish conviction frame. Never write `card.direction ?? 'Bullish'`
+     *  here -- that typechecks and silently reinstates that exact defect. */
+    direction: Direction;
+    /** The scoring horizon this card was scanned at — 'Intraday' | 'Swing' |
+     *  'Position'. REQUIRED, same standard as `direction` above and for a
+     *  related reason: the backend now measures THIS SYMBOL's own regime at
+     *  fire time to decide the headwind gate, and the horizon picks the window
+     *  it measures in (Intraday 26/1000/60 vs Position 50/750/100 — genuinely
+     *  different measurements). Derive it with `scoringHorizonFromLabel` from
+     *  the scan context rather than hand-writing a literal; never default it
+     *  here, which would typecheck while measuring the wrong window. */
+    horizon: ScoringHorizon;
+    /** The Step-3 Regime Gate thresholds this card's scan was run with,
+     *  snapshotted so a later Step-3 edit cannot retroactively change the rule
+     *  an already-armed trade is judged by — the same freeze `quantity`,
+     *  `premium_stop_pct` and the method pick get. Omitted means the scan used
+     *  the scoring_rules.yaml value. Build them with `regimeGateOverridesFrom`
+     *  so this and the scan request read the controls identically. */
+    regime_headwind_caution_pct?: number;
+    regime_headwind_reject_pct?: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
     entry_premium?: number;
     portfolio_value?: number;
@@ -641,7 +677,24 @@ export const api = {
     post<{ order_id: string; status: string }>('/auto-trade/fire', {}),
 
   getAutoTradeStatus: () =>
-    get<{ armed: boolean; symbol: string | null; option: string | null; last_order: unknown }>('/auto-trade/status'),
+    // Models ALL SEVEN keys the endpoint returns. It used to declare five:
+    // adding `direction` while leaving `broker` and `history_count` undeclared
+    // would have left this contract selectively complete for no reason, and
+    // this was the moment it was being edited anyway (ROUND 1 finding 10).
+    get<{ armed: boolean; symbol: string | null; option: string | null;
+          broker: string | null;
+          /** Null when nothing is armed. An armed trade's direction now decides
+           *  its size, so a wrong one is otherwise invisible until the fill.
+           *  `last_order` does NOT carry it: history entries record no direction
+           *  (that is O4's territory).
+           *
+           *  OPTIONAL, not merely nullable: a backend predating this field omits
+           *  the key altogether, so the runtime value is `undefined` — which a
+           *  bare `Direction | null` would have promised could not happen. The
+           *  rollout note in routers/auto_trade.py contemplates exactly that
+           *  deployment order. */
+          direction?: Direction | null;
+          history_count: number; last_order: unknown }>('/auto-trade/status'),
 
   // Phase 4: Chart alert CRUD
   createAlertRule: (body: {

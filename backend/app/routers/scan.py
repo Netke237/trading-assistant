@@ -41,6 +41,7 @@ from app.services.fundamentals_store import get_fundamentals, prefetch_universe 
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
 from app.scoring.fundamentals_scorer import score_fundamentals, FundamentalHealth
 from app.services.regime_omm import compute_omm as _compute_omm
+from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
 from app.services.regime_hmm_daily import compute_directional_hmm as _compute_dhmm, alignment as _hmm_alignment
 from typing import Literal
 from app.data.market import (
@@ -460,6 +461,11 @@ async def _process_symbol(
     gate: dict | None = None,
     atr_mult_target: float | None = None,
     atr_mult_stop: float | None = None,
+    # Step-3 Regime Gate overrides for THIS scan. None means "use the
+    # scoring_rules.yaml value" — the same contract StockScanRequest's pair of
+    # the same name has carried since it was added.
+    regime_headwind_caution_pct: float | None = None,
+    regime_headwind_reject_pct: float | None = None,
     price_map: dict | None = None,
     bars_map: dict | None = None,
     fund_map: dict | None = None,
@@ -578,6 +584,21 @@ async def _process_symbol(
     except Exception as exc:
         _log.warning("Regime signal failed for %s: %s", symbol, exc)
 
+    # The gate thresholds for THIS scan: the YAML block, then the Step-3
+    # per-scan overrides. A COPY, because `_load_scoring_cfg()` is cached and
+    # hands out a reference into one shared mutable dict — writing an override
+    # into it would repoint every later reader in the process. Same shape, same
+    # None-means-YAML rule, as stock_scan.py:804-808.
+    #
+    # Resolved once and used at BOTH score_stock call sites below (pre-screen
+    # and the post-chain re-score). Two independently built gate dicts on one
+    # symbol is how the two passes would come to disagree.
+    _regime_gate = _resolve_regime_gate(
+        _load_scoring_cfg().get("regime_gate"),
+        regime_headwind_caution_pct,
+        regime_headwind_reject_pct,
+    )
+
     # ── Pre-screen: score without IV rank ─────────────────────────────────────
     # iv_rank is unknown until the chain is fetched (pass 2). Score with None to gate
     # on trend/pullback/trigger/event — the components that drive most rejections.
@@ -590,7 +611,7 @@ async def _process_symbol(
         iv_rank=None,
         overrides=overrides,
         regime_signal=_regime_signal,
-        regime_gate=_load_scoring_cfg()["regime_gate"] if _regime_signal else None,
+        regime_gate=_regime_gate if _regime_signal else None,
         fundamentals=_fh,
         fundamentals_gate=fund_gate,
     )
@@ -679,7 +700,7 @@ async def _process_symbol(
         confidence_gate=gate,
         confidence_sample_size=_conf_n,
         regime_signal=_regime_signal,
-        regime_gate=_load_scoring_cfg()["regime_gate"] if _regime_signal else None,
+        regime_gate=_regime_gate if _regime_signal else None,
         fundamentals=_fh,
         fundamentals_gate=fund_gate,
     )
@@ -1527,6 +1548,8 @@ async def _execute_scan_core(
                 gate=gate,
                 atr_mult_target=_atr_target,
                 atr_mult_stop=_atr_stop,
+                regime_headwind_caution_pct=req.regime_headwind_caution_pct,
+                regime_headwind_reject_pct=req.regime_headwind_reject_pct,
                 price_map=price_map,
                 bars_map=bars_map,
                 fund_map=fund_map,

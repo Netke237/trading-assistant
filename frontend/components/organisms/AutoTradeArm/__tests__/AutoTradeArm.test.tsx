@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { AutoTradeArm } from '@/components/organisms/AutoTradeArm';
 import { useRiskStore } from '@/lib/riskStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
@@ -335,5 +336,237 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
     expect(payload.picked_method).toBe('barrier_race');
     expect(payload.picked_row_stock_price).toBeNull();
     expect(payload.picked_row_option_price).toBe(7.1);
+  });
+});
+
+describe("the armed payload carries the CARD's direction", () => {
+  /* THE ONE THING THIS WHOLE PIECE EXISTS TO GUARANTEE, and until now nothing
+   * pinned it. The backend sizes off `direction`; if the browser never sends it,
+   * or sends a constant, the fix is inert — and a missing field would be caught
+   * only by `tsc`, and only until someone writes `card.direction ?? 'Bullish'`,
+   * which typechecks and silently restores the exact defect: every bearish trade
+   * sized off the bullish frame.
+   *
+   * Both directions are asserted on purpose. A single Bullish case would pass
+   * against a hardcoded 'Bullish' literal, which is the failure mode worth
+   * catching — the old code hardcoded `action: 'BUY'` and that is what made
+   * `action` useless as a direction signal in the first place. */
+
+  beforeEach(() => {
+    // Same setup the sibling describes use: the Arm button only renders in
+    // 'armed' auto-mode, and portfolioValue must be set or the exposure check
+    // short-circuits before the payload is built.
+    act(() => {
+      useRiskStore.setState((st) => ({ limits: { ...st.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it.each([['Bullish'], ['Bearish']] as const)(
+    'sends direction=%s when that is what the card says',
+    async (direction) => {
+      render(
+        <AutoTradeArm
+          card={{ ...mockCard, direction }}
+          broker="ibkr_paper"
+          methodPick={pick()}
+        />,
+      );
+      fireEvent.click(screen.getByText(/^Arm —/));
+
+      await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+      expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].direction).toBe(direction);
+    },
+  );
+});
+
+describe('the ARMED state shows what the BACKEND has armed', () => {
+  /* ROUND 1 finding 6 added `direction` to /auto-trade/status; ROUND 2 findings
+   * 2, 3 and 4 are why this block was rewritten.
+   *
+   * The values rendered are the SERVER's. Echoing the card would redisplay what
+   * this component sent, which cannot disagree with itself and so could never
+   * catch a mis-arm. Symbol and direction must come from the SAME source: step-7
+   * renders this component with no `key`, so CandidateNav swaps `card` without
+   * remounting, and a server direction paired with a local `card.symbol` asserts
+   * "Armed TSLA Bullish" for a trade armed on AAPL. */
+
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((st) => ({ limits: { ...st.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({
+        autoMode: 'armed', armed: false, armedDirection: null, armedSymbol: null, lastOrderId: null,
+      });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it('renders the backend symbol AND direction, not the card it was rendered with', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({
+      armed: true, symbol: 'NVDA', option: null, broker: 'ibkr_paper',
+      direction: 'Bearish', history_count: 0, last_order: null,
+    });
+
+    // Card disagrees on BOTH axes. Asserted as one exact string rather than a
+    // regex with `.*` between the parts — the earlier version of this test used
+    // /Armed .*Bearish.*/ and rendered "Armed AAPL Bearish" while passing,
+    // which is the whole bug it was supposed to be guarding.
+    render(
+      <AutoTradeArm card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
+                    broker="ibkr_paper" methodPick={pick()} />,
+    );
+
+    expect(await screen.findByText('Armed NVDA Bearish — waiting for next trigger')).toBeInTheDocument();
+    expect(screen.queryByText(/Armed AAPL/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['direction is null',   { armed: true, symbol: 'NVDA', direction: null }],
+    ['direction is absent', { armed: true, symbol: 'NVDA' }],
+    ['symbol is absent',    { armed: true, direction: 'Bearish' }],
+  ])('falls back to the bare label when %s', async (_label, status) => {
+    // The absent-key rows are the "backend predates the field" case the rollout
+    // note contemplates — `undefined`, not null. Both names come from the
+    // server or neither does, so a half-answer renders the bare label rather
+    // than "Armed undefined Bearish".
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce(status);
+
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+
+    expect(await screen.findByText('Armed — waiting for next trigger')).toBeInTheDocument();
+  });
+
+  it('re-reads the backend after arming instead of trusting the card', async () => {
+    /* ROUND 2 finding 4. The mount effect's deps are referentially-stable store
+     * actions, so it runs once per mount and never re-reads. Without an explicit
+     * refetch on the arm path, the label showed `card.direction` on exactly the
+     * path that matters — the user having just armed — while the comments and
+     * tests claimed it showed the backend's. */
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockResolvedValueOnce({ armed: false })                                    // mount
+      .mockResolvedValueOnce({ armed: true, symbol: 'NVDA', direction: 'Bearish' }); // after arm
+
+    render(
+      <AutoTradeArm card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
+                    broker="ibkr_paper" methodPick={pick()} />,
+    );
+    fireEvent.click(await screen.findByText(/^Arm —/));
+
+    // The server's values win over the optimistic card echo.
+    expect(await screen.findByText('Armed NVDA Bearish — waiting for next trigger')).toBeInTheDocument();
+  });
+
+  it('does NOT let a status read issued before arming clobber the armed state', async () => {
+    /* ROUND 2 finding 3, the most dangerous of the three: the operator sees an
+     * "Arm" button and believes nothing is armed, while the backend is armed and
+     * will fire on the next trigger. The old `active` flag guarded unmount only,
+     * which is a different race entirely. */
+    let releaseMountRead: (v: unknown) => void = () => {};
+    const pendingMountRead = new Promise((resolve) => { releaseMountRead = resolve; });
+
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockReturnValueOnce(pendingMountRead)                                       // mount: held open
+      .mockResolvedValueOnce({ armed: true, symbol: 'AAPL', direction: 'Bullish' }); // post-arm
+
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(await screen.findByText(/^Arm —/));
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+
+    // Now the mount read lands, stale, insisting nothing is armed.
+    await act(async () => {
+      releaseMountRead({ armed: false, direction: null, symbol: null });
+      await pendingMountRead;
+    });
+
+    expect(useAutoTradeStore.getState().armed).toBe(true);
+    expect(screen.queryByText(/^Arm —/)).not.toBeInTheDocument();
+  });
+});
+
+// ── The regime gate's inputs, frozen at arm ─────────────────────────────────
+// AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19. The backend measures this
+// symbol's OWN regime at fire time instead of reading a cached market-wide
+// number, and it needs two things from the card to reproduce what the scan
+// measured: the horizon (which window) and the Step-3 thresholds (which rule).
+// The backend enforces `horizon`'s presence with a 422; what NOTHING but a test
+// here enforces is that the frontend actually fills the pipe — the same gap
+// piece 4 found, where `premium_stop_pct` existed end to end on the backend and
+// no caller could set it.
+describe('AutoTradeArm — regime gate inputs', () => {
+  beforeEach(() => {
+    act(() => {
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+      useScanStore.setState({ scanOverrides: {} });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+  });
+
+  it.each([
+    ['Intraday (0–2d)',     'Intraday'],
+    ['Swing (5–15d)',       'Swing'],
+    ['Position (15–45d)',   'Position'],
+    // The long-dated presets all SCORE as Position — scoring_rules.yaml has no
+    // `regime.quarterly` block, and the backend Literal would 422 the label.
+    ['Position (90–105d)',  'Position'],
+  ])('collapses the %s scan context to horizon=%s', async (contextHorizon, expected) => {
+    act(() => {
+      useScanStore.setState({
+        context: {
+          universe: 'SP500', direction: 'Bullish', horizon: contextHorizon,
+          horizonPreset: 'Swing', holdMin: 5, holdMax: 15,
+        },
+      });
+    });
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].horizon).toBe(expected);
+  });
+
+  it('sends the Step-3 headwind thresholds the scan was run with', async () => {
+    act(() => {
+      useScanStore.setState({
+        scanOverrides: { regime_headwind_caution_pct: -25, regime_headwind_reject_pct: -80 },
+      });
+    });
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.regime_headwind_caution_pct).toBe(-25);
+    expect(payload.regime_headwind_reject_pct).toBe(-80);
+  });
+
+  it('omits the thresholds when Step 3 never set them, so the backend reads its YAML', async () => {
+    // undefined, not 0 and not null: omitted is what "the scan used the config
+    // value" means on this endpoint, and 0 is a REAL threshold there.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.regime_headwind_caution_pct).toBeUndefined();
+    expect(payload.regime_headwind_reject_pct).toBeUndefined();
+  });
+
+  it('sends a zero threshold rather than dropping it as falsy', async () => {
+    // 0 sits inside the Step-3 control's own -100..0 range and means "cap on
+    // any headwind at all". A truthiness test anywhere along this path would
+    // silently substitute the YAML -40 — 40 points looser than asked for.
+    act(() => {
+      useScanStore.setState({
+        scanOverrides: { regime_headwind_caution_pct: 0, regime_headwind_reject_pct: 0 },
+      });
+    });
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.regime_headwind_caution_pct).toBe(0);
+    expect(payload.regime_headwind_reject_pct).toBe(0);
   });
 });

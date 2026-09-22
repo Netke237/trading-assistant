@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.schemas import PickedMethod, PickedStopBasis
+from app.schemas import Direction, PickedMethod, PickedStopBasis, Horizon
 from app.services.auto_trader import auto_trader, ArmedStrategy
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
@@ -17,7 +17,45 @@ class ArmRequest(BaseModel):
     broker:          Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
     symbol:          str
     option_symbol:   str
-    action:          Literal["BUY", "SELL"]
+    # NARROWED TO "BUY" -- ROUND 1 finding 3. `effect` is not a field here;
+    # `execute_option_order` hardcodes effect="OPEN", so "SELL" on this endpoint
+    # was a SELL-TO-OPEN: a naked short option, which nothing in this app ever
+    # intends. The frontend has only ever sent "BUY" (AutoTradeArm/index.tsx),
+    # and no other caller exists, so this narrowing removes a door rather than
+    # a feature.
+    #
+    # It also settles an inconsistency this piece created. Once sizing stopped
+    # reading `action`, the old expression's incidental damping of the SELL
+    # branch (`100 - conviction`) went away, so a naked short would have been
+    # sized at FULL conviction. Keeping `action` wide while declaring it
+    # meaningless was the worst of both: meaningless for sizing, still able to
+    # open an unintended position.
+    action:          Literal["BUY"]
+    # REQUIRED, NO DEFAULT -- this is the whole point of the field.
+    #
+    # `action` never encoded direction and cannot: a bearish options trade in
+    # this app is a LONG PUT, which is BUY, and AutoTradeArm/index.tsx hardcodes
+    # `action: 'BUY'` for every arm. So `_apply_vol_sizing` inferring direction
+    # from `action` sized every bearish trade off the BULLISH conviction frame --
+    # the ramp exactly inverted, largest into the regime that opposes the trade.
+    #
+    # A default of "Bullish" would reintroduce precisely that silent
+    # mis-direction, and it is the same failure shape as the documented G5-1
+    # hole (extra='ignore' letting a misspelled key arm with NULLs). Required
+    # means a body without `direction` is a 422 AT ARM TIME -- loud, before
+    # anything is armed -- rather than a wrong size at fire time.
+    #
+    # ROLLOUT: the two sides must deploy together. A backend ahead of the
+    # frontend, or a cached older client bundle, turns every Arm click into a
+    # 422 with no fallback. That is the accepted cost of failing loudly at arm.
+    #
+    # "Loudly" is now literally true on screen, which ROUND 1 finding 8 caught it
+    # not being: `apiError` in frontend/lib/api.ts dropped pydantic's `loc`, so
+    # this 422 rendered as `API /auto-trade/arm → 422: Field required` naming no
+    # field at all. It now reads `direction: Field required`. The backend test
+    # asserts "direction" in resp.text; that assertion was true all along and the
+    # only consumer was throwing the information away.
+    direction:       Direction
     quantity:        int = Field(..., ge=1)
     order_type:      Literal["MKT", "LMT"] = "LMT"
     # gt=0 -- ROUND 9, same reasoning as broker.py's two order schemas: a
@@ -75,6 +113,34 @@ class ArmRequest(BaseModel):
     picked_row_option_price: Optional[float]           = Field(default=None, gt=0)
     picked_stop_basis:       Optional[PickedStopBasis] = None
     picked_at:               Optional[str]             = None
+    # ── The regime gate's inputs, frozen at arm ─────────────────────────────
+    # AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19.
+    #
+    # REQUIRED, NO DEFAULT, for the reason `direction` above is: the fire path
+    # measures this symbol's own regime through the `regime.<horizon>` window
+    # (lookback / window / min_obs), and the three horizons are genuinely
+    # different measurements -- Intraday 26/1000/60 against Position 50/750/100.
+    # A default would pick one of them silently for a trade that meant another.
+    #
+    # THE ROLLOUT COST IS THE SAME ONE `direction` ACCEPTED and is stated again
+    # rather than assumed known: a backend ahead of the frontend, or a cached
+    # older client bundle, turns every Arm click into a 422. Both sides ship
+    # together. Failing loudly at arm beats measuring the wrong window at fire.
+    horizon:         Horizon
+    # The Step-3 Regime Gate thresholds this card's scan was run with. Omitted
+    # or null means "the scan used the scoring_rules.yaml value", which is what
+    # an untouched Step-3 control means -- so an omission is a real state here
+    # and not a missing field.
+    #
+    # UNBOUNDED ON PURPOSE, and deliberately unlike `premium_stop_pct` and
+    # `limit_price` above. Those tighten against a schema this endpoint
+    # bypasses. These two must be able to carry EXACTLY what the scan carried:
+    # `ScanRequest` and `StockScanRequest` both declare them as plain
+    # `Optional[float]`, and a bound here that the scan does not have would
+    # refuse to arm a card the scan itself produced -- which is the same
+    # scan-versus-fire disagreement this field exists to remove.
+    regime_headwind_caution_pct: Optional[float] = None
+    regime_headwind_reject_pct:  Optional[float] = None
 
 
 @router.post("/arm")
@@ -96,7 +162,8 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     """Trigger #1: manually fire the armed strategy with a live exposure check."""
     from app.models.portfolio import PortfolioPositionModel
     from app.services.portfolio_risk import orm_positions_to_risk
-    if not auto_trader.get_state().armed:
+    _armed_state = auto_trader.get_state()
+    if not _armed_state.armed or _armed_state.strategy is None:
         raise HTTPException(status_code=400, detail="AutoTrader not armed — cannot fire")
     result_q = await db.execute(select(PortfolioPositionModel))
     orm_positions = result_q.scalars().all()
@@ -105,6 +172,27 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
         result = auto_trader.fire(
             portfolio_snapshot=portfolio_snapshot,
             portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
+            # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same
+            # contract `maybe_fire_on_scan` passes, and for the same reason.
+            # This handler reads the armed slot, decides something about what
+            # it read (the 400 above), and only then calls: exactly the caller
+            # shape `fire()`'s docstring says `expect` exists for. Without it,
+            # `fire()`'s halt check runs on the symbol read in its first lock
+            # block and the submission happens on whatever the second one
+            # finds, so a re-arm in that window — which spans a 3s network
+            # call — authorizes order B on order A's halt decision.
+            #
+            # NOT REACHABLE OVER HTTP TODAY, and recorded here so the next
+            # reader does not decide it is therefore pointless: `fire_now` is
+            # `async def` but calls `fire()` synchronously, blocking the loop,
+            # so no second request can be parsed inside the window. That is an
+            # accident of this endpoint's shape, not a guard. It stops holding
+            # the moment `fire()` moves behind `asyncio.to_thread` (which this
+            # codebase is already doing for broker order execution), a second
+            # worker shares the state, or any non-HTTP producer calls `arm()`.
+            # A mismatch raises `ArmPreservedError`, which is a RuntimeError,
+            # so the handler below already maps it to the 400 it should be.
+            expect=_armed_state.strategy,
         )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -119,6 +207,16 @@ async def status() -> dict:
         "symbol": state.strategy.symbol if state.strategy else None,
         "option": state.strategy.option_symbol if state.strategy else None,
         "broker": state.strategy.broker if state.strategy else None,
+        # Once direction decides position size, a WRONG direction on an armed
+        # trade is otherwise undetectable until the fill. This is the
+        # observability half of arming loudly.
+        #
+        # KNOWN GAP, deliberately not closed here: the history entries appended
+        # in auto_trader.py carry no `direction`, so a FIRED trade's direction
+        # stays unrecorded and `last_order` below will not show it. Recording it
+        # there belongs to O4 (the path that will book a position) -- noted so
+        # nobody mistakes `last_order` for direction evidence.
+        "direction": state.strategy.direction if state.strategy else None,
         "history_count": len(state.history),
         "last_order": state.history[-1] if state.history else None,
     }

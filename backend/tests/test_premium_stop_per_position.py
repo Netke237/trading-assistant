@@ -286,8 +286,8 @@ def _armed(**kw):
     from app.services.auto_trader import ArmedStrategy
     base = dict(
         broker="tradier_paper", symbol="AAPL", option_symbol="AAPL260516C00190000",
-        action="BUY", quantity=1, order_type="LMT", limit_price=5.0, conid=None,
-        entry_premium=5.0,
+        action="BUY", direction="Bullish", quantity=1, order_type="LMT",
+        limit_price=5.0, conid=None, entry_premium=5.0,
     )
     base.update(kw)
     return ArmedStrategy(**base)
@@ -372,7 +372,8 @@ def test_arm_request_carries_the_pct_into_the_strategy():
 
     req = ArmRequest(
         broker="tradier_paper", symbol="AAPL",
-        option_symbol="AAPL260516C00190000", action="BUY", quantity=1,
+        option_symbol="AAPL260516C00190000", action="BUY", direction="Bullish",
+        horizon="Swing", quantity=1,
         premium_stop_pct=0.30,
     )
     assert ArmedStrategy(**req.model_dump()).premium_stop_pct == 0.30
@@ -388,7 +389,7 @@ def test_arm_request_rejects_meaningless_percentages(bad):
     with pytest.raises(ValidationError):
         ArmRequest(
             broker="tradier_paper", symbol="AAPL",
-            option_symbol="AAPL260516C00190000", action="BUY", quantity=1,
+            option_symbol="AAPL260516C00190000", action="BUY", direction="Bullish", quantity=1,
             premium_stop_pct=bad,
         )
 
@@ -576,7 +577,7 @@ async def _create(client, *, live_price=None, rec="REC-PS", **extra):
     """
     body = {
         "recId": rec, "symbol": "AAPL", "contract": "AAPL|190|2026-05-16|C",
-        "direction": "Bullish", "entryPrice": 5.20, "qty": 1,
+        "direction": "Bullish", "horizon": "Swing", "entryPrice": 5.20, "qty": 1,
         "entryDate": "2026-05-01", "targets": [], "dteTotal": 30,
         "portfolioValue": 1_000_000,
     }
@@ -727,7 +728,7 @@ async def _create_reanchor(client, *, scan_price, live_stock, stop, rec_override
     """
     body = {
         "recId": rec_override or "REC-RE", "symbol": "AAPL", "contract": "AAPL|190|2026-05-16|C",
-        "direction": "Bullish", "entryPrice": 5.20, "qty": 1,
+        "direction": "Bullish", "horizon": "Swing", "entryPrice": 5.20, "qty": 1,
         "entryDate": "2026-05-01", "targets": [], "dteTotal": 30,
         "portfolioValue": 1_000_000,
         "scanStockPrice": scan_price, "stop": stop,
@@ -853,7 +854,18 @@ def test_order_schemas_reject_a_non_positive_limit_price(bad):
     ):
         base = {
             "broker": "tradier_paper", "symbol": "AAPL", "action": "BUY",
-            "effect": "OPEN", "quantity": 1, "limit_price": bad, **extra,
+            "effect": "OPEN", "quantity": 1, "limit_price": bad,
+            # ROUND 1 finding 1. `direction` is REQUIRED on ArmRequest, and a
+            # missing required field raises before any other bound is
+            # evaluated -- so without this key the ArmRequest row below raised
+            # for the MISSING DIRECTION and this test passed for the wrong
+            # reason. `ArmRequest.limit_price`'s `gt=0` could have been deleted
+            # outright with the suite still green, and that schema reaches a
+            # broker without passing through either order schema above.
+            # Harmless to the two models that do not declare it: both ignore
+            # unknown keys here.
+            "direction": "Bullish", "horizon": "Swing",
+            **extra,
         }
         with pytest.raises(ValidationError):
             model(**base)

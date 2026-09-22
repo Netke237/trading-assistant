@@ -17,6 +17,7 @@ import type { Direction } from '@/types/domain';
 import type { ConfidenceGate, FundamentalsGate, SpreadsConfig } from '@/lib/settingsStore';
 import { atrMultForHorizon } from '@/lib/settingsStore';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
+import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
 
 export interface ResolvedScanContext {
   universe: string[];
@@ -72,6 +73,14 @@ export interface OptionsScanRequestBody {
   fundamentals_de_reject?: number;
   fundamentals_caution_above?: number;
   fundamentals_reject_above?: number;
+  /** Step-3 Regime Gate overrides. Added 2026-09-19 — Step 3 has shown these
+   *  two in every screener mode since they were built, but only the STOCK scan
+   *  request carried them, so setting "Headwind reject %" and running an
+   *  options scan did nothing. The auto-trader now snapshots the same two onto
+   *  the armed trade, so the options scan has to be applying them or the
+   *  snapshot would carry a rule its own scan never used. */
+  regime_headwind_caution_pct?: number;
+  regime_headwind_reject_pct?: number;
   spread_width?: number;
   short_leg_delta?: number;
   iv_rank_threshold?: number;
@@ -99,6 +108,11 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
   const { confidence_caution_below: _cb, confidence_reject_below: _rb,
           confidence_atr_mult_target: _amt, confidence_atr_mult_stop: _ams,
           fundamentals_caution_above: _fca, fundamentals_reject_above: _fra,
+          // Same reason as the six above: top-level request fields, not score
+          // overrides. They were landing in `overrides` before 2026-09-19 —
+          // harmless, because stock_scorer ignores keys it does not know, but
+          // it meant the Step-3 value was being posted to a place nothing read.
+          regime_headwind_caution_pct: _rhc, regime_headwind_reject_pct: _rhr,
           ...scoreOnlyOverrides } = scanOverrides;
   const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: ctx.shortlistMaxCandidates };
 
@@ -132,6 +146,16 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
   }
   if (typeof scanOverrides.fundamentals_reject_above === 'number') {
     filters.fundamentals_reject_above = scanOverrides.fundamentals_reject_above;
+  }
+
+  // One reading, shared with the stocks resolver and the arm payload — see
+  // lib/regimeGateOverrides.ts for why that matters.
+  const regimeGate = regimeGateOverridesFrom(scanOverrides);
+  if (regimeGate.regime_headwind_caution_pct !== undefined) {
+    filters.regime_headwind_caution_pct = regimeGate.regime_headwind_caution_pct;
+  }
+  if (regimeGate.regime_headwind_reject_pct !== undefined) {
+    filters.regime_headwind_reject_pct = regimeGate.regime_headwind_reject_pct;
   }
 
   const hold = sanitizeHoldDays(ctx.holdMinDays, ctx.holdMaxDays);

@@ -18,8 +18,16 @@ logger = logging.getLogger(__name__)
 
 _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
-# ── Module-level conviction cache (read by auto_trader._apply_vol_sizing) ─────
+# ── Module-level regime cache (read by auto_trader's fire path) ───────────────
 _last_conviction: float | None = None
+# STABILITY IS CACHED BECAUSE THE GATE NEEDS IT, and it was being discarded.
+# `compute_omm` returns it from the same call that produces conviction, but only
+# the pct was kept -- so the fire path could not apply `regime_gate`, whose
+# REJECT arm is conditioned on `require_stable_for_reject` (true today). Half a
+# rule is not the rule: applying the conviction half alone would refuse trades
+# in a Fragile regime that the scan lets through, which is a DIFFERENT gate
+# wearing the same name.
+_last_stability: str | None = None
 
 
 def get_last_conviction() -> float | None:
@@ -27,9 +35,27 @@ def get_last_conviction() -> float | None:
     return _last_conviction
 
 
+def get_last_stability() -> str | None:
+    """Return cached OMM stability ('Stable' | 'Fragile'). None = not yet computed."""
+    return _last_stability
+
+
 def set_last_conviction(pct: float) -> None:
     global _last_conviction
     _last_conviction = float(pct)
+
+
+def set_last_regime(pct: float, stability: str | None) -> None:
+    """Set both halves from ONE compute_omm result.
+
+    One setter, because they are one fact: a conviction cached without the
+    stability it was measured with invites a reader to pair a fresh number with
+    a stale one. `set_last_conviction` is kept for callers that genuinely have
+    only the pct; it leaves stability untouched rather than guessing.
+    """
+    global _last_stability
+    set_last_conviction(pct)
+    _last_stability = stability
 
 
 # ── Module-level REJECT-flip sustain clock ─────────────────────────────────
@@ -182,11 +208,11 @@ async def _update_conviction_cache() -> None:
                 return None
             closes = [c["close"] for c in candles]
             result = compute_omm(closes, direction="Bullish")
-            return result.conviction_pct if result else None
+            return (result.conviction_pct, result.stability) if result else None
 
-        pct = await loop.run_in_executor(None, _compute)
-        if pct is not None:
-            set_last_conviction(pct)
+        got = await loop.run_in_executor(None, _compute)
+        if got is not None:
+            set_last_regime(*got)
     except Exception as exc:
         logger.debug("regime_monitor: conviction cache update failed: %s", exc)
 

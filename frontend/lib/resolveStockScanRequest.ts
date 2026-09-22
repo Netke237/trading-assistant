@@ -7,6 +7,7 @@
 import type { ScanParams } from '@/lib/scanParamsStore';
 import type { ConfidenceGate } from '@/lib/settingsStore';
 import { atrMultForHorizon } from '@/lib/settingsStore';
+import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
 
 // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
 // Options-only params (max_delta, min_dte, etc.) and the two IV ceilings
@@ -128,8 +129,10 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
     confidence_reject_below: confidenceGate.enabled ? confidenceGate.rejectBelow : undefined,
     confidence_atr_mult_target: atrPair.target,
     confidence_atr_mult_stop: atrPair.stop,
-    regime_headwind_caution_pct: typeof rawOverrides.regime_headwind_caution_pct === 'number' ? rawOverrides.regime_headwind_caution_pct : undefined,
-    regime_headwind_reject_pct: typeof rawOverrides.regime_headwind_reject_pct === 'number' ? rawOverrides.regime_headwind_reject_pct : undefined,
+    // Was two inline ternaries identical to these; routed through the shared
+    // reader 2026-09-19 so this, the options scan and the arm snapshot cannot
+    // drift apart on what the Step-3 controls say.
+    ...regimeGateOverridesFrom(rawOverrides),
     fundamentals_caution_above: typeof rawOverrides.fundamentals_caution_above === 'number' ? rawOverrides.fundamentals_caution_above : undefined,
     fundamentals_reject_above: typeof rawOverrides.fundamentals_reject_above === 'number' ? rawOverrides.fundamentals_reject_above : undefined,
     ...(ctx.strategy === 'mean_reversion_multi' ? {

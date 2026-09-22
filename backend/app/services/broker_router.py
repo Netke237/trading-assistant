@@ -15,7 +15,25 @@ class BrokerRouter:
     def __init__(self, adapters: dict) -> None:
         self._adapters = adapters
 
-    def execute(self, broker_key: str, order: BrokerOrder) -> OrderResult:
+    def resolve(self, broker_key: str):
+        """The adapter for `broker_key`, or ValueError. CONTACTS NOTHING.
+
+        SPLIT OUT OF `execute` BY F2 OF 2A-ALERT ROUND 1, and the split is the
+        fix rather than a tidy-up. Both raises below happen BEFORE
+        `adapter.place_order` — the only call in this file that can put an order
+        in front of a broker — but a caller that only saw `execute` raise could
+        not tell them from a submission that errored mid-flight. `auto_trader`
+        paged "THE ORDER MAY HAVE LANDED. Check the broker" for both, and the
+        common way in is mundane: credentials expire or get rotated,
+        `build_router_from_credentials` silently omits that adapter, and the
+        dict lookup below raises "Unknown broker". Nothing was sent, and Kenneth
+        was sent hunting a position that does not exist.
+
+        The unknown-broker message therefore has to carry weight it did not
+        before: it is what the operator reads in the alert, and an empty
+        `Available:` list is the signal that the credential store came back
+        bare rather than that a key was mistyped.
+        """
         if broker_key in _LIVE_BROKERS:
             raise ValueError(
                 f"live trading via '{broker_key}' is not yet activated. "
@@ -27,7 +45,14 @@ class BrokerRouter:
                 f"Unknown broker '{broker_key}'. "
                 f"Available: {list(self._adapters.keys())}"
             )
-        return adapter.place_order(order)
+        return adapter
+
+    def execute(self, broker_key: str, order: BrokerOrder) -> OrderResult:
+        """Resolve then submit. Unchanged for every caller that does not need
+        the boundary — `routers/broker.py` handles its own errors per request
+        and has a human watching the response, so it keeps the one-call form.
+        """
+        return self.resolve(broker_key).place_order(order)
 
 
 def build_router_from_credentials() -> BrokerRouter:

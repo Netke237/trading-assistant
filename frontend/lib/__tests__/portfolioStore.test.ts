@@ -812,7 +812,13 @@ describe('portfolioStore', () => {
       const res = await usePortfolioStore.getState().addPosition(abt);
       expect(res.status).toBe('rejected');
       expect(typeof res.detail).toBe('string');
-      expect(res.detail).toBe('Input should be greater than 0');
+      // Prefixed with the field since this path moved onto lib/pydanticError.ts,
+      // the same helper apiError uses. The old unprefixed form was pinned here
+      // on the rationale that "these are all single-position posts" — but a
+      // single position posts several `gt=0` fields whose messages are
+      // byte-identical, so the sibling test below rendered "Input should be
+      // greater than 0; Input should be greater than 0" and named neither.
+      expect(res.detail).toBe('entry_price: Input should be greater than 0');
       const stored = usePortfolioStore.getState().lastSyncError?.detail;
       expect(typeof stored).toBe('string');
       // The page formatter must survive it -- that is the actual crash.

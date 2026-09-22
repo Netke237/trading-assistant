@@ -179,6 +179,42 @@ def _reset_strategy_param_cache():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_alert_dedup_state(tmp_path, monkeypatch):
+    """Point the alert notifier's dedup store at a throwaway file, and reset its
+    module globals, around every test.
+
+    WITHOUT THIS, RUNNING THE SUITE CORRUPTS REAL RUNTIME STATE. `_save_dedup`
+    writes `_fired` / `_first_seen` to `backend/alert_dedup.json` -- the actual
+    file the running backend loads at import. Any test that reaches a code path
+    calling `notify_alert` or `forget_alerts` without stubbing them therefore
+    rewrites that file with whatever the test left in the globals. Measured on
+    this suite: one run replaced the file's entire contents with two auto-trade
+    refusal keys and armed both of their FOUR-HOUR suppression windows, so a
+    backend restarted from the same tree had lost every genuine portfolio-alert
+    record AND would silently not alert the next config refusal inside the
+    window -- §9.1's "and alert" half failing from a test run.
+
+    Found by target 2a's round 3. The trigger was new: the auto-trader's
+    discrete-refusal cleanup calls the real `forget_alerts`, which calls the
+    real `_save_dedup`. But the exposure was not new and was not confined to
+    that path, which is why this is autouse over the whole suite rather than a
+    fixture in one module -- the next test to reach the notifier unstubbed would
+    have re-opened it.
+
+    Both globals are reset on the way IN and on the way OUT: a test that leaves
+    keys behind must not arm another test's dedup window, which is the same
+    ordering-dependence `_reset_market_data_caches` below exists to prevent.
+    """
+    import app.services.notifications.alert_notifier as an
+    monkeypatch.setattr(an, "_DEDUP_PATH", tmp_path / "alert_dedup.json")
+    an._fired.clear()
+    an._first_seen.clear()
+    yield
+    an._fired.clear()
+    an._first_seen.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_market_data_caches():
     """Clear market.py's module-level day-scoped caches before and after every
     test.

@@ -462,11 +462,20 @@ regime_gate:
 
 regime_sizing:
   enabled: true
-  # Floor of the conviction ramp: size = min_mult + (1 - min_mult) * (conv / full).
-  # Lowered 0.5 -> 0.3 when the auto-trader adopted the ramp. The ramp is >= the
-  # old clamp at equal min_mult, so this offsets it: below ~conviction 11 sizing
-  # is now SMALLER than the clamp shipped, above it larger, peaking +0.15 at
-  # conviction 20. Raise this to size up across the board; lower it to size down.
+  # Floor of the conviction ramp. THE RAMP IS TWO-SIDED since 2026-09-19:
+  #   size = min_mult + (1 - min_mult) * (conv + full) / (2 * full)
+  # so -full gives min_mult, 0 gives the midpoint, +full gives 1.0. It was
+  # one-sided ((conv / full), clamped at 0), which meant every conviction at or
+  # below neutral produced min_mult -- a regime opposing a trade slightly and
+  # one opposing it overwhelmingly sized identically.
+  #
+  # THAT CHANGE ROUGHLY DOUBLED NEUTRAL-REGIME SIZING: 0.30 -> 0.65 on these
+  # values, on BOTH the scan card and the auto-trader, which share this ramp.
+  # Raise min_mult to size up across the board; lower it to size down.
+  #
+  # `regime_gate.headwind_reject_pct` above is -40 and this is 40, so the
+  # graded band is exactly the band that survives the gate. That is a property
+  # of these two values, not an invariant -- nothing enforces the pairing.
   min_mult: 0.3
   full_conviction_pct: 40
 
