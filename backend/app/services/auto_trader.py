@@ -11,7 +11,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import date, datetime, time as dtime, timedelta, timezone
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 from app.schemas import Direction, Horizon
 from app.services.premium_stop import resolve_premium_stop_pct
 from app.services.scheduling_tz import MARKET_TZ
@@ -150,6 +150,50 @@ class RegimeGateConfigError(RuntimeError):
     """
 
 
+class MalformedDirectionError(RuntimeError):
+    """`ArmedStrategy.direction` is not one of the two values the frame needs.
+
+    PIECE B. `ArmedStrategy` is a plain dataclass, so its `Direction` annotation
+    is NOT enforced at runtime -- only `ArmRequest` (pydantic) refuses a bad
+    value, and that covers the HTTP door alone. A direct constructor passing
+    "bullish", "Bulish", "" or None reaches `_apply_vol_sizing` intact.
+
+    WHAT IT COSTS TODAY, and why a bounded wrong answer still gets its own
+    refusal: `directional_conv = conviction if direction == "Bullish" else
+    -conviction` FAILS OPEN TO BEARISH, so every malformed value is silently
+    sized in the mirrored frame. That is wrong but bounded between min_mult and
+    1. AFTER AUTOTRADE-SIZING-4-PER-SYMBOL-SIZING it stops being bounded:
+    sizing moves onto `compute_omm(direction=...)`, which RAISES on a direction
+    it does not recognise, `_measure_trade_regime` abstains, and an
+    abstain-to-proceed in SIZING would ship the FULL ARMED QUANTITY -- the
+    largest position this path can place, on its most malformed input. The
+    swap relocates the hole and makes it worse, which is why this lands first.
+
+    DELIBERATELY NOT a ValueError and not SizingConfigError, for the reason its
+    two neighbours above carry their own types -- and here it is not a judgement
+    call but a measured one. Round 3 of the plan audit
+    (docs/superpowers/plans/2026-09-18-B-armed-strategy-runtime-validation.md
+    section 2.1) prescribed a bare `raise ValueError` and then measured it:
+    fire() catches `(SizingConfigError, ValueError)`, so the refusal files
+    under `sizing_data_blocked`, logs "the regime conviction is not a usable
+    number" -- FALSE, the conviction is fine and was never read; the DIRECTION
+    is malformed -- and pages under `_REC_ID_SIZING`, a key shared with the
+    genuine sizing-config refusal, whose four-hour dedup window it can then
+    SUPPRESS. Its own type, its own history status
+    (`direction_invalid_blocked`), its own rec_id, its own alert type.
+
+    THE REMEDY IT NAMES IS A THIRD ONE. The sizing refusal means "fix
+    scoring_rules.yaml's regime_sizing block", the gate-config one means "fix
+    its regime_gate block", the headwind one means "the market moved against
+    this trade". This one means "whatever constructed this ArmedStrategy wrote
+    a direction the app does not have" -- a defect in a PRODUCER, not in a
+    config file and not in the market.
+
+    A RuntimeError so `/auto-trade/fire` maps it to a 400, as all three
+    neighbours do.
+    """
+
+
 @dataclass
 class ArmedStrategy:
     broker:          str
@@ -160,15 +204,24 @@ class ArmedStrategy:
     # Required and non-defaulted, which is legal here because every field above
     # is non-defaulted too and `entry_premium` below is the first with a default.
     #
-    # THIS DATACLASS IS THE CARRIER, NOT THE VALIDATOR: `Literal` is not enforced
-    # at runtime on a plain dataclass, so only `ArmRequest` (pydantic) actually
-    # refuses a bad value. A direct constructor passing "bullish", "" or None
-    # therefore still lands on the bearish branch in `_apply_vol_sizing` below.
-    # Closing that hole is its own piece (docs/superpowers/plans/
-    # 2026-09-18-B-armed-strategy-runtime-validation.md) because the obvious
-    # `raise ValueError` lands in fire()'s `sizing_data_blocked` bucket with a
-    # false log line, and sits after both full-size early returns -- absent
-    # exactly where the blast radius is largest.
+    # THIS DATACLASS IS STILL THE CARRIER, NOT THE VALIDATOR: `Direction` is a
+    # `Literal` and is not enforced at runtime on a plain dataclass, so only
+    # `ArmRequest` (pydantic) refuses a bad value AT CONSTRUCTION. A direct
+    # constructor passing "bullish", "" or None builds this object happily.
+    #
+    # WHAT CHANGED (piece B, 2026-09-22) IS WHAT HAPPENS NEXT. Such a value used
+    # to fall silently to the bearish branch in `_apply_vol_sizing` below --
+    # wrong, but bounded. `_apply_vol_sizing` now calls
+    # `_require_valid_direction` as its FIRST statement and raises
+    # `MalformedDirectionError`, so the fire is refused, recorded as
+    # `direction_invalid_blocked` and alerted under its own key.
+    #
+    # THE DATACLASS ITSELF IS DELIBERATELY LEFT UNVALIDATING -- no
+    # `__post_init__`. 24 call sites construct it (23 in tests, one in
+    # routers/auto_trade.py), and validating at construction would move the
+    # refusal from the fire path, where it can be recorded in history and
+    # paged, into whatever thread happened to build the object, where it
+    # cannot. The guard belongs where the refusal taxonomy is.
     direction:       Direction
     quantity:        int
     order_type:      Literal["MKT", "LMT"]
@@ -935,13 +988,29 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
             min_obs=min_obs,
         )
     except Exception as exc:
-        # `compute_omm` raises ValueError on a direction it does not recognise,
-        # which a direct constructor can still produce (ArmedStrategy's Literal
-        # is not enforced at runtime -- piece B). Abstaining rather than letting
-        # it escape keeps a malformed direction out of fire()'s
-        # `(SizingConfigError, ValueError)` bucket, where it would be recorded
-        # as `sizing_data_blocked` and logged as an unusable conviction: the
-        # exact false-log defect piece B's round 3 measured and rejected.
+        # NO LONGER THE DIRECTION GUARD, and that is piece B folding its
+        # partial mitigation in rather than leaving a second copy of it.
+        #
+        # 072d74ff added this catch because `compute_omm` raises ValueError on
+        # a direction it does not recognise, which a direct constructor could
+        # produce (`ArmedStrategy` is a plain dataclass and does not enforce
+        # its own annotation) -- and abstaining kept that out of fire()'s
+        # `(SizingConfigError, ValueError)` bucket, where it would have been
+        # filed as `sizing_data_blocked` and logged as an unusable conviction.
+        # That covered THIS path only, and ABSTAINING IS FAIL-OPEN: the trade
+        # then fired ungated at the full armed quantity.
+        #
+        # `_apply_vol_sizing` now calls `_require_valid_direction` as its first
+        # statement, above this function's only caller, so a malformed
+        # direction is REFUSED before any of this runs and can no longer reach
+        # `compute_omm`. One rule, one owner, and the answer is a refusal
+        # rather than an abstain.
+        #
+        # THE CATCH STAYS, because its remaining job is real and always was
+        # the wider one: `compute_omm` can raise for reasons that have nothing
+        # to do with direction, and a regime that cannot be computed is
+        # genuinely unmeasurable -- which is what `abstained` means and what
+        # the scan does with it too.
         logger.warning(
             "regime_gate: %s %s NOT evaluated — regime computation failed: %s",
             strategy.symbol, strategy.direction, exc,
@@ -1235,6 +1304,51 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
     return "passed"
 
 
+# The two directions, taken from the schema alias rather than spelled again.
+# `Direction` is `Literal['Bullish', 'Bearish']` and `ArmRequest` validates
+# against that same alias, so the HTTP door and this runtime guard cannot drift
+# into disagreeing about what a direction is -- which is the "two copies of one
+# rule" defect `conviction_sizing.py` exists to prevent, one field over.
+_VALID_DIRECTIONS: tuple[str, ...] = get_args(Direction)
+
+
+def _require_valid_direction(strategy: ArmedStrategy) -> None:
+    """Refuse an armed strategy whose `direction` is not a real direction.
+
+    RAISES `MalformedDirectionError`. Returns None on the two good values, so
+    callers read as a guard rather than as a branch.
+
+    WHY IT REFUSES RATHER THAN DEFAULTING: a default of "Bullish" is the exact
+    silent mis-direction `ArmRequest.direction` is required-and-non-defaulted to
+    prevent, and a default of "Bearish" is today's fail-open behaviour with a
+    comment on it. There is no third value that is not a guess about what the
+    producer meant, and guessing the frame of a trade is how a bearish position
+    came to be sized off the bullish conviction in the first place.
+
+    WHY IT REFUSES EVEN WHEN NOTHING WOULD HAVE READ THE DIRECTION -- with
+    `regime_sizing` off AND `regime_gate` disabled, direction reaches no
+    arithmetic at all, and refusing there is stricter than the damage. That is
+    accepted on purpose: those are precisely the two states that ship a FULL
+    ARMED QUANTITY, they are where round 3 measured the old guard to be absent
+    (section 2.2), and an ArmedStrategy carrying a direction this app does not
+    define is a corrupt record whether or not this particular fire would have
+    divided by it. The alternative -- validating only on the paths that
+    consume it -- puts the guard back exactly where the blast radius is
+    smallest.
+    """
+    if strategy.direction not in _VALID_DIRECTIONS:
+        raise MalformedDirectionError(
+            f"malformed direction: {strategy.symbol} was armed with "
+            f"direction={strategy.direction!r}, which is not one of "
+            f"{list(_VALID_DIRECTIONS)} — the trade's regime frame cannot be "
+            f"determined, so it was neither gated nor sized. `ArmedStrategy` "
+            f"is a plain dataclass and does not validate its own fields, so "
+            f"this came from a producer that bypassed POST /auto-trade/arm "
+            f"(which does validate) or from one constructing the dataclass "
+            f"directly"
+        )
+
+
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     """Return a (possibly quantity-adjusted) copy of strategy based on regime conviction.
 
@@ -1253,8 +1367,44 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     the regime_sizing block is present and cannot be honoured — the §9.1
     fail-closed posture, which fire() turns into a recorded refusal rather than
     an order at full size. RAISES RegimeHeadwindError when the symbol's own
-    regime opposes the trade hard enough that the scan's rule drops it.
+    regime opposes the trade hard enough that the scan's rule drops it. RAISES
+    MalformedDirectionError, before anything else runs, if the armed direction
+    is not a real direction.
     """
+    # PIECE B, AND IT IS THE FIRST STATEMENT ON PURPOSE -- all three of the
+    # reasons below, and dropping any one of them reopens a measured hole:
+    #
+    #   1. ABOVE BOTH FULL-SIZE EARLY RETURNS (`sizing_off` and
+    #      `conviction is None`). Round 3 of the plan audit rejected the
+    #      obvious fix largely on POSITION: it sat beside the
+    #      `directional_conv` expression, so a malformed direction was refused
+    #      only when regime sizing was ENABLED and the conviction cache was
+    #      WARM -- i.e. never in the two states where this function returns the
+    #      ARMED QUANTITY UNCHANGED. The guard was absent exactly where the
+    #      blast radius is largest. Here it fires in every state.
+    #
+    #   2. ABOVE `_apply_regime_gate`, so the direction rule has ONE owner.
+    #      The gate reaches `compute_omm(direction=...)`, which raises on an
+    #      unrecognised direction; `_measure_trade_regime` catches that and
+    #      ABSTAINS, which is fail-OPEN -- right for a regime that cannot be
+    #      measured, wrong for a record that is corrupt, and it would fire the
+    #      trade UNGATED at full size. That catch stays (it still covers
+    #      genuine computation failures) but it no longer has to stand in for
+    #      this check: 072d74ff added it as a PARTIAL mitigation covering the
+    #      gate path only, and this folds that in rather than leaving two
+    #      guards giving two answers to one question.
+    #
+    #   3. ABOVE `_load_scoring_config()` and `resolve_sizing()`, which can
+    #      both raise SizingConfigError. Below them, a malformed direction on a
+    #      broken config would be reported as a CONFIG fault -- the same
+    #      misattribution documented ~40 lines down for the gate, where it is
+    #      accepted only because moving the gate up would buy an 8-second bar
+    #      fetch on a config the process already knows it cannot honour. THAT
+    #      TRADE DOES NOT APPLY HERE: this is an in-memory membership test with
+    #      no I/O and no config read, so it costs nothing to put first, and it
+    #      also spares that fetch on a strategy already known to be unusable.
+    _require_valid_direction(strategy)
+
     cfg = _load_scoring_config()
     # Validated BEFORE the conviction lookup, and that order is load-bearing:
     # `conviction is None` below returns the strategy unchanged (full size), so
@@ -1535,6 +1685,29 @@ _REC_ID_GATE_CONFIG = "auto-trade-regime-gate-config"
 # calls the expected case. The prefix is a prefix; `_headwind_rec_id` below is
 # what is actually sent.
 _REC_ID_HEADWIND = "auto-trade-regime-headwind"
+# PER SYMBOL AND DISCRETE, added by piece B, on the headwind key's reasoning
+# rather than the config keys' -- and the choice is the third of this piece's
+# three coupled decisions, so it is argued rather than asserted.
+#
+# NOT `_REC_ID_SIZING`, WHICH IS THE WHOLE POINT. Round 3 measured a bare
+# `raise ValueError` landing in fire()'s sizing handler and paging under that
+# shared key: a malformed direction could then arm a FOUR-HOUR dedup window
+# that silently swallowed a genuine `sizing_data_blocked` refusal -- one broken
+# producer suppressing the page for a broken config file. Its own key, so
+# neither can suppress the other.
+#
+# PER SYMBOL because a producer constructing ArmedStrategy badly will do it for
+# every symbol it arms, and `notify_alert` keys on `f"{rec_id}|{alert_type}"`
+# with the symbol reaching only the BODY -- so a bare constant would page for
+# the first symbol and drop every one after it inside the window. That is round
+# 2's measured defect, which is why `_per_symbol_rec_id` exists.
+#
+# DISCRETE because a refusal DISARMS the auto-trader, so a second refusal of
+# the same symbol takes a deliberate re-arm, and suppressing the answer to a
+# human's re-arm is the opposite of what a dedup window is for. It is therefore
+# NOT added to `_clear_config_refusal_holds`, which exists for the two
+# NON-discrete config keys; `discrete=True` clears this one on its way out.
+_REC_ID_DIRECTION_INVALID = "auto-trade-direction-invalid"
 
 
 def _per_symbol_rec_id(prefix: str, symbol: str) -> str:
@@ -1647,6 +1820,42 @@ def _alert_regime_headwind_refusal(symbol: str, exc: Exception) -> None:
     )
 
 
+def _alert_malformed_direction_refusal(symbol: str, exc: Exception) -> None:
+    """Alert a malformed-direction refusal on the unattended trigger.
+
+    ITS OWN WORDING, for the reason the gate-config alert has its own rather
+    than the sizing one's: routing this to `_alert_sizing_config_refusal` would
+    page "the regime conviction is not a usable number" for a fault in neither
+    the conviction nor any config file, sending the operator to a block that is
+    fine. The conviction was never read -- the refusal happens above the lookup.
+
+    NOT A CONFIG_ERROR: scoring_rules.yaml is not implicated at all. The thing
+    to fix is CODE, in whatever produced the ArmedStrategy, so the message
+    names the bad value and says where a valid one is normally enforced.
+    """
+    _alert_refusal(
+        symbol,
+        "malformed-direction refusal",
+        (
+            f"Auto-trade REFUSED to fire {symbol}: the armed trade carries a "
+            f"direction this app does not define, so its regime frame is "
+            f"unknown and the trade was refused rather than sized in a guessed "
+            f"one. Nothing was sent and the auto-trader is disarmed. This is a "
+            f"defect in whatever armed the trade, not in a config file and not "
+            f"in the market — re-arming through POST /auto-trade/arm will "
+            f"reject the same value with a 422. {exc}"
+        ),
+        _per_symbol_rec_id(_REC_ID_DIRECTION_INVALID, symbol),
+        _ALERT_TYPE_DIRECTION_INVALID,
+        # A REFUSAL IS A DISCRETE EVENT, not a standing condition — the same
+        # call the headwind refusal makes above, and for the same measured
+        # reason: `notify_alert` stamps every later send under a key as a
+        # "(reminder)" carrying the FIRST occurrence's date plus a "Still
+        # active as of" line, which dresses a fresh refusal as an old nag.
+        discrete=True,
+    )
+
+
 # THE THREE REFUSAL KINDS ROUND 1 OF THIS TARGET FOUND STILL REACHING NOBODY.
 # All three leave `fire()` as a bare RuntimeError, so they cannot be told apart
 # by exception class the way the headwind, gate-config and sizing refusals can
@@ -1688,6 +1897,15 @@ _ALERT_TYPE_NOT_SUBMITTED = "AUTO_TRADE_ORDER_NOT_SUBMITTED"
 # routine event suppress the urgent one for the rest of the window.
 _ALERT_TYPE_STALE_BLOCKED = "AUTO_TRADE_ARM_EXPIRED"
 _ALERT_TYPE_UNCLASSIFIED = "AUTO_TRADE_REFUSED_UNCLASSIFIED"
+# A SIXTH TYPE, on the rule the five above share: `notify_alert` builds the
+# SUBJECT LINE from the type, and round 2 of target 2a measured that two
+# refusals given two exception types and two dedup keys still arrived in the
+# inbox reading identically when they shared one type -- the separation
+# stopping at the body, which is the half nobody reads first. This one's remedy
+# is neither a config file nor the market nor the broker: it is "a caller is
+# constructing ArmedStrategy with a direction that does not exist", and the
+# person who can act on it needs to see that before opening the mail.
+_ALERT_TYPE_DIRECTION_INVALID = "AUTO_TRADE_DIRECTION_INVALID"
 
 # The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
 # routes on them. They are `fire()`'s to define; this is a reader of them.
@@ -2111,6 +2329,46 @@ class AutoTradeService:
         # still maps it to a 400 and maybe_fire_on_scan can single it out to alert.
         try:
             strategy = _apply_vol_sizing(strategy)
+        except MalformedDirectionError as exc:
+            # ITS OWN BRANCH AND ITS OWN STATUS, on the rule its two neighbours
+            # below already follow. Read FIRST because it is refused first --
+            # `_apply_vol_sizing`'s opening statement, above the config read,
+            # the gate and both full-size returns. The classes are disjoint, so
+            # this is reading order, not precedence.
+            #
+            # `direction_invalid_blocked` says the true remedy: fix the caller.
+            # Not "the size is unknown" (which is what `sizing_data_blocked`
+            # claims, and where a bare ValueError would have filed this), not
+            # "the file is broken", not "the market moved". A post-mortem
+            # reading the history by hand can tell a corrupt armed record from
+            # all three.
+            #
+            # DELIBERATELY NOT IN `_SIZING_STATUSES`: that tuple routes the
+            # scan trigger's alert, and adding this status to it would undo the
+            # separation the exception type and the rec_id were chosen for.
+            # `maybe_fire_on_scan` routes this one by CLASS, as it does for the
+            # headwind and gate-config refusals.
+            with self._lock:
+                self._state.history.append({
+                    "attempt_id":      attempt_id,
+                    "order_id":        None,
+                    "status":          "direction_invalid_blocked",
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
+                })
+            logger.error(
+                # `strategy.direction` is printed via the exception message
+                # rather than as its own %s: it is the malformed value, and
+                # `!r` there is what distinguishes "" from None from a
+                # miscased string. A bare %s would render "" as nothing at all.
+                "AutoTrader fire REFUSED for %s — the armed direction is not a "
+                "direction: %s", strategy.symbol, exc,
+            )
+            raise
         except RegimeHeadwindError as exc:
             # ITS OWN BRANCH, ITS OWN STATUS. Folding this into the handler
             # below would file a refusal we CHOSE under a status meaning "the
@@ -2518,6 +2776,20 @@ class AutoTradeService:
             _alert_regime_headwind_refusal(strategy.symbol, exc)
         except RegimeGateConfigError as exc:
             _alert_regime_gate_config_refusal(strategy.symbol, exc)
+        except MalformedDirectionError as exc:
+            # ROUTED BY CLASS, like the two above and unlike the statuses
+            # `_alert_for_consumed_attempt` reads. It has a class of its own
+            # precisely so it never needs to be told apart by its history row.
+            #
+            # IT MUST BE CAUGHT HERE RATHER THAN LEFT TO THE GENERIC HANDLER:
+            # `MalformedDirectionError` is a RuntimeError, so without this
+            # branch it falls through to `except Exception`, which routes on
+            # the recorded status -- `direction_invalid_blocked` matches no
+            # tuple there and would land in `_alert_unclassified_refusal`,
+            # telling Kenneth to go and read the log for a refusal the app
+            # understands completely. That is the exact shape target 2a round 1
+            # found the headwind refusal in.
+            _alert_malformed_direction_refusal(strategy.symbol, exc)
         except SizingConfigError as exc:
             # fire() has already logged and recorded it; this trigger has no
             # reader, so it is also the half of §9.1 that says "and alert".
