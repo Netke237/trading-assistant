@@ -517,10 +517,17 @@ def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
           * host AHEAD of New York (the operator's own Europe/Berlin, +6):
             between the host's midnight and NY's, host-today is NY-TOMORROW, so
             `last_day >= today` is False and the end-trim is skipped before this
-            function is ever called. THAT WINDOW IS NY `[24:00 - offset, 24:00)`,
-            so it lies wholly after the 16:00 close ONLY WHILE `24 - offset >=
-            16`, i.e. offset <= +8h. Berlin (+6) and a UTC host (+0) satisfy it
-            and are the deployments this ships on, so the limb holds HERE -- but
+            function is ever called. EVERY OFFSET IN THIS BLOCK IS RELATIVE TO
+            NEW YORK, NOT TO UTC -- so a UTC host is +4 in EDT and +5 in EST,
+            and Berlin, at UTC+2 in summer, is +6. THAT WINDOW IS NY `[24:00 -
+            offset, 24:00)`, so it lies wholly after the 16:00 close ONLY WHILE
+            `24 - offset >= 16`, i.e. offset <= +8h. Berlin (+6) and a UTC host
+            (+4/+5) satisfy it and are the deployments this ships on, so the
+            limb holds HERE -- and it is NOT vacuous here either: on the UTC
+            host this runs and tests on, that window is a real NY 20:00-24:00
+            every evening, four hours daily in which the end-trim, and with it
+            this whole session test, is never reached. Keeping the bar is the
+            right answer throughout it, which is why the limb holds -- but
             it does not generalise to "host ahead of New York": at >= +9h (Tokyo
             is +13) the window reaches back INTO THE LIVE SESSION, where skipping
             the trim keeps a genuinely unclosed bar. The BEHAVIOUR there belongs
