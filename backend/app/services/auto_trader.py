@@ -217,11 +217,22 @@ class ArmedStrategy:
     # `direction_invalid_blocked` and alerted under its own key.
     #
     # THE DATACLASS ITSELF IS DELIBERATELY LEFT UNVALIDATING -- no
-    # `__post_init__`. 24 call sites construct it (23 in tests, one in
-    # routers/auto_trade.py), and validating at construction would move the
-    # refusal from the fire path, where it can be recorded in history and
-    # paged, into whatever thread happened to build the object, where it
-    # cannot. The guard belongs where the refusal taxonomy is.
+    # `__post_init__` -- because validating at CONSTRUCTION would move the
+    # refusal into whatever thread happened to build the object, where there is
+    # no history to record it in and no alert helper in scope. The refusal
+    # belongs where the taxonomy is. It is enforced instead at the two places
+    # that own the record: `AutoTradeService.arm()`, which is the only writer
+    # of `_state.strategy`, and `_apply_vol_sizing` on the fire path.
+    #
+    # 32 call sites construct this dataclass: 31 under backend/tests/ and ONE
+    # in production, routers/auto_trade.py. COUNTED BY WALKING THE AST for
+    # `ast.Call` nodes, not by grepping -- a bare `grep -c "ArmedStrategy("`
+    # returns more because several hits are DOCSTRING PROSE, which is the
+    # miscount the piece B plan doc carries a whole paragraph about. Re-measured
+    # 2026-09-22; the plan's own figure of 24 dated from 2026-09-19 and this
+    # comment was written carrying it forward unchecked, which round 1 of this
+    # piece's audit caught. If it matters again, re-measure rather than trust
+    # this line.
     direction:       Direction
     quantity:        int
     order_type:      Literal["MKT", "LMT"]
@@ -1311,6 +1322,47 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
 # rule" defect `conviction_sizing.py` exists to prevent, one field over.
 _VALID_DIRECTIONS: tuple[str, ...] = get_args(Direction)
 
+# AND THE ALIAS MUST NOT BE ABLE TO OUTGROW THE MIRROR, which is round 1 of this
+# piece's audit and is the sharp edge that deriving from `Direction` CREATED.
+# The guard widens automatically with the alias; the sizing mirror below does
+# NOT -- `directional_conv = conviction if strategy.direction == "Bullish" else
+# -conviction` is a two-way branch with "Bullish" spelled as a literal. So
+# adding a third member to `Direction` would make this guard ACCEPT it and the
+# mirror size it in the BEARISH frame: the exact defect piece B exists to
+# close, resurrected by the decision meant to prevent it, and measured to fail
+# no test (a simulated "Neutral" sized at min_mult with the suite green).
+#
+# A LOUD IMPORT-TIME FAILURE rather than a test, for the reason the
+# `strategy_watch_scheduler` import at the top of this file is at module level:
+# the cost of being wrong is a silently mis-sized live order, so it must be
+# impossible to reach a running process, not merely likely to be caught. A
+# third direction is a real feature and this is not a veto on it -- it is a
+# demand that whoever adds one comes HERE and decides what its frame is.
+_DIRECTIONS_THE_MIRROR_UNDERSTANDS = frozenset({"Bullish", "Bearish"})
+
+
+def _check_mirror_covers_alias(valid, understood) -> None:
+    """Raise if `Direction` has grown past what the sizing mirror can frame.
+
+    A FUNCTION RATHER THAN A BARE `if`, so the rule can be exercised directly
+    with a widened alias. The alternative -- reloading this module inside a
+    test -- rebinds every class in it and hands other tests a different
+    `AutoTradeService` than the one they imported, which is a worse defect than
+    the one being pinned.
+    """
+    if frozenset(valid) != frozenset(understood):
+        raise RuntimeError(
+            f"app.schemas.Direction is {sorted(valid)}, but "
+            f"`_apply_vol_sizing`'s conviction mirror only frames "
+            f"{sorted(understood)}. A direction this module accepts but "
+            f"cannot frame would be sized in the BEARISH frame silently. "
+            f"Update the mirror (and the headwind gate's compute_omm call) "
+            f"in the same change that widens the alias."
+        )
+
+
+_check_mirror_covers_alias(_VALID_DIRECTIONS, _DIRECTIONS_THE_MIRROR_UNDERSTANDS)
+
 
 def _require_valid_direction(strategy: ArmedStrategy) -> None:
     """Refuse an armed strategy whose `direction` is not a real direction.
@@ -1374,14 +1426,31 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     # PIECE B, AND IT IS THE FIRST STATEMENT ON PURPOSE -- all three of the
     # reasons below, and dropping any one of them reopens a measured hole:
     #
-    #   1. ABOVE BOTH FULL-SIZE EARLY RETURNS (`sizing_off` and
-    #      `conviction is None`). Round 3 of the plan audit rejected the
-    #      obvious fix largely on POSITION: it sat beside the
-    #      `directional_conv` expression, so a malformed direction was refused
-    #      only when regime sizing was ENABLED and the conviction cache was
-    #      WARM -- i.e. never in the two states where this function returns the
-    #      ARMED QUANTITY UNCHANGED. The guard was absent exactly where the
-    #      blast radius is largest. Here it fires in every state.
+    #   1. ABOVE BOTH FULL-SIZE EARLY RETURNS (`sizing_off` below, and
+    #      `conviction is None` below that). Round 3 of the plan audit rejected
+    #      the obvious fix largely on POSITION: section 2.2 measured it sitting
+    #      AFTER BOTH of them -- down beside `mult = conviction_mult(...)` --
+    #      where it is reached only when regime sizing is ENABLED and the
+    #      conviction cache is WARM, i.e. in NEITHER of the two states that
+    #      return the ARMED QUANTITY UNCHANGED. The guard was absent exactly
+    #      where the blast radius is largest.
+    #
+    #      SAID PRECISELY, because round 1 of this piece's own audit caught an
+    #      earlier draft of this comment overstating it: the plan ALSO
+    #      describes round 2's guard as sitting "before the expression", and in
+    #      TODAY's file those are two different lines with two different
+    #      behaviours. `directional_conv` is computed at the top of the
+    #      `conviction is not None` block, which is ABOVE `if sizing_off`, so a
+    #      guard placed beside it WOULD fire with `regime_sizing.enabled:
+    #      false` and would miss only the COLD-CACHE state. Measured by moving
+    #      the guard to each position and running this module (re-measured
+    #      2026-09-22 against the suite as it stands in THIS commit, so the
+    #      numbers and the tests agree): beside the expression -> 9 failures,
+    #      with all four `..._with_regime_sizing_switched_off` cases PASSING;
+    #      after both returns -> 13 failures, with both parametrized sets
+    #      failing. It is the second position that section 2.2 rejected.
+    #
+    #      Here, as the first statement, it fires in every state.
     #
     #   2. ABOVE `_apply_regime_gate`, so the direction rule has ONE owner.
     #      The gate reaches `compute_omm(direction=...)`, which raises on an
@@ -1708,6 +1777,25 @@ _REC_ID_HEADWIND = "auto-trade-regime-headwind"
 # NOT added to `_clear_config_refusal_holds`, which exists for the two
 # NON-discrete config keys; `discrete=True` clears this one on its way out.
 _REC_ID_DIRECTION_INVALID = "auto-trade-direction-invalid"
+# ITS OWN ALERT TYPE, DEFINED HERE BESIDE ITS KEY rather than in the constants
+# block further down -- round 1 of this piece's audit caught it being USED ~60
+# lines above where it was defined. That resolves at call time and works, but
+# it was the only one of the alert types to read backwards.
+#
+# WHY A SEPARATE TYPE AT ALL: `notify_alert` builds the SUBJECT LINE from it,
+# and round 2 of target 2a measured two refusals that had already been given
+# two exception types and two dedup keys still arriving in the inbox reading
+# identically because they shared one type -- the separation stopping at the
+# body, which is the half nobody reads first. This one's remedy is neither a
+# config file nor the market nor the broker: it is "a caller is constructing
+# ArmedStrategy with a direction that does not exist".
+#
+# NOT "THE SIXTH TYPE", which is what this comment said until the same audit
+# round counted: the constants block below holds five, but the three sibling
+# refusal helpers pass their type as a STRING LITERAL rather than through a
+# constant ("CONFIG_ERROR", "REGIME_GATE_CONFIG_ERROR", "AUTO_TRADE_REFUSED"),
+# so the module has nine alert types in flight and six of them are named.
+_ALERT_TYPE_DIRECTION_INVALID = "AUTO_TRADE_DIRECTION_INVALID"
 
 
 def _per_symbol_rec_id(prefix: str, symbol: str) -> str:
@@ -1897,15 +1985,6 @@ _ALERT_TYPE_NOT_SUBMITTED = "AUTO_TRADE_ORDER_NOT_SUBMITTED"
 # routine event suppress the urgent one for the rest of the window.
 _ALERT_TYPE_STALE_BLOCKED = "AUTO_TRADE_ARM_EXPIRED"
 _ALERT_TYPE_UNCLASSIFIED = "AUTO_TRADE_REFUSED_UNCLASSIFIED"
-# A SIXTH TYPE, on the rule the five above share: `notify_alert` builds the
-# SUBJECT LINE from the type, and round 2 of target 2a measured that two
-# refusals given two exception types and two dedup keys still arrived in the
-# inbox reading identically when they shared one type -- the separation
-# stopping at the body, which is the half nobody reads first. This one's remedy
-# is neither a config file nor the market nor the broker: it is "a caller is
-# constructing ArmedStrategy with a direction that does not exist", and the
-# person who can act on it needs to see that before opening the mail.
-_ALERT_TYPE_DIRECTION_INVALID = "AUTO_TRADE_DIRECTION_INVALID"
 
 # The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
 # routes on them. They are `fire()`'s to define; this is a reader of them.
@@ -2214,6 +2293,36 @@ class AutoTradeService:
         self._consumed_attempts: deque[str] = deque(maxlen=64)
 
     def arm(self, strategy: ArmedStrategy) -> None:
+        # REFUSED AT THE DOOR, NOT ONLY AT THE FIRE, and round 1 of this
+        # piece's audit is why. The original build guarded `_apply_vol_sizing`
+        # alone and argued the point only against a dataclass `__post_init__`
+        # -- "validating at construction moves the refusal out of the fire
+        # path, where it can be recorded and paged, into whatever thread built
+        # the object, where it cannot". That argument is sound about
+        # `__post_init__` and FALSE about this method, which the audit caught:
+        # `arm()` is already a runtime validator of this exact record (see
+        # `entry_premium` immediately below), it is a service method with the
+        # history and the alert helpers in scope, and it is the only writer of
+        # `_state.strategy`.
+        #
+        # WHAT THE FIRE-ONLY GUARD COST, measured: a malformed record was
+        # ACCEPTED here, `/auto-trade/status` reported `armed: true` carrying
+        # `"direction": "bulish"`, the UI showed an armed trade, and nothing
+        # said otherwise until the next scan trigger -- by which time the
+        # disarm inside `fire()` had already CONSUMED the arm, so the refusal
+        # destroyed the armed order rather than rejecting it. With
+        # `regime_sizing` and `regime_gate` both off, the order that was
+        # destroyed was fully determined by option_symbol/action/quantity and
+        # would have been CORRECT: direction reaches no arithmetic in that
+        # configuration. Refusing here costs nothing and consumes nothing.
+        #
+        # THE FIRE-PATH GUARD STAYS as defence in depth. Nothing else writes
+        # `_state.strategy` today, so in practice this one refuses first and
+        # the other never fires -- but the refusal TAXONOMY (its own history
+        # status, its own alert, its own dedup key) lives on the fire path, and
+        # a guard that is currently unreachable is the cheapest possible
+        # insurance against that stopping being true.
+        _require_valid_direction(strategy)
         if strategy.entry_premium <= 0:
             raise ValueError(
                 f"entry_premium must be > 0 before arming (got {strategy.entry_premium}). "

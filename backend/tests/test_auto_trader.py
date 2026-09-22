@@ -3127,12 +3127,18 @@ def test_the_refusal_classes_are_disjoint_from_the_silent_one(mocker):
     passing 272/272. The invariant is load-bearing, so it is asserted here.
     """
     from app.services.auto_trader import (
-        ArmPreservedError, OrderNotSubmittedError,
+        ArmPreservedError, MalformedDirectionError, OrderNotSubmittedError,
         RegimeHeadwindError, RegimeGateConfigError,
     )
     from app.scoring.conviction_sizing import SizingConfigError
+    # `MalformedDirectionError` joined this tuple in piece B's round 1: it
+    # consumes the armed order exactly as its neighbours do, and the audit
+    # measured `class MalformedDirectionError(ArmPreservedError)` passing the
+    # whole module. The registry IS the fence, so a new refusal class that
+    # skips it is a new way to route a real refusal into the silence.
     for cls in (RegimeHeadwindError, RegimeGateConfigError,
-                SizingConfigError, OrderNotSubmittedError):
+                SizingConfigError, OrderNotSubmittedError,
+                MalformedDirectionError):
         assert not issubclass(cls, ArmPreservedError), (
             f"{cls.__name__} consumes the armed order, so it must not be "
             f"caught by maybe_fire_on_scan's deliberate silence"
@@ -3170,8 +3176,12 @@ def test_an_arm_preserved_error_raised_after_the_disarm_still_alerts(mocker):
     )
 
 
-def test_every_one_of_the_seven_rows_fire_writes_carries_its_attempt_id(mocker):
-    """The stamp, on all seven rows -- including the two gate refusals.
+def test_every_one_of_the_eight_rows_fire_writes_carries_its_attempt_id(mocker):
+    """The stamp, on all eight rows -- including the two gate refusals.
+
+    EIGHT SINCE PIECE B, not seven: `direction_invalid_blocked` is an eighth
+    row `fire()` writes, and round 1 of piece B's audit measured it surviving
+    the same `attempt_id` -> None mutation round 5 wrote this test to kill.
 
     The pre-existing `test_every_history_row_...` patches `_apply_vol_sizing`
     to identity, so no GATE refusal is ever produced: it asserts on 2 of the 7
@@ -3181,7 +3191,9 @@ def test_every_one_of_the_seven_rows_fire_writes_carries_its_attempt_id(mocker):
     through the REAL gate rather than a stub, so the rows are the real ones.
     """
     import app.services.auto_trader as at
-    from app.services.auto_trader import RegimeHeadwindError, RegimeGateConfigError
+    from app.services.auto_trader import (
+        MalformedDirectionError, RegimeHeadwindError, RegimeGateConfigError,
+    )
 
     def _fire_expecting(exc_type, patch):
         svc = AutoTradeService()
@@ -3214,6 +3226,14 @@ def test_every_one_of_the_seven_rows_fire_writes_carries_its_attempt_id(mocker):
             side_effect=RegimeGateConfigError("regime_gate block is not a mapping")),
     )
     assert gate_config == "regime_gate_config_blocked"
+
+    direction_invalid = _fire_expecting(
+        MalformedDirectionError,
+        lambda svc: mocker.patch.object(
+            at, "_apply_vol_sizing",
+            side_effect=MalformedDirectionError("direction='bulish'")),
+    )
+    assert direction_invalid == "direction_invalid_blocked"
 
 
 def test_a_failing_risk_check_leaves_a_row_instead_of_vanishing(mocker):
@@ -4228,6 +4248,26 @@ def _armed_with(direction, **over):
     return ArmedStrategy(**kwargs)
 
 
+def _force_armed(svc, strategy):
+    """Arm WITHOUT passing `AutoTradeService.arm()`'s validation.
+
+    Since round 1 added the arm()-side guard, `svc.arm(_armed_with("bulish"))`
+    refuses at the door — which is the point of that guard, and it means the
+    FIRE-PATH guard can no longer be reached through the front door at all.
+
+    These tests are about the fire path, so they write `_state` the way arm()
+    does. That is not a contrivance: it is precisely the shape of the producer
+    the fire-path guard is defence in depth against — something that puts an
+    unvalidated `ArmedStrategy` into the armed slot without going through
+    arm(). If that ever becomes possible for real, these are the tests that say
+    what happens next.
+    """
+    with svc._lock:
+        svc._state.armed = True
+        svc._state.strategy = strategy
+    return svc
+
+
 @pytest.mark.parametrize("bad", _MALFORMED_DIRECTIONS)
 def test_a_malformed_direction_is_refused_rather_than_sized_as_bearish(mocker, bad):
     """THE HOLE ITSELF. Not a wrong size — no size at all, and no order.
@@ -4247,8 +4287,7 @@ def test_a_malformed_direction_is_refused_rather_than_sized_as_bearish(mocker, b
     mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=80.0)
     mocker.patch("app.data.market.fetch_candles", return_value=_fixture_bars("MSFT"))
 
-    svc = AutoTradeService()
-    svc.arm(_armed_with(bad))
+    svc = _force_armed(AutoTradeService(), _armed_with(bad))
     with pytest.raises(MalformedDirectionError):
         svc.fire()
 
@@ -4279,8 +4318,7 @@ def test_the_refusal_names_the_direction_and_not_the_conviction(mocker):
     conv = mocker.patch("app.services.regime_monitor.get_last_conviction",
                         return_value=80.0)
 
-    svc = AutoTradeService()
-    svc.arm(_armed_with("bullish"))
+    svc = _force_armed(AutoTradeService(), _armed_with("bullish"))
     with pytest.raises(MalformedDirectionError) as exc_info:
         svc.fire()
 
@@ -4326,8 +4364,7 @@ def test_it_refuses_with_regime_sizing_switched_off(mocker, monkeypatch, bad):
     mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=80.0)
     mocker.patch("app.data.market.fetch_candles", return_value=_fixture_bars("MSFT"))
 
-    svc = AutoTradeService()
-    svc.arm(_armed_with(bad, quantity=4))
+    svc = _force_armed(AutoTradeService(), _armed_with(bad, quantity=4))
     with pytest.raises(MalformedDirectionError):
         svc.fire()
 
@@ -4354,8 +4391,7 @@ def test_it_refuses_with_a_cold_conviction_cache(mocker, bad):
     mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
     mocker.patch("app.data.market.fetch_candles", return_value=_fixture_bars("MSFT"))
 
-    svc = AutoTradeService()
-    svc.arm(_armed_with(bad))
+    svc = _force_armed(AutoTradeService(), _armed_with(bad))
     with pytest.raises(MalformedDirectionError):
         svc.fire()
 
@@ -4380,8 +4416,7 @@ def test_the_guard_runs_above_the_gate_and_its_bar_fetch(mocker):
     fetch = mocker.patch("app.data.market.fetch_candles",
                          return_value=_fixture_bars("MSFT"))
 
-    svc = AutoTradeService()
-    svc.arm(_armed_with("Bulish"))
+    svc = _force_armed(AutoTradeService(), _armed_with("Bulish"))
     with pytest.raises(MalformedDirectionError):
         svc.fire()
 
@@ -4417,8 +4452,7 @@ def test_a_malformed_direction_on_a_broken_sizing_config_blames_the_direction(mo
         side_effect=SizingConfigError("scoring_rules.yaml could not be parsed"),
     )
 
-    svc = AutoTradeService()
-    svc.arm(_armed_with(""))
+    svc = _force_armed(AutoTradeService(), _armed_with(""))
     with pytest.raises(MalformedDirectionError):
         # NOT SizingConfigError: both faults are present and the one that is
         # cheap to detect and unambiguous is the one reported.
@@ -4532,8 +4566,7 @@ def test_a_direction_refusal_on_the_scan_trigger_alerts_as_itself(mocker):
     sizing_alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
     unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
 
-    svc = AutoTradeService()
-    svc.arm(_armed_with("bullish"))
+    svc = _force_armed(AutoTradeService(), _armed_with("bullish"))
     svc.maybe_fire_on_scan()
 
     assert direction_alert.call_count == 1
@@ -4560,14 +4593,235 @@ def test_the_two_real_directions_still_pass_the_guard(mocker, good):
     at._require_valid_direction(_armed_with(good))  # must not raise
 
 
-def test_the_guard_reads_its_values_from_the_schema_alias():
-    """ONE SOURCE OF TRUTH. `ArmRequest` validates against `Direction` and so
-    does this, so the HTTP door and the runtime guard cannot drift into
-    disagreeing about what a direction is — two copies of one rule being the
-    defect `conviction_sizing.py` exists to prevent, one field over.
+def test_the_alias_cannot_outgrow_the_mirror_that_frames_it():
+    """THE SHARP EDGE THAT DERIVING FROM `Direction` CREATED, found in round 1.
+
+    The guard reads `get_args(Direction)`, so it WIDENS automatically. The
+    sizing mirror does not -- `conviction if direction == "Bullish" else
+    -conviction` is a two-way branch with "Bullish" spelled as a literal. A
+    third member of `Direction` would therefore be ACCEPTED by the guard and
+    sized in the BEARISH frame: piece B's own defect, resurrected by the
+    decision meant to prevent it. The audit measured a simulated "Neutral"
+    sizing at min_mult with the whole suite green.
+
+    THE TEST THIS REPLACES ASSERTED THE IMPLEMENTATION BACK AT ITSELF --
+    `_VALID_DIRECTIONS == get_args(Direction)` restates the assignment verbatim
+    and cannot fail unless someone edits both lines.
     """
     import app.services.auto_trader as at
     from app.schemas import Direction
     from typing import get_args
-    assert at._VALID_DIRECTIONS == get_args(Direction)
-    assert set(at._VALID_DIRECTIONS) == {"Bullish", "Bearish"}
+
+    # The two facts the module-level call ties together.
+    assert at._DIRECTIONS_THE_MIRROR_UNDERSTANDS == frozenset({"Bullish", "Bearish"})
+    assert frozenset(at._VALID_DIRECTIONS) == frozenset(get_args(Direction))
+
+    # And the rule REFUSES rather than merely being a comment shaped like one.
+    at._check_mirror_covers_alias(("Bullish", "Bearish"),
+                                  at._DIRECTIONS_THE_MIRROR_UNDERSTANDS)
+    with pytest.raises(RuntimeError, match="cannot frame"):
+        at._check_mirror_covers_alias(
+            ("Bullish", "Bearish", "Neutral"),
+            at._DIRECTIONS_THE_MIRROR_UNDERSTANDS,
+        )
+
+
+# ---------------------------------------------------------------------------
+# PIECE B — ROUND 1 AUDIT FIXES
+#
+# Every test below exists because round 1 ran a mutation the original build did
+# not, and the mutation survived. Each names the mutation it kills.
+# ---------------------------------------------------------------------------
+
+def test_malformed_direction_error_is_a_runtime_error():
+    """THE FENCE THE FILE ALREADY HAS TWICE, and piece B shipped without.
+
+    `fire_now` (routers/auto_trade.py) catches `(ValueError, RuntimeError)` and
+    maps it to a 400. If this class stops being a RuntimeError subclass, that
+    handler misses it and a refusal the app understands completely surfaces as
+    an unhandled 500 — the same failure `SizingConfigError` and
+    `ArmPreservedError` each carry this identical assertion against.
+
+    MEASURED IN ROUND 1: `class MalformedDirectionError(Exception)` passed the
+    whole module, 201/201.
+    """
+    from app.services.auto_trader import MalformedDirectionError
+    assert issubclass(MalformedDirectionError, RuntimeError), (
+        "not a RuntimeError means /auto-trade/fire returns 500, not 400"
+    )
+
+
+def test_a_delivered_direction_alert_does_not_make_the_next_one_a_reminder(mocker):
+    """`discrete=True` ON THE NEW ALERT — THE MUTATION ROUND 1 FOUND UNPINNED.
+
+    `notify_alert` keeps a persisted `_first_seen` per key and stamps every
+    later send as a "(reminder)" carrying the FIRST occurrence's date plus a
+    "Still active as of" line. Correct for a standing condition, wrong for a
+    one-shot refusal, which then reads as an old nag and gets ignored.
+
+    THIS TEST DELIBERATELY DOES NOT PATCH `forget_alerts` OFF. The two original
+    piece-B alert tests both do — necessarily, since the cleanup is what makes
+    per-symbol keying observable — and the consequence was that
+    `discrete=True` -> `discrete=False` passed the ENTIRE backend suite,
+    2833/2833. The two legs of decision 3 were masking each other.
+    """
+    import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
+    from app.services.auto_trader import MalformedDirectionError
+    _capture_alerts(mocker)
+
+    at._alert_malformed_direction_refusal(
+        "MSFT", MalformedDirectionError("direction='bulish'"))
+
+    assert an._first_seen == {}, (
+        "a delivered refusal is over; leaving its first-seen record behind is "
+        "what turns the next one into a reminder dated to this one"
+    )
+    assert an._fired == {}, (
+        "and the hold goes with it — a refusal DISARMS the auto-trader, so a "
+        "second refusal of this symbol means a human deliberately re-armed, "
+        "which is the last thing that should be suppressed"
+    )
+
+
+def test_two_direction_refusals_of_one_symbol_both_reach_a_channel(mocker):
+    """The same property as above, stated as delivery rather than as state.
+
+    Counted at the channel, downstream of the real dedup gate: with
+    `discrete=False` the second send is suppressed inside its window and simply
+    does not appear here.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import MalformedDirectionError
+    calls = _capture_alerts(mocker)
+
+    at._alert_malformed_direction_refusal(
+        "MSFT", MalformedDirectionError("direction='bulish'"))
+    at._alert_malformed_direction_refusal(
+        "MSFT", MalformedDirectionError("direction=None"))
+
+    assert len(calls) == 2, (
+        "the second refusal followed a deliberate re-arm, so suppressing it "
+        f"answers a human with silence: {calls}"
+    )
+    assert "(reminder)" not in calls[1][0], calls[1][0]
+
+
+def test_the_direction_refusal_logs_the_offending_value_under_repr(mocker, caplog):
+    """ROUND 1: replacing the whole `logger.error` in fire()'s branch with
+    `pass` passed 201/201.
+
+    The log line carries a hand-written justification for printing the value
+    through the exception's `!r` rather than a bare `%s` — without it, `''`
+    renders as nothing at all and is indistinguishable from `None` or from a
+    field that was never set. This module's history is a string of defects that
+    were "a log line nobody checked", so the line gets an assertion.
+    """
+    import logging
+    import app.services.auto_trader as at
+    from app.services.auto_trader import MalformedDirectionError
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order")
+
+    # Driven through the FIRE path, because that is where the log line lives:
+    # arm() refuses by raising and records nothing, while fire() is the branch
+    # that writes the history row and the ERROR line together.
+    svc = _force_armed(AutoTradeService(), _armed_with(""))
+    with caplog.at_level(logging.ERROR, logger=at.__name__):
+        with pytest.raises(MalformedDirectionError):
+            svc.fire()
+
+    errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    joined = "\n".join(errors)
+    assert errors, "the refusal left no ERROR line at all"
+    assert "''" in joined, (
+        "the empty string must be visible as '' — a bare %s renders it as "
+        f"nothing and hides which malformed value arrived: {joined!r}"
+    )
+    assert "MSFT" in joined, joined
+
+
+# ── The arm()-side guard (round 1, finding 7) ────────────────────────────────
+
+@pytest.mark.parametrize("bad", _MALFORMED_DIRECTIONS)
+def test_arm_refuses_a_malformed_direction_at_the_door(bad):
+    """REFUSED BEFORE ANYTHING IS ARMED, so nothing is consumed.
+
+    Round 1's finding: the fire-only guard accepted the record here, so
+    `/auto-trade/status` reported `armed: true` carrying a direction the app
+    does not define, and the operator learned nothing until the next scan
+    trigger — by which time `fire()`'s disarm had already consumed the arm, so
+    the refusal DESTROYED the armed order rather than rejecting it.
+    """
+    from app.services.auto_trader import MalformedDirectionError
+    svc = AutoTradeService()
+    with pytest.raises(MalformedDirectionError):
+        svc.arm(_armed_with(bad))
+
+    state = svc.get_state()
+    assert state.armed is False, (
+        "a refused arm must leave nothing armed — reporting armed:true with a "
+        "direction the app cannot frame is what this guard exists to stop"
+    )
+    assert state.strategy is None
+
+
+@pytest.mark.parametrize("good", ["Bullish", "Bearish"])
+def test_arm_still_accepts_the_two_real_directions(good):
+    """The door must not have been closed on everything."""
+    svc = AutoTradeService()
+    svc.arm(_armed_with(good))
+    assert svc.get_state().armed is True
+
+
+def test_the_arm_guard_runs_before_the_entry_premium_check():
+    """Both are refusals of the same record; the order decides which is named.
+
+    Not arbitrary: a record with BOTH faults should be reported as the one that
+    is unambiguous and cheap to state. `entry_premium` is a number the caller
+    can reason about; a direction the app does not define means the producer is
+    broken, which is the more useful thing to say first.
+    """
+    from app.services.auto_trader import MalformedDirectionError
+    svc = AutoTradeService()
+    with pytest.raises(MalformedDirectionError):
+        svc.arm(_armed_with("bulish", entry_premium=0.0))
+
+
+def test_the_fire_path_guard_survives_the_arm_guard():
+    """DEFENCE IN DEPTH, PINNED — otherwise the fire-path guard rots unnoticed.
+
+    `arm()` is the only writer of `_state.strategy` today, so in practice it
+    refuses first and `_apply_vol_sizing`'s guard never fires. That makes the
+    fire-path guard easy to delete by accident, and it is where the refusal
+    TAXONOMY lives (its own history status, its own alert, its own dedup key).
+    Called directly here, bypassing arm(), which is exactly the shape a future
+    non-arm() producer would have.
+    """
+    import app.services.auto_trader as at
+    from app.services.auto_trader import MalformedDirectionError
+    with pytest.raises(MalformedDirectionError):
+        at._apply_vol_sizing(_armed_with("bulish"))
+
+
+def test_widening_the_direction_alias_fails_the_import_loudly():
+    """The module-level call, pinned in a SUBPROCESS.
+
+    `_check_mirror_covers_alias` being correct does not prove it is CALLED at
+    import. Reloading the module in-process to prove that would rebind every
+    class in it and hand the rest of this suite a different `AutoTradeService`
+    than the one it imported, so the check runs in a fresh interpreter instead.
+    """
+    import subprocess, sys
+    code = (
+        "import typing, app.schemas as sch; "
+        "sch.Direction = typing.Literal['Bullish','Bearish','Neutral']; "
+        "import app.services.auto_trader"
+    )
+    r = subprocess.run([sys.executable, "-c", code],
+                       capture_output=True, text=True)
+    assert r.returncode != 0, (
+        "a third direction imported cleanly — the guard would then ACCEPT it "
+        "and the sizing mirror would frame it as BEARISH, silently"
+    )
+    assert "cannot frame" in r.stderr, r.stderr[-2000:]
