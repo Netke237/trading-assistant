@@ -525,8 +525,9 @@ def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
             (+4/+5) satisfy it and are the deployments this ships on, so the
             limb holds HERE -- and it is NOT vacuous here either: on the UTC
             host this runs and tests on, that window is a real NY 20:00-24:00
-            every evening, four hours daily in which the end-trim, and with it
-            this whole session test, is never reached. Keeping the bar is the
+            in EDT and 19:00-24:00 in EST -- four to five hours every evening,
+            per the +4/+5 above -- in which the end-trim, and with it this whole
+            session test, is never reached. Keeping the bar is the
             right answer throughout it, which is why the limb holds -- but
             it does not generalise to "host ahead of New York": at >= +9h (Tokyo
             is +13) the window reaches back INTO THE LIVE SESSION, where skipping
