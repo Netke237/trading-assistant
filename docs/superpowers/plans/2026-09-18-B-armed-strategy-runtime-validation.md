@@ -1,7 +1,7 @@
 # Piece B — validating `ArmedStrategy.direction` at runtime
 
 **Date:** 2026-09-18
-**Status:** §5 LOCKED 2026-09-23 by Kenneth ("i agree with your proposal": freeze, not the `__setattr__` fallback; Q2 stays queued after this as one-round hardening). Implemented 2026-09-23; not yet audited.
+**Status:** §5 LOCKED 2026-09-23 by Kenneth ("i agree with your proposal": freeze, not the `__setattr__` fallback; Q2 stays queued after this as one-round hardening). Implemented 2026-09-23 (a7381f2d); adversarial round 1 CLEAN 2026-09-23 (zero gate-level findings). Not merged.
 **§1–§3 line numbers are from 2026-09-18 and stale.** §5 cites `origin/main` at `e5e669f5`.
 **Split from:** `2026-09-18-auto-trader-direction-sizing-plan.md` (Piece A) after its round 3
 fired audit_rule's hard cap. This half produced a MAJOR in two consecutive rounds; Piece A's
