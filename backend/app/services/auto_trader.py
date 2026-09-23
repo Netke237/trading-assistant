@@ -11,7 +11,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import date, datetime, time as dtime, timedelta, timezone
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 from app.schemas import Direction, Horizon
 from app.services.premium_stop import resolve_premium_stop_pct
 from app.services.scheduling_tz import MARKET_TZ
@@ -150,7 +150,39 @@ class RegimeGateConfigError(RuntimeError):
     """
 
 
-@dataclass
+class MalformedDirectionError(TypeError):
+    """An `ArmedStrategy` was constructed with a `direction` outside `Direction`.
+
+    Piece B (docs/superpowers/plans/2026-09-18-B-armed-strategy-runtime-
+    validation.md §5, locked by Kenneth 2026-09-23). `Literal` is not enforced
+    at runtime on a dataclass, so before this "bullish", "Bulish", "" and None
+    all constructed and then silently took the BEARISH `else` branch in
+    `_apply_vol_sizing`.
+
+    A TypeError, DELIBERATELY NOT A ValueError: fire()'s inner sizing handler
+    catches `(SizingConfigError, ValueError)` and files it as
+    `sizing_data_blocked` with a log line blaming the conviction -- the false
+    bucket the plan's round 3 measured and rejected. Nothing catches this one,
+    and nothing needs to: it is raised at CONSTRUCTION, so a malformed strategy
+    never exists, is never armed and is never fired. There is no alert bucket,
+    no rec_id and no history status for it on purpose. A test pins
+    `not issubclass(MalformedDirectionError, ValueError)`.
+
+    The one production producer, `ArmedStrategy(**req.model_dump())` in
+    routers/auto_trade.py, is already validated by pydantic (a bad value is a
+    422 before this runs), so this guards direct constructors: tests, and any
+    future non-HTTP producer.
+    """
+
+
+# FROZEN IS PART OF THE FIX, not a style choice: without it `s.direction = "x"`
+# after construction skips `__post_init__`, and the next `_dc_replace` -- both
+# of which sit inside fire()'s sizing `try` -- would re-run the check there and
+# raise into the refusal taxonomy this guard exists to stay out of. Production
+# never mutates one (every change is a `_dc_replace`). Residual, not guarded:
+# `object.__setattr__` on an instance, or writing `svc._state` with a
+# hand-built object -- both private-surface abuse.
+@dataclass(frozen=True)
 class ArmedStrategy:
     broker:          str
     symbol:          str
@@ -160,15 +192,14 @@ class ArmedStrategy:
     # Required and non-defaulted, which is legal here because every field above
     # is non-defaulted too and `entry_premium` below is the first with a default.
     #
-    # THIS DATACLASS IS THE CARRIER, NOT THE VALIDATOR: `Literal` is not enforced
-    # at runtime on a plain dataclass, so only `ArmRequest` (pydantic) actually
-    # refuses a bad value. A direct constructor passing "bullish", "" or None
-    # therefore still lands on the bearish branch in `_apply_vol_sizing` below.
-    # Closing that hole is its own piece (docs/superpowers/plans/
-    # 2026-09-18-B-armed-strategy-runtime-validation.md) because the obvious
-    # `raise ValueError` lands in fire()'s `sizing_data_blocked` bucket with a
-    # false log line, and sits after both full-size early returns -- absent
-    # exactly where the blast radius is largest.
+    # VALIDATED AT CONSTRUCTION (piece B): `Literal` is not enforced at runtime
+    # on a dataclass, so `__post_init__` below refuses anything outside
+    # `Direction` with `MalformedDirectionError`. Before that, a direct
+    # constructor passing "bullish", "" or None silently took the bearish
+    # branch in `_apply_vol_sizing`. It is checked HERE rather than in fire()
+    # because a raise there lands in fire()'s `sizing_data_blocked` bucket with
+    # a false log line, after both full-size early returns -- see the
+    # exception's docstring.
     direction:       Direction
     quantity:        int
     order_type:      Literal["MKT", "LMT"]
@@ -277,6 +308,17 @@ class ArmedStrategy:
     # the history could not answer at all.
     regime_gate_outcome: Optional[str] = None
     armed_at:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def __post_init__(self) -> None:
+        # `isinstance` first so an object whose `__eq__` matches anything cannot
+        # pass the membership test and then steer `== "Bullish"` downstream.
+        if not (isinstance(self.direction, str) and self.direction in get_args(Direction)):
+            raise MalformedDirectionError(
+                f"ArmedStrategy.direction must be one of {get_args(Direction)}, "
+                f"got {self.direction!r} for {self.symbol!r}. Refused at "
+                "construction: a malformed direction would otherwise size as "
+                "Bearish."
+            )
 
 
 @dataclass
@@ -935,13 +977,13 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
             min_obs=min_obs,
         )
     except Exception as exc:
-        # `compute_omm` raises ValueError on a direction it does not recognise,
-        # which a direct constructor can still produce (ArmedStrategy's Literal
-        # is not enforced at runtime -- piece B). Abstaining rather than letting
-        # it escape keeps a malformed direction out of fire()'s
-        # `(SizingConfigError, ValueError)` bucket, where it would be recorded
-        # as `sizing_data_blocked` and logged as an unusable conviction: the
-        # exact false-log defect piece B's round 3 measured and rejected.
+        # Added (072d74ff) for a malformed direction, which `compute_omm`
+        # raises ValueError on. Piece B now refuses that at `ArmedStrategy`
+        # construction, so for DIRECTION this is unreachable -- kept because it
+        # also covers any other `compute_omm` failure, which must not escape
+        # into fire()'s `(SizingConfigError, ValueError)` bucket either: it
+        # would be recorded as `sizing_data_blocked` and logged as an unusable
+        # conviction, a false log line.
         logger.warning(
             "regime_gate: %s %s NOT evaluated — regime computation failed: %s",
             strategy.symbol, strategy.direction, exc,
