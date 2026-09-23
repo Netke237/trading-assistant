@@ -1,7 +1,8 @@
 # Piece B — validating `ArmedStrategy.direction` at runtime
 
 **Date:** 2026-09-18
-**Status:** OPEN QUESTION — not planned, not audited, not implemented.
+**Status:** RESOLUTION PROPOSED 2026-09-23 (§5), NOT LOCKED — awaiting Kenneth. Not audited, not implemented.
+**§1–§3 line numbers are from 2026-09-18 and stale.** §5 cites `origin/main` at `e5e669f5`.
 **Split from:** `2026-09-18-auto-trader-direction-sizing-plan.md` (Piece A) after its round 3
 fired audit_rule's hard cap. This half produced a MAJOR in two consecutive rounds; Piece A's
 engineering half was converged. Splitting is audit_rule's own remedy for that shape.
@@ -82,3 +83,93 @@ This piece owns the runtime guard **only**. The `Literal` annotations on `ArmReq
 ship without this guard; it would then be correct through the HTTP door (pydantic validates)
 and silently bearish-on-malformed for direct constructors. **That residual risk is the reason
 this piece exists and is the thing to weigh when sequencing it against Piece A.**
+
+---
+
+## 5. Proposed resolution — 2026-09-23, NOT LOCKED
+
+Checked against `origin/main` at `e5e669f5` before proposing anything.
+
+### 5.1 What the code says today
+
+- **One production producer.** `routers/auto_trade.py:149` builds `ArmedStrategy(**req.model_dump())`.
+  Pydantic has already validated `ArmRequest.direction: Direction` by then, so a bad value is a
+  422 before anything is built.
+- **One way in.** `AutoTradeService.arm()` (`auto_trader.py:1998`) is the only writer of the
+  armed slot, and the slot is in-memory.
+- **Production never mutates one; tests do, in three places.** In `app/`, every change goes
+  through `dataclasses.replace`: `_dc_replace` at `:1304` and `:1407`, **both inside `fire()`'s
+  sizing `try`**. `tests/test_auto_trader.py` assigns fields in three places:
+  - `:2661` sets `svc._state.strategy.broker = "ibkr_live"`.
+  - `:2757` sets `armed.armed_at`, inside the expired-arm helper.
+  - `:2883` sets `twin.armed_at`.
+
+  A first grep missed all three. Setting `frozen=True` and running the auto-trader tests found
+  them: **12 failed / 381 passed**, and every failure was `FrozenInstanceError` from one of
+  those three sites.
+- **The trap is unchanged.** fire()'s inner handler (`:2183`) still catches
+  `(SizingConfigError, ValueError)`, so §2.1 still holds for anything raised inside it.
+
+### 5.2 The three decisions
+
+**Placement: at construction, not in `fire()`.** `ArmedStrategy.__post_init__` refuses any
+`direction` not in `typing.get_args(Direction)`, and the dataclass becomes `frozen=True`.
+
+- A malformed strategy then never exists, so it is never armed and never fired. §2.2's
+  objection (a guard placed after the full-size early returns) has nothing to apply to. The
+  refusal comes before both of those returns, and before `arm()`.
+- **`frozen=True` is part of the fix.** Without it, `s.direction = "x"` after construction
+  skips the check. The next `_dc_replace` inside the sizing `try` would then re-run
+  `__post_init__` and raise inside fire()'s refusal taxonomy, which is exactly §2.1's trap.
+  Freezing removes that path.
+- **Cost of freezing:** rewrite those three test sites to use `dataclasses.replace`, or to pass
+  the value to the constructor. Those sites feed 12 tests. No production change is needed.
+- **Fallback if Kenneth prefers no test churn:** guard only `direction`, with a `__setattr__`
+  that re-runs the same check. That closes the same path without freezing the other fields. It
+  is less conventional and does not change the rest of this proposal.
+
+**Exception type: `MalformedDirectionError(TypeError)`.**
+
+- **Not a `ValueError`,** because that is the class `:2183` files as `sizing_data_blocked`.
+- `TypeError` fits because the value violates the `Literal` type the field declares.
+- It keeps the name the phase's `verify` probe pins. Flip that probe from `absent` to `present`
+  in the same commit.
+- A test pins `not issubclass(MalformedDirectionError, ValueError)`, so the round-3 lesson
+  cannot be undone quietly.
+
+**Alert bucket and `rec_id`: none.**
+
+- The refusal is a synchronous exception to whoever is constructing the strategy, before
+  anything is armed. The scan trigger has no fire-time refusal to page about.
+- It adds no history status and no `rec_id`, so it can neither share a `rec_id` nor suppress a
+  genuine `sizing_data_blocked` page. fire()'s taxonomy and `maybe_fire_on_scan`'s handlers are
+  **not touched**.
+
+### 5.3 Folded in, not duplicated
+
+- `_measure_trade_regime`'s abstain on a `compute_omm` ValueError (`:937-949`, from 072d74ff)
+  becomes unreachable *for direction*. **Keep it:** it also covers any other `compute_omm`
+  failure. Re-word its comment so it stops claiming piece B is open.
+- Re-word the carrier comment on `ArmedStrategy.direction` (`:160-171`). It says a direct
+  constructor "still lands on the bearish branch", which stops being true.
+
+### 5.4 Tests
+
+- Each of `"bullish"`, `"Bulish"`, `"BULLISH"`, `""` and `None` raises
+  `MalformedDirectionError`.
+- `"Bullish"` and `"Bearish"` both construct.
+- `dataclasses.replace(s, quantity=…)` still works on a valid strategy.
+- Assigning a field raises `FrozenInstanceError`.
+- `MalformedDirectionError` is not a `ValueError` subclass.
+
+### 5.5 Residual, stated rather than hidden
+
+- `object.__setattr__` on a frozen instance, or writing `svc._state` directly with a hand-built
+  object, bypasses the guard. Both are private-surface abuse and are not guarded.
+- `horizon` has the same unenforced `Literal`. It is **out of scope**: a missing or unknown
+  horizon makes the gate abstain loudly (`:878-893`), and it never picks a sizing branch.
+
+### 5.6 Size
+
+About 30 lines of production code, plus about 60 lines of new tests and the three rewritten
+test sites. Two files. One round.
