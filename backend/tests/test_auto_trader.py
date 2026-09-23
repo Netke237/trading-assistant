@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import pytest
 from datetime import date, datetime, timedelta, timezone
@@ -2658,7 +2659,9 @@ def test_a_live_broker_block_is_also_pre_submission(mocker):
     anything either.
     """
     at, svc = _scan_trigger_service(mocker)
-    svc._state.strategy.broker = "ibkr_live"
+    # `ArmedStrategy` is frozen (piece B), so swap the armed slot rather than
+    # mutate it. Nothing holds the old object: the fire has not started.
+    svc._state.strategy = dataclasses.replace(svc._state.strategy, broker="ibkr_live")
     _expire_the_credentials(mocker)
 
     svc.maybe_fire_on_scan()
@@ -2753,8 +2756,10 @@ def _stale_armed_service(mocker, *, symbol="MSFT", age_minutes=60):
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
     svc = AutoTradeService()
-    armed = _make_armed(symbol=symbol)
-    armed.armed_at = datetime.now(timezone.utc) - timedelta(minutes=age_minutes)
+    armed = dataclasses.replace(
+        _make_armed(symbol=symbol),
+        armed_at=datetime.now(timezone.utc) - timedelta(minutes=age_minutes),
+    )
     svc.arm(armed)
     return at, svc
 
@@ -2879,8 +2884,7 @@ def test_an_equal_valued_re_arm_is_still_a_different_decision(mocker):
     # Equal in every field the dataclass compares, including armed_at, but a
     # DIFFERENT OBJECT: the strongest form of the case, since anything weaker
     # would be separated by `==` and prove nothing about `is`.
-    twin = _make_armed(symbol="MSFT")
-    twin.armed_at = expired.armed_at
+    twin = dataclasses.replace(_make_armed(symbol="MSFT"), armed_at=expired.armed_at)
     assert twin == expired and twin is not expired, (
         "this test is only meaningful if the two compare equal"
     )
@@ -4198,3 +4202,93 @@ def test_gate_measures_on_the_window_not_the_tail(mocker):
     # Option A (AUTOTRADE-2B-UNCLOSED-BAR-OPTION-A-2026-09-21): 441, not 442.
     # The window still STARTS on the scan's `today - 441d` anchor; it now ENDS
     # at the last fully completed session instead of on today's open bar.
+
+
+# --------------------------------------------------------------------------
+# Piece B — a malformed `direction` is refused at construction
+# (docs/superpowers/plans/2026-09-18-B-armed-strategy-runtime-validation.md §5)
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("bad", ["bullish", "Bulish", "BULLISH", "", None, " Bullish", 1])
+def test_a_malformed_direction_is_refused_at_construction(bad):
+    """Before piece B every one of these constructed and then sized as BEARISH,
+    because `_apply_vol_sizing`'s `== "Bullish"` sends anything else to `else`."""
+    from app.services.auto_trader import MalformedDirectionError
+    with pytest.raises(MalformedDirectionError, match="direction"):
+        dataclasses.replace(_make_armed(), direction=bad)
+
+
+def test_an_object_equal_to_everything_is_refused():
+    """Membership alone would pass it (`in` falls back to `==`), and it would then
+    steer `strategy.direction == "Bullish"` in `_apply_vol_sizing` -- so the guard
+    requires an actual `str` first."""
+    from app.services.auto_trader import MalformedDirectionError
+
+    class _EqualsAnything:
+        def __eq__(self, other):
+            return True
+        __hash__ = object.__hash__
+
+    with pytest.raises(MalformedDirectionError):
+        dataclasses.replace(_make_armed(), direction=_EqualsAnything())
+
+
+@pytest.mark.parametrize("bad", ["bullish", None])
+def test_a_malformed_direction_never_reaches_the_armed_slot(bad):
+    """The refusal is before `arm()`, so there is nothing armed to fire and no
+    history row, alert or rec_id to file it under."""
+    from app.services.auto_trader import MalformedDirectionError
+    svc = AutoTradeService()
+    with pytest.raises(MalformedDirectionError):
+        svc.arm(ArmedStrategy(
+            broker="ibkr_paper", symbol="AAPL", option_symbol="AAPL260620C00185000",
+            action="BUY", direction=bad, quantity=1, order_type="LMT",
+            limit_price=2.5, conid=None, entry_premium=2.5,
+        ))
+    state = svc.get_state()
+    assert state.armed is False and state.strategy is None and state.history == []
+
+
+@pytest.mark.parametrize("good", ["Bullish", "Bearish"])
+def test_both_valid_directions_construct(good):
+    assert dataclasses.replace(_make_armed(), direction=good).direction == good
+
+
+def test_the_guard_accepts_exactly_the_direction_literal():
+    """Pins the guard to `app.schemas.Direction` rather than a hand-kept copy, so
+    widening the Literal widens the guard and nothing else has to remember to."""
+    from typing import get_args
+    from app.schemas import Direction
+    assert set(get_args(Direction)) == {"Bullish", "Bearish"}
+    for d in get_args(Direction):
+        dataclasses.replace(_make_armed(), direction=d)
+
+
+def test_replace_still_works_on_a_valid_strategy():
+    """Production changes an armed strategy ONLY through `dataclasses.replace`
+    (`_apply_vol_sizing`'s two `_dc_replace` calls), so freezing must not break it."""
+    s = _make_armed(qty=1)
+    t = dataclasses.replace(s, quantity=3, regime_gate_outcome="passed")
+    assert (t.quantity, t.regime_gate_outcome, t.direction) == (3, "passed", "Bullish")
+    assert s.quantity == 1 and s.regime_gate_outcome is None
+
+
+@pytest.mark.parametrize("field_name,value", [("direction", "bullish"), ("quantity", 5)])
+def test_an_armed_strategy_cannot_be_mutated(field_name, value):
+    """FROZEN IS PART OF THE FIX: without it `s.direction = "x"` would skip the
+    check, and the next `_dc_replace` inside fire()'s sizing `try` would re-run
+    it there -- raising into the refusal taxonomy piece B exists to stay out of."""
+    s = _make_armed()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        setattr(s, field_name, value)
+    assert s.direction == "Bullish" and s.quantity == 1
+
+
+def test_malformed_direction_error_is_not_a_value_error():
+    """Round 3's lesson, pinned: fire()'s inner handler catches
+    `(SizingConfigError, ValueError)` and files it as `sizing_data_blocked` with a
+    log line blaming the conviction. This refusal must never be able to land there."""
+    from app.services.auto_trader import MalformedDirectionError, SizingConfigError
+    assert issubclass(MalformedDirectionError, TypeError)
+    assert not issubclass(MalformedDirectionError, ValueError)
+    assert not issubclass(MalformedDirectionError, SizingConfigError)
