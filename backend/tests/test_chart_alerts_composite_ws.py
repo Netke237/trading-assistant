@@ -262,8 +262,14 @@ async def test_ws_composite_path_evaluates_hmm_intraday_primary_condition(monkey
         db.add(_make_composite_rule_row('rule-7', 'AAPL', '15min', _HMM_TRIGGER_INTRADAY))
         await db.commit()
 
+    # A4c: the HMM_intraday regime fits on COMPLETED candles only, judged by int
+    # unix bar-start times (as fetch_intraday_candles returns them); the
+    # placeholder 't{i}' times of _FLAT_CANDLES cannot be dated and are dropped.
+    import time as _time
+    _now = int(_time.time())
+    candles = [{**c, "time": _now - 900 * (len(_FLAT_CANDLES) - i + 1)} for i, c in enumerate(_FLAT_CANDLES)]
     triggered = await chart_alerts.evaluate_and_notify_for_symbol(
-        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+        'AAPL', '15min', candles[-1], candles, [],
     )
     assert len(triggered) == 1
 

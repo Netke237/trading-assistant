@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from app.data.chart_cache import get_intraday
+from app.data.chart_cache import get_intraday, get_intraday_with_fetched_at
 from app.data.tradier_stream import get_stream_client
 from app.services.market_structure import compute_structure
 
@@ -74,7 +74,7 @@ async def stream(
                 if tick_time and tick_time != last_candle_time:
                     last_candle_time = tick_time
                     try:
-                        candles = await get_intraday(symbol, interval)
+                        candles, _fetched_at = await get_intraday_with_fetched_at(symbol, interval)
                         ht_candles = None
                         if interval == "1h":
                             ht_candles = await get_intraday(symbol, "1D")
@@ -92,7 +92,7 @@ async def stream(
                             # candles[-2] is the just-closed candle; candles[-1] is the new open
                             closed = candles[-2] if len(candles) >= 2 else candles[-1]
                             triggered = await evaluate_and_notify_for_symbol(
-                                symbol, interval, closed, candles, signals,
+                                symbol, interval, closed, candles, signals, as_of=_fetched_at,
                             )
                             for entry in triggered:
                                 await websocket.send_json({

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.data.market import completed_bars_for_interval
 from app.database import get_db, AsyncSessionLocal
 from app.models.alert import AlertRuleModel, AlertHistoryModel
 from app.services.alert_evaluator import (
@@ -733,8 +734,18 @@ async def test_notification(body: NotificationTestRequest):
 async def evaluate_and_notify_for_symbol(
     symbol: str, interval: str, closed_candle: dict,
     all_candles: list[dict], signals: list[dict],
+    as_of: float | None = None,
 ) -> list[dict]:
-    """Load enabled rules, evaluate, persist history, enqueue notifications."""
+    """Load enabled rules, evaluate, persist history, enqueue notifications.
+
+    A4c: every REGIME model here (standard rules' regime conditions, composite
+    rules' OMM and HMM_intraday primaries) fits on the COMPLETED candles of an
+    intraday `interval` -- completeness judged at `as_of`, the wall-clock time
+    `all_candles` was fetched (chart_cache.get_intraday_with_fetched_at), since
+    a cached candle that was forming then stays partial. None = time.time().
+    1D/1W are unchanged. Indicators, structure signals, the closed candle and the
+    VWAP confirmation keep `all_candles` (regime models only, Kenneth).
+    """
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(AlertRuleModel).where(
             AlertRuleModel.symbol == symbol.upper(),
@@ -759,8 +770,10 @@ async def evaluate_and_notify_for_symbol(
 
         rule_inputs = [_deserialize_rule(row.rule_json, row) for row in rows]
 
+        _regime_candles = completed_bars_for_interval(all_candles or [], interval, now=as_of)[-MAX_LIVE_MODEL_CANDLES:]
+
         needs_regime = any(c.kind == 'regime' for ri in rule_inputs for c in ri.group.conditions)
-        regime_by_model = build_regime_snapshot(all_candles[-MAX_LIVE_MODEL_CANDLES:]) if needs_regime else None
+        regime_by_model = build_regime_snapshot(_regime_candles) if needs_regime else None
 
         # Compute indicators referenced by rule conditions
         all_conditions = []
@@ -818,7 +831,7 @@ async def evaluate_and_notify_for_symbol(
             from app.services.composite_trigger_evaluator import evaluate_from_context_detailed, format_composite_reason
             from app.services.regime_omm import compute_omm
             _model_candles = all_candles[-MAX_LIVE_MODEL_CANDLES:] if all_candles else []
-            _closes = [c["close"] for c in _model_candles]
+            _closes = [c["close"] for c in _regime_candles]
             _omm = compute_omm(_closes) if len(_closes) >= 100 else None
 
             # Only fetch daily bars if some composite rule actually needs them — either
@@ -860,6 +873,7 @@ async def evaluate_and_notify_for_symbol(
                         _td, _omm, signals, indicators,
                         bars_daily=_rule_daily, bars_intraday=_bars_intraday,
                         direction=_direction, symbol=symbol,
+                        regime_bars_intraday=_regime_candles if interval not in ("1D", "1W") else None,
                     )
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
