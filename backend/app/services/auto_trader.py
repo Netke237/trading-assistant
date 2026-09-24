@@ -11,10 +11,15 @@ from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import date, datetime, time as dtime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Literal, Optional, get_args
+from typing import TYPE_CHECKING, Callable, Literal, Optional, get_args
 from app.schemas import Direction, Horizon
 from app.services.premium_stop import resolve_premium_stop_pct
 from app.services.scheduling_tz import MARKET_TZ
+
+if TYPE_CHECKING:
+    # For `FiredOrder`'s annotation only: `execute_option_order` imports the
+    # adapter module lazily, and that stays true.
+    from app.data.ibkr_paper import OrderResult
 # The scheduler's real NYSE-hours test, reused rather than re-implemented (guard
 # (i); see `_todays_bar_is_unclosed`). Aliased because `_market_is_open` already
 # lives in this file and means something entirely different -- a price probe --
@@ -225,11 +230,9 @@ class ArmedStrategy:
     # (Q2) and available to whatever eventually books a position for a fired
     # auto-trade.
     #
-    # THE FIRE PATH CREATES NO PortfolioPosition TODAY. That is a pre-existing,
-    # separately-documented limitation, NOT something build step 5 introduced
-    # and NOT something it closes -- see PROJECT_STATE.json's
-    # phase_g_step5_followups. Until that path books a position these five are
-    # captured and unread, which is the honest state of it.
+    # READ SINCE O4 STEPS 4+5: a fired order books its position from them
+    # (`services/auto_trade_booking.py`), so the pick the card showed is the
+    # pick the booked position records -- never a freshly-read live one.
     picked_method:           Optional[str]   = None
     picked_row_stock_price:  Optional[float] = None
     picked_row_option_price: Optional[float] = None
@@ -280,11 +283,11 @@ class ArmedStrategy:
     # frozen one — but a reader must not mistake it for a live control here.
     regime_headwind_caution_pct: Optional[float] = None
     regime_headwind_reject_pct:  Optional[float] = None
-    # ── O4 step 3: the fields a fired trade will book its position from ─────
+    # ── O4 step 3: the fields a fired trade books its position from ─────────
     # Carried from ArmRequest (which validates names and bounds); this
-    # dataclass is the carrier. CAPTURED AND UNREAD until O4 step 4 books a
-    # position on fire -- the note above about the fire path creating no
-    # PortfolioPosition is still true.
+    # dataclass is the carrier. READ SINCE O4 STEPS 4+5 by
+    # `services/auto_trade_booking.py`, which deep-copies the containers below
+    # before they reach a JSON column (see FROZEN IS SHALLOW).
     #
     # NOT HASHABLE ANY MORE. frozen=True with eq=True derives __hash__ from
     # every field, and `targets` / the four dicts are unhashable, so
@@ -357,6 +360,21 @@ class AutoTradeState:
     armed:    bool
     strategy: Optional[ArmedStrategy]
     history:  list[dict] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class FiredOrder:
+    """What a successful `fire()` hands its caller to book (O4 steps 4+5).
+
+    `strategy` is the POST-`_apply_vol_sizing` object -- the quantity the
+    broker got, which is the quantity the position must record. `attempt_id`
+    is the key of the success history row, so `record_booking` can stamp that
+    row with the booked `rec_id`. Only the success path returns one; every
+    refusal still raises exactly as before (spec section 9.4).
+    """
+    result:     "OrderResult"
+    strategy:   ArmedStrategy
+    attempt_id: str
 
 
 def _market_is_open(symbol: str) -> bool:
@@ -1508,8 +1526,12 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     endpoint, where asyncio.run raises.
 
     THE RUNNING-LOOP GUARD IS UNREACHABLE TODAY and round 1 was right to say
-    so: the only callers are in maybe_fire_on_scan, whose only caller is POST
-    /scan through asyncio.to_thread. It stays because the cost of being wrong
+    so: every caller reaches this from a thread with no loop. The refusal
+    helpers are called from maybe_fire_on_scan, whose only caller is POST
+    /scan through asyncio.to_thread; the two booking alerts (O4 steps 4+5,
+    `services/auto_trade_booking.py`) run ON the event loop and so call this
+    through `await asyncio.to_thread(...)` -- called directly there, this guard
+    would drop every one of them. It stays because the cost of being wrong
     about that later is §9.1's "and alert" half silently not happening, and a
     logged skip is the difference between finding that out and not.
 
@@ -2104,7 +2126,7 @@ class AutoTradeService:
     def fire(self, portfolio_snapshot: list | None = None,
              portfolio_value: float | None = None,
              attempt_id: str | None = None,
-             expect: ArmedStrategy | None = None):
+             expect: ArmedStrategy | None = None) -> FiredOrder:
         """Execute the armed strategy.
 
         Disarms on the fire attempt (fail-closed). If portfolio_snapshot is
@@ -2446,7 +2468,9 @@ class AutoTradeService:
                 "sizing":          strategy.sizing_basis,
             })
         logger.info("AutoTrader fired: order %s status %s", result.order_id, result.status)
-        return result
+        # O4 steps 4+5: the caller books the position from this. `strategy` is
+        # the local `_apply_vol_sizing` reassigned above, i.e. post-sizing.
+        return FiredOrder(result=result, strategy=strategy, attempt_id=attempt_id)
 
     @staticmethod
     def _check_exposure(strategy: ArmedStrategy, portfolio_snapshot: list, portfolio_value: float) -> None:
@@ -2477,8 +2501,13 @@ class AutoTradeService:
         self,
         portfolio_snapshot: list | None = None,
         portfolio_value: float | None = None,
-    ) -> None:
-        """Trigger #2: called after each scan completes. Fires if armed and fresh."""
+    ) -> Optional[FiredOrder]:
+        """Trigger #2: called after each scan completes. Fires if armed and fresh.
+
+        Returns the `FiredOrder` on a fire, for POST /scan to book on the event
+        loop (O4 step 5). Every other exit -- not armed, stale, and every
+        refusal handler below -- returns None, unchanged.
+        """
         with self._lock:
             should_fire = self._state.armed
             strategy = self._state.strategy
@@ -2576,19 +2605,21 @@ class AutoTradeService:
             return
 
         try:
-            self.fire(portfolio_snapshot=portfolio_snapshot,
-                      portfolio_value=portfolio_value,
-                      attempt_id=attempt_id,
-                      # FIRE THE ORDER THIS TRIGGER READ, OR NOTHING. The
-                      # staleness check above was made against `strategy`;
-                      # without this, a re-arm inside the window has the
-                      # attempt fire the NEW order on the old one's age.
-                      expect=strategy)
+            fired = self.fire(portfolio_snapshot=portfolio_snapshot,
+                              portfolio_value=portfolio_value,
+                              attempt_id=attempt_id,
+                              # FIRE THE ORDER THIS TRIGGER READ, OR NOTHING.
+                              # The staleness check above was made against
+                              # `strategy`; without this, a re-arm inside the
+                              # window has the attempt fire the NEW order on
+                              # the old one's age.
+                              expect=strategy)
             logger.info("AutoTrader: fired on scan completion trigger")
             # The config blocks were read and applied, so any standing
             # config-refusal alert is over — see the helper for why this lives
             # here and not as `discrete=True` on those two alerts.
             _clear_config_refusal_holds()
+            return fired
         except RegimeHeadwindError as exc:
             # THE REFUSAL THIS TRIGGER MOST NEEDS TO REPORT, and until target 2a
             # round 1 it was the only one that reported nothing: it is a
@@ -2699,6 +2730,31 @@ class AutoTradeService:
                 if row.get("attempt_id") == attempt_id:
                     return row
         return None
+
+    def record_booking(self, attempt_id: str, rec_id: str) -> bool:
+        """Stamp the success row of `attempt_id` with the position it booked.
+
+        O4 steps 4+5 (spec section 5.4): the link between "the auto-trader fired
+        this" and "this position exists". A row without a `rec_id` key reads as
+        fired, not booked. In-memory only, like the rest of `history`.
+
+        THE ROW IS REPLACED, NEVER MUTATED: `get_state()` copies the list, not
+        the rows, so a reader holding the old dict must not see it change size
+        under it. Searched from the end, as `_fire_attempt_record` is. A miss
+        logs and returns False; this never raises -- the booking it records has
+        already happened.
+        """
+        with self._lock:
+            history = self._state.history
+            for i in range(len(history) - 1, -1, -1):
+                if history[i].get("attempt_id") == attempt_id:
+                    history[i] = {**history[i], "rec_id": rec_id}
+                    return True
+        logger.warning(
+            "AutoTrader: booked %s but found no history row for attempt %s "
+            "to link it to", rec_id, attempt_id,
+        )
+        return False
 
     def _attempt_consumed(self, attempt_id: str) -> bool:
         """Did THIS attempt pass `fire()`'s disarm and take the armed order?

@@ -3,7 +3,8 @@ import json
 import pytest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from app.services.auto_trader import AutoTradeService, ArmedStrategy, AutoTradeState
+from unittest.mock import AsyncMock
+from app.services.auto_trader import AutoTradeService, ArmedStrategy, AutoTradeState, FiredOrder
 
 
 def test_service_starts_unarmed():
@@ -63,8 +64,8 @@ def test_fire_executes_and_disarms(mocker):
         entry_premium=2.50,
     )
     svc.arm(armed)
-    result = svc.fire()
-    assert result.order_id == "999"
+    fired = svc.fire()
+    assert fired.result.order_id == "999"
     mock_execute.assert_called_once()
     forwarded = mock_execute.call_args.args[0]
     assert forwarded.symbol == "AAPL"
@@ -134,8 +135,8 @@ def test_fire_passes_when_within_cap(mocker):
         entry_premium=2.50, portfolio_value=50_000.0,
     )
     svc.arm(armed)
-    result = svc.fire(portfolio_snapshot=[])
-    assert result.order_id == "ok"
+    fired = svc.fire(portfolio_snapshot=[])
+    assert fired.result.order_id == "ok"
     mock_execute.assert_called_once()
     forwarded = mock_execute.call_args.args[0]
     assert forwarded.symbol == "AAPL"
@@ -165,8 +166,8 @@ def test_fire_no_snapshot_skips_check(mocker):
         entry_premium=30.0, portfolio_value=200_000.0,   # would fail cap if snapshot provided
     )
     svc.arm(armed)
-    result = svc.fire()   # no portfolio_snapshot → cap check skipped
-    assert result.order_id == "y"
+    fired = svc.fire()   # no portfolio_snapshot → cap check skipped
+    assert fired.result.order_id == "y"
 
 
 def test_orm_positions_to_risk_converts_correctly():
@@ -3477,7 +3478,11 @@ async def test_the_manual_fire_endpoint_fires_the_order_it_checked(mocker):
     rt.auto_trader.arm(armed)
     fire_spy = mocker.patch.object(
         rt.auto_trader, "fire",
-        return_value=OrderResult("oid", "filled", "ibkr_paper"))
+        return_value=FiredOrder(OrderResult("oid", "filled", "ibkr_paper"),
+                                armed, "a-endpoint"))
+    # O4 steps 4+5: the endpoint now books what fired. Not this test's subject
+    # (it is about `expect`), and `_FakeDb` has no `commit`.
+    mocker.patch.object(rt, "book_fired_order", AsyncMock())
     try:
         await rt.fire_now(db=_FakeDb())
     finally:
@@ -4460,9 +4465,9 @@ def test_the_success_row_books_the_stop_the_breaker_gated_on(mocker):
     mocker.patch.object(AutoTradeService, "_risk_config", staticmethod(_cfg))
     svc, execute = _q2_fire_service(mocker)
 
-    result = svc.fire(portfolio_value=100_000.0)
+    fired = svc.fire(portfolio_value=100_000.0)
 
-    assert result.order_id == "q2"
+    assert fired.result.order_id == "q2"
     execute.assert_called_once()
     row = svc.get_state().history[-1]
     assert row["order_id"] == "q2"

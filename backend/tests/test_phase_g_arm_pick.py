@@ -11,21 +11,15 @@ fields `PortfolioPositionCreate` has, flowing into `ArmedStrategy` through the
 existing `ArmedStrategy(**req.model_dump())`. The order is unchanged — nothing
 submitted to any broker depends on the method (§8). The fields TRAVEL.
 
-TEST 6'S SECOND HALF IS NOT DELIVERABLE AS WRITTEN, and that is recorded here
-rather than quietly dropped. It reads "`fire_now()` creates a position carrying
-the armed pick, not a live one" — but the auto-trade fire path creates NO
-`PortfolioPosition` at all today. That is a pre-existing, separately documented
-limitation (CLAUDE.md's integrations table; `phase_g_send_path_wiring_followups`
-calls it O4 and puts it explicitly out of scope), not something this step
-introduced and not something it closes. So the half that IS deliverable —
-"carrying the armed pick, NOT A LIVE ONE" — is tested at the only place the
-distinction is observable today: the strategy handed to the broker executor
-(`test_the_pick_that_reaches_the_executor_is_the_one_that_was_armed`). And the
-gap itself gets a tripwire
-(`test_firing_still_creates_no_position_so_the_armed_pick_is_captured_and_unread`)
-that fails the day someone wires position creation into the fire path, so
-whoever does it is told, by a failing test, that five armed fields are sitting
-there waiting to be written.
+TEST 6'S SECOND HALF -- "`fire_now()` creates a position carrying the armed
+pick, not a live one" -- could not be written when this step landed: the fire
+path booked no position at all. It had a tripwire here that asserted the gap.
+O4 steps 4+5 closed it, and the tripwire was replaced by
+`tests/test_o4_step4_booking.py::test_fire_now_books_one_position_from_the_armed_values`,
+which asserts the five `picked_*` fields on the booked row. The half that was
+deliverable here -- the strategy handed to the broker executor carries the
+armed pick -- is still tested below
+(`test_the_pick_that_reaches_the_executor_is_the_one_that_was_armed`).
 """
 from __future__ import annotations
 
@@ -35,12 +29,10 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import app.models  # noqa: F401  (registers all tables on Base.metadata)
 from app.database import Base, get_db
-from app.models.portfolio import PortfolioPositionModel
 from app.routers.auto_trade import router as auto_trade_router
 from app.services.auto_trader import AutoTradeService, ArmedStrategy, auto_trader
 
@@ -306,53 +298,3 @@ def test_vol_sizing_rewrites_the_quantity_without_dropping_the_pick(mocker):
     assert resized.picked_row_option_price == OPTION_TARGET
     assert resized.picked_stop_basis == "premium"
     assert resized.picked_at == "2026-09-15T09:30:00Z"
-
-
-# ── The tripwire on the gap this step does NOT close ──────────────────────
-
-@pytest.mark.asyncio
-async def test_firing_still_creates_no_position_so_the_armed_pick_is_captured_and_unread(
-    client, engine_and_session, mocker,
-):
-    """A TRIPWIRE, NOT AN ENDORSEMENT — read the failure message before "fixing"
-    this test.
-
-    The auto-trade fire path creates no `PortfolioPosition` at all: `fire_now()`
-    reads the positions table for an exposure snapshot and writes nothing back.
-    That is pre-existing (CLAUDE.md's integrations table) and explicitly out of
-    Phase G's scope (`phase_g_send_path_wiring_followups` calls it O4), which is
-    why §10 test 6's second half — "creates a position carrying the armed pick"
-    — cannot be written against today's code.
-
-    So this asserts the gap instead. The day someone wires position creation into
-    the fire path this test goes red, and whoever is holding it learns from the
-    failure that `ArmedStrategy` has been carrying five `picked_*` fields all
-    along and they are the ones that belong on the position — rather than
-    shipping yet another send path that writes `picked_method = NULL`, which is
-    the exact defect c41145ba had to go back and close for the other seven."""
-    from app.data.ibkr_paper import OrderResult
-    _, Session = engine_and_session
-    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
-    mocker.patch(
-        "app.services.auto_trader.execute_option_order",
-        return_value=OrderResult(order_id="888", status="PreSubmitted", broker="tastytrade_paper"),
-    )
-
-    arm_resp = await client.post("/auto-trade/arm", json=_arm_body(**PICK))
-    assert arm_resp.status_code == 200, arm_resp.text
-    fire_resp = await client.post("/auto-trade/fire")
-    assert fire_resp.status_code == 200, fire_resp.text
-    assert fire_resp.json()["order_id"] == "888"
-
-    async with Session() as s:
-        rows = (await s.execute(select(PortfolioPositionModel))).scalars().all()
-    assert rows == [], (
-        "The auto-trade fire path now creates a position. That is a REAL "
-        "improvement and this test is the wrong thing to delete: the armed "
-        "strategy carries picked_method / picked_row_stock_price / "
-        "picked_row_option_price / picked_stop_basis / picked_at (Phase G build "
-        "step 5), and the new position must be built from THOSE, not from a "
-        "freshly-read live pick and not with the five left NULL. Wire them, then "
-        "replace this tripwire with the spec's §10 test 6 second half as "
-        "originally written."
-    )

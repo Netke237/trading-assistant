@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.schemas import Direction, PickedMethod, PickedStopBasis, Horizon
 from app.services.auto_trader import auto_trader, ArmedStrategy
+from app.services.auto_trade_booking import book_fired_order
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
 
@@ -197,7 +198,7 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     orm_positions = result_q.scalars().all()
     portfolio_snapshot = orm_positions_to_risk(orm_positions)
     try:
-        result = auto_trader.fire(
+        fired = auto_trader.fire(
             portfolio_snapshot=portfolio_snapshot,
             portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
             # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same
@@ -224,7 +225,21 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
         )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return {"order_id": result.order_id, "status": result.status, "broker": result.broker}
+    # O4 steps 4+5: book the position the order just opened. OUTSIDE the try
+    # above, and ALWAYS 200 once the order went through (spec section 6.1):
+    # `book_fired_order` never raises, and a refused booking is reported in the
+    # four keys below AND paged, so it reaches a human whatever client asked.
+    booking = await book_fired_order(fired, db)
+    result = fired.result
+    return {
+        "order_id":      result.order_id,
+        "status":        result.status,
+        "broker":        result.broker,
+        "booked":        booking.booked,
+        "rec_id":        booking.rec_id,
+        "book_error":    booking.error,
+        "over_exposure": booking.over_exposure,
+    }
 
 
 @router.get("/status")
@@ -240,10 +255,10 @@ async def status() -> dict:
         # observability half of arming loudly.
         #
         # KNOWN GAP, deliberately not closed here: the history entries appended
-        # in auto_trader.py carry no `direction`, so a FIRED trade's direction
-        # stays unrecorded and `last_order` below will not show it. Recording it
-        # there belongs to O4 (the path that will book a position) -- noted so
-        # nobody mistakes `last_order` for direction evidence.
+        # in auto_trader.py carry no `direction`, so `last_order` below will not
+        # show it -- do not mistake `last_order` for direction evidence. Since
+        # O4 steps 4+5 a BOOKED fire's row carries `rec_id`, and the position
+        # it names records the direction; the row itself stays as it is.
         "direction": state.strategy.direction if state.strategy else None,
         "history_count": len(state.history),
         "last_order": state.history[-1] if state.history else None,
