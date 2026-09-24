@@ -9,10 +9,10 @@ The router keeps the two things that are the router's: `log_approval` and the
 response schema.
 
 VERBATIM MEANS VERBATIM. The only step-1 edits are the three injected callables
-below and the return value; step 2 added `enforce_pre_trade_gates` (below) and
-nothing else. Nothing was tidied in passing: the existing POST
-/api/portfolio suite, run UNEDITED, is the proof that the move changed nothing,
-and a tidy-up would spend that proof.
+below and the return value; step 2 added `enforce_pre_trade_gates` and steps
+4+5 `stop_required` (both below), and nothing else. Nothing was tidied in
+passing: the existing POST /api/portfolio suite, run UNEDITED, is the proof that
+the move changed nothing, and a tidy-up would spend that proof.
 
 THE THREE INJECTED CALLABLES exist for that same proof. The router suite patches
 `app.routers.portfolio.fetch_contract_quote_async` / `fetch_price_async` /
@@ -47,6 +47,13 @@ It does NOT turn off the duplicate-contract 409, the live refetch, the
 re-anchor, the entryPrice replacement, the premium-stop derivation or
 `seed_tp_from_pick`. The risk check itself still RUNS in both modes -- it is
 what `over_exposure` and `adjusted_size` are read from.
+
+`stop_required` (O4 steps 4+5, spec section 6.2). Default False, which is the
+card path, unchanged. True raises 422 when there is no usable stop AFTER the
+live re-anchor -- none sent, or one the `(live - scan)` shift drove to <= 0,
+which would otherwise be stored as NULL. It raises before the risk-check
+SELECT, so nothing is written. The auto-trade booking passes True: a position
+with no stop there has no invalidation and no STOP_REACHED alert at all.
 """
 from __future__ import annotations
 
@@ -120,6 +127,7 @@ async def create_position(
     price_fetcher: Callable[..., Awaitable[object]] = fetch_price_async,
     exit_plan_cfg_loader: Callable[[], dict] = load_exit_plan_cfg,
     enforce_pre_trade_gates: bool = True,
+    stop_required: bool = False,
 ) -> WriteOutcome:
     """Persist a position from a create request. See the module docstring."""
     # Duplicate contract check → 409
@@ -235,6 +243,21 @@ async def create_position(
             for t in adjusted_targets
         ]
         entry_stock_price = live_price
+
+    # O4 steps 4+5 (spec section 6.2, the write half): a caller that must not
+    # book a position without an invalidation refuses HERE, after the
+    # re-anchor and before the risk-check SELECT -- so no row and no pending
+    # write can exist when it raises. Without the flag, a stop the re-anchor
+    # drives to <= 0 is stored as NULL by `_floor_stop` below (logged above).
+    if stop_required and _floor_stop(adjusted_stop) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"No usable stop after the re-anchor for {body.contract} "
+                f"(sent {body.stop!r}, re-anchored {adjusted_stop!r}); a position "
+                "without an invalidation is not booked."
+            ),
+        )
 
     # ROUND 9 -- a USER-TYPED stop on the wrong side of the underlying is
     # refused here, not just in the React input that usually produces it.

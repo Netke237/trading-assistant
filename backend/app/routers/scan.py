@@ -1803,11 +1803,23 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             _qr = await db.execute(select(PortfolioPositionModel))
             _orm_pos = _qr.scalars().all()
             _portfolio_snapshot = orm_positions_to_risk(_orm_pos)
-            await asyncio.to_thread(
+            fired = await asyncio.to_thread(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
                 None,  # fire() reads portfolio_value from strategy under lock
             )
+            # O4 step 5: book the fired order, back ON the event loop with this
+            # request's session (it never enters the worker thread). None on
+            # every non-fire. `book_fired_order` never raises, pages its own
+            # refusals and rolls back what it wrote, so `_upsert_session` below
+            # runs on a usable session either way.
+            if fired is not None:
+                from app.services.auto_trade_booking import book_fired_order
+                booking = await book_fired_order(fired, db)
+                if booking.booked:
+                    _log.info("scan auto-trade: fired order booked as %s", booking.rec_id)
+                else:
+                    _log.error("scan auto-trade: fired order NOT booked: %s", booking.error)
     # `req`, not `_last_request`. The global is read AFTER the auto-trade block
     # above, whose `await asyncio.to_thread(...)` is a synchronous broker call —
     # a window measured in seconds. A second overlapping manual scan (nothing

@@ -1,0 +1,334 @@
+"""Book the position an auto-trade fire just opened at the broker (O4 steps 4+5).
+
+Plan: docs/superpowers/plans/2026-09-24-o4-step-4-5-book-the-fired-order-replan.md.
+Spec: docs/superpowers/plans/2026-09-15-o4-auto-trade-books-a-position-spec.md.
+
+Both triggers call `book_fired_order` with the `FiredOrder` that `fire()`
+returned: POST /auto-trade/fire and POST /scan. It runs ON THE EVENT LOOP, with
+the request's own session, and writes through `create_position` -- the one
+writer every card send already uses -- with the pre-trade gates OFF (the order
+is already at the broker, so a gate can only refuse to write down a trade that
+happened) and `stop_required` ON (a booked position with no stop has no
+invalidation and no STOP_REACHED alert).
+
+IT NEVER RAISES (spec section 6.1). The order went through; the caller answers
+200 / carries on with the scan whatever happens here. `asyncio.CancelledError`
+is a BaseException and is left to propagate.
+
+ONCE `create_position` HAS RETURNED, THE OUTCOME IS `booked=True` (re-plan
+section 8, build rule 1). The row is committed by then, so a later failure --
+the audit record, the history link, the alert -- is logged and nothing more.
+Reporting it as not booked would page "add it by hand or close it at the
+broker" about a position that is already on the books.
+
+EVERY REFUSAL PAGES, through `auto_trader._alert_refusal` (decision
+O4-ROUTE-AND-ALERT-2026-09-24). That helper is sync, runs its own
+`asyncio.run`, and DROPS the alert when a loop is already running in its thread
+-- which this module's thread always has. So it is called through
+`await asyncio.to_thread(...)`: a worker thread has no loop, the same shape the
+scan trigger's refusals already run in. Called directly, every alert below
+would be a logged no-op.
+"""
+from __future__ import annotations
+
+import asyncio
+import copy
+import logging
+import math
+import time
+import uuid
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Optional
+
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import app.services.auto_trader as auto_trader_module
+from app.data.market import fetch_contract_quote_async, fetch_price_async
+from app.schemas import PortfolioPositionCreate
+from app.services.audit import log_approval
+from app.services.auto_trader import FiredOrder
+from app.services.config_loader import load_exit_plan_cfg
+from app.services.position_writer import create_position
+from app.services.scheduling_tz import MARKET_TZ
+
+logger = logging.getLogger(__name__)
+
+_ALERT_TYPE_NOT_BOOKED = "AUTO_TRADE_NOT_BOOKED"
+_ALERT_TYPE_OVER_EXPOSURE = "AUTO_TRADE_BOOKED_OVER_EXPOSURE"
+_REC_ID_NOT_BOOKED = "auto-trade-not-booked"
+_REC_ID_OVER_EXPOSURE = "auto-trade-over-exposure"
+
+# A STATED REJECTION at any of the four brokers, lower-cased. One set for all:
+# none of these words means "live" anywhere, so the union is the safer match.
+# IBKR says Inactive; Tradier adds error; Alpaca canceled/expired; tastytrade's
+# `OrderStatus` StrEnum gives Rejected/Cancelled/Expired. ANYTHING ELSE BOOKS,
+# including values no adapter emits today: a rejection list, not an allowlist
+# (spec section 3.2) -- an unknown word most likely means a live order.
+_REJECTED_STATUSES = frozenset({
+    "rejected", "inactive", "error", "canceled", "cancelled", "expired",
+})
+# "No order id": IBKR's confirmation-question reply yields "" for an order never
+# transmitted; Alpaca's adapter defaults a missing id to "unknown".
+_NO_ORDER_IDS = frozenset({"", "unknown"})
+
+_RIGHT_FOR_DIRECTION = {"Bullish": "C", "Bearish": "P"}
+
+
+@dataclass(frozen=True)
+class BookingOutcome:
+    booked:        bool
+    rec_id:        Optional[str]
+    error:         Optional[str]   # human-readable; always names the order id
+    over_exposure: bool
+
+
+class _Refused(Exception):
+    """A refusal decided here. `broker_live` picks the alert's wording."""
+
+    def __init__(self, reason: str, *, broker_live: bool = True) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.broker_live = broker_live
+
+
+def _order_label(fired: FiredOrder) -> str:
+    oid = fired.result.order_id
+    return f"order {oid}" if oid not in (None, "") else "an order with no order id"
+
+
+def _check_refusals(fired: FiredOrder) -> None:
+    """Spec section 6.3 / re-plan section 2.4, in order. Touches nothing."""
+    result, s = fired.result, fired.strategy
+
+    oid = result.order_id
+    if oid is None or str(oid).strip().lower() in _NO_ORDER_IDS:
+        raise _Refused(
+            f"the broker returned no order id ({oid!r}), so the order reads as "
+            "never transmitted", broker_live=False,
+        )
+    if str(result.status).strip().lower() in _REJECTED_STATUSES:
+        raise _Refused(
+            f"the broker's status {result.status!r} is a rejection",
+            broker_live=False,
+        )
+
+    if s.stop is None or s.stop <= 0:
+        raise _Refused("no invalidation was armed (no stop)")
+
+    parts = s.option_symbol.split("|")
+    if len(parts) != 4:
+        raise _Refused(
+            f"the contract {s.option_symbol!r} is not SYMBOL|STRIKE|EXPIRY|RIGHT"
+        )
+    sym, strike, expiry, right = parts
+    if sym != s.symbol:
+        raise _Refused(
+            f"the contract {s.option_symbol!r} is not on the armed symbol {s.symbol!r}"
+        )
+    try:
+        strike_ok = math.isfinite(float(strike)) and float(strike) > 0
+    except ValueError:
+        strike_ok = False
+    if not strike_ok:
+        raise _Refused(f"the contract {s.option_symbol!r} has no usable strike")
+    try:
+        date.fromisoformat(expiry)
+    except ValueError:
+        raise _Refused(f"the contract {s.option_symbol!r} has no usable expiry") from None
+    if right not in ("C", "P"):
+        raise _Refused(f"the contract {s.option_symbol!r} is neither a call nor a put")
+    if right != _RIGHT_FOR_DIRECTION[s.direction]:
+        # With `action` fixed at BUY, a Bullish put is a malformed arm, and the
+        # stop would be compared on the wrong side -- a stop that never fires.
+        raise _Refused(
+            f"the contract's right {right!r} disagrees with the armed direction "
+            f"{s.direction!r}"
+        )
+
+    if s.entry_premium <= 0:
+        # Defence in depth: `arm()` refuses this, so no armed strategy has one.
+        raise _Refused(f"no entry premium was armed ({s.entry_premium!r})")
+
+
+def _new_rec_id() -> str:
+    return f"REC-AT-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8].upper()}"
+
+
+def _build_body(fired: FiredOrder, rec_id: str) -> PortfolioPositionCreate:
+    """Re-plan section 2.6. The containers are deep-copied: frozen is shallow,
+    `_dc_replace` shares them with the pre-sizing object, and the JSON columns
+    would otherwise hold the strategy's own objects."""
+    s = fired.strategy
+    return PortfolioPositionCreate(
+        recId=rec_id,
+        symbol=s.symbol,
+        contract=s.option_symbol,
+        direction=s.direction,
+        entryPrice=s.entry_premium,
+        qty=s.quantity,
+        # MARKET_TZ, not UTC: a fire is a US-market event, and UTC reads a day
+        # late after 20:00 ET. Display and holding period only.
+        entryDate=datetime.now(MARKET_TZ).date().isoformat(),
+        portfolioValue=s.portfolio_value,
+        premiumStopPct=s.premium_stop_pct,
+        stop=s.stop,
+        stopIsUserSet=s.stop_is_user_set,
+        scanStockPrice=s.scan_stock_price,
+        structuralStop=s.structural_stop,
+        dteTotal=s.dte_total,
+        premiumStopDollar=s.premium_stop_dollar,
+        exitPlan=copy.deepcopy(s.exit_plan),
+        targets=copy.deepcopy(s.targets),
+        maxLossOverride=copy.deepcopy(s.max_loss_override),
+        tradeCardSnapshot=copy.deepcopy(s.trade_card_snapshot),
+        pickedMethod=s.picked_method,
+        pickedRowStockPrice=s.picked_row_stock_price,
+        pickedRowOptionPrice=s.picked_row_option_price,
+        pickedStopBasis=s.picked_stop_basis,
+        pickedAt=s.picked_at,
+    )
+
+
+async def _rollback(db: AsyncSession, why: str) -> None:
+    """Leave the session usable for the caller -- on the scan path,
+    `_upsert_session` runs on it next (spec section 5.3)."""
+    try:
+        await db.rollback()
+    except Exception:
+        logger.error("auto-trade booking: rollback after %s failed", why, exc_info=True)
+
+
+async def _page(symbol: str, what: str, reason: str, rec_id_key: str,
+                alert_type: str) -> None:
+    # `auto_trader_module` is looked up at call time so a test patch lands.
+    try:
+        await asyncio.to_thread(
+            auto_trader_module._alert_refusal,
+            symbol, what, reason, rec_id_key, alert_type, discrete=True,
+        )
+    except Exception:
+        logger.error("auto-trade booking: could not raise the %s alert for %s",
+                     what, symbol, exc_info=True)
+
+
+async def _alert_not_booked(fired: FiredOrder, reason: str, broker_live: bool) -> None:
+    s, r = fired.strategy, fired.result
+    if broker_live:
+        text = (
+            f"The broker ACCEPTED {_order_label(fired)} ({r.status}) for "
+            f"{s.option_symbol} x{s.quantity}, but NO position was booked, so there "
+            f"is no stop alert and no P&L for it: {reason}. Add it by hand or "
+            "close it at the broker."
+        )
+    else:
+        text = (
+            f"The broker's answer to {_order_label(fired)} ({r.status}) for "
+            f"{s.option_symbol} x{s.quantity} reads as NOT live: {reason}. Nothing "
+            "was booked. Verify at the broker."
+        )
+    await _page(
+        s.symbol, "auto-trade booking refusal", text,
+        auto_trader_module._per_symbol_rec_id(_REC_ID_NOT_BOOKED, s.symbol),
+        _ALERT_TYPE_NOT_BOOKED,
+    )
+
+
+async def _alert_over_exposure(fired: FiredOrder, rec_id: str) -> None:
+    s = fired.strategy
+    text = (
+        f"{_order_label(fired).capitalize()} for {s.option_symbol} was booked as "
+        f"{rec_id} at the ordered qty {s.quantity}, which is past the exposure "
+        "cap. Nothing was resized -- the books match the broker."
+    )
+    await _page(
+        s.symbol, "auto-trade booking over the exposure cap", text,
+        auto_trader_module._per_symbol_rec_id(_REC_ID_OVER_EXPOSURE, s.symbol),
+        _ALERT_TYPE_OVER_EXPOSURE,
+    )
+
+
+async def _refuse(fired: FiredOrder, reason: str, broker_live: bool) -> BookingOutcome:
+    error = f"{_order_label(fired)} was not booked: {reason}"
+    logger.error("auto-trade booking: %s (%s)", error, fired.strategy.symbol)
+    await _alert_not_booked(fired, reason, broker_live)
+    return BookingOutcome(booked=False, rec_id=None, error=error, over_exposure=False)
+
+
+async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcome:
+    """Book `fired` as a PortfolioPosition. Never raises -- see the module."""
+    booked_rec_id: Optional[str] = None
+    over_exposure = False
+    try:
+        try:
+            _check_refusals(fired)
+        except _Refused as ref:
+            return await _refuse(fired, ref.reason, ref.broker_live)
+
+        rec_id = _new_rec_id()
+        try:
+            body = _build_body(fired, rec_id)
+        except Exception as exc:
+            return await _refuse(fired, f"the position did not build: {exc}", True)
+
+        try:
+            outcome = await create_position(
+                body, db,
+                # This module's names, looked up at call time and passed
+                # explicitly: a keyword default binds at definition time, so a
+                # patch on this module would otherwise miss.
+                quote_fetcher=fetch_contract_quote_async,
+                price_fetcher=fetch_price_async,
+                exit_plan_cfg_loader=load_exit_plan_cfg,
+                enforce_pre_trade_gates=False,
+                stop_required=True,
+            )
+        except Exception as exc:
+            await _rollback(db, "a refused write")
+            detail = exc.detail if isinstance(exc, HTTPException) else repr(exc)
+            return await _refuse(fired, f"the position write failed: {detail}", True)
+
+        # COMMITTED. From here the outcome is booked=True, whatever fails.
+        booked_rec_id = rec_id
+        over_exposure = outcome.over_exposure
+        logger.info(
+            "auto-trade booking: %s booked as %s (%s x%s%s)",
+            _order_label(fired), rec_id, fired.strategy.option_symbol,
+            fired.strategy.quantity, ", OVER the exposure cap" if over_exposure else "",
+        )
+
+        if body.tradeCardSnapshot:
+            try:
+                await log_approval(rec_id, body.tradeCardSnapshot, db)
+            except Exception:
+                await _rollback(db, "a failed audit record")
+                logger.error("auto-trade booking: log_approval failed for %s", rec_id,
+                             exc_info=True)
+
+        try:
+            auto_trader_module.auto_trader.record_booking(fired.attempt_id, rec_id)
+        except Exception:
+            logger.error("auto-trade booking: could not link %s to its history row",
+                         rec_id, exc_info=True)
+
+        if over_exposure:
+            await _alert_over_exposure(fired, rec_id)
+
+        return BookingOutcome(booked=True, rec_id=rec_id, error=None,
+                              over_exposure=over_exposure)
+    except Exception as exc:
+        if booked_rec_id is not None:
+            logger.error("auto-trade booking: %s is booked, but a later step failed",
+                         booked_rec_id, exc_info=True)
+            return BookingOutcome(booked=True, rec_id=booked_rec_id, error=None,
+                                  over_exposure=over_exposure)
+        logger.error("auto-trade booking: unexpected failure", exc_info=True)
+        try:
+            return await _refuse(fired, f"unexpected failure: {exc!r}", True)
+        except Exception:
+            return BookingOutcome(
+                booked=False, rec_id=None,
+                error=f"{_order_label(fired)} was not booked: unexpected failure",
+                over_exposure=False,
+            )
