@@ -36,6 +36,7 @@ from app.schemas import (
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     SentimentData, FundamentalsOut, SCAN_RESULT_SCHEMA_VERSION,
+    RegimeGateSnapshot,
 )
 from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
@@ -436,6 +437,22 @@ def _safe(model_cls, d: dict | None):
         return model_cls(**known)
     except Exception:
         return None
+
+
+def _regime_gate_snapshot(gate: dict) -> RegimeGateSnapshot:
+    """The two resolved headwind thresholds, as the card carries them.
+
+    A non-numeric YAML value is carried as None rather than failing the card:
+    None tells the fire path to read scoring_rules.yaml, which is the same
+    value the scan itself was handed, so the two cannot disagree. `bool` is
+    excluded because it is an `int` to Python and is never a percentage.
+    """
+    def _num(v):
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    return RegimeGateSnapshot(
+        headwindCautionPct=_num(gate.get("headwind_caution_pct")),
+        headwindRejectPct=_num(gate.get("headwind_reject_pct")),
+    )
 
 
 async def _process_symbol(
@@ -1073,6 +1090,10 @@ async def _process_symbol(
         sentiment=SentimentData(**_regime_signal) if _regime_signal else None,
         stopCostPct=stop_cost_pct,
         stopCostStatus=stop_cost_status,
+        # The SAME resolved dict both score_stock calls above were handed, so
+        # the card cannot describe a rule its own scoring did not use. The arm
+        # payload reads the thresholds off this, not off live Step-3 state.
+        regimeGate=_regime_gate_snapshot(_regime_gate),
     )
 
     trade_card.fundamentals = FundamentalsOut(

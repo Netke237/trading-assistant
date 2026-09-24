@@ -7,7 +7,7 @@ import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
-import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
+import { regimeGateFromCard, MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
 import { api } from '@/lib/api';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import { armPickedFieldsFrom } from '@/lib/cardEdits';
@@ -192,6 +192,13 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    * one prop along. No card-level fallback exists to `??` against (see the
    * `methodPick` prop doc), so this reads the prop alone. */
   const pickMissing = !checkMethodPick(methodPick);
+  /* The regime-gate rule this card's scan resolved, or null when the card
+   * predates the snapshot. Null REFUSES the arm: falling back to the live
+   * Step-3 store would re-open arm-door round 1's F1, since that store need
+   * not hold what this card's scan was run with. Unlike the two checks above,
+   * no caller prints a sentence for this one, so this component does. */
+  const regimeGate = regimeGateFromCard(card);
+  const gateSnapshotMissing = regimeGate === null;
   /* NOTE: the disclosure is the CALLER'S, not this component's, and that is a
    * choice rather than an omission. Rendering the refusal sentence here too put
    * it on screen TWICE in one column -- step 7 already prints it a few rows
@@ -219,6 +226,9 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     // the check immediately above, on the same reading `pickMissing` was
     // derived from.
     if (pickMissing) return;
+    // Same belt-and-braces shape, on the same reading `gateSnapshotMissing`
+    // was derived from. Also narrows `regimeGate` for the spread below.
+    if (regimeGate === null) return;
     setWorking(true); setError(null);
     try {
       await api.armAutoTrade({
@@ -252,11 +262,15 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // (nothing scanned this session) falls back to the helper's own default
         // rather than to a literal written here.
         horizon:         scoringHorizonFromLabel(useScanStore.getState().context?.horizon),
-        // Spread, not two hand-written keys, and through the shared reader, so
-        // the snapshot cannot disagree with what the scan request sent.
-        // Absent keys stay absent: omitted means "the scan used the YAML
-        // value", which is exactly what an untouched Step-3 control means.
-        ...regimeGateOverridesFrom(useScanStore.getState().scanOverrides),
+        // The thresholds THIS CARD'S SCAN RESOLVED, off the card itself --
+        // NOT the live Step-3 store. Arm-door round 1, F1: `scanOverrides` is
+        // not persisted and survives a threshold edit or "Reset to defaults"
+        // without invalidating the scan, so reading it here armed the trade
+        // under whatever Step 3 said at submit time. Decision
+        // AUTOTRADE-ARMED-TRADE-JUDGED-BY-ITS-SCANS-RULE-2026-09-21: an armed
+        // trade is judged by the rule its own scan ran under. Absent keys stay
+        // absent: the resolved block had none, so the scan read the YAML.
+        ...regimeGate,
         // Floored defensively: `contracts` comes from the shared per-symbol
         // Contracts map (Feature 7), which a caller could in principle write
         // a sub-1 value into (e.g. Feature 3's Apply button before its own
@@ -362,10 +376,11 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         <div className={styles.armRow}>
           {!armed ? (
             <button type="button" className={`${styles.btn} ${styles.btnArm}`}
-              onClick={handleArm} disabled={!broker || working || stopMissing || pickMissing}
+              onClick={handleArm} disabled={!broker || working || stopMissing || pickMissing || gateSnapshotMissing}
               title={
                 stopMissing ? MISSING_INVALIDATION_TITLE
                 : pickMissing ? MISSING_METHOD_PICK_TITLE
+                : gateSnapshotMissing ? MISSING_REGIME_GATE_SNAPSHOT_TITLE
                 : undefined
               }>
               {working ? 'Arming…' : `Arm — ${card.symbol} ${card.direction}`}
@@ -394,6 +409,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
             </>
           )}
         </div>
+      )}
+
+      {autoMode === 'armed' && !armed && gateSnapshotMissing && (
+        <Text size={11} tone="caution">{MISSING_REGIME_GATE_SNAPSHOT_TITLE}</Text>
       )}
 
       {(autoMode === 'armed' || autoMode === 'post_scan') && (

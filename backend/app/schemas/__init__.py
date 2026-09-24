@@ -566,6 +566,20 @@ class AlternativeContract(BaseModel):
     breakeven:          Optional[float] = None
 
 
+class RegimeGateSnapshot(BaseModel):
+    """The two headwind thresholds a scan RESOLVED (YAML overlaid by Step 3).
+
+    Only the two per-run thresholds, deliberately: `enabled` and
+    `require_stable_for_reject` are config, not per-scan parameters, and are
+    not overridable by any caller (see services/regime_gate.py).
+
+    A None value means the resolved block itself carried no such key, which
+    the fire path reads exactly as the scan did -- from scoring_rules.yaml.
+    """
+    headwindCautionPct: Optional[float] = None
+    headwindRejectPct:  Optional[float] = None
+
+
 class TradeCardData(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     symbol: str
@@ -620,6 +634,20 @@ class TradeCardData(BaseModel):
     # the row was restored from a scan session written before this shipped.
     stopCostPct:    Optional[float] = None
     stopCostStatus: Optional[Literal["PASS", "CAUTION"]] = None
+
+    # ── The regime-gate rule THIS card's scan ran under ─────────────────────
+    # Decision AUTOTRADE-ARMED-TRADE-JUDGED-BY-ITS-SCANS-RULE-2026-09-21: an
+    # armed trade is judged by the rule its own scan resolved, not by whatever
+    # Step 3 says at the moment Arm is pressed. The arm payload reads its
+    # thresholds from HERE, so they travel with the card -- through a reload
+    # (scanStore persists the result), a Step-3 edit or reset (which never
+    # touches a card), and a restart that changes scoring_rules.yaml (the
+    # numbers are the RESOLVED ones, YAML already overlaid).
+    #
+    # None means the card was produced before this field existed (an older
+    # persisted or DB-restored scan); the Arm button refuses such a card rather
+    # than guess which rule its scan used.
+    regimeGate: Optional[RegimeGateSnapshot] = None
 
 
 # ── Scan ─────────────────────────────────────────────────────────────────────

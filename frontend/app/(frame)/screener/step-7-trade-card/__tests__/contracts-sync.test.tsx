@@ -67,6 +67,9 @@ function makeCard(symbol: string): TradeCardData {
     rrRatio: 2.0,
     rrModel: 'Heston repriced',
     finalStatus: 'PASS',
+    // Every card a current scan produces carries its resolved regime-gate
+    // rule; AutoTradeArm refuses one that does not.
+    regimeGate: { headwindCautionPct: -15, headwindRejectPct: -40 },
   };
 }
 

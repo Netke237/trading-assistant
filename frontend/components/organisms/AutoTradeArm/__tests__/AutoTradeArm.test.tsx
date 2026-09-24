@@ -5,6 +5,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
+import { MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
 // Phase G piece 5, build step 4 — every render below must supply a pick, or
@@ -53,6 +54,10 @@ const mockCard: TradeCardData = {
   },
   rrRatio: 2.5,
   rrModel: 'Heston repriced',
+  // The rule the card's scan resolved. Every card a current scan produces
+  // carries one; a card without it is refused at Arm (see the regime-gate
+  // describe at the bottom).
+  regimeGate: { headwindCautionPct: -15, headwindRejectPct: -40 },
 } as TradeCardData;
 
 describe('AutoTradeArm — backend payload portfolio_value', () => {
@@ -525,7 +530,10 @@ describe('AutoTradeArm — regime gate inputs', () => {
     expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].horizon).toBe(expected);
   });
 
-  it('sends the Step-3 headwind thresholds the scan was run with', async () => {
+  it("sends the thresholds the CARD'S scan resolved, not the live Step-3 store", async () => {
+    // Arm-door round 1, F1 -- the exact interleaving: the scan ran at the
+    // YAML -40, then Step 3 was edited WITHOUT re-scanning (context untouched,
+    // so the card survives), then Arm. The trade must be judged by -40.
     act(() => {
       useScanStore.setState({
         scanOverrides: { regime_headwind_caution_pct: -25, regime_headwind_reject_pct: -80 },
@@ -536,14 +544,29 @@ describe('AutoTradeArm — regime gate inputs', () => {
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
     const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
-    expect(payload.regime_headwind_caution_pct).toBe(-25);
-    expect(payload.regime_headwind_reject_pct).toBe(-80);
+    expect(payload.regime_headwind_caution_pct).toBe(-15);
+    expect(payload.regime_headwind_reject_pct).toBe(-40);
   });
 
-  it('omits the thresholds when Step 3 never set them, so the backend reads its YAML', async () => {
-    // undefined, not 0 and not null: omitted is what "the scan used the config
+  it('is unaffected by a Step-3 reset to defaults after the scan', async () => {
+    // The scan ran under a tightened -10 reject; 'Reset to defaults' empties
+    // scanOverrides. The card still says -10, and -10 is what is sent.
+    act(() => { useScanStore.setState({ scanOverrides: {} }); });
+    const card = { ...mockCard, regimeGate: { headwindCautionPct: -5, headwindRejectPct: -10 } };
+    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.regime_headwind_caution_pct).toBe(-5);
+    expect(payload.regime_headwind_reject_pct).toBe(-10);
+  });
+
+  it('omits a threshold the resolved block did not carry, so the backend reads its YAML', async () => {
+    // undefined, not 0 and not null: omitted is what "the scan read the config
     // value" means on this endpoint, and 0 is a REAL threshold there.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    const card = { ...mockCard, regimeGate: { headwindCautionPct: null, headwindRejectPct: null } };
+    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -556,17 +579,35 @@ describe('AutoTradeArm — regime gate inputs', () => {
     // 0 sits inside the Step-3 control's own -100..0 range and means "cap on
     // any headwind at all". A truthiness test anywhere along this path would
     // silently substitute the YAML -40 — 40 points looser than asked for.
-    act(() => {
-      useScanStore.setState({
-        scanOverrides: { regime_headwind_caution_pct: 0, regime_headwind_reject_pct: 0 },
-      });
-    });
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    const card = { ...mockCard, regimeGate: { headwindCautionPct: 0, headwindRejectPct: 0 } };
+    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
     const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
     expect(payload.regime_headwind_caution_pct).toBe(0);
     expect(payload.regime_headwind_reject_pct).toBe(0);
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['null',   null],
+  ])('refuses to arm a card whose regimeGate is %s, and says why', (_label, gate) => {
+    // A card from before the snapshot existed. Falling back to the live
+    // Step-3 store would re-open F1, so the button is disabled instead --
+    // even with Step 3 holding values that LOOK plausible.
+    act(() => {
+      useScanStore.setState({
+        scanOverrides: { regime_headwind_caution_pct: -25, regime_headwind_reject_pct: -80 },
+      });
+    });
+    const card = { ...mockCard, regimeGate: gate } as TradeCardData;
+    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
+    const btn = screen.getByText(/^Arm —/).closest('button')!;
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute('title', MISSING_REGIME_GATE_SNAPSHOT_TITLE);
+    expect(screen.getAllByText(MISSING_REGIME_GATE_SNAPSHOT_TITLE).length).toBeGreaterThan(0);
+    fireEvent.click(btn);
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
   });
 });
