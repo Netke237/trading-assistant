@@ -15,6 +15,8 @@ from __future__ import annotations
 import html as html_lib
 import json
 import logging
+import os
+import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -65,12 +67,34 @@ _DEDUP_PATH = Path(__file__).parent.parent.parent.parent / 'alert_dedup.json'
 
 
 def _save_dedup() -> None:
-    """Persist dedup state. Caller must hold _fired_lock."""
+    """Persist dedup state. Caller must hold _fired_lock.
+
+    ATOMIC: serialise first, write a unique temp file beside the target, fsync
+    it, then os.replace() it over the target. The old bare open(path, 'w')
+    truncated the file BEFORE writing, so a crash or encoding error part-way
+    left it empty or half-written -- and _load_dedup then lost every dedup
+    hold AND first-seen record on the next restart. Now a failure at any step
+    leaves the previous file exactly as it was.
+    """
+    tmp_name = None
     try:
-        with open(_DEDUP_PATH, 'w', encoding='utf-8') as f:
-            json.dump({'fired': _fired, 'first_seen': _first_seen}, f)
+        payload = json.dumps({'fired': _fired, 'first_seen': _first_seen})
+        fd, tmp_name = tempfile.mkstemp(
+            dir=_DEDUP_PATH.parent, prefix='.alert_dedup.', suffix='.tmp')
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_name, _DEDUP_PATH)
+        tmp_name = None
     except Exception:
-        logger.debug('Could not persist dedup state', exc_info=True)
+        logger.warning('Could not persist dedup state', exc_info=True)
+    finally:
+        if tmp_name is not None:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
 
 
 def _load_dedup() -> None:
@@ -82,7 +106,9 @@ def _load_dedup() -> None:
             _fired.update({k: float(v) for k, v in data.get('fired', {}).items()})
             _first_seen.update(data.get('first_seen', {}))
     except Exception:
-        logger.debug('Could not load dedup state', exc_info=True)
+        # WARNING, not DEBUG: an unreadable store means every dedup hold and
+        # first-seen record is gone, which the operator needs to see.
+        logger.warning('Could not load dedup state', exc_info=True)
 
 
 _load_dedup()

@@ -107,26 +107,45 @@ _DIRECTION_CONVICTION_DEFAULTS: dict[str, dict[str, float | None]] = {
 _KNOWN_HORIZONS = frozenset({"swing", "intraday", "position"})
 
 
-def _walk_direction_conviction_paths(node, path: tuple[str, ...] = ()):
-    """Yield the dotted path of every `direction_conviction` key anywhere in the
-    config, at any depth, through mappings and lists alike.
+def _walk_direction_conviction_paths(node, path: tuple[str, ...] = (), seen: set[int] | None = None):
+    """Yield the path (a TUPLE of key segments) of every `direction_conviction`
+    key anywhere in the config, at any depth, through mappings and lists alike.
 
     Keys are stringified: PyYAML parses `on:`, `yes:` and `true:` as BOOLEANS
     and `1:` as an int, so a bare `key.lower()` on a raw key would blow up with
     an AttributeError instead of the named error this module promises — and
     neither router catches AttributeError, so it would escape as a bare 500
     with no `detail` at all.
+
+    THE PATH IS A TUPLE, NOT A DOTTED STRING. Joined on '.', a top-level key
+    literally spelled `horizons.position` produced the legal string
+    'horizons.position.direction_conviction', passed validation, and sat inert
+    while the gate ran on the real block. A '.' inside a segment cannot
+    synthesise a separator in a tuple.
+
+    `seen` holds the ids of containers already walked. yaml.safe_load accepts
+    recursive aliases (`horizons: &x {swing: *x}`), which used to recurse until
+    RecursionError — a bare 500 again. Walking each container once also stops
+    an alias DAG being re-walked exponentially. It hides nothing: a container
+    reached twice has the same children, and a dict block's verdict in the
+    caller (read at a legal path or not) does not depend on the route taken.
     """
+    if seen is None:
+        seen = set()
+    if isinstance(node, (dict, list)):
+        if id(node) in seen:
+            return
+        seen.add(id(node))
     if isinstance(node, dict):
         for key, value in node.items():
             key_text = str(key)
             if key_text == "direction_conviction":
-                yield ".".join(path + (key_text,)), value
+                yield path + (key_text,), value
             else:
-                yield from _walk_direction_conviction_paths(value, path + (key_text,))
+                yield from _walk_direction_conviction_paths(value, path + (key_text,), seen)
     elif isinstance(node, list):
         for index, value in enumerate(node):
-            yield from _walk_direction_conviction_paths(value, path + (f"[{index}]",))
+            yield from _walk_direction_conviction_paths(value, path + (f"[{index}]",), seen)
 
 
 def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
@@ -166,15 +185,31 @@ def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
             f"{sorted(_KNOWN_HORIZONS)}, got {type(horizons).__name__}"
         )
 
-    legal_paths = {f"horizons.{h}.direction_conviction" for h in _KNOWN_HORIZONS}
-    for found_path, _block in _walk_direction_conviction_paths(cfg):
-        if found_path not in legal_paths:
-            raise ValueError(
-                f"misplaced direction_conviction block in scoring_rules.yaml: "
-                f"found at {found_path}, but it must sit at one of "
-                f"{sorted(legal_paths)} — as written it is never read, so the "
-                f"gate silently keeps running on its previous threshold"
-            )
+    legal_paths = {("horizons", h, "direction_conviction") for h in _KNOWN_HORIZONS}
+    # The dict blocks the gate actually READS. A block found elsewhere that is
+    # the SAME OBJECT as one of these is not inert: it is the `_defaults:
+    # &anchor` holder a YAML merge key needs (PyYAML hands the merged horizon
+    # the very same dict), or an aliased block. Dicts only — `None` and small
+    # ints share identity by accident, so a scalar never borrows a legal read.
+    read_block_ids = set()
+    for h in _KNOWN_HORIZONS:
+        horizon_cfg = horizons.get(h)
+        if isinstance(horizon_cfg, dict):
+            block = horizon_cfg.get("direction_conviction")
+            if isinstance(block, dict):
+                read_block_ids.add(id(block))
+    for found_path, found_block in _walk_direction_conviction_paths(cfg):
+        if found_path in legal_paths:
+            continue
+        if isinstance(found_block, dict) and id(found_block) in read_block_ids:
+            continue
+        raise ValueError(
+            f"misplaced direction_conviction block in scoring_rules.yaml: "
+            f"found at {'.'.join(found_path)}, but it must sit at one of "
+            f"{sorted('.'.join(p) for p in legal_paths)} — as written it is "
+            f"never read, so the gate silently keeps running on its previous "
+            f"threshold"
+        )
 
     blocks: dict[str, dict | None] = {}
     for key_text in sorted(_KNOWN_HORIZONS):
