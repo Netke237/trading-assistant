@@ -2,7 +2,7 @@ import { api, API_BASE_URL } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { buildStockScanRequestBody, type StockScanRequestBody } from '@/lib/resolveStockScanRequest';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 /**
@@ -257,6 +257,53 @@ export interface StockScanParamOverrides {
 }
 
 /**
+ * The body a manual stock scan posts: universe/direction/horizon from
+ * scanStore.context, params = saved scanParamsStore merged with the caller's
+ * per-run edits, Step-3 scanOverrides, settingsStore.confidenceGate.
+ * Shared by runStockScan (Step-3 / Step-4 Run) and Step 5's runScan so the two
+ * cannot drift again (A5b). Reads stores; may throw on a malformed persisted
+ * store — callers call it inside their try.
+ */
+export function manualStockScanRequest(
+  strategy: string,
+  overrides: StockScanParamOverrides = {},
+  opts: { accountSize?: number } = {},
+): StockScanRequestBody {
+  const store = useScanStore.getState();
+  const saved = useScanParamsStore.getState();
+  const p = { ...saved, ...overrides };
+  const context = store.context;
+  const requireReversal =
+    (store.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
+  const { confidenceGate } = useSettingsStore.getState();
+  const rawOverrides = store.scanOverrides;
+
+  // account_size/risk_pct are hardcoded here (not read from riskStore) —
+  // this is the manual-run path's existing, already-shipped behavior,
+  // unchanged by this extraction. Flagged (not silently fixed) per the
+  // scheduler-timezone-awareness plan: the profile-based schedule resolver
+  // (scanScheduleResolve.ts) explicitly reads live riskStore values instead,
+  // since a scheduled entry firing unattended for months must never
+  // silently keep a stale $50k/1% default baked in from before the user set
+  // their real position sizing — fixing this same gap for the manual path
+  // too is a separate, pre-existing concern outside this plan's scope.
+  // Step 5 passes opts.accountSize (riskStore portfolioValue), decision
+  // A5B-ACCOUNT-SIZE-2026-09-24; Steps 3/4 keep the 50k default.
+  return buildStockScanRequestBody({
+    universe: context?.universe ? [context.universe] : ['SP500'],
+    direction: context?.direction ?? 'Bullish',
+    horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
+    strategy,
+    params: p,
+    requireReversal,
+    scanOverrides: rawOverrides,
+    confidenceGate,
+    accountSize: opts.accountSize ?? 50_000,
+    riskPct: 0.01,
+  });
+}
+
+/**
  * Run a stock scan with `strategy`, reading universe/direction/horizon from
  * scanStore.context and parameters from scanParamsStore (overridable per-run).
  * Writes result + scanState into scanStore. Returns the result or null on error.
@@ -287,35 +334,7 @@ export async function runStockScan(
     store.setStockScanError(null);
     store.setScanState('SCANNING');
 
-    const saved = useScanParamsStore.getState();
-    const p = { ...saved, ...overrides };
-    const context = store.context;
-    const requireReversal =
-      (store.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
-    const { confidenceGate } = useSettingsStore.getState();
-    const rawOverrides = store.scanOverrides;
-
-    // account_size/risk_pct are hardcoded here (not read from riskStore) —
-    // this is the manual-run path's existing, already-shipped behavior,
-    // unchanged by this extraction. Flagged (not silently fixed) per the
-    // scheduler-timezone-awareness plan: the profile-based schedule resolver
-    // (scanScheduleResolve.ts) explicitly reads live riskStore values instead,
-    // since a scheduled entry firing unattended for months must never
-    // silently keep a stale $50k/1% default baked in from before the user set
-    // their real position sizing — fixing this same gap for the manual path
-    // too is a separate, pre-existing concern outside this plan's scope.
-    const requestBody = buildStockScanRequestBody({
-      universe: context?.universe ? [context.universe] : ['SP500'],
-      direction: context?.direction ?? 'Bullish',
-      horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
-      strategy,
-      params: p,
-      requireReversal,
-      scanOverrides: rawOverrides,
-      confidenceGate,
-      accountSize: 50_000,
-      riskPct: 0.01,
-    });
+    const requestBody = manualStockScanRequest(strategy, overrides);
 
     reachedRequest = true;
     const result = await api.postStockScan(requestBody);

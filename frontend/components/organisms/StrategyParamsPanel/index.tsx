@@ -210,8 +210,8 @@ export function StrategyParamsPanel({ params, setParams, onReset }: Props) {
         </label>
 
         <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">Require Choppy regime (mean reversion RSI only)</Text>
-          <Text size={10} tone="dim">When enabled, the mean-reversion RSI signal only fires when the OMM market regime is Choppy — more selective but higher precision in range-bound markets.</Text>
+          <Text size={11} tone="dim">Require Choppy regime (mean reversion RSI / BB)</Text>
+          <Text size={10} tone="dim">When enabled, the mean-reversion RSI / Bollinger Band signals (and the multi-signal strategy's RSI/BB variants) only fire when the OMM market regime is Choppy — more selective but higher precision in range-bound markets.</Text>
           <div className={styles.paramInput}>
             <input
               type="checkbox"

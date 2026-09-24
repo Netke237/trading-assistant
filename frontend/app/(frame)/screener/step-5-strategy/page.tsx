@@ -8,6 +8,7 @@ import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useShallow } from 'zustand/shallow';
 import { api, getLastDataRefresh } from '@/lib/api';
+import { manualStockScanRequest } from '@/lib/stockScan';
 import styles from './page.module.css';
 import { StrategyParamsPanel } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
@@ -214,35 +215,12 @@ export default function Step5StrategyPage() {
     setError(null);
     try {
       // A5: hoisted so the exact body travels with its result (Analysis replays it).
-      const requestBody = {
-        universe: context?.universe ? [context.universe] : ['SP500'],
-        direction: context?.direction ?? 'Bullish',
-        horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
-        strategy: stratKey,
-        pullback_tolerance_pct:    params.pullbackTolerancePct,
-        pullback_ema_period:       params.pullbackEmaPeriod,
-        pullback_trend_ema:        params.pullbackTrendEma,
-        pullback_ma_type:          params.pullbackMaType,
-        pullback_require_reversal: requireReversal,
-        ma_crossover_fast:      params.maCrossoverFast,
-        ma_crossover_slow:      params.maCrossoverSlow,
-        ma_crossover_lookback:  params.maCrossoverLookback,
-        breakout_volume_mult:   params.breakoutVolumeMult,
-        rsi_period:             params.rsiPeriod,
-        rsi_oversold:           params.rsiOversold,
-        rsi_trend_sma:          params.rsiTrendSma,
-        bt_min_trades:          params.btMinTrades,
-        bt_min_win_rate:        params.btMinWinRate,
-        account_size: portfolioValue,
-        risk_pct: 0.01,
-        shortlist_max_candidates: params.stockShortlistMax,
-        ...(stratKey === 'mean_reversion_multi' ? {
-          mean_reversion_variants:          meanReversionVariants,
-          mean_reversion_min_confirmations: meanReversionMinConfirm,
-          vwap_lookback:                    vwapLookback,
-          vwap_deviation_pct:               vwapDeviationPct,
-        } : {}),
-      };
+      // A5b: the same builder the Step-3/4 Run buttons use (Step-3 overrides,
+      // confidence gate, headwind, fundamentals, ATR pair, require_choppy_regime).
+      // Step 5's local panel edits ride in as per-run overrides, exactly as Step 4's
+      // do; account_size keeps Step 5's source, riskStore portfolioValue
+      // (decision A5B-ACCOUNT-SIZE-2026-09-24).
+      const requestBody = manualStockScanRequest(stratKey, params, { accountSize: portfolioValue });
       const result = await api.postStockScan(requestBody);
       setStockScanResult(result, requestBody);
       router.push('/screener/step-6-backtest');
