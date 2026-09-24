@@ -6,6 +6,7 @@ import io
 import logging
 import math
 import os
+import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -20,6 +21,10 @@ from app.services.audit import log_event
 
 TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com")
 TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
+
+# Module-level clock (A4d): fetch_intraday_candles reads it once as its first
+# line. Tests patch app.data.market._now, never time.time globally.
+_now = time.time
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +53,14 @@ def get_tradier_creds() -> tuple[str, str]:
 
 def _tradier_base() -> str:
     return get_tradier_creds()[1]
+
+
+def _is_sandbox_base(base: str) -> bool:
+    """True when a Tradier base URL is the sandbox (the paper token's base).
+
+    Substring, not equality, so a trailing slash on TRADIER_BASE_URL still counts.
+    """
+    return "sandbox.tradier.com" in (base or "")
 
 
 # ── In-process caches ─────────────────────────────────────────────────────────
@@ -93,8 +106,9 @@ def _finite_ohlc(row: dict) -> bool:
     return all(math.isfinite(row[k]) for k in ("open", "high", "low", "close"))
 
 
-def _headers() -> dict:
-    token, _ = get_tradier_creds()
+def _headers(token: str | None = None) -> dict:
+    if token is None:
+        token, _ = get_tradier_creds()
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
@@ -348,21 +362,30 @@ def fetch_intraday_candles(
       4h    → ~730 calendar days (yfinance 1h resampled to 4h; Tradier unsupported)
       1min  → ~7 calendar days   (yfinance cap)
 
-    Tradier bars take precedence on timestamp conflicts (more accurate for recent data).
+    Tradier bars take precedence on timestamp conflicts (more accurate for recent data),
+    EXCEPT on the sandbox base (A4d): its feed is 15 minutes delayed, so its newest
+    bar can be partial. That bar never overwrites another source's finite bar at
+    its timestamp, and when it fills an empty timestamp it is kept only while it
+    is the newest bar of the result -- see _merge_tradier_rows.
     Returns [] only when both sources fail.
     """
+    fetch_start = _now()  # first line, before any network call (A4d)
+    # Credentials read ONCE: the guard, the URL, the header and the sandbox
+    # policy all come from this one read, so they cannot disagree (A4d).
+    token, base = get_tradier_creds()
+    on_sandbox = _is_sandbox_base(base)
     interval = normalize_interval(interval)
     logger.info("Fetching intraday %s %s days=%s", symbol, interval, days)
 
     # ── Tradier (only for supported intervals) ───────────────────────────────
     tradier_rows: list[dict] = []
-    if get_tradier_creds()[0] and interval in _TRADIER_INTRADAY_INTERVALS:
+    if token and interval in _TRADIER_INTRADAY_INTERVALS:
         try:
             end = date.today()
             start = end - timedelta(days=min(days, 55))
             resp = httpx.get(
-                f"{_tradier_base()}/v1/markets/timesales",
-                headers=_headers(),
+                f"{base}/v1/markets/timesales",
+                headers=_headers(token),
                 params={
                     "symbol":         symbol,
                     "interval":       interval,
@@ -436,17 +459,77 @@ def fetch_intraday_candles(
         merged.update({b["time"]: b for b in yf_rows})
     if ibkr_rows:
         merged.update({b["time"]: b for b in ibkr_rows})   # IBKR overwrites yf
-    if tradier_rows:
-        merged.update({b["time"]: b for b in tradier_rows})  # Tradier overwrites all
+    partial_ts: int | None = None
+    yielded = False
+    if tradier_rows:  # the helper is never called without Tradier rows
+        partial_ts, yielded = _merge_tradier_rows(
+            merged, tradier_rows, on_sandbox=on_sandbox,
+            span=_INTERVAL_COMPLETION_SECONDS.get(interval), fetch_start=fetch_start,
+        )
 
     # Catch-all: a bad bar from IBKR or yfinance (not just Tradier, already
     # filtered above) must not reach the merged result either.
     result = sorted((b for b in merged.values() if _finite_ohlc(b)), key=lambda b: b["time"])
+    # Rule 3 (A4d), AFTER the catch-all so "newest" is the newest bar a
+    # consumer will see: a presumed-partial sandbox bar that filled an empty
+    # timestamp is dropped unless it is the newest bar. Kenneth, 2026-09-24:
+    # a partial bar never sits behind a newer bar.
+    dropped = partial_ts is not None and bool(result) and result[-1]["time"] != partial_ts
+    if dropped:
+        result = [b for b in result if b["time"] != partial_ts]
     logger.info(
-        "Merged %d Tradier + %d IBKR + %d yf → %d total bars for %s",
+        "Merged %d Tradier + %d IBKR + %d yf → %d total bars for %s "
+        "(sandbox partial bar: yielded=%d dropped=%d)",
         len(tradier_rows), len(ibkr_rows), len(yf_rows), len(result), symbol,
+        int(yielded), int(dropped),
     )
     return result
+
+
+# A4d: slack beyond the sandbox feed lag before the newest sandbox bar is
+# presumed complete. Only a sandbox more than ~30 minutes behind lets a partial
+# bar past the window, and then the merge behaves as it did before A4d.
+PARTIAL_BAR_SLACK_SECONDS = 900
+
+
+def _merge_tradier_rows(
+    merged: dict[int, dict],
+    rows: list[dict],
+    *,
+    on_sandbox: bool,
+    span: int | None,
+    fetch_start: float,
+) -> tuple[int | None, bool]:
+    """Merge Tradier rows into `merged` (in place). Returns (partial_ts, yielded).
+
+    Off the sandbox, or when `span` is None (an interval without a known bar
+    length), every Tradier row overwrites the other sources, as before A4d.
+
+    On the sandbox, P -- the row with the greatest `time` -- is presumed PARTIAL
+    when `P.time + span + TRADIER_SANDBOX_FEED_LAG_SECONDS +
+    PARTIAL_BAR_SLACK_SECONDS > fetch_start`. Every other row overwrites as
+    before. A presumed-partial P:
+      * never overwrites another source's FINITE bar at its timestamp
+        (returns (None, True): it yielded);
+      * otherwise fills the timestamp and is returned as `partial_ts`, which
+        the caller drops unless it is the newest bar of the final result.
+    P is identified by timestamp, so every Tradier row at P's time is held back,
+    and the other source's bar is read before any Tradier row lands.
+    """
+    p_time = max(b["time"] for b in rows)
+    partial = (
+        on_sandbox and span is not None
+        and p_time + span + TRADIER_SANDBOX_FEED_LAG_SECONDS + PARTIAL_BAR_SLACK_SECONDS > fetch_start
+    )
+    if not partial:
+        merged.update({b["time"]: b for b in rows})
+        return None, False
+    held = merged.get(p_time)
+    merged.update({b["time"]: b for b in rows if b["time"] != p_time})
+    if held is not None and _finite_ohlc(held):
+        return None, True
+    merged[p_time] = [b for b in rows if b["time"] == p_time][-1]  # last row wins, as dict.update did
+    return p_time, False
 
 
 
@@ -456,9 +539,12 @@ def fetch_intraday_candles(
 # auto-trader's Option A for daily bars (a forming bar buys a coin flip, not
 # information). Strategy signal/backtest bars are NOT regime and do not use this.
 INTRADAY_REGIME_BAR_SECONDS = 900
-# Tradier's sandbox serves 15-minute-DELAYED market data, and Tradier bars win
-# the merge in fetch_intraday_candles -- so a sandbox bar can be partial long
-# after its own 15 minutes have elapsed on the wall clock.
+# Tradier's sandbox serves 15-minute-DELAYED market data, so a sandbox bar can be
+# partial long after its own 15 minutes have elapsed on the wall clock. Since
+# A4d the partial (newest) sandbox bar no longer wins the merge against a finite
+# yfinance bar; it can still reach the result when no other source has its
+# timestamp (pre/after-hours), and then only as the newest bar -- which is why
+# this lag is still applied (whether to narrow it is open_questions[110]).
 TRADIER_SANDBOX_FEED_LAG_SECONDS = 900
 
 
@@ -466,9 +552,9 @@ def intraday_feed_lag_seconds() -> int:
     """Seconds the intraday feed in use runs behind the wall clock.
 
     900 when the Tradier base this process fetches from is the sandbox (the
-    paper token's base), else 0. Keyed on `_tradier_base()` because that is the
-    base `fetch_intraday_candles` actually calls. Substring, not equality, so a
-    trailing slash on TRADIER_BASE_URL still counts. When Tradier returned
+    paper token's base), else 0. Keyed on `_tradier_base()`, which reads the
+    same credentials `fetch_intraday_candles` reads for its base. Substring, not
+    equality (`_is_sandbox_base`), so a trailing slash still counts. When Tradier returned
     nothing and only yfinance (real time) answered, the sandbox lag still
     applies: that drops one extra COMPLETE bar -- the conservative direction.
     """
@@ -476,7 +562,7 @@ def intraday_feed_lag_seconds() -> int:
         base = _tradier_base() or ""
     except Exception:
         return TRADIER_SANDBOX_FEED_LAG_SECONDS
-    return TRADIER_SANDBOX_FEED_LAG_SECONDS if "sandbox.tradier.com" in base else 0
+    return TRADIER_SANDBOX_FEED_LAG_SECONDS if _is_sandbox_base(base) else 0
 
 
 def completed_intraday_bars(
