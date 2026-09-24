@@ -97,3 +97,31 @@ failed intraday fetch; run `_compute_dhmm` on `candles`.
 Full backend suite green and reconciling (+ the new file's count exactly); `state.py` exit 0 with a phase
 entry `A4-INTRADAY-REGIME-15MIN` created with the code; an adversarial round on the **code** clean at
 `audit_rule`'s gate; then merge.
+
+---
+
+## 6. Adversarial round 1 (the plan) — 2026-09-24: CLEAN
+
+An independent reviewer ran `bmad-review-adversarial-general` on this plan against `44a01102` under
+`audit_rule`'s gate. **Zero gate-level findings.** It confirmed: `fetch_intraday_candles` returns
+unix-int `time`, and nothing on either regime path reads `time` except `_fetch_scan_window_bars`'s date
+trim, which the Intraday branch bypasses; the 55-day source cap still yields ~990 (yfinance) to ~2,400
+(merged) bars, clearing `min_obs` 60 and the HMM's 200; the other readers of the options card's regime
+are display-only or read only `conviction_pct`/`stability`; the new fetch fits the fire path's executor
+and deadline (it writes no shared cache); no other options-path measurement exists; and no existing
+fire-path test arms Intraday.
+
+Below the gate (logged, not fixed in the plan). **The build adopts 1 and 2**, because they are about what
+the code it writes says, not new scope:
+
+1. **The stock scan's reader is `_process_stock` (`stock_scan.py:751-760`), which fetches
+   `("15min", 55)`.** The `("15min", 80)` at `:398` is `_analyze_core` — the Analysis page. Output is
+   identical (both sources cap at 55 days), but parity must copy the SCAN. **Build: both new readers use
+   `("15min", 55)`, and test 7 pins them against `_process_stock`.** §1's table and §2 should be read
+   with `55` where they say `80`.
+2. **The options-scan fetch sits outside `sem`**, while the stock scan's runs under its scan semaphore.
+   **Build: the options-scan fetch runs inside `async with sem:`.**
+3. The card's `MarketSentiment` shows `~{avg_regime_duration}d`, which is in lookback strides, not days —
+   already mislabelled on daily Swing/Position; A4 carries it onto Intraday, does not create it.
+4. The 8s fire-path deadline against a serial Tradier-then-yfinance fetch is unmeasured offline; if it
+   overruns, every Intraday fire abstains and sizes at the floor (§3.4 names it).
