@@ -11,6 +11,8 @@ Kenneth's decision `A8B-BASKET-BANNER-AND-DEAD-ENDPOINT-2026-09-24`, both on the
 
 ---
 
+## Round 1 (plan) — 1 blocking + 7 non-blocking, all folded in below
+
 ## 1. The basket failure banner (frontend)
 
 ### Defect, verified on today's tree
@@ -35,8 +37,8 @@ dropped-stop notices to their own `basketNotes` state for exactly this reason (`
 2. `handleSubmit` `:1248`: `setOrderError(\`Some orders were not saved — …\`)` →
    `setBasketError(...)`. Its start-of-submit resets add `setBasketError(null)`; it **keeps**
    `setOrderError(null)` (a basket send is a send "of any kind"; a stale direct-path error must not
-   sit over it — the property the existing "does not leave the previous submit's banner" test
-   guards, now split across two slots).
+   sit over it). After the split the `:895` test runs basket→basket only, so it no longer guards
+   this reset — T4 does (round-1 finding 1).
 3. `placeLimitPaper` `:1048` and `placeMarketNow` `:1103`: add `setBasketError(null)` to the reset
    line that already clears `setBasketNotes([])`.
 4. The `[active]` effect `:597` is **unchanged** — it must not touch `basketError`, and it must keep
@@ -46,9 +48,16 @@ dropped-stop notices to their own `basketNotes` state for exactly this reason (`
    basket never sets a broker). Update the ROUND 12 comment block above it, which names
    `setOrderError` as the basket's rejection channel.
 6. Fix the comment inside `handleSubmit` (`:1159-1166`) that describes the three resets, so it names
-   the new slot.
+   the new slot. Same for the two stale test comments: the block header at
+   `edited-fields-sync.test.tsx:805-808` and the `:895` test's comment at `:896-900`, both of which
+   name `orderError` as the basket's slot.
+7. The `basketError` declaration comment states the whole lifetime: survives Prev/Next, cleared by
+   the start of any send, and — like `basketNotes` — lost when the page unmounts (leaving Step 7 and
+   coming back). The decision promises only Prev/Next; unmount is stated, not changed.
 
-No other writer of `orderError` exists (grep: 6 `setOrderError` sites, all above). Nothing outside
+`setOrderError` call sites today (9, plus the declaration at `:478`): `:597` (`[active]`), `:1048`,
+`:1075`, `:1080` (Place Limit), `:1103`, `:1126`, `:1131` (Right Now), `:1168` (basket reset),
+`:1248` (basket failure — the one that moves). Nothing outside
 this file reads either slot. Not persisted, no store.
 
 ### Tests — `__tests__/edited-fields-sync.test.tsx`, block `spec §8 #8`
@@ -61,13 +70,17 @@ the cap of 5 is shared by the file and never reset (see the A8 basket test at `:
   422 fetch → pin AAA → send → `Some orders were not saved — AAA:` shown. Next (wait for `BBB Inc.`)
   → still shown. Prev → still shown. Swap fetch to ok, Next, pin BBB, send basket → banner gone
   (`waitFor … not.toBeInTheDocument`) and 1 position saved. Restore the daily count.
-- **T2 (new)** — *a DIRECT send clears the basket's failure banner.* `editAllThree()` (the direct
-  buttons need the edited plan/pick, as in the `:720` test), 422 fetch, pin + send basket → banner.
+- **T2 (new)** — *a DIRECT send clears the basket's failure banner.* Plain `render` + wait for
+  `Edit Limit` (the beforeEach already seeds the picks; the `:640` test places a limit order without
+  edits), 422 fetch, pin + send basket → banner.
   Swap fetch to ok, click `ibkr paper`, click `Place Limit @…` → banner gone and one position.
   Restore the daily count.
 - **T3 (new)** — *a DIRECT-path error still clears on navigation* (pins the half of the decision that
   did **not** change, which no test covers today). Click `ibkr paper`, make `api.postOptionOrder`
   reject once, click `Place Limit @…` → the error text shown. Next → gone.
+- **T4 (new)** — *a BASKET send clears a direct-path error.* Click `ibkr paper`,
+  `api.postOptionOrder.mockRejectedValueOnce(new Error('broker down'))`, Place Limit → error shown.
+  Fetch ok, pin AAA, send basket → error gone and one position saved. Restore the daily count.
 - **Existing, must stay green unchanged:** `shows the rejection banner for a BASKET order with no
   broker selected` (`:874`) and `does not leave the previous submit's banner over a successful one`
   (`:895`).
@@ -82,6 +95,7 @@ the cap of 5 is shared by the file and never reset (see the A8 basket test at `:
 | M4: drop `setBasketError(null)` from `placeLimitPaper` | T2 |
 | M5: remove `setOrderError(null)` from the `[active]` effect | T3 |
 | M6: render `basketError` inside the `selectedBroker` gate | T1 and `:874` |
+| M7: drop `setOrderError(null)` from `handleSubmit` | T4 |
 
 `placeMarketNow`'s reset is the same one-token edit as `placeLimitPaper`'s and has no own test (the
 Right Now button's test surface would duplicate T2); stated here rather than left implied.
@@ -108,10 +122,11 @@ Right Now button's test surface would duplicate T2); stated here rather than lef
    fallback" names a deleted function — reword to state the reason on its own. (Not in the phase
    note; found by the grep.)
 4. `tests/test_config_score_thresholds.py`
-   - `:21 test_stop_premium_thresholds_endpoint_mirrors_yaml` → **re-point** at
-     `pass_max_fraction_for`: for each of intraday/swing/position,
-     `pass_max_fraction_for(label) == horizons[key]["stop_premium"]["pass_max_fraction"]`. Renamed
-     `test_pass_max_fraction_for_mirrors_yaml`.
+   - `:21 test_stop_premium_thresholds_endpoint_mirrors_yaml` → **delete** (decision: "removed or
+     re-pointed"). Re-pointed it would compare `pass_max_fraction_for` against the same
+     `load_scoring_cfg()` it reads — a near-tautology; the values are already pinned to 0.80 / 0.70 /
+     0.60 by `test_stop_cost_gate.py:118-126` and the label→key mapping by the parametrize at `:152+`
+     (round-1 finding 7).
    - `:36 test_stop_premium_thresholds_are_coherent` → **re-point**: keep the `0 < frac <= 1`
      value-sanity check via `pass_max_fraction_for` for the three horizons; replace the payload
      key-set check (the client type is gone) with the YAML-level guard it stood for: each
@@ -125,14 +140,13 @@ Right Now button's test surface would duplicate T2); stated here rather than lef
 
 ### Test-count accounting (main: 3000 passed / 1 skipped)
 
-−1 (`test_endpoint_key_set_matches_the_client_type_exactly` deleted); the two
-`test_config_score_thresholds` tests are re-pointed, not removed. **Expected: 2999 passed / 1
-skipped.** Any other delta is a finding.
+−2: `test_endpoint_key_set_matches_the_client_type_exactly` and
+`test_stop_premium_thresholds_endpoint_mirrors_yaml` deleted; the coherence test is re-pointed, not
+removed. **Expected: 2998 passed / 1 skipped.** Any other delta is a finding.
 
 ### Mutation checks
 
-- Change one horizon's `pass_max_fraction` in `pass_max_fraction_for` (e.g. force `horizon_key` to
-  `"swing"`) → the re-pointed mirror test fails.
+- Make `pass_max_fraction_for` return `1.5` → the re-pointed coherence test fails (value sanity).
 - Add a `reject_fraction: 0.9` to one horizon's `stop_premium` block in `scoring_rules.yaml` → the
   re-pointed coherence test fails.
 
@@ -146,10 +160,13 @@ over `backend/ frontend/` (excl. `node_modules`, `.venv`, `__pycache__`) returns
 
 ## 3. State + verification
 
-- `PROJECT_STATE.json`: phase `A8B-BASKET-BANNER-AND-DEAD-ENDPOINT` → status/rounds per the
-  adversarial rounds; the `defect_marker` probe goes quiet when the route is gone — switch its
-  `verify` to a presence probe on the new `basketError` state in `page.tsx` so the phase stays pinned.
-- Frontend: `npx tsc --noEmit`, full `npx jest` — expected 137 suites / 1818 tests (1815 + T1-T3).
-- Backend: `.venv/bin/python -m pytest -q` — 2999 passed / 1 skipped.
+- `PROJECT_STATE.json`: the `verify` block **stays** the `defect_marker` on
+  `def get_stop_premium_thresholds\(` — it reads "shipped" once the route is gone and flags drift if
+  it ever comes back (round-1 finding 4); only its `note` is updated. Part (1) is pinned by T1, not a
+  probe. The phase's status moves to `shipped_unaudited` **in the same commit that deletes the
+  route**, or `state.py:633` reports drift between commits (round-1 finding 5); `audit_clean` after
+  the code round.
+- Frontend: `npx tsc --noEmit`, full `npx jest` — expected 137 suites / 1819 tests (1815 + T1-T4).
+- Backend: `.venv/bin/python -m pytest -q` — 2998 passed / 1 skipped.
 - `python3 scripts/state.py` exits 0.
 - Merge to main only after the code round comes back clean. Cap: 3 rounds.
