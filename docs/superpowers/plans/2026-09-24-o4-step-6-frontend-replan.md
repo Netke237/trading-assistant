@@ -314,3 +314,34 @@ Existing suites expected unchanged: the three Step-7 suites mock `fireAutoTrade`
 - `python3 scripts/state.py` exit 0, with a phase entry for O4 step 6 whose probe pins
   `armBookingFieldsFrom`.
 - An adversarial round on the **code** comes back clean at `audit_rule`'s gate before merge.
+
+---
+
+## 10. Adversarial round 1 (the plan) — 2026-09-24: CLEAN
+
+An independent reviewer ran `bmad-review-adversarial-general` on this plan against the tree at
+`e2245173`, under `audit_rule`'s gate. **Zero gate-level findings.** It validated a realistic §2 body
+against the real `ArmRequest` (targets as objects, dicts, int `dte_total`, nulls); confirmed the
+`stop`/`stop_is_user_set`/`scan_stock_price` triple equals the card path's, so `create_position`
+re-anchors (or skips it for a typed stop) exactly as Place Limit does; that `toOptionSymbol` yields the
+`SYM|strike|YYYY-MM-DD|R` form refusal 4 parses and the `unique` column stores, and `fromBackend` keeps
+it verbatim; that every pre-broker raise in `fire()` is a 400 without `Order failed:`; that a second
+press after an unknown cannot double-fire; and that every step-3 §6 and step-4+5 §6 obligation is here.
+
+Below the gate, logged. The build takes items 2, 3 and 4 as build rules, since they are about how the
+code is written, not new scope:
+
+1. §4's "at most one 30s sync old" is false on the screener: only portfolio/dashboard poll; step 7 has
+   the persisted copy plus one sync at mount. The warning only; the 409 and page still catch it.
+2. **Build:** "Arm anyway" passes the confirmation as an **argument** to `handleArm`, not via state read
+   in the same tick (the stale closure would loop the dialog).
+3. **Build:** the duplicate dialog closes when `optionSymbol` changes (step 7 swaps `card` without
+   remounting), so "Arm anyway" can never arm a different card than the one warned about.
+4. **Build:** `ArmBookingFields` is derived from `armAutoTrade`'s request type
+   (`Required<Pick<…>>`), so a misspelled key fails `tsc`; a separate interface would not.
+5. §5.3 "disarmed means it did": `fire()` disarms before its headwind/cap/daily-loss refusals, so
+   disarmed means *attempted*. Nothing branches on it; the caution copy says "check the broker".
+6. On `booked:false` with a rejected status, the pre-existing green "Auto-trade fired — Order ID" line
+   still shows beside the caution.
+7. The not-booked copy's "record" remedy would 409 in the duplicate case; "adjust" in the same sentence
+   covers it.
