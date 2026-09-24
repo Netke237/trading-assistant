@@ -6,6 +6,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
 import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/types/domain';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
+import type { StockScanRequestBody } from './resolveStockScanRequest';
 import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
 import { stripLegacyIvFields, stripLegacyIvDetail } from './ivBasis';
@@ -319,7 +320,15 @@ interface ScanStoreState {
   /** ISO-ish local timestamp of the last completed options scan. */
   optionsScanAt:       string | null;
   setOptionsScanAt:    (at: string) => void;
-  setStockScanResult:  (r: StockScanResult | null) => void;
+  /** A5 (decision A5-MIRROR-LAST-SCAN-RUN-2026-09-24). The exact request that
+   *  produced `stockScanResult`, so the Analysis page replays the scan the user
+   *  is looking at. Written ONLY by `setStockScanResult`, in the same `set()` as
+   *  the result, so it can never pair with a different one: a writer that does
+   *  not know the request (StoreHydration's backend recovery) stores null, and
+   *  clearing the result clears it. StoreHydration may attach the backend's
+   *  record afterwards, but only when its `scan_id` matches this result. */
+  stockScanRequest:    StockScanRequestBody | null;
+  setStockScanResult:  (r: StockScanResult | null, request?: StockScanRequestBody | null) => void;
   /** Why the last stock scan failed, as one human-readable line — null when
    *  the last run succeeded, was cleared at the start of a new run, or none
    *  has run yet. Written only by `runStockScan()` (lib/stockScan.ts).
@@ -409,6 +418,7 @@ export const useScanStore = create<ScanStoreState>()(
             // indicator that they no longer match the selected universe/direction.
             scanResult:        null,
             stockScanResult:   null,
+            stockScanRequest:  null,
             stockScanAt:       null,
             optionsScanAt:     null,
             rejectedLog:       [],
@@ -484,6 +494,7 @@ export const useScanStore = create<ScanStoreState>()(
       setContractsBySymbol: (map) => set({ contractsBySymbol: map }),
       screenerMode:             'options',
       stockScanResult:          null,
+      stockScanRequest:         null,
       stockScanError:           null,
       previousStockScanResult:  null,
       stockScanAt:              null,
@@ -497,8 +508,9 @@ export const useScanStore = create<ScanStoreState>()(
       lastStockScanStrategy:    null,
       setScreenerMode:     (m) => set({ screenerMode: m }),
       setOptionsScanAt:    (at) => set({ optionsScanAt: at }),
-      setStockScanResult:  (r) => set((state) => ({
+      setStockScanResult:  (r, request) => set((state) => ({
         stockScanResult: r,
+        stockScanRequest: r !== null ? (request ?? null) : null,
         previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
         stockScanAt: r !== null ? toLocalWallClock() : state.stockScanAt,
       })),
@@ -525,7 +537,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-       version: 16,
+       version: 17,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -661,6 +673,12 @@ export const useScanStore = create<ScanStoreState>()(
           // everything" -- see selectCardEdits.
           s = { ...s, optionsCardEdits: emptyCardEdits(), stocksCardEdits: emptyCardEdits() };
         }
+        if (version < 17) {
+          // A5. No stored result has a known request: null, which Analysis
+          // reads as "use current settings, and say so" -- StoreHydration may
+          // then attach the backend's record when its scan_id matches.
+          s = { ...s, stockScanRequest: null };
+        }
         return s;
       },
       partialize: (state) => ({
@@ -676,6 +694,7 @@ export const useScanStore = create<ScanStoreState>()(
         screenerMode:             state.screenerMode,
         activeStrategy:           state.activeStrategy,
         stockScanResult:          state.stockScanResult,
+        stockScanRequest:         state.stockScanRequest,
         previousStockScanResult:  state.previousStockScanResult,
         stockScanAt:              state.stockScanAt,
         optionsScanAt:            state.optionsScanAt,

@@ -314,7 +314,8 @@ async def restore_stock_from_db() -> None:
 
 
 def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None,
-                   commission: float = 0.0) -> str:
+                   commission: float = 0.0, min_trades: int | None = None,
+                   min_win_rate: float | None = None) -> str:
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
@@ -323,7 +324,12 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     # so that editing strategy_params.yaml's costs.fee_pct/slippage_pct doesn't
     # leave a stale pre-edit BacktestResult (including passes_gate) served out of
     # _BACKTEST_CACHE for up to _BACKTEST_TTL (24h) under an unchanged key.
-    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}|{commission:.6f}"
+    # A5: the gate thresholds too. The cached BacktestResult's passes_gate /
+    # confidence / summary_text are decided on them, and the scan and the
+    # Analysis page share this cache -- without them a run at 5 trades served
+    # its verdict to a later run at 10 for up to _BACKTEST_TTL.
+    return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}|{commission:.6f}"
+            f"|{min_trades}|{min_win_rate!r}")
 
 
 def _get_backtest_cached(key: str):
@@ -435,7 +441,14 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         _snap = await _get_fundamentals(symbol, staleness_days=fund_gate.get("staleness_days", 90))
         _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
 
-    _regime_gate = dict(full_cfg.get("regime_gate") or {})
+    # A5 (decision A5-ANALYSIS-MIRRORS-SCAN): the same resolver as
+    # _process_stock, so the Step-3 headwind thresholds the scan ran with are
+    # the ones this page scores and flags on.
+    _regime_gate = _resolve_regime_gate(
+        full_cfg.get("regime_gate"),
+        req.regime_headwind_caution_pct,
+        req.regime_headwind_reject_pct,
+    )
     card = score_stock(
         symbol=symbol, direction=req.direction, horizon=req.horizon, bars=bars[-120:],
         scoring_mode="stock", regime_signal=regime_signal,
@@ -475,7 +488,8 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         _bt_bars = _intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
         _bt_commission = _backtest_commission()
         _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars, signal_kwargs,
-                                 commission=_bt_commission)
+                                 commission=_bt_commission, min_trades=req.bt_min_trades,
+                                 min_win_rate=req.bt_min_win_rate)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -505,6 +519,13 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         if conf_val is not None and req.confidence_reject_below is not None and conf_val < req.confidence_reject_below:
             gate_flags.append({"gate": "confidence", "status": "REJECT",
                                "detail": f"{conf_val:.0f}% < {req.confidence_reject_below:.0f}%"})
+        elif (conf_val is not None and req.confidence_caution_below is not None
+              and conf_val < req.confidence_caution_below):
+            # Mirrors _process_stock's cap: CAUTION at most, never lowers a REJECT.
+            if card.status == "PASS":
+                card = dataclasses.replace(card, status="CAUTION")
+            gate_flags.append({"gate": "confidence", "status": "CAUTION",
+                               "detail": f"{conf_val:.0f}% < {req.confidence_caution_below:.0f}%"})
 
     # Event proximity
     next_event_days = next_event_label = None
@@ -925,7 +946,8 @@ async def _process_stock(
 
             _bt_commission = _backtest_commission()
             _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params,
-                                     commission=_bt_commission)
+                                     commission=_bt_commission, min_trades=req.bt_min_trades,
+                                     min_win_rate=req.bt_min_win_rate)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -1060,6 +1082,24 @@ async def _process_stock(
 async def get_last_stock_scan() -> StockScanResult | None:
     """Return the most recently completed stocks-mode scan, if any."""
     return _last_stock_result
+
+
+@router.get('/stock-scan/last-request')
+async def get_last_stock_scan_request() -> dict | None:
+    """The request that produced GET /stock-scan/last's result, with its scan_id,
+    so the Analysis page can replay it (A5, decision A5-MIRROR-LAST-SCAN-RUN).
+
+    Served ONLY while status is "complete": that is the one state in which the
+    two globals come from the same run. run_stock_scan's "running" write pairs
+    the NEW request with the PREVIOUS result, and restore_stock_from_db turns a
+    persisted "running" row into "idle" with that same mismatch."""
+    if (_last_stock_status != "complete" or _last_stock_request is None
+            or _last_stock_result is None):
+        return None
+    return {
+        "scan_id": _last_stock_result.scan_id,
+        "request": _last_stock_request.model_dump(mode="json", exclude_none=True),
+    }
 
 
 @router.get('/stock-scan/last-run', response_model=ScanSessionStatus)
