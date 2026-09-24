@@ -424,11 +424,13 @@ describe('fundamentalScoreTooltip — the stricter 65/40 band', () => {
 /* ── RiskPanel ────────────────────────────────────────────────────────── */
 
 describe('riskStatusTooltip — per-band comparators, as riskStore.computeMetrics applies them', () => {
-  // Caps chosen so 80% of the COUNT caps is not an integer (7 -> 5.6, 9 -> 7.2):
-  // floor and round then disagree, so the comparator is actually discriminated.
+  // Caps chosen so 80% of each COUNT cap has a fractional part >= .5 (7 -> 5.6,
+  // 12 -> 9.6): floor and round then disagree, so the comparator is actually
+  // discriminated. (Round 3: a cap of 9 -> 7.2 did NOT -- floor and round are
+  // both 7 -- and Math.round on the daily band shipped green.)
   const limits: RiskLimits = {
     maxTotalExposurePct: 0.5, maxConcurrentPositions: 7, maxSingleTradeExposurePct: 0.2,
-    maxDailyRecommendations: 9, portfolioValue: 100_000, maxLossPerTradePct: 0.0375,
+    maxDailyRecommendations: 12, portfolioValue: 100_000, maxLossPerTradePct: 0.0375,
   };
   const m = (over: Partial<PortfolioRiskMetrics>): PortfolioRiskMetrics => ({
     totalExposurePct: 0.1, concurrentPositions: 1, dailyRecommendations: 1,
@@ -448,10 +450,10 @@ describe('riskStatusTooltip — per-band comparators, as riskStore.computeMetric
     // concentration: like exposure
     ['concentration', m({ largestConcentrationPct: 0.2 }),  '20% of a 20% limit (CAUTION).'],
     ['concentration', m({ largestConcentrationPct: 0.21 }), '21% of a 20% limit (REJECT).'],
-    // daily: like positions, floor(7.2) = 7
-    ['daily', m({ dailyRecommendations: 6 }), '6 of a 9 limit (PASS).'],
-    ['daily', m({ dailyRecommendations: 7 }), '7 of a 9 limit (CAUTION).'],
-    ['daily', m({ dailyRecommendations: 9 }), '9 of a 9 limit (REJECT).'],
+    // daily: like positions, floor(9.6) = 9
+    ['daily', m({ dailyRecommendations: 8 }),  '8 of a 12 limit (PASS).'],
+    ['daily', m({ dailyRecommendations: 9 }),  '9 of a 12 limit (CAUTION).'],
+    ['daily', m({ dailyRecommendations: 12 }), '12 of a 12 limit (REJECT).'],
   ] as const)('%s', (metric, metrics, expected) => {
     expect(riskStatusTooltip(metrics, limits, metric)).toBe(expected);
   });
@@ -466,8 +468,8 @@ describe('riskStatusTooltip — per-band comparators, as riskStore.computeMetric
       .toBe('Driven by largest position (MSFT): 25% of a 20% limit (REJECT).');
   });
   it('a CAUTION alone', () => {
-    expect(riskStatusTooltip(m({ dailyRecommendations: 8 }), limits))
-      .toBe('Driven by today’s recommendations: 8 of a 9 limit (CAUTION).');
+    expect(riskStatusTooltip(m({ dailyRecommendations: 10 }), limits))
+      .toBe('Driven by today’s recommendations: 10 of a 12 limit (CAUTION).');
   });
   it('on a tie of verdicts, the first band in panel order', () => {
     expect(riskStatusTooltip(m({ totalExposurePct: 0.6, concurrentPositions: 7 }), limits))
