@@ -280,6 +280,29 @@ class ArmedStrategy:
     # frozen one — but a reader must not mistake it for a live control here.
     regime_headwind_caution_pct: Optional[float] = None
     regime_headwind_reject_pct:  Optional[float] = None
+    # ── O4 step 3: the fields a fired trade will book its position from ─────
+    # Carried from ArmRequest (which validates names and bounds); this
+    # dataclass is the carrier. CAPTURED AND UNREAD until O4 step 4 books a
+    # position on fire -- the note above about the fire path creating no
+    # PortfolioPosition is still true.
+    #
+    # NOT HASHABLE ANY MORE. frozen=True with eq=True derives __hash__ from
+    # every field, and `targets` / the four dicts are unhashable, so
+    # `hash(strategy)` raises TypeError. Nothing hashes one (fire()'s `expect`
+    # check is by identity); tests/test_o4_step3_arm_fields.py pins it, so
+    # whoever reaches for a set() learns why. FROZEN IS SHALLOW for these:
+    # `_dc_replace` shares the containers, so mutating one in place would also
+    # change the pre-sizing object. Production never does.
+    stop:                Optional[float] = None
+    stop_is_user_set:    Optional[bool]  = None
+    scan_stock_price:    Optional[float] = None
+    structural_stop:     Optional[float] = None
+    exit_plan:           Optional[dict]  = None
+    targets:             list[dict]      = field(default_factory=list)
+    dte_total:           Optional[int]   = None
+    premium_stop_dollar: Optional[float] = None
+    max_loss_override:   Optional[dict]  = None
+    trade_card_snapshot: Optional[dict]  = None
     # What the headwind gate DID, carried onto the fired history row.
     #
     # ROUND 1 OF TARGET 2a: abstention is fail-open and left no trace at all --
