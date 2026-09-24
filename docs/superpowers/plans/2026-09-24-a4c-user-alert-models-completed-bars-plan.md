@@ -165,3 +165,16 @@ rule-level `closed` candle can still be partial under the sandbox (not regime; s
   to keep in lockstep. A fresh fetch stamps `time.time()` taken before the fetch, which can only
   understate the fetch time (the conservative direction).
 - The U1 watch fetch keeps its own interval default (`"15m"`) for the completeness span.
+
+## 10. Adversarial round 2 (the code, f2ad5bc) — 2026-09-24: CLEAN (zero gate-level findings)
+
+Fresh subagent against `git diff 22c4942 -- backend/`. Every user-alert regime fit is covered (U1–U4). U3's
+persisted `omm_state` now comes from completed bars too. No real source yields non-int times, so no path
+drops a whole series. Unknown, daily and weekly intervals are unchanged. OMM (100) and HMM (200) floors are
+cleared by the cache windows. 1D/1W and every non-regime input (indicators, closed candle, structure, VWAP,
+daily bars, `describe_match`) are untouched. `fetched_at` is at or before the true fetch start in all three
+cases (fresh, cached, empty rows), so any error is the conservative one. Both callers pass the `as_of` of
+the candles they evaluate. The adjusted tests still pin the fire. The 4h span was re-verified.
+
+Below the gate, not raised: the cached fetch time is taken before the semaphore wait, which can add about
+one extra bar of regime lag (the conservative direction).
