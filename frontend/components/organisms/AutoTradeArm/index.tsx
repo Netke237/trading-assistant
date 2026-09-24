@@ -3,16 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
 import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import { regimeGateFromCard, MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
 import { api } from '@/lib/api';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { armBookingFieldsFrom, classifyFireFailure } from '@/lib/armBookingFields';
+import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import { armPickedFieldsFrom } from '@/lib/cardEdits';
 import { checkInvalidation, MISSING_INVALIDATION_TITLE, checkMethodPick, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
-import type { TradeCardData, MethodPick } from '@/types/domain';
+import type { TradeCardData, MethodPick, ExitPlan, MaxLossOverride } from '@/types/domain';
 import styles from './AutoTradeArm.module.css';
 
 interface AutoTradeArmProps {
@@ -63,12 +67,10 @@ interface AutoTradeArmProps {
    *  the other would arm the trade at a fraction derived against a price the
    *  order was never placed at.
    *
-   *  There is no invalidation counterpart in the REQUEST because the arm
-   *  request carries no stop level: `/auto-trade/arm` books entry, size and
-   *  premium stop only, and the auto-trader places no protective order (see the
-   *  daily-loss-gate note in PROJECT_STATE.json's open questions). What the card
-   *  does have to say about its stop is `resolvedInvalidation` below, and that
-   *  is a GATE, not a payload. */
+   *  The invalidation stop travels separately, as `stop` (O4 step 6): see
+   *  `resolvedInvalidation` below, which is both the gate and that payload. The
+   *  auto-trader still places no protective order AT THE BROKER; the stop is
+   *  booked on the position, where the alert engines read it. */
   entryLimit?: number | null;
   /** DIRECT-SEND-STOP-GATE-2026-09-09 -- the stop the card is SHOWING, resolved
    *  by the caller exactly as every send path resolves it (step 7's
@@ -76,14 +78,14 @@ interface AutoTradeArmProps {
    *  touched, else the card's own). Null means the card has no stop, and arming
    *  is refused.
    *
-   *  Why this control needs the check at all, given it sends no stop and books
-   *  no position: because the OTHER four paths now refuse such a card. A gate on
-   *  Place Limit, Right Now — Market and the basket, with Arm left open beside
-   *  them, does not close the hole -- it relabels it, and puts the way around
-   *  the refusal directly under the refusal. It is also the worse door of the
-   *  two: an auto-trade fill creates no PortfolioPosition at all, so a card with
-   *  no stop armed here yields a filled order carrying no stop, no premium stop
-   *  and no time stop, which is the caution already printed below this button.
+   *  SINCE O4 STEP 6 IT IS ALSO THE PAYLOAD: `handleArm` posts this same value
+   *  (one local, `armedStop`) as `stop`, and a fired trade is booked with it.
+   *  The gate is still needed, now for a sharper reason: the booking REFUSES a
+   *  strategy with no stop (backend `book_fired_order`), and it refuses AFTER
+   *  the broker order is live -- so a stopless card armed here would place a
+   *  real order that no position records, and page "not booked". Refusing at
+   *  arm costs no order. It also keeps Arm from being the way around the same
+   *  refusal on Place Limit, Right Now — Market and the basket.
    *
    *  `undefined` (the default) falls back to `card.exit.invalidation`, matching
    *  `checkTradeRisk`'s `resolvedInvalidation` contract verbatim -- the same
@@ -126,6 +128,31 @@ interface AutoTradeArmProps {
    *  Null/undefined falls back to the scan-time mid, which is all that was
    *  ever available before. */
   liveMid?: number | null;
+  /** O4 step 6 — the pipe-form option id (`SYM|STRIKE|YYYY-MM-DD|R`), resolved
+   *  at the call site by the SAME `toOptionSymbol(card)` the card path books
+   *  under. It is posted as `option_symbol`, which is both what the broker
+   *  adapter receives and the `contract` the fired trade is booked as -- a
+   *  unique column, and the key the premium-stop and time-stop alerts parse.
+   *  REQUIRED: `card.contract` is a different expression, and two spellings of
+   *  one option would be two rows.
+   *
+   *  (It is Bamendjou's id, not OCC; the adapters convert. OCC at the wire is a
+   *  tracked follow-up, spec §9.5.) */
+  optionSymbol: string;
+  /** O4 step 6 — whether the stop was TYPED on the card (step 7's
+   *  `invalidationIsUserSetFor`). The booking re-anchors a plan-derived stop by
+   *  (live price - scan price) and must not move a typed one; "absent" reads as
+   *  not typed, so this is REQUIRED rather than defaulted. */
+  stopIsUserSet: boolean;
+  /** O4 step 6 — booked as the position's `structural_stop`. Step 7's
+   *  `structuralBySymbol[symbol]?.stop?.price`, as `buildPaperPosition`. */
+  structuralStop?: number | null;
+  /** O4 step 6 — booked as the position's `exit_plan`. Step 7's
+   *  `exitPlanFor(card)`, the same helper `buildPaperPosition` calls. */
+  exitPlan?: ExitPlan | null;
+  /** O4 step 6 — booked as the position's `max_loss_override`. Step 7's
+   *  `maxLossOverrideBySymbol[symbol]`, as `buildPaperPosition`. */
+  maxLossOverride?: MaxLossOverride | null;
 }
 
 const MODE_LABELS: Record<AutoTradeMode, string> = {
@@ -134,11 +161,20 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null,
+                               optionSymbol, stopIsUserSet, structuralStop = null, exitPlan = null, maxLossOverride = null }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, armedDirection, armedSymbol, applyArmedStatus,
           lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+  /** What the last "Fire now" says about its BOOKING (O4 step 6) -- a caution,
+   *  not an error: either the request succeeded and the record did not, or the
+   *  outcome is unknown. Local, not persisted; the backend's Gmail/Telegram
+   *  page is the durable channel. */
+  const [fireNote, setFireNote] = useState<string | null>(null);
+  /** The held position a pending Arm would duplicate (yaml plan §9.10: warn,
+   *  do not block). Non-null renders the confirmation dialog. */
+  const [dupWarning, setDupWarning] = useState<{ contracts: number; entryPrice: number } | null>(null);
 
   // Monotonic counter guarding against a STALE status response. ROUND 2
   // finding 3 demonstrated the hazard: a read issued on mount that resolves
@@ -173,6 +209,12 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
 
   useEffect(() => { void refreshStatus(); }, [refreshStatus]);
 
+  // Step 7 swaps `card` without remounting this component. A duplicate
+  // warning raised for one contract must not survive onto another, or "Arm
+  // anyway" would arm a card nobody was warned about -- and skip that card's
+  // own duplicate check.
+  useEffect(() => { setDupWarning(null); }, [optionSymbol]);
+
   // ONE premium, read once: it is both what the arm request books as the
   // entry and the denominator the premium-stop fraction is derived against.
   // LIVE FIRST -- see the `liveMid` prop doc. The scan-time mid stays as the
@@ -187,7 +229,11 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    * resolution already falls back to the card, so a null out of it means the
    * card is null too) and matching the established idiom is worth more than a
    * second, subtly different one. */
-  const stopMissing = !checkInvalidation(resolvedInvalidation ?? card.exit.invalidation);
+  const armedStop = resolvedInvalidation ?? card.exit.invalidation;
+  // O4 step 6: `armedStop` is ALSO what `handleArm` posts as `stop`. One
+  // reading for the gate and the wire, so the button cannot be enabled on one
+  // number while the booking is armed with another.
+  const stopMissing = !checkInvalidation(armedStop);
   /* Phase G piece 5, build step 4 (§7.1) — same treatment `stopMissing` gets,
    * one prop along. No card-level fallback exists to `??` against (see the
    * `methodPick` prop doc), so this reads the prop alone. */
@@ -210,11 +256,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    * greyed Arm button unexplained -- there is exactly one today, and it prints
    * it. */
 
-  const contractId = card.contract;
-  // NOTE: option_symbol should be OCC format for real broker APIs; card.contract is
-  // Bamendjou's display id. OCC conversion is a tracked follow-up — passed as-is for now.
-
-  async function handleArm() {
+  /** `confirmedDuplicate` is an ARGUMENT, not state: "Arm anyway" calls this in
+   *  the same tick as it closes the dialog, and a state flag read here would
+   *  still be the stale `false`, re-opening the dialog forever. */
+  async function handleArm(confirmedDuplicate = false) {
     if (!broker) return;
     // Belt and braces beside the button's own `disabled`, on the same reading
     // of the same value -- an invariant on the function that submits the arm
@@ -229,12 +274,28 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     // Same belt-and-braces shape, on the same reading `gateSnapshotMissing`
     // was derived from. Also narrows `regimeGate` for the spread below.
     if (regimeGate === null) return;
-    setWorking(true); setError(null);
+    // Yaml plan §9.10 (Kenneth, 2026-09-17): arming into a contract already
+    // held WARNS, it does not block. Checked here, at arm, because this is the
+    // one moment a human consents for BOTH triggers -- the scan trigger fires
+    // unattended. Matched on the exact string the booking uses as its unique
+    // key, so "the dialog said held" and "the booking will refuse it as a
+    // duplicate" are the same test. `positions` is this tab's store (persisted,
+    // plus the sync at mount), so a position opened elsewhere since may be
+    // missed; the booking's refusal and its alert still catch that.
+    if (!confirmedDuplicate) {
+      const held = usePortfolioStore.getState().positions.find((p) => p.contract === optionSymbol);
+      if (held) {
+        setDupWarning({ contracts: held.contracts ?? 1, entryPrice: held.entryPrice });
+        return;
+      }
+    }
+    setDupWarning(null);
+    setWorking(true); setError(null); setFireNote(null);
     try {
       await api.armAutoTrade({
         broker,
         symbol:          card.symbol,
-        option_symbol:   contractId,
+        option_symbol:   optionSymbol,
         // Still BUY, and still correct -- but it no longer implies BULLISH. A
         // long single-leg option is always buy-to-open whether it is a call or
         // a put, so `action` carries no directional meaning at all.
@@ -304,6 +365,23 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // endpoint (a pre-G client, a direct API call) and the schema must go on
         // accepting it as one.
         ...armPickedFieldsFrom(methodPick ?? null),
+        // O4 step 6 — the ten booking fields, so a fired trade books its
+        // position (backend `book_fired_order`). Frozen at arm like everything
+        // above: "Fire now" posts no body, so a later card edit does not change
+        // what the armed trade books. `stop` is `armedStop`, the value the
+        // stop gate above read.
+        ...armBookingFieldsFrom({
+          stop:              armedStop,
+          stopIsUserSet,
+          scanStockPrice:    card.price,
+          structuralStop,
+          exitPlan,
+          targets:           card.exit.targets,
+          dteTotal:          card.contractDetails?.dte,
+          premiumStopDollar,
+          maxLossOverride,
+          tradeCardSnapshot: tradeCardSnapshotOf(card),
+        }),
       });
       // Invalidate any status read still in flight (ROUND 2 finding 3) before
       // publishing the new state, so a stale `armed: false` cannot land on top.
@@ -326,7 +404,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
   }
 
   async function handleDisarm() {
-    setWorking(true); setError(null);
+    setWorking(true); setError(null); setFireNote(null);
     try {
       await api.disarmAutoTrade();
       statusSeq.current += 1;
@@ -341,14 +419,50 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
   }
 
   async function handleFireNow() {
-    setWorking(true); setError(null);
+    setWorking(true); setError(null); setFireNote(null);
     try {
       const res = await api.fireAutoTrade();
       setLastOrderId(res.order_id);
       statusSeq.current += 1;
       applyArmedStatus(false, null, null);
+      // O4 steps 4+5: the server books the position, so its answer is read
+      // here. `=== false`, never `!res.booked`: a backend predating the key
+      // omits it, and "not reported" is not "not booked".
+      if (res.booked === false) {
+        // No "order placed" in the lead: two of the backend's refusals are
+        // exactly the cases where the broker's answer reads as NOT live, and
+        // `book_error` says which.
+        setFireNote(
+          `No position was recorded for this fire: ${res.book_error ?? 'no reason given'}. `
+          + 'Nothing is watching its stop. Check the broker, then record or adjust the position on the Portfolio page.',
+        );
+      } else if (res.booked === true) {
+        if (res.over_exposure === true) {
+          setFireNote(
+            `Booked as ${res.rec_id ?? 'a new position'} at the ordered size, which is past your exposure limit. `
+            + 'Nothing was resized — the portfolio matches the broker.',
+          );
+        }
+        // Written server-side, so without this pull the position is invisible
+        // here and on the Portfolio page until something else syncs.
+        void usePortfolioStore.getState().syncFromBackend(true);
+      }
     } catch (e) {
-      setError(String(e));
+      if (classifyFireFailure(e) === 'refused') {
+        setError(String(e));
+      } else {
+        // UNKNOWN, not failed: the broker call may have been made (see
+        // classifyFireFailure). Never a plain error inviting a second press.
+        // The status read settles whether THIS request took the armed slot
+        // (still armed -> it did not fire); the sync shows a booking if one
+        // was made.
+        setFireNote(
+          'The fire request did not return a result — the order may or may not have been placed. '
+          + 'Check the broker and your portfolio before firing again.',
+        );
+        void refreshStatus();
+        void usePortfolioStore.getState().syncFromBackend(true);
+      }
     } finally {
       setWorking(false);
     }
@@ -376,7 +490,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         <div className={styles.armRow}>
           {!armed ? (
             <button type="button" className={`${styles.btn} ${styles.btnArm}`}
-              onClick={handleArm} disabled={!broker || working || stopMissing || pickMissing || gateSnapshotMissing}
+              onClick={() => { void handleArm(); }} disabled={!broker || working || stopMissing || pickMissing || gateSnapshotMissing}
               title={
                 stopMissing ? MISSING_INVALIDATION_TITLE
                 : pickMissing ? MISSING_METHOD_PICK_TITLE
@@ -416,22 +530,17 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
       )}
 
       {(autoMode === 'armed' || autoMode === 'post_scan') && (
-        // Round 7 finding 16. An auto-trade FIRE places the broker order and
-        // appends a history row -- it creates no PortfolioPosition
-        // (auto_trader.fire), so nothing on that path carries a `stop` or a
-        // `premium_stop_pct` into the alert engines: no STOP_REACHED, no
-        // PREMIUM_STOP, no TIME_STOP. The armed request does send the premium
-        // stop, but only as the `premium_at_risk` history figure and the
-        // daily-loss-gate denominator.
-        //
-        // Said on screen because this control sits directly beside Place
-        // Limit, which DOES thread all of it, and nothing distinguished them.
-        // Both halves were already recorded (this file's own prop docs, the
-        // open questions in PROJECT_STATE) -- recorded is not the same as
-        // visible to the person pressing the button.
+        // Round 7 finding 16 said here that an auto-trade fill books no
+        // position. O4 steps 4-6 changed that: the fire books a
+        // PortfolioPosition server-side from the fields `handleArm` captured,
+        // so STOP_REACHED, PREMIUM_STOP and TIME_STOP arm on it as they do for
+        // Place Limit. What still differs is said on screen: the values are the
+        // card's AT ARM (a later edit does not reach an armed trade), and a
+        // booking can be refused after the order is live.
         <Text size={11} tone="caution">
-          An auto-trade fill is not tracked as a position: the invalidation and premium stops on the card
-          above arm no alerts on this path. Place Limit does thread both.
+          When an auto-trade fires, it is booked as a position with the invalidation, premium stop and exit
+          plan this card had when you armed it — later edits do not change an armed trade. If the booking
+          is refused you will see it here (Fire now) and get an alert (Gmail/Telegram, if set up).
         </Text>
       )}
 
@@ -446,6 +555,22 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         <Text size={12} tone="pass">Auto-trade fired — Order ID: {lastOrderId}</Text>
       )}
       {error && <Text size={12} tone="reject">{error}</Text>}
+      {fireNote && <Text size={12} tone="caution">{fireNote}</Text>}
+
+      {dupWarning && (
+        <ConfirmDialog
+          title={`You already hold ${optionSymbol}`}
+          body={
+            `Existing position: ${dupWarning.contracts} contract${dupWarning.contracts === 1 ? '' : 's'} `
+            + `at $${dupWarning.entryPrice.toFixed(2)}. Arming will place a second buy-to-open on this contract `
+            + 'when it fires. That order will NOT be added to your portfolio (a contract is booked once) — '
+            + "you will be alerted, and should adjust the existing position's size by hand."
+          }
+          confirmLabel="Arm anyway"
+          onCancel={() => setDupWarning(null)}
+          onConfirm={() => { setDupWarning(null); void handleArm(true); }}
+        />
+      )}
     </div>
   );
 }

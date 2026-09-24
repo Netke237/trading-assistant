@@ -4,6 +4,8 @@ import { AutoTradeArm } from '@/components/organisms/AutoTradeArm';
 import { useRiskStore } from '@/lib/riskStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { useScanStore } from '@/lib/scanStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import type { PortfolioPosition } from '@/types/domain';
 import { api } from '@/lib/api';
 import { MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
 import type { TradeCardData, MethodPick } from '@/types/domain';
@@ -18,6 +20,12 @@ const pick = (): MethodPick => ({
   stopBasis: 'stock',
   pickedAt: '2026-09-14T10:00:00.000Z',
 });
+
+// O4 step 6 — the two REQUIRED booking props, spread into every render so
+// the tests below keep isolating what they isolated. `optionSymbol` is
+// deliberately NOT `mockCard.contract`, so a regression to posting
+// `card.contract` goes red.
+const BOOKING = { optionSymbol: 'AAPL|190|2026-05-15|C', stopIsUserSet: false } as const;
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -70,7 +78,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
   });
 
   it('handleArm posts the riskStore-configured portfolio_value, not the backend default', async () => {
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -87,7 +95,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     // $1.00 of a $2.50 mid = 0.40. Derived against entry_premium specifically:
     // anchoring it to any other premium is the bug piece 4's router fix exists
     // to prevent.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -99,7 +107,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
   it('omits the premium stop entirely when the card carries none, so the auto-trader inherits the global', async () => {
     // undefined, not null: ArmRequest.premium_stop_pct is Optional with a None
     // default, and omitting is what "inherit" means on that endpoint.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -110,7 +118,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
   it('omits a stop at or above the whole premium rather than sending a fraction the schema rejects', async () => {
     // A total loss is unreachable-by-definition rather than a stop, and the
     // endpoint's bound is lt=1 — sending 1.0 would 422 the arm.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={2.5} methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={2.5} methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -130,7 +138,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     //   stale -> entry 2.50, pct 0.400  (gate books 2.4x too little risk)
     //   live  -> entry 6.00, pct 0.1667
     render(
-      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={6.0} methodPick={pick()} />,
+      <AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={6.0} methodPick={pick()} />,
     );
     fireEvent.click(screen.getByText(/^Arm —/));
 
@@ -145,7 +153,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     // The prop is additive: a page that has not fetched a quote yet behaves
     // exactly as it did before.
     render(
-      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={null} methodPick={pick()} />,
+      <AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={null} methodPick={pick()} />,
     );
     fireEvent.click(screen.getByText(/^Arm —/));
 
@@ -155,7 +163,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
 
   it('reflects an already-armed backend state after reload', async () => {
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({ armed: true });
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
 
     await waitFor(() => expect(screen.getByText('Armed — waiting for next trigger')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Disarm' })).toBeInTheDocument();
@@ -186,7 +194,7 @@ describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () 
   const noStopCard = { ...mockCard, exit: { ...mockCard.exit, invalidation: null } } as TradeCardData;
 
   it('disables Arm and posts NOTHING when the resolved stop is null', async () => {
-    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={null} methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={noStopCard} broker="ibkr_paper" resolvedInvalidation={null} methodPick={pick()} />);
     const arm = screen.getByText(/^Arm —/).closest('button')!;
     expect(arm).toBeDisabled();
 
@@ -202,7 +210,7 @@ describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () 
     // `card.exit.invalidation` implementation fails: typing a stop is the
     // single gesture that fixes a restored candidate, and the caller resolves
     // it exactly as every send path does.
-    render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" resolvedInvalidation={185} methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={noStopCard} broker="ibkr_paper" resolvedInvalidation={185} methodPick={pick()} />);
     const arm = screen.getByText(/^Arm —/).closest('button')!;
     expect(arm).toBeEnabled();
 
@@ -216,11 +224,11 @@ describe('AutoTradeArm — refuses to arm a card with no invalidation stop', () 
     // `undefined` means "no overlay to consult", not "no gate" -- the same
     // contract `checkTradeRisk.resolvedInvalidation` documents. A card with no
     // stop is still refused; the ordinary card is still armable.
-    const { unmount } = render(<AutoTradeArm card={noStopCard} broker="ibkr_paper" methodPick={pick()} />);
+    const { unmount } = render(<AutoTradeArm {...BOOKING} card={noStopCard} broker="ibkr_paper" methodPick={pick()} />);
     expect(screen.getByText(/^Arm —/).closest('button')!).toBeDisabled();
     unmount();
 
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     expect(screen.getByText(/^Arm —/).closest('button')!).toBeEnabled();
   });
 });
@@ -240,7 +248,7 @@ describe('AutoTradeArm — refuses to arm a card with no method pick (spec test 
   });
 
   it('disables Arm and posts NOTHING when no methodPick is supplied', async () => {
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" />);
     const arm = screen.getByText(/^Arm —/).closest('button')!;
     expect(arm).toBeDisabled();
 
@@ -250,7 +258,7 @@ describe('AutoTradeArm — refuses to arm a card with no method pick (spec test 
   });
 
   it('arms normally once a pick is supplied', async () => {
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     const arm = screen.getByText(/^Arm —/).closest('button')!;
     expect(arm).toBeEnabled();
 
@@ -277,7 +285,7 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
   });
 
   it('posts all five picked_* fields, snake_case, from the supplied pick', async () => {
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -299,7 +307,7 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
     // excess-property check. `POST /api/portfolio` takes the camelCase
     // spelling, this endpoint does not, and one mapping serving both is how
     // that gets confused — into an armed trade whose pick was discarded.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -315,7 +323,7 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
     // THE UNITS TEST on this path. The two numbers are far apart on purpose:
     // only `picked_row_stock_price` may ever seed `resolved_tp_price`, and a
     // $6.24 premium landing there makes `price >= 6.24` true on the first tick.
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -333,7 +341,7 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
       method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 7.1,
       stopBasis: 'premium', pickedAt: '2026-09-14T11:00:00.000Z',
     };
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={racePick} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={racePick} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -372,7 +380,7 @@ describe("the armed payload carries the CARD's direction", () => {
     'sends direction=%s when that is what the card says',
     async (direction) => {
       render(
-        <AutoTradeArm
+        <AutoTradeArm {...BOOKING}
           card={{ ...mockCard, direction }}
           broker="ibkr_paper"
           methodPick={pick()}
@@ -418,7 +426,7 @@ describe('the ARMED state shows what the BACKEND has armed', () => {
     // /Armed .*Bearish.*/ and rendered "Armed AAPL Bearish" while passing,
     // which is the whole bug it was supposed to be guarding.
     render(
-      <AutoTradeArm card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
+      <AutoTradeArm {...BOOKING} card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
                     broker="ibkr_paper" methodPick={pick()} />,
     );
 
@@ -437,7 +445,7 @@ describe('the ARMED state shows what the BACKEND has armed', () => {
     // than "Armed undefined Bearish".
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce(status);
 
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
 
     expect(await screen.findByText('Armed — waiting for next trigger')).toBeInTheDocument();
   });
@@ -453,7 +461,7 @@ describe('the ARMED state shows what the BACKEND has armed', () => {
       .mockResolvedValueOnce({ armed: true, symbol: 'NVDA', direction: 'Bearish' }); // after arm
 
     render(
-      <AutoTradeArm card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
+      <AutoTradeArm {...BOOKING} card={{ ...mockCard, symbol: 'AAPL', direction: 'Bullish' }}
                     broker="ibkr_paper" methodPick={pick()} />,
     );
     fireEvent.click(await screen.findByText(/^Arm —/));
@@ -474,7 +482,7 @@ describe('the ARMED state shows what the BACKEND has armed', () => {
       .mockReturnValueOnce(pendingMountRead)                                       // mount: held open
       .mockResolvedValueOnce({ armed: true, symbol: 'AAPL', direction: 'Bullish' }); // post-arm
 
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(await screen.findByText(/^Arm —/));
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
 
@@ -523,7 +531,7 @@ describe('AutoTradeArm — regime gate inputs', () => {
         },
       });
     });
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -539,7 +547,7 @@ describe('AutoTradeArm — regime gate inputs', () => {
         scanOverrides: { regime_headwind_caution_pct: -25, regime_headwind_reject_pct: -80 },
       });
     });
-    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -553,7 +561,7 @@ describe('AutoTradeArm — regime gate inputs', () => {
     // scanOverrides. The card still says -10, and -10 is what is sent.
     act(() => { useScanStore.setState({ scanOverrides: {} }); });
     const card = { ...mockCard, regimeGate: { headwindCautionPct: -5, headwindRejectPct: -10 } };
-    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={card} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -566,7 +574,7 @@ describe('AutoTradeArm — regime gate inputs', () => {
     // undefined, not 0 and not null: omitted is what "the scan read the config
     // value" means on this endpoint, and 0 is a REAL threshold there.
     const card = { ...mockCard, regimeGate: { headwindCautionPct: null, headwindRejectPct: null } };
-    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={card} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -580,7 +588,7 @@ describe('AutoTradeArm — regime gate inputs', () => {
     // any headwind at all". A truthiness test anywhere along this path would
     // silently substitute the YAML -40 — 40 points looser than asked for.
     const card = { ...mockCard, regimeGate: { headwindCautionPct: 0, headwindRejectPct: 0 } };
-    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={card} broker="ibkr_paper" methodPick={pick()} />);
     fireEvent.click(screen.getByText(/^Arm —/));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
@@ -602,12 +610,214 @@ describe('AutoTradeArm — regime gate inputs', () => {
       });
     });
     const card = { ...mockCard, regimeGate: gate } as TradeCardData;
-    render(<AutoTradeArm card={card} broker="ibkr_paper" methodPick={pick()} />);
+    render(<AutoTradeArm {...BOOKING} card={card} broker="ibkr_paper" methodPick={pick()} />);
     const btn = screen.getByText(/^Arm —/).closest('button')!;
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute('title', MISSING_REGIME_GATE_SNAPSHOT_TITLE);
     expect(screen.getAllByText(MISSING_REGIME_GATE_SNAPSHOT_TITLE).length).toBeGreaterThan(0);
     fireEvent.click(btn);
     expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+});
+
+
+// ── O4 step 6 ─────────────────────────────────────────────────────────────
+describe('AutoTradeArm — O4 step 6: the arm carries the booking fields', () => {
+  beforeEach(() => {
+    act(() => {
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+      usePortfolioStore.setState({ positions: [] });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+  });
+
+  async function armedPayload() {
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    return (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+  }
+
+  it('7. posts the ten, with `stop` = resolvedInvalidation when given', async () => {
+    render(
+      <AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()}
+        resolvedInvalidation={176.5} structuralStop={175} premiumStopDollar={1.0}
+        exitPlan={{ method: 'x' } as never} maxLossOverride={{ maxLoss: 300 } as never} />,
+    );
+    fireEvent.click(screen.getByText(/^Arm —/));
+    const p = await armedPayload();
+    expect(p.stop).toBe(176.5);
+    expect(p.stop_is_user_set).toBe(false);
+    expect(p.scan_stock_price).toBe(185.2);
+    expect(p.structural_stop).toBe(175);
+    expect(p.exit_plan).toEqual({ method: 'x' });
+    expect(p.targets).toEqual(mockCard.exit.targets);
+    expect(p.dte_total).toBe(24);
+    expect(p.premium_stop_dollar).toBe(1.0);
+    expect(p.max_loss_override).toEqual({ maxLoss: 300 });
+    expect(p.trade_card_snapshot).toEqual(expect.objectContaining({ strike: 190, stockScore: 82 }));
+  });
+
+  it('7b. `stop` falls back to the card\'s own invalidation — the value the gate read', async () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    expect((await armedPayload()).stop).toBe(179.64);
+  });
+
+  it('8. posts option_symbol = the optionSymbol prop, not card.contract', async () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    const p = await armedPayload();
+    expect(p.option_symbol).toBe('AAPL|190|2026-05-15|C');
+    expect(p.option_symbol).not.toBe(mockCard.contract);
+  });
+
+  it('9. posts stop_is_user_set: true when the stop was typed', async () => {
+    render(<AutoTradeArm {...BOOKING} stopIsUserSet card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    expect((await armedPayload()).stop_is_user_set).toBe(true);
+  });
+});
+
+describe('AutoTradeArm — O4 step 6: arming a contract already held warns, does not block', () => {
+  const held = (contract: string): PortfolioPosition =>
+    ({ symbol: 'AAPL', contract, contracts: 3, entryPrice: 2.4, recId: 'REC-1' } as PortfolioPosition);
+
+  beforeEach(() => {
+    act(() => {
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+  });
+  afterEach(() => { act(() => { usePortfolioStore.setState({ positions: [] }); }); });
+
+  it('10a. shows the held size and entry, and does not arm until "Arm anyway"', async () => {
+    act(() => { usePortfolioStore.setState({ positions: [held(BOOKING.optionSymbol)] }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText(`You already hold ${BOOKING.optionSymbol}`)).toBeInTheDocument();
+    expect(screen.getByText(/3 contracts at \$2\.40/)).toBeInTheDocument();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Arm anyway' }));
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('10b. Cancel arms nothing', async () => {
+    act(() => { usePortfolioStore.setState({ positions: [held(BOOKING.optionSymbol)] }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('10c. a position on a DIFFERENT contract shows no dialog', async () => {
+    act(() => { usePortfolioStore.setState({ positions: [held('AAPL|195|2026-05-15|C')] }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('10d. the warning does not survive a switch to another contract', async () => {
+    act(() => { usePortfolioStore.setState({ positions: [held(BOOKING.optionSymbol)] }); });
+    const { rerender } = render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    rerender(<AutoTradeArm {...BOOKING} optionSymbol="AAPL|195|2026-05-15|C" card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+});
+
+describe('AutoTradeArm — O4 step 6: reading the /fire result', () => {
+  const sync = jest.fn().mockResolvedValue(true);
+  let realSync: ReturnType<typeof usePortfolioStore.getState>['syncFromBackend'];
+
+  beforeEach(() => {
+    realSync = usePortfolioStore.getState().syncFromBackend;
+    sync.mockClear();
+    act(() => {
+      usePortfolioStore.setState({ syncFromBackend: sync });
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null });
+    });
+    (api.getAutoTradeStatus as jest.Mock).mockClear();
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });
+  });
+  afterEach(() => {
+    act(() => { usePortfolioStore.setState({ syncFromBackend: realSync }); });
+    (api.fireAutoTrade as jest.Mock).mockReset();
+    (api.fireAutoTrade as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+  });
+
+  async function fire(res: unknown, reject = false) {
+    if (reject) (api.fireAutoTrade as jest.Mock).mockRejectedValueOnce(res);
+    else (api.fireAutoTrade as jest.Mock).mockResolvedValueOnce(res);
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Fire now' }));
+    await waitFor(() => expect(api.fireAutoTrade).toHaveBeenCalled());
+  }
+
+  it('11. booked === false renders a caution naming the reason, and does not sync', async () => {
+    await fire({ order_id: '888', status: 'ok', broker: 'ibkr_paper', booked: false, rec_id: null,
+                 book_error: 'no invalidation was armed', over_exposure: false });
+    expect(await screen.findByText(/No position was recorded for this fire: no invalidation was armed/)).toBeInTheDocument();
+    expect(sync).not.toHaveBeenCalled();
+  });
+
+  it('12. booked === true syncs the portfolio once, with no caution', async () => {
+    await fire({ order_id: '888', status: 'ok', broker: 'ibkr_paper', booked: true, rec_id: 'REC-AT-1',
+                 book_error: null, over_exposure: false });
+    await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+    expect(sync).toHaveBeenCalledWith(true);
+    expect(screen.queryByText(/No position was recorded/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/past your exposure limit/)).not.toBeInTheDocument();
+  });
+
+  it('13. over_exposure renders a caution naming the booking, and still syncs', async () => {
+    await fire({ order_id: '888', status: 'ok', broker: 'ibkr_paper', booked: true, rec_id: 'REC-AT-1',
+                 book_error: null, over_exposure: true });
+    expect(await screen.findByText(/Booked as REC-AT-1 at the ordered size, which is past your exposure limit/)).toBeInTheDocument();
+    expect(sync).toHaveBeenCalledWith(true);
+  });
+
+  it('14. a pre-O4 response (no `booked` key) is neither "not booked" nor synced', async () => {
+    await fire({ order_id: '1', status: 'ok' });
+    expect(await screen.findByText(/Order ID: 1/)).toBeInTheDocument();
+    expect(screen.queryByText(/No position was recorded/)).not.toBeInTheDocument();
+    expect(sync).not.toHaveBeenCalled();
+  });
+
+  it('15a. a transport failure is UNKNOWN: caution, status re-read, portfolio synced', async () => {
+    await fire(new TypeError('Failed to fetch'), true);
+    expect(await screen.findByText(/may or may not have been placed/)).toBeInTheDocument();
+    await waitFor(() => expect(sync).toHaveBeenCalledWith(true));
+    // Once on mount, once after the unknown.
+    await waitFor(() => expect(api.getAutoTradeStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it('15b. a 400 "Order failed:" is UNKNOWN too — the broker call was made', async () => {
+    await fire(new Error('API /auto-trade/fire → 400: Order failed: read timeout'), true);
+    expect(await screen.findByText(/may or may not have been placed/)).toBeInTheDocument();
+  });
+
+  it('15c. a plain 400 refusal renders red as before and does not sync', async () => {
+    await fire(new Error('API /auto-trade/fire → 400: AutoTrader not armed — cannot fire'), true);
+    expect(await screen.findByText(/AutoTrader not armed/)).toBeInTheDocument();
+    expect(screen.queryByText(/may or may not have been placed/)).not.toBeInTheDocument();
+    expect(sync).not.toHaveBeenCalled();
+  });
+});
+
+describe('AutoTradeArm — O4 step 6: the caution under the buttons', () => {
+  it('16. no longer says an auto-trade fill is not tracked as a position', () => {
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    expect(screen.queryByText(/not tracked as a position/)).not.toBeInTheDocument();
+    expect(screen.getByText(/booked as a position with the invalidation, premium stop and exit/)).toBeInTheDocument();
   });
 });

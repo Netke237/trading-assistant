@@ -368,6 +368,48 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     ));
   });
 
+  it('arms with the booking fields Place Limit would store: the BUILT contract id and the typed stop', async () => {
+    // O4 step 6, test 17. The card's `contract` is the display label
+    // ('AAA 150C 05/15'); the position is booked under `toOptionSymbol`'s
+    // pipe id. A regression that posts `card.contract`, or derives the id
+    // inside AutoTradeArm from anything but the page's `toOptionSymbol`, goes
+    // red on the first assertion. The typed stop must travel AND be flagged
+    // typed, or the booking re-anchors it by (live - scan).
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    expandLadder();
+    editField('Invalidation', String(CARD_INVALIDATION), '132');
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132'));
+
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(await screen.findByText(/armed — fire on next qualifying condition/i));
+    fireEvent.click(await screen.findByRole('button', { name: /^Arm —/ }));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const body = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(body.option_symbol).toBe('AAA|150|2026-05-15|C');
+    expect(body.stop).toBe(132);
+    expect(body.stop_is_user_set).toBe(true);
+    expect(body.scan_stock_price).toBe(150);
+    expect(body.dte_total).toBe(24);
+    expect(body.targets).toEqual([]);
+    expect(body.trade_card_snapshot).toEqual(expect.objectContaining({ strike: 150 }));
+  });
+
+  it('arms an UNTOUCHED stop as plan-derived, so the booking re-anchors it', async () => {
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(await screen.findByText(/armed — fire on next qualifying condition/i));
+    fireEvent.click(await screen.findByRole('button', { name: /^Arm —/ }));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const body = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(body.stop).toBe(CARD_INVALIDATION);
+    expect(body.stop_is_user_set).toBe(false);
+  });
+
   it('does not leak an edit from one candidate onto the other', async () => {
     // The leak direction the round-trip test cannot cover on its own: edit AAA,
     // then place the order on BBB. BBB must post its OWN limit and store its

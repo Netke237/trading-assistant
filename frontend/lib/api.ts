@@ -1,6 +1,6 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
-              PickedMethod, PickedStopBasis, Direction } from '@/types/domain';
+              PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -13,6 +13,47 @@ import type { ScoringHorizon } from '@/lib/horizonPresets';
 
 // ── Part 3: profile-based scan schedule entries ────────────────────────────
 // Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
+/** O4 step 6 — the ten booking fields `POST /auto-trade/arm` carries so a
+ *  fired auto-trade can book its PortfolioPosition (backend `ArmRequest`, O4
+ *  step 3). ONE declaration, used twice: `armAutoTrade`'s request type takes it
+ *  as optional keys, and `armBookingFieldsFrom` (lib/armBookingFields.ts)
+ *  returns it with every key required. A misspelled key in that mapping is
+ *  therefore an excess-property error in `tsc`, which matters because the
+ *  endpoint has no `extra='forbid'` and would otherwise drop it with a 200.
+ *
+ *  snake_case, like every other key on this endpoint. Nested objects
+ *  (`exit_plan`, `targets`, ...) travel verbatim, as `POST /api/portfolio`
+ *  sends them. */
+export interface ArmBookingFields {
+  stop: number | null;
+  /** Never null: the booking re-anchors `stop` by (live - scan_stock_price)
+   *  unless this is true, so "unknown" would shift a typed stop. */
+  stop_is_user_set: boolean;
+  scan_stock_price: number | null;
+  structural_stop: number | null;
+  exit_plan: ExitPlan | null;
+  /** `[]`, never null: the backend field is a list, not Optional. */
+  targets: TargetLevel[];
+  dte_total: number | null;
+  premium_stop_dollar: number | null;
+  max_loss_override: MaxLossOverride | null;
+  trade_card_snapshot: Record<string, unknown> | null;
+}
+
+/** What `POST /auto-trade/fire` returns once the order went through (always
+ *  200 then, whatever the booking did -- O4 steps 4+5). The four booking keys
+ *  are OPTIONAL: a backend predating them omits them, and `undefined` means
+ *  "not reported", never "not booked". Read `booked === false`, not `!booked`. */
+export interface FireAutoTradeResult {
+  order_id: string;
+  status: string;
+  broker: string;
+  booked?: boolean;
+  rec_id?: string | null;
+  book_error?: string | null;
+  over_exposure?: boolean;
+}
+
 export interface ScanScheduleEntry {
   id: string;
   label: string;
@@ -671,12 +712,12 @@ export const api = {
     picked_row_option_price?: number | null;
     picked_stop_basis?: PickedStopBasis | null;
     picked_at?: string | null;
-  }) => post<{ armed: boolean }>('/auto-trade/arm', req),
+  } & Partial<ArmBookingFields>) => post<{ armed: boolean }>('/auto-trade/arm', req),
 
   disarmAutoTrade: () => del('/auto-trade/arm'),
 
   fireAutoTrade: () =>
-    post<{ order_id: string; status: string }>('/auto-trade/fire', {}),
+    post<FireAutoTradeResult>('/auto-trade/fire', {}),
 
   getAutoTradeStatus: () =>
     // Models ALL SEVEN keys the endpoint returns. It used to declare five:
