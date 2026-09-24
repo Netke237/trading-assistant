@@ -291,22 +291,39 @@ async def test_stock_order_does_not_block_event_loop():
     """Regression for the High finding: router_.execute() ran straight on the
     event loop with no to_thread hop, so a slow synchronous adapter call (e.g.
     IBKR/Tradier/Alpaca's blocking httpx.post) froze every other coroutine —
-    scans, price fetches, websocket alerts — for the whole round trip."""
-    import time as _time
+    scans, price fetches, websocket alerts — for the whole round trip.
 
-    class SlowAdapter:
+    Deterministic, no wall-clock threshold (the previous version asserted a
+    concurrent 0.05s tick resolved in < 0.2s, which failed intermittently in
+    full-suite runs): the adapter blocks its thread until a coroutine on the
+    event loop has run AFTER the adapter started. On a worker thread that
+    coroutine runs at once; on the loop thread it cannot run until the adapter
+    returns, so the adapter's wait times out and reports it."""
+    import threading as _threading
+    from app.routers.broker import _idempotency_cache, _idempotency_inflight
+    # An identical order cached by an earlier test would be answered from the
+    # dedup cache without ever reaching the adapter.
+    _idempotency_cache.clear()
+    _idempotency_inflight.clear()
+
+    adapter_started = _threading.Event()
+    loop_ran_during_adapter = _threading.Event()
+    seen: dict[str, bool] = {}
+
+    class BlockingAdapter:
         def place_order(self, order):
-            _time.sleep(0.3)  # simulates a slow synchronous httpx.post
+            adapter_started.set()
+            # Blocks its thread like a synchronous httpx.post would.
+            seen["loop_ran"] = loop_ran_during_adapter.wait(timeout=5.0)
             return OrderResult(order_id="SLOW1", status="ok", broker="ibkr_paper")
 
-    router = BrokerRouter(adapters={"ibkr_paper": SlowAdapter()})
-    tick_elapsed: dict[str, float] = {}
-    loop = asyncio.get_running_loop()
-    t0 = loop.time()
+    router = BrokerRouter(adapters={"ibkr_paper": BlockingAdapter()})
 
-    async def tick_soon():
-        await asyncio.sleep(0.05)
-        tick_elapsed["seconds"] = loop.time() - t0
+    async def other_coroutine():
+        # Polls asynchronously, so it only makes progress while the loop is free.
+        while not adapter_started.is_set():
+            await asyncio.sleep(0.005)
+        loop_ran_during_adapter.set()
 
     with patch("app.routers.broker.build_router_from_credentials", return_value=router):
         transport = ASGITransport(app=app)
@@ -315,16 +332,14 @@ async def test_stock_order_does_not_block_event_loop():
                 "broker": "ibkr_paper", "symbol": "AAPL",
                 "action": "BUY", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
             }))
-            tick_task = asyncio.create_task(tick_soon())
+            other_task = asyncio.create_task(other_coroutine())
             resp = await order_task
-            await tick_task
+            other_task.cancel()
     assert resp.status_code == 200
-    # If the handler blocked the loop for the adapter's full 0.3s synchronous
-    # sleep, the concurrent 0.05s tick couldn't resolve until that block
-    # cleared, landing tick_elapsed near/after 0.3s instead of ~0.05s.
-    assert tick_elapsed["seconds"] < 0.2, (
-        f"tick_soon() took {tick_elapsed['seconds']:.3f}s to resolve — "
-        f"the order handler is still blocking the event loop"
+    assert resp.json()["deduped"] is False
+    assert seen.get("loop_ran") is True, (
+        "no event-loop coroutine ran while the adapter was blocking — "
+        "the order handler is still running the broker call on the event loop"
     )
 
 
