@@ -69,6 +69,30 @@ scan run*, not current settings (decision `A5-MIRROR-LAST-SCAN-RUN-2026-09-24`).
   requireReversal = `scanOverrides.pullback_require_reversal ?? false`,
   scanOverrides, `settingsStore.confidenceGate`, 50_000 / 0.01, strategy =
   `activeStrategy ?? 'pullback_ema'`, direction from context).
+- **Recovered results (plan round 2, F2-1).** StoreHydration recovers
+  `stockScanResult` from `GET /api/stock-scan/last` with no request, so the
+  snapshot would be null and Analysis would replay *current* settings against a
+  result they did not produce (reload mid-scan, second device, cleared storage,
+  and every persisted result right after the v17 migration). Fix:
+  - B4 — new `GET /api/stock-scan/last-request` → `{scan_id, request}` or null.
+    `request` = `_last_stock_request.model_dump(mode="json", exclude_none=True)`,
+    `scan_id` = `_last_stock_result.scan_id`. **Served only when
+    `_last_stock_status == "complete"`**, because that is the only state in which
+    the two globals are from the same run: the "running" write
+    (`run_stock_scan` → `_upsert_stock_session(req=req, result=_prev_result,
+    status="running")`) pairs the NEW request with the OLD result, and
+    `restore_stock_from_db` turns a persisted "running" row into "idle" with
+    the same mismatch. The failure revert restores the previous pair and status.
+    Scheduled runs never write these globals.
+  - StoreHydration: after its result block, when `stockScanResult` is non-null
+    and `stockScanRequest` is null, fetch it; attach **only if**
+    `resp.scan_id === stockScanResult.scan_id` at write time (re-read the store
+    then, so a scan that finished meanwhile is not overwritten). Else leave null.
+  - Analysis records its basis: `basis: 'last-scan' | 'current-settings'`. The
+    page shows one caption under the search row: "Settings: the last stock scan"
+    or "Settings: current Step-3 settings — no stock scan request on record,
+    re-run the scan to mirror it". So the one remaining fallback is labelled,
+    never silently presented as the scan's mirror.
 - `AnalyzeStockRequest` in `lib/api.ts` becomes
   `Omit<StockScanRequestBody,'universe'|'horizon'> & {symbol; horizon: enum}`.
 
@@ -111,6 +135,13 @@ handed to `run_strategy_backtest`. No other caller (grep-verified at build).
   `setStockScanResult(null)` and the context reset clear it; failed scan leaves
   null. Step 5 success stores its body.
 - T-F3 migration v16 → v17 adds `stockScanRequest: null`.
+- T-F4 StoreHydration attaches the recovered request only on scan_id match
+  (match, mismatch, null response, fetch failure, a local result + request
+  already present → no fetch).
+- T-F5 analyze sets basis; caption renders for each.
+- T-B4 `/stock-scan/last-request`: complete → pair; running (new req + old
+  result) → null; idle / no result → null; request dump replayed through
+  `StockAnalysisRequest` validates.
 - T-B1 `_analyze_core` with `regime_headwind_reject_pct` set tighter than YAML:
   card regime rule REJECT and headwind flag appears at the overridden caution
   threshold; without the keys, YAML behaviour unchanged.
