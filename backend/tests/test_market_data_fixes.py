@@ -296,6 +296,9 @@ def test_tradier_overrides_ibkr_on_conflict():
     try:
         with (
             patch("app.data.market.TRADIER_TOKEN", "fake-token"),
+            # A4d: pin the live base so this precedence test never depends on
+            # the environment's base (the sandbox rule is inert here anyway).
+            patch("app.data.market.TRADIER_BASE_URL", "https://api.tradier.com"),
             patch("app.data.market._fetch_intraday_yf", return_value=[]),
             # Expand Tradier's supported set so "1h" fires the Tradier block
             patch("app.data.market._TRADIER_INTRADAY_INTERVALS", {"1min", "5min", "15min", "1h"}),
