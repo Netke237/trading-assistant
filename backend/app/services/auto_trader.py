@@ -905,11 +905,13 @@ def _fetch_intraday_regime_bars(symbol: str) -> list[dict]:
     path must read the same series or the gate and sizer disagree with the card
     they fire from. Deliberately NOT routed through `_fetch_scan_window_bars`:
     that trims by ISO DATE and drops the still-forming DAILY bar, and these
-    bars carry unix-int `time`. The still-forming 15-minute bar is kept, as
-    both scans keep it (A4 plan s3.1).
+    bars carry unix-int `time`. The still-forming 15-minute bar is DROPPED,
+    as on every Intraday regime reader (A4b, decision
+    A4B-DROP-FORMING-15MIN-BAR-2026-09-24) -- by `completed_intraday_bars`,
+    which also allows for the Tradier sandbox's 15-minute feed delay.
     """
-    from app.data.market import fetch_intraday_candles
-    return fetch_intraday_candles(symbol, "15min", 55)
+    from app.data.market import completed_intraday_bars, fetch_intraday_candles
+    return completed_intraday_bars(fetch_intraday_candles(symbol, "15min", 55))
 
 
 def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
@@ -932,8 +934,9 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
       - window:      regime.<horizon> from YAML   (was: compute_omm defaults)
       - frame:       compute_omm(direction=...)   (was: a mirrored bullish cache)
       - bars:        for INTRADAY (timeframe 15min), the scans' 15-minute
-        series via `_fetch_intraday_regime_bars` (A4) -- none of the daily
-        trimming below applies to it. For Swing/Position:
+        series via `_fetch_intraday_regime_bars` (A4), COMPLETED bars only
+        (A4b) -- none of the daily trimming below applies to it. For
+        Swing/Position:
         daily, over the scan's own start anchor `today - 441d`
         and ending at the LAST FULLY COMPLETED SESSION via
         `_fetch_scan_window_bars` -- ~306 bars, NOT `fetch_candles`'s 252

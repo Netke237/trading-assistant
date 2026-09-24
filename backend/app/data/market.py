@@ -449,6 +449,63 @@ def fetch_intraday_candles(
     return result
 
 
+
+# ── Completed intraday bars for a REGIME measurement (A4b) ─────────────────────
+# Decision A4B-DROP-FORMING-15MIN-BAR-2026-09-24: the Intraday-horizon regime is
+# measured on COMPLETED 15-minute bars only, on every reader, in line with the
+# auto-trader's Option A for daily bars (a forming bar buys a coin flip, not
+# information). Strategy signal/backtest bars are NOT regime and do not use this.
+INTRADAY_REGIME_BAR_SECONDS = 900
+# Tradier's sandbox serves 15-minute-DELAYED market data, and Tradier bars win
+# the merge in fetch_intraday_candles -- so a sandbox bar can be partial long
+# after its own 15 minutes have elapsed on the wall clock.
+TRADIER_SANDBOX_FEED_LAG_SECONDS = 900
+
+
+def intraday_feed_lag_seconds() -> int:
+    """Seconds the intraday feed in use runs behind the wall clock.
+
+    900 when the Tradier base this process fetches from is the sandbox (the
+    paper token's base), else 0. Keyed on `_tradier_base()` because that is the
+    base `fetch_intraday_candles` actually calls. Substring, not equality, so a
+    trailing slash on TRADIER_BASE_URL still counts. When Tradier returned
+    nothing and only yfinance (real time) answered, the sandbox lag still
+    applies: that drops one extra COMPLETE bar -- the conservative direction.
+    """
+    try:
+        base = _tradier_base() or ""
+    except Exception:
+        return TRADIER_SANDBOX_FEED_LAG_SECONDS
+    return TRADIER_SANDBOX_FEED_LAG_SECONDS if "sandbox.tradier.com" in base else 0
+
+
+def completed_intraday_bars(
+    bars: list[dict],
+    now: float | None = None,
+    bar_seconds: int = INTRADAY_REGIME_BAR_SECONDS,
+    feed_lag: int | None = None,
+) -> list[dict]:
+    """The bars whose interval had fully elapsed, in the feed's own clock, at `now`.
+
+    `time` is the bar's START as a unix int (both sources of
+    fetch_intraday_candles), so a bar is complete iff
+    `time + bar_seconds + feed_lag <= now`. A bar whose `time` is not an int
+    (or is a bool) cannot be shown complete and is DROPPED -- fail closed.
+    Order is preserved. `now` defaults to time.time(); `feed_lag` to
+    intraday_feed_lag_seconds().
+    """
+    import time as _time
+    if now is None:
+        now = _time.time()
+    if feed_lag is None:
+        feed_lag = intraday_feed_lag_seconds()
+    cutoff = now - bar_seconds - feed_lag
+    return [
+        b for b in bars
+        if isinstance(b.get("time"), int) and not isinstance(b.get("time"), bool)
+        and b["time"] <= cutoff
+    ]
+
 def fetch_price(symbol: str) -> Optional[float]:
     try:
         resp = httpx.get(

@@ -114,7 +114,8 @@ async def test_options_scan_runs_the_hmm_on_the_same_15_minute_series():
             symbol="AAPL", direction="Bullish", horizon="Intraday", client=AsyncMock(),
             sem=_sem(), scan_id="a4", bars_map={"AAPL": DAILY},
         )
-    assert dhmm.call_args.args[0] is INTRADAY
+    # A4b: a filtered COPY now (completed bars); every INTRADAY bar is long past.
+    assert dhmm.call_args.args[0] == INTRADAY
     assert score.call_args.kwargs["regime_signal"]["timeframe"] == "15min"
 
 
