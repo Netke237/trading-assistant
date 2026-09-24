@@ -125,6 +125,27 @@ async def test_b2_below_reject_keeps_the_single_reject_flag(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_r3_1_below_reject_caps_pass_at_caution(monkeypatch):
+    # Round 3: 35% (below reject) read PASS while 50% (below caution) read
+    # CAUTION -- worse confidence, better verdict. The scan drops it outright.
+    _offline(monkeypatch, conviction=10, card_status="PASS")
+    _with_signal_and_confidence(monkeypatch, 35)
+    core = await ss._analyze_core("TEST", StockAnalysisRequest(
+        symbol="TEST", confidence_caution_below=55, confidence_reject_below=40))
+    assert core.card.status == "CAUTION"
+    assert [f["status"] for f in _flags(core, "confidence")] == ["REJECT"]
+
+
+@pytest.mark.asyncio
+async def test_r3_1_below_reject_with_caution_unset_still_caps(monkeypatch):
+    _offline(monkeypatch, conviction=10, card_status="PASS")
+    _with_signal_and_confidence(monkeypatch, 35)
+    core = await ss._analyze_core("TEST", StockAnalysisRequest(
+        symbol="TEST", confidence_reject_below=40))
+    assert core.card.status == "CAUTION"
+
+
+@pytest.mark.asyncio
 async def test_b2_unset_caution_is_a_no_op(monkeypatch):
     _offline(monkeypatch, conviction=10, card_status="PASS")
     _with_signal_and_confidence(monkeypatch, 40)
