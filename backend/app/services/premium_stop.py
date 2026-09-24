@@ -4,7 +4,9 @@ Before this module there were three global premium-stop percentages and no
 per-position field at all:
 
     risk_rules.yaml -> reward_risk.premium_stop_pct   (alerts, trade plan)
-    risk_rules.yaml -> auto_trade.premium_stop_pct    (auto-trader sizing)
+    risk_rules.yaml -> auto_trade.premium_stop_pct    (auto-trader daily-loss gate;
+                                                       NOT READ since A6, which
+                                                       counts the full premium)
     settingsStore.premiumStopPct                      (frontend alert engine)
 
 Every open position shared one number, so changing it silently re-armed every
@@ -14,7 +16,7 @@ speculative one.
 `PortfolioPositionModel.premium_stop_pct` is the per-position override, and
 this module is the ONE place that decides what a position's effective
 percentage is. Every read site calls `resolve_premium_stop_pct` — the alert
-generator, the auto-trader, and (via its TypeScript twin in
+generator and (via its TypeScript twin in
 `frontend/lib/premiumStop.ts`) the frontend alert engine and the portfolio
 drawer's preview. A preview that disagrees with the alert that later fires is
 worse than no preview, so they must not each roll their own resolution.

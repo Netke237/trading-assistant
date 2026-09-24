@@ -10,6 +10,12 @@ from app.database import get_db
 from app.schemas import Direction, PickedMethod, PickedStopBasis, Horizon
 from app.services.auto_trader import auto_trader, ArmedStrategy
 from app.services.auto_trade_booking import book_fired_order
+from app.scoring.conviction_sizing import SizingConfigError
+
+# The detail prefix of POST /fire's sizing-config 500. Coupled on purpose to
+# frontend/lib/armBookingFields.ts `SIZING_CONFIG_REFUSED_PREFIX`: a 500 carrying
+# it is a refusal (nothing sent), any other 500 is unknown.
+SIZING_CONFIG_REFUSED_PREFIX = "Refused, nothing sent: regime_sizing is unusable: "
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
 
@@ -223,6 +229,19 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
             # so the handler below already maps it to the 400 it should be.
             expect=_armed_state.strategy,
         )
+    except SizingConfigError as exc:
+        # 500, NOT 400 -- decision A7B-FIRE-SIZING-CONFIG-500-2026-09-24, and
+        # the same answer POST /stock-scan gives for the same broken block: the
+        # request is fine, the SERVER's regime_sizing is unusable, and no fire
+        # can succeed until it is fixed. Ordered above the RuntimeError handler
+        # because SizingConfigError subclasses RuntimeError. `fire()` raises it
+        # only from `_apply_vol_sizing`, after the disarm and before any broker
+        # call, so "nothing sent" is true; `fire()` has already logged it and
+        # written its `sizing_config_blocked` row. The prefix is what
+        # frontend `classifyFireFailure` reads to tell this 500 (refused) from
+        # every other 500 (unknown) -- change both together.
+        raise HTTPException(status_code=500,
+                            detail=f"{SIZING_CONFIG_REFUSED_PREFIX}{exc}")
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     # O4 steps 4+5: book the position the order just opened. OUTSIDE the try
