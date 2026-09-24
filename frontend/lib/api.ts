@@ -634,12 +634,14 @@ export const api = {
      *  the scan context rather than hand-writing a literal; never default it
      *  here, which would typecheck while measuring the wrong window. */
     horizon: ScoringHorizon;
-    /** The Step-3 Regime Gate thresholds this card's scan was run with,
-     *  snapshotted so a later Step-3 edit cannot retroactively change the rule
-     *  an already-armed trade is judged by — the same freeze `quantity`,
-     *  `premium_stop_pct` and the method pick get. Omitted means the scan used
-     *  the scoring_rules.yaml value. Build them with `regimeGateOverridesFrom`
-     *  so this and the scan request read the controls identically. */
+    /** The Regime Gate thresholds this card's scan RESOLVED, read off the
+     *  card's own `regimeGate` snapshot so neither a Step-3 edit, a reset nor
+     *  a reload can change the rule the trade is judged by — the same freeze
+     *  `quantity`, `premium_stop_pct` and the method pick get. Omitted means
+     *  the resolved block carried no such key and the scan read
+     *  scoring_rules.yaml. Build them with `regimeGateFromCard`, NOT
+     *  `regimeGateOverridesFrom`: the latter reads the live Step-3 store,
+     *  which need not hold what the card's scan used (arm-door round 1, F1). */
     regime_headwind_caution_pct?: number;
     regime_headwind_reject_pct?: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;

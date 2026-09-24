@@ -721,6 +721,22 @@ export interface TradeCardData {
    *  scan session persisted before B3 shipped. */
   stopCostPct?:    number | null;
   stopCostStatus?: 'PASS' | 'CAUTION' | null;
+  /** The two regime-gate headwind thresholds THIS card's scan resolved
+   *  (scoring_rules.yaml overlaid by the Step-3 controls it was run with).
+   *  Mirrors `TradeCardData.regimeGate` in backend/app/schemas.
+   *
+   *  The auto-trade arm payload reads its thresholds from HERE, not from the
+   *  live Step-3 store: an armed trade is judged by the rule its own scan ran
+   *  under (AUTOTRADE-ARMED-TRADE-JUDGED-BY-ITS-SCANS-RULE-2026-09-21).
+   *
+   *  Absent means the card predates the field (an older persisted or restored
+   *  scan), and Arm refuses it rather than guess. A null VALUE inside means the
+   *  resolved block carried no such key -- the scan read the YAML, and so will
+   *  the fire path. */
+  regimeGate?: {
+    headwindCautionPct?: number | null;
+    headwindRejectPct?:  number | null;
+  } | null;
   /**
    * Set locally (never sent by the backend) when the user has picked a
    * different contract than the scan's top recommendation via the contract

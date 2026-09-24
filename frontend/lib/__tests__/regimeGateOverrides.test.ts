@@ -1,7 +1,8 @@
 /**
  * The Step-3 Regime Gate controls must reach the same place, with the same
- * value, on all three paths that carry them: the options scan, the stocks scan,
- * and the auto-trade arm snapshot.
+ * value, on both scan paths that carry them: the options scan and the stocks
+ * scan. The auto-trade arm reads the CARD's resolved snapshot instead
+ * (`regimeGateFromCard`, pinned at the bottom of this file).
  *
  * Piece 2 round 1 finding 3, in one sentence: "Headwind reject %" has been on
  * the shared Step-3 panel in every screener mode since it was built, and only
@@ -14,7 +15,7 @@
  */
 import { buildOptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
-import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
+import { regimeGateOverridesFrom, regimeGateFromCard } from '@/lib/regimeGateOverrides';
 import type { ConfidenceGate, FundamentalsGate, SpreadsConfig } from '@/lib/settingsStore';
 import type { ScanParams } from '@/lib/scanParamsStore';
 
@@ -125,5 +126,22 @@ describe('both scan requests carry the Step-3 Regime Gate controls', () => {
   it('omits both when Step 3 never set them, so the backend reads its YAML', () => {
     expect(optionsBody({}).regime_headwind_reject_pct).toBeUndefined();
     expect(stocksBody({}).regime_headwind_reject_pct).toBeUndefined();
+  });
+});
+
+describe('regimeGateFromCard — the arm path reads the CARD, not Step 3', () => {
+  it('returns null when the card carries no snapshot (absent or null)', () => {
+    expect(regimeGateFromCard({})).toBeNull();
+    expect(regimeGateFromCard({ regimeGate: null })).toBeNull();
+  });
+
+  it('maps the resolved thresholds onto the arm payload keys', () => {
+    expect(regimeGateFromCard({ regimeGate: { headwindCautionPct: -15, headwindRejectPct: -40 } }))
+      .toEqual({ regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40 });
+  });
+
+  it('keeps a zero and turns a null value into an omitted key', () => {
+    const g = regimeGateFromCard({ regimeGate: { headwindCautionPct: null, headwindRejectPct: 0 } });
+    expect(g).toEqual({ regime_headwind_caution_pct: undefined, regime_headwind_reject_pct: 0 });
   });
 });
