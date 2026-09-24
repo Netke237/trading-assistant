@@ -38,7 +38,7 @@ was never applied to the other builders. This pass applies it to all of them, on
 three `gateDriverPhrase` arms (`toBe('IV rank')` etc.); the rest are regex/`toMatch` or
 untested: `GENERIC_STATUS_TOOLTIP`, `positionStatusTooltip`, `stockStatusTooltip`,
 `regimeStatusTooltip`, `regimeMetricTooltip`, `regimeNoDataTooltip`, `gateDriverPhrase`
-(the three PASS arms), `eventVolGateTooltip` (F2), `winRateTooltip`, `backtestGateTooltip`,
+(every arm, both nouns), `eventVolGateTooltip` (F2), `winRateTooltip`, `backtestGateTooltip`,
 `stockScanGateTooltip`, `contractScoreTooltip`, `contractBreakdownTooltip`,
 `regimeFitTooltip`, `safetyFlagTooltip`, `fundamentalScoreTooltip`, `riskStatusTooltip`,
 `scanPipelineStatusTooltip`, `alertStatusTooltip`, `eventProximityGateTooltip`,
@@ -67,11 +67,22 @@ tests), and any other page's local copy.
 5. **Band edges are pinned where the builder itself decides a band** (`stockStatusTooltip`,
    `fundamentalScoreTooltip`, `riskStatusTooltip`, `contractScoreTooltip`,
    `backtestGateTooltip`'s expectation clause): value exactly at the edge and one below.
-6. **Two rendered-page literal pins** in step 5, so the call sites are pinned too, not only
-   the builders: one Swing scan (a rank row at IV rank 45 with an event 30d out; an
-   absolute-IV row; an unreadable row) asserting the whole `[data-line="thresholds"]` text
-   and one row's full tooltip text literally. These catch a swap at the page's call site
-   (e.g. `evReject: evCaution`) independent of the circular `PART_PINS` rebuild.
+6. **Rendered-page literal pins** in step 5, so the call sites are pinned too, not only
+   the builders. One Swing scan with an injected IV-threshold fixture in which **all four
+   numbers differ from each other and from the event window** — rank 30/50, absolute
+   40/60, event 21/45 (plan round 1 F1: the shipped FALLBACK and every existing fixture set
+   rank == absolute, so a page that looked up the rank band for an absolute row was
+   invisible). Rows: rank 37 with an event 60d out (IV CAUTION, event PASS — the two sides
+   differ); absolute IV 58 with an event 10d out (IV CAUTION, event REJECT); an unreadable
+   row. Assert the whole `[data-line="thresholds"]` text literally and **every** row's full
+   tooltip literally. These catch a swap at the page's call site (e.g. `evReject:
+   evCaution`, or `'rank'` passed for `b` in the `ivBands` map) independent of the circular
+   `PART_PINS` rebuild.
+7. **`gateDriverPhrase` is pinned on every arm with both nouns** — `'IV rank'` and `'IV'` —
+   including the reading-driven IV arm and the reading-driven "both" arm, and
+   `eventVolGateTooltip` gets a literal with an absolute basis, IV REJECT, event PASS (plan
+   round 1 F2: hard-coding `'IV rank'` in the IV arm shipped 1811/1811 green, labelling an
+   absolute level a percentile).
 
 ## Files
 
@@ -103,6 +114,10 @@ decision for Kenneth, not a silent fix in this pass.
   - M8: `winRateTooltip` swaps `passMin`/`cautionMin` in the band text.
   - M9: `gateDriverPhrase` ungated-PASS wording altered by one word.
   - M10: `contractScoreTooltip` `(+N more)` count off by one.
+  - M11 (plan round 1 F2): `gateDriverPhrase` pushes a hard-coded `'IV rank'` instead of
+    `ivNoun`.
+  - M12 (plan round 1 F1): the page's `ivBands` map passes `'rank'` instead of `b` to
+    `getIvPassMax` / `getIvCautionMax`.
   Each must fail in the new files specifically; the run records which test killed it.
 - `python3 scripts/state.py` exits 0 with the new phase entry.
 
@@ -113,3 +128,12 @@ Plan round clean → build → code round clean (≤ 3 rounds total), phase entr
 its round-7 findings F1/F2 are closed by this pass (it does NOT set that entry
 `audit_clean: true` — the code round on this pass is what speaks to that, and only for the
 F1/F2 circularity it was built to remove).
+
+## Audit log
+
+- **Plan round 1** (2026-09-24): 2 gate-level findings, both method gaps, both taken.
+  F1 — the planned page fixture used coinciding rank/absolute thresholds (the FALLBACK's),
+  so a rank-for-absolute band lookup on the page stayed invisible → method rule 6 now
+  injects four distinct thresholds, M12 added. F2 — `gateDriverPhrase`'s reading-driven IV
+  arm was pinned only with the noun `'IV rank'`; hard-coding it shipped 1811/1811 green →
+  rule 7, M11 added.
