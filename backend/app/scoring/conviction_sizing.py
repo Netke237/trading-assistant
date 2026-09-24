@@ -344,7 +344,7 @@ def conviction_mult(conviction_pct: float, sizing: Mapping[str, Any] | None) -> 
 
     # NOT routed through _number: that message names a key of
     # scoring_rules.yaml, and `conviction_pct` is not one. It arrives from
-    # regime_monitor's cache (fire path) or the scan's regime_signal, so a bad
+    # the fire path's per-symbol measurement or the scan's regime_signal, so a bad
     # value here is a DATA fault and must not be reported, alerted or recorded
     # as a broken config file.
     if isinstance(conviction_pct, bool) or not isinstance(conviction_pct, (int, float)):

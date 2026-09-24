@@ -467,7 +467,9 @@ def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=0)
+    import app.services.auto_trader as at
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_measure_trade_regime", return_value=(0, "Fragile"))
 
     svc = AutoTradeService()
     strategy = ArmedStrategy(
@@ -483,7 +485,7 @@ def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
 
 
 def test_vol_sizing_keeps_full_quantity_at_high_conviction(mocker):
-    """conviction=50, full=40 → mult capped at 1.0 → quantity unchanged."""
+    """Own conviction +50, full=40 → mult capped at 1.0 → quantity unchanged."""
     from app.data.ibkr_paper import OrderResult
     captured = {}
     def mock_execute(s):
@@ -492,7 +494,9 @@ def test_vol_sizing_keeps_full_quantity_at_high_conviction(mocker):
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=50)
+    import app.services.auto_trader as at
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_measure_trade_regime", return_value=(50, "Fragile"))
 
     svc = AutoTradeService()
     strategy = ArmedStrategy(
@@ -507,9 +511,18 @@ def test_vol_sizing_keeps_full_quantity_at_high_conviction(mocker):
     assert captured.get("quantity") == 4, "High conviction must not reduce quantity"
 
 
-def test_vol_sizing_skipped_when_conviction_is_none(mocker):
-    """If conviction cache is None (monitor hasn't run), sizing is skipped — full quantity fires."""
+def test_vol_sizing_floors_when_the_symbols_regime_cannot_be_measured(mocker):
+    """SIZING-4: an unmeasurable regime sizes at the min_mult FLOOR, not full.
+
+    This was `test_vol_sizing_skipped_when_conviction_is_none`, which asserted
+    FULL size on a cold SPX cache -- the abstain-to-full-size shape Kenneth's
+    decision rules out (SIZING-4-UNMEASURED-FLOOR-2026-09-24): the largest
+    position on the worst input. The gate still abstains and lets it through;
+    sizing now bounds it. qty 3 * 0.30 = 0.9 -> round -> 1 (and `max(1, ...)`
+    keeps it an order, as the gate intends).
+    """
     from app.data.ibkr_paper import OrderResult
+    import app.services.auto_trader as at
     captured = {}
     def mock_execute(s):
         captured["quantity"] = s.quantity
@@ -517,55 +530,66 @@ def test_vol_sizing_skipped_when_conviction_is_none(mocker):
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_measure_trade_regime", return_value=None)
 
     svc = AutoTradeService()
     svc.arm(ArmedStrategy(
         broker="ibkr_paper", symbol="AAPL",
         option_symbol="AAPL260620C00185000",
-        action="BUY", direction="Bullish", quantity=3, order_type="LMT",
+        action="BUY", direction="Bullish", quantity=10, order_type="LMT",
         limit_price=2.50, conid=None,
         entry_premium=2.50, portfolio_value=100_000.0,
     ))
     svc.fire()
-    assert captured.get("quantity") == 3
+    assert captured.get("quantity") == 3, "10 * min_mult 0.30 -> 3, never the full 10"
+    last = svc.get_state().history[-1]
+    assert last["sizing"] == "floor:unmeasured"
+    assert last["regime_gate"] == "abstained", (
+        "the gate's fail-open posture is unchanged -- only the SIZE is bounded"
+    )
 
 
-# ── Direction-aware sizing: the bearish frame ─────────────────────────────────
+# ── Direction-aware sizing: the trade's own frame ─────────────────────────────
 #
-# `conviction` is the SIGNED BULLISH frame, [-100, +100]. Sizing used to pick its
-# frame from `action`, which is always "BUY" for a long single-leg option — a
-# bearish trade in this app is a long PUT — so every bearish trade was sized off
-# the bullish ramp, inverted: largest into the regime that opposes it.
+# SINCE SIZING-4 sizing reads the traded symbol's own measurement, which
+# `compute_omm(direction=...)` returns ALREADY IN THE TRADE'S FRAME: +40 means
+# "the symbol's regime favours this trade", whether the trade is a call or a
+# put. So these tests stub the measurement in the trade's frame and there is NO
+# MIRROR left in auto_trader.py to pin -- what they pin instead is that none is
+# applied (a bearish trade the regime favours sizes FULL; a double mirror would
+# floor it). Before SIZING-4 they fed a bullish-frame SPX number and pinned the
+# `-conviction` mirror; the rows below are the same ramp points restated in the
+# trade's frame.
 #
 # EVERY TEST BELOW ARMS quantity=4, AND THAT IS LOAD-BEARING. `_apply_vol_sizing`
 # does `max(1, round(quantity * mult))`, so at quantity=1 the multipliers 0.30,
-# 0.65 and 1.00 ALL round to 1 and every assertion here would read `1` with the
-# bug still in place. At 4 they separate: 0.30 -> 1, 0.65 -> 3, 1.00 -> 4.
+# 0.65 and 1.00 ALL round to 1. At 4 they separate: 0.30 -> 1, 0.65 -> 3,
+# 1.00 -> 4.
 #
-# Quantity is also the only observable worth asserting: `_apply_vol_sizing`
-# returns an ArmedStrategy and nothing in the changed code returns a multiplier,
-# so calling `conviction_mult` directly would not exercise this path at all —
-# the negation lives here, not in conviction_sizing.py.
+# Stability is "Fragile" throughout: with the shipped
+# `require_stable_for_reject: true` the gate cannot REJECT a Fragile regime, so
+# every row reaches sizing and the assertion is about SIZE alone.
 
 def _fired_quantity(mocker, *, direction: str, conviction: float,
                     quantity: int = 4, action: str = "BUY") -> int:
-    """Arm one trade, fire it, and return the quantity that reached the broker.
+    """Arm one trade, fire it with its OWN regime measured at `conviction` (in
+    the trade's frame), and return the quantity that reached the broker.
 
     The option right follows `direction`, so for the default action="BUY" the
     fixture is a coherent position: a bearish single-leg option is a long put.
 
-    THAT COHERENCE DOES NOT EXTEND TO action="SELL", and ROUND 1 finding 7 was
-    right to say so. With `effect` hardcoded to OPEN, SELL+Bullish builds a
-    right="C" sell-to-open — a short call, a BEARISH position wearing a
-    "Bullish" label, the mirror image of the incoherence this piece retired.
-    Exactly one caller passes SELL (`test_vol_sizing_ignores_action_entirely`)
-    and it does so deliberately, to prove the sizing expression ignores
-    `action`. It is reachable only through this dataclass: `ArmRequest.action`
-    is now Literal["BUY"], so that body is a 422 at the HTTP door
+    THAT COHERENCE DOES NOT EXTEND TO action="SELL". With `effect` hardcoded to
+    OPEN, SELL+Bullish builds a short call -- a BEARISH position wearing a
+    "Bullish" label. Exactly one caller passes SELL
+    (`test_vol_sizing_ignores_action_entirely`) and it does so deliberately, to
+    prove the sizing expression ignores `action`. It is reachable only through
+    this dataclass: `ArmRequest.action` is Literal["BUY"], so that body is a
+    422 at the HTTP door
     (test_auto_trade.py::test_arm_refuses_sell_because_it_would_be_a_naked_short).
     """
     from app.data.ibkr_paper import OrderResult
+    import app.services.auto_trader as at
     captured = {}
     def mock_execute(s):
         captured["quantity"] = s.quantity
@@ -573,7 +597,9 @@ def _fired_quantity(mocker, *, direction: str, conviction: float,
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=conviction)
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_measure_trade_regime",
+                        return_value=(conviction, "Fragile"))
 
     right = "C" if direction == "Bullish" else "P"
     svc = AutoTradeService()
@@ -588,94 +614,69 @@ def _fired_quantity(mocker, *, direction: str, conviction: float,
     return captured.get("quantity")
 
 
-def test_vol_sizing_bearish_cut_to_floor_in_strongly_bullish_market(mocker):
-    """A long put armed into conviction=+80 is cut to the floor, not sized full.
+def test_vol_sizing_bearish_cut_to_floor_when_its_regime_strongly_opposes(mocker):
+    """A long put whose own regime reads -80 in its frame is cut to the floor.
 
-    This replaces `test_vol_sizing_sell_reduced_in_strongly_bullish_market`, which
-    armed action="SELL" on a PUT — a SHORT put, which is a BULLISH position — and
-    then asserted it must be reduced in a bullish market. It passed, and it was
-    asserting the wrong thing about a branch no production caller can reach.
-
-    Bearish at +80 mirrors to -80, which clamps to the 0.30 floor:
     round(4 * 0.30) = 1.
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=80) == 1
+    assert _fired_quantity(mocker, direction="Bearish", conviction=-80) == 1
 
 
-def test_vol_sizing_bearish_floors_when_regime_strongly_opposes(mocker):
-    """Bearish at +40 (regime strongly opposes): mirror -40 -> 0.30 floor -> 1.
-
-    With the `action`-based inference this returned 4 — FULL SIZE into the regime
-    most opposed to the trade. This is the row where the defect was largest.
-    """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=40) == 1
+def test_vol_sizing_bearish_floors_at_the_ramp_end(mocker):
+    """Bearish, own regime -40 (the ramp's lower end): 0.30 floor -> 1."""
+    assert _fired_quantity(mocker, direction="Bearish", conviction=-40) == 1
 
 
 def test_vol_sizing_bearish_is_GRADED_when_the_regime_opposes(mocker):
-    """Bearish at +20: mirror -20 -> 0.475 -> round(1.9) = 2.
+    """Bearish, own regime -20: 0.475 -> round(1.9) = 2.
 
-    RENAMED, because it no longer floors and that is the whole point of the
-    two-sided ramp. Under the one-sided form every opposed conviction collapsed
-    to min_mult, so -1 and -100 sized the same. Now the opposed half grades:
-    this sits between the floor at -40 and the midpoint at 0.
+    The two-sided ramp grades the opposed half: this sits between the floor at
+    -40 and the midpoint at 0.
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=20) == 2
+    assert _fired_quantity(mocker, direction="Bearish", conviction=-20) == 2
 
 
 def test_vol_sizing_bearish_scales_up_when_regime_favours(mocker):
-    """Bearish at -20: mirror +20 -> mid-ramp 0.65 -> round(2.6) = 3 (bug gave 1).
+    """Bearish, own regime +20: 0.825 -> round(3.3) = 3.
 
-    THE ONLY CASE INSIDE THE RAMP. Every other row here sits on the floor or the
-    cap, so this is the one that would notice a later change to
-    `full_conviction_pct` (40 today) rather than silently absorbing it.
+    THE ONLY FAVOURING CASE INSIDE THE RAMP, so the one that would notice a
+    later change to `full_conviction_pct` (40 today).
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=-20) == 3
+    assert _fired_quantity(mocker, direction="Bearish", conviction=20) == 3
 
 
-def test_vol_sizing_bearish_full_size_when_regime_strongly_favours(mocker):
-    """Bearish at -40: mirror +40 -> cap 1.00 -> 4 (bug gave 1 — the inverse)."""
-    assert _fired_quantity(mocker, direction="Bearish", conviction=-40) == 4
+def test_vol_sizing_bearish_full_size_when_its_regime_strongly_favours(mocker):
+    """Bearish, own regime +40 in its frame -> cap 1.00 -> 4.
+
+    THE NO-DOUBLE-MIRROR PIN. The measurement is already in the put's frame,
+    so re-applying the old `-conviction` mirror would read -40 and FLOOR this
+    at 1 -- the smallest position into the regime that most favours it.
+    """
+    assert _fired_quantity(mocker, direction="Bearish", conviction=40) == 4
 
 
 def test_vol_sizing_bearish_at_neutral_conviction_sits_mid_ramp(mocker):
-    """Bearish at 0 -> mirror -0 -> the ramp's MIDPOINT 0.65 -> round(2.6) = 3.
-
-    Still the pin that the mirror of 0 is 0, which is what stops anyone
-    reintroducing an offset like `100 - conviction` (under which neutral would
-    saturate at FULL size). What changed is where neutral sits: the floor under
-    the one-sided ramp, the midpoint under the two-sided one.
-    """
+    """Bearish at 0 -> the ramp's MIDPOINT 0.65 -> round(2.6) = 3."""
     assert _fired_quantity(mocker, direction="Bearish", conviction=0) == 3
 
 
 def test_vol_sizing_bullish_full_size_at_high_conviction_unchanged(mocker):
-    """Regression guard: bullish behaviour is untouched. +40 -> cap 1.00 -> 4."""
+    """Bullish, own +40 -> cap 1.00 -> 4."""
     assert _fired_quantity(mocker, direction="Bullish", conviction=40) == 4
 
 
 def test_vol_sizing_bullish_floors_at_negative_conviction_unchanged(mocker):
-    """Regression guard: bullish at -40 -> 0.30 floor -> 1, as before."""
+    """Bullish, own -40 -> 0.30 floor -> 1."""
     assert _fired_quantity(mocker, direction="Bullish", conviction=-40) == 1
 
 
 def test_vol_sizing_ignores_action_entirely(mocker):
-    """`action` must no longer influence size, in either direction.
+    """`action` must not influence size, in either direction.
 
-    The rewritten test above was repo-wide the ONLY sizing test constructing
-    action="SELL". Without this one, someone reinstating `strategy.action` in the
-    sizing expression would break no test — which is exactly the drift removing
-    the inference exists to prevent.
-
-    action="SELL" with direction="Bullish" at conviction=+80: the direction
-    decides, so mult(+80) caps at 1.00 -> 4. Under the old expression SELL took
-    the `100 - 80 = 20` branch -> 0.65 -> round(2.6) = 3. Discriminating.
-
-    This constructs ArmedStrategy DIRECTLY and that is now the only way to
-    reach it: ROUND 1 finding 3 narrowed `ArmRequest.action` to Literal["BUY"],
-    because SELL + the hardcoded effect="OPEN" is a naked short. So this row is
-    a guard on the sizing expression, NOT a claim that a SELL arm is reachable
-    or sane — the position it describes is incoherent on purpose, and the HTTP
-    door refuses it. See `_fired_quantity`'s docstring.
+    action="SELL" with direction="Bullish" at own +80: mult caps at 1.00 -> 4.
+    The long-retired `action` inference took a `100 - 80 = 20` branch here
+    (-> 3), so the row still discriminates if it is ever reinstated. Reachable
+    only by constructing ArmedStrategy directly -- see `_fired_quantity`.
     """
     assert _fired_quantity(mocker, direction="Bullish", conviction=80, action="SELL") == 4
 
@@ -797,20 +798,22 @@ def test_an_absent_block_is_still_sizing_off_not_a_failure(mocker, tmp_path):
 
 
 def test_a_broken_block_refuses_before_the_conviction_lookup(mocker):
-    """Order matters: a missing conviction returns the strategy unchanged (full
-    size), so validating after it would let a broken config through on every
-    fire before regime_monitor has cached anything."""
+    """Order matters: a config the process already knows it cannot honour must
+    refuse BEFORE the symbol's regime is measured -- it must not first buy a
+    bounded bar fetch, and a measurement that fails must not mask it. (Before
+    SIZING-4 the lookup was the SPX cache; it is now the per-symbol
+    measurement, and the order is the same.)"""
     import app.services.auto_trader as at
     from app.scoring.conviction_sizing import SizingConfigError
 
     mocker.patch.object(at, "_load_scoring_config",
                         return_value={"enabled": True, "min_mult": 0.3,
                                       "full_conviction_pct": -40})
-    conviction = mocker.patch("app.services.regime_monitor.get_last_conviction",
-                              return_value=None)
+    _forbid_spx_cache(mocker)
+    measure = mocker.patch.object(at, "_measure_trade_regime", return_value=None)
     with pytest.raises(SizingConfigError):
         at._apply_vol_sizing(_sizing_strategy(4))
-    conviction.assert_not_called()
+    measure.assert_not_called()
 
 
 def test_fire_sends_nothing_records_the_refusal_and_stays_disarmed(mocker):
@@ -949,7 +952,8 @@ def test_a_full_size_multiplier_still_leaves_a_trace(mocker, caplog):
     mocker.patch.object(at, "_load_scoring_config", return_value={
         "enabled": True, "min_mult": 0.3, "full_conviction_pct": 40,
     })
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=90)
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_measure_trade_regime", return_value=(90, "Fragile"))
 
     with caplog.at_level("INFO", logger="app.services.auto_trader"):
         out = at._apply_vol_sizing(_sizing_strategy(10))
@@ -972,8 +976,12 @@ def test_a_bad_conviction_is_recorded_and_alerted_like_a_bad_config(mocker):
     mocker.patch.object(at, "_load_scoring_config", return_value={
         "enabled": True, "min_mult": 0.3, "full_conviction_pct": 40,
     })
-    mocker.patch("app.services.regime_monitor.get_last_conviction",
-                 return_value=float("nan"))
+    # A measured conviction that is not a usable number. `compute_omm` returns
+    # an int today, so this is the defensive path, stubbed at the seam sizing
+    # now reads (SIZING-4) rather than at the retired SPX cache.
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_measure_trade_regime",
+                        return_value=(float("nan"), "Fragile"))
     alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
 
     svc = AutoTradeService()
@@ -1042,6 +1050,35 @@ def test_sizing_off_by_configuration_still_leaves_a_trace(mocker, caplog):
 _FIXTURES = Path(__file__).parent / "fixtures"
 
 
+def _forbid_spx_cache(mocker):
+    """SIZING-4: the fire path must not read regime_monitor's SPX cache at all.
+
+    Neither the gate (since 2026-09-19) nor sizing (since SIZING-4) reads it,
+    so any call is a regression back onto the market-wide number.
+    """
+    return mocker.patch(
+        "app.services.regime_monitor.get_last_conviction",
+        side_effect=AssertionError(
+            "the fire path read regime_monitor's SPX cache — sizing and the "
+            "gate both read the traded symbol's own measurement since SIZING-4"
+        ),
+    )
+
+
+def _sizing_off(mocker):
+    """Switch regime_sizing OFF (an absent block) so a GATE test's fired
+    quantity is the armed quantity and every assertion is about the gate.
+
+    Before SIZING-4 these tests got that for free from an empty SPX cache
+    (`conviction is None` returned the strategy unchanged). Sizing now reads
+    the same measurement the gate takes, so a gate test that leaves sizing on
+    is also a sizing test; the ones that want that say so explicitly.
+    """
+    import app.services.auto_trader as at
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_load_scoring_config", return_value={})
+
+
 def _fixture_bars(symbol: str) -> list[dict]:
     with open(_FIXTURES / f"{symbol}_candles.json") as f:
         return json.load(f)
@@ -1049,15 +1086,15 @@ def _fixture_bars(symbol: str) -> list[dict]:
 
 def _gate_fire(mocker, *, symbol="MSFT", direction="Bearish", horizon="Position",
                quantity=4, bars=None, caution_pct=None, reject_pct=None,
-               cached_conviction=None):
+               sizing_on=False):
     """Arm and fire with the gate driven by REAL bars through the REAL compute_omm.
 
     Returns (fired_quantity | None, svc, fetch_spy).
 
-    `cached_conviction` seeds regime_monitor's market-wide cache. It defaults to
-    None precisely so the SIZING arithmetic is a no-op (`conviction is None`
-    returns the strategy unchanged) and every assertion below is about the GATE
-    and nothing else. The tests that care about the cache set it deliberately.
+    `sizing_on` defaults to False so the fired quantity is the armed quantity
+    and every assertion below is about the GATE and nothing else (see
+    `_sizing_off`). With it True, the shipped regime_sizing block sizes off the
+    same real measurement. Either way the SPX cache is forbidden.
     """
     from app.data.ibkr_paper import OrderResult
     captured: dict = {}
@@ -1068,8 +1105,10 @@ def _gate_fire(mocker, *, symbol="MSFT", direction="Bearish", horizon="Position"
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction",
-                 return_value=cached_conviction)
+    if sizing_on:
+        _forbid_spx_cache(mocker)
+    else:
+        _sizing_off(mocker)
     fetch_spy = mocker.patch(
         "app.data.market.fetch_candles",
         return_value=_fixture_bars(symbol) if bars is None else bars,
@@ -1118,11 +1157,18 @@ def test_regime_gate_measures_the_traded_symbol_and_not_the_cached_market(mocker
     sides of zero).
     """
     qty, _, fetch_spy = _gate_fire(mocker, symbol="MSFT", direction="Bearish",
-                                   horizon="Position", cached_conviction=80)
+                                   horizon="Position", sizing_on=True)
     assert qty is not None, "the symbol's own regime passes, so it must fire"
     assert fetch_spy.call_args.args[0] == "MSFT", (
         "the gate must fetch the TRADED symbol's bars, not a market proxy"
     )
+    # SIZING-4, on the same real bars: sizing reads MSFT's own +50 in the
+    # Bearish frame -> mult 1.00 -> the full 4. Under the old SPX wiring this
+    # audit's reproduced case sized 2 (decision
+    # AUTOTRADE-SIZING-ON-PER-SYMBOL-CONVICTION-2026-09-20's measured table).
+    # `_gate_fire` forbids the SPX cache, and ONE fetch serves gate and sizer.
+    assert qty == 4
+    assert fetch_spy.call_count == 1, "gate and sizer share one measurement"
 
 
 def test_regime_gate_refuses_on_the_symbols_own_measured_regime(mocker, monkeypatch):
@@ -1246,7 +1292,7 @@ def test_regime_gate_refusal_is_recorded_and_sends_nothing(mocker, monkeypatch):
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order",
                  side_effect=lambda s: sent.append(s) or OrderResult("x", "ok", "ibkr_paper"))
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    _sizing_off(mocker)
     mocker.patch("app.data.market.fetch_candles", return_value=_fixture_bars("MSFT"))
 
     svc = AutoTradeService()
@@ -1315,9 +1361,90 @@ def test_regime_gate_does_not_fire_when_disabled(mocker, monkeypatch):
     qty, _, fetch_spy = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
                                    horizon="Position")
     assert qty == 4
+    # UPDATED FOR SIZING-4, WITH THE REASON (the decision required that this
+    # test be updated, never deleted). "A disabled gate never fetches" is no
+    # longer the rule, because sizing now reads the same per-symbol
+    # measurement and needs it whether or not the gate looks. What still holds,
+    # and is pinned here, is narrower: with the gate disabled AND sizing off,
+    # NOTHING reads the measurement, so nothing pays for the bars. The
+    # sizing-on half is the test below.
     assert fetch_spy.call_count == 0, (
-        "a disabled gate must not pay for bars it will not look at"
+        "with the gate disabled and sizing off, nothing reads the measurement "
+        "-- no bars may be fetched"
     )
+
+
+def test_a_disabled_gate_still_measures_when_sizing_needs_it(mocker, monkeypatch):
+    """SIZING-4: gate off, sizing on -> sizing measures on its own, once.
+
+    MSFT Bullish at Position measures -50 in its own frame on the fixture, so
+    the shipped ramp floors it: 4 * 0.30 -> 1. The gate would have capped this
+    at CAUTION (Fragile), but it is disabled, so its outcome is "disabled" --
+    and the size still comes from MSFT's own regime, never from SPX.
+    """
+    import app.services.auto_trader as at
+    monkeypatch.setattr(at, "_load_regime_gate_config", lambda: {
+        "enabled": False, "headwind_caution_pct": -15,
+        "headwind_reject_pct": -40, "require_stable_for_reject": False,
+    })
+    qty, svc, fetch_spy = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                                     horizon="Position", sizing_on=True)
+    assert fetch_spy.call_count == 1, "sizing needs the measurement the gate skipped"
+    assert fetch_spy.call_args.args[0] == "MSFT"
+    assert qty == 1, "own -50 on the shipped ramp is the 0.30 floor"
+    last = svc.get_state().history[-1]
+    assert last["regime_gate"] == "disabled"
+    assert last["sizing"] == "measured"
+
+
+def test_sizing_off_is_recorded_as_off_on_the_history_row(mocker):
+    """The "sizing" field tells the three full/floor/measured cases apart."""
+    qty, svc, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                             horizon="Position")
+    assert qty == 4
+    assert svc.get_state().history[-1]["sizing"] == "off"
+
+
+def test_a_broken_gate_block_refuses_before_sizing_measures(mocker, monkeypatch):
+    """The lazy shared measurement must not be forced by sizing ahead of the
+    gate's own config check: a gate that cannot read its rule refuses, and no
+    bars are fetched for a fire that was never going to happen."""
+    from app.services.auto_trader import RegimeGateConfigError
+    import app.services.auto_trader as at
+    monkeypatch.setattr(at, "_load_regime_gate_config",
+                        lambda: {"enabled": True, "headwind_caution_pct": -15})
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    sent: list = []
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 side_effect=lambda s: sent.append(s))
+    _forbid_spx_cache(mocker)
+    measure = mocker.patch.object(at, "_measure_trade_regime")
+
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper", symbol="MSFT", option_symbol="MSFT260620C00185000",
+        action="BUY", direction="Bullish", quantity=4, order_type="LMT",
+        limit_price=2.50, conid=None, entry_premium=2.50,
+        portfolio_value=100_000.0, horizon="Position",
+    ))
+    with pytest.raises(RegimeGateConfigError):
+        svc.fire()
+    measure.assert_not_called()
+    assert sent == []
+
+
+def test_a_caution_band_trade_is_sized_down_the_ramp_when_sizing_is_on(mocker):
+    """The shipped config, real bars: MSFT Bullish Position is -50 and Fragile,
+    so the gate CAUTIONs rather than refuses -- and, since SIZING-4, the SAME
+    -50 sizes it at the 0.30 floor (4 -> 1). Before, a caution-band trade was
+    sized off SPX and could fire at the full armed quantity."""
+    qty, svc, fetch_spy = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                                     horizon="Position", sizing_on=True)
+    assert qty == 1
+    assert fetch_spy.call_count == 1
+    last = svc.get_state().history[-1]
+    assert last["regime_gate"] == "caution"
+    assert last["sizing"] == "measured"
 
 
 def test_regime_gate_still_refuses_when_regime_sizing_is_disabled(mocker, monkeypatch):
@@ -1387,7 +1514,7 @@ def _gate_fire_measured(mocker, measured, *, direction="Bullish", quantity=4,
 
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    _sizing_off(mocker)
     mocker.patch.object(at, "_measure_trade_regime", return_value=measured)
     if gate_cfg is not None:
         assert monkeypatch is not None, "gate_cfg needs monkeypatch"
@@ -1520,7 +1647,7 @@ def test_regime_gate_config_refusal_is_recorded_under_its_own_status(mocker, mon
     sent: list = []
     mocker.patch("app.services.auto_trader.execute_option_order",
                  side_effect=lambda s: sent.append(s))
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    _sizing_off(mocker)
     monkeypatch.setattr(at, "_load_regime_gate_config",
                         lambda: {"enabled": True, "headwind_caution_pct": -15})
 
@@ -1635,7 +1762,7 @@ def test_a_headwind_refusal_on_the_scan_trigger_alerts(mocker, monkeypatch):
     import app.services.auto_trader as at
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order")
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    _sizing_off(mocker)
     mocker.patch.object(at, "_measure_trade_regime", return_value=(-50, "Stable"))
     alert = mocker.patch.object(at, "_alert_regime_headwind_refusal")
     sizing_alert = mocker.patch.object(at, "_alert_sizing_config_refusal")
@@ -1821,7 +1948,7 @@ def test_a_gate_config_refusal_on_the_scan_trigger_alerts_as_itself(mocker, monk
     import app.services.auto_trader as at
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order")
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    _sizing_off(mocker)
     monkeypatch.setattr(at, "_load_regime_gate_config",
                         lambda: {"enabled": True, "headwind_caution_pct": -15})
     gate_alert = mocker.patch.object(at, "_alert_regime_gate_config_refusal")
@@ -2059,7 +2186,7 @@ def test_an_order_failed_row_records_what_the_gate_did(mocker):
     """
     import app.services.auto_trader as at
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+    _sizing_off(mocker)
     mocker.patch.object(at, "_measure_trade_regime", return_value=None)
     mocker.patch("app.services.auto_trader.execute_option_order",
                  side_effect=RuntimeError("broker exploded"))
@@ -2114,23 +2241,23 @@ def test_the_headwind_alert_is_not_dressed_as_a_config_error(mocker):
 
 
 def test_regime_gate_never_consults_the_market_wide_conviction_cache(mocker, monkeypatch):
-    """The cache is no longer an input to the gate at all — not even a tiebreak.
+    """The cache is no longer an input to the fire path at all.
 
-    Both halves of the old wiring are moved to values that would flip the old
-    verdict, and neither changes anything: a cached conviction that mirrors to
-    -100 (a REJECT under the old gate) still fires when MSFT's own regime
-    passes, and an absent cache still refuses when MSFT's own regime rejects.
+    `_gate_fire` makes any read of `get_last_conviction` fail the test (see
+    `_forbid_spx_cache`), so a pass and a refusal decided by MSFT's own regime,
+    with sizing ON, prove neither the gate nor -- since SIZING-4 -- the sizer
+    consults the market-wide cache.
     """
     from app.services.auto_trader import RegimeHeadwindError
 
     qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bearish",
-                           horizon="Position", cached_conviction=100)
-    assert qty is not None, "a REJECT-grade cached market number must not refuse"
+                           horizon="Position", sizing_on=True)
+    assert qty is not None, "MSFT's own regime passes, so it fires"
 
     _no_stability_requirement(monkeypatch)
     with pytest.raises(RegimeHeadwindError):
         _gate_fire(mocker, symbol="MSFT", direction="Bullish",
-                   horizon="Position", cached_conviction=None)
+                   horizon="Position", sizing_on=True)
 
 
 # ---------------------------------------------------------------------------

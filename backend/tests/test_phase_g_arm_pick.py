@@ -294,7 +294,10 @@ def test_vol_sizing_rewrites_the_quantity_without_dropping_the_pick(mocker):
     # 0.0, not 20.0: on the two-sided ramp with min_mult 0.5, conviction 20
     # gives 0.875 and round(4 * 0.875) is 4 — the resize branch this test
     # needs would not be entered at all. Neutral gives 0.75 -> 3.
-    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=0.0)
+    # SIZING-4: sizing reads the traded symbol's own measurement, not the SPX
+    # cache, so that is the seam stubbed. Stubbed rather than measured so no
+    # bar fetch runs; Fragile so the gate cannot refuse and sizing is reached.
+    mocker.patch.object(at, "_measure_trade_regime", return_value=(0, "Fragile"))
 
     resized = at._apply_vol_sizing(_strategy(quantity=4))
     assert resized.quantity != 4, "the fixture must actually exercise the resize branch"
