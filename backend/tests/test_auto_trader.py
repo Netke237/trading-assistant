@@ -3410,9 +3410,8 @@ def test_which_rows_carry_the_regime_gate_outcome(mocker):
     `not_submitted`, and in doing so stopped that class of attempt carrying the
     gate's verdict -- the row's comment states the rule it followed ("rides
     only where an order may be live"), but no test asserted either way, so the
-    change was invisible. This locks the CURRENT rule so the next change to it
-    has to be deliberate. See open_questions: whether `not_submitted` SHOULD
-    carry it is Kenneth's call, not this test's.
+    change was invisible. Kenneth decided (A7a, 2026-09-24) that it SHOULD
+    carry it -- and `sizing` -- so this now pins that rule.
     """
     import app.services.auto_trader as at
     from app.data.ibkr_paper import OrderResult
@@ -3437,8 +3436,10 @@ def test_which_rows_carry_the_regime_gate_outcome(mocker):
         svc.fire(attempt_id="a-notsub")
     row = svc.get_state().history[-1]
     assert row["status"] == "not_submitted"
-    assert "regime_gate" not in row, (
-        "CURRENT rule: the field rides only where an order may be live"
+    # FLIPPED DELIBERATELY by decision A7A-NOT-SUBMITTED-CARRIES-GATE-2026-09-24:
+    # the gate ran upstream of the submission, so its verdict is recorded.
+    assert "regime_gate" in row and "sizing" in row, (
+        "A7a: not_submitted carries what the gate and the sizer decided"
     )
 
 
@@ -4426,16 +4427,15 @@ def test_malformed_direction_error_is_not_a_value_error():
     assert not issubclass(MalformedDirectionError, SizingConfigError)
 
 
-# ── Q2 hardening: the stop fraction is resolved ONCE, before the order ─────────
+# ── Q2 hardening: the risk is computed ONCE, before the order ───────────────
 #
 # `fire()` used to resolve `premium_stop_pct` twice: inside `_check_daily_loss`
 # before the order, and again after `execute_option_order` for the success
-# row's `premium_at_risk`. A malformed value was refused only because the first
-# read happened to raise before the order went out. The two reads agree today
-# (`_risk_config` is lru_cached and the strategy is frozen), so nothing was
-# live -- but a second resolution AFTER a broker call is the one place where a
-# disagreement means a placed order with no history row. These pin that there
-# is no second resolution.
+# row's `premium_at_risk`. A second computation AFTER a broker call is the one
+# place where a disagreement means a placed order with no history row. These
+# pin that there is none. Since A6 the risk is the FULL premium and no stop
+# fraction is resolved on the fire path at all; the tests below were rewritten
+# deliberately to pin that.
 
 
 def _q2_fire_service(mocker):
@@ -4449,21 +4449,21 @@ def _q2_fire_service(mocker):
     return svc, execute
 
 
-def test_the_success_row_books_the_stop_the_breaker_gated_on(mocker):
-    """THE REPRODUCER. Any config read after the first returns a malformed
-    stop. Before Q2 the breaker read the good value, the order WENT OUT, and
-    the post-order re-resolution raised ValueError -- a placed order leaving
-    fire() with no history row, so the next breaker check under-counted today's
-    risk. Now there is no read after the breaker's."""
+def test_the_success_row_books_the_risk_the_breaker_gated_on(mocker):
+    """The success row books exactly the dollars `_check_daily_loss` gated on
+    -- the full premium since A6 -- and the config is read once, before the
+    order. Any later config read returns a malformed value; the row must not
+    care."""
     reads = []
 
     def _cfg():
         reads.append(1)
-        stop = 0.60 if len(reads) == 1 else "60%"
-        return {"max_daily_loss_pct": 1.0, "premium_stop_pct": stop}
+        return ({"max_daily_loss_pct": 1.0} if len(reads) == 1
+                else {"max_daily_loss_pct": "2%"})
 
     mocker.patch.object(AutoTradeService, "_risk_config", staticmethod(_cfg))
     svc, execute = _q2_fire_service(mocker)
+    gated = mocker.spy(AutoTradeService, "_check_daily_loss")
 
     fired = svc.fire(portfolio_value=100_000.0)
 
@@ -4471,42 +4471,46 @@ def test_the_success_row_books_the_stop_the_breaker_gated_on(mocker):
     execute.assert_called_once()
     row = svc.get_state().history[-1]
     assert row["order_id"] == "q2"
-    # 2.50 x 1 x 100 x 0.60 -- the value the breaker gated on.
-    assert row["premium_at_risk"] == pytest.approx(150.0)
+    # 2.50 x 1 x 100 -- the full premium, the value the breaker gated on.
+    assert row["premium_at_risk"] == pytest.approx(250.0)
+    assert row["premium_at_risk"] == gated.spy_return
     assert len(reads) == 1, "the config was read again after the order went out"
 
 
-def test_the_stop_is_resolved_exactly_once_per_fire(mocker):
-    """The structural half, pinned directly rather than inferred from a
-    config double: one resolution per successful fire, not one per reader."""
+def test_no_stop_fraction_is_resolved_on_the_fire_path(mocker):
+    """A6: the daily-loss gate no longer reads a premium stop, so the fire
+    path resolves none. `auto_trader` no longer imports
+    `resolve_premium_stop_pct`, and the source-module function is never called
+    during a fire."""
     import app.services.auto_trader as at
+    import app.services.premium_stop as ps
+    assert not hasattr(at, "resolve_premium_stop_pct")
     mocker.patch.object(AutoTradeService, "_risk_config",
                         staticmethod(lambda: {"max_daily_loss_pct": 1.0,
                                               "premium_stop_pct": 0.60}))
-    spy = mocker.spy(at, "resolve_premium_stop_pct")
+    spy = mocker.spy(ps, "resolve_premium_stop_pct")
     svc, _ = _q2_fire_service(mocker)
 
     svc.fire(portfolio_value=100_000.0)
 
-    assert spy.call_count == 1
+    assert spy.call_count == 0
     assert svc.get_state().history[-1]["order_id"] == "q2"
 
 
-def test_a_malformed_stop_is_refused_before_the_order(mocker):
-    """The refusal the decision calls coincidental, pinned as a contract: a
-    non-numeric stop never reaches the broker and leaves a risk_check_failed
-    row, not a missing one."""
+def test_a_malformed_premium_stop_key_no_longer_affects_the_fire(mocker):
+    """FLIPPED DELIBERATELY. Before A6 a non-numeric
+    `auto_trade.premium_stop_pct` was refused because the breaker read it.
+    Since A6 nothing reads that key, so the fire proceeds and books the full
+    premium. A malformed `max_daily_loss_pct` IS still refused (the
+    risk_rules.yaml fault test earlier in this file)."""
     mocker.patch.object(AutoTradeService, "_risk_config",
                         staticmethod(lambda: {"max_daily_loss_pct": 1.0,
                                               "premium_stop_pct": "60%"}))
     svc, execute = _q2_fire_service(mocker)
 
-    with pytest.raises(ValueError):
-        svc.fire(portfolio_value=100_000.0)
+    svc.fire(portfolio_value=100_000.0)
 
-    execute.assert_not_called()
+    execute.assert_called_once()
     row = svc.get_state().history[-1]
-    assert row["status"] == "risk_check_failed"
-    assert row["order_id"] is None
-    assert row["premium_at_risk"] == 0.0
-    assert svc.get_state().armed is False
+    assert row["order_id"] == "q2"
+    assert row["premium_at_risk"] == pytest.approx(250.0)
