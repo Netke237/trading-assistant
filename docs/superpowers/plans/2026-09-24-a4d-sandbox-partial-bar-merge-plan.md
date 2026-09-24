@@ -388,8 +388,8 @@ number in front of a user or on a broker order, or corrupt persisted data), ever
 in-branch, and rounds 2-3 re-reviewed the whole plan instead of only the previous round's fixes. The round-4
 reviewer caught the cap itself (finding 1). Its other findings are recorded here and **not applied**:
 
-2. §5.2 and open question [106] understate the A4b sandbox lag's cost when yfinance answered: up to 900s is 1 bar
-   on `15min`, 3 on `5min`, 15 on `1min` — not "up to one extra bar". (Prose; matters to Kenneth's call on [106].)
+2. §5.2 and open question [110] understate the A4b sandbox lag's cost when yfinance answered: up to 900s is 1 bar
+   on `15min`, 3 on `5min`, 15 on `1min` — not "up to one extra bar". (Prose; matters to Kenneth's call on [110].)
 3. Test 11 does not say yfinance lacks P's timestamp; without that, the "rule 3 before the catch-all" mutation
    survives. (Test hygiene.)
 4. The duplicate-P "last row wins" with no counterpart is unpinned (a `[0]` mutation survives). (Test hygiene.)

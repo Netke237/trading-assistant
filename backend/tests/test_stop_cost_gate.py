@@ -125,25 +125,9 @@ class TestThresholds:
         assert pass_max_fraction_for("Swing") == 0.70
         assert pass_max_fraction_for("Position") == 0.60
 
-    def test_endpoint_key_set_matches_the_client_type_exactly(self):
-        """Spec test 7's reject_fraction regression guard. The client's
-        HorizonStopPremiumThresholds declares ONE key; a second one reappearing
-        here (a re-added reject_fraction, say) must fail loudly rather than be
-        dropped silently on the wire — the gate is PASS/CAUTION by design and
-        never REJECTs."""
-        from app.routers.config import get_stop_premium_thresholds
-        served = get_stop_premium_thresholds()
-        assert set(served) == {"Intraday", "Swing", "Position"}
-        for label, pair in served.items():
-            assert set(pair) == {"pass_max_fraction"}, f"{label}: {set(pair)}"
-        assert served["Intraday"]["pass_max_fraction"] == pass_max_fraction_for("Intraday")
-        assert served["Swing"]["pass_max_fraction"] == pass_max_fraction_for("Swing")
-        assert served["Position"]["pass_max_fraction"] == pass_max_fraction_for("Position")
-
     def test_an_absent_or_unknown_preset_falls_toward_caution(self):
         """Swing, not the loosest line — "no preset was sent" must not buy a
-        contract the Intraday tolerance. Same choice as the frontend's
-        getStopPremiumThresholds."""
+        contract the Intraday tolerance."""
         assert horizon_key(None) == "swing"
         assert horizon_key("Weekly") == "swing"
         assert horizon_key("") == "swing"

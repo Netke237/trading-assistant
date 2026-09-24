@@ -1054,8 +1054,7 @@ describe('PremiumStopEditor', () => {
   /* ROUND 12 finding 13 — one quantity, two editors, two different answers to
    * "what counts as a stop". TradeCard refuses a dollar stop below 10% of the
    * mid (round 5: a 0.19% stop raises a Critical PREMIUM_STOP on the first
-   * cent of adverse move and shrinks the auto-trader's daily-loss denominator
-   * ~3000x). This field edits the SAME `premiumStopPct` on the SAME position
+   * cent of adverse move). This field edits the SAME `premiumStopPct` on the SAME position
    * and accepted 0.01 through 99.99 -- so every value the card refuses to
    * create could be typed onto the position here ten seconds later. Both now
    * derive from premiumStop.ts's band. */

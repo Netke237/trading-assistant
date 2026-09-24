@@ -492,6 +492,16 @@ export default function Step7Page() {
   // keystroke, before they could be read. Cleared only when the NEXT send of
   // any kind starts (the three send paths below).
   const [basketNotes, setBasketNotes] = useState<string[]>([]);
+  // The BASKET's failure banner (A8b), split out of `orderError` for the same
+  // reason as `basketNotes` above and with the same lifetime: the rejected rows
+  // were rolled back and the toast counts only placed orders, so this banner is
+  // the only record that an order was NOT saved. The state survives Prev/Next
+  // and a new scan landing, and is cleared only when the next send of any kind
+  // starts; it renders only while a card is shown (the `effectiveCard` block).
+  // Like `basketNotes` it is page state, so leaving Step 7 drops it.
+  // `orderError` keeps the direct paths' per-card lifetime (the `[active]`
+  // effect clears it).
+  const [basketError, setBasketError] = useState<string | null>(null);
   const sizeNote = (adjustedQty: number) =>
     `Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`;
   // The one place the card can tell the user their premium stop did not survive
@@ -1045,7 +1055,7 @@ export default function Step7Page() {
     // un-reduced order. Round 9's accumulate-don't-overwrite change made that
     // strictly worse: the stale note now sits BESIDE any new one instead of
     // being replaced by it.
-    setLimitPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]);
+    setLimitPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
     try {
       // Floored defensively: the shared map is a plausible target for a
       // future write path to drop a sub-1 value into (e.g. Feature 3's Apply
@@ -1100,7 +1110,7 @@ export default function Step7Page() {
     // Phase G piece 5, build step 4 (§7.1) — see placeLimitPaper's identical guard.
     if (!checkMethodPick(methodPickFor(card))) return;
     // See placeLimitPaper — notes describe this save only.
-    setMarketPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]);
+    setMarketPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
     try {
       // Floored defensively — see placeLimitPaper's identical comment above.
       const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
@@ -1157,14 +1167,15 @@ export default function Step7Page() {
     // Same reason as the two order paths: this submit's outcome, not the last
     // one's. Basket notes are symbol-qualified because several land at once.
     //
-    // All THREE, matching placeLimitPaper and placeMarketNow. Clearing only
-    // the notes left the red banner standing: a basket that partly failed set
-    // `orderError`, and a second basket that fully succeeded then rendered
+    // ALL of them, matching placeLimitPaper and placeMarketNow. Clearing only
+    // the notes left the red banner standing: a basket that partly failed
+    // set its banner, and a second basket that fully succeeded then rendered
     // "Some orders were not saved" over a submit in which everything was.
-    // Invisible before this branch (the banner was gated behind a selected
-    // broker the basket never sets) and reachable the moment it was hoisted.
+    // `orderError` too: a direct path's error is about an earlier send, not
+    // this one (A8b split the basket's banner into `basketError`).
     setSaveNotes([]);
     setBasketNotes([]);
+    setBasketError(null);
     setOrderError(null);
     setPaperOrderId(null);
     let auto = 0, manual = 0, queued = 0;
@@ -1245,7 +1256,7 @@ export default function Step7Page() {
       window.setTimeout(() => setToast(null), 6000);
     }
     if (failures.length) {
-      setOrderError(`Some orders were not saved — ${failures.join('; ')}`);
+      setBasketError(`Some orders were not saved — ${failures.join('; ')}`);
     }
   };
 
@@ -1486,11 +1497,12 @@ export default function Step7Page() {
           )}
           {/* OUTSIDE the `selectedBroker` gate, deliberately.
             *
-            * ROUND 12 finding 2 -- these two lines are the ONLY channel for
+            * ROUND 12 finding 2 -- the lines below are the ONLY channel for
             * two things the basket path produces: the "premium stop could not
             * be applied" disclosure (`droppedStopNote`, written by
             * `handleSubmit` for every order the backend re-anchored) and the
-            * hard-rejection banner (`setOrderError` on a failed save). The
+            * hard-rejection banner (`basketError` since A8b; `orderError`
+            * before it, on a failed save). The
             * basket reaches `handleSubmit` through TradeCard's Send button,
             * which never touches BrokerPicker -- so a user who pins a basket
             * and sends it without selecting a paper broker got neither
@@ -1506,6 +1518,7 @@ export default function Step7Page() {
           {basketNotes.map((n) => (
             <Text key={`basket:${n}`} size={12} tone="caution">{n}</Text>
           ))}
+          {basketError && <Text size={12} tone="reject">{basketError}</Text>}
           {orderError && <Text size={12} tone="reject">{orderError}</Text>}
         </div>
       )}

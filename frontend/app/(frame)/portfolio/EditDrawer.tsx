@@ -1205,8 +1205,7 @@ function PremiumStopEditor({
     // TradeCard's dollar field derives its bounds from. The two editors of
     // this one number used to disagree about what a stop even is: the card
     // refuses anything below 10% of the mid (a 0.19% stop raises a Critical
-    // PREMIUM_STOP on the first cent of adverse move and shrinks the
-    // auto-trader's daily-loss denominator ~3000x), while this field, editing
+    // PREMIUM_STOP on the first cent of adverse move), while this field, editing
     // the same `premiumStopPct` on the same position, accepted 0.01% — and
     // advertised it in its own hint. Anything the card will not create could
     // still be typed onto the position here.
