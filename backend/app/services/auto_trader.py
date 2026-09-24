@@ -68,8 +68,8 @@ class ArmPreservedError(RuntimeError):
     the router below needs no state inspection at all: not this class means
     consumed.
 
-    A RuntimeError so `/auto-trade/fire` still maps it to a 400, as its
-    neighbours do — the message text the router surfaces is unchanged.
+    A RuntimeError so `/auto-trade/fire` still maps it to a 400, as it does
+    every refusal but the two config faults (prefixed 500s) — the message text the router surfaces is unchanged.
     """
 
 
@@ -98,8 +98,8 @@ class OrderNotSubmittedError(RuntimeError):
     mode being closed is a FALSE alert, so replacing it with the opposite false
     alert would be no better.
 
-    A RuntimeError so `/auto-trade/fire` maps it to a 400 exactly as its
-    neighbours do — and `fire()` re-raises it as a bare RuntimeError anyway, so
+    A RuntimeError so `/auto-trade/fire` maps it to a 400 like every refusal
+    but the two config faults (prefixed 500s) — and `fire()` re-raises it as a bare RuntimeError anyway, so
     the class is a routing signal inside this module, not part of the endpoint's
     contract.
     """
@@ -1534,7 +1534,8 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     """Push a fire refusal to a channel that reaches a phone. The mechanics only.
 
     §9.1 is "refuse to fire AND alert". The manual trigger needs no help — the
-    refusal is the 400 body of POST /auto-trade/fire, with a human reading it.
+    refusal is the 400 body of POST /auto-trade/fire (a prefixed 500 for the
+    two config faults), with a human reading it.
     The scan trigger has no reader at all: POST /scan calls it through
     `asyncio.to_thread` and discards the outcome, so without this the refusal
     is a log line on a box nobody is watching while an armed order silently
@@ -1815,8 +1816,6 @@ _ALERT_TYPE_NOT_SUBMITTED = "AUTO_TRADE_ORDER_NOT_SUBMITTED"
 _ALERT_TYPE_STALE_BLOCKED = "AUTO_TRADE_ARM_EXPIRED"
 _ALERT_TYPE_UNCLASSIFIED = "AUTO_TRADE_REFUSED_UNCLASSIFIED"
 
-# The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
-# routes on them. They are `fire()`'s to define; this is a reader of them.
 # A STATED REJECTION at any of the four brokers, lower-cased. One set for all:
 # none of these words means "live" anywhere, so the union is the safer match.
 # IBKR says Inactive; Tradier adds error; Alpaca canceled/expired; tastytrade's
@@ -1841,6 +1840,8 @@ def _is_rejected_status(status) -> bool:
     return str(status).strip().lower() in _REJECTED_STATUSES
 
 
+# The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
+# routes on them. They are `fire()`'s to define; this is a reader of them.
 _SIZING_STATUSES = ("sizing_config_blocked", "sizing_data_blocked")
 _RISK_BLOCKED_STATUSES = ("cap_blocked", "daily_loss_blocked")
 # THE ONE STATUS `fire()` DOES NOT WRITE. `stale_blocked` is recorded by
@@ -2265,7 +2266,9 @@ class AutoTradeService:
         # leaves nothing armed and nothing sent — the same shape as the two
         # blocks below. /auto-trade/fire maps SizingConfigError to a 500 (a
         # server config fault, decision A7B-FIRE-SIZING-CONFIG-500-2026-09-24,
-        # matching POST /stock-scan) and maybe_fire_on_scan singles it out to alert.
+        # matching POST /stock-scan), and RegimeGateConfigError to a 500 too
+        # (A9-REGIME-GATE-CONFIG-500-2026-09-24); maybe_fire_on_scan singles
+        # each out to alert.
         try:
             strategy = _apply_vol_sizing(strategy)
         except RegimeHeadwindError as exc:
@@ -2938,7 +2941,8 @@ class AutoTradeService:
         """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit.
 
         Returns this trade's risk in dollars -- the number the check gated on.
-        `fire()` books the success row's `premium_at_risk` with it, so the row
+        `fire()` books the success row's `premium_at_risk` (0 instead on a
+        stated rejection) and the `order_failed` row's with it, so each row
         records the risk this check allowed, and nothing is computed after the
         order is placed.
 

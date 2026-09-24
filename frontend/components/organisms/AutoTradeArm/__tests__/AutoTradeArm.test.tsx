@@ -850,6 +850,19 @@ describe('AutoTradeArm — O4 step 6: reading the /fire result', () => {
     expect(screen.getByText(/^Arm —/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Fire now' })).not.toBeInTheDocument();
   });
+
+  it('15g. the same race on the UNKNOWN branch: a stale pre-fire read cannot re-arm the panel', async () => {
+    let resolveMount: (v: unknown) => void = () => {};
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockImplementationOnce(() => new Promise((r) => { resolveMount = r; }))  // mount, held
+      .mockResolvedValueOnce({ armed: false });                                 // after the unknown
+    await fire(new TypeError('Failed to fetch'), true);
+    await waitFor(() => expect(api.getAutoTradeStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText(/^Arm —/)).toBeInTheDocument());
+    await act(async () => { resolveMount(ARMED); });
+    expect(screen.getByText(/^Arm —/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fire now' })).not.toBeInTheDocument();
+  });
 });
 
 describe('AutoTradeArm — O4 step 6: the caution under the buttons', () => {
