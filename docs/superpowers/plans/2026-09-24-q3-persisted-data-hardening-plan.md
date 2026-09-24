@@ -100,3 +100,25 @@ discrepancy; /analysis direction_conviction gate visibility.
 
 ## Verification
 Full backend suite (baseline 2987 passed / 1 skipped at main 07627d2). Frontend untouched.
+
+## Amendment after round 2 (the code) — one gate-level finding, taken
+
+Round 2 showed §3b/§3c as built opened a NEW silent-ignore path: the exemption
+asked only "does SOME known horizon read this dict?", and the `seen` set skipped
+every revisit of a shared container. So `position: {vol: {direction_conviction: *swing_block}}`,
+`position: {trend: {<<: *d}}` and `position: {vol: *swing}` were all accepted while
+the Position gate ran on its default 40 — each was rejected on main.
+
+**Fix (supersedes §3b/§3c's rules):**
+- A `direction_conviction` found at a non-legal path is exempt only when ALL hold:
+  (a) it is NOT under `horizons.<known horizon>` (any deeper spot there is the wrong
+  place for that horizon, whoever else reads the object); (b) its holder key starts
+  with `_` — the anchor-holder convention (`_defaults`), which no mis-cased or
+  misspelled horizon name (`Position`, `positon`) can match; (c) it is a dict that IS
+  a block read at a legal path.
+- The walker guards only TRUE cycles (the ids of containers on the current path), not
+  every revisit, so a shared container is judged at each path it appears under.
+  Accepted cost: an adversarial alias DAG re-walks exponentially; that needs a
+  hand-crafted file and would already break the other readers of scoring_rules.yaml.
+- Tests: the three round-2 repros, a mis-cased `Position:` alias, a non-`_` holder, an
+  `_`-holder inside a known horizon, and a null block in an `_` holder all raise.

@@ -237,7 +237,7 @@ horizons:
 
 def test_a_block_aliased_into_a_horizon_is_accepted():
     cfg = _load("""
-shared:
+_shared:
   direction_conviction: &blk {bearish_min_trend: 45}
 horizons:
   swing:
@@ -286,6 +286,82 @@ def test_a_misplaced_null_block_gets_no_identity_exemption():
     }}}
     with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
         with pytest.raises(ValueError, match="misplaced direction_conviction block"):
+            load_direction_conviction_min_trend("Bearish", "Position")
+
+
+# Round 2 (the code) finding: the first exemption asked only "does SOME horizon
+# read this object?", so a block aliased into the WRONG place was excused by
+# another horizon's legal read, and the horizon the operator meant ran on its
+# old threshold. Each case below was accepted at 0d02be6 and rejected on main.
+
+@pytest.mark.parametrize("text,where", [
+    ("""
+horizons:
+  swing:
+    direction_conviction: &b {bullish_min_trend: 60, bearish_min_trend: 60}
+  position:
+    vol:
+      direction_conviction: *b
+""", r"horizons\.position\.vol\.direction_conviction"),
+    ("""
+horizons:
+  _defaults: &d
+    direction_conviction: {bullish_min_trend: 60, bearish_min_trend: 60}
+  swing:
+    <<: *d
+  position:
+    trend:
+      <<: *d
+""", r"horizons\.position\.trend\.direction_conviction"),
+    ("""
+horizons:
+  swing: &s
+    direction_conviction: {bullish_min_trend: 60, bearish_min_trend: 60}
+  position:
+    vol: *s
+""", r"horizons\.position\.vol\.direction_conviction"),
+    # A mis-cased horizon aliasing another horizon's block: Position meant,
+    # swing's block borrowed.
+    ("""
+horizons:
+  swing:
+    direction_conviction: &b {bullish_min_trend: 60, bearish_min_trend: 60}
+  Position:
+    direction_conviction: *b
+""", r"horizons\.Position\.direction_conviction"),
+    # An '_'-prefixed holder INSIDE a known horizon is still the wrong place
+    # for that horizon, whoever else reads the object.
+    ("""
+horizons:
+  swing:
+    direction_conviction: &b {bullish_min_trend: 60, bearish_min_trend: 60}
+  position:
+    _local:
+      direction_conviction: *b
+""", r"horizons\.position\._local\.direction_conviction"),
+    # A holder without the '_' convention is not an anchor holder.
+    ("""
+shared:
+  direction_conviction: &b {bullish_min_trend: 60, bearish_min_trend: 60}
+horizons:
+  swing:
+    direction_conviction: *b
+""", r"shared\.direction_conviction"),
+])
+def test_a_block_read_elsewhere_does_not_excuse_a_wrong_placement(text, where):
+    cfg = _load(text)
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        with pytest.raises(ValueError, match="misplaced direction_conviction block.*" + where):
+            load_direction_conviction_min_trend("Bullish", "Position")
+
+
+def test_a_null_block_in_an_anchor_holder_gets_no_exemption():
+    """`None is None` everywhere: a holder's `direction_conviction: null` must
+    not borrow position's explicit null as a legal read."""
+    cfg = {"_holder": {"direction_conviction": None},
+           "horizons": {"position": {"direction_conviction": None}}}
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        with pytest.raises(ValueError, match=r"misplaced direction_conviction block.*_holder"):
             load_direction_conviction_min_trend("Bearish", "Position")
 
 
