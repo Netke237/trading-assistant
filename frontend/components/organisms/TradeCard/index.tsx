@@ -1694,9 +1694,9 @@ export function TradeCard({
    *  differed from the seed, and therefore counted as a deliberate edit. On a
    *  $5.20 mid the server stored 0.01/5.20 = 0.19%, putting the PREMIUM_STOP
    *  threshold at $5.19 and raising a Critical alert on the first cent of
-   *  adverse move. The same keystroke shrinks the auto-trader's daily-loss
-   *  denominator by ~3000x (`entry_premium * qty * 100 * stop_pct`), so a field
-   *  labelled only "Premium stop" could all but switch that gate off.
+   *  adverse move. (It also used to shrink the auto-trader's daily-loss count
+   *  ~3000x; since A6 that gate counts the full premium and ignores the
+   *  declared stop.)
    *
    *  10%-99% OF THE MID, because that is the range the app already considers a
    *  stop: the GLOBAL premium stop is bounded `ge=0.10, le=1.0`

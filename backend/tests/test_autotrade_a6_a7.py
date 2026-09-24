@@ -227,12 +227,12 @@ async def test_fire_endpoint_maps_a_sizing_config_error_to_500(mocker):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exc", [
     ValueError("the regime conviction is not a usable number"),
-    RegimeGateConfigError("regime_gate missing a threshold"),
     RuntimeError("Exposure cap breach: []"),
 ])
 async def test_other_refusals_stay_400(mocker, exc):
-    """Only SizingConfigError moved. A sizing DATA fault (ValueError) and a
-    regime_gate config fault were not part of decision A7b."""
+    """Only the two CONFIG faults are 500s: SizingConfigError (A7b) and, since
+    A9, RegimeGateConfigError (pinned in test_autotrade_a9.py). A sizing DATA
+    fault (ValueError) and a risk-limit refusal stay 400."""
     from app.routers import auto_trade as rt
     mocker.patch.object(rt.auto_trader, "fire", side_effect=exc)
     rt.auto_trader.arm(_armed())
@@ -243,6 +243,7 @@ async def test_other_refusals_stay_400(mocker, exc):
         rt.auto_trader.disarm()
     assert ei.value.status_code == 400
     assert not ei.value.detail.startswith(rt.SIZING_CONFIG_REFUSED_PREFIX)
+    assert not ei.value.detail.startswith(rt.REGIME_GATE_CONFIG_REFUSED_PREFIX)
 
 
 def test_the_prefix_is_the_one_the_frontend_reads():

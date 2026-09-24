@@ -150,7 +150,11 @@ class RegimeGateConfigError(RuntimeError):
     the real one. This one means "fix scoring_rules.yaml's regime_gate block";
     the headwind one means "the market moved against this trade".
 
-    A RuntimeError so `/auto-trade/fire` maps it to a 400, as both neighbours do.
+    Still a RuntimeError subclass, so POST /auto-trade/fire must catch it ABOVE
+    its `(ValueError, RuntimeError)` 400 handler: it answers a prefixed 500, a
+    server config fault like `SizingConfigError` (decisions
+    A7B-FIRE-SIZING-CONFIG-500-2026-09-24 and
+    A9-REGIME-GATE-CONFIG-500-2026-09-24).
     """
 
 
@@ -1813,6 +1817,30 @@ _ALERT_TYPE_UNCLASSIFIED = "AUTO_TRADE_REFUSED_UNCLASSIFIED"
 
 # The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
 # routes on them. They are `fire()`'s to define; this is a reader of them.
+# A STATED REJECTION at any of the four brokers, lower-cased. One set for all:
+# none of these words means "live" anywhere, so the union is the safer match.
+# IBKR says Inactive; Tradier adds error; Alpaca canceled/expired; tastytrade's
+# `OrderStatus` StrEnum gives Rejected/Cancelled/Expired. ANYTHING ELSE COUNTS AS
+# LIVE, including values no adapter emits today: a rejection list, not an
+# allowlist (O4 spec section 3.2) -- an unknown word most likely means a live
+# order.
+#
+# TWO READERS, ONE SET (decision A9-REJECTED-BOOKS-ZERO-2026-09-24): `fire()`
+# books a rejected order's `premium_at_risk` as 0, and the booking step
+# (services/auto_trade_booking.py) refuses to book it as a position. Both call
+# `_is_rejected_status`, so what "rejected" means cannot drift between the
+# daily-loss budget and the portfolio. It lives here and not in the booking
+# module because that module imports this one.
+_REJECTED_STATUSES = frozenset({
+    "rejected", "inactive", "error", "canceled", "cancelled", "expired",
+})
+
+
+def _is_rejected_status(status) -> bool:
+    """True when the broker's order status is a stated rejection (see the set)."""
+    return str(status).strip().lower() in _REJECTED_STATUSES
+
+
 _SIZING_STATUSES = ("sizing_config_blocked", "sizing_data_blocked")
 _RISK_BLOCKED_STATUSES = ("cap_blocked", "daily_loss_blocked")
 # THE ONE STATUS `fire()` DOES NOT WRITE. `stale_blocked` is recorded by
@@ -2018,15 +2046,21 @@ def _alert_stale_arm(symbol: str, age_minutes: float, max_age: int) -> None:
 
 
 def _alert_unclassified_refusal(symbol: str, exc: Exception) -> None:
-    """Alert a fire that consumed the armed order and recorded NO history row.
+    """Alert a fire that consumed the armed order with no outcome this can name.
+
+    TWO WAYS IN. A fire that left no row of its own reaches the `else` of
+    `_alert_for_consumed_attempt`; so does a `risk_check_failed` row (fire()'s
+    `except Exception` after the sizing call, the exposure check and the
+    daily-loss check), which that router does not name and so routes here by
+    fall-through. Either way no order was recorded as submitted.
 
     Round 1 of this target: narrowing `maybe_fire_on_scan`'s sizing handler
     stops a `risk_rules.yaml` fault being paged as a sizing fault, but on its
     own it would leave that refusal reaching nobody at all — the same hole one
     file further along. The known way in is a non-numeric value in
     `risk_rules.yaml`: `_check_daily_loss` calls `float()` on
-    `max_daily_loss_pct` and raises ValueError, `fire()`'s guard there catches only RuntimeError,
-    and by then the disarm has already happened.
+    `max_daily_loss_pct` and raises ValueError; `fire()` catches it after the
+    disarm and writes a `risk_check_failed` row, which lands here.
 
     DELIBERATELY DOES NOT CLAIM NOTHING WAS SENT. Every way in today is
     pre-order, but this branch exists precisely for the faults nobody
@@ -2401,11 +2435,13 @@ class AutoTradeService:
         with self._lock:
             _history_snapshot = list(self._state.history)
         try:
-            # THE ONE COMPUTATION OF THIS ATTEMPT'S RISK. The success row below
-            # books `premium_at_risk` as the dollars this check gated on rather
-            # than computing again after the broker call (Q2 hardening,
-            # AUTOTRADE-PIECE-B-DESIGN-LOCKED-AND-Q2-HARDENING-2026-09-23): a
-            # second computation after the order is the one place where a
+            # THE ONE COMPUTATION OF THIS ATTEMPT'S RISK. Two rows below book
+            # `premium_at_risk` as the dollars this check gated on rather than
+            # computing again after the broker call (Q2 hardening,
+            # AUTOTRADE-PIECE-B-DESIGN-LOCKED-AND-Q2-HARDENING-2026-09-23): the
+            # success row (0 instead when the broker's status is a stated
+            # rejection, A9) and the `order_failed` row (A9). A second
+            # computation after the order is the one place where a
             # disagreement means a placed order with no history row. Since A6
             # it is the FULL premium -- see `_check_daily_loss`.
             this_risk = self._check_daily_loss(strategy, _history_snapshot, pv)
@@ -2484,7 +2520,17 @@ class AutoTradeService:
                     "symbol":          strategy.symbol,
                     "option":          strategy.option_symbol,
                     "timestamp":       datetime.now(timezone.utc).isoformat(),
-                    "premium_at_risk": 0.0,
+                    # THE FULL PREMIUM, NOT 0 -- decision
+                    # A9-ORDER-FAILED-BOOKS-FULL-PREMIUM-2026-09-24 (Kenneth).
+                    # The broker call was MADE and errored, so the order may
+                    # be live at the broker, and no position is booked for it
+                    # (this method raises before any caller books). Booking 0
+                    # let a may-have-landed order spend none of the daily-loss
+                    # budget, so the gate could pass more than the limit.
+                    # Fails closed: the worst case is that this premium's
+                    # share of today's budget is spent on an order that did
+                    # not land, until the next UTC day.
+                    "premium_at_risk": this_risk,
                     "error":           str(exc),
                     # CARRIED HERE and on `not_submitted` (A7a), NOT on
                     # `cap_blocked` / `daily_loss_blocked`, which provably
@@ -2507,7 +2553,14 @@ class AutoTradeService:
                 "symbol":          strategy.symbol,
                 "option":          strategy.option_symbol,
                 "timestamp":       datetime.now(timezone.utc).isoformat(),
-                "premium_at_risk": this_risk,
+                # 0 ON A STATED REJECTION -- decision
+                # A9-REJECTED-BOOKS-ZERO-2026-09-24 (Kenneth). The broker SAID
+                # the order did not happen, so counting its premium would only
+                # block later trades for nothing. The same set the booking step
+                # refuses it with (`_is_rejected_status`). Every other status,
+                # an unknown word included, books the full premium.
+                "premium_at_risk": (0.0 if _is_rejected_status(result.status)
+                                    else this_risk),
                 # WHAT THE HEADWIND GATE DID: "passed", "caution", "abstained"
                 # or "disabled". Target 2a round 1: a trade the gate never
                 # evaluated (fail-open, and the dominant outcome on this repo's
@@ -2850,8 +2903,10 @@ class AutoTradeService:
         elif status == "order_failed":
             _alert_order_failed(symbol, exc)
         else:
-            # No row of ours: it failed past the disarm and before anything
-            # was recorded.
+            # No status named above: either no row of ours (it failed past
+            # the disarm and before anything was recorded) or a
+            # `risk_check_failed` row, which reaches this alert by
+            # fall-through. Neither recorded an order as submitted.
             _alert_unclassified_refusal(symbol, exc)
 
     @staticmethod
@@ -2896,6 +2951,11 @@ class AutoTradeService:
         trades through a gate nothing enforced. The declared stop is still
         armed and booked onto the position (the premium-stop alert reads it
         there); it is no longer part of this sum.
+
+        WHAT THE ROWS IT SUMS BOOK (A9): the full premium on a success row and
+        on an `order_failed` row (the order may be live); 0 on a success row
+        whose broker status is a stated rejection, on `not_submitted`, and on
+        every refusal.
         """
         risk_cfg = AutoTradeService._risk_config()
         max_pct  = float(risk_cfg.get("max_daily_loss_pct", 0.02))

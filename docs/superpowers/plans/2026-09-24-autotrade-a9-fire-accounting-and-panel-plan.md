@@ -171,3 +171,39 @@ Frontend:
 `python3 scripts/state.py` exit 0. State file: new phase AUTOTRADE-A9 with a
 presence probe (`REGIME_GATE_CONFIG_REFUSED_PREFIX =` in routers/auto_trade.py),
 three decisions, oq 70/97/98/99/100/101/102 closed with pointers, oq 96 reworded.
+
+## 9. Round 1 (the plan) — no blocking findings; 4 should-fix + 7 nits, ALL folded in
+
+1. **§4.1 amended — bump `statusSeq` before the refresh.** The post-refusal read IS
+   the newer truth; an older in-flight read (the mount read) carries the same seq
+   and could land after it with a pre-fire `armed: true`. Both the refused and the
+   unknown branch now do `statusSeq.current += 1; void refreshStatus();`. Test:
+   mount read held on a deferred promise, refusal, post-refusal read `armed: false`,
+   then the mount read resolves `armed: true` → the Arm button is shown.
+2. **`RegimeGateConfigError`'s docstring** ("maps it to a 400") reworded to the
+   500 + must-be-caught-above-the-400-handler rule; `test_conviction_sizing.py:318`'s
+   docstring ("catches (ValueError, RuntimeError) -> 400") corrected for both
+   classes.
+3. **§7 frontend test spelled out:** `.mockResolvedValueOnce(armedTrue)
+   .mockResolvedValueOnce({armed:false})`, wait for 2 calls, assert armed text and
+   Fire now gone, Arm button present, red error still shown, no sync. Mutation:
+   drop the refresh → fails.
+4. **§1.4 widened:** the docstring headline of `_alert_unclassified_refusal` and the
+   `else:` comment in `_alert_for_consumed_attempt` stop claiming "no row": a
+   `risk_check_failed` row falls through to that `else` (routed by fall-through,
+   not by name). The PAGE TEXT ("no outcome was recorded") is left unchanged and
+   logged as an open question — wording a human receives is Kenneth's.
+5. nit: the §1.2 comment states the true worst case — this premium's share of
+   today's budget is spent until the next UTC day.
+6. nit: "THE ONE COMPUTATION" comment names both consumers (success row, possibly
+   0 on a rejection; `order_failed` row).
+7. nit: two stale test comments added to §5 (`AutoTradeArm.test.tsx` ~:133,
+   `EditDrawer.test.tsx` ~:1057).
+8. nit: expected backend count is 3000 + new − 1 (the dropped 400 param);
+   `test_other_refusals_stay_400` docstring + assertion cover both prefixes.
+9. nit: frontend constant test pins the literal, prefix-must-lead, 502 → unknown,
+   and the two prefixes do not cross.
+10. nit: booking imports only `_is_rejected_status`; the identity pin is
+    `atb._is_rejected_status is at._is_rejected_status`.
+11. nit: endpoint test 6 mirrors the A7b twin exactly (`_apply_vol_sizing`
+    patched to raise, real `fire()`, full `detail ==`).
