@@ -146,3 +146,20 @@ Below the gate, logged: Tradier's parse fallback sets `time = 0` (an int, so "co
 pre-existing; test 5 proves the helper is called, test 2 proves its result reaches `compute_omm`.
 
 Next: round 2, scoped per `audit_rule` (2) to this revision.
+
+## 8. Adversarial round 2 (the revision) — 2026-09-24: CLEAN
+
+Scoped to `git diff 12d85c46 7face152`. **Zero gate-level findings.** Verified: `_tradier_base()` is the
+base the fetch actually used, so a lag keyed on it is right in every credential case (live token → 0;
+paper token → sandbox → 900; no creds → yfinance only → 0; sandbox env with no token → 900, the accepted
+conservative case); the `T + 1800 <= now` arithmetic; IBKR never joins the 15min merge; R6 filters
+before `HMM_MIN_BARS` and feeds both the HMM and the OMM fallback; the 8s fire deadline is unaffected;
+every Intraday-horizon regime reader is R1–R6.
+
+Below the gate. **The build adopts 1 and 2:**
+1. Tests other than 1b must pass `feed_lag=0` (or patch `intraday_feed_lag_seconds`), or they depend on
+   the machine's saved Tradier credentials.
+2. Detect the sandbox by substring — `"sandbox.tradier.com" in _tradier_base()` — not equality, so a
+   trailing slash on `TRADIER_BASE_URL` still counts.
+3. `alert_evaluator.build_regime_snapshot` (regime conditions in price/condition alert rules) belongs in
+   §1's scoped-out list; added to the logged follow-up.
