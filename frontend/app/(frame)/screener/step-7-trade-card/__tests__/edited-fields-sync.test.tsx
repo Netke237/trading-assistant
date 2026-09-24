@@ -803,15 +803,16 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   });
 
   /* ROUND 12 finding 2 — the basket path's two messages were WRITTEN and never
-   * SHOWN. Both `saveNotes` and `orderError` rendered inside the
+   * SHOWN. Both `saveNotes` and `orderError` (the basket's rejection banner
+   * until A8b split it into `basketError`) rendered inside the
    * `{selectedBroker && ...}` block of the paper-execution section, and the
    * basket never touches BrokerPicker: it is pinned on the card and submitted
    * through SendToBrokerDialog. So a user who sent a basket without also
    * selecting a paper broker got no dropped-stop disclosure and no rejection
    * banner.
    *
-   * `selectedBroker` is null in this block's beforeEach and neither test below
-   * clicks a broker, which is the whole point — click one and both pass on the
+   * `selectedBroker` is null in this block's beforeEach and neither of the two
+   * tests immediately below clicks a broker, which is the whole point — click one and both pass on the
    * old code too. */
   it('shows the dropped-stop disclosure for a BASKET order with no broker selected', async () => {
     // The mocked POST answers `{}`, i.e. no premiumStopPct, which is exactly
@@ -894,10 +895,10 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
   it('does not leave the previous submit\'s banner over a successful one', async () => {
     /* Round 1 of the follow-up audit. `handleSubmit` cleared `saveNotes` and
-     * not `orderError`, and the only other resets are the `[active]` effect
-     * and the two DIRECT paper paths -- neither of which a basket-only user
-     * goes through. Invisible while the banner was gated behind a selected
-     * broker; reachable the moment it was hoisted, which is this branch. */
+     * not the basket's banner (then `orderError`, `basketError` since A8b),
+     * and the only other resets are the two DIRECT paper paths -- which a
+     * basket-only user never goes through. Invisible while the banner was
+     * gated behind a selected broker; reachable the moment it was hoisted. */
     {
       // ── Submit 1: the backend refuses it.
       global.fetch = jest.fn().mockResolvedValue({
@@ -925,6 +926,121 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
       await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
       expect(screen.queryByText(/Some orders were not saved/)).not.toBeInTheDocument();
+    }
+  });
+
+  /* A8b (decision A8B-BASKET-BANNER-AND-DEAD-ENDPOINT-2026-09-24). The basket's
+   * "Some orders were not saved" banner gets the basket notices' lifetime: it
+   * survives Prev/Next and is cleared only when the next send of ANY kind
+   * starts. A direct-path error keeps its per-card lifetime.
+   *
+   * The daily-recommendation cap (5) is shared by every basket test in this
+   * file and nothing resets it, so each test gives back what it consumes -- in
+   * a `finally`, so a failing assertion (a mutation run) cannot leak a spent
+   * slot into the tests after it. */
+  const reject422 = () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }),
+    }) as unknown as typeof fetch;
+  };
+  const acceptAll = () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+  };
+  async function sendBasket() {
+    fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /send basket/i }));
+    const submit = await screen.findByRole('button', { name: /^(Submit \d orders?|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+  }
+  async function renderPage() {
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+  }
+  const BANNER = /Some orders were not saved — AAA:/;
+
+  it('keeps the basket\'s failure banner across Prev/Next until the next send (A8b)', async () => {
+    const dailyBefore = useRiskStore.getState().dailyRecommendations;
+    try {
+      reject422();
+      await renderPage();
+      await sendBasket();
+      expect(await screen.findByText(BANNER)).toBeInTheDocument();
+
+      // Navigate: the banner stays.
+      fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+      await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+      expect(screen.getByText(BANNER)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Previous candidate' }));
+      await waitFor(() => expect(screen.getByText('AAA Inc.')).toBeInTheDocument());
+      expect(screen.getByText(BANNER)).toBeInTheDocument();
+
+      // The next basket send (BBB, accepted) starts by clearing it.
+      acceptAll();
+      fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+      await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+      await sendBasket();
+      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+      expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    } finally {
+      act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
+    }
+  });
+
+  it('a DIRECT send clears the basket\'s failure banner (A8b)', async () => {
+    const dailyBefore = useRiskStore.getState().dailyRecommendations;
+    try {
+      reject422();
+      await renderPage();
+      await sendBasket();
+      expect(await screen.findByText(BANNER)).toBeInTheDocument();
+
+      acceptAll();
+      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+      const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+      await waitFor(() => expect(limitBtn).toBeEnabled());
+      fireEvent.click(limitBtn);
+      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+      expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    } finally {
+      act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
+    }
+  });
+
+  it('a DIRECT-path error still clears on Prev/Next (A8b left its lifetime per-card)', async () => {
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(new Error('broker down'));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+    // Rendered as `String(e)`, i.e. "Error: broker down".
+    expect(await screen.findByText(/broker down/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+    await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+    expect(screen.queryByText(/broker down/)).not.toBeInTheDocument();
+  });
+
+  it('a BASKET send clears a direct-path error (A8b)', async () => {
+    // After the split, 'does not leave the previous submit's banner' only
+    // runs basket -> basket; this is the test that pins handleSubmit's
+    // `setOrderError(null)`.
+    const dailyBefore = useRiskStore.getState().dailyRecommendations;
+    try {
+      await renderPage();
+      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+      (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(new Error('broker down'));
+      const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+      await waitFor(() => expect(limitBtn).toBeEnabled());
+      fireEvent.click(limitBtn);
+      expect(await screen.findByText(/broker down/)).toBeInTheDocument();
+
+      await sendBasket();
+      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+      expect(screen.queryByText(/broker down/)).not.toBeInTheDocument();
+    } finally {
+      act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
     }
   });
 });
