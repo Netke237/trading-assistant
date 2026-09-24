@@ -942,7 +942,12 @@ class PortfolioPositionCreate(BaseModel):
     # stop dropped on the floor, while every other unusable-input path on this
     # endpoint reports itself.
     entryPrice: float = Field(alias="entry_price", gt=0)
-    qty: int = Field(default=1)
+    # ge=1, matching the PATCH path (routers/portfolio.py rejects qty < 1): a
+    # zero or negative quantity is not a position, and without the floor POST
+    # saved one that every P&L and exposure sum then multiplied by. Request
+    # schema only -- PortfolioPositionSchema stays unbounded so a pre-existing
+    # bad row still lists.
+    qty: int = Field(default=1, ge=1)
     entryDate: str = Field(alias="entry_date")
     stop: Optional[float] = None
     structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
