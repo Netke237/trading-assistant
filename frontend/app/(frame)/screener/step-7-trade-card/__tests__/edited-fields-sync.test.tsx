@@ -1007,6 +1007,26 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     }
   });
 
+  it('a MARKET (Right Now) send clears the basket\'s failure banner too (A8b)', async () => {
+    const dailyBefore = useRiskStore.getState().dailyRecommendations;
+    try {
+      reject422();
+      await renderPage();
+      await sendBasket();
+      expect(await screen.findByText(BANNER)).toBeInTheDocument();
+
+      acceptAll();
+      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+      const marketBtn = await screen.findByRole('button', { name: /right now — market/i });
+      await waitFor(() => expect(marketBtn).toBeEnabled());
+      fireEvent.click(marketBtn);
+      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+      expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+    } finally {
+      act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
+    }
+  });
+
   it('a DIRECT-path error still clears on Prev/Next (A8b left its lifetime per-card)', async () => {
     await renderPage();
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));

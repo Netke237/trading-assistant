@@ -495,9 +495,10 @@ export default function Step7Page() {
   // The BASKET's failure banner (A8b), split out of `orderError` for the same
   // reason as `basketNotes` above and with the same lifetime: the rejected rows
   // were rolled back and the toast counts only placed orders, so this banner is
-  // the only record that an order was NOT saved. It survives Prev/Next and a
-  // new scan landing, and is cleared only when the next send of any kind
-  // starts. Like `basketNotes` it is page state, so leaving Step 7 drops it.
+  // the only record that an order was NOT saved. The state survives Prev/Next
+  // and a new scan landing, and is cleared only when the next send of any kind
+  // starts; it renders only while a card is shown (the `effectiveCard` block).
+  // Like `basketNotes` it is page state, so leaving Step 7 drops it.
   // `orderError` keeps the direct paths' per-card lifetime (the `[active]`
   // effect clears it).
   const [basketError, setBasketError] = useState<string | null>(null);
@@ -1496,7 +1497,7 @@ export default function Step7Page() {
           )}
           {/* OUTSIDE the `selectedBroker` gate, deliberately.
             *
-            * ROUND 12 finding 2 -- these two lines are the ONLY channel for
+            * ROUND 12 finding 2 -- the lines below are the ONLY channel for
             * two things the basket path produces: the "premium stop could not
             * be applied" disclosure (`droppedStopNote`, written by
             * `handleSubmit` for every order the backend re-anchored) and the
