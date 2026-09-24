@@ -345,3 +345,25 @@ code is written, not new scope:
    still shows beside the caution.
 7. The not-booked copy's "record" remedy would 409 in the duplicate case; "adjust" in the same sentence
    covers it.
+
+---
+
+## 11. Adversarial round 2 (the code, `c66ff854`) — 2026-09-24: CLEAN
+
+A fresh reviewer ran `bmad-review-adversarial-general` on the commit against this plan and the backend
+it talks to, under `audit_rule`'s gate, on a private `git archive` copy. **Zero gate-level findings.**
+It captured the real arm payload from a jest render and pushed it through the real `ArmRequest` →
+`ArmedStrategy` → `_check_refusals` → `_build_body`: valid, no dropped key, no refusal, and the
+resulting `PortfolioPositionCreate` carries the card path's stop, flag, scan price, structural stop,
+DTE, dollar stop and `AAPL|190|2026-05-15|C`. It confirmed each Step-7 prop is `buildPaperPosition`'s
+own expression, the mapping matches `toBackendPayload`, the classifier matches `apiError` and `fire()`'s
+raise paths, and §10's three build rules hold. 11 mutants: 9 killed; the 2 survivors (`structuralStop`
+and `exitPlan` nulled at the call site) are coverage gaps on correct code. Typecheck clean; 83/83 in the
+touched suites.
+
+Below the gate, logged in `PROJECT_STATE.json`'s `open_questions`, not fixed (per `audit_rule`):
+a dollar premium stop ≥ the fill makes the armed path fall back to its arm-time fraction where the card
+path falls back to the global (backend step 4's `_build_body`, not this diff); `dte_total` is frozen at
+arm; the caution's "the invalidation this card had" is re-anchored at fire unless typed (as on the card
+path); an unknown plus a failed status read leaves Fire now enabled (harmless: a second press 400s);
+the pre-existing green order-id line beside a not-booked caution; the two surviving mutants.
