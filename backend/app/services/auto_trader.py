@@ -2293,7 +2293,15 @@ class AutoTradeService:
         with self._lock:
             _history_snapshot = list(self._state.history)
         try:
-            self._check_daily_loss(strategy, _history_snapshot, pv)
+            # THE ONE RESOLUTION OF THE STOP FRACTION FOR THIS ATTEMPT. The
+            # success row below books `premium_at_risk` at this same value
+            # rather than resolving again after the broker call. Q2 hardening
+            # (AUTOTRADE-PIECE-B-DESIGN-LOCKED-AND-Q2-HARDENING-2026-09-23):
+            # a malformed stop used to be refused only because this pre-order
+            # read happened to raise first, and a second read that disagreed
+            # would have raised with the order already placed and no row
+            # written. No read happens after the order, so that cannot occur.
+            stop_pct = self._check_daily_loss(strategy, _history_snapshot, pv)
         except RuntimeError:
             with self._lock:
                 self._state.history.append({
@@ -2380,10 +2388,6 @@ class AutoTradeService:
             logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
             raise RuntimeError(f"Order failed: {exc}") from exc
 
-        stop_pct = resolve_premium_stop_pct(
-            strategy.premium_stop_pct,
-            float(self._risk_config().get("premium_stop_pct", 0.60)),
-        )
         with self._lock:
             self._state.history.append({
                 "attempt_id":      attempt_id,
@@ -2728,8 +2732,13 @@ class AutoTradeService:
             return {}
 
     @staticmethod
-    def _check_daily_loss(strategy: ArmedStrategy, history: list[dict], portfolio_value: float) -> None:
-        """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit."""
+    def _check_daily_loss(strategy: ArmedStrategy, history: list[dict], portfolio_value: float) -> float:
+        """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit.
+
+        Returns the stop fraction the check gated on. `fire()` books the success
+        row's `premium_at_risk` with it, so the row records the risk this check
+        allowed, and nothing resolves the stop after the order is placed.
+        """
         risk_cfg = AutoTradeService._risk_config()
         max_pct  = float(risk_cfg.get("max_daily_loss_pct", 0.02))
         # NOTE, and it is a real one: since piece 4 this denominator can come
@@ -2769,6 +2778,7 @@ class AutoTradeService:
                 f"Daily loss limit reached: {today_risk + this_risk:.0f} at risk "
                 f"vs limit {limit:.0f} — no further trades today"
             )
+        return stop_pct
 
 
 # Module-level singleton
