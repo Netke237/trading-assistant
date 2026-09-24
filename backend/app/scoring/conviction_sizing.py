@@ -335,9 +335,8 @@ def conviction_mult(conviction_pct: float, sizing: Mapping[str, Any] | None) -> 
     `regime_gate.headwind_reject_pct` is -40 and `full_conviction_pct` is 40,
     but `_regime_cap` REJECTs at or below -40 only when the regime is Stable
     (`require_stable_for_reject: true`). In a Fragile regime a trade below -40
-    survives the gate and is sized at min_mult, so min_mult sizes surviving
-    deep-headwind trades as well as unmeasured ones. Nothing ties the two
-    keys together.
+    survives the gate and is sized at min_mult. Nothing ties the two keys
+    together.
     """
     resolved = resolve_sizing(sizing)
     if resolved is None:

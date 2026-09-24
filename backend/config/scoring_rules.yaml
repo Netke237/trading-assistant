@@ -475,8 +475,7 @@ regime_sizing:
   #
   # The gate does NOT bound the floor: `regime_gate` REJECTs at or below -40
   # only in a Stable regime (require_stable_for_reject). In a Fragile regime a
-  # trade below -40 survives and is sized at min_mult, so min_mult sizes
-  # surviving deep-headwind trades as well as unmeasured ones.
+  # trade below -40 survives and is sized at min_mult.
   min_mult: 0.3
   full_conviction_pct: 40
 
