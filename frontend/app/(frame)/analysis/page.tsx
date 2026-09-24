@@ -49,7 +49,7 @@ function signalLabel(sig: 'pos' | 'neu' | 'neg'): string {
 
 export default function AnalysisPage() {
   const router = useRouter();
-  const { result, loading, error, analyze } = useAnalysisStore();
+  const { result, basis, loading, error, analyze } = useAnalysisStore();
   const [input, setInput] = useState('');
   const [candles, setCandles] = useState<Candle[]>([]);
   const [stockNews, setStockNews] = useState<NewsItem[]>([]);
@@ -96,6 +96,17 @@ export default function AnalysisPage() {
       </div>
 
       {error && <Text size={12} tone="reject">{error}</Text>}
+
+      {/* A5: which settings this analysis ran on — the last stock scan's own
+          request, or (no request on record) the current settings, said aloud. */}
+      {result && basis === 'last-scan' && (
+        <Text size={11} tone="dim">Settings: the last stock scan&apos;s</Text>
+      )}
+      {result && basis === 'current-settings' && (
+        <Text size={11} tone="caution">
+          Settings: current Step-3 and saved settings — no stock scan request on record; re-run the scan to mirror it.
+        </Text>
+      )}
 
       {result && (
         <>

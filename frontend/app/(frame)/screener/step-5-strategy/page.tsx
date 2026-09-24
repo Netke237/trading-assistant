@@ -213,7 +213,8 @@ export default function Step5StrategyPage() {
     setLoadingStrategy(stratKey);
     setError(null);
     try {
-      const result = await api.postStockScan({
+      // A5: hoisted so the exact body travels with its result (Analysis replays it).
+      const requestBody = {
         universe: context?.universe ? [context.universe] : ['SP500'],
         direction: context?.direction ?? 'Bullish',
         horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
@@ -241,8 +242,9 @@ export default function Step5StrategyPage() {
           vwap_lookback:                    vwapLookback,
           vwap_deviation_pct:               vwapDeviationPct,
         } : {}),
-      });
-      setStockScanResult(result);
+      };
+      const result = await api.postStockScan(requestBody);
+      setStockScanResult(result, requestBody);
       router.push('/screener/step-6-backtest');
     } catch (e) {
       setError(String(e));

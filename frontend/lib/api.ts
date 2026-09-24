@@ -361,24 +361,19 @@ export interface StockAnalysis {
   market_backdrop: MarketBackdrop | null;
 }
 
-export interface AnalyzeStockRequest {
+/** A5: the stock scan's own request body with `symbol` in place of `universe`,
+ *  so this type cannot drift from what the scan sends (the page mirrors the
+ *  scan, decision A5-ANALYSIS-MIRRORS-SCAN-2026-09-24). */
+export type AnalyzeStockRequest = Omit<StockScanRequestBody, 'universe' | 'horizon'> & {
   symbol: string;
-  direction: string;
   horizon: 'Intraday' | 'Swing' | 'Position';
-  strategy: string;
-  overrides?: Record<string, number | boolean | string>;
-  pullback_tolerance_pct?: number;
-  pullback_ema_period?: number;
-  pullback_trend_ema?: number;
-  pullback_ma_type?: 'EMA' | 'SMA';
-  pullback_require_reversal?: boolean;
-  ma_crossover_fast?: number;
-  ma_crossover_slow?: number;
-  ma_crossover_lookback?: number;
-  breakout_volume_mult?: number;
-  rsi_period?: number;
-  rsi_oversold?: number;
-  rsi_trend_sma?: number;
+};
+
+/** GET /api/stock-scan/last-request — the request behind /stock-scan/last's
+ *  result, keyed by its scan_id; null unless the backend's last run completed. */
+export interface LastStockScanRequest {
+  scan_id: string;
+  request: StockScanRequestBody;
 }
 
 export const api = {
@@ -633,6 +628,7 @@ export const api = {
 
   getLastScan: () => get<ScanResult | null>('/api/scan/last'),
   getLastStockScan: () => get<StockScanResult | null>('/api/stock-scan/last'),
+  getLastStockScanRequest: () => get<LastStockScanRequest | null>('/api/stock-scan/last-request'),
   getLastScanStatus: () => get<ScanSessionStatus>('/api/scan/last-run'),
   getLastStockScanStatus: () => get<ScanSessionStatus>('/api/stock-scan/last-run'),
 

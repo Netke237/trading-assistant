@@ -319,7 +319,8 @@ export async function runStockScan(
 
     reachedRequest = true;
     const result = await api.postStockScan(requestBody);
-    store.setStockScanResult(result);
+    // A5: the request travels with its result, so Analysis replays this run.
+    store.setStockScanResult(result, requestBody);
     store.setScanState('COMPLETED');
     return result;
   } catch (err) {
