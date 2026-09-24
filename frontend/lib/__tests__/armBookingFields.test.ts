@@ -1,4 +1,4 @@
-import { armBookingFieldsFrom, classifyFireFailure, type ArmBookingInputs } from '@/lib/armBookingFields';
+import { armBookingFieldsFrom, classifyFireFailure, SIZING_CONFIG_REFUSED_PREFIX, type ArmBookingInputs } from '@/lib/armBookingFields';
 import type { ExitPlan, MaxLossOverride, TargetLevel } from '@/types/domain';
 
 const PLAN = { method: 'arithmetic', targets: [] } as unknown as ExitPlan;
@@ -105,5 +105,18 @@ describe('classifyFireFailure — O4 step 6 §5.3', () => {
     expect(classifyFireFailure(new Error('The operation was aborted'))).toBe('unknown');
     expect(classifyFireFailure('boom')).toBe('unknown');
     expect(classifyFireFailure(undefined)).toBe('unknown');
+  });
+
+  it('6d. A7b: the sizing-config 500 is "refused"; any other 500 stays "unknown"', () => {
+    // The literal the backend sends (routers/auto_trade.py SIZING_CONFIG_REFUSED_PREFIX),
+    // written out so a drift on this side fails here rather than in production.
+    expect(SIZING_CONFIG_REFUSED_PREFIX).toBe('Refused, nothing sent: regime_sizing is unusable: ');
+    expect(classifyFireFailure(api(500,
+      'Refused, nothing sent: regime_sizing is unusable: min_mult must be <= 1'))).toBe('refused');
+    // The prefix must LEAD the detail, and must arrive on a 500.
+    expect(classifyFireFailure(api(500,
+      'Order failed: Refused, nothing sent: regime_sizing is unusable: x'))).toBe('unknown');
+    expect(classifyFireFailure(api(502,
+      'Refused, nothing sent: regime_sizing is unusable: x'))).toBe('unknown');
   });
 });
