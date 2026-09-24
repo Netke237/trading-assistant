@@ -86,8 +86,8 @@ _PRESET_TO_HORIZON = {
 }
 
 # An unrecognised or absent preset resolves here rather than to the loosest
-# line, so an unknown horizon fails toward caution. Same choice, and the same
-# reason, as the frontend's `getStopPremiumThresholds` fallback.
+# line, so an unknown horizon fails toward caution: "no preset was sent" must
+# not buy a contract the Intraday tolerance.
 DEFAULT_HORIZON_KEY = "swing"
 
 # A premium below one cent has no printable card: every figure in this gate is
@@ -152,9 +152,11 @@ def horizon_key(preset: Optional[str]) -> str:
 def pass_max_fraction_for(preset: Optional[str], cfg: Optional[dict] = None) -> float:
     """The horizon's `stop_premium.pass_max_fraction` from scoring_rules.yaml.
 
-    One source of truth, the same one /api/config/stop-premium-thresholds
-    serves the client from — this gate must not carry a second hardcoded copy
-    to drift away from the YAML the operator actually edits.
+    One source of truth: this gate must not carry a hardcoded copy of the
+    threshold to drift away from the YAML the operator actually edits. It is
+    the only reader of the value: the client holds no copy and grades nothing,
+    it displays the status and `passMaxFraction` carried on the `stopCost`
+    this module returns.
     """
     cfg = cfg if cfg is not None else load_scoring_cfg()
     horizons = cfg["horizons"]

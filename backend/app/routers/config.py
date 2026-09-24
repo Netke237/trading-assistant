@@ -44,32 +44,6 @@ def get_iv_thresholds() -> dict:
     }
 
 
-@router.get("/stop-premium-thresholds")
-def get_stop_premium_thresholds() -> dict:
-    """Return per-horizon stop-vs-premium gate thresholds from scoring_rules.yaml.
-
-    The gate answers "what share of this option's premium does its own stop cost
-    me?" — at or above the threshold the stop is not a meaningful risk control on
-    that contract. One threshold, two outcomes (PASS / CAUTION): the gate sorts
-    candidates by how survivable their own stop is, it never rejects one and it
-    never paints red. Served from the same YAML
-    the rest of the per-horizon thresholds live in, for the same reason
-    /event-thresholds and /iv-thresholds are: one source of truth, no second
-    hardcoded copy on the client to drift from it.
-    """
-    horizons = load_scoring_cfg()["horizons"]
-    return {
-        label: {
-            "pass_max_fraction": horizons[key]["stop_premium"]["pass_max_fraction"],
-        }
-        for label, key in [
-            ("Intraday", "intraday"),
-            ("Swing",    "swing"),
-            ("Position", "position"),
-        ]
-    }
-
-
 @router.get("/event-thresholds")
 def get_event_thresholds() -> dict:
     """Return per-horizon event-proximity reject/caution day windows from scoring_rules.yaml.
