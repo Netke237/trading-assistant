@@ -11,7 +11,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import date, datetime, time as dtime, timedelta, timezone
 from pathlib import Path
-from typing import Literal, Optional, get_args
+from typing import Callable, Literal, Optional, get_args
 from app.schemas import Direction, Horizon
 from app.services.premium_stop import resolve_premium_stop_pct
 from app.services.scheduling_tz import MARKET_TZ
@@ -307,6 +307,14 @@ class ArmedStrategy:
     # target's function. This answers "did the gate run", which is the question
     # the history could not answer at all.
     regime_gate_outcome: Optional[str] = None
+    # WHAT SIZING WAS BASED ON, set by `_apply_vol_sizing` beside the gate's
+    # outcome and for the same reason: "off" (regime_sizing disabled, full
+    # armed quantity), "measured" (the symbol's own conviction), or
+    # "floor:unmeasured" (no measurement, sized at min_mult -- decision
+    # SIZING-4-UNMEASURED-FLOOR-2026-09-24). Without it a floor-sized order and a
+    # measured one at the same quantity are indistinguishable afterwards. Same
+    # in-memory limits as `regime_gate_outcome` above.
+    sizing_basis: Optional[str] = None
     armed_at:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:
@@ -900,9 +908,9 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
     NO CONVICTION MIRROR. `compute_omm(direction=...)` already returns
     `conviction_pct` in the trade's frame (`regime_omm.py`: `conviction(sig,
     direction)` is `signal if Bullish else -signal`). Mirroring it again would
-    be a double mirror. The mirror in `_apply_vol_sizing` below is for the
-    CACHED bullish number that still feeds SIZING, and the two must not be
-    confused -- see that function's note.
+    be a double mirror. Since SIZING-4 this same result also feeds SIZING
+    (`_sizing_conviction_for`), unmirrored, and the cached bullish SPX number
+    that used to need a mirror there is no longer read on the fire path.
 
     NETWORK CALL, ON A PATH THAT USED TO PROMISE NONE. Kenneth was told and
     accepted it when locking the decision. It is bounded by
@@ -1017,7 +1025,52 @@ def _is_real_number(value: object) -> bool:
     return math.isfinite(value)
 
 
-def _apply_regime_gate(strategy: ArmedStrategy) -> str:
+def _measure_once(strategy: ArmedStrategy) -> "Callable[[], tuple[int, str] | None]":
+    """A memoised `_measure_trade_regime(strategy)`: measured on first call only.
+
+    SIZING-4. The gate and the sizer read ONE measurement of the traded symbol,
+    taken at most once per fire, and taken LAZILY -- so a gate that refuses on
+    its own config, or is disabled while sizing is off too, never pays the
+    bounded bar fetch. The name is looked up at call time, so a test that
+    patches `_measure_trade_regime` is seen here.
+    """
+    taken: list = []
+
+    def measure() -> "tuple[int, str] | None":
+        if not taken:
+            taken.append(_measure_trade_regime(strategy))
+        return taken[0]
+
+    return measure
+
+
+def _sizing_conviction_for(
+    strategy: ArmedStrategy,
+    measure: "Callable[[], tuple[int, str] | None]",
+) -> "float | None":
+    """The conviction SIZING reads: the traded symbol's own, in the trade's frame.
+
+    SIZING-4 (decision AUTOTRADE-SIZING-ON-PER-SYMBOL-CONVICTION-2026-09-20).
+    This used to be `regime_monitor.get_last_conviction()` -- SPX, bullish
+    frame, mirrored here for bearish trades -- while the gate one call earlier
+    measured the SYMBOL. It is now the gate's own measurement, so the two read
+    the same number. NO MIRROR: `compute_omm(direction=...)` already returns the
+    trade's frame, and mirroring it would be a double mirror.
+
+    None when the regime cannot be measured. The caller sizes that at the
+    min_mult FLOOR, never at full size (decision
+    SIZING-4-UNMEASURED-FLOOR-2026-09-24).
+    """
+    measured = measure()
+    if measured is None:
+        return None
+    return measured[0]
+
+
+def _apply_regime_gate(
+    strategy: ArmedStrategy,
+    measure: "Callable[[], tuple[int, str] | None] | None" = None,
+) -> str:
     """Refuse a fire the scan's `regime_gate` would have hard-dropped.
 
     Returns what it DID -- "disabled", "abstained", "caution" or "passed" --
@@ -1052,15 +1105,13 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
         conviction_mult`). On the shipped block a conviction of 0 sizes at
         **0.65**, not the 0.30 floor; only -full_conviction_pct (-40) and below
         floors. The whole caution band (-15 to -40) sizes at 0.52 down to 0.31.
-      - SIZING DOES NOT SEE THIS NUMBER AT ALL. It reads `get_last_conviction()`
-        -- the market-wide cached SPX figure -- not the symbol's own measurement
-        this function just took. See `_apply_vol_sizing`'s note on that
-        divergence, which is recorded and scheduled, not accidental.
-    And when `regime_sizing` is off or the cache is cold, `_apply_vol_sizing`
-    returns unchanged, so A CAUTION-BAND TRADE CAN FIRE AT THE FULL ARMED
-    QUANTITY. That is the real position. It is stated rather than fixed because
-    giving CAUTION a size consequence changes position size, which is
-    SIZING-4's subject and its risk budget, not this target's.
+      - SINCE SIZING-4 SIZING READS THIS SAME MEASUREMENT (one per fire,
+        shared through `_measure_once`), so a caution-band conviction IS sized
+        down the ramp -- but by the RAMP, not by the caution band: the band's
+        thresholds play no part in the size.
+    And when `regime_sizing` is off, `_apply_vol_sizing` returns unchanged, so
+    A CAUTION-BAND TRADE CAN FIRE AT THE FULL ARMED QUANTITY. That is the real
+    position with sizing switched off.
 
     FOLLOWS FROM THAT: `regime_headwind_caution_pct` -- threaded from Step 3
     through `ArmRequest`, snapshotted onto `ArmedStrategy`, resolved here -- has
@@ -1227,11 +1278,13 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
     # renamed `regime.<horizon>` block is also scoring_rules.yaml being wrong,
     # and it lands on the fail-OPEN side because it reaches
     # `_measure_trade_regime` rather than this function -- so that one config
-    # fault fires at full armed quantity and files as "abstained". That branch
+    # fault passes the gate and files as "abstained" -- and, since SIZING-4,
+    # is sized at the min_mult floor when regime_sizing is on (full armed
+    # quantity only when sizing is off). That branch
     # is a different audit target's function and is deliberately not reached
     # into from here; what is recorded is that the boundary is drawn by WHICH
     # FUNCTION OWNS THE INPUT, not by a judgement that one fault is safer.
-    measured = _measure_trade_regime(strategy)
+    measured = measure() if measure is not None else _measure_trade_regime(strategy)
     if measured is None:
         # Every abstaining branch inside `_measure_trade_regime` has already
         # logged WHICH one it was, at WARNING, naming the symbol. Abstaining is
@@ -1280,171 +1333,128 @@ def _apply_regime_gate(strategy: ArmedStrategy) -> str:
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     """Return a (possibly quantity-adjusted) copy of strategy based on regime conviction.
 
-    SIZING reads cached conviction from regime_monitor. THE HEADWIND GATE DOES
-    NOT, and since 2026-09-19 THIS FUNCTION MAKES A NETWORK CALL because of it:
-    `_apply_regime_gate` measures the traded symbol's own regime, which means
-    fetching that symbol's bars. The docstring used to promise "no network
-    call"; that promise is retired deliberately, not by accident — Kenneth was
-    told the cost when locking AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19
-    and accepted it. The fetch is bounded by `_REGIME_FETCH_DEADLINE_S` and
-    happens outside the state lock, beside the one `fire()` already makes.
+    SIZING READS THE TRADED SYMBOL'S OWN REGIME, IN THE TRADE'S FRAME -- the
+    measurement the headwind gate takes -- since SIZING-4 (decision
+    AUTOTRADE-SIZING-ON-PER-SYMBOL-CONVICTION-2026-09-20). It used to read
+    `regime_monitor`'s cached SPX number, so one call asked the symbol whether
+    to fire and asked SPX how big. `get_last_conviction` is no longer on the
+    fire path. The stock path already sized this way (stock_scan.py, at scan
+    time); options were the outlier.
 
-    If conviction is None or regime_sizing is disabled, returns strategy
-    unchanged — but only AFTER the gate has had its say, because the gate is a
-    refusal rather than a size (round 1 finding 1). RAISES SizingConfigError if
-    the regime_sizing block is present and cannot be honoured — the §9.1
-    fail-closed posture, which fire() turns into a recorded refusal rather than
-    an order at full size. RAISES RegimeHeadwindError when the symbol's own
+    NETWORK CALL: measuring the symbol means fetching its bars, bounded by
+    `_REGIME_FETCH_DEADLINE_S` and outside the state lock, beside the one
+    `fire()` already makes. It is taken AT MOST ONCE per fire (`_measure_once`)
+    and shared by gate and sizer. With the gate DISABLED and sizing on, sizing
+    now measures on its own -- it needs the number the gate would have taken.
+
+    OUTCOMES, each logged and recorded on `sizing_basis`:
+      - regime_sizing off           -> full armed quantity ("off")
+      - measured                    -> the conviction ramp ("measured")
+      - NOT measurable              -> the min_mult FLOOR ("floor:unmeasured"),
+        NEVER full size. The gate abstains and lets the fire through on the
+        same input; sizing must not copy that, because abstain-to-full-size is
+        the largest position on the worst input (decision
+        SIZING-4-UNMEASURED-FLOOR-2026-09-24, Kenneth).
+
+    RAISES SizingConfigError if the regime_sizing block is present and cannot
+    be honoured -- the §9.1 fail-closed posture, which fire() turns into a
+    recorded refusal rather than an order at full size. RAISES ValueError on an
+    unusable measured conviction (a DATA fault, recorded as
+    `sizing_data_blocked`). RAISES RegimeHeadwindError when the symbol's own
     regime opposes the trade hard enough that the scan's rule drops it.
     """
     cfg = _load_scoring_config()
-    # Validated BEFORE the conviction lookup, and that order is load-bearing:
-    # `conviction is None` below returns the strategy unchanged (full size), so
-    # validating after it would let a broken config through on every fire that
-    # happens before regime_monitor has cached anything.
+    # Validated BEFORE any measurement, and that order is load-bearing: a
+    # config the process already knows it cannot honour must not first buy an
+    # 8-second bar fetch, and must not be masked by a measurement that fails.
     #
     # THE RESULT IS HELD, NOT RETURNED ON. Piece 2 round 1 finding 1: this used
     # to `return strategy` right here, and `_apply_regime_gate` sits further
     # down, so `regime_sizing.enabled: false` -- a DIFFERENT, independently
     # configured feature -- silently switched the headwind gate off too and the
-    # trade fired at FULL armed quantity, which is worse than the pre-gate
-    # behaviour it replaced (that at least sized down to min_mult). Measured:
-    # MSFT Bearish, cached conviction +80, Stable, regime_gate untouched at
-    # enabled/-40/require_stable -> REFUSED with sizing on, FIRED qty 4 with
-    # sizing off. conviction_sizing.py's own SizingConfigError text advises "To
-    # stop trading in a headwind, disable regime_sizing or raise the gate", so
-    # following the advice in the codebase disabled the gate.
+    # trade fired at FULL armed quantity. conviction_sizing.py's own
+    # SizingConfigError text advises "To stop trading in a headwind, disable
+    # regime_sizing or raise the gate", so following the advice in the codebase
+    # disabled the gate.
     sizing_off = resolve_sizing(cfg) is None
 
-    from app.services.regime_monitor import get_last_conviction
-    conviction = get_last_conviction()
+    # ONE MEASUREMENT, LAZY, SHARED. The gate calls it only once its own config
+    # has validated and only when enabled; sizing calls it only when sizing is
+    # on. Whichever asks first pays the fetch; the other reads the same result.
+    measure = _measure_once(strategy)
 
-    # THE GATE RUNS REGARDLESS OF `sizing_off` AND REGARDLESS OF THE CACHE. It
-    # is a refusal, not a size, so it does not belong behind a size switch
-    # (piece 2 round 1 finding 1) -- and since round 1 finding 2 it measures the
-    # symbol's own regime itself rather than reading `conviction` below, so a
-    # cold or stale SPX cache neither arms it nor disarms it. It is called
-    # before the `sizing_off` return for that first reason and outside the
-    # `conviction is not None` block for this second one.
+    # THE GATE RUNS REGARDLESS OF `sizing_off`. It is a refusal, not a size, so
+    # it does not belong behind a size switch (piece 2 round 1 finding 1).
     #
-    # IT DOES NOT RUN *FIRST*, and this comment used to say it did -- target 2a
-    # round 1. `_load_scoring_config()` and `resolve_sizing()` above run before
-    # it and can both RAISE SizingConfigError. So the decoupling claim holds for
-    # the switch it was written about (`regime_sizing.enabled: false` -> the
-    # gate still evaluates, verified by test), but NOT for a *broken*
-    # regime_sizing block: there the sizing config really does pre-empt the
-    # gate. Nothing fires at full size either way -- both paths refuse -- but
-    # the REPORTED CAUSE is the sizing block, so a headwind trade can be filed
-    # and paged as a config fault. Left in this order because moving the gate
-    # above them would make a fire proceed to an 8-second bar fetch on a config
-    # the process already knows it cannot honour; the cost is a misreported
-    # cause on a narrow path, and it is written down rather than hidden.
-    gate_outcome = _apply_regime_gate(strategy)
-    # Recorded on the strategy HERE, before any of the three early returns
-    # below, so every path that fires carries what the gate did — including the
-    # two that return the strategy unchanged.
+    # IT DOES NOT RUN *FIRST* -- target 2a round 1. `_load_scoring_config()` and
+    # `resolve_sizing()` above run before it and can both RAISE
+    # SizingConfigError, so for a *broken* regime_sizing block the sizing
+    # config pre-empts the gate. Nothing fires at full size either way -- both
+    # paths refuse -- but the REPORTED CAUSE is the sizing block, so a headwind
+    # trade can be filed and paged as a config fault. Written down rather than
+    # reordered, for the fetch-cost reason above.
+    gate_outcome = _apply_regime_gate(strategy, measure)
+    # Recorded HERE, before any return below, so every path that fires carries
+    # what the gate did.
     strategy = _dc_replace(strategy, regime_gate_outcome=gate_outcome)
 
-    if conviction is not None:
-        # Direction-aware: `conviction` is the SIGNED BULLISH FRAME
-        # (regime_omm.conviction over P(Bull) - P(Bear), scaled to [-100, +100]),
-        # so the bearish mirror is -conviction, NOT 100 - conviction. On a signed
-        # scale `100 - conviction` is a mirror of an unsigned [0, 100] one: with
-        # full_conviction_pct at 40, `(100 - conviction) / 40` saturates whenever
-        # `100 - conviction >= 40`, i.e. for every conviction <= 60 -- FULL SIZE
-        # in essentially every regime. (<= 60, not <= 40: the tight bound,
-        # because a comment whose job is to be checkable has to survive being
-        # checked.)
-        #
-        # Direction is carried explicitly from the card. It is NOT inferred from
-        # `action`, which is always "BUY" for a long single-leg option and never
-        # encoded direction -- that inference is the defect this replaces, and
-        # keeping it alongside would be a second source of truth for the same
-        # fact.
-        directional_conv = conviction if strategy.direction == "Bullish" else -conviction
-        #
-        # THIS MIRROR IS FOR SIZING ONLY, and after 2026-09-19 that distinction
-        # is load-bearing. The GATE above no longer reads `conviction`: it calls
-        # compute_omm(direction=...) on the symbol's own bars, which returns the
-        # trade's frame directly and needs no mirror. Mirroring a number that is
-        # already in the trade's frame would be a double mirror, which is why
-        # the two must not be merged back together.
-        #
-        # SIZING STILL READS THE MARKET-WIDE CACHE, and that is a KNOWN
-        # DIVERGENCE from the gate one line above, recorded rather than quietly
-        # left: the scan card sizes off the SYMBOL's own conviction
-        # (stock_scan.py:970 passes `regime_signal["conviction_pct"]`), this
-        # path sizes off regime_monitor's SPX number. Round 1 finding 2 named
-        # the gate, Kenneth's decision covered the gate, and moving SIZING onto
-        # the per-symbol number changes POSITION SIZE -- which is piece 3's
-        # subject and its risk budget, not piece 2's. See PROJECT_STATE.json
-        # open_questions for the entry that carries it.
     if sizing_off:
         # Logged for the same reason as the unchanged-quantity line below: this
-        # returns at FULL SIZE, and round 2 caught it as the one full-size path
-        # still leaving no trace. It is the "off versus broken" case a reader
-        # most needs to be able to tell apart afterwards — a block that carries
-        # real min_mult/full_conviction_pct values but says `enabled: false`
-        # comes through here, not through a refusal.
+        # returns at FULL SIZE, and round 2 caught it as a full-size path
+        # leaving no trace. It is the "off versus broken" case a reader most
+        # needs to be able to tell apart afterwards.
         logger.info(
             "vol_sizing: %s qty %d unchanged — regime_sizing is off by "
             "configuration", strategy.symbol, strategy.quantity,
         )
-        return strategy
+        return _dc_replace(strategy, sizing_basis="off")
+
+    conviction = _sizing_conviction_for(strategy, measure)
 
     if conviction is None:
-        # LOGGED, AND ROUND 3 IS WHY. The `sizing_off` branch above claimed to
-        # be "the one full-size path still leaving no trace"; this was another,
-        # and it is the one the process sits in every time it restarts before
-        # `regime_monitor` has cached anything. Full armed quantity, no record
-        # at any level that sizing was skipped — while the history row's
-        # `regime_gate` field speaks only for the GATE and says nothing about
-        # sizing. Three rounds have now each found one of these, on the same
-        # stated principle: a full-size return must leave a trace.
-        logger.info(
-            "vol_sizing: %s qty %d unchanged — no cached regime conviction "
-            "yet, so no size adjustment was applied",
-            strategy.symbol, strategy.quantity,
+        # THE FLOOR, NOT FULL SIZE. `_measure_trade_regime` has already logged
+        # WHICH branch could not measure, at WARNING, naming the symbol.
+        # Re-resolved rather than held: resolve_sizing is pure and cheap, and
+        # it already validated above, so this cannot raise here.
+        min_mult = resolve_sizing(cfg)[0]
+        adjusted_qty = max(1, round(strategy.quantity * min_mult))
+        logger.warning(
+            "vol_sizing: %s %s qty %d → %d at the min_mult floor (%.2f) — its "
+            "own regime could not be measured, so it is sized at the smallest "
+            "size the ramp allows rather than at full",
+            strategy.symbol, strategy.direction, strategy.quantity,
+            adjusted_qty, min_mult,
         )
-        return strategy
+        return _dc_replace(strategy, quantity=adjusted_qty,
+                           sizing_basis="floor:unmeasured")
 
-    #
     # CLOSED, AND THIS IS ONLY THE RECORD OF IT. Piece 2 round 1 finding 4 was
-    # that this path read `regime_sizing` alone, so a trade at -80 in its own
-    # frame WAS sized to min_mult and STILL FIRED (`max(1, ...)` guarantees a
-    # contract) where the scan would have dropped it. That gap is gone: the
-    # `_apply_regime_gate` call ~50 lines above -- before both `return strategy`
-    # statements -- refuses it. Compressed to the past tense in target 2a round
-    # 1, which caught it still asserting all of the above as present fact and
-    # pointing at a "line above" that was neither.
-    mult = conviction_mult(directional_conv, cfg)
+    # that a trade at -80 in its own frame WAS sized to min_mult and STILL FIRED
+    # (`max(1, ...)` guarantees a contract) where the scan would have dropped
+    # it. The `_apply_regime_gate` call above refuses it.
+    mult = conviction_mult(conviction, cfg)
     adjusted_qty = max(1, round(strategy.quantity * mult))
+    strategy = _dc_replace(strategy, sizing_basis="measured")
 
     if adjusted_qty == strategy.quantity:
-        # Logged too, and round 1 is why: every case where a bad-but-honourable
-        # config produced mult 1.0 (full size) returned here and left NO trace
-        # at any level, so the one outcome worth noticing was the only silent
-        # one. Includes the honest no-op (conviction at or above full).
+        # Logged too, and round 1 is why: every case that produced mult 1.0
+        # (full size) used to return silently, so the one outcome worth
+        # noticing was the only silent one. `conviction` is the symbol's own,
+        # ALREADY in the trade's frame -- there is no post-mirror number to
+        # disambiguate any more, but direction is still printed so a
+        # post-mortem can read the frame.
         logger.info(
-            # `direction` and the RAW conviction are both printed, and that is
-            # the point: `directional_conv` is POST-mirror, so Bearish@+80 and
-            # Bullish@-80 both render as -80.0 and are indistinguishable. Since
-            # direction now decides size, a post-mortem has to be able to tell
-            # which one it was.
-            "vol_sizing: %s %s qty %d unchanged (conviction=%.1f, "
-            "directional=%.1f, mult=%.2f)",
+            "vol_sizing: %s %s qty %d unchanged (own conviction=%.1f, "
+            "mult=%.2f)",
             strategy.symbol, strategy.direction, strategy.quantity,
-            conviction, directional_conv, mult,
+            conviction, mult,
         )
         return strategy
 
     logger.info(
-        # Same reason as the unchanged line above: raw conviction AND direction,
-        # because the post-mirror number alone cannot say which trade this was.
-        "vol_sizing: %s %s qty %d → %d (conviction=%.1f, directional=%.1f, "
-        "mult=%.2f)",
+        "vol_sizing: %s %s qty %d → %d (own conviction=%.1f, mult=%.2f)",
         strategy.symbol, strategy.direction, strategy.quantity, adjusted_qty,
-        conviction, directional_conv, mult,
+        conviction, mult,
     )
     return _dc_replace(strategy, quantity=adjusted_qty)
 
@@ -2141,8 +2151,8 @@ class AutoTradeService:
             # acquisition so the two cannot come apart. See the deque.
             self._consumed_attempts.append(attempt_id)
 
-        # Vol-scaled sizing (cached regime conviction) + the headwind gate,
-        # which measures this symbol's own regime and therefore DOES make a
+        # Vol-scaled sizing + the headwind gate, both on ONE measurement of
+        # this symbol's own regime (SIZING-4), which therefore DOES make a
         # bounded network call — see _apply_vol_sizing's docstring. Placed here,
         # after the disarm and outside the lock, for the same reason
         # `_market_is_open` above is: network I/O must not hold the lock.
@@ -2384,6 +2394,7 @@ class AutoTradeService:
                     # one refusal-shaped row where the question still has an
                     # answer worth recording. Round 2.
                     "regime_gate":     strategy.regime_gate_outcome,
+                    "sizing":          strategy.sizing_basis,
                 })
             logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
             raise RuntimeError(f"Order failed: {exc}") from exc
@@ -2407,6 +2418,9 @@ class AutoTradeService:
                 # `_apply_vol_sizing`. In-memory only -- see the field's
                 # declaration for the limits of what this record survives.
                 "regime_gate":     strategy.regime_gate_outcome,
+                # WHAT THE SIZE WAS BASED ON: "measured", "floor:unmeasured" or
+                # "off" -- see `ArmedStrategy.sizing_basis`. SIZING-4.
+                "sizing":          strategy.sizing_basis,
             })
         logger.info("AutoTrader fired: order %s status %s", result.order_id, result.status)
         return result
