@@ -9,7 +9,7 @@ newest bar.* When no other source has that timestamp, the partial sandbox bar is
 of the merged series (it is then the forming candle, which `candles[-2]` and the completed-bars helpers already
 skip); if any newer bar sits after it, it is dropped. A partial bar never sits behind a newer bar.
 
-**Revision after plan round 1** (12 findings, all taken; see §8). The main change: the partial bar is now the
+**Revised after plan rounds 1 and 2** (12 + 11 findings, all taken; see §8). The main change: the partial bar is now the
 newest sandbox bar **and** it must be inside a (generous) feed-lag window, which matches the locked wording
 exactly. Round 1 showed the "newest only" test of the first draft would drop a *complete* stale bar.
 
@@ -81,8 +81,8 @@ feed-lag window" of the locked decision, with a slack of one more feed lag.
    it is dropped.
 
 **Why the newest sandbox row AND a window, not either alone.**
-- A window alone flags every bar of the last 15 minutes. On `1min` that is up to 15 bars, 14 of them complete; in
-  extended hours (no yfinance) rule 3 would then drop 14 complete bars. Taking only the newest row flags one bar
+- A window alone flags every bar inside it. With the 900s slack that is about 30 bars on `1min`, 29 of them
+  complete; in extended hours (no yfinance) rule 3 would then drop 29 complete bars. Taking only the newest row flags one bar
   at most.
 - The newest row alone (the first draft) flags a *complete* bar when the sandbox is stale: it serves nothing for
   today, returns a short range, or simply stops. If that bar is an extended-hours bar yfinance lacks and yfinance
@@ -95,8 +95,15 @@ The newest sandbox bar is the only bar that can be partial, whatever the exact d
 - Regular session: P is partial and inside the window; yfinance has a complete bar at P's timestamp, so rule 2
   keeps yfinance's.
 - Pre-market and after-hours (04:00-09:30, 16:00-20:00 ET, fetched because of `session_filter=all`): P is
-  partial and yfinance does not have it (no `prepost`). Rule 2 merges it, and it is the newest bar, so rule 3
+  partial and yfinance does not have it (no `prepost`). Rule 2 merges it. While it is the newest bar, rule 3
   keeps it as the forming candle — Kenneth's decision.
+- **The open, every trading day (09:30 to about 09:45+ ET):** the sandbox's newest bar is still a partial
+  pre-market bar that yfinance lacks, while yfinance already has 09:30+ bars. So P is not the newest bar and
+  rule 3 drops it on every fetch in that window (on `1min`, a different minute each time). On `15min` at 09:35:
+  the 09:15 bar is dropped and `candles[-2]` is 09:00; by 09:46 the sandbox's 09:15 bar is complete, no longer P,
+  and merged normally — but `candles[-2]` has moved on to 09:30, so the 09:15 bar is never evaluated as a chart
+  rule's closed candle. This is Kenneth's decision applied as written (a partial bar never sits behind a newer
+  bar); the skipped pre-market candle is logged with §5.3.
 - Overnight and weekends: P is complete and outside the window, so today's precedence applies.
 
 Beyond the letter of the decision, only one thing changes: a complete P that is still inside the window (e.g.
@@ -105,61 +112,87 @@ so nothing is lost; it is the existing yfinance baseline.
 
 ## 3. The change — `fetch_intraday_candles` only
 
-A new helper `_merge_tradier_rows(merged, tradier_rows, *, on_sandbox, span, fetch_start) -> int | None` does the
-Tradier step and returns the timestamp rule 3 must police (or `None`). Sketch:
+A new helper `_merge_tradier_rows(merged, rows, *, on_sandbox, span, fetch_start) -> tuple[int | None, bool]`
+does the Tradier step. It returns `(partial_ts, yielded)`: `partial_ts` is the timestamp rule 3 must police (or
+`None`), `yielded` is True when a presumed-partial P gave way to another source's finite bar. Sketch:
 
 ```python
-fetch_start = _time.time()                            # first line of fetch_intraday_candles
-token, base = get_tradier_creds()                     # read ONCE; the request uses this base and token
-on_sandbox = _is_sandbox_base(base)
-...
-merged: dict[int, dict] = {}
-merged.update(yf); merged.update(ibkr)                # unchanged
-partial_ts = _merge_tradier_rows(merged, tradier_rows, on_sandbox=on_sandbox,
-                                 span=_INTERVAL_COMPLETION_SECONDS[interval], fetch_start=fetch_start)
-result = sorted(finite(merged.values()), key=time)    # unchanged catch-all
-if partial_ts is not None and result and result[-1]["time"] != partial_ts:
-    result = [b for b in result if b["time"] != partial_ts]
+import time                                           # module level, beside the other imports
+_now = time.time                                      # module-level clock; tests patch app.data.market._now
+
+def fetch_intraday_candles(symbol, interval="15min", days=55):
+    fetch_start = _now()                              # first line, before any network call
+    token, base = get_tradier_creds()                 # read ONCE; the request uses this token and base
+    on_sandbox = _is_sandbox_base(base)
+    ...
+    if token and interval in _TRADIER_INTRADAY_INTERVALS:          # unchanged guard, from the one read
+        resp = httpx.get(f"{base}/v1/markets/timesales", headers=_headers(token), ...)
+    ...
+    merged: dict[int, dict] = {}
+    merged.update(yf); merged.update(ibkr)            # unchanged
+    partial_ts, yielded = None, False
+    if tradier_rows:                                  # the helper is NEVER called without Tradier rows
+        partial_ts, yielded = _merge_tradier_rows(
+            merged, tradier_rows, on_sandbox=on_sandbox,
+            span=_INTERVAL_COMPLETION_SECONDS.get(interval), fetch_start=fetch_start)
+    result = sorted(finite(merged.values()), key=time)   # unchanged catch-all
+    dropped = partial_ts is not None and bool(result) and result[-1]["time"] != partial_ts
+    if dropped:
+        result = [b for b in result if b["time"] != partial_ts]
+    logger.info("Merged %d Tradier + %d IBKR + %d yf -> %d total bars for %s "
+                "(sandbox partial bar: yielded=%d dropped=%d)", ..., int(yielded), int(dropped))
 
 def _merge_tradier_rows(merged, rows, *, on_sandbox, span, fetch_start):
-    if not rows:
-        return None
-    newest = max(rows, key=lambda b: b["time"])
-    partial = on_sandbox and (newest["time"] + span + TRADIER_SANDBOX_FEED_LAG_SECONDS
-                              + PARTIAL_BAR_SLACK_SECONDS > fetch_start)
-    merged.update({b["time"]: b for b in rows if not (partial and b is newest)})
+    p_time = max(b["time"] for b in rows)
+    partial = (on_sandbox and span is not None
+               and p_time + span + TRADIER_SANDBOX_FEED_LAG_SECONDS + PARTIAL_BAR_SLACK_SECONDS > fetch_start)
     if not partial:
-        return None
-    held = merged.get(newest["time"])
+        merged.update({b["time"]: b for b in rows})   # today's precedence
+        return None, False
+    held = merged.get(p_time)                         # the OTHER source's bar, read before any Tradier row lands
+    merged.update({b["time"]: b for b in rows if b["time"] != p_time})   # by TIMESTAMP, not identity
     if held is not None and _finite_ohlc(held):
-        return None                                   # another source's finite bar stays
-    merged[newest["time"]] = newest
-    return newest["time"]
+        return None, True                             # yielded: the other source's bar stays
+    merged[p_time] = [b for b in rows if b["time"] == p_time][-1]   # last row wins, as dict.update does today
+    return p_time, False
 ```
 
-- **One credential read.** Today the fetch calls `get_tradier_creds()` for the token, `_tradier_base()` for the
-  URL and `_headers()` for the header: three separate reads. The fetch reads `token, base` once and uses them
-  for the request, and `on_sandbox` is derived from that same `base`. So the policy cannot disagree with the base
-  the rows came from if Settings changes mid-fetch.
+- **Guards.** The helper runs only when Tradier returned rows, which only happens for
+  `_TRADIER_INTRADAY_INTERVALS`. `span` is looked up with `.get`, and `None` means "not partial", so an interval
+  missing from `_INTERVAL_COMPLETION_SECONDS` (`daily`, `weekly`, or a test that widens the Tradier set, as
+  `test_tradier_overrides_ibkr_on_conflict` does with `1h`) keeps today's precedence and never raises.
+- **Duplicate Tradier timestamps.** P is identified by its timestamp, and every Tradier row at that timestamp is
+  held back, not just one object. `held` is read before any Tradier row is merged, so rule 2 always compares
+  against yfinance/IBKR's bar, never a second Tradier row. Two rows that both failed to parse (`time=0`) are far
+  outside the window, so the rule is inert for them.
+- **One credential read.** Today the fetch reads the credentials three times: `get_tradier_creds()[0]` for the
+  guard, `_tradier_base()` for the URL, and `_headers()` for the header (`market.py:96-97` reads them again).
+  The fetch now reads `token, base` once and passes both on. `_headers` gains an optional `token` parameter
+  (`_headers(token: str | None = None)`, reading the store only when it is `None`), so its ~20 other callers are
+  unchanged. `on_sandbox` comes from the same `base`, so the policy, URL and header cannot disagree if Settings
+  changes mid-fetch.
 - **`_is_sandbox_base(base)`** is new and holds the substring test (`"sandbox.tradier.com" in base`, so a
-  trailing slash still counts). `intraday_feed_lag_seconds` is refactored to call it, so the A4b key has one
-  source. Its fail-closed branch (900 when reading the base raises) stays in `intraday_feed_lag_seconds`; in the
-  merge, the base is already in hand, so there is no unknown-base case.
-- The finite check at rule 2 (`_finite_ohlc(held)`) matters: yfinance does `dropna` but not `inf`. Without it, a
-  non-finite yfinance bar at P's timestamp would block P and then be dropped by the catch-all, so the timestamp
-  would vanish. Today Tradier's finite bar fills it.
+  trailing slash still counts). `intraday_feed_lag_seconds` keeps calling `_tradier_base()` and passes the
+  result to `_is_sandbox_base`, so the A4b tests that patch `_tradier_base` stay valid and the A4b key has one
+  source. Its fail-closed branch (900 when reading the base raises) stays; in the merge the base is already in
+  hand, so there is no unknown-base case.
+- **Clock.** `_now = time.time` at module level, read once as the fetch's first line. Tests patch
+  `app.data.market._now`, never `time.time` globally (that would also move asyncio, SQLAlchemy and the chart
+  cache in test 14). Taking it before the network calls only makes the rule more cautious.
+- **The finite check at rule 2** (`_finite_ohlc(held)`): yfinance does `dropna` but not `inf`. Without the check,
+  a non-finite yfinance bar at P's timestamp would block P and then be dropped by the catch-all. With it, P fills
+  the timestamp — but only while P is the newest bar. If a newer bar exists (the regular session), rule 3 still
+  drops P and the timestamp is absent, which is Kenneth's decision (a partial bar never sits behind a newer bar)
+  applied to a case where yfinance's bar was unusable. Today the partial Tradier bar would fill it.
 - Rule 3 runs **after** the finite catch-all, so "newest bar" means the newest bar a consumer will see.
-- `span` comes from the existing `_INTERVAL_COMPLETION_SECONDS` (A4c, `market.py` ~518), not a new map — the helper is only reached with rows for
-  `1min`/`5min`/`15min`, all of which it covers. `fetch_start` uses the module's own time source (the local `import time as _time` pattern already used in `market.py`), and tests patch that.
-- The merge log line gains the count of presumed-partial sandbox bars yielded or dropped (0/1), at `info`, as it
-  is today.
+- **Log line.** The existing `info` line gains `(sandbox partial bar: yielded=0|1 dropped=0|1)`.
 - **Stale comments corrected in the same change:** the `fetch_intraday_candles` docstring ("Tradier bars take
   precedence on timestamp conflicts", `market.py:351`) gains the sandbox exception. The A4b comment above
   `TRADIER_SANDBOX_FEED_LAG_SECONDS` (`market.py:459-461`, "Tradier bars win the merge") and the
   `intraday_feed_lag_seconds` docstring are annotated: after A4d that holds only for a kept partial bar out of
   hours, and the open question (§5.2) asks whether to narrow the lag.
-- The comment `# Tradier overwrites all` must **not** be carried onto the live-base line: it is the phase's
-  former defect marker. The state probe moves to a presence probe on `def _merge_tradier_rows(` (see §7).
+- The comment `# Tradier overwrites all` must **not** be carried onto the non-partial line: it is the phase's
+  former defect marker. The state probe is a presence probe on the call site (see §7).
 - Nothing else changes. `completed_intraday_bars` keeps its sandbox lag (see §5.2), and the chart cache and
   every consumer are unchanged.
 
@@ -171,8 +204,9 @@ def _merge_tradier_rows(merged, rows, *, on_sandbox, span, fetch_start):
 - Pre/after-hours on the sandbox: unchanged. The partial bar is the newest, the forming candle.
 - Overnight/weekend, a stale sandbox, the live base, and yfinance-only (no token): unchanged.
 - The stock scan's intraday strategy bars (VWAP and others) and the auto-trader's intraday regime: in regular
-  hours the partial bar is **replaced** by yfinance's complete bar at the same timestamp. It is removed only in
-  the rare case that yfinance lacks that timestamp while having a newer bar. No lag is added.
+  hours the partial bar is **replaced** by yfinance's complete bar at the same timestamp. It is removed when
+  yfinance lacks that timestamp while having a newer bar: every trading day around the open (§2), and when
+  yfinance's own bar at that timestamp is unusable. No lag is added.
 
 ## 5. Decisions and residuals
 
@@ -185,8 +219,9 @@ def _merge_tradier_rows(merged, rows, *, on_sandbox, span, fetch_start):
 3. **Logged, not changed — the chart cache can skip a closed candle.** `chart_cache._TTL_BY_INTERVAL` holds a
    `15min` snapshot for 30 minutes (and `1min`/`5min` for 15). The scheduler polls every ~60s but sees the same
    snapshot until it expires, so `candles[-2]` can jump by two 15-minute bars and one closed candle is never
-   evaluated. A4d makes each evaluated candle right; it does not make every candle evaluated. Logged as a new
-   open question for Kenneth; not in this phase.
+   evaluated. A4d makes each evaluated candle right; it does not make every candle evaluated. A4d adds one more
+   skip of the same kind: the last pre-market bar at the open (§2). Logged as a new open question for Kenneth,
+   covering both; not in this phase.
 4. **Pre-existing, noted:** a Tradier row whose `time` fails to parse is kept with `time = 0` (a 1970 bar). It
    is out of scope. It can only become P if every row failed to parse, and then it is far outside the window, so
    the rule is inert.
@@ -194,8 +229,8 @@ def _merge_tradier_rows(merged, rows, *, on_sandbox, span, fetch_start):
 ## 6. Tests — new `backend/tests/test_a4d_sandbox_partial_bar_merge.py`
 
 Stubs: Tradier via `httpx.get` (as `test_market_data_fixes.py` does); yfinance via `_fetch_intraday_yf`; the
-token and base via `get_tradier_creds` returning a token plus the sandbox or the live base; the wall clock via the time source `fetch_start` reads (§3),
-so `fetch_start` is a fixed ET instant on a weekday. Fixture rules:
+token and base via `get_tradier_creds` returning a token plus the sandbox or the live base; the clock via
+`app.data.market._now` (§3), so `fetch_start` is a fixed ET instant on a weekday. Fixture rules:
 - Tradier and yfinance stamps are built from the **same ET wall time**: Tradier as the naive `"YYYY-MM-DD HH:MM"`
   string, yfinance as `int(datetime.fromisoformat(s).replace(tzinfo=ZoneInfo("America/New_York")).timestamp())`,
   as `test_market_data_fixes.py:285-287` does.
@@ -204,7 +239,9 @@ so `fetch_start` is a fixed ET instant on a weekday. Fixture rules:
 
 Cases:
 1. Sandbox, `15min`, the §1 table (`fetch_start` 10:20): the 10:00 bar is yfinance's close; 09:45 is Tradier's
-   (older precedence unchanged); 10:15 is yfinance's. `result[-2]` is yfinance's 10:00 bar.
+   (older precedence unchanged); 10:15 is yfinance's. `result[-2]` is yfinance's 10:00 bar. Also:
+   `get_tradier_creds.call_count == 1`, and `httpx.get` was called with a URL starting with the sandbox base and
+   `Authorization == "Bearer <the stubbed token>"`.
 2. Sandbox, pre-market shape (`fetch_start` 08:20, yfinance ends the previous day at 15:45): P (08:00) has no
    counterpart and is the newest: kept, with Tradier's values.
 3. Sandbox, P has no counterpart but yfinance has a later bar: P is absent from the result, every other bar
@@ -214,29 +251,39 @@ Cases:
 6. Sandbox, Tradier returns nothing: the yfinance series is returned unchanged.
 7. Sandbox, **stale P** (`fetch_start` Monday 10:20; the sandbox's newest bar is Friday 19:45, yfinance has
    Monday bars): P is outside the window, kept, and every Friday Tradier bar keeps today's precedence.
-8. Sandbox, window edge: P exactly at the window boundary on `1min` (`P.time + 60 + 1800 == fetch_start` is
-   not presumed partial; one second less is).
-9. Sandbox, yfinance's bar at P's timestamp is **non-finite** (`inf` close): P fills the timestamp (rule 2's
-   finite check), the result has no gap.
-10. Sandbox, yfinance's only bar newer than P is non-finite: after the catch-all P is the newest, so it is kept
+8. Sandbox, window edge on `1min` (window = 60 + 900 + 900 = 1860s), with yfinance holding a bar at P's
+   timestamp with a different close. (a) `fetch_start = P.time + 1860`: not partial, the bar is Tradier's.
+   (b) `fetch_start = P.time + 1859`: partial, the bar is yfinance's.
+9. Sandbox, yfinance's bar at P's timestamp is **non-finite** (`inf` close), and P is the newest bar (yfinance has
+   nothing later): P fills the timestamp with Tradier's values; the result has no gap.
+10. Sandbox, yfinance's bar at P's timestamp is non-finite **and** yfinance has a newer bar: P's timestamp is
+    absent (rule 3, Kenneth's decision), the newer bar present.
+11. Sandbox, yfinance's only bar newer than P is non-finite: after the catch-all P is the newest, so it is kept
     (rule 3 runs on the filtered result).
-11. Non-Tradier interval (`30min`) on the sandbox: the result equals the plain yfinance series (rule inert,
-    `_merge_tradier_rows` never sees rows).
-12. `_is_sandbox_base`: a trailing slash on the sandbox base counts; `intraday_feed_lag_seconds` still returns
+12. Sandbox, **duplicate Tradier rows** at P's timestamp (two rows, different closes) with yfinance holding that
+    timestamp: yfinance's bar stays (neither Tradier row wins).
+13. Sandbox, **the open** (`15min`, `fetch_start` 09:35; sandbox rows up to a partial 09:15; yfinance has the
+    previous day and 09:30): 09:15 is absent, `result[-2]` is the 09:00 Tradier bar, 09:30 is last.
+14. Non-Tradier intervals on the sandbox: `30min` returns the plain yfinance series; `daily` and `1D` do not raise
+    and return the yfinance series (the helper is never reached without Tradier rows; `span` lookup is `.get`).
+15. `_is_sandbox_base`: a trailing slash on the sandbox base counts; `intraday_feed_lag_seconds` still returns
     900/0 as before (A4b's tests stay green).
-13. The merge log line reports 1 on case 1 and 0 on case 4 (`caplog`).
-14. End to end: `chart_alert_scheduler._tick` with one enabled `15min` rule in an in-memory SQLite session
+16. The merge log line (`caplog`): `yielded=1 dropped=0` on case 1, `yielded=0 dropped=1` on case 3,
+    `yielded=0 dropped=0` on case 4.
+17. End to end: `chart_alert_scheduler._tick` with one enabled `15min` rule in an in-memory SQLite session
     (`sched.AsyncSessionLocal` patched, as `test_a4c_user_alert_completed_bars.py` does),
-    `chart_cache._INTRADAY_CACHE` and `sched._last_seen_candle` cleared, `compute_structure` stubbed,
-    `evaluate_and_notify_for_symbol` patched at `app.routers.chart_alerts` (it is imported inside `_tick`), and
-    sources stubbed as in case 1. The `closed` passed in is yfinance's 10:00 bar.
+    `chart_cache._INTRADAY_CACHE` (`app/data/chart_cache.py`) and `sched._last_seen_candle` cleared,
+    `compute_structure` stubbed, `evaluate_and_notify_for_symbol` patched at `app.routers.chart_alerts` (it is
+    imported inside `_tick`), `app.data.market._now` patched (not `time.time`), and sources stubbed as in case 1.
+    The `closed` passed in is yfinance's 10:00 bar.
 
-**Existing test at risk:** `test_tradier_overrides_ibkr_on_conflict` (`test_market_data_fixes.py:274-326`)
-pins only `TRADIER_TOKEN`; the base comes from the credential store or `TRADIER_BASE_URL` (env, and `.env` via
-`load_dotenv()` in `app/main.py`). Its single bar is dated 2023, far outside the window, so the rule cannot touch
-it. The build still pins the live base there, so the test does not depend on the environment. Before counting,
-check that no other existing test runs on the sandbox base by accident: the credential store in the test
-environment, and `TRADIER_BASE_URL` from `.env` or the environment.
+**Existing tests.** `test_tradier_overrides_ibkr_on_conflict` (`test_market_data_fixes.py:274-326`) widens the
+Tradier set to `1h`; `1h` is in `_INTERVAL_COMPLETION_SECONDS`, but its single bar is dated 2023, far outside the
+window, so the rule cannot touch it on either base. The build still pins the live base there so it does not
+depend on the environment. There is no `.env` in the repo today and `conftest.py:71-72` points the credential
+store at a throwaway file; before counting, the build also confirms no test writes a `tradier_paper` token into
+that shared file before a fetch test runs, and that no test depends on the fetch reading the credentials more
+than once (the fetch tests patch `TRADIER_TOKEN` and `httpx.get`, which still work with one read).
 
 Mutations before the round, each of which must turn at least one test red:
 - restore Tradier-overwrites-all on the sandbox (1);
@@ -245,23 +292,28 @@ Mutations before the round, each of which must turn at least one test red:
 - choose P as `tradier_rows[-1]` (5);
 - keep P over another source's finite bar (1);
 - drop the window test (7);
-- drop the slack (8);
+- drop the slack (8b);
+- `>=` instead of `>` (8a);
 - drop the finite check at rule 2 (9);
-- run rule 3 before the catch-all (10);
-- derive `on_sandbox` from a second `_tradier_base()` read instead of the fetch's own base (a case where the
-  stubbed store would answer differently on a second call: add it to 1 as a `side_effect` sequence).
+- run rule 3 before the catch-all (11);
+- exclude P by identity instead of timestamp (12);
+- call the helper without the `tradier_rows` guard or with `span=[interval]` (14);
+- keep `headers=_headers()` or a second `_tradier_base()` read in the fetch (1: call count and header).
 
 Account for every change against main's backend count.
 
 ## 7. Done means
 
 Full backend suite green and reconciling (frontend untouched). `state.py` exit 0 with phase
-`A4D-SANDBOX-PARTIAL-BAR-MERGE` flipped to shipped. Its verify probe is changed **now**, at the plan, from the
-defect marker `# Tradier overwrites all` (which could be "fixed" by deleting a comment) to kind `absent` on
-`def _merge_tradier_rows\(` in `backend/app/data/market.py`; the behavioural pin is the new test file. The
-adversarial round on the code is clean at `audit_rule`'s gate. Then merge.
+`A4D-SANDBOX-PARTIAL-BAR-MERGE` flipped to shipped. Its verify probe was moved at plan round 1 from the defect
+marker `# Tradier overwrites all` (which could be "fixed" by deleting a comment) to kind `absent`, and at round 2
+from the definition to the **call site**, `_merge_tradier_rows\(\s*merged,`, in `backend/app/data/market.py`. Like
+every probe it pins presence, not behaviour; the behavioural pin is the new test file. The adversarial round on
+the code is clean at `audit_rule`'s gate. Then merge.
 
-## 8. Plan round 1 (2026-09-24): 12 findings, all taken
+## 8. Plan rounds
+
+### Round 1 (2026-09-24): 12 findings, all taken (test numbers below are as of round 1; §6 renumbered at round 2)
 
 1. Newest-row test departed from the locked "inside the feed-lag window" wording and dropped a complete stale
    bar → combined test, newest row AND generous window (§2), tests 7-8.
@@ -279,3 +331,21 @@ adversarial round on the code is clean at `audit_rule`'s gate. Then merge.
 10. Fixture stamps and distinct closes → §6 fixture rules.
 11. No non-Tradier-interval, catch-all-order or log-count test → tests 10, 11, 13.
 12. Chart-cache TTL skips closed candles → logged as an open question (§5.3), not in this phase.
+
+### Round 2 (2026-09-24): 11 findings (3 high, 4 medium, 4 low), all taken
+
+1. The sketch called the helper on every interval with `_INTERVAL_COMPLETION_SECONDS[interval]` → `KeyError` on
+   daily/weekly → helper only under `if tradier_rows:`, `span` via `.get` (None = not partial), test 14.
+2. Duplicate Tradier timestamps brought the defect back (exclusion by identity) → exclusion by timestamp, `held`
+   read before any Tradier row lands, test 12.
+3. The finite check only helps while P is newest; test 9 was unsatisfiable on the §1 shape → §3 states it, test 9
+   pinned to P newest, test 10 added for the regular-session case.
+4. The helper could not report "yielded" → returns `(partial_ts, yielded)`, log format spelled out, test 16.
+5. No module-level clock existed to patch → `_now = time.time` at module level, tests patch it.
+6. `_headers()` re-read the credentials → `_headers(token=None)`, test 1 asserts one read, URL and header.
+7. "Rare case" was false: rule 3 drops the last pre-market bar every trading day at the open → §2, §4 corrected,
+   test 13, the skipped candle logged with §5.3.
+8. Test 8 ambiguous → both instants and the assertion written out; `>=` mutation added.
+9. "Up to 15 bars" stale with the slack → about 30.
+10. The probe only pinned the definition → call-site pattern (§7).
+11. The claim "only 1min/5min/15min" contradicted the `1h` test → §3 guard wording, §6 existing-tests note.
