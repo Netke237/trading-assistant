@@ -5,7 +5,7 @@ Phase `A5B-STEP5-SHARED-REQUEST`. Frontend only. Process as A5: plan +
 adversarial round, build + tests + mutation checks, code round, merge when clean.
 
 **Plan round 1 (2026-09-24): NOT CLEAN — 2 blocking, 11 non-blocking. All folded
-in below, tagged `[R1-n]`.** Precondition for the build: Kenneth answers Q1 [R1-2].
+in below, tagged `[R1-n]`.** Precondition for the build: Kenneth answers Q1 [R1-2] — answered (a), keep portfolioValue.
 
 ## The defect (measured on main 48555b5)
 
@@ -132,7 +132,9 @@ stays (portfolioValue). No now-unused imports expected; typecheck confirms.
   `DEFAULT_CONFIDENCE_GATE`. `runStockScan` has the same exposure today, so it is
   not a regression, but it is a new dependency for Step 5. Not addressed here.
 
-## Q1 — `account_size` — BUILD GATE: Kenneth answers before any code [R1-2]
+## Q1 — `account_size` — ANSWERED: (a) (Kenneth 2026-09-24, decision `A5B-ACCOUNT-SIZE-2026-09-24`)
+
+The build gate [R1-2] is lifted. T1 and mutation 3 use the (a) forms below.
 
 The answer is recorded as a decision in PROJECT_STATE.json before T1 is written;
 T1 and mutation 3 follow the chosen option. The option below marked (a) is the
@@ -176,9 +178,8 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
 - **T1 — the pin.** Click the Step-5 `ma_crossover` card; capture the posted
   body. Reset the post mock; `await runStockScan('ma_crossover')` with the same
   stores; capture. Assert with **`toStrictEqual`** [R1-8] (explicit-`undefined`
-  keys count): under Q1 (a) `{...step5, account_size: 0}` vs
-  `{...step4, account_size: 0}` plus `step5.account_size === 123_456`; under (b)
-  whole bodies.
+  keys count): `{...step5, account_size: 0}` vs `{...step4, account_size: 0}`
+  plus `step5.account_size === 123_456` (Q1 answered (a)).
 - **T2 — every seeded value, hard-coded [R1-9].** T1 is circular (both sides go
   through the helper), so T2 pins the helper's output independently: the Step-5
   body has `universe: ['NDX100']`, `direction: 'Bearish'`, `horizon: 'Position'`,
@@ -201,7 +202,7 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
   `getByLabelText(/MA crossover fast/i)` via `fireEvent.change` (the input sits
   in a closed `<details>`, StrategyParamsPanel/index.tsx:32, :115-128 —
   `fireEvent` still works) [R1-11]. Body carries the edited value and
-  (toStrictEqual, per Q1) equals `runStockScan('ma_crossover', { maCrossoverFast: edited })`.
+  (toStrictEqual, modulo `account_size` per Q1) equals `runStockScan('ma_crossover', { maCrossoverFast: edited })`.
 - **T5 — mean_reversion_multi through the panel [R1-10].** Change
   `minConfirmations` (and a variant toggle) through the rendered
   `MeanReversionConfirmPanel`, then click the multi card: the body carries the
@@ -221,7 +222,7 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
 
 1. Restore the hand-built literal in Step 5 → T1, T2, T3 red.
 2. In `manualStockScanRequest`, drop the `overrides` arg from the merge → T4 red.
-3. (Q1 (a) only) Step 5 passes no `accountSize` → T1's `account_size` assertion red.
+3. Step 5 passes no `accountSize` → T1's `account_size` assertion red.
 4. In the Step-5 page, disconnect `MeanReversionConfirmPanel`'s `onChange` from
    `setMeanReversionMinConfirm` → T5 red [R1-10].
 5. Hoist the `manualStockScanRequest` call in `runStockScan` above the `try` → T7 red [R1-5].
