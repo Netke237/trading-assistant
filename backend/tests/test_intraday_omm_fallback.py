@@ -20,7 +20,9 @@ def _make_bars(n: int, seed: int = 7) -> list[dict]:
     bars = []
     for i in range(n):
         c = base + rng.gauss(0, 2)
-        bars.append({"time": f"2026-01-{i % 28 + 1:02d} 09:30", "open": c - 0.1,
+        # Unix-int bar START, as fetch_intraday_candles returns it -- A4b's
+        # completed_intraday_bars drops any bar it cannot date (a string time).
+        bars.append({"time": 1_760_000_000 + 900 * i, "open": c - 0.1,
                      "high": c + 0.5, "low": c - 0.5, "close": c, "volume": 50_000})
         base = c
     return bars

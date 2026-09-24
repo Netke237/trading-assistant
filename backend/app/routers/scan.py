@@ -49,7 +49,7 @@ from app.data.market import (
     fetch_candles_async, fetch_price_async, fetch_option_chain_async,
     fetch_company_name_async, fetch_fundamentals_calendar,
     fetch_market_cap_async, fetch_calendar_dates_async,
-    fetch_quotes, fetch_intraday_candles,
+    fetch_quotes, fetch_intraday_candles, completed_intraday_bars,
     _extract_earnings_date, _extract_dividend_date,
     _compute_iv_bs,
     get_tradier_creds,
@@ -580,9 +580,11 @@ async def _process_symbol(
         if _rcfg["timeframe"] == "15min":
             try:
                 async with sem:
-                    _regime_bars = await asyncio.to_thread(
+                    # A4b: completed bars only -- the still-forming bar
+                    # is dropped (decision A4B-DROP-FORMING-15MIN-BAR).
+                    _regime_bars = completed_intraday_bars(await asyncio.to_thread(
                         fetch_intraday_candles, symbol, "15min", 55
-                    )
+                    ))
             except Exception as exc:
                 _log.warning("Intraday regime bars unavailable for %s: %s", symbol, exc)
                 _regime_bars = []

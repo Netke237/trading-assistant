@@ -42,6 +42,7 @@ from app.routers.regime import _ema as _regime_ema, compute_overall_regime
 from app.schemas import SentimentData, ScanSessionStatus
 from app.data.market import (
     fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles,
+    completed_intraday_bars,
     fetch_candles_async,
 )
 from app.services.historical_store import get_bars as get_historical_bars
@@ -402,7 +403,9 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     full_cfg = _load_full_scoring_cfg()
     rcfg = _load_regime_cfg(req.horizon)
     regime_signal = None
-    regime_bars = _intraday_bars if rcfg["timeframe"] == "15min" else bars
+    # A4b: the regime copy drops the still-forming bar; `_intraday_bars` itself
+    # stays whole for the signal / backtest / chart uses below.
+    regime_bars = completed_intraday_bars(_intraday_bars) if rcfg["timeframe"] == "15min" else bars
     if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
         omm = compute_omm([b["close"] for b in regime_bars], direction=req.direction,
                           lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
@@ -547,7 +550,7 @@ def _regime_block_for_horizon(
     rcfg = _load_regime_cfg(horizon)
     if rcfg["timeframe"] == "15min":
         # Use pre-loaded bars when provided to avoid blocking the event loop.
-        rbars = intraday_bars if intraday_bars is not None else []
+        rbars = completed_intraday_bars(intraday_bars) if intraday_bars is not None else []
     else:
         rbars = bars
 
@@ -753,9 +756,10 @@ async def _process_stock(
             regime_signal = None
             if rcfg["timeframe"] == "15min":
                 try:
-                    regime_bars = await asyncio.to_thread(
+                    # A4b: completed bars only (decision A4B-DROP-FORMING-15MIN-BAR).
+                    regime_bars = completed_intraday_bars(await asyncio.to_thread(
                         fetch_intraday_candles, symbol, "15min", 55
-                    )
+                    ))
                 except Exception as exc:
                     logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
                     regime_bars = []

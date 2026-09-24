@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query
 _log = logging.getLogger(__name__)
 
 from app.schemas import MarketRegime, RegimeMetric, OmmData, IntraHmmData, IntraHmmTransition
-from app.data.market import fetch_price, fetch_candles, fetch_intraday_candles
+from app.data.market import fetch_price, fetch_candles, fetch_intraday_candles, completed_intraday_bars
 from app.services.regime_omm import compute_omm
 from app.services.regime_hmm import MIN_BARS as HMM_MIN_BARS, compute_intraday_hmm
 from app.services.regime_hmm_daily import compute_directional_hmm as _compute_directional_hmm, alignment as _regime_alignment
@@ -229,7 +229,12 @@ async def get_regime(
     intraday_hmm_status: str = 'unavailable'
     intra_bars: list[dict] = []
     try:
-        intra_bars = await asyncio.to_thread(fetch_intraday_candles, 'SPY', interval='15min', days=55)
+        # A4b: COMPLETED bars only, before the HMM_MIN_BARS test, so the HMM and
+        # the OMM fallback below both measure what every other Intraday regime
+        # reader measures (decision A4B-DROP-FORMING-15MIN-BAR-2026-09-24).
+        intra_bars = completed_intraday_bars(
+            await asyncio.to_thread(fetch_intraday_candles, 'SPY', interval='15min', days=55)
+        )
         if intra_bars:
             if len(intra_bars) < HMM_MIN_BARS:
                 # Genuinely not enough 15-min history to fit the model
