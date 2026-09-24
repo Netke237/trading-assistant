@@ -38,25 +38,43 @@ the scan returns.
 
 ## Changes
 
-### F1 — frontend: Analysis builds its request with the scan's builder
-`analysisStore.analyze()` calls `buildStockScanRequestBody` with exactly the
-inputs `runStockScan` passes (`lib/stockScan.ts:~300`): `params` =
-`useScanParamsStore.getState()`, `requireReversal` =
-`scanOverrides.pullback_require_reversal ?? false`, `scanOverrides` =
-`scanStore.scanOverrides`, `confidenceGate` = `settingsStore.confidenceGate`,
-`accountSize` 50_000, `riskPct` 0.01 (unused by analysis; passed for parity),
-`strategy` = `activeStrategy ?? 'pullback_ema'` (unchanged), direction
-unchanged. Then drops `universe`, adds `symbol`, and keeps `horizon` =
-`_horizonEnum(ctx.horizon)` (the backend enum; equals the scan's
-`split(' ')[0]` for every real label and is safe for a malformed one).
-`AnalyzeStockRequest` in `lib/api.ts` becomes
-`Omit<StockScanRequestBody,'universe'|'horizon'> & {symbol; horizon: enum}` so
-the type cannot drift from the scan body again.
+### F1 — frontend: Analysis replays the LAST STOCK SCAN'S OWN REQUEST
+**Revised after plan round 1 (F-1: the Step-4 Run button scans with unsaved
+local param edits — `step-4-stocks/page.tsx:130,195` → `runStockScan(selected,
+params)` merges them over the saved store — so building from the live stores
+still disagrees with the scan). Kenneth, 2026-09-24, asked: mirror *the last
+scan run*, not current settings (decision `A5-MIRROR-LAST-SCAN-RUN-2026-09-24`).**
 
-Not refactoring `runStockScan` to share a context helper: it is the hot,
-heavily-commented scan path and out of scope. Parity is pinned by a test
-instead (T-F1) that runs `runStockScan` and `analyze` on the same store state
-and asserts the two bodies are equal except `universe`/`symbol`/`horizon`.
+- `scanStore` gains `stockScanRequest: StockScanRequestBody | null`, written
+  **only inside `setStockScanResult`, in the same `set()` as the result**:
+  `setStockScanResult(r, request?)` → `stockScanRequest = r ? (request ?? null) : null`.
+  So the snapshot can never pair with a different result: any writer that does
+  not pass a request (StoreHydration's backend recovery `StoreHydration:67`)
+  stores null, and clearing the result clears it. The context-change reset
+  (`scanStore.ts:~411`, which nulls `stockScanResult`) nulls it too.
+  Persisted with the result (in `partialize`), version 16 → 17, migration adds
+  `stockScanRequest: null`.
+- Writers that pass it: `runStockScan` (`lib/stockScan.ts:322`, the
+  `requestBody` it posted — both the Step-3 Run button and the Step-4 Run
+  button go through here, the Step-4 local edits included) and Step 5's
+  `runScan` (`step-5-strategy/page.tsx:245`, the body literal it posted, hoisted
+  into a const).
+- `analysisStore.analyze()`: if `stockScanRequest` is non-null, send
+  `{...snapshot without universe, symbol, horizon: _horizonEnum(snapshot.horizon)}`
+  — direction, strategy, every param, overrides, regime/fundamentals/confidence
+  keys, ATR pair, bt thresholds exactly as the scan sent them. If null (no
+  stock scan this context, or a recovered result with no known request): build
+  from the live stores with `buildStockScanRequestBody` exactly as
+  `runStockScan(activeStrategy)` would (params = `useScanParamsStore`,
+  requireReversal = `scanOverrides.pullback_require_reversal ?? false`,
+  scanOverrides, `settingsStore.confidenceGate`, 50_000 / 0.01, strategy =
+  `activeStrategy ?? 'pullback_ema'`, direction from context).
+- `AnalyzeStockRequest` in `lib/api.ts` becomes
+  `Omit<StockScanRequestBody,'universe'|'horizon'> & {symbol; horizon: enum}`.
+
+Not refactoring `runStockScan`/Step 5 to share one builder: out of scope.
+Step 5's hand-built body ignores the Step-3 overrides itself — a scan-side gap,
+logged for Kenneth, not fixed here; Analysis mirrors whatever that scan sent.
 
 ### B1 — backend: `_analyze_core` resolves the regime gate like the scan
 `_regime_gate = _resolve_regime_gate(full_cfg.get("regime_gate"),
@@ -85,9 +103,14 @@ handed to `run_strategy_backtest`. No other caller (grep-verified at build).
   drops the symbol) unchanged.
 
 ## Tests
-- T-F1 parity (runStockScan body vs analyze body, non-default Step-3 overrides,
-  regime keys, confidence gate enabled, reversal true).
-- T-F2 analyze sends `overrides`, both regime keys, confidence thresholds.
+- T-F1 parity: `runStockScan(strategy, nonDefaultLocalParams)` with non-default
+  Step-3 overrides, regime keys, confidence gate on, reversal true; then change
+  the live stores; `analyze` body == scan body minus universe, plus symbol.
+- T-F2 no snapshot → live-store body == what `runStockScan(activeStrategy)`
+  would send; StoreHydration-style `setStockScanResult(r)` stores null;
+  `setStockScanResult(null)` and the context reset clear it; failed scan leaves
+  null. Step 5 success stores its body.
+- T-F3 migration v16 → v17 adds `stockScanRequest: null`.
 - T-B1 `_analyze_core` with `regime_headwind_reject_pct` set tighter than YAML:
   card regime rule REJECT and headwind flag appears at the overridden caution
   threshold; without the keys, YAML behaviour unchanged.
