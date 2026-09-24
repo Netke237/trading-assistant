@@ -141,6 +141,34 @@ class ArmRequest(BaseModel):
     # scan-versus-fire disagreement this field exists to remove.
     regime_headwind_caution_pct: Optional[float] = None
     regime_headwind_reject_pct:  Optional[float] = None
+    # ── O4 step 3: the fields a fired trade will book its position from ─────
+    # Plan: docs/superpowers/plans/2026-09-24-o4-step-3-arm-fields-replan.md.
+    #
+    # THEY TRAVEL, NOTHING READS THEM YET. Step 4 maps them onto
+    # PortfolioPositionCreate (same snake_case names as that schema's ALIASES)
+    # when a fired order books a position. Same carry as the pick above:
+    # snake_case, no alias, `ArmedStrategy(**req.model_dump())` keys off names,
+    # and a camelCase key on the wire is silently dropped (extra='ignore', G5-1).
+    #
+    # TIGHTER THAN PortfolioPositionCreate ON FOUR (stop, scan_stock_price,
+    # structural_stop, dte_total), ON PURPOSE: a 422 at arm is the only refusal
+    # that costs no order -- refusing at booking happens after a real fill.
+    # Never looser, so nothing accepted here can be refused by the create
+    # schema on these bounds. A client must send null, never 0, for an absent
+    # price, and [] (not null) for no targets.
+    #
+    # The four dicts are untyped and uncapped, exactly as on the create path:
+    # the card path is the reference and step 3 does not tighten it.
+    stop:                Optional[float] = Field(default=None, gt=0)
+    stop_is_user_set:    Optional[bool]  = None
+    scan_stock_price:    Optional[float] = Field(default=None, gt=0)
+    structural_stop:     Optional[float] = Field(default=None, gt=0)
+    exit_plan:           Optional[dict]  = None
+    targets:             list[dict]      = []
+    dte_total:           Optional[int]   = Field(default=None, ge=0)
+    premium_stop_dollar: Optional[float] = Field(default=None, gt=0)
+    max_loss_override:   Optional[dict]  = None
+    trade_card_snapshot: Optional[dict]  = None
 
 
 @router.post("/arm")
