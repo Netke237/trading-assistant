@@ -49,7 +49,7 @@ from app.data.market import (
     fetch_candles_async, fetch_price_async, fetch_option_chain_async,
     fetch_company_name_async, fetch_fundamentals_calendar,
     fetch_market_cap_async, fetch_calendar_dates_async,
-    fetch_quotes,
+    fetch_quotes, fetch_intraday_candles,
     _extract_earnings_date, _extract_dividend_date,
     _compute_iv_bs,
     get_tradier_creds,
@@ -569,9 +569,28 @@ async def _process_symbol(
     try:
         _scfg = _load_scoring_cfg()
         _rcfg = _scfg["regime"][horizon.lower()]
-        if candles and len(candles) >= _rcfg.get("min_obs", 10):
+        # A4: the regime is measured on the bars its `timeframe` names. Intraday
+        # is `15min`; this block used to measure it on the DAILY `candles` and
+        # only LABEL it 15min, so Options and Stocks mode could give one symbol
+        # different regime verdicts. The fetch copies the stock scan's reader
+        # (`stock_scan._process_stock`: `fetch_intraday_candles(symbol, "15min",
+        # 55)`) and, like it, runs under the scan's semaphore. A failed or short
+        # intraday series leaves the regime unmeasured -- there is NO fallback to
+        # daily bars, which would bring back the mislabelled measurement.
+        if _rcfg["timeframe"] == "15min":
+            try:
+                async with sem:
+                    _regime_bars = await asyncio.to_thread(
+                        fetch_intraday_candles, symbol, "15min", 55
+                    )
+            except Exception as exc:
+                _log.warning("Intraday regime bars unavailable for %s: %s", symbol, exc)
+                _regime_bars = []
+        else:
+            _regime_bars = candles
+        if _regime_bars and len(_regime_bars) >= _rcfg.get("min_obs", 10):
             _omm = _compute_omm(
-                [b["close"] for b in candles],
+                [b["close"] for b in _regime_bars],
                 direction=direction,
                 lookback=_rcfg["lookback"],
                 window=_rcfg["window"],
@@ -580,7 +599,7 @@ async def _process_symbol(
             if _omm:
                 _dh = None
                 try:
-                    _dh = await asyncio.to_thread(_compute_dhmm, candles)
+                    _dh = await asyncio.to_thread(_compute_dhmm, _regime_bars)
                 except Exception as exc:
                     _log.debug("HMM unavailable for %s: %s", symbol, exc)
                 _regime_signal = {

@@ -896,6 +896,22 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     return [b for b in kept if str(b.get("time", "")) >= stale_cutoff]
 
 
+def _fetch_intraday_regime_bars(symbol: str) -> list[dict]:
+    """15-minute bars for an Intraday regime, fetched as the SCANS fetch them.
+
+    A4. `regime.intraday.timeframe` is `15min`, and both scans measure the
+    Intraday regime on `fetch_intraday_candles(symbol, "15min", 55)` -- the
+    stock scan's `_process_stock` and, since A4, the options scan. The fire
+    path must read the same series or the gate and sizer disagree with the card
+    they fire from. Deliberately NOT routed through `_fetch_scan_window_bars`:
+    that trims by ISO DATE and drops the still-forming DAILY bar, and these
+    bars carry unix-int `time`. The still-forming 15-minute bar is kept, as
+    both scans keep it (A4 plan s3.1).
+    """
+    from app.data.market import fetch_intraday_candles
+    return fetch_intraday_candles(symbol, "15min", 55)
+
+
 def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
     """Measure THIS symbol's own regime, in THIS trade's frame, right now.
 
@@ -915,7 +931,10 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
       - instrument:  the traded symbol            (was: SPX)
       - window:      regime.<horizon> from YAML   (was: compute_omm defaults)
       - frame:       compute_omm(direction=...)   (was: a mirrored bullish cache)
-      - bars:        daily, over the scan's own start anchor `today - 441d`
+      - bars:        for INTRADAY (timeframe 15min), the scans' 15-minute
+        series via `_fetch_intraday_regime_bars` (A4) -- none of the daily
+        trimming below applies to it. For Swing/Position:
+        daily, over the scan's own start anchor `today - 441d`
         and ending at the LAST FULLY COMPLETED SESSION via
         `_fetch_scan_window_bars` -- ~306 bars, NOT `fetch_candles`'s 252
         default. Round 1 found that length difference flipping verdicts across
@@ -984,7 +1003,11 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
 
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        future = ex.submit(_fetch_scan_window_bars, strategy.symbol)
+        # A4: the series follows the horizon's `timeframe`, as both scans do.
+        _fetch_bars = (_fetch_intraday_regime_bars
+                       if rcfg.get("timeframe") == "15min"
+                       else _fetch_scan_window_bars)
+        future = ex.submit(_fetch_bars, strategy.symbol)
         try:
             bars = future.result(timeout=_REGIME_FETCH_DEADLINE_S)
         except concurrent.futures.TimeoutError:
