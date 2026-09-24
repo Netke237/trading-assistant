@@ -261,7 +261,15 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                 logger.warning("composite-watch: intraday fetch failed for %s — %s", symbol, exc)
         try:
             from app.services.composite_trigger_evaluator import evaluate_scheduled, describe_match, format_composite_reason
-            fired = evaluate_scheduled(symbol, trigger_def, bars, bars_intraday)
+            # A4c: the HMM_intraday regime fits on COMPLETED bars of the watch's
+            # interval; bars_intraday (whole) still feeds the VWAP confirmation.
+            _regime_intraday = None
+            if model == "HMM_intraday":
+                from app.data.market import completed_bars_for_interval
+                _regime_intraday = completed_bars_for_interval(bars_intraday, w.get("interval", "15m"))
+            fired = evaluate_scheduled(
+                symbol, trigger_def, bars, bars_intraday, regime_bars_intraday=_regime_intraday,
+            )
         except Exception as exc:
             logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
             continue

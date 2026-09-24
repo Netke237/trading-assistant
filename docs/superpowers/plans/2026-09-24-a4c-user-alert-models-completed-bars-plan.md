@@ -139,3 +139,29 @@ skipped at each of U1–U4, `as_of` ignored (use `time.time()`), VWAP bars filte
 
 Full backend suite green and reconciling (frontend untouched). `state.py` exit 0 with a phase entry
 `A4C-USER-ALERT-COMPLETED-BARS`. The adversarial round on the code is clean at `audit_rule`'s gate. Then merge.
+
+---
+
+## 8. Adversarial round 1 (the plan) — 2026-09-24: CLEAN (zero gate-level findings)
+
+Fresh subagent (bmad-review-adversarial-general, audit_rule's gate). It checked every caller of `compute_omm`,
+`compute_intraday_hmm`, `build_regime_snapshot`, `evaluate_scheduled`/`evaluate_from_context*`,
+`fetch_intraday_candles` and `get_intraday`, and confirmed that U1–U4 are the complete set of readers that
+decide or fire. It found `describe_match`/`format_composite_reason` carry no regime value. The one regime
+number persisted in history (`trigger_values.omm_state`) comes from `_omm`, which the plan fixes. All bar
+sources give int start times. The 4h span of 18000 was worked through for yfinance :30 bars and IBKR
+clock-aligned bars in both EDT and EST, and is sufficient. The Tradier set and the aliases are as stated.
+The reviewer confirmed the `as_of` reasoning, with the note that `fetched_at` must be wall-clock (it is:
+`time.time()`, with cached entries derived from the monotonic expiry).
+
+Below the gate, not raised: IBKR 1h/4h carry no feed lag (no evidence the gateway is delayed, and 4h's
+extra hour covers it). The scheduler tests that patch `get_intraday` need updating (test hygiene). The
+rule-level `closed` candle can still be partial under the sandbox (not regime; scoped out).
+
+## 9. Build notes
+
+- `chart_cache.get_intraday_with_fetched_at` keeps the cache entry's `(rows, expiry)` shape. A cached
+  entry's fetch time is derived from its expiry and `_ttl_for(interval, rows)`, so there is no second store
+  to keep in lockstep. A fresh fetch stamps `time.time()` taken before the fetch, which can only
+  understate the fetch time (the conservative direction).
+- The U1 watch fetch keeps its own interval default (`"15m"`) for the completeness span.

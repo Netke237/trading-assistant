@@ -162,6 +162,7 @@ def evaluate_from_context(
     indicator_values: dict,
     bars_daily: list[dict] | None = None,
     bars_intraday: list[dict] | None = None,
+    regime_bars_intraday: list[dict] | None = None,
 ) -> bool:
     """Alert/WebSocket path. Receives pre-computed model outputs — no I/O for the
     primary/confirmations checks. bars_daily/bars_intraday are optional and,
@@ -179,6 +180,9 @@ def evaluate_from_context(
         OR if primary.model == "HMM_daily" (used to fit the HMM directly)
     bars_intraday: OHLCV intraday bars — needed if trigger_def sets strategy_confirmations,
         OR if primary.model == "HMM_intraday" (used to fit the HMM directly)
+    regime_bars_intraday: A4c -- when not None, the HMM_intraday fit uses THIS
+        series (the caller's completed bars) instead of bars_intraday; the
+        strategy confirmations keep bars_intraday (regime models only, Kenneth).
     """
     if isinstance(trigger_def, dict):
         td = trigger_def
@@ -193,12 +197,13 @@ def evaluate_from_context(
         if not _check_primary_omm(td, omm_result):
             return False
     elif model == "HMM_intraday":
-        if not bars_intraday:
+        _hmm_bars = regime_bars_intraday if regime_bars_intraday is not None else bars_intraday
+        if not _hmm_bars:
             logger.warning("evaluate_from_context: HMM_intraday requested but no intraday bars supplied; skipping")
             return False
         try:
             from app.services.regime_hmm import compute_intraday_hmm
-            hmm_result = compute_intraday_hmm(bars_intraday)
+            hmm_result = compute_intraday_hmm(_hmm_bars)
             if not _check_primary_hmm(td, hmm_result):
                 return False
         except Exception as exc:
@@ -263,6 +268,7 @@ def evaluate_from_context_detailed(
     bars_intraday: list[dict] | None = None,
     direction: str = "Bullish",
     symbol: str = "",
+    regime_bars_intraday: list[dict] | None = None,
 ) -> tuple[bool, dict | None]:
     """Fire-gate + match detail in one pass. Returns (fired, detail) where detail is
     the describe_match() dict when fired, else None. Equivalent to calling
@@ -274,6 +280,7 @@ def evaluate_from_context_detailed(
     fired = evaluate_from_context(
         trigger_def, omm_result, structure_signals, indicator_values,
         bars_daily=bars_daily, bars_intraday=bars_intraday,
+        regime_bars_intraday=regime_bars_intraday,
     )
     if not fired:
         return False, None
@@ -289,11 +296,14 @@ def evaluate_scheduled(
     trigger_def: dict,
     bars_daily: list[dict],
     bars_intraday: list[dict],
+    regime_bars_intraday: list[dict] | None = None,
 ) -> bool:
     """Watch/scheduler path. Receives raw bars — runs models internally.
 
     bars_daily: OHLCV daily bars for OMM and daily HMM
     bars_intraday: OHLCV intraday bars for HMM_intraday (may be empty if not needed)
+    regime_bars_intraday: A4c -- as evaluate_from_context: when not None the
+        HMM_intraday fit uses it; strategy confirmations keep bars_intraday.
 
     Note: regime_hmm.py only exposes compute_intraday_hmm(); 'HMM_daily' falls back to
     that function on daily bars (requires MIN_BARS=200 daily bars).
@@ -318,12 +328,13 @@ def evaluate_scheduled(
         omm_result = compute_omm(closes)
         primary_met = _check_primary_omm(td, omm_result)
     elif model == "HMM_intraday":
-        if not bars_intraday:
+        _hmm_bars = regime_bars_intraday if regime_bars_intraday is not None else bars_intraday
+        if not _hmm_bars:
             logger.warning("evaluate_scheduled: HMM_intraday requested but no intraday bars for %s", symbol)
             return False
         try:
             from app.services.regime_hmm import compute_intraday_hmm
-            hmm_result = compute_intraday_hmm(bars_intraday)
+            hmm_result = compute_intraday_hmm(_hmm_bars)
             primary_met = _check_primary_hmm(td, hmm_result)
         except Exception as exc:
             # Deliberate fail-closed: if the HMM model errors we suppress the alert
