@@ -473,9 +473,10 @@ regime_sizing:
   # values, on BOTH the scan card and the auto-trader, which share this ramp.
   # Raise min_mult to size up across the board; lower it to size down.
   #
-  # `regime_gate.headwind_reject_pct` above is -40 and this is 40, so the
-  # graded band is exactly the band that survives the gate. That is a property
-  # of these two values, not an invariant -- nothing enforces the pairing.
+  # The gate does NOT bound the floor: `regime_gate` REJECTs at or below -40
+  # only in a Stable regime (require_stable_for_reject). In a Fragile regime a
+  # trade below -40 survives and is sized at min_mult, so min_mult sizes
+  # surviving deep-headwind trades as well as unmeasured ones.
   min_mult: 0.3
   full_conviction_pct: 40
 

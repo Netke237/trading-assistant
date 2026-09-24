@@ -331,11 +331,13 @@ def conviction_mult(conviction_pct: float, sizing: Mapping[str, Any] | None) -> 
     here cannot reach one and not the other. A neutral-regime trade now sizes
     roughly twice what it did.
 
-    The reject boundary lines up with the ramp by construction on the shipped
-    config: `regime_gate.headwind_reject_pct` is -40 and `full_conviction_pct`
-    is 40, so the graded band is exactly the band that survives the gate. That
-    is a property of these values, not an invariant -- the two keys are
-    independent and nothing enforces the correspondence.
+    The gate does NOT bound the ramp's floor. On the shipped config
+    `regime_gate.headwind_reject_pct` is -40 and `full_conviction_pct` is 40,
+    but `_regime_cap` REJECTs at or below -40 only when the regime is Stable
+    (`require_stable_for_reject: true`). In a Fragile regime a trade below -40
+    survives the gate and is sized at min_mult, so min_mult sizes surviving
+    deep-headwind trades as well as unmeasured ones. Nothing ties the two
+    keys together.
     """
     resolved = resolve_sizing(sizing)
     if resolved is None:
