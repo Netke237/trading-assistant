@@ -375,3 +375,18 @@ Below the gate, logged and not fixed in the plan (per `audit_rule`). The build t
    (the imported name).
 7. The over-exposure alert rides `_alert_refusal`, whose log lines say "refusal" for a booking that
    stands. Log wording only.
+
+---
+
+## 9. Adversarial round 2 (the code, `b74f9035`) — 2026-09-24: CLEAN
+
+A fresh reviewer ran `bmad-review-adversarial-general` on the commit against this plan, under
+`audit_rule`'s gate, on a `git archive` copy so the concurrent full-suite run was undisturbed.
+**Zero gate-level findings.** It confirmed the §2.6 mapping field by field, the §2.4/§2.8 order and
+wording, build rules 1, 4 and 6, the `stop_required` placement, the five unchanged handlers, and that
+the new tests write no files, open no sockets and leave the singleton clean. 29 mutants: 21 killed;
+the 10 survivors each remove a guard from correct code. Its 13 below-gate items (untested rollbacks,
+a time-dependent `MARKET_TZ` assertion, three deep copies pydantic already makes, untested strike /
+expiry sub-checks, unpinned `discrete=True`, the 409 page's remedy, `/fire` latency for step 6) are
+logged in `PROJECT_STATE.json`'s `open_questions`, not fixed, per `audit_rule`.
+Backend: 2928 passed / 1 skipped (2891 + 38 − 1).
