@@ -75,8 +75,11 @@ async def get_regime_snapshot(
     if model in ("HMM_daily", "HMM_intraday"):
         from app.services.regime_hmm import compute_intraday_hmm
         if model == "HMM_intraday":
-            from app.data.market import fetch_intraday_candles
-            hmm_bars = fetch_intraday_candles(symbol, interval=interval, days=55)
+            from app.data.market import completed_bars_for_interval, fetch_intraday_candles
+            # A4c: the value the watch will compare against -- completed bars only.
+            hmm_bars = completed_bars_for_interval(
+                fetch_intraday_candles(symbol, interval=interval, days=55), interval,
+            )
         else:
             hmm_bars = bars
         result_hmm = compute_intraday_hmm(hmm_bars)

@@ -4,6 +4,7 @@ import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { emptyCardEdits } from '@/lib/cardEdits';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
@@ -831,6 +832,43 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(
       await screen.findByText(/AAA: Premium stop of \$0\.90\/share could not be applied/),
     ).toBeInTheDocument();
+  });
+
+  it('keeps the basket\'s dropped-stop disclosure across Prev/Next until the next send (A8, open_questions[61])', async () => {
+    // The `[active]` effect clears the per-card notes on every navigation, and
+    // the basket's notes used to share that list -- so pressing Next after a
+    // basket send destroyed the disclosure before it could be read.
+    //
+    // Two sends here; the daily-recommendation cap (5) is shared by every
+    // basket test in this file and nothing resets it, so give back what this
+    // test consumes or the later ones are refused before they send.
+    const dailyBefore = useRiskStore.getState().dailyRecommendations;
+    await editAllThree();
+    fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
+    let submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    const NOTE = /AAA: Premium stop of \$0\.90\/share could not be applied/;
+    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+
+    // Navigate: the disclosure stays.
+    fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+    await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous candidate' }));
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+
+    // The next send (BBB, no typed premium stop) starts by clearing it.
+    fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+    fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /send basket/i }));
+    submit = await screen.findByRole('button', { name: /^(Submit \d orders?|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    await waitFor(() => expect(screen.queryByText(NOTE)).not.toBeInTheDocument());
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(2));
+    act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
   });
 
   it('shows the rejection banner for a BASKET order with no broker selected', async () => {

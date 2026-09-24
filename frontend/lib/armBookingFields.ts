@@ -68,13 +68,25 @@ export function armBookingFieldsFrom(i: ArmBookingInputs): ArmBookingFields {
  *  broker too. The caller must not present these as a plain failure the user
  *  can retry: the order may be live.
  *
- *  Coupled to two strings on purpose, pinned by this module's tests:
- *  `apiError`'s "API <path> → <status>: <detail>" (lib/api.ts) and `fire()`'s
- *  "Order failed:" prefix (backend services/auto_trader.py). */
+ *  ONE 500 IS A REFUSAL: an unusable regime_sizing block (decision
+ *  A7B-FIRE-SIZING-CONFIG-500-2026-09-24). The backend refuses it after the
+ *  disarm and before any broker call, and answers 500 because the server's
+ *  config is broken, not the request. It is recognised by its detail prefix
+ *  only; every other 5xx stays 'unknown'.
+ *
+ *  Coupled to three strings on purpose, pinned by this module's tests:
+ *  `apiError`'s "API <path> → <status>: <detail>" (lib/api.ts), `fire()`'s
+ *  "Order failed:" prefix (backend services/auto_trader.py) and
+ *  `SIZING_CONFIG_REFUSED_PREFIX` (backend routers/auto_trade.py). */
+export const SIZING_CONFIG_REFUSED_PREFIX = 'Refused, nothing sent: regime_sizing is unusable: ';
+
 export function classifyFireFailure(e: unknown): 'refused' | 'unknown' {
   if (!(e instanceof Error) || e instanceof TypeError) return 'unknown';
   const m = /^API \S+ → (\d{3})(?:: ([\s\S]*))?$/.exec(e.message);
   if (!m) return 'unknown';
+  if (m[1] === '500') {
+    return (m[2] ?? '').startsWith(SIZING_CONFIG_REFUSED_PREFIX) ? 'refused' : 'unknown';
+  }
   if (m[1] !== '400') return 'unknown';
   return (m[2] ?? '').startsWith('Order failed:') ? 'unknown' : 'refused';
 }

@@ -42,8 +42,31 @@ def _key(symbol: str, interval: str, days: int) -> str:
     return f"{symbol}:{interval}:{days}"
 
 
+def _ttl_for(interval: str, rows: list[dict]) -> float:
+    return _TTL_BY_INTERVAL.get(interval, 30 * 60) if rows else 60
+
+
+def _fetched_at_wall(interval: str, rows: list[dict], expiry: float) -> float:
+    """Wall-clock instant the cached `rows` were fetched, derived from the entry's
+    monotonic expiry (expiry = fetch + _ttl_for). Derived rather than stored so
+    the cache entry keeps its (rows, expiry) shape."""
+    fetched_mono = expiry - _ttl_for(interval, rows)
+    return time.time() - (time.monotonic() - fetched_mono)
+
+
 async def get_intraday(symbol: str, interval: str = "15min", days: int | None = None) -> list[dict]:
-    """Return OHLCV bars, served from cache when fresh.
+    """Return OHLCV bars, served from cache when fresh."""
+    rows, _ = await get_intraday_with_fetched_at(symbol, interval, days)
+    return rows
+
+
+async def get_intraday_with_fetched_at(
+    symbol: str, interval: str = "15min", days: int | None = None,
+) -> tuple[list[dict], float]:
+    """`get_intraday`, plus the wall-clock time (epoch seconds) the rows were
+    fetched. A4c: a cached bar that was still forming at fetch time keeps its
+    partial content after its interval elapses on the wall clock, so a regime
+    model's "completed bars" must be judged at THIS instant, not time.time().
 
     `days=None` (the default) applies the per-interval default window — the
     historical behavior of the daily/weekly/1h/4h widening. An explicit
@@ -67,20 +90,23 @@ async def get_intraday(symbol: str, interval: str = "15min", days: int | None = 
     cached = _INTRADAY_CACHE.get(key)
     if cached is not None and now < cached[1]:
         _INTRADAY_CACHE.move_to_end(key)
-        return cached[0]
+        return cached[0], _fetched_at_wall(interval, cached[0], cached[1])
 
     async with _CHART_SEM:
         cached = _INTRADAY_CACHE.get(key)
         if cached is not None and time.monotonic() < cached[1]:
             _INTRADAY_CACHE.move_to_end(key)
-            return cached[0]
+            return cached[0], _fetched_at_wall(interval, cached[0], cached[1])
 
+        # The fetch STARTS here; a bar complete at this instant is complete in
+        # the rows returned. Taken before the fetch, so it can only understate.
+        fetched_at = time.time()
         rows = await asyncio.to_thread(fetch_intraday_candles, symbol, interval, days)
-        ttl = _TTL_BY_INTERVAL.get(interval, 30 * 60) if rows else 60
+        ttl = _ttl_for(interval, rows)
         _INTRADAY_CACHE[key] = (rows, now + ttl)
         _INTRADAY_CACHE.move_to_end(key)
         _evict(now)
-        return rows
+        return rows, fetched_at
 
 
 def _evict(now: float) -> None:

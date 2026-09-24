@@ -46,7 +46,8 @@ async def test_tick_evaluates_each_enabled_symbol_interval_once_per_new_candle(m
         await db.commit()
 
     monkeypatch.setattr(sched, 'AsyncSessionLocal', Session)
-    monkeypatch.setattr(sched, 'get_intraday', AsyncMock(return_value=_CANDLES_V1))
+    # A4c: _tick fetches through get_intraday_with_fetched_at (rows + fetch time).
+    monkeypatch.setattr(sched, 'get_intraday_with_fetched_at', AsyncMock(return_value=(_CANDLES_V1, 0.0)))
     monkeypatch.setattr(sched, 'compute_structure', lambda *a, **kw: [])
     mock_evaluate = AsyncMock(return_value=[])
     monkeypatch.setattr('app.routers.chart_alerts.evaluate_and_notify_for_symbol', mock_evaluate)
@@ -68,8 +69,8 @@ async def test_tick_skips_when_no_enabled_rules(monkeypatch):
 
     Session = await _make_session_factory()
     monkeypatch.setattr(sched, 'AsyncSessionLocal', Session)
-    get_intraday_mock = AsyncMock(return_value=_CANDLES_V1)
-    monkeypatch.setattr(sched, 'get_intraday', get_intraday_mock)
+    get_intraday_mock = AsyncMock(return_value=(_CANDLES_V1, 0.0))
+    monkeypatch.setattr(sched, 'get_intraday_with_fetched_at', get_intraday_mock)
     sched._last_seen_candle.clear()
 
     await sched._tick()

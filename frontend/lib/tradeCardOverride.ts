@@ -202,9 +202,12 @@ export type CachedFirstPassage = {
   context:  FirstPassageContext | null;
 };
 
-/** One cached "Check structure" result, keyed by SYMBOL — the structural level is
- *  a function of (symbol, direction, stock_price) only; the contract never reaches
- *  api.getStructuralStop. `stop: null` is a real, cacheable answer ("checked, no
+/** One cached "Check structure" result, keyed by CONTRACT (contractKeyFor). The
+ *  structural LEVEL is a function of (symbol, direction, stock_price) only, but
+ *  the request carries the contract (strike, dte, live premium) and since B2 the
+ *  response's `stop.stopCost` is the stop-vs-premium verdict priced against that
+ *  contract — so a symbol key would splice contract A's verdict onto contract
+ *  B's card (A8, open_questions[51]). `stop: null` is a real, cacheable answer ("checked, no
  *  order block or swing level found"), distinct from "never checked" (no entry). */
 export type CachedStructural = {
   stop:       StructuralStop | null;
@@ -232,14 +235,14 @@ export type CachedStructural = {
  */
 export function cacheStructural(
   prev: Record<string, CachedStructural>,
-  symbol: string,
+  key: string,
   stop: StructuralStop | null | undefined,
   stockPrice: number | null,
 ): Record<string, CachedStructural> {
   if (stop === undefined) return prev;
-  const cur = prev[symbol];
+  const cur = prev[key];
   if (cur && cur.stop === stop && cur.stockPrice === stockPrice) return prev;
-  return { ...prev, [symbol]: { stop, stockPrice } };
+  return { ...prev, [key]: { stop, stockPrice } };
 }
 
 /**

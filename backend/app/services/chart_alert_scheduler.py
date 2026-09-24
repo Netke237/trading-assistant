@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 from sqlalchemy import select
 
-from app.data.chart_cache import get_intraday
+from app.data.chart_cache import get_intraday, get_intraday_with_fetched_at
 from app.database import AsyncSessionLocal
 from app.models.alert import AlertRuleModel
 from app.services.market_structure import compute_structure
@@ -54,7 +54,7 @@ async def _tick() -> None:
 
     for symbol, interval in pairs:
         try:
-            candles = await get_intraday(symbol, interval)
+            candles, fetched_at = await get_intraday_with_fetched_at(symbol, interval)
             if not candles or len(candles) < 2:
                 continue
             closed = candles[-2]
@@ -66,7 +66,7 @@ async def _tick() -> None:
             ht_candles = await get_intraday(symbol, '1D') if interval == '1h' else None
             signals = await asyncio.to_thread(compute_structure, candles, interval, symbol, ht_candles)
 
-            await evaluate_and_notify_for_symbol(symbol, interval, closed, candles, signals)
+            await evaluate_and_notify_for_symbol(symbol, interval, closed, candles, signals, as_of=fetched_at)
         except Exception:
             logger.warning('chart alert background check failed for %s [%s]', symbol, interval, exc_info=True)
 
