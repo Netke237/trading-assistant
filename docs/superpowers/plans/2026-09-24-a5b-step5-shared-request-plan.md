@@ -5,7 +5,11 @@ Phase `A5B-STEP5-SHARED-REQUEST`. Frontend only. Process as A5: plan +
 adversarial round, build + tests + mutation checks, code round, merge when clean.
 
 **Plan round 1 (2026-09-24): NOT CLEAN — 2 blocking, 11 non-blocking. All folded
-in below, tagged `[R1-n]`.** Precondition for the build: Kenneth answers Q1 [R1-2] — answered (a), keep portfolioValue.
+in below, tagged `[R1-n]`.**
+**Plan round 2 (2026-09-24): CLEAN** (fresh subagent). Its 12 non-blocking notes
+are folded in, tagged `[R2-n]`. **The code round is round 3 = the audit cap [R2-1]:
+if it is not clean, stop and escalate to Kenneth; do not re-audit.**
+Precondition for the build: Kenneth answers Q1 [R1-2] — answered (a), keep portfolioValue.
 
 ## The defect (measured on main 48555b5)
 
@@ -71,7 +75,7 @@ export function manualStockScanRequest(
 Body = the current `runStockScan` lines that compute `saved`, `p`,
 `context`, `requireReversal`, `confidenceGate`, `rawOverrides` and call
 `buildStockScanRequestBody` — not a verbatim move [R1-6]: those lines read
-`runStockScan`'s local `store` (stockScan.ts:272, :296-300); the helper reads
+`runStockScan`'s local `store` (`const store = useScanStore.getState()` and the `store.context` / `store.scanOverrides` reads [R2-12]); the helper reads
 `useScanStore.getState()` itself at call time. Equivalent inside `runStockScan`
 because none of the four preceding writes (`setActiveStrategy`,
 `setStockScanResult(null)`, `setStockScanError(null)`, `setScanState`) touches
@@ -91,7 +95,8 @@ In `step-5-strategy/page.tsx` `runScan`, replace the literal (:216-245) with:
 // A5b: the same builder the Step-3/4 Run buttons use (Step-3 overrides,
 // confidence gate, headwind, fundamentals, ATR pair, require_choppy_regime).
 // Step 5's local panel edits ride in as per-run overrides, exactly as Step 4's
-// do; account_size keeps Step 5's existing source (see Q1).
+// do; account_size keeps Step 5's source, riskStore portfolioValue
+// (decision A5B-ACCOUNT-SIZE-2026-09-24). [R2-9]
 const requestBody = manualStockScanRequest(stratKey, params, { accountSize: portfolioValue });
 ```
 
@@ -126,6 +131,11 @@ stays (portfolioValue). No now-unused imports expected; typecheck confirms.
   `buildStockScanRequestBody` and is pinned by the A5 suite; folding it into
   `manualStockScanRequest` is a pure dedupe, not part of the locked fix.
 - The `$50k` hardcode in `runStockScan` (Q1).
+- StrategyParamsPanel's "require choppy regime" tooltip says it affects the
+  mean-reversion RSI signal only; after A5b it also filters `mean_reversion_bb`
+  and `mean_reversion_multi` on Step 5 [R1-4]. **In scope, one-line text fix:**
+  widen the tooltip to "the mean-reversion RSI / Bollinger Band signals (and the
+  multi-signal strategy's RSI/BB variants)" [R2-10].
 - Backend: no change. `StockScanRequest` already accepts every field.
 - Hydration [R1-13]: Step 5 now reads `useSettingsStore.getState().confidenceGate`
   at click time; before settingsStore rehydrates it would send
@@ -134,11 +144,7 @@ stays (portfolioValue). No now-unused imports expected; typecheck confirms.
 
 ## Q1 — `account_size` — ANSWERED: (a) (Kenneth 2026-09-24, decision `A5B-ACCOUNT-SIZE-2026-09-24`)
 
-The build gate [R1-2] is lifted. T1 and mutation 3 use the (a) forms below.
-
-The answer is recorded as a decision in PROJECT_STATE.json before T1 is written;
-T1 and mutation 3 follow the chosen option. The option below marked (a) is the
-recommendation, not a default the build may assume.
+The build gate [R1-2] is lifted. T1 and mutation 3 use the (a) forms below [R2-8].
 
 The locked pin says "a Step-5 body equals the Step-3/4 body apart from the
 strategy fields". Taken literally, Step 5 would start sending `50_000` instead of
@@ -159,7 +165,7 @@ silently.
 Setup mirrors `a5AnalysisMirrorsScan.test.tsx` (mocked `api`, `next/navigation`),
 with its **own `beforeEach`** that resets `useScanStore`, `useScanParamsStore`,
 `useSettingsStore` and `useRiskStore` to their initial state — the A5 suite's
-`reset()` (:47-67) does not reset scanParams/risk, and this suite changes both
+`reset()` does not reset scanParams/risk, and this suite changes both
 [R1-11]. Seeding rules [R1-11]:
 - all store seeding happens **before `render`** — the page's `useState`
   initializer (page.tsx:132) captures scanParams; `skipHydration` means the
@@ -170,13 +176,21 @@ with its **own `beforeEach`** that resets `useScanStore`, `useScanParamsStore`,
 Seeded non-default values: `scanOverrides = { weight_trend: 0.4, fast_ema: 12,
 regime_headwind_caution_pct: -3, regime_headwind_reject_pct: -9,
 fundamentals_caution_above: 55, fundamentals_reject_above: 75,
-confidence_atr_mult_target: 2.5, confidence_atr_mult_stop: 1.25,
+confidence_atr_mult_target: 3.5, confidence_atr_mult_stop: 1.25,  // [R2-3]: both differ from the Position default 2.5/1.5
 pullback_require_reversal: true }`, `confidenceGate.enabled = true` with
 caution/reject 60/40, `scanParamsStore.requireChoppyRegime = true`,
 context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)' }`.
 
+- **Card queries and clicks [R2-6, R2-7].** Cards are found as the A5 suite does:
+  `getAllByText(re).map(el => el.closest('button')).find(Boolean)` with
+  `/^MA Crossover \d+\/\d+$/` (the title tracks the params, and the bare phrase
+  also matches panel text), `/Mean Reversion BB/`, `/Mean Reversion Multi-Signal/`.
+  Between two clicks in one test, `await waitFor(() => expect(btn).not.toBeDisabled())`
+  — `loadingStrategy` clears only in `finally`, after `getLastStockScanStatus`.
+  Between a Step-5 run and a `runStockScan` run, use `mockClear` (not `mockReset`,
+  which drops the resolved value).
 - **T1 — the pin.** Click the Step-5 `ma_crossover` card; capture the posted
-  body. Reset the post mock; `await runStockScan('ma_crossover')` with the same
+  body. `mockClear` the post mock; `await runStockScan('ma_crossover')` with the same
   stores; capture. Assert with **`toStrictEqual`** [R1-8] (explicit-`undefined`
   keys count): `{...step5, account_size: 0}` vs `{...step4, account_size: 0}`
   plus `step5.account_size === 123_456` (Q1 answered (a)).
@@ -184,7 +198,7 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
   through the helper), so T2 pins the helper's output independently: the Step-5
   body has `universe: ['NDX100']`, `direction: 'Bearish'`, `horizon: 'Position'`,
   `confidence_caution_below: 60`, `confidence_reject_below: 40`,
-  `confidence_atr_mult_target: 2.5`, `confidence_atr_mult_stop: 1.25`,
+  `confidence_atr_mult_target: 3.5`, `confidence_atr_mult_stop: 1.25`,
   `overrides: { weight_trend: 0.4, fast_ema: 12 }` (exactly — the non-scorer
   keys are filtered out), `regime_headwind_caution_pct: -3`,
   `regime_headwind_reject_pct: -9`, `fundamentals_caution_above: 55`,
@@ -194,13 +208,13 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
   changes the backend's result.
 - **T3 — horizon ATR pair and gate off [R1-7].** Seed the same, but **without**
   the two `confidence_atr_mult_*` overrides and with `confidenceGate.enabled = false`.
-  Step-5 body: `confidence_atr_mult_target/stop` equal
-  `atrMultForHorizon(DEFAULT_CONFIDENCE_GATE, 'Position')` (= the `position`
-  pair), and both confidence thresholds are `undefined`. The ATR half fails on
+  Step-5 body: `confidence_atr_mult_target: 2.5`, `confidence_atr_mult_stop: 1.5`
+  — literals, the default `position` pair (settingsStore `DEFAULT_ATR_MULT_BY_HORIZON`,
+  = scoring_rules.yaml), not recomputed through `atrMultForHorizon` [R2-4], and both confidence thresholds are `undefined`. The ATR half fails on
   the old literal (it sent no pair), so T3 catches something.
 - **T4 — Step 5's local edits still win.** Before clicking, change
   `getByLabelText(/MA crossover fast/i)` via `fireEvent.change` (the input sits
-  in a closed `<details>`, StrategyParamsPanel/index.tsx:32, :115-128 —
+  in a closed `<details>`, StrategyParamsPanel `<details>` [R2-12] —
   `fireEvent` still works) [R1-11]. Body carries the edited value and
   (toStrictEqual, modulo `account_size` per Q1) equals `runStockScan('ma_crossover', { maCrossoverFast: edited })`.
 - **T5 — mean_reversion_multi through the panel [R1-10].** Change
@@ -208,13 +222,23 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
   `MeanReversionConfirmPanel`, then click the multi card: the body carries the
   panel's values for all four fields. Click a non-multi card:
   `not.toHaveProperty('mean_reversion_variants')` (and the other three).
-- **T6 — Step 5 throw path.** `useSettingsStore.setState({ confidenceGate: null })`
+  T5 is also a **shadowing guard [R2-11]**: the real A5b risk is Step 5's local
+  `params` shadowing a variant field in the `{...saved, ...overrides}` merge
+  (mutation 8).
+- **T6 — Step 5 throw path.** `useSettingsStore.setState({ confidenceGate: null } as never)` [R2-5]
   → click: the error text renders, `postStockScan` not called, the loading text
   gone and the cards enabled again.
-- **T7 — runStockScan throw path [R1-5].** Same null gate:
-  `await runStockScan('ma_crossover')` returns `null`, `scanState === 'FAILED'`,
-  `stockScanError` is set and does not contain `could not reach the backend`
-  (`reachedRequest` false), `postStockScan` not called.
+- **T7 — runStockScan throw path [R1-5, R2-2].** The throw must look like a
+  transport failure, or the `reachedRequest` assertion cannot fail (a
+  `Cannot read properties of null` TypeError never matches
+  `FETCH_FAILURE_MESSAGE`). With both ATR overrides seeded (so the builder reads
+  `confidenceGate.enabled`), `jest.spyOn(useSettingsStore, 'getState')` returns
+  `{ ...real, confidenceGate: gate }` where `gate` has an `enabled` getter
+  throwing `new TypeError('Failed to fetch')`. A spy, not `setState`: the
+  persisted store would JSON-serialize the getter and throw inside the test's own
+  `setState`. Then `await runStockScan('ma_crossover')` returns `null`,
+  `scanState === 'FAILED'`, `stockScanError` is set and does **not** contain
+  `could not reach the backend` (`reachedRequest` false), `postStockScan` not called.
 - Existing: `a5AnalysisMirrorsScan` "Step 5 writer" (stored request equals the
   posted body) and `lib/__tests__/stockScan.test.ts` must pass unchanged.
 
@@ -228,12 +252,17 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
 5. Hoist the `manualStockScanRequest` call in `runStockScan` above the `try` → T7 red [R1-5].
 6. Remove the two `confidence_*_below` lines from the builder path (e.g. force
    `confidenceGate.enabled` false inside the helper) → T2 red [R1-9].
+7. In `runStockScan`, move `reachedRequest = true` above the
+   `manualStockScanRequest` call → T7 red [R2-2].
+8. Add `meanReversionMinConfirm: 1` to Step 5's local `params` (both the
+   `savedParams` selector and the hydration sync) → T5 red, provided T5's panel
+   value is not 1 [R2-11].
 
 ## State file [R1-1]
 
 `state.py` treats a `defect_marker` probe as "shipped" once the pattern is gone
-(scripts/state.py:97-104) and reports drift when that disagrees with the status
-(:626-637). So:
+(scripts/state.py `probe()`, the `defect_marker` branch) and reports drift when
+that disagrees with the status (the declared-vs-probed check in `main()`) [R2-12]. So:
 - Now (plan rounds): `active_phase` → `A5B-STEP5-SHARED-REQUEST`; phase status
   `in_progress`, `audit_rounds` bumped per round. The defect marker still
   matches, so no drift.
@@ -242,7 +271,8 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
   "manualStockScanRequest\\(stratKey"}`. Leaving it `in_progress` with the
   marker gone makes `state.py` exit 1.
 - After a clean code round: `shipped`, `audit_clean: true`.
-- Q1's answer recorded as a decision before the build.
+- Q1's answer: recorded, decision `A5B-ACCOUNT-SIZE-2026-09-24` [R2-8].
+- Plan rounds 1-2 + code round 3 = the cap [R2-1].
 
 ## Verification
 
