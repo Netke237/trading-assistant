@@ -278,8 +278,9 @@ export function manualStockScanRequest(
   const { confidenceGate } = useSettingsStore.getState();
   const rawOverrides = store.scanOverrides;
 
-  // account_size/risk_pct are hardcoded here (not read from riskStore) —
-  // this is the manual-run path's existing, already-shipped behavior,
+  // account_size defaults to 50_000 when the caller passes none (the Step-3/4
+  // Run path, runStockScan); risk_pct is always 0.01. Neither is read from
+  // riskStore here — the manual-run path's existing, already-shipped behavior,
   // unchanged by this extraction. Flagged (not silently fixed) per the
   // scheduler-timezone-awareness plan: the profile-based schedule resolver
   // (scanScheduleResolve.ts) explicitly reads live riskStore values instead,
@@ -287,8 +288,8 @@ export function manualStockScanRequest(
   // silently keep a stale $50k/1% default baked in from before the user set
   // their real position sizing — fixing this same gap for the manual path
   // too is a separate, pre-existing concern outside this plan's scope.
-  // Step 5 passes opts.accountSize (riskStore portfolioValue), decision
-  // A5B-ACCOUNT-SIZE-2026-09-24; Steps 3/4 keep the 50k default.
+  // Step 5 passes opts.accountSize = riskStore portfolioValue (decision
+  // A5B-ACCOUNT-SIZE-2026-09-24).
   return buildStockScanRequestBody({
     universe: context?.universe ? [context.universe] : ['SP500'],
     direction: context?.direction ?? 'Bullish',

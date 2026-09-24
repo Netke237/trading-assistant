@@ -6,6 +6,7 @@ adversarial round, build + tests + mutation checks, code round, merge when clean
 
 **Plan round 1 (2026-09-24): NOT CLEAN — 2 blocking, 11 non-blocking. All folded
 in below, tagged `[R1-n]`.**
+**Code round 3 (2026-09-24): CLEAN** (fresh subagent, diff afed291..14d25a8), 7 non-blocking; 1-4, 6, 7 folded in, 5 logged as a follow-up.
 **Plan round 2 (2026-09-24): CLEAN** (fresh subagent). Its 12 non-blocking notes
 are folded in, tagged `[R2-n]`. **The code round is round 3 = the audit cap [R2-1]:
 if it is not clean, stop and escalate to Kenneth; do not re-audit.**
@@ -257,6 +258,9 @@ context = `{ universe: 'NDX100', direction: 'Bearish', horizon: 'Position (…)'
 8. Add `meanReversionMinConfirm: 1` to Step 5's local `params` (both the
    `savedParams` selector and the hydration sync) → T5 red, provided T5's panel
    value is not 1 [R2-11].
+   **[R3-7]** As written this does not type-check (StrategyParamsPanel's `setParams`
+   type has no `meanReversionMinConfirm`) — itself a guard. The build ran it type-valid:
+   spread `...({ meanReversionMinConfirm: 1 } as object)` into both places → T5 red.
 
 ## State file [R1-1]
 

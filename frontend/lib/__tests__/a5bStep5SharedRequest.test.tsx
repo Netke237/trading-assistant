@@ -111,6 +111,8 @@ describe('T1 — the pin: a Step-5 body equals a Step-3/4 body apart from accoun
     const step5 = await runCard(MA);
     m(api.postStockScan).mockClear();
     await runStockScan('ma_crossover');
+    // Let runStockScan's fire-and-forget meta refresh land inside this test.
+    await waitFor(() => expect(api.getLastStockScanStatus).toHaveBeenCalledTimes(2));
     const step4 = m(api.postStockScan).mock.calls[0][0];
     expect({ ...step5, account_size: 0 }).toStrictEqual({ ...step4, account_size: 0 });
     expect(step5.account_size).toBe(PORTFOLIO_VALUE);
@@ -175,11 +177,15 @@ describe("T4 — Step 5's local panel edits still win", () => {
     expect(useScanParamsStore.getState().maCrossoverFast).not.toBe(edited);
     m(api.postStockScan).mockClear();
     await runStockScan('ma_crossover', { maCrossoverFast: edited });
+    await waitFor(() => expect(api.getLastStockScanStatus).toHaveBeenCalledTimes(2));
     const step4 = m(api.postStockScan).mock.calls[0][0];
     expect({ ...step5, account_size: 0 }).toStrictEqual({ ...step4, account_size: 0 });
   });
 });
 
+// T5 is a panel-wiring and shadowing guard (mutations 4 and 8), NOT a
+// regression test for the A5b defect: the pre-A5b literal also sent these four
+// fields from useScanParamsStore, so T5 passes on the old code too.
 describe('T5 — mean_reversion_multi carries the panel values; other strategies carry none', () => {
   it('multi body has all four variant fields from the rendered panel', async () => {
     seed();
@@ -214,6 +220,7 @@ describe('T6 — a builder throw on Step 5 lands in the page error, like a post 
     expect(api.postStockScan).not.toHaveBeenCalled();
     await waitFor(() => expect(card(MA)).not.toBeDisabled());
     expect(card(MR_BB)).not.toBeDisabled();
+    expect(screen.queryByText('Running backtest scan…')).not.toBeInTheDocument();
   });
 });
 
@@ -234,5 +241,6 @@ describe('T7 — runStockScan: a builder throw is still inside the try, before r
     expect(s.stockScanError).toBeTruthy();
     expect(s.stockScanError).not.toMatch(/could not reach the backend/);
     expect(api.postStockScan).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.getLastStockScanStatus).toHaveBeenCalledTimes(1));
   });
 });

@@ -99,7 +99,7 @@ describe('spec test 11 — a pick survives navigation, never a new scan', () => 
     expect(readEdits('stocks').picks).toEqual({});
   });
 
-  // step-5-strategy/page.tsx:224 — calls api.postStockScan then
+  // step-5-strategy/page.tsx runScan — calls api.postStockScan then
   // setStockScanResult directly, bypassing runStockScan entirely.
   it('does NOT survive a new stock scan landing via setStockScanResult', () => {
     act(() => {
