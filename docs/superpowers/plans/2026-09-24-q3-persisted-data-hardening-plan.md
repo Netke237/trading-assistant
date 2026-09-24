@@ -122,3 +122,16 @@ the Position gate ran on its default 40 — each was rejected on main.
   hand-crafted file and would already break the other readers of scoring_rules.yaml.
 - Tests: the three round-2 repros, a mis-cased `Position:` alias, a non-`_` holder, an
   `_`-holder inside a known horizon, and a null block in an `_` holder all raise.
+
+## Split at the round cap (2026-09-24, Kenneth: Q3-CAP "B then A")
+
+Round 3 left one open finding, and it is in the config_loader part (item 3). Items 1
+(qty floor) and 2 (atomic dedup write) drew no finding in any round. So this change
+is reduced to items 1 and 2:
+
+- `backend/app/services/config_loader.py` is restored to main's version, and section 3 of
+  `backend/tests/test_q3_persisted_data_hardening.py` is removed. Both are recoverable at 83b98de.
+- Its four logged open_questions are reopened. Item 3 continues as phase
+  `Q3B-CONFIG-LOADER-HARDENING`, whose fix adds a named ValueError on any alias cycle.
+- Round 4 (authorised by Kenneth) reviews only the reduced diff: `schemas/__init__.py` and
+  `notifications/alert_notifier.py` plus their tests. Merge only if it is clean.
