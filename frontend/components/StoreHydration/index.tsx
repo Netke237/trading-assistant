@@ -75,6 +75,28 @@ export function StoreHydration() {
         }
       }
 
+      // A5: a stock result with no request on record (recovered just above,
+      // or persisted before v17) gets the backend's record of the request
+      // behind ITS result -- attached only when the scan_ids match at write
+      // time, re-read then so a scan finishing meanwhile is never paired with
+      // this older request. No match: stays null and Analysis says it is on
+      // current settings instead of claiming to mirror the scan.
+      {
+        const { stockScanResult: held, stockScanRequest } = useScanStore.getState();
+        if (held && !stockScanRequest) {
+          try {
+            const rec = await api.getLastStockScanRequest();
+            const now = useScanStore.getState();
+            if (rec && now.stockScanResult && !now.stockScanRequest
+                && rec.scan_id === now.stockScanResult.scan_id) {
+              useScanStore.setState({ stockScanRequest: rec.request });
+            }
+          } catch {
+            // Backend unreachable or no record -- leave null (current-settings basis).
+          }
+        }
+      }
+
       // Last-run status/strategy metadata — unlike the two blocks above, fetch
       // unconditionally on every load (not just when the store is empty): this
       // can go stale independent of whether a cached result already exists.
