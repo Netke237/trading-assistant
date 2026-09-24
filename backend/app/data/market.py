@@ -506,6 +506,44 @@ def completed_intraday_bars(
         and b["time"] <= cutoff
     ]
 
+
+# ── Completed bars for a USER-INTERVAL regime model (A4c) ──────────────────────
+# Kenneth, 2026-09-24: "every model that decides or fires" drops the forming bar
+# -- the user-built alert models (composite watches HMM_intraday, chart-drawn
+# composite and regime-condition rules) on their own intervals. Intraday
+# intervals only: daily/weekly are returned unchanged (logged separately).
+# 4h is 4h + 1h: fetch_intraday_candles builds it by resampling yfinance 1h bars
+# (which start at :30) into epoch-aligned 4h buckets keyed by bucket START, so
+# the bucket's last 1h constituent can end up to 30 min past the nominal 4h.
+_INTERVAL_COMPLETION_SECONDS: dict[str, int] = {
+    "1min": 60, "1m": 60,
+    "5min": 300, "5m": 300,
+    "15min": 900, "15m": 900,
+    "30min": 1800, "30m": 1800,
+    "1h": 3600,
+    "4h": 4 * 3600 + 3600,
+}
+
+
+def completed_bars_for_interval(
+    bars: list[dict],
+    interval: str,
+    now: float | None = None,
+) -> list[dict]:
+    """`completed_intraday_bars` for a user-chosen `interval`.
+
+    An interval outside `_INTERVAL_COMPLETION_SECONDS` (daily, weekly, or an
+    unrecognised string) returns `bars` unchanged -- fail OPEN on purpose:
+    dropping every bar would silently kill the user's alert. The sandbox feed
+    lag applies only to the intervals Tradier timesales actually serves.
+    """
+    norm = normalize_interval(interval)
+    span = _INTERVAL_COMPLETION_SECONDS.get(norm)
+    if span is None:
+        return bars
+    lag = intraday_feed_lag_seconds() if norm in _TRADIER_INTRADAY_INTERVALS else 0
+    return completed_intraday_bars(bars, now=now, bar_seconds=span, feed_lag=lag)
+
 def fetch_price(symbol: str) -> Optional[float]:
     try:
         resp = httpx.get(
