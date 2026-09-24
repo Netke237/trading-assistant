@@ -280,7 +280,7 @@ async def test_logged_threshold_pct_reports_the_global_for_an_inheriting_positio
     )
 
 
-# ── The auto-trader sizes off the resolved value ────────────────────────────
+# ── The auto-trader's daily-loss gate: full premium since A6 ────────────────────────────
 
 def _armed(**kw):
     from app.services.auto_trader import ArmedStrategy
@@ -293,50 +293,44 @@ def _armed(**kw):
     return ArmedStrategy(**base)
 
 
-def test_auto_trader_daily_loss_gate_sizes_off_the_resolved_pct(monkeypatch):
-    """`auto_trade.premium_stop_pct` is a DIFFERENT global from the alerts'.
-    The auto-trader is placing the trade the card described, so it must size the
-    daily-loss gate on the number the user set, not on either global.
+def test_auto_trader_daily_loss_gate_counts_the_full_premium(monkeypatch):
+    """A6 (decision A6-FULL-PREMIUM-DAILY-LOSS-2026-09-24): the daily-loss gate
+    counts the WHOLE premium, whatever stop was declared. The auto-trader
+    places no protective order, so a declared stop bounds nothing.
 
-    This drives `_check_daily_loss` itself. The version of this test that
-    shipped constructed an ArmedStrategy and then asserted on
-    `resolve_premium_stop_pct(...)` directly, so it passed with the auto-trader
-    still reading the global -- both call sites could be reverted with the whole
-    suite green. The gate is arithmetic on `stop_pct`, so a threshold that
-    straddles the two values is what actually pins the wiring.
+    FLIPPED DELIBERATELY from `..._sizes_off_the_resolved_pct`, which pinned
+    the old rule (a tighter declared stop booked less risk and let the trade
+    through). Thresholds straddle every value either rule could produce, so a
+    gate still scaling by a stop fraction fails here.
     """
     from app.services.auto_trader import AutoTradeService
 
-    # limit = 0.02 x 10_000 = $200. this_risk = 5.00 x 1 x 100 x stop_pct,
-    # so the global's 0.60 books $300 (over) and a per-position 0.30 books
-    # $150 (under). Nothing else separates the two calls.
     monkeypatch.setattr(
         AutoTradeService, "_risk_config",
         staticmethod(lambda: {"max_daily_loss_pct": 0.02, "premium_stop_pct": 0.60}),
     )
-
-    # Inheriting: sized at the global, and the gate trips.
+    # this_risk = 5.00 x 1 x 100 = $500 for every declared stop.
+    # At $20,000 the limit is $400: the old rule booked $300 (global 0.60) or
+    # $150 (declared 0.30) and passed; full premium trips for all three.
+    for pct in (None, 0.30, 0.10):
+        with pytest.raises(RuntimeError, match="Daily loss limit reached"):
+            AutoTradeService._check_daily_loss(_armed(premium_stop_pct=pct), [], 20_000.0)
+    # At $25,000 the limit is exactly $500: passes, returning the dollars it
+    # gated on, identical for every declared stop.
+    for pct in (None, 0.30, 0.90):
+        assert AutoTradeService._check_daily_loss(
+            _armed(premium_stop_pct=pct), [], 25_000.0) == pytest.approx(500.0)
+    # And the quantity is in it: 2 contracts are $1,000.
     with pytest.raises(RuntimeError, match="Daily loss limit reached"):
-        AutoTradeService._check_daily_loss(_armed(), [], 10_000.0)
-
-    # The same trade with a tighter declared stop books half the risk and passes.
-    AutoTradeService._check_daily_loss(_armed(premium_stop_pct=0.30), [], 10_000.0)
-
-    # And in the other direction, so the per-position value is genuinely in the
-    # arithmetic rather than the tighter case merely failing to raise. At
-    # $20,000 the limit is $400: the global's $300 passes, a declared 0.90
-    # books $450 and trips. A gate still reading the global would let it
-    # through.
-    AutoTradeService._check_daily_loss(_armed(), [], 20_000.0)
-    with pytest.raises(RuntimeError, match="Daily loss limit reached"):
-        AutoTradeService._check_daily_loss(_armed(premium_stop_pct=0.90), [], 20_000.0)
+        AutoTradeService._check_daily_loss(_armed(quantity=2), [], 25_000.0)
 
 
-def test_auto_trader_books_premium_at_risk_at_the_resolved_pct(monkeypatch):
+def test_auto_trader_books_premium_at_risk_at_the_full_premium(monkeypatch):
     """`fire()` stamps `premium_at_risk` on the history entry the daily-loss
-    gate later sums. If that were still booked at the global, a per-position
-    stop would gate correctly on the way in and then mis-report what it spent,
-    so tomorrow's first trade would be sized against the wrong number."""
+    gate later sums. Since A6 that is the FULL premium, whatever stop was
+    declared -- booked at a stop fraction, the gate would count the trade in
+    full on the way in and then under-report what it spent, letting later
+    trades through. FLIPPED DELIBERATELY from `..._at_the_resolved_pct`."""
     from app.services import auto_trader as at_mod
     from app.services.auto_trader import AutoTradeService
 
@@ -360,8 +354,8 @@ def test_auto_trader_books_premium_at_risk_at_the_resolved_pct(monkeypatch):
 
     booked = [e for e in svc._state.history if e.get("order_id") == "o1"]
     assert booked, f"fire() recorded no history entry: {svc._state.history}"
-    # 5.00 x 1 x 100 x 0.30 = 150, not the global's 300.
-    assert booked[-1]["premium_at_risk"] == pytest.approx(150.0)
+    # 5.00 x 1 x 100 = 500 -- not 150 (the declared 0.30), not 300 (the global).
+    assert booked[-1]["premium_at_risk"] == pytest.approx(500.0)
 
 
 def test_arm_request_carries_the_pct_into_the_strategy():

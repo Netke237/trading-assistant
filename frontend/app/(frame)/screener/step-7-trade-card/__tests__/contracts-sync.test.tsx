@@ -144,6 +144,27 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     expect(screen.getByLabelText('Contracts for BBB')).toHaveValue(5);
   });
 
+  it('resets the contract count when a new scan result lands (A8, open_questions[68])', async () => {
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument());
+    editContracts('3');
+    await waitFor(() => expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('3'));
+
+    // A new run of the same symbols, landing while the page is mounted (the
+    // StoreHydration-after-mount path). A size typed against the old run must
+    // not ride into the new run's order.
+    act(() => {
+      useScanStore.setState({
+        scanResult: { scan_id: 'test-scan-2', candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        optionsCardEdits: {
+          ...emptyCardEdits(), scanId: 'test-scan-2',
+          picks: { 'AAA|150|2026-05-15|C': pick(), 'BBB|150|2026-05-15|C': pick() },
+        },
+      } as any);
+    });
+    await waitFor(() => expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('1'));
+  });
+
   it('uses the shared map\'s edited value — not a hardcoded 1 — on the quick "Place Limit" and "Right Now — Market" paths', async () => {
     render(<Step7TradeCardPage />);
 

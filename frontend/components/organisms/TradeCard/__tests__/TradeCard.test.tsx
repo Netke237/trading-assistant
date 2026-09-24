@@ -951,6 +951,50 @@ describe('TradeCard', () => {
     expect((api.getStructuralStop as jest.Mock).mock.calls.at(-1)![0].horizon_preset).toBe('Quarterly');
   });
 
+  // A8, open_questions[52]. The two other call sites of the same horizon fix:
+  // only Check structure was pinned, so reverting either of these to the raw
+  // preset regressed silently -- a Custom 60-185d plan or estimate graded at
+  // Swing's threshold while the card beside it said Position.
+  const CUSTOM_POSITION = {
+    universe: 'SP500', direction: 'Bullish' as const,
+    horizon: 'Position (60–185d)', horizonPreset: 'Custom' as const,
+    holdMin: 60, holdMax: 185,
+  };
+
+  it('sends the resolved horizon from Compute Arithmetic Plan, not the raw Custom preset', async () => {
+    useScanStore.getState().setContext(CUSTOM_POSITION as any);
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: {
+        price: 177.0, source: 'atr_floor' as const, contractPrice: 1.2,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 178.5, atrFloorPrice: 177.0, distanceDollar: 1.5,
+      },
+      targets: [],
+      atr: 3.5,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    await waitFor(() => expect(api.getExitPlan).toHaveBeenCalled());
+    expect((api.getExitPlan as jest.Mock).mock.calls.at(-1)![0].horizon_preset).toBe('Position');
+  });
+
+  it('sends the resolved horizon from the Estimate click\'s structural sub-fetch', async () => {
+    useScanStore.getState().setContext(CUSTOM_POSITION as any);
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [], stopHitPct: null, medianDaysToStop: null, sampleSize: 0,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /estimate/i }));
+    await waitFor(() => expect(api.getStructuralStop).toHaveBeenCalled());
+    expect((api.getStructuralStop as jest.Mock).mock.calls.at(-1)![0].horizon_preset).toBe('Position');
+    // Same cleanup as the live-premium estimate test above.
+    await waitFor(() => expect(api.getFirstPassageEstimate).toHaveBeenCalled());
+    (api.getFirstPassageEstimate as jest.Mock).mockClear();
+  });
+
   it('shows a not-found message when no structural level is available', async () => {
     (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
       available: false, price: null, source: null, confidence: null, distancePct: null,
