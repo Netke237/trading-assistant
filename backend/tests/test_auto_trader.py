@@ -4292,3 +4292,89 @@ def test_malformed_direction_error_is_not_a_value_error():
     assert issubclass(MalformedDirectionError, TypeError)
     assert not issubclass(MalformedDirectionError, ValueError)
     assert not issubclass(MalformedDirectionError, SizingConfigError)
+
+
+# ── Q2 hardening: the stop fraction is resolved ONCE, before the order ─────────
+#
+# `fire()` used to resolve `premium_stop_pct` twice: inside `_check_daily_loss`
+# before the order, and again after `execute_option_order` for the success
+# row's `premium_at_risk`. A malformed value was refused only because the first
+# read happened to raise before the order went out. The two reads agree today
+# (`_risk_config` is lru_cached and the strategy is frozen), so nothing was
+# live -- but a second resolution AFTER a broker call is the one place where a
+# disagreement means a placed order with no history row. These pin that there
+# is no second resolution.
+
+
+def _q2_fire_service(mocker):
+    from app.data.ibkr_paper import OrderResult
+    import app.services.auto_trader as at
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    execute = mocker.patch.object(at, "execute_option_order",
+                                  return_value=OrderResult("q2", "ok", "ibkr_paper"))
+    svc = AutoTradeService()
+    svc.arm(_make_armed())
+    return svc, execute
+
+
+def test_the_success_row_books_the_stop_the_breaker_gated_on(mocker):
+    """THE REPRODUCER. Any config read after the first returns a malformed
+    stop. Before Q2 the breaker read the good value, the order WENT OUT, and
+    the post-order re-resolution raised ValueError -- a placed order leaving
+    fire() with no history row, so the next breaker check under-counted today's
+    risk. Now there is no read after the breaker's."""
+    reads = []
+
+    def _cfg():
+        reads.append(1)
+        stop = 0.60 if len(reads) == 1 else "60%"
+        return {"max_daily_loss_pct": 1.0, "premium_stop_pct": stop}
+
+    mocker.patch.object(AutoTradeService, "_risk_config", staticmethod(_cfg))
+    svc, execute = _q2_fire_service(mocker)
+
+    result = svc.fire(portfolio_value=100_000.0)
+
+    assert result.order_id == "q2"
+    execute.assert_called_once()
+    row = svc.get_state().history[-1]
+    assert row["order_id"] == "q2"
+    # 2.50 x 1 x 100 x 0.60 -- the value the breaker gated on.
+    assert row["premium_at_risk"] == pytest.approx(150.0)
+    assert len(reads) == 1, "the config was read again after the order went out"
+
+
+def test_the_stop_is_resolved_exactly_once_per_fire(mocker):
+    """The structural half, pinned directly rather than inferred from a
+    config double: one resolution per successful fire, not one per reader."""
+    import app.services.auto_trader as at
+    mocker.patch.object(AutoTradeService, "_risk_config",
+                        staticmethod(lambda: {"max_daily_loss_pct": 1.0,
+                                              "premium_stop_pct": 0.60}))
+    spy = mocker.spy(at, "resolve_premium_stop_pct")
+    svc, _ = _q2_fire_service(mocker)
+
+    svc.fire(portfolio_value=100_000.0)
+
+    assert spy.call_count == 1
+    assert svc.get_state().history[-1]["order_id"] == "q2"
+
+
+def test_a_malformed_stop_is_refused_before_the_order(mocker):
+    """The refusal the decision calls coincidental, pinned as a contract: a
+    non-numeric stop never reaches the broker and leaves a risk_check_failed
+    row, not a missing one."""
+    mocker.patch.object(AutoTradeService, "_risk_config",
+                        staticmethod(lambda: {"max_daily_loss_pct": 1.0,
+                                              "premium_stop_pct": "60%"}))
+    svc, execute = _q2_fire_service(mocker)
+
+    with pytest.raises(ValueError):
+        svc.fire(portfolio_value=100_000.0)
+
+    execute.assert_not_called()
+    row = svc.get_state().history[-1]
+    assert row["status"] == "risk_check_failed"
+    assert row["order_id"] is None
+    assert row["premium_at_risk"] == 0.0
+    assert svc.get_state().armed is False
