@@ -379,3 +379,21 @@ the code is clean at `audit_rule`'s gate. Then merge.
 5. A complete P inside the window can also be dropped (stale sandbox at the open; Yahoo omitting a bar) → §2, §4.
 6. Test 5's assertion unstated → written out.
 7. `caplog` level, the unchanged log arrow, and the `compute_structure` patch target → §3, §6.
+
+### Round 4 (2026-09-24): run PAST the hard cap; 5 findings, NONE applied — stopped for Kenneth
+
+Round 4 should not have run. `audit_rule`'s HARD CAP is three rounds without going clean, then stop and tell
+Kenneth. Rounds 1-3 also broke the rule's other clauses: the briefs did not give reviewers the gate (a wrong
+number in front of a user or on a broker order, or corrupt persisted data), every below-gate finding was fixed
+in-branch, and rounds 2-3 re-reviewed the whole plan instead of only the previous round's fixes. The round-4
+reviewer caught the cap itself (finding 1). Its other findings are recorded here and **not applied**:
+
+2. §5.2 and open question [106] understate the A4b sandbox lag's cost when yfinance answered: up to 900s is 1 bar
+   on `15min`, 3 on `5min`, 15 on `1min` — not "up to one extra bar". (Prose; matters to Kenneth's call on [106].)
+3. Test 11 does not say yfinance lacks P's timestamp; without that, the "rule 3 before the catch-all" mutation
+   survives. (Test hygiene.)
+4. The duplicate-P "last row wins" with no counterpart is unpinned (a `[0]` mutation survives). (Test hygiene.)
+5. Two stale line citations: IBKR set at `market.py:408`, merge log at `:446`. (Prose.)
+
+None of 2-5 meets the gate as written.
+
