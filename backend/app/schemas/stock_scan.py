@@ -122,6 +122,11 @@ class PositionCardOut(BaseModel):
     shares:       int
     dollar_risk:  float
     dollar_size:  float
+    # What `shares` was sized on: "off" (regime_sizing disabled, full risk
+    # budget), "measured" (the conviction ramp) or "floor:unmeasured" (the
+    # symbol's regime could not be measured, so min_mult). Same vocabulary as
+    # the auto-trader's history rows.
+    sizing_basis: Optional[str] = None
     confidence:   Optional[int] = None
     confidence_text: Optional[str] = None
     sector_rs_pct: float | None = None   # stock ROC minus SPY ROC; positive = outperforming

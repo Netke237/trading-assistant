@@ -971,7 +971,20 @@ async def _process_stock(
                         card = dataclasses.replace(card, status="CAUTION")
 
             sizing_cfg = full_cfg.get("regime_sizing", {"enabled": False})
-            mult = _conviction_mult(regime_signal["conviction_pct"], sizing_cfg) if regime_signal else 1.0
+            _sizing = resolve_sizing(sizing_cfg)
+            if _sizing is None:
+                mult, sizing_basis = 1.0, "off"
+            elif regime_signal:
+                mult = _conviction_mult(regime_signal["conviction_pct"], sizing_cfg)
+                sizing_basis = "measured"
+            else:
+                # THE FLOOR, NOT FULL SIZE: the 15-min fetch failed, there were
+                # fewer than min_obs bars, or compute_omm returned nothing. This
+                # used to be 1.0 -- the largest position on the worst input.
+                # Mirrors the auto-trader (decision
+                # SIZING-4-UNMEASURED-FLOOR-2026-09-24); this card's `shares` is
+                # what StockSendDialog sends.
+                mult, sizing_basis = _sizing[0], "floor:unmeasured"
             sized_risk_pct = (req.risk_pct * mult) if req.risk_pct is not None else None
             sized_risk_fixed = (req.risk_fixed_usd * mult) if req.risk_fixed_usd is not None else None
             shares, dollar_risk = _position_size(
@@ -1023,6 +1036,7 @@ async def _process_stock(
                 stock_score=card.score, stock_status=card.status,
                 shares=shares, dollar_risk=dollar_risk,
                 dollar_size=round(shares * signal.entry_price, 2),
+                sizing_basis=sizing_basis,
                 confidence=conf_val, confidence_text=conf_txt,
                 sector_rs_pct=sector_rs_pct,
                 next_event_days=next_event_days, next_event_label=next_event_label,
