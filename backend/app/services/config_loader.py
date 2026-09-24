@@ -107,26 +107,62 @@ _DIRECTION_CONVICTION_DEFAULTS: dict[str, dict[str, float | None]] = {
 _KNOWN_HORIZONS = frozenset({"swing", "intraday", "position"})
 
 
-def _walk_direction_conviction_paths(node, path: tuple[str, ...] = ()):
-    """Yield the dotted path of every `direction_conviction` key anywhere in the
-    config, at any depth, through mappings and lists alike.
+def _walk_direction_conviction_paths(node, path: tuple[str, ...] = (), ancestors: frozenset[int] = frozenset()):
+    """Yield the path (a TUPLE of key segments) of every `direction_conviction`
+    key anywhere in the config, at any depth, through mappings and lists alike.
 
     Keys are stringified: PyYAML parses `on:`, `yes:` and `true:` as BOOLEANS
     and `1:` as an int, so a bare `key.lower()` on a raw key would blow up with
     an AttributeError instead of the named error this module promises — and
     neither router catches AttributeError, so it would escape as a bare 500
     with no `detail` at all.
+
+    THE PATH IS A TUPLE, NOT A DOTTED STRING. Joined on '.', a top-level key
+    literally spelled `horizons.position` produced the legal string
+    'horizons.position.direction_conviction', passed validation, and sat inert
+    while the gate ran on the real block. A '.' inside a segment cannot
+    synthesise a separator in a tuple.
+
+    `ancestors` holds the ids of the containers on the CURRENT path only.
+    yaml.safe_load accepts recursive aliases (`horizons: &x {swing: *x}`),
+    which used to recurse until RecursionError — a bare 500 again. ANY cycle
+    now raises the named ValueError instead. It is not cut and walked past:
+    cutting let `horizons: &h {..., position: {vol: *h}}` hide a misplaced
+    block while Position ran on its default. A container that is merely
+    SHARED (aliased in two places, no cycle) is walked again under each path,
+    because where a block sits is exactly what the caller judges — skipping
+    every revisit let `position: {vol: *swing}` hide a misplaced block behind
+    swing's legal one.
     """
+    if isinstance(node, (dict, list, tuple)):
+        if id(node) in ancestors:
+            raise ValueError(
+                f"alias cycle in scoring_rules.yaml at {'.'.join(path) or '<root>'}: "
+                f"a YAML alias refers back to a mapping or list that contains it, "
+                f"so the direction_conviction blocks cannot be located reliably"
+            )
+        ancestors = ancestors | {id(node)}
     if isinstance(node, dict):
         for key, value in node.items():
             key_text = str(key)
             if key_text == "direction_conviction":
-                yield ".".join(path + (key_text,)), value
+                yield path + (key_text,), value
             else:
-                yield from _walk_direction_conviction_paths(value, path + (key_text,))
-    elif isinstance(node, list):
+                yield from _walk_direction_conviction_paths(value, path + (key_text,), ancestors)
+    elif isinstance(node, (list, tuple)):
+        # `!!omap` and `!!pairs` load as a LIST of (key, value) TUPLES, so a
+        # tuple whose key is direction_conviction is a block like any other --
+        # skipping tuples let `vol: !!omap [direction_conviction: {...}]`
+        # sit inert while the gate ran on the default.
+        if isinstance(node, tuple) and len(node) == 2 and str(node[0]) == "direction_conviction":
+            yield path + ("direction_conviction",), node[1]
+            return
         for index, value in enumerate(node):
-            yield from _walk_direction_conviction_paths(value, path + (f"[{index}]",))
+            yield from _walk_direction_conviction_paths(value, path + (f"[{index}]",), ancestors)
+    elif isinstance(node, (set, frozenset)):
+        # `!!set` loads as a set of keys whose values are all null.
+        if any(str(member) == "direction_conviction" for member in node):
+            yield path + ("direction_conviction",), None
 
 
 def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
@@ -166,14 +202,24 @@ def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
             f"{sorted(_KNOWN_HORIZONS)}, got {type(horizons).__name__}"
         )
 
-    legal_paths = {f"horizons.{h}.direction_conviction" for h in _KNOWN_HORIZONS}
+    legal_paths = {("horizons", h, "direction_conviction") for h in _KNOWN_HORIZONS}
+    # NO ANCHOR-HOLDER EXEMPTION, deliberately. A `_defaults: &d` holder that
+    # itself carries a direction_conviction is rejected even when a horizon
+    # merges it. YAML merges are shallow and first-wins, and PyYAML keeps no
+    # record of which horizons merged what, so "some horizon reads this block"
+    # cannot tell whether EVERY horizon that merged it still does: with
+    # `swing: {<<: *d}` and `position: {<<: *d, direction_conviction:
+    # {bullish_min_trend: 60}}`, the holder's bearish value is silently gone
+    # for Position. Put the block at horizons.<horizon>.direction_conviction
+    # itself (a merge INSIDE the block is fine).
     for found_path, _block in _walk_direction_conviction_paths(cfg):
         if found_path not in legal_paths:
             raise ValueError(
                 f"misplaced direction_conviction block in scoring_rules.yaml: "
-                f"found at {found_path}, but it must sit at one of "
-                f"{sorted(legal_paths)} — as written it is never read, so the "
-                f"gate silently keeps running on its previous threshold"
+                f"found at {'.'.join(found_path)}, but it must sit at one of "
+                f"{sorted('.'.join(p) for p in legal_paths)} — as written it is "
+                f"never read, so the gate silently keeps running on its previous "
+                f"threshold"
             )
 
     blocks: dict[str, dict | None] = {}
