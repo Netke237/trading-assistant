@@ -2,8 +2,11 @@
 
 /*
  * Trade Card right-rail — Pre-trade checklist.
- * Gates are computed from live TradeCardData + WatchlistRow for the
- * candidate currently active in Step 7 (tracked via scanStore.selectedSymbol).
+ * Gates are computed from the card Step 7 is SHOWING, published by that page
+ * into tradeCardUiStore -- the Step-6 pick applied and its recomputed plan
+ * merged. Never from the raw scan candidate: after a pick that is the
+ * auto-picked contract, and the rail graded its IV, score, spread and R:R
+ * beside a card showing another one (A8, open_questions[64]).
  */
 
 import { RailSection } from '@/components/organisms/ContextRail';
@@ -11,6 +14,7 @@ import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
+import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import { statusForScore } from '@/lib/status';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
 import { resolveIv, formatIv } from '@/lib/ivBasis';
@@ -33,6 +37,7 @@ function buildChecklist(
   regime: Status,
   horizonKey: string,
   ivThresholds: Record<string, HorizonIvThresholds>,
+  rrPending: boolean,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -105,8 +110,15 @@ function buildChecklist(
     detail: `Lower of stock score (${candidate.stockScore}) and contract score (${candidate.contractScore}) = ${minScore}.`,
   });
 
-  // R:R ≥ 2.0
-  gates.push({
+  // R:R ≥ 2.0. While the picked contract's plan is loading (or failed) the
+  // card's rrRatio is still the auto-pick's -- CAUTION, never that figure.
+  if (rrPending) {
+    gates.push({
+      label: 'R:R ≥ 2.0',
+      status: 'CAUTION',
+      detail: 'R:R not yet recomputed for the contract picked in Step 6.',
+    });
+  } else gates.push({
     label: 'R:R ≥ 2.0',
     status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',
     detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}× — pass ≥2.0×, caution 1.5-2.0×.`,
@@ -124,18 +136,16 @@ function buildChecklist(
 }
 
 export default function TradeCardContextRail() {
-  const selectedSymbol      = useScanStore((s) => s.selectedSymbol);
+  const published           = useTradeCardUiStore((s) => s.activeCard);
   const regime              = useScanStore((s) => s.combinedRegime);
   const horizon             = useScanStore((s) => s.context?.horizon);
-  const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
-  const candidates          = scanResultCandidates ?? [];
   const ivThresholds        = useIvThresholdsStore((s) => s.thresholds);
 
   const horizonKey = horizon?.startsWith('Intraday') ? 'Intraday'
     : horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
 
-  const candidate = candidates.find((c) => c.symbol === selectedSymbol) ?? candidates[0];
+  const candidate = published?.card;
 
   // Build a minimal WatchlistRow from candidate for buildChecklist
   const wlRow: WatchlistRow | undefined = candidate
@@ -155,12 +165,12 @@ export default function TradeCardContextRail() {
       }
     : undefined;
 
-  const gates = candidate ? buildChecklist(candidate, wlRow, regime, horizonKey, ivThresholds) : [];
+  const gates = candidate ? buildChecklist(candidate, wlRow, regime, horizonKey, ivThresholds, published?.rrPending ?? false) : [];
 
   return (
     <ScreenerStepGate>
       <>
-      <RailSection title={selectedSymbol ? `Pre-trade checklist · ${selectedSymbol}` : 'Pre-trade checklist'}>
+      <RailSection title={candidate ? `Pre-trade checklist · ${candidate.symbol}` : 'Pre-trade checklist'}>
         {!candidate ? (
           <Text size={12} tone="dim">Run a scan to populate the checklist.</Text>
         ) : (

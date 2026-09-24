@@ -128,6 +128,7 @@ frontend/
 | `notesStore.ts` | One overwritable free-text note per symbol, backend-synced (not localStorage). Shared by the Chart sidebar, the Portfolio EditDrawer and the Portfolio sidebar, so an edit in one is visible in the others without a refresh. Local edit applies instantly; the backend write is debounced 600ms via a module-level timer `Map` (not Zustand state — timers aren't serializable), mirroring `portfolioStore`'s patch-flush pattern |
 | `portfolioUiStore.ts` | Ephemeral `selectedSymbol` for the Portfolio page, shared with its `@contextRail` sidebar — a separate parallel-route component that cannot read the page's local state. Not persisted |
 | `watchlistUiStore.ts` | Ephemeral `selectedSymbol` for the Watchlist page, same `@contextRail` reason as `portfolioUiStore`. Deliberately **not** `chartStore.symbol`, which defaults to `'AAPL'` and is persisted and so can never represent "nothing selected" |
+| `tradeCardUiStore.ts` | Ephemeral `activeCard` — the card Step 7 is showing (Step-6 pick applied, recomputed plan merged) plus `rrPending`, published by the page for its `@contextRail` pre-trade checklist, same parallel-route reason as `portfolioUiStore`. The rail must read this, never the raw scan candidate (that is the auto-pick). Not persisted; cleared on unmount |
 
 `scanStore.regime` (raw market-overall status) and `scanStore.combinedRegime`
 (`alignmentVerdict(direction, descriptor)` — direction-aligned verdict) are kept in sync across

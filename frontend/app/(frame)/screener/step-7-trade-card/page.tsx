@@ -40,6 +40,7 @@ import {
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
+import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
@@ -621,6 +622,21 @@ export default function Step7Page() {
 
   // Merge the recomputed Entry/Exit/RR into the overridden card once it arrives.
   const effectiveCard = pickedCard && planForThisContract ? mergePlan(pickedCard, planForThisContract) : pickedCard;
+
+  // A8 (open_questions[64]). Publish the card this page SHOWS for the
+  // @contextRail checklist, which cannot read this component's state and used
+  // to grade the raw scan candidate -- the auto-pick -- beside a card showing
+  // the Step-6 pick. `rrPending` while `effectiveCard.rrRatio` is still the
+  // auto-pick's (override plan loading or failed). This page does not subscribe
+  // to the store, so publishing on every render of an overridden card (whose
+  // identity changes each render) re-renders the rail only, never this page.
+  const setRailCard = useTradeCardUiStore((s) => s.setActiveCard);
+  useEffect(() => {
+    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady } : null);
+  }, [effectiveCard, planReady, setRailCard]);
+  // Cleared on unmount, so a later visit never shows the previous visit's
+  // contract before its first publish.
+  useEffect(() => () => setRailCard(null), [setRailCard]);
 
   /* DIRECT-SEND-STOP-GATE-2026-09-09. The two direct buttons' half of the
    * refusal `checkTradeRisk` already raises as `missing_invalidation` on the
