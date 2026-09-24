@@ -8,8 +8,9 @@ card send already goes through, instead of a second writer that drifts from it.
 The router keeps the two things that are the router's: `log_approval` and the
 response schema.
 
-VERBATIM MEANS VERBATIM. The only edits are the three injected callables below
-and the return value. Nothing was tidied in passing: the existing POST
+VERBATIM MEANS VERBATIM. The only step-1 edits are the three injected callables
+below and the return value; step 2 added `enforce_pre_trade_gates` (below) and
+nothing else. Nothing was tidied in passing: the existing POST
 /api/portfolio suite, run UNEDITED, is the proof that the move changed nothing,
 and a tidy-up would spend that proof.
 
@@ -26,7 +27,26 @@ it to end -- on the scan path that matters (spec section 5.3).
 
 IT RAISES HTTPException exactly as the router did (409 duplicate, 422 wrong-side
 stop, 422 exposure, 500 rec_id collision), because those raises are part of the
-moved body. A non-HTTP caller must catch them.
+moved body. A non-HTTP caller must catch them. With `enforce_pre_trade_gates=False`
+the two 422s become warnings; the 409 and the 500 still raise.
+
+`enforce_pre_trade_gates` (O4 step 2, spec section 5.2). Default True, which is
+the card path, byte-for-byte. False is for a caller whose order is ALREADY AT
+THE BROKER (the auto-trade fire path, from step 4): re-running a pre-trade gate
+there can only refuse to write down a trade that already happened. It turns off
+exactly three things:
+  - the exposure 422: an unapproved position is booked, with a warning, and
+    `WriteOutcome.over_exposure` is True so the caller can put the breach in
+    front of a human (spec section 6.5) -- a log line alone would hide it.
+    `over_exposure` is also True when the check APPROVED a quantity smaller
+    than the one booked (see `WriteOutcome`);
+  - the exposure RESIZE: `qty` is `body.qty`, the quantity that was ordered.
+    The books match the broker, not the gate;
+  - the wrong-side-stop 422: warned instead of raised.
+It does NOT turn off the duplicate-contract 409, the live refetch, the
+re-anchor, the entryPrice replacement, the premium-stop derivation or
+`seed_tp_from_pick`. The risk check itself still RUNS in both modes -- it is
+what `over_exposure` and `adjusted_size` are read from.
 """
 from __future__ import annotations
 
@@ -47,6 +67,7 @@ from app.schemas import PortfolioPositionCreate
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
 from app.services.portfolio_performance import _contract_multiplier
+from app.services import portfolio_risk
 from app.services.portfolio_risk import check_position_risk, PortfolioPosition as RiskPosition
 
 import logging as _logging
@@ -63,12 +84,28 @@ def _floor_stop(value: Optional[float]) -> Optional[float]:
 class WriteOutcome:
     """What `create_position` did, beyond the row itself (spec section 5.1).
 
-    `adjusted_size` is what the exposure gate resized to (None if it did not).
-    `over_exposure` is `not risk.approved`. It is ALWAYS False from this step:
-    with the gate enforced, an unapproved position raises 422 before any row
-    exists. It is carried now because it cannot be derived from
-    `adjusted_size` -- `check_position_risk` sets the two independently -- and
-    step 2's un-gated mode is where it becomes reachable.
+    `adjusted_size` is `risk.adjusted_size` as the check computed it (None
+    if it computed none). The gate APPLIES it only with gates on and only when
+    the check approved; a refusal can carry one too. With gates off the row's
+    `qty` is `body.qty` whatever this says.
+
+    `over_exposure` means the booked position went past a cap. With gates
+    enforced it is always False: an unapproved position raises 422 before any
+    row exists, and an approved resize is applied. With gates off it is True
+    when ANY of these holds, because each means the booked quantity was never
+    judged within the caps:
+      - `not risk.approved` -- read from `approved`, never inferred from
+        `adjusted_size`: the two are set independently (max-concurrent refuses
+        with no resize);
+      - `risk.adjusted_size is not None` -- an APPROVED soft resize. The check
+        judged the total-exposure cap on the RESIZED capital, so booking the
+        ordered quantity is over the single-position cap and can be over the
+        total cap with `approved` still True;
+      - `body.qty > max_contracts_per_trade` -- the check clamps the quantity
+        to that cap before judging anything, so it never saw what was booked.
+    This is wider than spec section 5.1's comment "risk.approved was False";
+    it is that comment's own gloss, "the booking went past a cap", made true
+    (O4 step 2, round 1).
     """
     position:      PortfolioPositionModel
     adjusted_size: Optional[int]
@@ -82,6 +119,7 @@ async def create_position(
     quote_fetcher: Callable[..., Awaitable[object]] = fetch_contract_quote_async,
     price_fetcher: Callable[..., Awaitable[object]] = fetch_price_async,
     exit_plan_cfg_loader: Callable[[], dict] = load_exit_plan_cfg,
+    enforce_pre_trade_gates: bool = True,
 ) -> WriteOutcome:
     """Persist a position from a create request. See the module docstring."""
     # Duplicate contract check → 409
@@ -219,12 +257,21 @@ async def create_position(
             else adjusted_stop <= live_price
         )
         if wrong_side:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    f"A {body.direction.lower()} stop of {adjusted_stop:.2f} is on the wrong "
-                    f"side of the underlying at {live_price:.2f}; it would fire immediately."
-                ),
+            wrong_side_detail = (
+                f"A {body.direction.lower()} stop of {adjusted_stop:.2f} is on the wrong "
+                f"side of the underlying at {live_price:.2f}; it would fire immediately."
+            )
+            if enforce_pre_trade_gates:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=wrong_side_detail,
+                )
+            # O4 step 2 (spec section 5.2): the order is already at the broker.
+            # A stop that fires on the first scan is loud, visible in the drawer
+            # and one edit to correct; refusing leaves no position at all.
+            _log.warning(
+                "create_position: %s -- booking %s anyway, pre-trade gates are off",
+                wrong_side_detail, body.contract,
             )
 
     live_entry = (live_quote or {}).get("price") if isinstance(live_quote, dict) else None
@@ -271,11 +318,34 @@ async def create_position(
         portfolio=portfolio,
         portfolio_value=body.portfolioValue,
     )
-    if not risk.approved:
+    if not risk.approved and enforce_pre_trade_gates:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=" ".join(risk.reasons),
         )
+    # O4 step 2 (spec section 5.2). With gates on this stays False: a refusal
+    # raised above, and an approved resize is applied to `qty` below. With
+    # gates off `qty` is `body.qty`, and every way the check can have judged a
+    # quantity other than that one is a breach -- see `WriteOutcome`.
+    over_exposure = False
+    if not enforce_pre_trade_gates:
+        breaches = []
+        if not risk.approved:
+            breaches.append(" ".join(risk.reasons))
+        if risk.adjusted_size is not None:
+            breaches.append(f"the check would have resized to {risk.adjusted_size}")
+        max_per_trade = portfolio_risk._load_config()["sizing"]["max_contracts_per_trade"]
+        if body.qty > max_per_trade:
+            breaches.append(f"qty exceeds max_contracts_per_trade {max_per_trade}")
+        over_exposure = bool(breaches)
+        if over_exposure:
+            # This log is not the record of the breach -- `over_exposure` is,
+            # and the caller must surface it.
+            _log.warning(
+                "create_position: booking %s OVER the exposure gate (%s) at the ordered "
+                "qty %s -- pre-trade gates are off",
+                body.contract, "; ".join(breaches), body.qty,
+            )
 
     # Piece 4 — derive the premium-stop FRACTION here, not on the client.
     # `entry_price` above may have just been replaced with the live quote, and
@@ -391,7 +461,10 @@ async def create_position(
         contract=body.contract,
         direction=body.direction,
         entry_price=entry_price,
-        qty=risk.adjusted_size or body.qty,
+        # Gates off: the quantity that was ORDERED, never the gate's resize
+        # (spec section 5.2) -- booking 3 when the broker traded 5 puts every
+        # downstream P&L and exposure number on a quantity that never happened.
+        qty=(risk.adjusted_size or body.qty) if enforce_pre_trade_gates else body.qty,
         entry_date=body.entryDate,
         stop=_floor_stop(adjusted_stop),
         structural_stop=_floor_stop(adjusted_structural_stop),
@@ -466,5 +539,5 @@ async def create_position(
     return WriteOutcome(
         position=position,
         adjusted_size=risk.adjusted_size,
-        over_exposure=not risk.approved,
+        over_exposure=over_exposure,
     )
