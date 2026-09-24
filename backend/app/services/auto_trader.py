@@ -13,7 +13,6 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Literal, Optional, get_args
 from app.schemas import Direction, Horizon
-from app.services.premium_stop import resolve_premium_stop_pct
 from app.services.scheduling_tz import MARKET_TZ
 
 if TYPE_CHECKING:
@@ -213,10 +212,10 @@ class ArmedStrategy:
     entry_premium:   float = 0.0
     portfolio_value: float = 50_000.0
     # Piece 4 — the per-trade premium stop the card was showing when this was
-    # armed. None inherits auto_trade.premium_stop_pct. Threaded through rather
-    # than left to the global: the auto-trader is placing the same trade the
-    # card described, so sizing it off a different number than the one the user
-    # set is a silent divergence — which is how three globals happened.
+    # armed. Booked onto the position the fire opens (auto_trade_booking.py),
+    # where the premium-stop alert reads it; None means that position inherits
+    # the global premium stop. NOT used by the daily-loss gate since A6, which
+    # counts the full premium because nothing places this stop at the broker.
     premium_stop_pct: Optional[float] = None
     # Piece 5 (Phase G, build step 5) -- the method pick the card was showing
     # when this was armed, carried through by `ArmedStrategy(**req.model_dump())`
@@ -2025,8 +2024,8 @@ def _alert_unclassified_refusal(symbol: str, exc: Exception) -> None:
     stops a `risk_rules.yaml` fault being paged as a sizing fault, but on its
     own it would leave that refusal reaching nobody at all — the same hole one
     file further along. The known way in is a non-numeric value in
-    `risk_rules.yaml`: `_check_daily_loss` calls `float()` on two of its keys
-    and raises ValueError, `fire()`'s guard there catches only RuntimeError,
+    `risk_rules.yaml`: `_check_daily_loss` calls `float()` on
+    `max_daily_loss_pct` and raises ValueError, `fire()`'s guard there catches only RuntimeError,
     and by then the disarm has already happened.
 
     DELIBERATELY DOES NOT CLAIM NOTHING WAS SENT. Every way in today is
@@ -2230,8 +2229,9 @@ class AutoTradeService:
         # A config this cannot honour refuses the fire (§9.1, fail closed). The
         # order matters: disarm has already happened above, so a refusal here
         # leaves nothing armed and nothing sent — the same shape as the two
-        # blocks below. SizingConfigError is a RuntimeError, so /auto-trade/fire
-        # still maps it to a 400 and maybe_fire_on_scan can single it out to alert.
+        # blocks below. /auto-trade/fire maps SizingConfigError to a 500 (a
+        # server config fault, decision A7B-FIRE-SIZING-CONFIG-500-2026-09-24,
+        # matching POST /stock-scan) and maybe_fire_on_scan singles it out to alert.
         try:
             strategy = _apply_vol_sizing(strategy)
         except RegimeHeadwindError as exc:
@@ -2333,13 +2333,39 @@ class AutoTradeService:
                 else "the regime conviction is not a usable number", exc,
             )
             raise
+        except Exception as exc:
+            # THE LAST-RESORT ROW for this call, on the rule
+            # `_STATUS_RISK_CHECK_FAILED` states: the disarm above has already
+            # consumed the armed order, so an exception outside the four named
+            # classes must still leave a row -- it used to leave none, and
+            # `/auto-trade/status` went on showing the PREVIOUS order as
+            # last_order. Not filed under a sizing or gate status, because
+            # nothing says which of the two failed or why; the scan trigger
+            # routes this status to the unclassified alert. Nothing was sent.
+            with self._lock:
+                self._state.history.append({
+                    "attempt_id":      attempt_id,
+                    "order_id":        None,
+                    "status":          _STATUS_RISK_CHECK_FAILED,
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           f"sizing/regime check failed: {exc}",
+                })
+            logger.error(
+                "AutoTrader fire REFUSED for %s — the sizing/regime check "
+                "failed unexpectedly: %r", strategy.symbol, exc,
+            )
+            raise
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
         pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
         if portfolio_snapshot is not None and strategy.entry_premium > 0:
             try:
                 self._check_exposure(strategy, portfolio_snapshot, pv)
-            except RuntimeError:
+            except RuntimeError as exc:
                 with self._lock:
                     self._state.history.append({
                         "attempt_id":      attempt_id,
@@ -2350,6 +2376,7 @@ class AutoTradeService:
                         "option":          strategy.option_symbol,
                         "timestamp":       datetime.now(timezone.utc).isoformat(),
                         "premium_at_risk": 0.0,
+                        "error":           str(exc),
                     })
                 raise
             except Exception as exc:
@@ -2374,16 +2401,15 @@ class AutoTradeService:
         with self._lock:
             _history_snapshot = list(self._state.history)
         try:
-            # THE ONE RESOLUTION OF THE STOP FRACTION FOR THIS ATTEMPT. The
-            # success row below books `premium_at_risk` at this same value
-            # rather than resolving again after the broker call. Q2 hardening
-            # (AUTOTRADE-PIECE-B-DESIGN-LOCKED-AND-Q2-HARDENING-2026-09-23):
-            # a malformed stop used to be refused only because this pre-order
-            # read happened to raise first, and a second read that disagreed
-            # would have raised with the order already placed and no row
-            # written. No read happens after the order, so that cannot occur.
-            stop_pct = self._check_daily_loss(strategy, _history_snapshot, pv)
-        except RuntimeError:
+            # THE ONE COMPUTATION OF THIS ATTEMPT'S RISK. The success row below
+            # books `premium_at_risk` as the dollars this check gated on rather
+            # than computing again after the broker call (Q2 hardening,
+            # AUTOTRADE-PIECE-B-DESIGN-LOCKED-AND-Q2-HARDENING-2026-09-23): a
+            # second computation after the order is the one place where a
+            # disagreement means a placed order with no history row. Since A6
+            # it is the FULL premium -- see `_check_daily_loss`.
+            this_risk = self._check_daily_loss(strategy, _history_snapshot, pv)
+        except RuntimeError as exc:
             with self._lock:
                 self._state.history.append({
                     "attempt_id":      attempt_id,
@@ -2394,6 +2420,7 @@ class AutoTradeService:
                     "option":          strategy.option_symbol,
                     "timestamp":       datetime.now(timezone.utc).isoformat(),
                     "premium_at_risk": 0.0,
+                    "error":           str(exc),
                 })
             raise
         except Exception as exc:
@@ -2432,13 +2459,15 @@ class AutoTradeService:
                     "timestamp":       datetime.now(timezone.utc).isoformat(),
                     "premium_at_risk": 0.0,
                     "error":           str(exc),
-                    # NO `regime_gate` HERE, by the rule the `order_failed` row
-                    # below states in its own comment: the field is carried on
-                    # that row alone because it is the one refusal-shaped row
-                    # whose order may be live, so "did the gate run" still has
-                    # a position to be asked about. This row provably has none,
-                    # which puts it with `cap_blocked` and
-                    # `daily_loss_blocked`, where the question is moot.
+                    # CARRIED HERE TOO, by Kenneth's decision
+                    # A7A-NOT-SUBMITTED-CARRIES-GATE-2026-09-24. The gate and
+                    # the sizer demonstrably RAN (they are upstream of the
+                    # submission), and without these a credential-expiry week
+                    # could not be told apart afterwards from a gate-degraded
+                    # one. Before F2 split this failure out of `order_failed`,
+                    # it carried the verdict there.
+                    "regime_gate":     strategy.regime_gate_outcome,
+                    "sizing":          strategy.sizing_basis,
                 })
             logger.error(
                 "AutoTrader order NOT SUBMITTED for %s — nothing reached the "
@@ -2457,13 +2486,12 @@ class AutoTradeService:
                     "timestamp":       datetime.now(timezone.utc).isoformat(),
                     "premium_at_risk": 0.0,
                     "error":           str(exc),
-                    # CARRIED HERE AND NOT ON THE OTHER BLOCKED ROWS, on
-                    # purpose. `cap_blocked` and `daily_loss_blocked` provably
-                    # never reached the broker, so "did the gate run" is moot
-                    # for them. THIS row means the broker call was MADE and
-                    # errored — the submission may have landed — so it is the
-                    # one refusal-shaped row where the question still has an
-                    # answer worth recording. Round 2.
+                    # CARRIED HERE and on `not_submitted` (A7a), NOT on
+                    # `cap_blocked` / `daily_loss_blocked`, which provably
+                    # never reached the broker. THIS row means the broker call
+                    # was MADE and errored — the submission may have landed —
+                    # so "did the gate run" still has an answer worth
+                    # recording. Round 2.
                     "regime_gate":     strategy.regime_gate_outcome,
                     "sizing":          strategy.sizing_basis,
                 })
@@ -2479,7 +2507,7 @@ class AutoTradeService:
                 "symbol":          strategy.symbol,
                 "option":          strategy.option_symbol,
                 "timestamp":       datetime.now(timezone.utc).isoformat(),
-                "premium_at_risk": strategy.entry_premium * strategy.quantity * 100 * stop_pct,
+                "premium_at_risk": this_risk,
                 # WHAT THE HEADWIND GATE DID: "passed", "caution", "abstained"
                 # or "disabled". Target 2a round 1: a trade the gate never
                 # evaluated (fail-open, and the dominant outcome on this repo's
@@ -2854,31 +2882,23 @@ class AutoTradeService:
     def _check_daily_loss(strategy: ArmedStrategy, history: list[dict], portfolio_value: float) -> float:
         """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit.
 
-        Returns the stop fraction the check gated on. `fire()` books the success
-        row's `premium_at_risk` with it, so the row records the risk this check
-        allowed, and nothing resolves the stop after the order is placed.
+        Returns this trade's risk in dollars -- the number the check gated on.
+        `fire()` books the success row's `premium_at_risk` with it, so the row
+        records the risk this check allowed, and nothing is computed after the
+        order is placed.
+
+        FULL PREMIUM, decision A6-FULL-PREMIUM-DAILY-LOSS-2026-09-24 (Kenneth).
+        The auto-trader places no protective order, so the declared premium
+        stop is a declaration, not a bound: if it is never acted on, the whole
+        premium is what the trade can lose. It used to size on the declared
+        stop (`ArmedStrategy.premium_stop_pct`, else risk_rules.yaml's
+        `auto_trade.premium_stop_pct`), so a tighter declared stop let more
+        trades through a gate nothing enforced. The declared stop is still
+        armed and booked onto the position (the premium-stop alert reads it
+        there); it is no longer part of this sum.
         """
         risk_cfg = AutoTradeService._risk_config()
         max_pct  = float(risk_cfg.get("max_daily_loss_pct", 0.02))
-        # NOTE, and it is a real one: since piece 4 this denominator can come
-        # from the ARM REQUEST rather than from risk_rules.yaml. A tighter
-        # declared stop shrinks `this_risk` and so lets more trades through the
-        # daily-loss gate, and nothing here enforces the declared stop -- the
-        # auto-trader places no protective order, so the true exposure is the
-        # whole premium either way. That was already true when this read the
-        # global; what changed is that the optimism is now client-settable
-        # (bounded to (0, 1) by ArmRequest, so it cannot be zeroed).
-        #
-        # Deliberately NOT clamped here. Threading the per-trade stop is what
-        # piece 4 was approved to do, and clamping it to the global would make
-        # a genuinely tighter stop book MORE risk than it takes. Sizing the
-        # gate on the full premium instead is the honest fix and a change to
-        # risk behaviour Kenneth has not agreed to -- recorded as an open
-        # question in PROJECT_STATE.json rather than made here.
-        stop_pct = resolve_premium_stop_pct(
-            strategy.premium_stop_pct,
-            float(risk_cfg.get("premium_stop_pct", 0.60)),
-        )
         limit    = max_pct * portfolio_value
 
         today_str = datetime.now(timezone.utc).date().isoformat()   # UTC date "YYYY-MM-DD"
@@ -2890,14 +2910,14 @@ class AutoTradeService:
             if isinstance(e.get("timestamp"), str) and e["timestamp"].startswith(today_str)
         )
 
-        # Add this trade's prospective risk
-        this_risk = strategy.entry_premium * strategy.quantity * 100 * stop_pct
+        # Add this trade's prospective risk: the whole premium.
+        this_risk = strategy.entry_premium * strategy.quantity * 100
         if today_risk + this_risk > limit:
             raise RuntimeError(
                 f"Daily loss limit reached: {today_risk + this_risk:.0f} at risk "
                 f"vs limit {limit:.0f} — no further trades today"
             )
-        return stop_pct
+        return this_risk
 
 
 # Module-level singleton
