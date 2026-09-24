@@ -6,6 +6,8 @@ import { Title, Text } from '@/components/primitives';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useRiskStore } from '@/lib/riskStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
 import { useShallow } from 'zustand/shallow';
 import { api, getLastDataRefresh } from '@/lib/api';
 import styles from './page.module.css';
@@ -214,35 +216,30 @@ export default function Step5StrategyPage() {
     setError(null);
     try {
       // A5: hoisted so the exact body travels with its result (Analysis replays it).
-      const requestBody = {
-        universe: context?.universe ? [context.universe] : ['SP500'],
-        direction: context?.direction ?? 'Bullish',
-        horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
+      // A5b: built by the same builder runStockScan (Steps 3/4) uses, so a
+      // Step-5 scan carries every Step-3 setting — score overrides, confidence
+      // gate, ATR pair, headwind and fundamentals thresholds. Stores are read
+      // at click time, as runStockScan does.
+      const scan = useScanStore.getState();
+      const ctx = scan.context;
+      const requestBody = buildStockScanRequestBody({
+        universe: ctx?.universe ? [ctx.universe] : ['SP500'],
+        direction: ctx?.direction ?? 'Bullish',
+        horizon: (ctx?.horizon ?? 'Swing (5–15d)').split(' ')[0],
         strategy: stratKey,
-        pullback_tolerance_pct:    params.pullbackTolerancePct,
-        pullback_ema_period:       params.pullbackEmaPeriod,
-        pullback_trend_ema:        params.pullbackTrendEma,
-        pullback_ma_type:          params.pullbackMaType,
-        pullback_require_reversal: requireReversal,
-        ma_crossover_fast:      params.maCrossoverFast,
-        ma_crossover_slow:      params.maCrossoverSlow,
-        ma_crossover_lookback:  params.maCrossoverLookback,
-        breakout_volume_mult:   params.breakoutVolumeMult,
-        rsi_period:             params.rsiPeriod,
-        rsi_oversold:           params.rsiOversold,
-        rsi_trend_sma:          params.rsiTrendSma,
-        bt_min_trades:          params.btMinTrades,
-        bt_min_win_rate:        params.btMinWinRate,
-        account_size: portfolioValue,
-        risk_pct: 0.01,
-        shortlist_max_candidates: params.stockShortlistMax,
-        ...(stratKey === 'mean_reversion_multi' ? {
-          mean_reversion_variants:          meanReversionVariants,
-          mean_reversion_min_confirmations: meanReversionMinConfirm,
-          vwap_lookback:                    vwapLookback,
-          vwap_deviation_pct:               vwapDeviationPct,
-        } : {}),
-      };
+        // Saved params (incl. the mean-reversion fields, which this page edits
+        // straight into the store) overlaid with the panel's unsaved local
+        // edits — the same `{ ...saved, ...overrides }` merge runStockScan does.
+        params: { ...useScanParamsStore.getState(), ...params },
+        requireReversal:
+          (scan.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false,
+        scanOverrides: scan.scanOverrides,
+        confidenceGate: useSettingsStore.getState().confidenceGate,
+        // Deliberately the user's real account value, not runStockScan's
+        // hardcoded 50_000 (a separate, pre-existing concern there).
+        accountSize: portfolioValue,
+        riskPct: 0.01,
+      });
       const result = await api.postStockScan(requestBody);
       setStockScanResult(result, requestBody);
       router.push('/screener/step-6-backtest');
