@@ -379,3 +379,27 @@ def test_the_shipped_scoring_rules_still_load_unchanged():
         assert load_direction_conviction_min_trend("Bearish", "Intraday") is None
     finally:
         load_scoring_cfg.cache_clear()
+
+
+# ── Round 2's finding: blocks inside !!omap / !!pairs / !!set ───────────────
+# Those tags load as tuples-in-a-list or a set, which the walker used to skip,
+# so a block written there sat inert (main: operator 99, gate 30).
+
+@pytest.mark.parametrize("text", [
+    "horizons:\n  swing:\n    vol: !!omap\n      - direction_conviction: {bullish_min_trend: 99}\n",
+    "horizons:\n  swing:\n    vol: !!pairs\n      - direction_conviction: {bullish_min_trend: 99}\n",
+    "extras: !!omap\n  - a: 1\n  - direction_conviction: {bullish_min_trend: 99}\nhorizons: {}\n",
+    "extras: !!omap\n  - a: {direction_conviction: {bullish_min_trend: 99}}\nhorizons: {}\n",
+    "horizons:\n  swing:\n    vol: !!set {direction_conviction}\n",
+])
+def test_a_block_inside_an_omap_pairs_or_set_is_rejected(text):
+    cfg = _load(text)
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        with pytest.raises(ValueError, match="misplaced direction_conviction block"):
+            load_direction_conviction_min_trend("Bullish", "Swing")
+
+
+def test_an_omap_elsewhere_without_a_block_is_accepted():
+    cfg = _load("extras: !!omap\n  - a: 1\n  - b: [1, 2]\nhorizons:\n  swing:\n    direction_conviction: {bullish_min_trend: 33}\n")
+    with patch("app.services.config_loader.load_scoring_cfg", return_value=cfg):
+        assert load_direction_conviction_min_trend("Bullish", "Swing") == 33.0

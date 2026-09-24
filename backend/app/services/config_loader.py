@@ -134,7 +134,7 @@ def _walk_direction_conviction_paths(node, path: tuple[str, ...] = (), ancestors
     every revisit let `position: {vol: *swing}` hide a misplaced block behind
     swing's legal one.
     """
-    if isinstance(node, (dict, list)):
+    if isinstance(node, (dict, list, tuple)):
         if id(node) in ancestors:
             raise ValueError(
                 f"alias cycle in scoring_rules.yaml at {'.'.join(path) or '<root>'}: "
@@ -149,9 +149,20 @@ def _walk_direction_conviction_paths(node, path: tuple[str, ...] = (), ancestors
                 yield path + (key_text,), value
             else:
                 yield from _walk_direction_conviction_paths(value, path + (key_text,), ancestors)
-    elif isinstance(node, list):
+    elif isinstance(node, (list, tuple)):
+        # `!!omap` and `!!pairs` load as a LIST of (key, value) TUPLES, so a
+        # tuple whose key is direction_conviction is a block like any other --
+        # skipping tuples let `vol: !!omap [direction_conviction: {...}]`
+        # sit inert while the gate ran on the default.
+        if isinstance(node, tuple) and len(node) == 2 and str(node[0]) == "direction_conviction":
+            yield path + ("direction_conviction",), node[1]
+            return
         for index, value in enumerate(node):
             yield from _walk_direction_conviction_paths(value, path + (f"[{index}]",), ancestors)
+    elif isinstance(node, (set, frozenset)):
+        # `!!set` loads as a set of keys whose values are all null.
+        if any(str(member) == "direction_conviction" for member in node):
+            yield path + ("direction_conviction",), None
 
 
 def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
