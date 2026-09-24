@@ -24,8 +24,7 @@ export const PREMIUM_STOP_PCT_FALLBACK = 0.60;
  *  ROUND 12 finding 13 — one quantity had two editors and they disagreed on
  *  what counts as a stop at all. TradeCard bounded the DOLLAR field at
  *  10%–99% of the mid (round 5, after a typed 0 clamped to $0.01 and armed a
- *  0.19% stop that alerts on the first cent of adverse move and shrinks the
- *  auto-trader's daily-loss denominator ~3000x). The Portfolio drawer, editing
+ *  0.19% stop that alerts on the first cent of adverse move). The Portfolio drawer, editing
  *  the same `premiumStopPct` on the same position, went on accepting anything
  *  the backend schema does — `gt=0, lt=1`, advertised in its own hint as
  *  0.01–99.99 — so the number the card refuses to create could still be typed
