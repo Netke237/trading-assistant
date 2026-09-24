@@ -336,3 +336,42 @@ Budget: ~250 lines of code (booking module ~170, the rest ~80) and ~450 of tests
 - `python3 scripts/state.py` exit 0, with a phase entry for O4 steps 4+5 whose probe pins
   `book_fired_order`.
 - An adversarial round on the **code** comes back clean at `audit_rule`'s gate before merge.
+
+---
+
+## 8. Adversarial round 1 — 2026-09-24: CLEAN
+
+An independent reviewer ran `bmad-review-adversarial-general` on this plan against the tree at
+`52a19b80`, under `audit_rule`'s gate. **Zero gate-level findings.** It executed rather than read the
+load-bearing claims: `_alert_refusal` called directly inside a running loop logged "NOT alerted" and
+never reached `notify_alert`, and through `await asyncio.to_thread(...)` the patched `notify_alert`
+was awaited once with the per-symbol key; `asyncio.run(notify_alert)` in a worker is safe (dedup
+state under a `threading.Lock`, a fresh Telegram client per call, Gmail via `to_thread`); a
+`PortfolioPositionCreate` built from the §2.6 mapping validates; tastytrade's `OrderStatus` yields
+the thirteen plain strings. It also confirmed the `stop_required` insertion point is before any
+pending write, that a rollback leaves `run_scan`'s session usable for `_upsert_session`, that the
+history-row replacement is safe for every reader, that test 9's patch lands on the writer and not on
+`fire()`'s lazy import, and that §5's sweep is complete (no other test reads `fire()`'s or
+`maybe_fire_on_scan`'s return, fires over HTTP, or runs `run_scan` with the real singleton armed).
+
+Below the gate, logged and not fixed in the plan (per `audit_rule`). The build takes items 1, 4 and
+6, because they are about what the code and tests it writes will say, not new scope:
+
+1. **A failure after `create_position` has committed** (`db.refresh` faulting, or test 15's
+   `record_booking` raising) would take the outer catch-all's not-booked route while the row exists,
+   and the page says "add it by hand or close it at the broker". **Build rule: once the commit has
+   returned, the outcome is `booked=True`**; later failures are logged, and test 15 asserts
+   `booked is True`. (A `refresh` fault inside `create_position` itself still reads as not booked —
+   the card path has the same commit-then-refresh shape; needs a DB fault.)
+2. `maybe_fire_on_scan` has **five** handlers, not six (§1, §2.1). "All unchanged" stays true.
+3. `date.fromisoformat("20260620")` succeeds on 3.11, so an undashed expiry passes refusal 4. Nothing
+   produces one; `app/data/option_symbol.py`'s `_PIPE_RE` would match what the rest of the code accepts.
+4. Tests 6/9: an `AsyncMock` returns a truthy mock, so `_alert_refusal` then calls the real
+   `forget_alerts`, which writes the repo's `alert_dedup.json`. **Build: `return_value=True` and patch
+   `forget_alerts`.**
+5. IBKR `ApiCancelled`/`PendingCancel` are not in the rejection set; neither is a plausible reply to a
+   placement.
+6. Test 6's "`create_position` raises" must patch `app.services.auto_trade_booking.create_position`
+   (the imported name).
+7. The over-exposure alert rides `_alert_refusal`, whose log lines say "refusal" for a booking that
+   stands. Log wording only.
