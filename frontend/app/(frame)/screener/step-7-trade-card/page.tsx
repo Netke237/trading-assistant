@@ -172,9 +172,14 @@ export default function Step7Page() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toast, setToast]         = useState<ToastState | null>(null);
   const [recIdMap, setRecIdMap]   = useState<Record<string, string>>({});
-  // "Check structure" results captured from the active TradeCard, per SYMBOL — the
-  // structural level is a function of (symbol, direction, stock_price) only, so the
-  // contract never enters the key. Serves two readers: the order-send path (which
+  // "Check structure" results captured from the active TradeCard, per CONTRACT
+  // (contractKeyFor, the key estimatesByContract / exitPlanByContract use). The
+  // structural LEVEL is a function of (symbol, direction, stock_price) only, but
+  // since B2 the cached response also carries `stopCost` -- the stop-vs-premium
+  // verdict priced against THIS contract's strike, DTE and premium -- so a
+  // symbol key would let contract A's verdict be spliced onto contract B's card
+  // (A8, open_questions[51]). A contract with no key (incomplete details) is
+  // never cached. Serves two readers: the order-send path (which
   // needs just `.stop.price`) and the TradeCard restore path (which needs the whole
   // level plus the price it was measured against, so the Exit Plan section can
   // still show the restored level itself — the R:R-vs-structural-stop column is
@@ -186,7 +191,12 @@ export default function Step7Page() {
   // comment). Undefined (never fetched/reset) leaves a symbol's entry untouched
   // rather than clearing it, so navigating away and back to an already-checked
   // candidate doesn't lose its captured level.
-  const [structuralBySymbol, setStructuralBySymbol] = useState<Record<string, CachedStructural>>({});
+  const [structuralByContract, setStructuralByContract] = useState<Record<string, CachedStructural>>({});
+  /** The cached structural stop LEVEL for the contract a card carries, or null. */
+  const structuralStopPriceFor = (c: TradeCardData): number | null => {
+    const k = contractKeyFor(c);
+    return k ? structuralByContract[k]?.stop?.price ?? null : null;
+  };
   // "Estimate" (Monte Carlo first-passage) results, per CONTRACT — unlike the
   // structural stop these ARE contract-specific (every optionPrice is
   // premium*(1+pct) off that contract's own premium), so they're keyed by
@@ -198,9 +208,8 @@ export default function Step7Page() {
   // not symbol.
   const [exitPlanByContract, setExitPlanByContract] = useState<Record<string, CachedExitPlan>>({});
   // Feature 7 — the single shared source of truth for "how many contracts" a
-  // given symbol's order carries. Keyed by SYMBOL (not contract), matching
-  // structuralBySymbol's keying: a contract switch within the same symbol
-  // should not reset a user's sizing choice. Fed into TradeCard's existing
+  // given symbol's order carries. Keyed by SYMBOL (not contract): a contract
+  // switch within the same symbol should not reset a user's sizing choice. Fed into TradeCard's existing
   // `contracts` prop (which already seeds `overlay.contracts` on mount and
   // re-syncs via a `[initialContracts]` effect) and updated from the existing
   // `onEditsChange` callback — no new prop/callback pair needed on TradeCard
@@ -250,8 +259,9 @@ export default function Step7Page() {
   const premiumStopByContract = cardEdits.premiumStop;
   // The card's editable INVALIDATION -- the underlying stock level that becomes
   // `PortfolioPosition.stop` and drives STOP_REACHED. Keyed by SYMBOL, like
-  // `structuralBySymbol` and `maxLossOverrideBySymbol` beside it and unlike
-  // `premiumStopByContract`: an invalidation is a price level on the
+  // `maxLossOverrideBySymbol` beside it and unlike `premiumStopByContract`
+  // (and `structuralByContract`, whose cached response carries a
+  // contract-priced stopCost): an invalidation is a price level on the
   // UNDERLYING, so it is the same thesis whichever strike expresses it, while a
   // dollar premium stop is meaningful only against one contract's premium.
   //
@@ -379,8 +389,7 @@ export default function Step7Page() {
     return (key ? entryLimitByContract[key] : null) ?? card.entry.limit;
   };
   // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
-  // (a risk decision about the underlying, same keying as structuralBySymbol,
-  // not exitPlanByContract). Fed into TradeCard's initialMaxLossOverride prop
+  // (a risk decision about the underlying, not exitPlanByContract). Fed into TradeCard's initialMaxLossOverride prop
   // and updated from onMaxLossOverrideChange; also read by
   // buildPaperPosition/positionFromOrder (to carry the override onto the
   // created PortfolioPosition) and SendToBrokerDialog (so its own risk check
@@ -438,10 +447,10 @@ export default function Step7Page() {
   //      re-fire that sync effect... unbounded. React skips the re-render on an
   //      identical state reference, so a no-op call here is genuinely a no-op.
   const handleStructuralStopChange = (
-    symbol: string,
+    key: string | null,
     stop: StructuralStop | null | undefined,
     stockPrice: number | null,
-  ) => setStructuralBySymbol((prev) => cacheStructural(prev, symbol, stop, stockPrice));
+  ) => { if (key) setStructuralByContract((prev) => cacheStructural(prev, key, stop, stockPrice)); };
   const handleFirstPassageChange = (
     key: string | null,
     estimate: FirstPassageEstimate | null | undefined,
@@ -476,6 +485,13 @@ export default function Step7Page() {
   const addSaveNote = useCallback((note: string) => {
     setSaveNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
   }, []);
+  // The BASKET's notes (A8, open_questions[61]). Kept apart from `saveNotes`
+  // because they have a different lifetime: a basket covers several symbols,
+  // so its "premium stop could not be applied" disclosures must survive
+  // Prev/Next -- the `[active]` effect used to destroy them on the first
+  // keystroke, before they could be read. Cleared only when the NEXT send of
+  // any kind starts (the three send paths below).
+  const [basketNotes, setBasketNotes] = useState<string[]>([]);
   const sizeNote = (adjustedQty: number) =>
     `Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`;
   // The one place the card can tell the user their premium stop did not survive
@@ -540,8 +556,13 @@ export default function Step7Page() {
     // in-place scan re-run added to this page, a live scan-result push), so
     // this file doesn't silently rely on an invariant that lives elsewhere.
     setEstimatesByContract({});
-    setStructuralBySymbol({});
+    setStructuralByContract({});
     setExitPlanByContract({});
+    // The per-symbol contract COUNT too (A8, open_questions[68]): a size typed
+    // against the previous run must not ride into the next run's order. Same
+    // belt-and-suspenders standing as the three caches above; on mount the
+    // map is already empty, so the mount run changes nothing.
+    setOrderContractsBySymbol({});
     // THE FOUR EDIT CACHES ARE NOT CLEARED HERE, AND MUST NOT BE (Phase G piece
     // 5, spec §5 / §5.1). They now live in one scan-stamped slice on scanStore,
     // and the stamp already does this job: a new `scan_id` makes every older
@@ -695,10 +716,10 @@ export default function Step7Page() {
     () => withCachedEstimate(
       effectiveCard,
       contractKey ? estimatesByContract[contractKey] : undefined,
-      effectiveCard ? structuralBySymbol[effectiveCard.symbol] : undefined,
+      contractKey ? structuralByContract[contractKey] : undefined,
       contractKey ? exitPlanByContract[contractKey] : undefined,
     ),
-    [effectiveCard, contractKey, estimatesByContract, structuralBySymbol, exitPlanByContract],
+    [effectiveCard, contractKey, estimatesByContract, structuralByContract, exitPlanByContract],
   );
 
   // Every basket item, override-resolved and (if overridden) merged with its
@@ -973,7 +994,7 @@ export default function Step7Page() {
       // without the flag the router shifted the typed stop by
       // (live - scan) and stored a level the user never chose.
       stopIsUserSet: invalidationIsUserSetFor(card),
-      structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
+      structuralStop: structuralStopPriceFor(card),
       exitPlan:      exitPlanFor(card),
       maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
       // Piece 4 — MUST match what positionFromOrder produces for the same card,
@@ -1024,7 +1045,7 @@ export default function Step7Page() {
     // un-reduced order. Round 9's accumulate-don't-overwrite change made that
     // strictly worse: the stale note now sits BESIDE any new one instead of
     // being replaced by it.
-    setLimitPlacing(true); setOrderError(null); setSaveNotes([]);
+    setLimitPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]);
     try {
       // Floored defensively: the shared map is a plausible target for a
       // future write path to drop a sub-1 value into (e.g. Feature 3's Apply
@@ -1079,7 +1100,7 @@ export default function Step7Page() {
     // Phase G piece 5, build step 4 (§7.1) — see placeLimitPaper's identical guard.
     if (!checkMethodPick(methodPickFor(card))) return;
     // See placeLimitPaper — notes describe this save only.
-    setMarketPlacing(true); setOrderError(null); setSaveNotes([]);
+    setMarketPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]);
     try {
       // Floored defensively — see placeLimitPaper's identical comment above.
       const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
@@ -1143,6 +1164,7 @@ export default function Step7Page() {
     // Invisible before this branch (the banner was gated behind a selected
     // broker the basket never sets) and reachable the moment it was hoisted.
     setSaveNotes([]);
+    setBasketNotes([]);
     setOrderError(null);
     setPaperOrderId(null);
     let auto = 0, manual = 0, queued = 0;
@@ -1153,7 +1175,7 @@ export default function Step7Page() {
       // One canonical recId per order: addPosition syncs it to the backend
       // (a single POST), so there is no second POST to conflict (409) with.
       const recId = recIdMap[o.card.symbol] ?? generateRecId();
-      const structuralStop = structuralBySymbol[o.card.symbol]?.stop?.price ?? null;
+      const structuralStop = structuralStopPriceFor(o.card);
       const orderContractKey = contractKeyFor(o.card);
       const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
       const orderMaxLossOverride = maxLossOverrideBySymbol[o.card.symbol] ?? null;
@@ -1189,7 +1211,8 @@ export default function Step7Page() {
       // placeMarketNow. Same fallback, same silence, one of four create paths
       // away. Symbol-qualified because a basket submits several at once.
       if (res.premiumStopDropped != null) {
-        addSaveNote(`${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped)}`);
+        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped)}`;
+        setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
       }
       if (res.status === 'pending') {
         // Optimistically added but not yet confirmed by the backend. Don't count it
@@ -1317,7 +1340,7 @@ export default function Step7Page() {
               liveStockPrice={liveStockPriceForCard}
               liveMid={liveQuoteForCard?.price ?? null}
               resetKey={scanEpoch}
-              onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
+              onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(contractKey, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
               initialMaxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
@@ -1449,7 +1472,7 @@ export default function Step7Page() {
                   // props for that reason.
                   optionSymbol={toOptionSymbol(effectiveCard)}
                   stopIsUserSet={invalidationIsUserSetFor(effectiveCard)}
-                  structuralStop={structuralBySymbol[effectiveCard.symbol]?.stop?.price ?? null}
+                  structuralStop={structuralStopPriceFor(effectiveCard)}
                   exitPlan={exitPlanFor(effectiveCard)}
                   maxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
                   // Phase G piece 5, build step 4 (§7.1). The same resolution
@@ -1479,6 +1502,9 @@ export default function Step7Page() {
             * paths set it, and both require a selected broker. */}
           {saveNotes.map((n) => (
             <Text key={n} size={12} tone="caution">{n}</Text>
+          ))}
+          {basketNotes.map((n) => (
+            <Text key={`basket:${n}`} size={12} tone="caution">{n}</Text>
           ))}
           {orderError && <Text size={12} tone="reject">{orderError}</Text>}
         </div>

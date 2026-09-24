@@ -31,6 +31,7 @@ jest.mock('@/lib/api', () => ({
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
     recomputePlan: jest.fn(),
+    getStructuralStop: jest.fn(),
     getAutoTradeStatus: jest.fn().mockResolvedValue({ armed: false }),
     armAutoTrade: jest.fn().mockResolvedValue({ armed: true }),
     disarmAutoTrade: jest.fn().mockResolvedValue({ armed: false }),
@@ -144,5 +145,83 @@ describe('step-7-trade-card -- publishes the shown card for the context rail (A8
     const pub = useTradeCardUiStore.getState().activeCard!;
     expect(pub.card.contract).toBe('AAA 150C 05/15');
     expect(pub.rrPending).toBe(false);
+  });
+});
+
+/*
+ * A8, open_questions[51]. The "Check structure" cache is keyed by CONTRACT:
+ * its response carries `stopCost`, the stop-vs-premium verdict priced against
+ * the contract that was sent. Keyed by symbol, a check on the auto-pick was
+ * restored onto a different contract of the same symbol.
+ */
+describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A8)', () => {
+  beforeEach(() => {
+    act(() => {
+      useScanStore.setState({
+        scanResult: { scan_id: 'test-scan', candidates: [makeCard('AAA')] } as any,
+        optionsCardEdits: {
+          ...emptyCardEdits(), scanId: 'test-scan',
+          picks: { 'AAA|150|2026-05-15|C': pick(), [PICKED_ID]: pick() },
+        },
+        pickedContracts: {},
+        contractsBySymbol: { AAA: [picked] },
+        scanOverrides: {},
+      } as any);
+      usePortfolioStore.setState({ positions: [], lastSyncError: null });
+      useAutoTradeStore.setState({ selectedBroker: null, autoMode: 'manual', armed: false, lastOrderId: null });
+    });
+    jest.clearAllMocks();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: true, price: 143.25, source: 'order_block', confidence: 75, distancePct: 4.5,
+    });
+    // The picked card renders only once its plan lands; resolve it so the
+    // assertion below is about the cache, not about an unrendered card.
+    { const b = makeCard('AAA');
+      (api.recomputePlan as jest.Mock).mockResolvedValue({ entry: b.entry, exit: b.exit, rrRatio: 1.2, rrModel: 'Heston repriced' }); }
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+  });
+  afterEach(() => { global.fetch = originalFetch; });
+
+  it('does not restore a check made on one contract onto another contract of the same symbol', async () => {
+    render(<Step7TradeCardPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /check structure/i }));
+    expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
+
+    // An in-page contract switch (none exists in production today -- a Step-6
+    // pick unmounts this page -- which is exactly the invariant the symbol key
+    // leaned on).
+    act(() => { useScanStore.setState({ pickedContracts: { AAA: PICKED_ID } } as any); });
+    await waitFor(() => expect(useTradeCardUiStore.getState().activeCard?.rrPending).toBe(false));
+    expect(useTradeCardUiStore.getState().activeCard?.card.contract).toBe(PICKED_ID);
+    expect(screen.getByRole('button', { name: /check structure/i })).toBeInTheDocument();
+    expect(screen.queryByText('$143.25 (4.5% away)')).not.toBeInTheDocument();
+
+    // Back to the auto-pick: its own check is still cached for it.
+    act(() => { useScanStore.setState({ pickedContracts: {} } as any); });
+    expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
+  });
+
+  it('sends the checked level on a direct order for the contract it was checked on', async () => {
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+    act(() => {
+      useSettingsStore.setState((st) => ({
+        ibkrPaper: { ...st.ibkrPaper, accountId: 'ACC', baseUrl: 'https://localhost:7499/v1/api' },
+      }) as any);
+    });
+    render(<Step7TradeCardPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /check structure/i }));
+    expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    expect(usePortfolioStore.getState().positions[0].structuralStop).toBe(143.25);
   });
 });

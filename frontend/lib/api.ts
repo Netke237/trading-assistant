@@ -906,11 +906,6 @@ export const api = {
       '/api/config/event-thresholds'
     ),
 
-  getStopPremiumThresholds: () =>
-    get<Record<string, { pass_max_fraction: number }>>(
-      '/api/config/stop-premium-thresholds'
-    ),
-
   // ── Part 1: operator timezone ────────────────────────────────────────────
   getSchedulingTimezone: () => get<{ timezone: string }>('/settings/scheduling'),
   putSchedulingTimezone: (timezone: string) => put<{ timezone: string }>('/settings/scheduling', { timezone }),
