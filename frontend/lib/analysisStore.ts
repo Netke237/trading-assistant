@@ -1,7 +1,9 @@
 import { create } from 'zustand';
-import { api, type StockAnalysis } from '@/lib/api';
+import { api, type AnalyzeStockRequest, type StockAnalysis } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { buildStockScanRequestBody, type StockScanRequestBody } from '@/lib/resolveStockScanRequest';
 
 export type HorizonEnum = 'Intraday' | 'Swing' | 'Position';
 
@@ -13,9 +15,51 @@ export function _horizonEnum(label: string | undefined): HorizonEnum {
   return 'Swing';
 }
 
+/** What the Analysis request was built from (A5). 'last-scan' — the exact
+ *  request of the stock scan result on record; 'current-settings' — no such
+ *  request is known, so the live Step-3 / saved settings, and the page says so. */
+export type AnalysisBasis = 'last-scan' | 'current-settings';
+
+/** A5 (decisions A5-ANALYSIS-MIRRORS-SCAN / A5-MIRROR-LAST-SCAN-RUN,
+ *  2026-09-24): Analysis mirrors the last stock scan RUN. Replays that scan's
+ *  own request with `symbol` in place of `universe`, so every param, Step-3
+ *  override, gate threshold and the Step-4 panel's unsaved edits match what
+ *  produced the rows on screen. Only when no request is on record does it
+ *  build one from the live stores exactly as `runStockScan(activeStrategy)`
+ *  would, and it reports that basis rather than passing it off as the scan's. */
+export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; basis: AnalysisBasis } {
+  const scan = useScanStore.getState();
+  const snapshot = scan.stockScanRequest;
+  if (snapshot) {
+    // `symbols` can arrive on a request recovered from the backend's record.
+    const { universe: _u, symbols: _s, ...rest } =
+      snapshot as StockScanRequestBody & { symbols?: unknown };
+    return {
+      req: { ...rest, symbol, horizon: _horizonEnum(snapshot.horizon) },
+      basis: 'last-scan',
+    };
+  }
+  const ctx = scan.context;
+  const { universe: _u, ...rest } = buildStockScanRequestBody({
+    universe: [],
+    direction: ctx?.direction ?? 'Bullish',
+    horizon: (ctx?.horizon ?? 'Swing (5–15d)').split(' ')[0],
+    strategy: scan.activeStrategy ?? 'pullback_ema',
+    params: useScanParamsStore.getState(),
+    requireReversal: (scan.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false,
+    scanOverrides: scan.scanOverrides,
+    confidenceGate: useSettingsStore.getState().confidenceGate,
+    accountSize: 50_000,
+    riskPct: 0.01,
+  });
+  return { req: { ...rest, symbol, horizon: _horizonEnum(ctx?.horizon) }, basis: 'current-settings' };
+}
+
 interface AnalysisState {
   symbol: string;
   result: StockAnalysis | null;
+  /** Basis of the request behind `result` (null before the first analysis). */
+  basis: AnalysisBasis | null;
   loading: boolean;
   error: string | null;
   analyze: (symbol: string) => Promise<void>;
@@ -24,6 +68,7 @@ interface AnalysisState {
 export const useAnalysisStore = create<AnalysisState>((set) => ({
   symbol: '',
   result: null,
+  basis: null,
   loading: false,
   error: null,
   analyze: async (raw: string) => {
@@ -31,28 +76,11 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     if (!symbol) return;
     set({ loading: true, error: null, symbol });
     try {
-      const ctx = useScanStore.getState().context;
-      const p = useScanParamsStore.getState();
-      const result = await api.analyzeStock({
-        symbol,
-        direction: ctx?.direction ?? 'Bullish',
-        horizon: _horizonEnum(ctx?.horizon),
-        strategy: useScanStore.getState().activeStrategy ?? 'pullback_ema',
-        pullback_tolerance_pct: p.pullbackTolerancePct,
-        pullback_ema_period: p.pullbackEmaPeriod,
-        pullback_trend_ema: p.pullbackTrendEma,
-        pullback_ma_type: p.pullbackMaType,
-        ma_crossover_fast: p.maCrossoverFast,
-        ma_crossover_slow: p.maCrossoverSlow,
-        ma_crossover_lookback: p.maCrossoverLookback,
-        breakout_volume_mult: p.breakoutVolumeMult,
-        rsi_period: p.rsiPeriod,
-        rsi_oversold: p.rsiOversold,
-        rsi_trend_sma: p.rsiTrendSma,
-      });
-      set({ result, loading: false });
+      const { req, basis } = analysisRequestFor(symbol);
+      const result = await api.analyzeStock(req);
+      set({ result, basis, loading: false });
     } catch (e) {
-      set({ result: null, loading: false, error: e instanceof Error ? e.message : 'Analysis failed' });
+      set({ result: null, basis: null, loading: false, error: e instanceof Error ? e.message : 'Analysis failed' });
     }
   },
 }));

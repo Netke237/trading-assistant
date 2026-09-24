@@ -259,8 +259,10 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
     # same real commission value the router will compute via _backtest_commission()
     # — otherwise this pre-populated entry is never hit and the real (uncached)
     # backtest runs instead, which produces 0 trades on this fixture.
+    # A5: the backtest gate thresholds are in the key too — the request's
+    # schema defaults (bt_min_trades=5, bt_min_win_rate=0.45).
     bt_key = _backtest_key("TSLA", "pullback_ema", "Bearish", bearish_bars, _fixed_params,
-                            commission=_backtest_commission())
+                            commission=_backtest_commission(), min_trades=5, min_win_rate=0.45)
     _BACKTEST_CACHE[bt_key] = (_pass_bt(), time.time() + _BACKTEST_TTL)
 
     try:
