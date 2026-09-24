@@ -26,6 +26,7 @@ import type {
 } from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
+import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
 import {
@@ -60,22 +61,6 @@ function todayISO(): string {
 
 function generateRecId(): string {
   return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-}
-
-// The "why was this bought" snapshot — attached to the position once, at buy
-// time, so it survives independent of later scans overwriting scanStore.
-function tradeCardSnapshotOf(card: TradeCardData): Record<string, unknown> {
-  return {
-    stockScore: card.stockScore,
-    stockConfidence: card.stockConfidence,
-    stockBreakdown: card.stockBreakdown,
-    contractScore: card.contractScore,
-    contractConfidence: card.contractConfidence,
-    contractBreakdown: card.contractBreakdown,
-    rrRatio: card.rrRatio,
-    rrModel: card.rrModel,
-    strike: card.contractDetails?.strike ?? null,
-  };
 }
 
 function positionFromOrder(
@@ -926,6 +911,15 @@ export default function Step7Page() {
     return card.contract; // fallback (display label — broker may reject, best effort)
   }
 
+  /** The exit plan a position booked from `card` carries. ONE expression for
+   *  the two paths that book from a single card -- `buildPaperPosition` and
+   *  the auto-trade arm request (O4 step 6) -- so an armed trade and a sent
+   *  trade cannot carry two different plans for one contract. */
+  function exitPlanFor(card: TradeCardData): ExitPlan | null {
+    const key = contractKeyFor(card);
+    return key ? exitPlanByContract[key]?.plan ?? null : null;
+  }
+
   /** Build a paper position object without touching the store.
    *  `livePrice` (the freshly-fetched mid for the active contract) takes
    *  precedence over the scan-time mid so the entry price reflects the market
@@ -941,7 +935,6 @@ export default function Step7Page() {
       broker === 'tastytrade_paper' ? 'Tastytrade Paper' :
       'IBKR Paper';
     const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
-    const cardContractKey = contractKeyFor(card);
     return {
       symbol:        card.symbol,
       contract:      toOptionSymbol(card),
@@ -965,7 +958,7 @@ export default function Step7Page() {
       // (live - scan) and stored a level the user never chose.
       stopIsUserSet: invalidationIsUserSetFor(card),
       structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
-      exitPlan:      cardContractKey ? exitPlanByContract[cardContractKey]?.plan ?? null : null,
+      exitPlan:      exitPlanFor(card),
       maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
       // Piece 4 — MUST match what positionFromOrder produces for the same card,
       // which is now true by construction: both call premiumStopDollarFor.
@@ -1423,12 +1416,26 @@ export default function Step7Page() {
                   // reason: an armed trade and a sent trade must not go out at
                   // two different limit prices.
                   entryLimit={entryLimitFor(effectiveCard)}
-                  // DIRECT-SEND-STOP-GATE-2026-09-09. The arm REQUEST still
-                  // carries no stop level -- this is the gate, not a payload.
-                  // The same resolution `stopMissing` is derived from, passed
-                  // rather than recomputed, so Arm and the two direct buttons
-                  // cannot refuse on two different readings of one field.
+                  // DIRECT-SEND-STOP-GATE-2026-09-09, and since O4 step 6 also
+                  // the booked stop: AutoTradeArm gates on this value AND posts
+                  // it as `stop`, so the fired trade is booked at the level
+                  // the card shows. The same resolution `stopMissing` is
+                  // derived from, passed rather than recomputed, so Arm and
+                  // the two direct buttons cannot refuse on two different
+                  // readings of one field.
                   resolvedInvalidation={resolvedInvalidationForCard}
+                  // O4 step 6 -- the booking fields, each resolved by the SAME
+                  // expression `buildPaperPosition` uses for this card, so an
+                  // armed trade books what Place Limit would have stored.
+                  // `optionSymbol` is the booked `contract` (a unique column)
+                  // and what the broker receives; `stopIsUserSet` tells the
+                  // booking not to re-anchor a typed stop. Both are required
+                  // props for that reason.
+                  optionSymbol={toOptionSymbol(effectiveCard)}
+                  stopIsUserSet={invalidationIsUserSetFor(effectiveCard)}
+                  structuralStop={structuralBySymbol[effectiveCard.symbol]?.stop?.price ?? null}
+                  exitPlan={exitPlanFor(effectiveCard)}
+                  maxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
                   // Phase G piece 5, build step 4 (§7.1). The same resolution
                   // `pickMissing` is derived from, passed rather than
                   // recomputed, so Arm and the two direct buttons cannot
