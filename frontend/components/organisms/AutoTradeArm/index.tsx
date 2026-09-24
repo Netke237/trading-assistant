@@ -120,10 +120,11 @@ interface AutoTradeArmProps {
    *  own bounds and did not carry to this path. It matters three times over
    *  here: it is booked as `entry_premium`, it is the denominator
    *  `premiumStopPctFromDollars` divides the dollar stop by, and the backend's
-   *  `_check_daily_loss` sizes `entry_premium * quantity * 100 * stop_pct` off
-   *  it. Scanned at $2.50 and reopened at $6.00, the daily-loss gate booked
-   *  2.4x less risk than the trade carries and a $1.00 stop armed at 40%
-   *  instead of 17%, with "Live mid: $6.00" on screen a few rows below.
+   *  `_check_daily_loss` sizes the full premium `entry_premium * quantity *
+   *  100` off it (since A6; the declared stop no longer enters that gate).
+   *  Scanned at $2.50 and reopened at $6.00, the daily-loss gate booked 2.4x
+   *  less risk than the trade carries and a $1.00 stop armed at 40% instead of
+   *  17%, with "Live mid: $6.00" on screen a few rows below.
    *
    *  Null/undefined falls back to the scan-time mid, which is all that was
    *  ever available before. */
@@ -450,6 +451,15 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     } catch (e) {
       if (classifyFireFailure(e) === 'refused') {
         setError(String(e));
+        // Re-read, never assume (open_questions[98]): most refusals land AFTER
+        // the backend's disarm, so the panel went on showing "Armed" and a
+        // second press got "not armed" -- but a market-closed / re-armed
+        // refusal PRESERVES the arm, so clearing it locally would be wrong the
+        // other way. The bump makes this read the only one that can apply: an
+        // older read still in flight (the mount read) carries the old seq and
+        // would otherwise land its pre-fire `armed: true` on top.
+        statusSeq.current += 1;
+        void refreshStatus();
       } else {
         // UNKNOWN, not failed: the broker call may have been made (see
         // classifyFireFailure). Never a plain error inviting a second press.
@@ -460,6 +470,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
           'The fire request did not return a result — the order may or may not have been placed. '
           + 'Check the broker and your portfolio before firing again.',
         );
+        statusSeq.current += 1;   // same reason as the refused branch above
         void refreshStatus();
         void usePortfolioStore.getState().syncFromBackend(true);
       }

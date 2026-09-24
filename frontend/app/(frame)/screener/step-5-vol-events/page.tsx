@@ -112,9 +112,12 @@ export type IvBand = { basis: IvBasis; passMax: number; cautionMax: number | nul
  * the PASS max by 20 in this sentence -- so the page said "IV rank <= 54 -> PASS"
  * while rejecting at 34 -- shipped 1740/1740, because the pin was a regex with
  * `\d+` holes in it. Same defect the four claim fields were rebuilt to remove,
- * left standing on the numbers beside them. Now: a builder over published
- * bands, pinned by equality, with the bands themselves checked against the
- * store the gate reads. */
+ * left standing on the numbers beside them. Then: a builder over published
+ * bands, pinned by equality against ITSELF -- round 7 measured swapping the two
+ * bands inside this function shipping green, because gateSummary.test.tsx's pin
+ * rebuilds its expectation with this same builder. What catches a change to the
+ * numbers or their order is __tests__/literalPins.test.tsx: literal strings,
+ * for the builder and for the rendered page. */
 export function ivThresholdSentence(bands: IvBand[]): string {
   return bands
     .map((b) => `${b.basis === 'rank' ? 'IV rank' : 'IV'} \u2264 ${b.passMax} \u2192 PASS; `

@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.database import get_db
 from app.schemas import Direction, PickedMethod, PickedStopBasis, Horizon
-from app.services.auto_trader import auto_trader, ArmedStrategy
+from app.services.auto_trader import auto_trader, ArmedStrategy, RegimeGateConfigError
 from app.services.auto_trade_booking import book_fired_order
 from app.scoring.conviction_sizing import SizingConfigError
 
@@ -16,6 +16,10 @@ from app.scoring.conviction_sizing import SizingConfigError
 # frontend/lib/armBookingFields.ts `SIZING_CONFIG_REFUSED_PREFIX`: a 500 carrying
 # it is a refusal (nothing sent), any other 500 is unknown.
 SIZING_CONFIG_REFUSED_PREFIX = "Refused, nothing sent: regime_sizing is unusable: "
+# Its twin for an unusable regime_gate block (decision
+# A9-REGIME-GATE-CONFIG-500-2026-09-24). Coupled the same way, to
+# `REGIME_GATE_CONFIG_REFUSED_PREFIX` in the same frontend file.
+REGIME_GATE_CONFIG_REFUSED_PREFIX = "Refused, nothing sent: regime_gate is unusable: "
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
 
@@ -242,6 +246,16 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
         # every other 500 (unknown) -- change both together.
         raise HTTPException(status_code=500,
                             detail=f"{SIZING_CONFIG_REFUSED_PREFIX}{exc}")
+    except RegimeGateConfigError as exc:
+        # 500 TOO -- decision A9-REGIME-GATE-CONFIG-500-2026-09-24, for A7b's
+        # reason: a broken scoring_rules.yaml regime_gate block is a server
+        # config fault, not a bad request. Also a RuntimeError subclass, so it
+        # must stay above the 400 handler. `fire()` raises it only from
+        # `_apply_vol_sizing` (via `_apply_regime_gate`), after the disarm and
+        # before any broker call, and has already written its
+        # `regime_gate_config_blocked` row -- so "nothing sent" is true.
+        raise HTTPException(status_code=500,
+                            detail=f"{REGIME_GATE_CONFIG_REFUSED_PREFIX}{exc}")
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     # O4 steps 4+5: book the position the order just opened. OUTSIDE the try

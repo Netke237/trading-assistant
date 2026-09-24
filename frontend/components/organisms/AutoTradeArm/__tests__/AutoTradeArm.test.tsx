@@ -132,7 +132,7 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     // -- the staleness round 8 fixed for the card's own bounds and did not
     // carry here. It is booked as the entry, it is the denominator the stop
     // fraction is derived against, and the backend's _check_daily_loss sizes
-    // `entry_premium * quantity * 100 * stop_pct` off it.
+    // the full premium `entry_premium * quantity * 100` off it (since A6).
     //
     // Scanned at $2.50, reopened at $6.00, with a $1.00 dollar stop:
     //   stale -> entry 2.50, pct 0.400  (gate books 2.4x too little risk)
@@ -810,6 +810,58 @@ describe('AutoTradeArm — O4 step 6: reading the /fire result', () => {
     expect(await screen.findByText(/AutoTrader not armed/)).toBeInTheDocument();
     expect(screen.queryByText(/may or may not have been placed/)).not.toBeInTheDocument();
     expect(sync).not.toHaveBeenCalled();
+  });
+
+  // open_questions[98] / A9: a refusal re-reads the backend's armed state.
+  const ARMED = { armed: true, symbol: 'AAPL', direction: 'Bullish' };
+  const REFUSED = new Error('API /auto-trade/fire → 400: Daily loss limit reached: 500 at risk vs limit 400');
+
+  it('15d. a refusal after the disarm re-reads status and drops the armed banner', async () => {
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockResolvedValueOnce(ARMED)              // mount
+      .mockResolvedValueOnce({ armed: false });  // after the refusal
+    await fire(REFUSED, true);
+    await waitFor(() => expect(api.getAutoTradeStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Fire now' })).not.toBeInTheDocument());
+    expect(screen.queryByText(/^Armed AAPL/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Arm —/)).toBeInTheDocument();
+    expect(screen.getByText(/Daily loss limit reached/)).toBeInTheDocument();
+    expect(sync).not.toHaveBeenCalled();
+  });
+
+  it('15e. a refusal that PRESERVED the arm keeps the armed banner', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue(ARMED);
+    await fire(new Error('API /auto-trade/fire → 400: Market closed or AAPL halted — armed state preserved for retry'), true);
+    await waitFor(() => expect(api.getAutoTradeStatus).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('button', { name: 'Fire now' })).toBeInTheDocument();
+    expect(screen.getByText(/Market closed or AAPL halted/)).toBeInTheDocument();
+  });
+
+  it('15f. a pre-fire status read landing AFTER the refusal read cannot re-arm the panel', async () => {
+    let resolveMount: (v: unknown) => void = () => {};
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockImplementationOnce(() => new Promise((r) => { resolveMount = r; }))  // mount, held
+      .mockResolvedValueOnce({ armed: false });                                 // after the refusal
+    await fire(REFUSED, true);
+    await waitFor(() => expect(api.getAutoTradeStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText(/^Arm —/)).toBeInTheDocument());
+    // The stale mount read now arrives with the pre-fire truth.
+    await act(async () => { resolveMount(ARMED); });
+    expect(screen.getByText(/^Arm —/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fire now' })).not.toBeInTheDocument();
+  });
+
+  it('15g. the same race on the UNKNOWN branch: a stale pre-fire read cannot re-arm the panel', async () => {
+    let resolveMount: (v: unknown) => void = () => {};
+    (api.getAutoTradeStatus as jest.Mock)
+      .mockImplementationOnce(() => new Promise((r) => { resolveMount = r; }))  // mount, held
+      .mockResolvedValueOnce({ armed: false });                                 // after the unknown
+    await fire(new TypeError('Failed to fetch'), true);
+    await waitFor(() => expect(api.getAutoTradeStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText(/^Arm —/)).toBeInTheDocument());
+    await act(async () => { resolveMount(ARMED); });
+    expect(screen.getByText(/^Arm —/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fire now' })).not.toBeInTheDocument();
   });
 });
 

@@ -48,7 +48,7 @@ import app.services.auto_trader as auto_trader_module
 from app.data.market import fetch_contract_quote_async, fetch_price_async
 from app.schemas import PortfolioPositionCreate
 from app.services.audit import log_approval
-from app.services.auto_trader import FiredOrder
+from app.services.auto_trader import FiredOrder, _is_rejected_status
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.position_writer import create_position
 from app.services.scheduling_tz import MARKET_TZ
@@ -60,15 +60,10 @@ _ALERT_TYPE_OVER_EXPOSURE = "AUTO_TRADE_BOOKED_OVER_EXPOSURE"
 _REC_ID_NOT_BOOKED = "auto-trade-not-booked"
 _REC_ID_OVER_EXPOSURE = "auto-trade-over-exposure"
 
-# A STATED REJECTION at any of the four brokers, lower-cased. One set for all:
-# none of these words means "live" anywhere, so the union is the safer match.
-# IBKR says Inactive; Tradier adds error; Alpaca canceled/expired; tastytrade's
-# `OrderStatus` StrEnum gives Rejected/Cancelled/Expired. ANYTHING ELSE BOOKS,
-# including values no adapter emits today: a rejection list, not an allowlist
-# (spec section 3.2) -- an unknown word most likely means a live order.
-_REJECTED_STATUSES = frozenset({
-    "rejected", "inactive", "error", "canceled", "cancelled", "expired",
-})
+# The rejection words live in `auto_trader._REJECTED_STATUSES`, read through
+# `_is_rejected_status` -- one set for this refusal and for `fire()`'s daily-loss
+# booking (decision A9-REJECTED-BOOKS-ZERO-2026-09-24).
+
 # "No order id": IBKR's confirmation-question reply yields "" for an order never
 # transmitted; Alpaca's adapter defaults a missing id to "unknown".
 _NO_ORDER_IDS = frozenset({"", "unknown"})
@@ -108,7 +103,7 @@ def _check_refusals(fired: FiredOrder) -> None:
             f"the broker returned no order id ({oid!r}), so the order reads as "
             "never transmitted", broker_live=False,
         )
-    if str(result.status).strip().lower() in _REJECTED_STATUSES:
+    if _is_rejected_status(result.status):
         raise _Refused(
             f"the broker's status {result.status!r} is a rejection",
             broker_live=False,

@@ -1,4 +1,4 @@
-import { armBookingFieldsFrom, classifyFireFailure, SIZING_CONFIG_REFUSED_PREFIX, type ArmBookingInputs } from '@/lib/armBookingFields';
+import { armBookingFieldsFrom, classifyFireFailure, SIZING_CONFIG_REFUSED_PREFIX, REGIME_GATE_CONFIG_REFUSED_PREFIX, type ArmBookingInputs } from '@/lib/armBookingFields';
 import type { ExitPlan, MaxLossOverride, TargetLevel } from '@/types/domain';
 
 const PLAN = { method: 'arithmetic', targets: [] } as unknown as ExitPlan;
@@ -118,5 +118,20 @@ describe('classifyFireFailure — O4 step 6 §5.3', () => {
       'Order failed: Refused, nothing sent: regime_sizing is unusable: x'))).toBe('unknown');
     expect(classifyFireFailure(api(502,
       'Refused, nothing sent: regime_sizing is unusable: x'))).toBe('unknown');
+  });
+
+  it('6e. A9: the regime_gate-config 500 is "refused" by its own prefix', () => {
+    // routers/auto_trade.py REGIME_GATE_CONFIG_REFUSED_PREFIX, written out.
+    expect(REGIME_GATE_CONFIG_REFUSED_PREFIX).toBe('Refused, nothing sent: regime_gate is unusable: ');
+    expect(classifyFireFailure(api(500,
+      'Refused, nothing sent: regime_gate is unusable: headwind_reject_pct is missing'))).toBe('refused');
+    expect(classifyFireFailure(api(500,
+      'Order failed: Refused, nothing sent: regime_gate is unusable: x'))).toBe('unknown');
+    expect(classifyFireFailure(api(502,
+      'Refused, nothing sent: regime_gate is unusable: x'))).toBe('unknown');
+    // Only the two full prefixes count: their shared lead alone is not a refusal.
+    expect(classifyFireFailure(api(500, 'Refused, nothing sent: something else'))).toBe('unknown');
+    expect(REGIME_GATE_CONFIG_REFUSED_PREFIX.startsWith(SIZING_CONFIG_REFUSED_PREFIX)).toBe(false);
+    expect(SIZING_CONFIG_REFUSED_PREFIX.startsWith(REGIME_GATE_CONFIG_REFUSED_PREFIX)).toBe(false);
   });
 });

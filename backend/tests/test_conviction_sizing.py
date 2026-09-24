@@ -315,9 +315,11 @@ def test_a_nan_conviction_is_a_data_fault_not_a_config_fault():
 
 
 def test_the_error_is_a_runtimeerror_so_existing_handlers_still_map_it():
-    """POST /auto-trade/fire catches (ValueError, RuntimeError) -> 400, and
-    fire() signals every other refusal as RuntimeError. If this stopped being
-    a RuntimeError subclass, a refusal would surface as an unhandled 500."""
+    """fire() signals every refusal as a RuntimeError subclass, and this one
+    keeps that shape. POST /auto-trade/fire catches it by name ABOVE its
+    (ValueError, RuntimeError) 400 handler and answers a prefixed 500 (decision
+    A7B-FIRE-SIZING-CONFIG-500-2026-09-24), so the ordering of those two
+    clauses is what this subclass relationship makes load-bearing."""
     assert issubclass(SizingConfigError, RuntimeError)
 
 
