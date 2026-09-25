@@ -11,7 +11,7 @@ bar / this week's forming weekly bar. Move `auto_trader._todays_bar_is_unclosed`
 `backend/app/services/market_session.py` (moved, not copied).
 
 ## Status
-in-progress — build committed (edb701a), 10/10 mutations killed, backend 3211 passed / 1 skipped; adversarial round 2 RUNNING (not yet clean).
+DONE on branch — adversarial round 2 CLEAN at the gate; recorded in PROJECT_STATE.json. Awaiting the owner's go to merge to main.
 
 ## Done
 - Plan written, pre-round-1: `docs/superpowers/plans/2026-09-25-a4g-forming-daily-weekly-bar-plan.md`
@@ -36,8 +36,9 @@ in-progress — build committed (edb701a), 10/10 mutations killed, backend 3211 
       (43 tests).
 - [x] Run the plan's mutations (§6 list + weekday-check), 10/10 killed (edb701a).
 - [x] Full suites: backend 3211 passed / 1 skipped; frontend untouched; state.py exit 0.
-- [ ] (IN PROGRESS: if interrupted, re-run from scratch on `git diff origin/main..HEAD`) Adversarial round 2 (plan amendment + code) via K-adversarial-audit-loop; loop until clean.
-- [ ] Record A4g in `docs/superpowers/PROJECT_STATE.json` (phase, decision, logged items).
+- [x] Adversarial round 2 (plan amendment + code) via K-adversarial-audit-loop; loop until clean.
+- [x] Record A4g in `docs/superpowers/PROJECT_STATE.json` (phase A4G-FORMING-DAILY-WEEKLY-BAR, decision A4G-CHART-COMPLETED-FOR-ALL-2026-09-25, 10 below-gate items + live-feed question in open_questions).
+- [ ] On the owner's go: merge origin/main in, re-run backend suite + state.py, merge to main (--no-ff) with a main-merge record, then `k_session.py finish`.
 
 ## Blockers / open questions
 - Open (logged in plan §1, for Kenneth): Alpaca daily `get_bars` with a date-only `end` — unverified
