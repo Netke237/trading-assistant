@@ -359,6 +359,35 @@ The round used a fresh subagent running bmad-review-adversarial-general against 
 11. The '4h' citation was wrong. Corrected.
 12. The baselines were stale. §5 now re-runs them on the branch head.
 
-## 7. Plan round 2
+## 7. Plan round 2 (2026-09-25): CLEAN, zero gate-level findings
 
-(pending)
+A fresh subagent ran bmad-review-adversarial-general. It verified the §1 claims against
+the code and ran R5 as a throwaway: on '1D' the warning is logged and the HMM is not
+called; on '5m' after migration the HMM is called with 250 bars. Its 12 sub-gate items
+are taken into the build as follows:
+1. R5 candles use int unix `time`, the newest at least 300 s before `as_of`.
+2. and 10. The migration is retried at the top of each loop iteration until one run
+   succeeds, then never again. R6 lets the fake sleep stop the loop on its SECOND call.
+   Case one asserts `["migrate","tick","tick"]` with exactly one migration. Case two:
+   the first migration raises, the second succeeds; order
+   `["migrate","tick","migrate","tick"]`, and an ERROR is logged. New mutants: **M12**
+   migrate on every iteration; **M13** never retry after a failure.
+3. R6: `asyncio.to_thread` is used only inside the stubbed `_tick`, so the namespace
+   needs only `sleep`.
+4. R4 adds a DISABLED legacy row (migrated, stays disabled) and a row with
+   `user_id='other'` (migrated). **M14**: the filter adds `enabled == True`.
+5. R4 adds `rule_json='[]'` and a composite whose `primary` is a string, both on '1D',
+   both unchanged. **M15**: `.get` without the isinstance guards.
+6. R4 adds a composite HMM_intraday rule on 'daily', unchanged. **M16**: the filter
+   uses `not is_intraday_interval`.
+7. The over-rejection cases are tied to mutants. **M17**: the predicate rejects every
+   HMM_intraday (killed by R1, R2 '5m', R3g). **M18**: it rejects any composite on '1D'
+   (killed by R1 OMM, R2 OMM+'1D').
+8. R1 parity: `monkeypatch.setenv` to a tmp path, then a plain import, with no reload.
+   Pinning the variable in conftest is logged, not done here.
+9. §4: an Alerts-page sync in the first moments after a restart can still show '1D'
+   (the migration runs in the scheduler task); it corrects itself on the next visit.
+11. The §5 PROJECT_STATE update rewrites `open_questions[2]`'s design inputs to match
+    this build (the scheduler task, not lifespan).
+12. `_INTERVAL_LABELS` has no '5m', so notifications say "5m chart". Folded into the
+    '5m' vs '5min' open question.
