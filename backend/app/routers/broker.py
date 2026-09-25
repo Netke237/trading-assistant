@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import html
+import re
 import threading
 import time
 from typing import Literal, Optional
@@ -120,6 +122,56 @@ def _release_claim(key: tuple, response: dict | None) -> None:
         event.set()
 
 
+# ── IBKR's confirmation question (MANUAL-IBKR-CONFIRM-AS-ERROR, Kenneth 2026-09-25) ──
+# IBKR can answer a submission with an "order reply message" -- a question to
+# confirm -- instead of an order. The order is not placed until
+# POST /iserver/reply/{id} confirms it, and nothing in this app sends that
+# reply. ibkr_paper.place_order flags that reply (OrderResult.
+# awaiting_confirmation); both routes below answer it as a 502 carrying the
+# question, never as an empty-id "success" -- every frontend send path creates
+# a Portfolio position on a 2xx.
+_CONFIRMATION_QUESTION_MAX_CHARS = 500
+_CONFIRMATION_QUESTION_FALLBACK = "IBKR asked for a confirmation"
+# Tag-shaped runs only, so a question like "price < 5 and qty > 3" survives.
+_HTML_TAG_RE = re.compile(r"</?[A-Za-z][^<>]*>")
+
+
+def _confirmation_question(result) -> str | None:
+    """IBKR's order-reply question when the broker asked instead of placing the
+    order, else None. getattr: only ibkr_paper's OrderResult has the field
+    (Tradier's result is its own class). `is True`, not truthiness, so a result
+    whose attribute merely reads truthy (a mock, a future non-bool) is not
+    mistaken for the reply."""
+    if getattr(result, "awaiting_confirmation", False) is not True:
+        return None
+    text = _HTML_TAG_RE.sub(" ", str(getattr(result, "message", "") or ""))
+    # Stripped again after unescaping: an entity-encoded tag ("&lt;br&gt;")
+    # only becomes tag-shaped once decoded.
+    text = _HTML_TAG_RE.sub(" ", html.unescape(text))
+    text = " ".join(text.split())
+    return (text or _CONFIRMATION_QUESTION_FALLBACK)[:_CONFIRMATION_QUESTION_MAX_CHARS]
+
+
+def _raise_if_awaiting_confirmation(result, rec_id: str, kind: str, symbol: str) -> None:
+    """Shared by both routes: log the reply as a failed order and answer it as
+    a 502. Raised with `response` still None, so _release_claim caches nothing
+    and a retry asks IBKR again (nothing was placed)."""
+    question = _confirmation_question(result)
+    if question is None:
+        return
+    log_event("broker_order_failed", rec_id, {
+        "kind": kind, "broker": result.broker, "symbol": symbol,
+        "http_status": 502, "awaiting_confirmation": True, "error": question,
+    })
+    raise HTTPException(
+        status_code=502,
+        detail=(
+            "IBKR did not place the order: it asked for a confirmation this app "
+            f"does not send. IBKR said: {question}"
+        ),
+    )
+
+
 class StockOrderRequest(BaseModel):
     broker: BrokerKey
     symbol: str
@@ -218,6 +270,7 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
                 "http_status": 502, "error": str(exc),
             })
             raise HTTPException(status_code=502, detail=str(exc))
+        _raise_if_awaiting_confirmation(result, rec_id, "stock", req.symbol)
         log_event("broker_order_filled", rec_id, {
             "kind": "stock", "broker": result.broker, "symbol": req.symbol,
             "order_id": result.order_id, "status": result.status,
@@ -285,6 +338,7 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
                 "http_status": 502, "error": str(exc),
             })
             raise HTTPException(status_code=502, detail=str(exc))
+        _raise_if_awaiting_confirmation(result, rec_id, "option", req.symbol)
         log_event("broker_order_filled", rec_id, {
             "kind": "option", "broker": result.broker, "symbol": req.symbol,
             "order_id": result.order_id, "status": result.status,
