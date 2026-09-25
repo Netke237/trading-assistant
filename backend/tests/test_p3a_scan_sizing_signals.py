@@ -158,8 +158,8 @@ def test_the_scan_hands_the_benchmark_to_the_scorer_on_both_paths():
     """A relative_strength scan must score WITH the benchmark on the scan and
     on Analysis, or every name reads unmeasured and is removed."""
     import inspect
-    assert "benchmark_candles=rs_benchmark_candles" in inspect.getsource(ss._process_stock)
-    assert "benchmark_candles=await _rs_benchmark_candles(req)" in inspect.getsource(ss._analyze_core)
+    assert "benchmark_candles=_aligned_benchmark(rs_benchmark_candles, bars[-120:])" in inspect.getsource(ss._process_stock)
+    assert "benchmark_candles=_aligned_benchmark(await _rs_benchmark_candles(req), bars[-120:])" in inspect.getsource(ss._analyze_core)
     assert "rs_benchmark_candles=rs_benchmark_candles" in inspect.getsource(ss._execute_stock_scan_core)
 
 
@@ -356,7 +356,9 @@ def test_core_counts_unmeasured_apart_and_reports_the_floor_it_applied():
     assert p.direction_min_trend == 40.0
     # Counts, not a cause.
     assert "market structure" not in res.direction_banner
-    assert "removed 1 of 3 (trend below 40)" in res.direction_banner
+    # Both direction-gate reasons count (plan round 3 note): AAA below the
+    # floor + BBB unmeasured = 2; CCC was another gate, so "the rest" stays.
+    assert "removed 2 of 3 (trend below 40); the rest were removed" in res.direction_banner
 
 
 def test_core_reports_an_exempt_horizon_as_no_floor():
@@ -382,3 +384,26 @@ def test_precheck_refuses_an_unusable_scoring_document_with_detail(doc, exc):
         asyncio.run(run())
     assert ei.value.status_code == 500
     assert "scoring_rules.yaml" in ei.value.detail
+
+
+def test_the_banner_omits_the_rest_when_the_direction_gate_removed_everything():
+    res = _core([
+        {"symbol": "AAA", "reason": "direction_conviction: trend 20 < 40 for Bearish Position"},
+        {"symbol": "BBB", "reason": "direction_conviction_unmeasured: no trend measurement for Bearish Position"},
+        {"symbol": "CCC", "reason": "direction_conviction: trend 10 < 40 for Bearish Position"},
+    ])
+    assert "removed 3 of 3 (trend below 40)." in res.direction_banner
+    assert "the rest" not in res.direction_banner
+    assert res.pipeline.failed_direction == 2
+
+
+def test_the_rs_benchmark_is_aligned_by_date_not_position():
+    stock = [{"time": f"2026-01-{d:02d}", "close": 1.0} for d in range(1, 21)]
+    same = [{"time": f"2026-01-{d:02d}", "close": 1.0} for d in range(1, 23)]
+    aligned = ss._aligned_benchmark(same, stock)
+    assert aligned[-1]["time"] == "2026-01-20"          # trimmed to the stock's last day
+    early = [{"time": f"2026-01-{d:02d}", "close": 1.0} for d in range(1, 20)]
+    assert ss._aligned_benchmark(early, stock) is None   # ends a day earlier -> unmeasured
+    gap = [b for b in same if b["time"] != "2026-01-20"]
+    assert ss._aligned_benchmark(gap, stock) is None     # missing the stock's last day
+    assert ss._aligned_benchmark(None, stock) is None

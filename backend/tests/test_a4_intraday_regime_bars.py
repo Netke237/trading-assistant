@@ -220,7 +220,8 @@ def test_the_three_readers_fetch_the_same_15_minute_series():
         "the stock scan's reader changed -- move the other two with it"
     )
     ss_spec = 'fetch_intraday_candles, symbol, "15min", _INTRADAY_FETCH_DAYS'
-    assert inspect.getsource(stock_scan._process_stock).count(ss_spec) == 2
+    # ONE fetch in _process_stock since P3a item 12 (signal + regime share it).
+    assert inspect.getsource(stock_scan._process_stock).count(ss_spec) == 1
     assert ss_spec in inspect.getsource(stock_scan._analyze_core)
     import app.routers.scan as scan_mod
     assert spec in inspect.getsource(scan_mod._process_symbol)

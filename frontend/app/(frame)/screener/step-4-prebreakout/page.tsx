@@ -23,6 +23,7 @@ import { _horizonEnum } from '@/lib/analysisStore';
 import { confidenceTier, confidenceTone } from '@/lib/confidenceText';
 import { statusForScore, toneForStatus } from '@/lib/status';
 import styles from './page.module.css';
+import { scanSizingFromRisk } from '@/lib/stockScan';
 
 type ScanRowMetrics = {
   atr_ratio?: number;
@@ -145,6 +146,11 @@ export default function Step4PreBreakoutPage() {
     setScanning(true);
     try {
       if (scanMode === 'pullback') {
+        // The user's sizing (P3a). This body is a hand-built SNAKE_CASE literal
+        // (not buildStockScanRequestBody) and the backend ignores unknown keys,
+        // so the two fields are named explicitly -- never spread the helper's
+        // camelCase result. Throws ScanSizingError on 0%; the catch shows it.
+        const sizing = scanSizingFromRisk();
         const result = await api.postStockScan({
           universe: universe ?? symbols,
           direction,
@@ -152,6 +158,8 @@ export default function Step4PreBreakoutPage() {
           strategy: 'pullback_ema',
           pullback_ema_period: pullbackEmaParams.emaPeriod,
           pullback_trend_ema: pullbackEmaParams.trendEma,
+          account_size: sizing.accountSize,
+          risk_pct: sizing.riskPct,
         });
         setPullbackResults(result.candidates);
       } else if (scanMode === 'fib') {
