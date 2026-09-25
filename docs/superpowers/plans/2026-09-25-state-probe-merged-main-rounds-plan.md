@@ -45,7 +45,7 @@ carries, which is the scope the unnarrowed path already uses.
 
 **Residuals** (round 1; the helper's docstring states them too):
 
-- **SILENT, and Kenneth decides it.** Suppose a sibling branch was cut from main
+- **SILENT, ACCEPTED by Kenneth** (decision STATE-PROBE-SILENT-SIBLING-ROUND-ACCEPTED-2026-09-25). Suppose a sibling branch was cut from main
   before this piece opened. It carries a round of *this* piece, and it reaches
   main before the branch merges main. The fix drops that round.
   - In git's graph it looks exactly like another piece's merged round, so git
@@ -110,3 +110,5 @@ together.
   - The build-before-audit order is recorded.
 - **Noted:** the probe pattern depends on the helper appearing before the call
   site in the file.
+
+**Kenneth's call (2026-09-25):** accept the silent residual as documented and pinned (T5). Round 2 next.
