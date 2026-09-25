@@ -158,3 +158,30 @@ Test: Place Limit on AAA, then Next to BBB, then resolve the broker → BBB show
 - The banner is `${label}: Portfolio saved it but its reply could not be read, so NO order was sent.`
 
 Test: persist resolves `{ok:true, entryPrice:null}` → `postOptionOrder` is not called, and the delete and the button are present. Mutation M25: drop the check → red.
+
+---
+
+## Revisions after plan round 2 (these SUPERSEDE §3 and U1-U4 where they conflict)
+
+Round 2 (a fresh subagent, U1-U4 only) found 2 MEDIUM. It confirmed:
+- U4's premise: a parsed 201 always carries a positive `entryPrice` (`schemas/__init__.py:944,1119`, `position_writer.py:375-377`, `portfolioStore.ts:413-418`);
+- U3 and M24 can fail;
+- U2's store writes land on the right row.
+
+It noted one test-hygiene point: success mocks that return `{}` must include `entryPrice`, or U4 blocks them. That is applied in the build.
+
+**V0 — ONE INVARIANT replaces the scattered rules.** Every branch of `placeDirectOrder` whose banner tells the user a row may exist without an order pushes `{ recId, label, unconfirmed }` onto `unknownRecIds`. Such a banner is "If … delete it", "could not be removed", "status UNKNOWN", offline, or U4. The banner is the explanation. The Remove button is the durable record, and it survives Prev/Next, a basket submit and new sends (§3). No orphan is ever recorded only in `orderError`.
+
+**V1 (MEDIUM) — on an unconfirmed entry, a 404 from the Remove button is not final.** `unconfirmed: true` is set for the offline branch and for U4, the cases where the server may still be creating the row.
+- On such an entry, a click answered `→ 404` does NOT remove it. The entry stays. Its line reads `${label}: ${recId} not found in Portfolio yet — its save may still be finishing. Try Remove again in a few seconds, or dismiss once you have checked Portfolio.`, and a **Dismiss** button appears beside Remove.
+- Dismiss drops the entry without any request. It is the user's explicit "I checked", so the page never decides alone that an unconfirmed row does not exist.
+- A successful DELETE (2xx) removes the entry, as §3 says.
+- On an entry with `unconfirmed: false`, where the server answered and its write is over, a 404 still counts as removed, as §3 says.
+
+Test: offline, then click Remove with a mocked `→ 404` → the button is still there, the "not found yet" line shows, and Dismiss appears. Click Dismiss → the entry is gone and no further DELETE is sent. Mutation M26: treat a 404 as final on an unconfirmed entry → red.
+
+**V2 (MEDIUM) — the two delete-failed banners now push too.** Per V0:
+- An auto-delete whose DELETE fails (§2.5 "could not be removed") pushes `{recId, label, unconfirmed:false}`.
+- A not-ok/not-offline save whose cleanup DELETE throws anything other than `→ 404` (§2.3's suffix case) pushes `{recId, label, unconfirmed:false}`.
+
+Test: the auto-delete's DELETE fails, then Next → the Remove button for that recId is still present. Mutation M27: skip the push in the auto-delete-failed branch → red.
