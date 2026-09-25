@@ -1063,4 +1063,34 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
     }
   });
+
+  /* MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25). IBKR's confirmation question is
+   * now a 502 carrying it (it used to be an empty-id 200, and both direct
+   * handlers then persisted a phantom position). Pinned for BOTH handlers:
+   * the error shows, nothing is persisted (no request reaches the backend
+   * save, which `acceptAll` would otherwise accept), no position exists. */
+  const CONFIRM_502 = () => new Error(
+    'API /broker/option-order → 502: IBKR did not place the order: it asked for a ' +
+    'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
+  );
+  for (const [label, button] of [
+    ['Place Limit', /place limit @/i],
+    ['Right Now — Market', /right now — market/i],
+  ] as const) {
+    it(`an IBKR confirmation question (502) on ${label} shows as an error and creates no position`, async () => {
+      acceptAll();
+      await renderPage();
+      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+      (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(CONFIRM_502());
+      const btn = await screen.findByRole('button', { name: button });
+      await waitFor(() => expect(btn).toBeEnabled());
+      fireEvent.click(btn);
+
+      expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
+      expect(api.postOptionOrder).toHaveBeenCalledTimes(1);
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(usePortfolioStore.getState().positions).toHaveLength(0);
+      expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
+    });
+  }
 });

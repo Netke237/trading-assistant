@@ -830,6 +830,23 @@
       "note": "*** 2026-09-25 ROUND 2 (the CODE, 367ac6b~1..1c76609) CLEAN -- zero blocking. MERGED to main. *** Fresh subagent, bmad-review-adversarial-general. Verified all four round-1 fixes; grepped tests/frontend for the changed log texts, broker_contacted and _alert_not_submitted (only a mock checking args[0]); pre-change rows lacking broker_contacted fall back to the old wording. Nits: three stale docstrings (fixed); `id` + empty `message: []` not flagged (fail-closed, full premium; undocumented shape; left); ack test cosmetic (left). VERIFIED on the final code: backend 3130 passed / 1 skipped; state.py exit 0; frontend untouched. || *** 2026-09-25 ROUND 1 (the CODE, 367ac6b) NOT CLEAN -- 1 blocking, 3 nits, all fixed; round 2 PENDING. *** B1: fire()'s new REJECTED warning made test_autotrade_scan_reject_log count 2 WARNINGs (3 failed) -- that test now filters on the scan trigger's own line. N2: fire()'s ERROR log said 'nothing reached the broker' for the confirmation case -- worded from the exception class now, pinned. N3: OrderNotSubmittedError / _alert_risk_limit_refusal docstrings corrected for the subclass. N4: adapter edge shapes pinned (order_id null not flagged; bare dict and string message flagged). || *** 2026-09-25 BUILT at 367ac6b, round 1 (the CODE) PENDING. NOT MERGED. *** Plan: docs/superpowers/plans/2026-09-25-autotrade-ibkr-confirm-not-submitted-plan.md. ibkr_paper.OrderResult.awaiting_confirmation set only for the reply-message shape (no order_id key, truthy id, truthy message); execute_option_order raises OrderAwaitingConfirmationError (an OrderNotSubmittedError, the one raised past place_order); fire()'s not_submitted row books 0 and carries broker_contacted; _alert_not_submitted words that case 'contacted but did NOT accept'. fire()'s own log line: WARNING 'REJECTED by the broker' on _is_rejected_status. Mutants killed: no check in execute_option_order, alert ignoring the row flag, fire log reverted, detection loosened (and->or), order_id presence ignored."
     },
     {
+      "id": "MANUAL-IBKR-CONFIRM-AS-ERROR",
+      "name": "Manual /broker/stock-order and /broker/option-order answer IBKR's confirmation question as a 502 carrying it (not an empty-id 200); nothing cached; no frontend position",
+      "status": "shipped_unaudited",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "AUTOTRADE-IBKR-CONFIRM-NOT-SUBMITTED"
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/routers/broker.py",
+        "pattern": "def _confirmation_question\\(",
+        "note": "PRESENCE ONLY. Wiring in BOTH routes pinned by mutations (a)/(b) killed by tests/test_manual_ibkr_confirm_as_error.py; the no-position contract by the five frontend cases (StockPositionCard.submit, step-7-position-card page, StockSendDialog, step-7-trade-card limit + market) plus lib api.test.ts."
+      },
+      "note": "*** 2026-09-25 BUILT, code round 1 PENDING. NOT MERGED. *** Decision MANUAL-IBKR-CONFIRM-AS-ERROR-2026-09-25. Plan: docs/superpowers/plans/2026-09-25-manual-ibkr-confirm-as-error-plan.md (plan round 1 NOT CLEAN: 1 blocking, the frontend no-position coverage, fixed; plan round 2 CLEAN, 11 nits taken). routers/broker.py: _confirmation_question (real True flag only; tag-shaped runs stripped, entities unescaped, whitespace collapsed, fallback, 500-char cap) + _raise_if_awaiting_confirmation shared by both routes: broker_order_failed (awaiting_confirmation True), HTTP 502 'IBKR did not place the order: it asked for a confirmation this app does not send. IBKR said: <q>'; response stays None so nothing is cached and a retry/parked waiter asks IBKR again. ibkr_paper.py comment only. Frontend: no source change (all five send paths create the position only after the order call resolves); tests added. Mutants killed: backend 7 (both routes' check, truthiness, cache the error, filled-before-check, no strip, naive regex); frontend 5 (each send path swallowing the rejection as an empty-id success). VERIFIED: backend 3196 passed / 1 skipped; frontend 1992 passed; typecheck clean."
+    },
+    {
       "id": "A4F-HMM-INTRADAY-INTERVAL-DEFAULT",
       "name": "A4f: HMM_intraday composite watches get an intraday interval (dialog default '5m', backend rejects a non-intraday interval) and stored daily/weekly ones are migrated to '5m', reported",
       "status": "shipped",
@@ -1759,7 +1776,7 @@
     {
       "id": "MANUAL-IBKR-CONFIRM-AS-ERROR-2026-09-25",
       "q": "The manual /broker/option-order and /broker/stock-order routes on IBKR show an empty-id 'success' when IBKR answers with a confirmation question. Show the question as an error instead?",
-      "a": "Yes, fix it. Queued for a new session: plan + adversarial round, build, code round, merge when clean. Not built yet.",
+      "a": "Yes, fix it. BUILT 2026-09-25 as phase MANUAL-IBKR-CONFIRM-AS-ERROR (plan clean at round 2; code round pending).",
       "by": "Kenneth 2026-09-25"
     }
   ],

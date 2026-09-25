@@ -197,3 +197,14 @@ built. Rounds: plan stage and code stage each up to 3 (AUDIT-CAP-PER-STAGE-2026-
     - the retry-set note in Out of scope;
     - HTML tag strip plus test and mutation (g);
     - the state note names mutations (a)/(b).
+- Plan round 2 (2026-09-25, fresh subagent): **CLEAN**, 0 blocking, 11 nits. All taken into the build:
+  - tag strip only on tag-shaped runs (`</?[A-Za-z][^<>]*>`), so "price < 5 and qty > 3" survives;
+    `html.unescape` runs after it;
+  - test 4b uses started/release events under `asyncio.wait_for` with AsyncClient, and asserts
+    the second execute starts only after release;
+  - frontend tests await the error text before asserting positions length 0 (no addPosition spy);
+    the StockSendDialog rows are all auto-send;
+  - the api.ts case goes in lib/__tests__/api.test.ts with a `text()` mock;
+  - mutation (f) is also run on `placeMarketNow`;
+  - the cap is asserted by counting a unique character.
+  Plan stage CLOSED.
