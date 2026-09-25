@@ -232,11 +232,30 @@ def test_zero_full_conviction_falls_back_to_the_default_scale():
     assert resolve_sizing(cfg) == (0.5, DEFAULT_FULL_CONVICTION_PCT)
 
 
-def test_zero_full_conviction_is_logged_at_error(caplog):
+def test_zero_full_conviction_is_logged_at_error(caplog, monkeypatch):
+    # The ERROR is once per process (P3b), so reset it: an earlier test may
+    # already have logged it.
+    import app.scoring.conviction_sizing as cs
+    monkeypatch.setattr(cs, "_ZERO_FULL_LOGGED", False)
     cfg = {"enabled": True, "min_mult": 0.3, "full_conviction_pct": 0}
     with caplog.at_level("ERROR", logger="app.scoring.conviction_sizing"):
         conviction_mult(40, cfg)
     assert "full_conviction_pct is 0" in caplog.text
+
+
+def test_zero_full_conviction_logs_its_error_once_not_per_resolve(caplog, monkeypatch):
+    """P3b: resolve_sizing runs twice per fire and N+1 times per scan; the
+    ERROR is logged once per process, later resolves at DEBUG. The fallback
+    value is unchanged every time."""
+    import app.scoring.conviction_sizing as cs
+    monkeypatch.setattr(cs, "_ZERO_FULL_LOGGED", False)
+    cfg = {"enabled": True, "min_mult": 0.3, "full_conviction_pct": 0}
+    with caplog.at_level("ERROR", logger="app.scoring.conviction_sizing"):
+        for _ in range(3):
+            assert resolve_sizing(cfg) == (0.3, DEFAULT_FULL_CONVICTION_PCT)
+    errors = [r for r in caplog.records if r.levelname == "ERROR"
+              and "full_conviction_pct is 0" in r.getMessage()]
+    assert len(errors) == 1
 
 
 # ── FAIL CLOSED (§9.1, Kenneth 2026-09-17) ────────────────────────────────────

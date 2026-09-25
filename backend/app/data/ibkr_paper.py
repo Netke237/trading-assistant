@@ -160,10 +160,13 @@ class IbkrPaperAdapter:
             broker="ibkr_paper",
             message=str(message),
             # The reply-message shape, and only it: no `order_id` at all, plus
-            # the reply id to confirm against and the question itself.
+            # the reply id to confirm against and a `message` key. The key's
+            # PRESENCE decides, not its truthiness (P3b): a reply with an id and
+            # an EMPTY `message: []` is still a question, and reading it as an
+            # order would report an order with no id as placed.
             awaiting_confirmation=(
                 "order_id" not in data
                 and bool(data.get("id"))
-                and bool(data.get("message"))
+                and "message" in data
             ),
         )
