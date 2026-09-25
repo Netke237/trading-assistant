@@ -257,3 +257,11 @@ P1b's and out of scope here, except the merge-order constraint in §0.
   - `/auto-trade/arm` accepts qty > 5 (P3b/P6);
   - TradeCard Contracts input has no `max` (P2);
   - Q12 on plan-derived stops (P3b).
+
+---
+
+## Plan round 1 (2026-09-25): CLEAN
+
+A fresh subagent ran bmad-review-adversarial-general and found 0 gate-level findings. It confirmed all three callers of `check_position_risk`, the §0 merge-order hazard, and that M1, M5 and M16/M17 can fail. Two notes below the gate are carried into the build:
+- The existing `test_gates_off_a_qty_over_the_per_trade_clamp_is_flagged` asserts that `adjusted_size is None`. That precondition is updated where the real-qty judgement changes it; the test is not deleted.
+- Test 16 applies its "no digit other than `{qty}`" check after `{contract}` is removed from the text.

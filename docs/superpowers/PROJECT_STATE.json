@@ -1068,7 +1068,7 @@
       "id": "P1A-BACKEND-CONTRACT-CAP",
       "name": "P1a (split from P1): check_position_risk refuses more than max_contracts_per_trade OPTION contracts for every caller (Q18, P1-CLAMP-AT-SOURCE), judged_size/max_contracts on the result, position_writer serialises create-vs-create under a per-loop lock with an in-lock duplicate re-check, gates-off over_exposure from judged_size, Q12 wrong_side_stop paged by auto_trade_booking, booking residuals (post-commit recovery, 409 text, undashed expiry, whitespace order id), test gaps",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
@@ -1077,7 +1077,7 @@
         "pattern": "exceeds_max_contracts_per_trade",
         "note": "ABSENT until check_position_risk refuses an option qty above max_contracts_per_trade (Q18 at the source)."
       },
-      "note": "Branch claude/order-booking-safety-7evlql. Plan: docs/superpowers/plans/2026-09-25-p1a-backend-contract-cap-plan.md (self-contained; folds the backend half of the P1 plan and its R/S/T answers). MERGE ORDER: must NOT reach main before P1B-STEP7-SAVE-FIRST -- Step-7 sends the broker order before saving today, so the new 422 would leave a live >5-lot order untracked. Merged together with P1b, --no-ff, once both are clean."
+      "note": "Branch claude/order-booking-safety-7evlql. Plan: docs/superpowers/plans/2026-09-25-p1a-backend-contract-cap-plan.md (self-contained; folds the backend half of the P1 plan and its R/S/T answers). MERGE ORDER: must NOT reach main before P1B-STEP7-SAVE-FIRST -- Step-7 sends the broker order before saving today, so the new 422 would leave a live >5-lot order untracked. Merged together with P1b, --no-ff, once both are clean. || Plan round 1 (fresh subagent, 2026-09-25): CLEAN, 0 gate-level findings. Plan stage closed; code stage starts at round 1 of 3 (AUDIT-CAP-PER-STAGE). Two below-gate notes carried into the build: the existing test_gates_off_a_qty_over_the_per_trade_clamp_is_flagged asserts adjusted_size is None, which may no longer hold once the check judges the real qty -- updated, not deleted; test 16's 'no digit other than {qty}' is checked on the page text with {contract} removed."
     },
     {
       "id": "P1B-STEP7-SAVE-FIRST",
