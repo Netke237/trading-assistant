@@ -8,7 +8,7 @@
 Build work package P2 (see `docs/superpowers/plans/2026-09-25-work-packages.md`): 23 backlog entries + Kenneth's decisions Q6, Q7, Q8, Q9, Q15. Plan: `docs/superpowers/plans/2026-09-25-p2-premium-stop-position-editing-plan.md`.
 
 ## Status
-BUILT, not yet code-audited. All 24 plan items built with tests; mutation checks done (see Done). origin/main (P3a, task claims, P3c decisions) merged in. Claim taken on P2-PREMIUM-STOP-POSITION-EDITING (scripts/claim.py). Full suites running; next: code round 1 (= round 6).
+CLEAN. Code round 1 (round 6) not clean -> 2 fixes; code round 2 (round 7) CLEAN. 28 backlog entries closed in PROJECT_STATE; state.py exit 0. Suites: frontend 3752/3752, backend 3403 passed / 1 skipped. Waiting for Kenneth's OK to merge into main.
 
 ## Done
 - fe495ca plan r0; c759fb1 r1 revisions (8 major/12 minor); 10630b7 r2 revisions (6 major/9 minor); 411d7e6 r3 revisions (2 major/7 minor, unaudited) — originally on `claude/quirky-pasteur-r1kt0v`, merged onto current main (which now carries P3b) in this branch.
@@ -20,9 +20,9 @@ BUILT, not yet code-audited. All 24 plan items built with tests; mutation checks
 - [x] Plan rounds 4 and 5 (both not clean; Kenneth closed the plan stage and chose to build).
 - [x] Re-baseline on main c05971a: frontend 3680, backend 3345 passed / 1 skipped.
 - [x] Build per plan. One P1-owned TEST edited out of necessity: step-7 edited-fields-sync.test.tsx now reads the POSTED premiumStopDollar (P2-06 drops it from the synced row). No P1 app code touched.
-- [ ] Code adversarial round 1 (= round 6; cap 3 code rounds, then ask Kenneth). Scope: `git diff origin/main HEAD` minus plan/state docs; gate-level only.
-- [ ] Update PROJECT_STATE.json after each round (audit_rounds 4, ...); at the end close P2 backlog entries with evidence and set status shipped.
-- [ ] Merge into main (--no-ff, state record written before the merge), then `k_session.py finish`.
+- [x] Code round 1 (round 6) NOT CLEAN, 2 fixed; code round 2 (round 7) CLEAN.
+- [x] PROJECT_STATE: status shipped, audit_rounds 7, audit_clean true; 28 entries closed with evidence.
+- [ ] With Kenneth's OK: merge origin/main in again if it moved, write the main-merge record in PROJECT_STATE.json (`main` field) BEFORE the merge, then merge into main (--no-ff, state record written before the merge), then release the claim (`python3 scripts/claim.py release P2-PREMIUM-STOP-POSITION-EDITING`) and `k_session.py finish`.
 
 ## Blockers / open questions
 - None blocking. Q-P2-1 logged-only (not built).
