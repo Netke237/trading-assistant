@@ -138,7 +138,6 @@ note/banner clears at the start stay as they are today.
 | M29 | Put `inactive` back in the auto-delete set | 7 |
 | M30 | Push the ORDER-UNKNOWN note after `applyPersistedPosition` | 15 |
 | M31 | Skip `dropLocal` on the auto-delete | 6 |
-| M32 | Echo a constant `entryPrice` in the persist mock (test-side) | 11 must still fail against M12 |
 | M20 | Clear `orphanNotes` in the `[active]` effect | 8 |
 | M21 | Treat a bare `HTTP 502` persist detail as a plain refusal (no SAVE-UNCONFIRMED) | 4 |
 | M22 | Match any marker (IBKR, Unknown broker, credentials) as a substring instead of a prefix | 7 |
