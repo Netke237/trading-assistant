@@ -278,3 +278,7 @@ A fresh subagent ran bmad-review-adversarial-general and found 0 gate-level find
 - Weighted-average entry on a qty increase is re-logged at close for P6 (the drawer PATCH owner). It is not needed here.
 
 Everything else was checked and found sound: the lock (one per loop, never re-entered, and neither booking call site runs inside `to_thread`), the 409/500/recovery paths, the early returns, both callers, the Q18 numbers, and the scan-price fallback.
+
+## Code round 2 (2026-09-25): CLEAN
+
+A fresh subagent reviewed only F1's fix (`30087b5`) and found 0 gate-level findings. P1a's code stage is closed. The §8 closures and re-logs are applied when the branch merges, which happens together with P1b.
