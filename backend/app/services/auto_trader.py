@@ -2724,9 +2724,23 @@ class AutoTradeService:
                               # window has the attempt fire the NEW order on
                               # the old one's age.
                               expect=strategy)
-            logger.info("AutoTrader: fired on scan completion trigger")
+            # A STATED REJECTION IS NOT "FIRED" (Kenneth, 2026-09-25). fire()
+            # returns normally when the broker answers with a rejection, so
+            # this line used to log "fired" for an order that never happened.
+            # Same set fire() books 0 on, so the log and the budget agree.
+            if _is_rejected_status(fired.result.status):
+                logger.warning(
+                    "AutoTrader: scan completion trigger's order for %s was "
+                    "REJECTED by the broker (status %s, order %s)",
+                    fired.strategy.symbol, fired.result.status,
+                    fired.result.order_id,
+                )
+            else:
+                logger.info("AutoTrader: fired on scan completion trigger")
             # The config blocks were read and applied, so any standing
-            # config-refusal alert is over — see the helper for why this lives
+            # config-refusal alert is over. That holds on a rejection too: the
+            # broker can only reject an order that was built from them. See
+            # the helper for why this lives
             # here and not as `discrete=True` on those two alerts.
             _clear_config_refusal_holds()
             return fired
