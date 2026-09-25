@@ -6,7 +6,7 @@
  * the badge's color instead of drifting into stale hardcoded copy.
  */
 import type { Status } from '@/lib/status';
-import { FUNDAMENTAL_BAND, SCORE_BAND } from '@/lib/status';
+import { FUNDAMENTAL_BAND, SCORE_BAND, riskBandStatus, type RiskBandKind } from '@/lib/status';
 import type { OptionContract, ContractScoreBreakdown } from '@/types/domain';
 import type { ScanState } from '@/lib/scanStore';
 import type { PortfolioRiskMetrics, RiskLimits } from '@/types/domain';
@@ -407,11 +407,9 @@ export function fundamentalScoreTooltip(kind: 'overall' | 'growth' | 'quality' |
 }
 
 /** RiskPanel's combined RiskBadge, and (with `metric` set) each of the 4 individual Stat cells.
- *  Comparators mirror lib/riskStore.ts's computeMetrics exactly (per-band, not uniform):
- *  exposure/concentration reject strictly above the cap; positions/daily reject at-or-above
- *  it and floor their 80% caution threshold — using a single `>= cap` rule for all four (as
- *  an earlier version of this function did) makes the badge color and the tooltip disagree
- *  right at the boundary. */
+ *  Verdicts come from lib/status.ts's riskBandStatus — the same function riskStore's
+ *  computeMetrics uses for the badge — so the tooltip and the badge cannot disagree. Each
+ *  band only declares its kind ('fraction' or 'count'); never re-implement a comparator here. */
 export function riskStatusTooltip(
   metrics: PortfolioRiskMetrics,
   limits: RiskLimits,
@@ -423,38 +421,38 @@ export function riskStatusTooltip(
     value: number;
     cap: number;
     fmt: (n: number) => string;
-    statusFor: (value: number, cap: number) => Status;
+    kind: RiskBandKind;
   }> = [
     {
       key: 'exposure', label: 'total exposure', value: metrics.totalExposurePct, cap: limits.maxTotalExposurePct,
       fmt: (n) => `${(n * 100).toFixed(0)}%`,
-      statusFor: (v, c) => v > c ? 'REJECT' : v > c * 0.8 ? 'CAUTION' : 'PASS',
+      kind: 'fraction',
     },
     {
       key: 'positions', label: 'concurrent positions', value: metrics.concurrentPositions, cap: limits.maxConcurrentPositions,
       fmt: (n) => `${n}`,
-      statusFor: (v, c) => v >= c ? 'REJECT' : v >= Math.floor(c * 0.8) ? 'CAUTION' : 'PASS',
+      kind: 'count',
     },
     {
       key: 'concentration', label: `largest position (${metrics.largestConcentrationSymbol})`, value: metrics.largestConcentrationPct, cap: limits.maxSingleTradeExposurePct,
       fmt: (n) => `${(n * 100).toFixed(0)}%`,
-      statusFor: (v, c) => v > c ? 'REJECT' : v > c * 0.8 ? 'CAUTION' : 'PASS',
+      kind: 'fraction',
     },
     {
       key: 'daily', label: 'today’s recommendations', value: metrics.dailyRecommendations, cap: limits.maxDailyRecommendations,
       fmt: (n) => `${n}`,
-      statusFor: (v, c) => v >= c ? 'REJECT' : v >= Math.floor(c * 0.8) ? 'CAUTION' : 'PASS',
+      kind: 'count',
     },
   ];
 
   if (metric) {
     const b = bands.find((x) => x.key === metric)!;
-    const s = b.statusFor(b.value, b.cap);
+    const s = riskBandStatus(b.kind, b.value, b.cap);
     return `${b.fmt(b.value)} of a ${b.fmt(b.cap)} limit (${s}).`;
   }
 
   const worst = bands
-    .map((b) => ({ ...b, status: b.statusFor(b.value, b.cap) }))
+    .map((b) => ({ ...b, status: riskBandStatus(b.kind, b.value, b.cap) }))
     .sort((a, b2) => (a.status === 'REJECT' ? 0 : a.status === 'CAUTION' ? 1 : 2) - (b2.status === 'REJECT' ? 0 : b2.status === 'CAUTION' ? 1 : 2))[0];
   if (worst.status === 'PASS') return 'All portfolio risk limits (exposure, positions, concentration, daily recommendations) are comfortably within bounds.';
   return `Driven by ${worst.label}: ${worst.fmt(worst.value)} of a ${worst.fmt(worst.cap)} limit (${worst.status}).`;

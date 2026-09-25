@@ -3879,9 +3879,12 @@ def test_guard_i_uses_the_schedulers_session_test_not_the_price_probe(mocker):
     F-3's normalisation at the seam where it matters.
     """
     from app.services import auto_trader as at
+    from app.services import market_session as ms
     from app.services.scheduling_tz import MARKET_TZ
 
-    session = mocker.patch.object(at, "_market_session_open", return_value=True)
+    # A4g: the hours-test import moved to market_session with the helper (moved,
+    # not copied), so the seam is patched where the helper now reads it.
+    session = mocker.patch.object(ms, "_market_session_open", return_value=True)
 
     assert at._todays_bar_is_unclosed(_ny(2026, 6, 10, 10, 0)) is True
     assert session.call_count == 1, "the real session test was not consulted"
@@ -3905,11 +3908,12 @@ def test_guard_i_normalises_an_aware_instant_to_market_tz():
     nothing worse than a caller choosing a different tzinfo.
     """
     from app.services import auto_trader as at
+    from app.services import market_session as ms  # A4g: `_NYSE_OPEN` moved with the helper
 
     ny_evening = _ny(2026, 6, 10, 20, 0)
     as_utc = ny_evening.astimezone(timezone.utc)
 
-    assert as_utc.time() < at._NYSE_OPEN, (
+    assert as_utc.time() < ms._NYSE_OPEN, (
         "premise check: this instant IS < 09:30 on the UTC wall clock"
     )
     assert at._todays_bar_is_unclosed(ny_evening) is False
@@ -3941,10 +3945,10 @@ def test_guard_i_nyse_open_matches_the_schedulers_own_boundary():
     one minute before the copy must be pre-open, and the boundary itself must
     be inside the scheduler's session.
     """
-    from app.services import auto_trader as at
+    from app.services import market_session as ms  # A4g: `_NYSE_OPEN` moved with the helper
     from app.services.strategy_watch_scheduler import _market_open
 
-    boundary = _ny(2026, 6, 10, at._NYSE_OPEN.hour, at._NYSE_OPEN.minute)
+    boundary = _ny(2026, 6, 10, ms._NYSE_OPEN.hour, ms._NYSE_OPEN.minute)
 
     assert _market_open(boundary) is True, (
         "`_NYSE_OPEN` is not the scheduler's open — the `< _NYSE_OPEN` clause "
@@ -4077,8 +4081,12 @@ def test_guard_i_call_site_consults_the_real_clock(mocker, ny_now,
     """
     from app.services import auto_trader as at
 
+    from app.services import market_session as ms
+
     today = date.today()
-    mocker.patch.object(at, "datetime", _clock_at(ny_now))
+    # A4g: the helper moved to market_session (moved, not copied) and reads the
+    # wall clock there, so the frozen clock is installed where the helper runs.
+    mocker.patch.object(ms, "datetime", _clock_at(ny_now))
     mocker.patch("app.data.market.fetch_candles",
                  return_value=_dated_bars(400, end=today))
 
@@ -4144,7 +4152,9 @@ def test_guard_i_acceptance_stale_db_gate_series_equals_scan_series(mocker):
         "premise check: a stale DB backfills, so the SCAN sees today's bar"
     )
 
-    mocker.patch.object(at, "datetime", _clock_at(_ny(2026, 6, 10, 16, 30)))
+    from app.services import market_session as ms
+    # A4g: the helper reads the clock in market_session, where it now lives.
+    mocker.patch.object(ms, "datetime", _clock_at(_ny(2026, 6, 10, 16, 30)))
     mocker.patch("app.data.market.fetch_candles", return_value=stored)
     gate_times = [b["time"] for b in at._fetch_scan_window_bars("MSFT")]
 
@@ -4194,7 +4204,9 @@ def test_guard_i_acceptance_fresh_db_divergence_is_the_accepted_cost(mocker):
         "ends at the previous session"
     )
 
-    mocker.patch.object(at, "datetime", _clock_at(_ny(2026, 6, 10, 16, 30)))
+    from app.services import market_session as ms
+    # A4g: the helper reads the clock in market_session, where it now lives.
+    mocker.patch.object(ms, "datetime", _clock_at(_ny(2026, 6, 10, 16, 30)))
     mocker.patch("app.data.market.fetch_candles", return_value=stored)
     gate_times = [b["time"] for b in at._fetch_scan_window_bars("MSFT")]
 

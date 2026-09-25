@@ -50,8 +50,11 @@ export function trendDetailText(d?: TrendDetail): string | undefined {
 }
 
 export function eventDetailText(d?: EventDetail): string | undefined {
-  if (!d) return undefined;
+  // No event name -> undefined, so callers fall back to their generic status text
+  // instead of rendering "undefined in undefinedd".
+  if (!d || !d.event) return undefined;
   if (d.event === 'none') return 'No upcoming event';
+  if (d.days_to_event == null) return d.event;
   return `${d.event} in ${d.days_to_event}d`;
 }
 

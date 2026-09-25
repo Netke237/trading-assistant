@@ -229,10 +229,24 @@ async def test_u4_regime_condition_snapshot_on_completed_candles(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_1d_rules_are_unchanged(monkeypatch):
-    candles = _bars(n=150, span=86400)
+async def test_1d_rules_skip_the_intraday_trim(monkeypatch):
+    """A4c's span-based intraday trim is not applied to 1D. Since A4g, 1D/1W drop
+    the forming daily/weekly bar by session close instead
+    (tests/test_a4g_forming_daily_weekly_bar.py), so this pins A4c's half at an
+    instant where the two disagree: Friday 17:00 ET, last bar Friday's (00:00 ET
+    stamp). A span trim would drop it (00:00 + 86400s is still ahead); A4g keeps
+    it (the session closed at 16:00)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    ny = ZoneInfo("America/New_York")
+    fri = int(datetime(2026, 6, 12, tzinfo=ny).timestamp())
+    candles = [{"time": fri - 86400 * (150 - i), "open": 50.0, "high": 50.5, "low": 49.5,
+                "close": 50.0, "volume": 1_000} for i in range(150)]
+    candles.append({"time": fri, "open": 50.0, "high": 50.5, "low": 49.5, "close": FORMING, "volume": 1})
+    fri_evening = int(datetime(2026, 6, 12, 17, tzinfo=ny).timestamp())
     seen = await _run(monkeypatch, '1D',
-                      [_row('s1', '1D', _REGIME_RULE), _row('c1', '1D', _COMPOSITE_OMM)], candles)
+                      [_row('s1', '1D', _REGIME_RULE), _row('c1', '1D', _COMPOSITE_OMM)],
+                      candles, as_of=fri_evening)
     assert seen["snap"] == [candles]
     assert seen["omm"] == [[c["close"] for c in candles]]
 
