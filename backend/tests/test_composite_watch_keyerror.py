@@ -213,3 +213,101 @@ def test_the_duplicate_check_still_refuses_a_real_duplicate(store):
     store.add_watch("MSFT", "pullback_ema")
     with pytest.raises(ValueError, match="already watched"):
         store.add_watch("MSFT", "pullback_ema")
+
+
+# ── Round 2 F1: a feed/model failure is NO READING, not "condition false" ───
+# evaluate_scheduled fails closed internally (no bars, model error, structure
+# error, too few bars for a strategy confirmation). Read as False, a blip
+# mid-regime re-armed an armed composite, and the next good reading re-sent the
+# same entry. These drive the REAL evaluate_scheduled.
+
+from types import SimpleNamespace
+
+from app.services import composite_trigger_evaluator as cte
+
+_OMM_BULL = SimpleNamespace(state="Bull", conviction_pct=80, p_stay=0.9)
+_OMM_TRIGGER = {"primary": {"model": "OMM", "to_state": "Bull"}, "min_confirmations": 0}
+
+
+async def _run_real(store, omm_results):
+    """One evaluate_and_notify per entry in omm_results (None = model had no
+    result), counting notifications actually sent."""
+    sent = AsyncMock(return_value=True)
+    with patch.object(ev, "strategy_watch_store", store), \
+         patch.object(ev, "get_bars", new=AsyncMock(return_value=_bars())), \
+         patch.object(ev, "notify_enabled_channels", sent), \
+         patch("app.services.composite_trigger_evaluator.describe_match", return_value={}), \
+         patch("app.services.regime_omm.compute_omm", side_effect=list(omm_results)):
+        for _ in omm_results:
+            await ev.evaluate_and_notify()
+    return sent.await_count
+
+
+@pytest.mark.asyncio
+async def test_a_model_blip_mid_regime_does_not_resend_the_entry(store):
+    store.add_composite_watch("AAPL", _OMM_TRIGGER)
+    assert await _run_real(store, [_OMM_BULL, None, _OMM_BULL]) == 1
+    assert _composite_state(store)["phase"] == "armed"
+
+
+@pytest.mark.asyncio
+async def test_a_blip_while_idle_neither_fires_nor_writes(store):
+    store.add_composite_watch("AAPL", _OMM_TRIGGER)
+    before = dict(_composite_state(store))
+    assert await _run_real(store, [None]) == 0
+    assert _composite_state(store) == before
+
+
+@pytest.mark.asyncio
+async def test_a_genuine_false_still_re_arms(store):
+    store.add_composite_watch("AAPL", _OMM_TRIGGER)
+    bear = SimpleNamespace(state="Bear", conviction_pct=80, p_stay=0.9)
+    assert await _run_real(store, [_OMM_BULL, bear, _OMM_BULL]) == 2
+
+
+def _call(td, *, bars_daily=None, bars_intraday=None, flag):
+    return cte.evaluate_scheduled(
+        "AAPL", td, _bars() if bars_daily is None else bars_daily,
+        bars_intraday or [], unknown_as_none=flag,
+    )
+
+
+@pytest.mark.parametrize("flag,expected", [(True, None), (False, False)])
+def test_each_unknown_path_is_none_with_the_flag_and_false_without(flag, expected):
+    # no daily bars
+    assert _call(_OMM_TRIGGER, bars_daily=[], flag=flag) is expected
+    # OMM had no result
+    with patch("app.services.regime_omm.compute_omm", return_value=None):
+        assert _call(_OMM_TRIGGER, flag=flag) is expected
+    # HMM_intraday with no intraday bars
+    assert _call({"primary": {"model": "HMM_intraday"}, "min_confirmations": 0},
+                 flag=flag) is expected
+    # HMM model raised
+    with patch("app.services.regime_hmm.compute_intraday_hmm", side_effect=RuntimeError("x")):
+        assert _call({"primary": {"model": "HMM_daily"}, "min_confirmations": 0},
+                     flag=flag) is expected
+    # structure detection raised, confirmations required
+    with patch("app.services.regime_omm.compute_omm", return_value=_OMM_BULL), \
+         patch("app.services.market_structure.compute_structure", side_effect=RuntimeError("x")):
+        assert _call({**_OMM_TRIGGER, "min_confirmations": 1}, flag=flag) is expected
+    # a listed strategy confirmation starved of bars
+    with patch("app.services.regime_omm.compute_omm", return_value=_OMM_BULL):
+        assert _call({**_OMM_TRIGGER, "strategy_confirmations": ["mean_reversion_vwap"]},
+                     flag=flag) is expected
+
+
+def test_a_met_strategy_minimum_is_true_even_with_another_strategy_starved():
+    """The unknown only replaces a SHORTFALL: rsi firing meets min 1 even though
+    vwap had no intraday bars -- True with or without the flag."""
+    td = {**_OMM_TRIGGER, "strategy_confirmations": ["mean_reversion_rsi", "mean_reversion_vwap"],
+          "min_strategy_confirmations": 1}
+    with patch("app.services.regime_omm.compute_omm", return_value=_OMM_BULL), \
+         patch.object(cte, "_check_strategy_signals", return_value=1):
+        assert _call(td, flag=True) is True
+        assert _call(td, flag=False) is True
+
+
+def test_a_genuine_miss_is_false_with_the_flag():
+    bear = SimpleNamespace(state="Bear", conviction_pct=80, p_stay=0.9)
+    with patch("app.services.regime_omm.compute_omm", return_value=bear):
+        assert _call(_OMM_TRIGGER, flag=True) is False

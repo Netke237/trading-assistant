@@ -297,7 +297,9 @@ def evaluate_scheduled(
     bars_daily: list[dict],
     bars_intraday: list[dict],
     regime_bars_intraday: list[dict] | None = None,
-) -> bool:
+    *,
+    unknown_as_none: bool = False,
+) -> bool | None:
     """Watch/scheduler path. Receives raw bars — runs models internally.
 
     bars_daily: OHLCV daily bars for OMM and daily HMM
@@ -305,11 +307,22 @@ def evaluate_scheduled(
     regime_bars_intraday: A4c -- as evaluate_from_context: when not None the
         HMM_intraday fit uses it; strategy confirmations keep bars_intraday.
 
+    unknown_as_none: when True, a reading that could not be TAKEN -- no bars,
+        a model that errored or returned nothing, structure detection that
+        raised, too few bars for a listed strategy confirmation -- returns
+        None instead of False. The strategy-watch loop needs the difference: a
+        composite armed for the current entry re-arms on a genuine False, and
+        treating a feed blip as False re-armed it and re-sent the same alert
+        once the feed recovered. Default False keeps every other caller's
+        fail-closed bool unchanged.
+
     Note: regime_hmm.py only exposes compute_intraday_hmm(); 'HMM_daily' falls back to
     that function on daily bars (requires MIN_BARS=200 daily bars).
     """
     from app.services.regime_omm import compute_omm
     from app.services.market_structure import compute_structure
+
+    unknown = None if unknown_as_none else False
 
     if isinstance(trigger_def, dict):
         td = trigger_def
@@ -323,18 +336,22 @@ def evaluate_scheduled(
     primary_met = False
     if model == "OMM":
         if not bars_daily:
-            return False
+            return unknown
         closes = [b["close"] for b in bars_daily]
         omm_result = compute_omm(closes)
+        if omm_result is None:
+            return unknown
         primary_met = _check_primary_omm(td, omm_result)
     elif model == "HMM_intraday":
         _hmm_bars = regime_bars_intraday if regime_bars_intraday is not None else bars_intraday
         if not _hmm_bars:
             logger.warning("evaluate_scheduled: HMM_intraday requested but no intraday bars for %s", symbol)
-            return False
+            return unknown
         try:
             from app.services.regime_hmm import compute_intraday_hmm
             hmm_result = compute_intraday_hmm(_hmm_bars)
+            if hmm_result is None:
+                return unknown
             primary_met = _check_primary_hmm(td, hmm_result)
         except Exception as exc:
             # Deliberate fail-closed: if the HMM model errors we suppress the alert
@@ -343,20 +360,22 @@ def evaluate_scheduled(
             # ever needs to become a user-visible error, that is a product decision,
             # not a silent code change.
             logger.warning("evaluate_scheduled: HMM_intraday failed for %s — %s", symbol, exc)
-            return False
+            return unknown
     elif model == "HMM_daily":
         # compute_intraday_hmm works on any list[dict] with 'close' keys; use daily bars.
         # Requires MIN_BARS=200 daily bars; callers should ensure sufficient history.
         if not bars_daily:
-            return False
+            return unknown
         try:
             from app.services.regime_hmm import compute_intraday_hmm
             hmm_result = compute_intraday_hmm(bars_daily)
+            if hmm_result is None:
+                return unknown
             primary_met = _check_primary_hmm(td, hmm_result)
         except Exception as exc:
             # Deliberate fail-closed: see the HMM_intraday branch above for rationale.
             logger.warning("evaluate_scheduled: HMM_daily failed for %s — %s", symbol, exc)
-            return False
+            return unknown
     elif model == "any":
         primary_met = True
 
@@ -367,16 +386,19 @@ def evaluate_scheduled(
     min_conf_count = td.get("min_confirmations", 1)
     if min_conf_count > 0:
         structure_signals: list[dict] = []
+        structure_failed = False
         if bars_daily:
             try:
                 # compute_structure(candles, interval, symbol) is the entry point
                 structure_signals = compute_structure(bars_daily, "1D", symbol) or []
             except Exception as exc:
                 logger.warning("evaluate_scheduled: structure detection failed for %s — %s", symbol, exc)
+                structure_failed = True
 
         count = _count_confirmations(td, structure_signals, {})
         if count < min_conf_count:
-            return False
+            # A shortfall only because detection raised is no reading.
+            return unknown if structure_failed else False
 
     # Strategy confirmations — independent N-of-M gate for mean-reversion strategies.
     # Evaluated regardless of min_confirmations to ensure the strategy gate is never skipped.
@@ -386,7 +408,14 @@ def evaluate_scheduled(
         direction: str = td.get("direction") or "Bullish"
         strategy_fired = _check_strategy_signals(strategy_conf_list, bars_daily, bars_intraday, direction=direction)
         if strategy_fired < min_strategy_conf:
-            return False
+            # _matched_strategy_signals silently skips a strategy with < 60
+            # bars of its kind; a shortfall with one of them skipped is no
+            # reading, not a "did not fire".
+            starved = any(
+                len((bars_intraday if key == "mean_reversion_vwap" else bars_daily) or []) < 60
+                for key in strategy_conf_list
+            )
+            return unknown if starved else False
 
     return True
 

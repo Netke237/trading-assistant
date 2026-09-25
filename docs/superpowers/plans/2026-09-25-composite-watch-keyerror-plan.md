@@ -134,3 +134,27 @@ give exactly ONE composite event; true → false → true gives two; sustain + h
 and clears `pending_entry_since`; an `evaluate_scheduled` exception leaves state unchanged;
 `add_watch` / `add_watches_bulk` for a symbol that has a composite succeed and add all
 symbols.
+
+## Amendment after round 2 (the code) — one gate-level finding taken, two logged
+
+**F1 (taken). A feed/model failure read as "condition false" re-armed an armed composite.**
+`evaluate_scheduled` fails closed internally: it returns False for no daily bars, no
+intraday bars, an HMM exception, `compute_omm` → None, a structure exception, or a strategy
+confirmation starved of bars. So a blip mid-regime moved armed → idle, and the next good
+reading re-sent the same entry (reproduced: 3 runs, feed `[ok, empty, ok]`, 2
+notifications).
+
+Fix: `evaluate_scheduled(..., *, unknown_as_none=False)`. With the flag set, those paths
+return **None** (no reading). A structure or strategy shortfall counts as unknown only when
+detection raised or a listed strategy had < 60 bars of its kind. A strategy minimum that is
+MET stays True. The watch loop passes the flag, and on None it `continue`s with state
+untouched in both phases. Without the flag every path returns exactly the old bool, so
+other callers are unchanged (the only production caller is the watch loop).
+
+**F2 (logged, parity).** A composite is armed inside `evaluate_all`, before
+`evaluate_and_notify` sends. If Gmail/Telegram fails at that moment, the entry's alert is
+lost until the next entry. Strategy watches have done the same since before this change,
+and composites sent nothing at all before it.
+
+**F3 (logged, parity).** A manual `/evaluate` overlapping a scheduled run has no lock, so
+both runs can see idle and both send. Strategy watches share this.

@@ -275,9 +275,16 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                 _regime_intraday = completed_bars_for_interval(bars_intraday, w.get("interval", "15m"))
             fired = evaluate_scheduled(
                 symbol, trigger_def, bars, bars_intraday, regime_bars_intraday=_regime_intraday,
+                unknown_as_none=True,
             )
         except Exception as exc:
             logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
+            continue
+        if fired is None:
+            # No reading (feed or model failure inside evaluate_scheduled): the
+            # state is left exactly as it was -- an armed watch must not re-arm
+            # on a blip and re-send the same entry when the feed recovers.
+            logger.warning("composite-watch: no reading for %s this run; state unchanged", symbol)
             continue
 
         watch_state = dict(w.get("last_state") or {})
