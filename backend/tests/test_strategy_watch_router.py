@@ -137,3 +137,46 @@ async def test_bulk_unknown_strategy_returns_400(app):
         resp = await ac.post("/api/strategy-watch/bulk",
                             json={"symbols": ["AAPL"], "strategy_key": "nonexistent"})
     assert resp.status_code == 400
+
+
+# ── COMPOSITE-WATCH-STRATEGY-KEY-CRASH ────────────────────────────────────────
+# Seed composite rows directly on the RELOADED store. Never via
+# POST /api/composite-watches/: the fixture does not reload that router, so it
+# still holds the pre-reload store (pointing at the real config file) -- the
+# write would miss this test's store and the test would pass vacuously on main.
+_OMM_TD = {"primary": {"model": "OMM", "to_state": "Bull"}}
+
+
+@pytest.mark.asyncio
+async def test_add_strategy_watch_for_symbol_with_composite_watch_is_201(app):
+    import app.services.strategy_watch_store as sws
+    sws.strategy_watch_store.add_composite_watch("AAPL", _OMM_TD)
+    assert len(sws.strategy_watch_store.list_watches()) == 1
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        r = await ac.post("/api/strategy-watch/",
+                          json={"symbol": "AAPL", "strategy_key": "pullback_ema"})
+    assert r.status_code == 201
+    assert len(sws.strategy_watch_store.list_watches()) == 2
+
+
+@pytest.mark.asyncio
+async def test_evaluate_now_with_enabled_composite_watch_is_200(app):
+    import app.services.strategy_watch_store as sws
+    sws.strategy_watch_store.add_composite_watch("AAPL", _OMM_TD)
+    bars = [{"time": f"2024-01-{d:02d}", "open": 100.0, "high": 101.0, "low": 99.0,
+             "close": 100.0, "volume": 1_000_000} for d in range(1, 29)]
+    # The evaluator also captured the pre-reload store; point it at this test's store.
+    # evaluate_scheduled -> False and notify patched: nothing can be sent for real.
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store",
+               sws.strategy_watch_store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=bars), \
+         patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
+               return_value=False), \
+         patch("app.services.strategy_watch_evaluator.notify_enabled_channels",
+               new_callable=AsyncMock) as notify:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            r = await ac.post("/api/strategy-watch/evaluate")
+    assert r.status_code == 200
+    assert r.json()["fired"] == 0
+    notify.assert_not_called()

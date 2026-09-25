@@ -95,6 +95,8 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
     for w in strategy_watch_store.list_watches():
         if not w.get("enabled"):
             continue
+        if w.get("watch_type") == "composite":
+            continue  # evaluated by the composite loop below; has no strategy_key
         symbol = w["symbol"]
         key = w["strategy_key"]
         fn = _SIGNAL_FNS.get(key)

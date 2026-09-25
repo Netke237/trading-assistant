@@ -292,8 +292,10 @@ def test_format_event_uses_plain_strategy_label_and_reward_risk_wording():
 
 
 def _composite_watch(**overrides):
+    # Real composite rows (StrategyWatchStore.add_composite_watch) carry no
+    # strategy_key -- a fake one here once hid the evaluate_all KeyError.
     base = {"id": "wch_comp_1", "symbol": "AAPL", "watch_type": "composite",
-            "strategy_key": "composite", "direction": "Bullish", "enabled": True,
+            "direction": "Bullish", "enabled": True,
             "trigger_def": {"primary": {"model": "OMM", "to_state": "bull_trend"}}}
     base.update(overrides)
     return base
@@ -458,3 +460,58 @@ async def test_regular_watch_corrupted_pending_since_does_not_raise_or_fire():
     assert events == []
     store.update_state.assert_called_once()
     assert "pending_entry_since" in store.update_state.call_args[0][1]
+
+
+# ── COMPOSITE-WATCH-STRATEGY-KEY-CRASH: real composite rows (no strategy_key) ──
+# These use a real StrategyWatchStore, never hand-built dicts, so the row shape is
+# exactly what add_composite_watch persists.
+
+_OMM_TD = {"primary": {"model": "OMM", "to_state": "Bull"}}
+_REAL_DETAIL = {"structure_matched": [], "structure_total": 0,
+                "strategy_matched": [], "strategy_total": 0}
+
+
+async def _evaluate_real_store(store, composite_fires: bool):
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, **k: _signal()}), \
+         patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
+               return_value=composite_fires), \
+         patch("app.services.composite_trigger_evaluator.describe_match",
+               return_value=_REAL_DETAIL):
+        return await evaluate_all()
+
+
+@pytest.mark.asyncio
+async def test_composite_row_listed_first_does_not_abort_strategy_watches(tmp_path):
+    from app.services.strategy_watch_store import StrategyWatchStore
+    store = StrategyWatchStore(path=tmp_path / "w.yaml")
+    store.add_composite_watch("AAPL", _OMM_TD)      # listed first: crashed the loop on main
+    store.add_watch("MSFT", "pullback_ema")
+    events = await _evaluate_real_store(store, composite_fires=False)
+    assert [(e.symbol, e.event_type) for e in events] == [("MSFT", "entry")]
+
+
+@pytest.mark.asyncio
+async def test_composite_row_listed_last_does_not_discard_earlier_strategy_events(tmp_path):
+    from app.services.strategy_watch_store import StrategyWatchStore
+    store = StrategyWatchStore(path=tmp_path / "w.yaml")
+    store.add_watch("MSFT", "pullback_ema")         # on main: armed + saved, event then lost
+    store.add_composite_watch("AAPL", _OMM_TD)
+    events = await _evaluate_real_store(store, composite_fires=False)
+    assert [(e.symbol, e.event_type) for e in events] == [("MSFT", "entry")]
+
+
+@pytest.mark.asyncio
+async def test_real_composite_row_still_fires_in_composite_loop(tmp_path):
+    from app.services.strategy_watch_store import StrategyWatchStore
+    store = StrategyWatchStore(path=tmp_path / "w.yaml")
+    store.add_composite_watch("AAPL", _OMM_TD)
+    store.add_watch("MSFT", "pullback_ema")
+    events = await _evaluate_real_store(store, composite_fires=True)
+    assert sorted((e.symbol, e.strategy_key) for e in events) == [
+        ("AAPL", "composite"), ("MSFT", "pullback_ema")]
+    composite = next(e for e in events if e.strategy_key == "composite")
+    assert composite.reason == "Composite Markov trigger: Bull regime"  # real formatter, no fallback

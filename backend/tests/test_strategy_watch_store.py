@@ -111,3 +111,30 @@ def test_schedule_defaults_and_update(tmp_path):
     store.set_schedule({"enabled": True, "mode": "poll", "eod_time": "16:30", "poll_hours": 2})
     assert store.get_schedule()["mode"] == "poll"
     assert store.get_schedule()["poll_hours"] == 2
+
+
+# ── COMPOSITE-WATCH-STRATEGY-KEY-CRASH ────────────────────────────────────────
+_OMM_TD = {"primary": {"model": "OMM", "to_state": "Bull"}}
+
+
+def test_add_watch_for_symbol_with_composite_watch_does_not_raise(tmp_path):
+    s = StrategyWatchStore(path=tmp_path / "w.yaml")
+    s.add_composite_watch("AAPL", _OMM_TD)
+    s.add_watch("AAPL", "pullback_ema")
+    with pytest.raises(ValueError, match="already watched"):
+        s.add_watch("AAPL", "pullback_ema")
+    assert len(s.list_watches()) == 2
+
+
+def test_add_watch_duplicate_rejected_without_composite_rows(tmp_path):
+    s = StrategyWatchStore(path=tmp_path / "w.yaml")
+    s.add_watch("AAPL", "pullback_ema")
+    with pytest.raises(ValueError, match="already watched"):
+        s.add_watch("AAPL", "pullback_ema")
+
+
+def test_bulk_add_across_a_composite_watched_symbol_adds_all(tmp_path):
+    s = StrategyWatchStore(path=tmp_path / "w.yaml")
+    s.add_composite_watch("AAPL", _OMM_TD)
+    added = s.add_watches_bulk(["AAPL", "MSFT"], "breakout_base")
+    assert [w["symbol"] for w in added] == ["AAPL", "MSFT"]
