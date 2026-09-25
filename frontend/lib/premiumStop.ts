@@ -36,7 +36,7 @@ export const PREMIUM_STOP_PCT_FALLBACK = 0.60;
  *  caution under such a value instead.
  *
  *  10% because that is the floor the app already applies to the GLOBAL premium
- *  stop (`routers/risk_settings.py`, `ge=0.10, le=1.0`); 99% because the
+ *  stop (`routers/risk_settings.py`, `ge=0.10, le=0.99` since P2-02); 99% because the
  *  backend rejects a per-position ratio at or above 1 and 100% is not a stop
  *  but a total loss. Deriving both editors from these two numbers is what
  *  keeps them from drifting again.

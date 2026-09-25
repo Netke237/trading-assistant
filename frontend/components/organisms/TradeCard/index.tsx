@@ -1711,7 +1711,7 @@ export function TradeCard({
    *  declared stop.)
    *
    *  10%-99% OF THE MID, because that is the range the app already considers a
-   *  stop: the GLOBAL premium stop is bounded `ge=0.10, le=1.0`
+   *  stop: the GLOBAL premium stop is bounded `ge=0.10, le=0.99` (le=1.0 before P2-02)
    *  (routers/risk_settings.py), and the server rejects a per-position ratio at
    *  or above 1. Deriving the dollar bounds from the mid keeps the card and
    *  those two rules from disagreeing, instead of hard-coding a second opinion.
@@ -3493,8 +3493,9 @@ export function EditableKV({
     // reason one step further out. Round 5 added
     // 10-99%-of-mid bounds to the Premium stop field and re-opened exactly the
     // defect this guard exists to close: the seed is `round(mid x global, 2)`
-    // (trade_plan.py), and the global is allowed up to 1.0 (risk_settings.py
-    // `le=1.0`), at which point the seed IS the mid and the max is 99% of it --
+    // (trade_plan.py), and the global was allowed up to 1.0 (risk_settings.py
+    // `le=1.0`; 0.99 since P2-02, but a stored legacy 1.0 still loads), at
+    // which point the seed IS the mid and the max is 99% of it --
     // 1951 of 2000 mids from $0.01 to $20.00 seed above the bound. Clicking the
     // field to read it and clicking away would pin a per-position stop nobody
     // chose, on a card with no way back to inheriting.

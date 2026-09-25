@@ -23,6 +23,7 @@ import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
 import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal, type ScanScheduleEntry, type ScanScheduleRun } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
+import { PREMIUM_STOP_MAX_PCT, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
 
@@ -94,6 +95,41 @@ function SectionIntro({ title, blurb }: { title: string; blurb: string }) {
       <Text size={14} weight={600}>{title}</Text>
       <Text size={12} tone="secondary">{blurb}</Text>
     </div>
+  );
+}
+
+/** P2-02 / R3-1 / R3-6 / R4-1 / R4-2 / R5-1 -- what the stored global premium
+ *  stop actually does, said under the field.
+ *
+ *  - 100% or more (only a value stored before the 99% cap): the threshold is
+ *    $0.00, which neither alert engine fires on.
+ *  - Above 99% but below 100%: it DOES fire (at entry x (1 - pct)), so no
+ *    never-fires claim -- only that saving applies the 99% maximum.
+ *  - Below 100%: the entry price under which the threshold is below $0.01,
+ *    computed from the RAW value (both engines use it until Settings is
+ *    saved), rounded UP to the cent in integer cents. */
+function PremiumStopSettingNotes({ pct }: { pct: number }) {
+  if (!Number.isFinite(pct)) return null;
+  if (pct >= 1) {
+    return (
+      <Text size={11} tone="caution">
+        Stored 100% can never fire, in this browser or on the server. Save to apply 99%.
+      </Text>
+    );
+  }
+  const limitCents = Math.ceil((0.01 / (1 - pct)) * 100 - 1e-9);
+  return (
+    <>
+      {pct > PREMIUM_STOP_MAX_PCT && (
+        <Text size={11} tone="caution">
+          {`Stored ${premiumStopPctLabel(pct)} is above the 99% maximum. Save to apply 99%.`}
+        </Text>
+      )}
+      <Text size={11} tone="dim">
+        {`At ${premiumStopPctLabel(pct)}, an entry below $${(limitCents / 100).toFixed(2)} puts the stop `
+          + 'threshold below $0.01 — fires only on a sub-penny quote.'}
+      </Text>
+    </>
   );
 }
 
@@ -1278,9 +1314,13 @@ function RiskForm() {
       t3: Math.max(localTargetPct.t3, localTargetPct.t2, localTargetPct.t1),
     };
     const wasClamped = orderedTargetPct.t2 !== localTargetPct.t2 || orderedTargetPct.t3 !== localTargetPct.t3;
+    // P2-02 (R2-9) -- clamped ONCE and used for the POST and both local
+    // copies, so a loaded legacy 100% (which the backend now refuses) saves as
+    // 99% and the caution below clears after the save.
+    const stopPct = Math.min(PREMIUM_STOP_MAX_PCT, localStopPct);
     try {
       await saveRiskSettings({
-        premiumStopPct:          localStopPct,
+        premiumStopPct:          stopPct,
         portfolioValue:          localLimits.portfolioValue,
         maxSinglePositionPct:    localLimits.maxSingleTradeExposurePct,
         maxLossPerTradePct:      localLimits.maxLossPerTradePct,
@@ -1291,7 +1331,8 @@ function RiskForm() {
         targetT2Pct: orderedTargetPct.t2,
         targetT3Pct: orderedTargetPct.t3,
       });
-      setPremiumStopPct(localStopPct);
+      setPremiumStopPct(stopPct);
+      setLocalStopPct(stopPct);
       setTargetProfitPct(orderedTargetPct);
       setLocalTargetPct(orderedTargetPct);
       setSaveResult(wasClamped ? 'Saved (T2/T3 raised to stay ≥ the level before them)' : 'Saved');
@@ -1428,16 +1469,21 @@ function RiskForm() {
         hint="Fraction of premium lost before stop fires (0.60 = stop at −60%)"
         defaultValue="0.60"
       >
-        <input
-          type="number"
-          className={styles.input}
-          min={0.10}
-          max={1.0}
-          step={0.05}
-          value={localStopPct}
-          onChange={(e) => setLocalStopPct(Math.max(0.10, Math.min(1.0, Number(e.target.value))))}
-          onBlur={handleSaveRisk}
-        />
+        <div>
+          <input
+            type="number"
+            className={styles.input}
+            min={0.10}
+            // P2-02 (decision Q7): 99% is the maximum -- the same number the
+            // per-position editors use, imported so the two cannot drift.
+            max={PREMIUM_STOP_MAX_PCT}
+            step={0.01}
+            value={localStopPct}
+            onChange={(e) => setLocalStopPct(Math.max(0.10, Math.min(PREMIUM_STOP_MAX_PCT, Number(e.target.value))))}
+            onBlur={handleSaveRisk}
+          />
+          <PremiumStopSettingNotes pct={localStopPct} />
+        </div>
       </Row>
       <Row
         label="Profit target — T1"
