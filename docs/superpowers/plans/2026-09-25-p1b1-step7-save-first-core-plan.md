@@ -175,3 +175,89 @@ not a finding against this plan.
 - Closes: round_11_followups items 5 and 7, round_13_followups item 7 (the TradeCard `max` stays with P2), and round_2_batch_followups item 3.
 - Re-logged for the broker/adapters owner (unassigned): post-submit parse errors should raise `RuntimeError`, not `ValueError`, and a broker 4xx should be told apart from a transport failure in the 502 detail. Until then those land in ORDER-UNKNOWN, which keeps the row. That is the safe side.
 - Re-logged for the backend owner (round 1 finding 12): when an offline save's DELETE lands after the create commits but before `log_approval`'s own commit (`routers/portfolio.py:163-168`), an APPROVE audit event is written for a rec_id that no longer exists. `log_approval` should skip a missing position. Backend is out of P1b-i's files.
+
+---
+
+## Revision after the plan cap: Kenneth's option A (SUPERSEDES §3, the §2.5 note wording, and the note parts of §5/§6/§7)
+
+Plan round 3 was not clean: 14 findings, 3 of them gate-level. That hit the cap. Decision `P1B1-MINIMAL-REMOVE-2026-09-25`.
+
+The three gate-level findings, and what answers each:
+1. **Portfolio has no delete action.** Its only removal is Close, which books a fake closed trade into History and performance. So "delete it in Portfolio" cannot be followed safely.
+2. **Portfolio shows the raw contract string, not the note's label.**
+3. **An in-memory note never retires.** It can later point at a new, order-backed row of the same contract.
+
+Answer: every note carries its own **Remove** button. The button hard-DELETEs exactly that note's rec_id, after a confirm step. There is no Dismiss button. The notes no longer send the user to Portfolio (answers 1 and 2), and they act only on their own rec_id, never on "the ${label} position" (answers 3).
+
+`DELETE /api/portfolio/{rec_id}` is a hard delete. It writes no `closed_positions` row, so nothing reaches History, and it also removes that rec_id's audit events (`routers/portfolio.py:303-321`).
+
+The 11 below-gate round-3 findings were not recorded by the session that ran the round. Per `audit_rule` they would not have been fixed in-branch.
+
+### A1. The store
+
+`lib/directSendNotesStore.ts`, still with no `persist()` (decision `P1B1-NOTE-IN-MEMORY-2026-09-25` stands):
+
+```ts
+type DirectSendNoteKind = 'order-unknown' | 'save-unconfirmed' | 'not-removed';
+interface DirectSendNote {
+  recId: string; kind: DirectSendNoteKind; label: string;
+  brokerLabel: string; orderId: string | null;
+  status: string | null;     // the Remove button's last outcome, shown under the note
+  removing: boolean;
+}
+// actions: addNote(n) — dedup by recId (a later push for the same recId replaces kind/text);
+//          patchNote(recId, partial); removeNote(recId)
+```
+
+The note text is rendered from these fields, so no free string drifts from its kind. Lifetime is unchanged from §3: the store survives Prev/Next, basket sends, new sends and navigation, and it clears only on a full reload. Tests reset it in `beforeEach`.
+
+### A2. The note text (replaces §3's three texts)
+
+- **ORDER-UNKNOWN:** `${label}: order status UNKNOWN${idPart} (rec_id ${recId}). Check ${brokerLabel} first. If an order exists there, keep this position. If none does, press Remove.`
+- **SAVE-UNCONFIRMED:** `${label}: NO order was sent, but Portfolio may still have saved this send (rec_id ${recId}). Press Remove to delete that saved row.`
+- **NOT-REMOVED:** `${label}: NO order was placed, but its tracked position could not be removed (rec_id ${recId}). Press Remove to try again.`
+
+§3's "did not already hold ${label}" clause is dropped. The button acts on this send's own rec_id, so another row of the same contract can never be touched.
+
+### A3. The Remove button
+
+One per note, labelled `Remove (${label})`, and `disabled` while `removing` is true (no double click).
+
+1. **Confirm.** `window.confirm(...)` with the kind's text. Cancel does nothing.
+   - ORDER-UNKNOWN: `Delete the tracked ${label} position (rec_id ${recId})? Do this ONLY if ${brokerLabel} shows no order for it. If an order exists, deleting leaves that order untracked.`
+   - The other two kinds: `Delete the saved ${label} row (rec_id ${recId})? No order was placed for it.`
+2. **Delete.** `patchNote(recId, {removing: true, status: null})`, then `await api.deletePortfolioPosition(recId)`.
+   - **2xx:** `removeNote(recId)` and `dropLocal(recId)`. Then `void syncFromBackend(true).then(() => dropLocal(recId))`, as §2.5 already does after an auto-delete, so a sync already in flight cannot write the row back.
+   - **A thrown `→ 404` on ORDER-UNKNOWN or NOT-REMOVED:** the server answered this send's save before the note existed, so its write is over. A 404 means the row is gone. Handle it exactly like 2xx.
+   - **A thrown `→ 404` on SAVE-UNCONFIRMED:** this does NOT count as removed. The create may still be in flight (U1). The note stays, with status `Not found yet — the save may still be finishing. Press Remove again in a few seconds.` and `removing: false`.
+   - **Any other throw:** the note stays, with status `Remove failed: ${why}. Try again.` and `removing: false`. `why` is taken as in §2.5.
+3. The note is only ever removed by a 2xx, or by a 404 that counts as final. There is no Dismiss button, and the note never retires by any other path. It stays until a reload, as decided.
+
+### A4. Tests (added to §5; the note assertions in §5 tests 3, 6, 7, 8, 9, 14, 15 and 16 read the new texts)
+
+17. **ORDER-UNKNOWN, Remove.**
+    - An UNKNOWN send, then Remove with `confirm` returning false → `deletePortfolioPosition` is not called and the note stays.
+    - With `confirm` true → it is called with the note's recId, and never a contract. The note is gone and the local row is dropped.
+    - The confirm text contains `ONLY if` and the broker label.
+18. **SAVE-UNCONFIRMED, Remove on a 404.** An offline send, then Remove, and the delete throws `→ 404` → the note stays with "Not found yet". A second Remove that resolves → the note is gone.
+19. **NOT-REMOVED, Remove on a 404.** An auto-delete whose delete fails, then Remove, and the delete throws `→ 404` → the note is gone.
+20. **Remove on any other error.** The delete throws `→ 500: x` → the note stays with "Remove failed", and the button is enabled again.
+21. **Rec_id isolation.**
+    - Two notes, AAA's then BBB's; Remove on BBB → only BBB's recId is deleted, and AAA's note stays.
+    - A later successful send of the same contract as a SAVE-UNCONFIRMED note, then Remove on that note → the DELETE carries the note's recId, not the new row's.
+22. **Double click.** Remove while a delete is pending → the button is disabled and only one DELETE is sent.
+
+### A5. Mutations (added to §6)
+
+| # | Mutation | Test that turns red |
+|---|---|---|
+| M39 | Skip the confirm step | 17 |
+| M40 | Treat a SAVE-UNCONFIRMED 404 as final | 18 |
+| M41 | Treat an ORDER-UNKNOWN/NOT-REMOVED 404 as a failure | 19 |
+| M42 | Remove the note on a non-404 error | 20 |
+| M43 | Delete by the active card's recId, or by contract, instead of the note's | 21 |
+| M44 | Drop the `removing` disable | 22 |
+
+### A6. Gate reminder (replaces §7's note sentence)
+
+The per-note Remove (confirm first, by rec_id) is now IN scope. A Dismiss button and any wider orphan-row UI stay P1b-ii and are not findings against this plan.
