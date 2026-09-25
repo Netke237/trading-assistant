@@ -52,13 +52,14 @@ In backend/app/routers/broker.py:
    ```
 
    Returns `None` unless `getattr(result, "awaiting_confirmation", False) is True`.
-   Otherwise returns `result.message` stripped, or a fixed fallback
-   (`"IBKR asked for a confirmation"`) if that is empty. Capped at 500 chars, so a long
-   broker text cannot bloat the log or the UI.
+   Otherwise it returns `result.message` with HTML tags removed (IBKR question texts can carry
+   fragments like `<br>`, which React would render as literal tags; replaced by a space) and
+   whitespace collapsed. It falls back to `"IBKR asked for a confirmation"` if that leaves
+   nothing, and caps the result at 500 chars so a long broker text cannot bloat the log or UI.
 
-   Why `is True` and not truthiness: tests' `MagicMock` results would read truthy on any
-   attribute. A real `OrderResult` carries a real bool. This keeps every existing
-   MagicMock-based route test on its current path.
+   Why `is True` and not truthiness: it defends against any future non-OrderResult/mock result
+   whose attribute reads truthy. Today every route test uses a real `OrderResult` with the flag
+   at its default False, and the adapter's expression always yields a real bool.
 
 2. In each route, right after `result = await asyncio.to_thread(...)` and before the
    `broker_order_filled` log, add:
@@ -73,7 +74,7 @@ In backend/app/routers/broker.py:
        raise HTTPException(
            status_code=502,
            detail=f"IBKR did not place the order: it asked for a confirmation this app "
-                  f"does not send, so nothing was submitted. IBKR said: {question}",
+                  f"does not send. IBKR said: {question}",
        )
    ```
 
@@ -87,7 +88,11 @@ In backend/app/routers/broker.py:
      This is the existing failure-path contract (`_release_claim` docstring), not a new one.
    - No `broker_order_filled` event for this reply.
 
-3. Nothing else changes: `ibkr_paper.py`, `broker_router.py`, `auto_trader.py`, other
+3. Comment-only update: `ibkr_paper.py`'s `awaiting_confirmation` comment (~:96) says "Other
+   callers see the empty `order_id` as before". Reword it to name the manual routes
+   (MANUAL-IBKR-CONFIRM-AS-ERROR) as a second reader.
+
+4. Nothing else changes: `broker_router.py`, `auto_trader.py`, other
    brokers' results (no field → `getattr` False → unchanged 200), the response shape on success,
    `/broker/status`.
 
@@ -104,9 +109,13 @@ tests/test_broker_idempotency.py, and clears `_idempotency_cache`/`_idempotency_
 3. The audit trail: `log_event` (patched in `app.routers.broker`) is called with
    `broker_order_failed`, carrying `awaiting_confirmation: True` and the question.
    It is **never** called with `broker_order_filled`. Both routes.
-4. No cache on this path: two identical posts → both 502, `execute` called twice, and neither
+4. No cache on this path (sequential): two identical posts → both 502, `execute` called twice, and neither
    response says `deduped`. After both, `_idempotency_cache` is empty and `_idempotency_inflight`
    is empty.
+4b. No cache on this path (concurrent): `execute` blocks on a threading.Event and returns the
+   confirmation result. Two identical posts are launched concurrently (same asyncio pattern as
+   test_broker_router.py:347). Both get 502, `execute` is called twice (the waiter became the new
+   leader), and both maps end empty.
 5. A confirmation followed by a normal reply for the same order within the window: first → 502,
    second → 200 with the real order id and `deduped: False`.
 6. Unchanged paths: a normal IBKR result (`order_id="123"`, flag False) → 200 as before, and so
@@ -114,22 +123,35 @@ tests/test_broker_idempotency.py, and clears `_idempotency_cache`/`_idempotency_
    NO-ORDER-ID-BOOKS-FULL-PREMIUM and is out of scope). So does a result object with no
    `awaiting_confirmation` attribute (a Tradier-shaped dataclass or a `SimpleNamespace`).
 7. Message edge cases: empty/whitespace message with the flag → 502 with the fallback text; a
-   600-char message → detail carries at most 500 chars of it.
+   600-char message → detail carries at most 500 chars of it; `"Line one<br>Line two"` →
+   `"Line one Line two"` (no `<`), and a message that is only tags → the fallback.
 8. Helper unit tests: `_confirmation_question` for True/False/missing attribute/MagicMock
    (a MagicMock result → None).
 
-Frontend: no source change. Add tests only where the throw path isn't already pinned:
-- StockPositionCard: `postStockOrder` rejects with
-  `Error('API /broker/stock-order → 502: IBKR did not place the order: ...')` → the error text is
-  shown, `addPosition` is not called, and no order id is shown.
-- step-7-position-card page: same assertion.
-- StockSendDialog (StockSendDialog.test.tsx:132) and the step-7 trade card
-  (edited-fields-sync.test.tsx:1033) already pin the throw → error, no position.
+Frontend: no source change. Tests only. The existing rejection tests (StockSendDialog.test.tsx:132,
+edited-fields-sync.test.tsx:1033/1053) pin the error text but never assert that no position was
+created, and `placeMarketNow` has none. So one new test file per surface pins **error shown AND
+no position** for all five send paths. Each rejects the order call with the real-shaped message
+`Error('API /broker/<route> → 502: IBKR did not place the order: it asked for a confirmation this app does not send. IBKR said: <q>')`:
+- StockPositionCard `submit`: the question text is shown; the portfolio store's `addPosition` is
+  not called and `positions` stays empty; no "ID:" / order id is shown.
+- step-7-position-card page submit: same three assertions.
+- StockSendDialog auto-send: the error is shown for the row; `addPosition` is not called for it
+  and the portfolio store stays empty.
+- step-7 trade card `placeLimitPaper` AND `placeMarketNow` (separately): the error is shown;
+  `persistPosition` is not called (or no positions POST reaches the backend mock, whichever the
+  existing harness in edited-fields-sync.test.tsx exposes); `usePortfolioStore` `positions` has
+  length 0; no paper order id is shown.
+- lib/api: one test mocks `fetch` to return 502 with JSON `{"detail": "IBKR did not place the
+  order: ... IBKR said: Q?"}`. `api.postStockOrder` rejects with a message containing
+  `→ 502` and `IBKR said: Q?`, which proves the real parse produces the text the UI tests use.
 
 Mutation checks to run and record (each must fail ≥1 test):
 (a) drop the check in stock-order; (b) the same in option-order; (c) truthiness instead of `is True`
-(the MagicMock test must catch it); (d) cache the error response (`response = {...}` before
-raising); (e) log `broker_order_filled` before the check.
+(the helper's MagicMock unit test must catch it); (d) cache the error response (`response = {...}`
+before raising); (e) log `broker_order_filled` before the check; (f) frontend: in one handler
+(StockPositionCard `submit`), move `addPosition` into the catch; the new test must fail; (g) drop
+the tag strip.
 
 ## 4. Verification
 
@@ -143,7 +165,8 @@ raising); (e) log `broker_order_filled` before the check.
 
 Add a PROJECT_STATE.json phase `MANUAL-IBKR-CONFIRM-AS-ERROR`
 (verify: present, `backend/app/routers/broker.py`, pattern `def _confirmation_question\(`; note:
-presence only, behaviour pinned by the new test file). Record each audit round. Mark the decision
+presence only; the wiring in BOTH routes is pinned by mutations (a)/(b), which the route tests
+kill, and the frontend no-position contract by the five new frontend cases). Record each audit round. Mark the decision
 built. Rounds: plan stage and code stage each up to 3 (AUDIT-CAP-PER-STAGE-2026-09-25).
 
 ## 6. Out of scope
@@ -154,7 +177,23 @@ built. Rounds: plan stage and code stage each up to 3 (AUDIT-CAP-PER-STAGE-2026-
 - Empty-order-id success without the flag (decision NO-ORDER-ID-BOOKS-FULL-PREMIUM).
 - The auto-trade `/fire` path (already handled) and its synchronous broker call.
 - Any wording change in the frontend beyond what the backend `detail` supplies.
+- StockSendDialog's retry set: a row that failed with the confirmation question stays retryable.
+  A retry re-asks IBKR and gets the same 502. That is correct (nothing was placed, so a retry is
+  a genuine new submission), and it is not a regression.
 
 ## Audit rounds
 
-(none yet)
+- Plan round 1 (2026-09-25, fresh subagent, bmad-review-adversarial-general): NOT CLEAN, 1 blocking,
+  8 nits.
+  - B1: the frontend tests claimed as already pinned asserted only the error text, never "no
+    position", and `placeMarketNow` had no failure test. Now five send paths are pinned for error +
+    no position, plus mutation (f).
+  - Nits taken:
+    - the detail wording ("nothing was submitted" was false);
+    - the stale ibkr_paper comment;
+    - a concurrent no-cache test (4b);
+    - an api.ts parse test;
+    - the `is True` rationale corrected;
+    - the retry-set note in Out of scope;
+    - HTML tag strip plus test and mutation (g);
+    - the state note names mutations (a)/(b).
