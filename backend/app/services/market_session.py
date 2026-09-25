@@ -205,8 +205,9 @@ def last_session_close(now: datetime | None = None) -> datetime:
 
     Today's close when today is a weekday and ``todays_bar_is_unclosed(now)``
     is False (after 16:00); otherwise the previous weekday's close. The weekday
-    is checked FIRST: guard (i) reads a Saturday before 09:30 as "unclosed",
-    and that must not move the answer off Friday.
+    is checked FIRST: guard (i) reads a weekend after 09:30 as "closed" (its
+    WEEKENDS residual), and taking that as "today's close" would return a
+    Saturday/Sunday 16:00 that no session had.
     """
     now = _normalise(now, "last_session_close")
     today = now.date()

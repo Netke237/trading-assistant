@@ -113,11 +113,14 @@ def test_monday_keeps_fridays_bar_drops_todays():
     assert out[-1]["time"] == _ts(_ny(2026, 6, 5)), "Friday's completed bar must survive Monday"
 
 
-def test_last_session_close_skips_the_weekend_and_ignores_saturday_pre_open():
+def test_last_session_close_skips_the_weekend():
     assert last_session_close(_ny(2026, 6, 8, 10)) == _ny(2026, 6, 5, 16)
-    assert last_session_close(_ny(2026, 6, 13, 8)) == _ny(2026, 6, 12, 16), (
-        "guard (i) reads Sat 08:00 as 'unclosed'; the weekday check must come first"
+    assert last_session_close(_ny(2026, 6, 13, 8)) == _ny(2026, 6, 12, 16)
+    assert last_session_close(_ny(2026, 6, 13, 12)) == _ny(2026, 6, 12, 16), (
+        "guard (i) reads a weekend after 09:30 as 'closed'; without the weekday "
+        "check that returns Saturday 16:00, a close no session ever had"
     )
+    assert last_session_close(_ny(2026, 6, 14, 21)) == _ny(2026, 6, 12, 16)
     assert last_session_close(_ny(2026, 6, 10, 17)) == _ny(2026, 6, 10, 16)
 
 

@@ -98,8 +98,8 @@ New module `app/services/market_session.py`:
     Monday-00:00 (yfinance), Sunday-evening-ET and Friday stamps. The only false positive is a bar
     stamped AFTER its own close (e.g. 20:00 ET): it is dropped until that stamp passes, the conservative
     direction. Weekends need no special case: on Sat/Sun the last close is Friday 16:00, and no bar is
-    newer. (Guard (i) reads Sat before 09:30 as "unclosed"; `last_session_close` checks the weekday first,
-    so that quirk does not reach here.)
+    newer. (Guard (i) reads a weekend after 09:30 as "closed"; `last_session_close` checks the weekday
+    first, so it never returns a Saturday/Sunday 16:00 "close".)
   - Order is preserved and the input list is not mutated.
 
 **The `now` for the chart path is the fetch time**, as in A4c. `chart_cache` holds a 1D/1W snapshot for
@@ -168,7 +168,8 @@ Mutations before the round:
 - D3 left on `_model_candles`;
 - the helper skipped entirely;
 - drop all undatable bars instead of the last one;
-- Friday treated as closed all day.
+- Friday treated as closed all day;
+- the weekday check dropped from `last_session_close` (a weekend after 09:30 returns a weekend close).
 
 ## 6a. Adversarial round 1 (plan) — NOT CLEAN, one finding, taken
 
