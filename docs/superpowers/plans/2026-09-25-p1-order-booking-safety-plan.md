@@ -386,7 +386,7 @@ Tests (FE): a 400 "Expecting value: line 1 column 1" keeps the row, shows the bu
 
 ## Revisions after plan round 3 (these SUPERSEDE R1-R14 and S1-S11 where they conflict)
 
-Round 3 (fresh subagent) found 0 HIGH, 2 MEDIUM and 7 LOW. It verified S1's five auto-delete classes against the code: each is raised before any broker submission, and no path leaves a live order untracked or deletes a row whose order may be live. T-n answers round 3's findings in order: T1-T2 are M-1 and M-2, T3-T9 are L-1 to L-7. Kenneth approved a 4th plan round over the 3-round cap.
+Round 3 (fresh subagent) found 0 HIGH, 2 MEDIUM and 7 LOW. It verified S1's five auto-delete classes against the code: each is raised before any broker submission, and no path leaves a live order untracked or deletes a row whose order may be live. T-n answers round 3's findings in order: T1-T2 are M-1 and M-2, T3-T9 are L-1 to L-7. A 4th plan round is NOT yet run: the 3-round cap applies (see PROJECT_STATE audit_rule), pending Kenneth's call.
 
 **T1 (M-1) — S8's persist-failure rule depends on the detail TEXT only.** The page never sees the HTTP status: `persistPosition` returns `{ok, offline?, detail?, …}` (`frontend/lib/portfolioStore.ts:389-429`), and `errorDetail` returns the backend's text, falling back to `HTTP ${status}` only when there is none (`:311-323`). `portfolioStore.ts` is P2's file and is not edited. The rule that replaces S8's first bullet:
 - After ANY `!saved.ok && !saved.offline`, make a best-effort `api.deletePortfolioPosition(pos.recId)`, UNLESS the detail contains `duplicate rec_id` (`position_writer.py:558`: that rec_id belongs to another row, so it must never be deleted).
