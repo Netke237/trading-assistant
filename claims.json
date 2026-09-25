@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "claude/confident-volta-mja4lz",
       "claimed_at": "2026-09-25T21:45:31Z",
-      "expires_at": "2026-09-26T00:45:31Z",
+      "expires_at": "2026-09-26T01:07:45Z",
       "note": "P3c plan + implementation",
       "task": "P3C-SCAN-SIZING-LEFTOVERS"
     }
