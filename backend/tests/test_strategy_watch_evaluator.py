@@ -292,8 +292,10 @@ def test_format_event_uses_plain_strategy_label_and_reward_risk_wording():
 
 
 def _composite_watch(**overrides):
+    # Real composite rows (StrategyWatchStore.add_composite_watch) carry no
+    # strategy_key -- a fake one here once hid the evaluate_all KeyError.
     base = {"id": "wch_comp_1", "symbol": "AAPL", "watch_type": "composite",
-            "strategy_key": "composite", "direction": "Bullish", "enabled": True,
+            "direction": "Bullish", "enabled": True,
             "trigger_def": {"primary": {"model": "OMM", "to_state": "bull_trend"}}}
     base.update(overrides)
     return base
