@@ -311,3 +311,69 @@ def test_a_genuine_miss_is_false_with_the_flag():
     bear = SimpleNamespace(state="Bear", conviction_pct=80, p_stay=0.9)
     with patch("app.services.regime_omm.compute_omm", return_value=bear):
         assert _call(_OMM_TRIGGER, flag=True) is False
+
+
+# ── Round 3 (code round 2) F1: three-valued AND over the gates ──────────────
+# A gate with no reading used to short-circuit to None past a later gate that
+# was definitely False, so an armed watch stayed armed through a genuine exit
+# and then missed the next entry.
+
+_THREE = ["mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"]
+
+
+def test_starved_strategies_that_cannot_reach_the_minimum_are_a_definite_false():
+    # 2-of-3 with vwap starved and rsi/bb not firing: 0 + 1 < 2 -> False.
+    td = {"primary": {"model": "any"}, "min_confirmations": 0,
+          "strategy_confirmations": _THREE, "min_strategy_confirmations": 2}
+    with patch.object(cte, "_check_strategy_signals", return_value=0):
+        assert _call(td, bars_intraday=[], flag=True) is False
+    # 1 + 1 >= 2: the starved vwap could have decided it -> no reading.
+    with patch.object(cte, "_check_strategy_signals", return_value=1):
+        assert _call(td, bars_intraday=[], flag=True) is None
+
+
+def test_an_unread_primary_does_not_hide_a_later_definite_false():
+    td = {**_OMM_TRIGGER, "strategy_confirmations": ["mean_reversion_rsi"],
+          "min_strategy_confirmations": 1}
+    with patch("app.services.regime_omm.compute_omm", return_value=None), \
+         patch.object(cte, "_check_strategy_signals", return_value=0):
+        assert _call(td, flag=True) is False
+    with patch("app.services.regime_omm.compute_omm", return_value=None), \
+         patch.object(cte, "_check_strategy_signals", return_value=1):
+        assert _call(td, flag=True) is None
+
+
+def test_unread_structure_does_not_hide_a_later_definite_false():
+    td = {**_OMM_TRIGGER, "min_confirmations": 1,
+          "strategy_confirmations": ["mean_reversion_rsi"], "min_strategy_confirmations": 1}
+    with patch("app.services.regime_omm.compute_omm", return_value=_OMM_BULL), \
+         patch("app.services.market_structure.compute_structure", side_effect=RuntimeError("x")), \
+         patch.object(cte, "_check_strategy_signals", return_value=0):
+        assert _call(td, flag=True) is False
+
+
+@pytest.mark.asyncio
+async def test_a_genuine_exit_during_an_intraday_outage_re_arms_and_the_next_entry_alerts(store):
+    """The reviewer's end-to-end case: 2-of-3 incl. vwap; intraday feed down
+    from run 1; rsi/bb stop firing (a real exit), then fire again (a real new
+    entry) -- two alerts, not one."""
+    td = {"primary": {"model": "any"}, "min_confirmations": 0,
+          "strategy_confirmations": _THREE, "min_strategy_confirmations": 2}
+    store.add_composite_watch("AAPL", td)
+    sent = AsyncMock(return_value=True)
+    with patch.object(ev, "strategy_watch_store", store), \
+         patch.object(ev, "get_bars", new=AsyncMock(return_value=_bars(n=300))), \
+         patch.object(ev, "notify_enabled_channels", sent), \
+         patch("app.data.market.fetch_intraday_candles",
+               side_effect=[_bars(n=300), [], []]), \
+         patch("app.services.composite_trigger_evaluator.describe_match", return_value={}), \
+         patch.object(cte, "_check_strategy_signals", side_effect=[2, 0, 2]):
+        for _ in range(3):
+            await ev.evaluate_and_notify()
+    assert sent.await_count == 2
+
+
+def test_structure_with_no_daily_bars_is_no_reading_not_a_miss():
+    td = {"primary": {"model": "any"}, "min_confirmations": 1}
+    assert _call(td, bars_daily=[], flag=True) is None
+    assert _call(td, bars_daily=[], flag=False) is False

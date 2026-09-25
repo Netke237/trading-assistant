@@ -158,3 +158,16 @@ and composites sent nothing at all before it.
 
 **F3 (logged, parity).** A manual `/evaluate` overlapping a scheduled run has no lock, so
 both runs can see idle and both send. Strategy watches share this.
+
+## Amendment after code round 2 — one gate-level finding, taken
+
+A gate with no reading returned None at once, skipping past a later gate that was
+definitely False. So an armed watch stayed armed through a genuine exit and then missed the
+next entry. Reproduced: 2-of-3 with VWAP starved and RSI/BB not firing (0 + 1 < 2, a
+definite False) returned None.
+
+Fix: `evaluate_scheduled` with the flag is a **three-valued AND**. Any gate definitely False
+→ False; otherwise any gate with no reading → None; otherwise True. A starved strategy set
+counts as no reading only if `fired + starved_known >= min` (it could have decided the
+gate). Structure with no daily bars, or detection raising, is no reading. With the flag off,
+the first no-reading returns False immediately, exactly the old short-circuit.

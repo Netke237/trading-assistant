@@ -104,6 +104,14 @@ def _count_confirmations(trigger_def: dict, structure_signals: list[dict], indic
 
 _MR_STRATEGY_LOOKBACK = 3   # bars scanned to detect a recent signal
 
+# The bar set each confirmable strategy reads (mirrors _matched_strategy_signals'
+# _FNS); evaluate_scheduled uses it to tell a starved strategy from a miss.
+_KNOWN_STRATEGY_BAR_TYPE = {
+    "mean_reversion_rsi":  "daily",
+    "mean_reversion_bb":   "daily",
+    "mean_reversion_vwap": "intraday",
+}
+
 
 def _matched_strategy_signals(
     strategy_keys: list[str],
@@ -322,8 +330,6 @@ def evaluate_scheduled(
     from app.services.regime_omm import compute_omm
     from app.services.market_structure import compute_structure
 
-    unknown = None if unknown_as_none else False
-
     if isinstance(trigger_def, dict):
         td = trigger_def
     else:
@@ -332,73 +338,83 @@ def evaluate_scheduled(
     primary = td.get("primary", {})
     model = primary.get("model", "OMM")
 
-    # Run appropriate model
-    primary_met = False
+    # THREE-VALUED AND over the gates, when unknown_as_none is set: any gate
+    # that is definitely False makes the whole result False; otherwise any gate
+    # with no reading makes it None; otherwise True. A gate with no reading must
+    # NOT short-circuit past a later gate that is definitely False -- that left
+    # an armed watch armed through a genuine exit, and it then missed the next
+    # entry. With the flag off, `no_reading()` returns False at once, exactly the
+    # old fail-closed short-circuit.
+    had_no_reading = False
+
+    def no_reading() -> bool:
+        nonlocal had_no_reading
+        had_no_reading = True
+        return not unknown_as_none   # True -> the caller returns False now
+
+    # Run appropriate model. primary_met: True / False / None (no reading).
+    primary_met: bool | None = False
     if model == "OMM":
-        if not bars_daily:
-            return unknown
-        closes = [b["close"] for b in bars_daily]
-        omm_result = compute_omm(closes)
-        if omm_result is None:
-            return unknown
-        primary_met = _check_primary_omm(td, omm_result)
+        omm_result = compute_omm([b["close"] for b in bars_daily]) if bars_daily else None
+        primary_met = None if omm_result is None else _check_primary_omm(td, omm_result)
     elif model == "HMM_intraday":
         _hmm_bars = regime_bars_intraday if regime_bars_intraday is not None else bars_intraday
         if not _hmm_bars:
             logger.warning("evaluate_scheduled: HMM_intraday requested but no intraday bars for %s", symbol)
-            return unknown
-        try:
-            from app.services.regime_hmm import compute_intraday_hmm
-            hmm_result = compute_intraday_hmm(_hmm_bars)
-            if hmm_result is None:
-                return unknown
-            primary_met = _check_primary_hmm(td, hmm_result)
-        except Exception as exc:
-            # Deliberate fail-closed: if the HMM model errors we suppress the alert
-            # (return False) rather than surfacing an error alert, matching the OMM/
-            # regime-failure pattern. Logged at WARNING for observability. If this
-            # ever needs to become a user-visible error, that is a product decision,
-            # not a silent code change.
-            logger.warning("evaluate_scheduled: HMM_intraday failed for %s — %s", symbol, exc)
-            return unknown
+            primary_met = None
+        else:
+            try:
+                from app.services.regime_hmm import compute_intraday_hmm
+                hmm_result = compute_intraday_hmm(_hmm_bars)
+                primary_met = None if hmm_result is None else _check_primary_hmm(td, hmm_result)
+            except Exception as exc:
+                # Deliberate fail-closed: if the HMM model errors we suppress the alert
+                # rather than surfacing an error alert, matching the OMM/regime-failure
+                # pattern. Logged at WARNING for observability. If this ever needs to
+                # become a user-visible error, that is a product decision, not a
+                # silent code change.
+                logger.warning("evaluate_scheduled: HMM_intraday failed for %s — %s", symbol, exc)
+                primary_met = None
     elif model == "HMM_daily":
         # compute_intraday_hmm works on any list[dict] with 'close' keys; use daily bars.
         # Requires MIN_BARS=200 daily bars; callers should ensure sufficient history.
         if not bars_daily:
-            return unknown
-        try:
-            from app.services.regime_hmm import compute_intraday_hmm
-            hmm_result = compute_intraday_hmm(bars_daily)
-            if hmm_result is None:
-                return unknown
-            primary_met = _check_primary_hmm(td, hmm_result)
-        except Exception as exc:
-            # Deliberate fail-closed: see the HMM_intraday branch above for rationale.
-            logger.warning("evaluate_scheduled: HMM_daily failed for %s — %s", symbol, exc)
-            return unknown
+            primary_met = None
+        else:
+            try:
+                from app.services.regime_hmm import compute_intraday_hmm
+                hmm_result = compute_intraday_hmm(bars_daily)
+                primary_met = None if hmm_result is None else _check_primary_hmm(td, hmm_result)
+            except Exception as exc:
+                # Deliberate fail-closed: see the HMM_intraday branch above for rationale.
+                logger.warning("evaluate_scheduled: HMM_daily failed for %s — %s", symbol, exc)
+                primary_met = None
     elif model == "any":
         primary_met = True
 
-    if not primary_met:
+    if primary_met is False:
+        return False
+    if primary_met is None and no_reading():
         return False
 
     # Count structure confirmations (only runs if min_confirmations > 0).
     min_conf_count = td.get("min_confirmations", 1)
     if min_conf_count > 0:
         structure_signals: list[dict] = []
-        structure_failed = False
+        structure_unread = not bars_daily
         if bars_daily:
             try:
                 # compute_structure(candles, interval, symbol) is the entry point
                 structure_signals = compute_structure(bars_daily, "1D", symbol) or []
             except Exception as exc:
                 logger.warning("evaluate_scheduled: structure detection failed for %s — %s", symbol, exc)
-                structure_failed = True
+                structure_unread = True
 
         count = _count_confirmations(td, structure_signals, {})
         if count < min_conf_count:
-            # A shortfall only because detection raised is no reading.
-            return unknown if structure_failed else False
+            # A shortfall only because there was nothing to detect on is no reading.
+            if not structure_unread or no_reading():
+                return False
 
     # Strategy confirmations — independent N-of-M gate for mean-reversion strategies.
     # Evaluated regardless of min_confirmations to ensure the strategy gate is never skipped.
@@ -408,16 +424,20 @@ def evaluate_scheduled(
         direction: str = td.get("direction") or "Bullish"
         strategy_fired = _check_strategy_signals(strategy_conf_list, bars_daily, bars_intraday, direction=direction)
         if strategy_fired < min_strategy_conf:
-            # _matched_strategy_signals silently skips a strategy with < 60
-            # bars of its kind; a shortfall with one of them skipped is no
-            # reading, not a "did not fire".
-            starved = any(
-                len((bars_intraday if key == "mean_reversion_vwap" else bars_daily) or []) < 60
-                for key in strategy_conf_list
+            # _matched_strategy_signals silently skips a known strategy with
+            # < 60 bars of its kind. It is no reading only if those skipped
+            # strategies could still have reached the minimum; otherwise the
+            # gate is definitely False.
+            starved = sum(
+                1 for key in strategy_conf_list
+                if key in _KNOWN_STRATEGY_BAR_TYPE
+                and len((bars_intraday if _KNOWN_STRATEGY_BAR_TYPE[key] == "intraday"
+                         else bars_daily) or []) < 60
             )
-            return unknown if starved else False
+            if strategy_fired + starved < min_strategy_conf or no_reading():
+                return False
 
-    return True
+    return None if had_no_reading else True
 
 
 def describe_match(
