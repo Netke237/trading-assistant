@@ -145,3 +145,20 @@ Backend `cd backend && .venv/bin/python -m pytest -q`; frontend `npx tsc --noEmi
 - **R2-13 (P2-23).** `anchorStockPrice` also chains `> 0`.
 - **R2-14 (P2-07).** The v3→v4 test uses version 3 input; a version 4 input asserts the step does NOT run.
 - **R2-15 (R1-1).** Corrected: edited-fields-sync also edits Premium stop after `expandLadder()`. That stays harmless because the field is now always visible.
+
+## G. Plan round 3 (NOT CLEAN: 2 MAJOR, 7 MINOR) — the cap is reached. The fixes below are written in but NOT re-audited. Stopped for Kenneth.
+
+- **R3-1 (MAJOR, R1-3/R2-7).** The Settings caution text, shown whenever `global > PREMIUM_STOP_MAX_PCT`, becomes: "Stored 100% can never fire, in this browser or on the server. Save to apply 99%." The drawer hint uses the same condition. A test pins the exact text.
+- **R3-2 (MAJOR, R2-12/P2-24).** The earlier claim was wrong: `premiumStopDollarToSend` does NOT drop a cached dollar (premiumStop.ts:225-230), and the send path is P1's page. So a read-only row with `touched.premiumStop` labels the cached pinned dollar as pinned, not "global". The server's fill-relative ratio decides, and a ratio ≥ 1 raises the existing drop notice. Pinned: `premiumStopDollarToSend(0.01) === 0.01`. Whether to clear the cache on entering read-only is Kenneth's call (question Q-P2-2).
+- **R3-3 (P2-10).** Rationale corrected. Rows from GET already send neither field (`fromBackend` drops them). The change matters for promoted-but-not-yet-reconciled rows. Residual, logged: such a row re-POSTed after a backend loss stores unshifted plan levels.
+- **R3-4 (P2-05).** `EditDrawer.test.tsx:1119` ("retires a rejection message when the value changes from OUTSIDE") is inverted to Q15's rule, and an EditField twin is added.
+- **R3-5 (P2-02).** Test list: "GET with a stored 1.0 returns 1.0" (tmp `_RISK_PATH`). RiskForm: loaded 1.0 → caution → blur → POST 0.99 → caution gone.
+- **R3-6 (R2-3).** The Settings hint computes its entry limit `0.01/(1−pct)` from the current value, and is worded "below $0.01 — fires only on a sub-penny quote".
+- **R3-7.** The source of "global" on the card and in AutoTradeArm is `useSettingsStore((s) => s.premiumStopPct)`. Residual: the browser copy can differ from the server's yaml until Settings mounts.
+- **R3-8 (P2-16).** The property test becomes `firing <= threshold` (strict) and `threshold − firing <= 0.01 + 1e-9`.
+- **R3-9 (P2-12).** The stamped rung's label is captured at the top of `runEstimate`, before `setMcResult(null)`, with nearest price as the fallback. A test covers target % settings changing between runs.
+
+Open questions for Kenneth raised by the plan rounds:
+- **Q-P2-1:** a SHORT stock's per-position percent stop fires on a price FALL, which is a gain for a short (alertEngine.ts:266, direction-blind).
+- **Q-P2-2:** clear a cached per-position dollar when the card's mid drops to where the band offers no stop?
+- **Q-P2-3:** below $0.01 thresholds (entry × (1 − pct) < $0.01), which F2 narrows to: change behaviour, or warn only (the plan warns only)?
