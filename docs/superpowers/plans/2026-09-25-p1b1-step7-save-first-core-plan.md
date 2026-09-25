@@ -261,3 +261,22 @@ One per note, labelled `Remove (${label})`, and `disabled` while `removing` is t
 ### A6. Gate reminder (replaces §7's note sentence)
 
 The per-note Remove (confirm first, by rec_id) is now IN scope. A Dismiss button and any wider orphan-row UI stay P1b-ii and are not findings against this plan.
+
+## Plan round 4 (delta, A1-A6 only, decision P1B1-DELTA-REVIEW-2026-09-25): NOT clean, stopped for Kenneth
+
+The round confirmed:
+- ORDER-UNKNOWN and NOT-REMOVED exist only after the server answered the create, so a 404 on them is final.
+- A 404 on SAVE-UNCONFIRMED staying non-final is enough.
+- No Remove can delete a row other than its own send's: rec_ids are client-generated and stable.
+- M39-M44 can each fail.
+
+**X1 (gate c → b): the forced sync + `dropLocal` after a Remove is untested.**
+- A sync whose GET started before the DELETE can write the deleted row back (`portfolioStore.ts:1257-1263`).
+- A Close on that stale row hits a 404, and the store's recovery then re-creates the row and closes it (`portfolioStore.ts:1066-1074`).
+- The result is a phantom closed trade in History.
+- M36 pins this pattern only for the §2.5 auto-delete path.
+
+PROPOSED, and NOT reviewed:
+- One shared helper, `removeTrackedRow(recId)`, doing `delete`, then `dropLocal`, then `void syncFromBackend(true).then(() => dropLocal(recId))`. It is used by both the auto-delete and Remove.
+- **A4 test 23:** a GET `/api/portfolio` started before the Remove's DELETE resolves after it, with the row inside → once everything settles the row is not in the store.
+- **A5 M45:** drop the chained sync from the Remove path → test 23 red.
