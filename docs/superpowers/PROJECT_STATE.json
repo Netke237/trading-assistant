@@ -2080,6 +2080,12 @@
       "id": "P3A-UNMEASURED-TREND-REMOVE-2026-09-25",
       "q": "Q11 follow-up (raised by P3a plan round 1): when a stock's trend score cannot be measured (too few bars for the MA; no benchmark for relative_strength), should the stock-scan direction gate REMOVE the name (counted as 'no data' in the funnel) or KEEP it flagged unmeasured?",
       "a": "Kenneth, 2026-09-25: REMOVE (fail closed; the funnel counts it as 'no data'). Paired with P3a making relative_strength actually measurable (benchmark ETF fetched per scan), so the method does not empty every scan."
+    },
+    {
+      "id": "P3A-INTRADAY-REGIME-FETCH-REFUSES-2026-09-25",
+      "q": "P3b residual: an Intraday auto-trade fire now refuses when its 15-min regime bars cannot be fetched (P3B-REGIME-BARS-MISSING-REFUSES), but the stock scan keeps that name ungated and floor-sized. Add the fix to P3a, or leave it as a logged note?",
+      "a": "Kenneth, 2026-09-25: add it to P3a. The scan drops such a name exactly where the fire would refuse (measurement used: regime filter on or regime sizing on; fetch raised or no completed 15-min bars); a short series still abstains. Plan item 12.",
+      "by": "Kenneth 2026-09-25"
     }
   ],
   "pending_kenneth": [

@@ -8,6 +8,8 @@ partial exceptions stated per item.
 
 ## Files touched
 
+Item 12 was added after P3b merged (decision P3A-INTRADAY-REGIME-FETCH-REFUSES-2026-09-25).
+
 Owned by P3a: `backend/app/routers/stock_scan.py`, `backend/app/scoring/stock_scorer.py`,
 `backend/app/services/strategy_engine.py` (`_build_target_ladder` only), `backend/app/routers/scan.py`
 (one comment only), `frontend/lib/stockScan.ts`, `frontend/lib/analysisStore.ts`, screener step-3, step-4-prebreakout and
@@ -173,6 +175,41 @@ mapping, and raises the same logged `HTTPException(500, detail=...)` as its neig
 (9) a raised exception in the gather is recorded as `{'symbol': 'unknown'}`: results are zipped with
 `symbols` so the real symbol is named.
 Items (3)(4)(5)(10) are in conviction_sizing.py (P3b) and stay open; the entry is annotated, not closed.
+
+## 12. Intraday scan refuses a name whose 15-min regime bars could not be had (added after P3b)
+
+Decision P3A-INTRADAY-REGIME-FETCH-REFUSES-2026-09-25 (Kenneth, after P3b merged): close the gap P3b logged —
+since P3B-REGIME-BARS-MISSING-REFUSES an Intraday **fire** refuses when its 15-min regime fetch fails, while
+the stock **scan** keeps the name ungated and floor-sized, so the scan can propose what the fire will refuse.
+
+Today (`_process_stock`, horizon whose `regime.<h>.timeframe == "15min"`): a raised fetch is logged and
+becomes `regime_bars = []`; an empty series (or one holding only the forming bar, which
+`completed_intraday_bars` removes) means no `regime_signal`, so the headwind filter cannot fire and sizing
+takes `floor:unmeasured`.
+
+Change, mirroring the fire path exactly (`auto_trader._measure_trade_regime` + its lazy `measure()`):
+- **When the measurement is used** — `req.regime_filter` is on, or `resolve_sizing(regime_sizing)` is not
+  `None` — and the 15-min fetch raised or returned no completed bars, `_process_stock` drops the name with
+  reason `regime data unavailable: no completed 15-min bars for {symbol}` (the raised case adds the
+  exception text). With the filter off and sizing off the fire never fetches, so the scan does not refuse
+  either.
+- A series that arrived but is shorter than `min_obs`, or that `compute_omm` cannot measure, still
+  abstains and is floor-sized, exactly as the fire does. The daily timeframe is unchanged (a symbol with no
+  daily bars is already dropped earlier as `insufficient history`).
+- Funnel: `classify_stock_rejection` puts `regime data unavailable:` in `failed_history` (the funnel's
+  "no history" stage, alongside `no price data`) — no schema or UI change. A test pins the bucket.
+- Analysis (`_analyze_core`): on the same condition it adds a REJECT `regime_data` flag worded as a scan
+  drop (`_scan_drop_flag`), so Analysis keeps agreeing with the scan (A5c).
+- The scan has no deadline of its own; `fetch_intraday_candles` keeps its adapter timeouts. The fire's 25s
+  deadline is the fire's concern (P3b).
+
+Tests: for an Intraday scan with the filter on — fetch raises -> dropped with the reason, bucket
+`failed_history`; fetch returns `[]` -> dropped; fetch returns only a forming bar -> dropped; returns
+`min_obs - 1` completed bars -> kept, `sizing_basis == "floor:unmeasured"`. With filter off and sizing off,
+a raising fetch keeps the name. With filter off and sizing on, a raising fetch drops it. Swing
+(daily timeframe) unaffected. Analysis gets the REJECT flag on a raising fetch with the filter on.
+Mutation: remove the drop -> the raising-fetch test fails; drop the "measurement used" condition -> the
+filter-off/sizing-off test fails.
 
 ## Out of scope, stated
 

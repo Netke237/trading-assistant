@@ -1,0 +1,35 @@
+{
+  "task_id": "p3a-scan-sizing-signal-correctness-plan--202609251153",
+  "goal": "P3a scan sizing & signal correctness: plan r3, frontend half, intraday regime-fetch refusal, code review to clean, merge",
+  "branch": "claude/cool-allen-5ih4v0",
+  "base": "main",
+  "created_at": "2026-09-25T11:53:30+00:00",
+  "updated_at": "2026-09-25T11:54:39+00:00",
+  "saved_commit": "c79bf96",
+  "log": [
+    {
+      "at": "2026-09-25T11:53:30+00:00",
+      "agent": "claude",
+      "handle": "anon",
+      "location": "cloud",
+      "event": "init",
+      "commit": "c79bf96"
+    },
+    {
+      "at": "2026-09-25T11:54:39+00:00",
+      "agent": "claude",
+      "handle": "anon",
+      "location": "cloud",
+      "event": "checkpoint",
+      "commit": "c79bf96",
+      "note": "P3a plan item 12 + decision recorded; handoff initialised"
+    }
+  ],
+  "lock": {
+    "holder": "claude@anon/cloud",
+    "since": "2026-09-25T11:53:30+00:00",
+    "heartbeat_at": "2026-09-25T11:54:39+00:00"
+  },
+  "schema_version": 1,
+  "tool_version": "1.0.0"
+}
