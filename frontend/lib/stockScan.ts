@@ -73,6 +73,15 @@ function causeText(cause: unknown): string {
   return typeof code === 'string' ? oneLine(code) : '';
 }
 
+/** What a manual scan shows when building its request from the saved stores
+ *  threw — nothing was sent. The likely cause (not the only possible one) is a
+ *  malformed persisted setting, e.g. `confidenceGate: null`. Points at the
+ *  footer Reset because the Settings → Scan form reads the same gate while
+ *  rendering. Reset also restores the broker accounts, regime and gate
+ *  settings, so the message says so. A5d. */
+export const STOCK_SCAN_SETTINGS_INVALID =
+  "Couldn't read your saved scan settings. Open Settings and press Reset to restore the defaults (this also resets your broker accounts, regime and gate settings).";
+
 /**
  * One human-readable line explaining why a stock scan failed — collapsed to a
  * single line and clamped, because the caller renders it verbatim.

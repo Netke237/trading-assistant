@@ -12,7 +12,7 @@ pre-request failure shows `STOCK_SCAN_SETTINGS_INVALID`, a post-request failure 
 `stockScanFailureReason(e)`.
 
 ## Status
-BLOCKED on Kenneth. Plan round 3 was NOT clean: 1 blocking finding, a state.py status label, now fixed. That hits the plan-stage cap of 3 rounds.
+Building. The plan-stage cap was hit and Kenneth chose to build. The code and tests are written (Step-5 suites 17/17, uncommitted in checkpoint WIP). Mutation checks are next.
 
 ## Done
 - c0937ad, c44e867, 956ad65: the A5d plan and its round-1 record, written on `claude/peaceful-ritchie-b59i77`.
@@ -22,7 +22,7 @@ BLOCKED on Kenneth. Plan round 3 was NOT clean: 1 blocking finding, a state.py s
 ## Next steps
 - [x] Plan round 2: not clean, findings [R2-1..R2-10] folded into the plan.
 - [x] Plan round 3: not clean, findings [R3-1..R3-5] folded in. Cap reached.
-- [ ] Kenneth decides: build on the fixed plan, or run a plan round 4.
+- [x] Kenneth decided: build now (decision A5D-BUILD-AFTER-PLAN-CAP-2026-09-25).
 - [ ] Build per plan §2. Add `STOCK_SCAN_SETTINGS_INVALID` to `frontend/lib/stockScan.ts`. In `frontend/app/(frame)/screener/step-5-strategy/page.tsx` `runScan`, add a `reachedRequest` flag, the catch mapping, and `console.error` for pre-request failures.
 - [ ] Tests T1–T5 in `frontend/app/(frame)/screener/step-5-strategy/__tests__/a5dReadableScanError.test.tsx`. Reuse the harness in the sibling `a5bSharedRequest.test.tsx`.
 - [ ] Mutation checks M1–M7 (plan §3). Each one must turn a test red, then be reverted.
@@ -31,7 +31,7 @@ BLOCKED on Kenneth. Plan round 3 was NOT clean: 1 blocking finding, a state.py s
 - [ ] Merge to main (`--no-ff`, with the main merge record written on the branch first), then `k_session.py finish`.
 
 ## Blockers / open questions
-- Waiting on Kenneth (plan-stage cap). The final message wording is "…(this also resets your broker accounts, regime and gate settings)." Kenneth re-chose it after round 2 showed that "scheduled scans" was false.
+- None. The final message wording is "…(this also resets your broker accounts, regime and gate settings)." Kenneth re-chose it after round 2 showed that "scheduled scans" was false.
 
 ## Decisions
 - A5B-KEEP-MAIN-2026-09-25: main's A5b stays. The other branch's A5b is archived at `archive/peaceful-ritchie-a5b-4796924`.
