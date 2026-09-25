@@ -1080,6 +1080,21 @@
         "note": "PRESENCE ONLY. Behavioural pins: backend/tests/test_p3a_scan_sizing_signals.py, backend/tests/test_p3a_intraday_regime_data.py, frontend step-5-strategy/__tests__/p3aScanSizing.test.tsx, lib/__tests__/p3aMinStockScore.test.ts, ScanFunnel tests."
       },
       "note": "SHIPPED 2026-09-25. Plan: rounds 1-5 (clean at 5; rounds 4-5 allowed by Kenneth past the cap). Code: round 1 (1 finding, stored 0% schedules), round 2 CLEAN. audit_rounds 7 = 5 plan + 2 code. 4 backlog entries closed, 4 annotated as partly fixed, 3 new observations logged. || Code round 1 NOT CLEAN (1 gate-level: stored 0% schedules broke under risk_pct gt=0); fixed per P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT (0 -> unset), tests + mutation. Code round 2 next. || BUILT on the branch (items 1-12), code review pending. Backend 3396 passed / 1 skipped; frontend tsc clean, jest 3693; mutations 18/18 killed after one test strengthened and one dead check removed. || PLAN CLEAN at round 5 (Kenneth allowed rounds 4 and 5 past the cap); building. || Plan round 4 NOT CLEAN (1 gate-level: the one-fetch rule dropped every non-VWAP Intraday name); fixed in the plan, awaiting Kenneth on a round 5. || 2026-09-25. Plan docs/superpowers/plans/2026-09-25-p3a-scan-sizing-signals-plan.md. Plan rounds 1-3 NOT clean (round 3: 2 blocking, cap reached). Kenneth answered B1/B2 and allowed a round 4 (P3A-INTRADAY-REFUSAL-MATCHES-FIRE, P3A-SCAN-RISK-ZERO-STOPS, P3A-PLAN-ROUND-4-ALLOWED). Backend half (items 3-11) already built at a2365a3; item 12 + frontend half pending."
+    },
+    {
+      "id": "P4B-STRATEGY-COMPOSITE-WATCHES",
+      "name": "P4b strategy & composite watches: conftest pin, per-watch isolation (Q17), state committed after delivery + run lock, 4h HMM history, VWAP confirmation like the regime models (interval threaded, completed bars, daily variant on 1D/1W, same answer on watch and rule paths), momentum confirmations read a number, GET /api/strategy-watch/ lists strategy watches only",
+      "status": "in_progress",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [],
+      "verify": {
+        "kind": "defect_marker",
+        "path": "backend/app/services/composite_trigger_evaluator.py",
+        "pattern": "if fn\\(slice_bars, direction=direction\\) is not None:",
+        "note": "DEFECT MARKER while in progress: the VWAP signal is still called without interval. On merge this flips to kind 'absent' of the same pattern. Plan: docs/superpowers/plans/2026-09-25-p4b-strategy-composite-watches-plan.md."
+      },
+      "note": "Branch claude/cool-heisenberg-6lsa3a, claim P4B-STRATEGY-COMPOSITE-WATCHES. Plan r1 written 2026-09-25; decisions P4B-DECISIONS-2026-09-25."
     }
   ],
   "already_shipped": [
@@ -2157,6 +2172,12 @@
       "q": "P3b residual: an Intraday auto-trade fire now refuses when its 15-min regime bars cannot be fetched (P3B-REGIME-BARS-MISSING-REFUSES), but the stock scan keeps that name ungated and floor-sized. Add the fix to P3a, or leave it as a logged note?",
       "a": "Kenneth, 2026-09-25: add it to P3a. The scan drops such a name exactly where the fire would refuse (measurement used: regime filter on or regime sizing on; fetch raised or no completed 15-min bars); a short series still abstains. Plan item 12.",
       "by": "Kenneth 2026-09-25"
+    },
+    {
+      "id": "P4B-DECISIONS-2026-09-25",
+      "q": "P4b new questions: (1) may P4b edit routers/chart_alerts.py (P4a-owned) for the composite block? (2) VWAP confirmation on 4h? (3) delivery-gated watch state when no notification channel is enabled?",
+      "a": "Kenneth, 2026-09-25: (1) YES -- composite-rule block (~:953-1005) and its A4e docstring VWAP sentence only; P4a's plan must not rework those lines. (2) the intraday VWAP signal on completed 4h bars; add '4h' to mean_reversion_vwap_signal's interval allow-list in strategy_engine.py (one line). (3) no channel enabled -> the watch arms as today (nothing to retry); channels enabled but none delivered -> the transition is not committed and retries next run.",
+      "by": "Kenneth 2026-09-25 (P4b)"
     }
   ],
   "pending_kenneth": [
