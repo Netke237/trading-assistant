@@ -41,6 +41,19 @@ the user's sizing too. That path posts a hand-built **snake_case** literal (it d
 `buildStockScanRequestBody`), and `StockScanRequest` silently ignores unknown keys, so the body must set
 `account_size: sizing.accountSize, risk_pct: sizing.riskPct` explicitly (`const sizing = scanSizingFromRisk()`)
 — never a spread of the camelCase helper result. (The fib and prebreakout sub-modes call other endpoints that size nothing.)
+**Max loss per trade at 0% (decision P3A-SCAN-RISK-ZERO-STOPS-2026-09-25, Kenneth, plan round 3 B2).**
+Settings allows `maxLossPerTradePct` = 0 (riskStore bounds it to [0, 1]; `portfolioValue` is bounded
+at >= 1000, so only the percentage can be 0). Item 8 makes the backend's `risk_pct` `gt=0`, so posting it
+would 422 every scan. `scanSizingFromRisk()` therefore throws a `ScanSizingError` with the message
+`Max loss per trade is 0% — set it in Settings → Risk` when `maxLossPerTradePct <= 0` (or is not finite).
+Each of the four paths calls it BEFORE building/posting the request and shows that exact message through
+its existing error surface: `runStockScan` stores it as the scan-failure reason (not the generic
+"settings invalid" text: the catch recognises `ScanSizingError`), Step 5 `setError(message)`, Analysis
+`set({ error: message })`, Pre-Breakout pullback `setError(message)`. Nothing is posted. Jest: for each of
+the four paths, `maxLossPerTradePct = 0` -> no POST and the message is shown.
+`lib/scanScheduleResolve.ts:125` (the scheduled-scan resolver) has the same 0 hole; it is not P3a's file,
+so it is logged as an open question, not changed.
+
 The Analysis `last-scan` basis is unchanged: it replays the exact body the scan ran with, sizing included.
 The stale "hardcoded here" comments are replaced.
 
@@ -61,8 +74,8 @@ Frontend: new `PARAM_DEFS` row `min_stock_score`, section `stocks`, new subGroup
 is already REJECT and dropped before this check — a lower value would display a gate the scan cannot
 apply. The backend field is `Field(None, ge=0, le=100)` and the hint says values at or below 35 add
 nothing beyond the existing REJECT drop. Default per horizon in `executionParamDefaults.ts` is 35 — `stock_score_thresholds.caution`,
-the floor the scan already applies through the REJECT status — so an untouched field changes nothing and,
-being equal to the default, is never sent. The hint says it applies to **Stocks-mode scans only** (the
+the floor the scan already applies through the REJECT status — so an untouched field changes nothing.
+A 35 can still be sent (e.g. a value clamped up to the floor); it has no effect beyond the REJECT drop. The hint says it applies to **Stocks-mode scans only** (the
 Options scan does not read it). `buildStockScanRequestBody` sends `min_stock_score` only when the override
 is a number. A jest test pins the default to `lib/status.ts`'s caution threshold so the two cannot drift.
 
@@ -89,7 +102,10 @@ to its ETF proxy (`SPX -> SPY`, `NDX -> QQQ`; an unknown name -> None, i.e. unme
 substitute index) and fetches it with `get_historical_bars`. Called once per scan in
 `_execute_stock_scan_core` (passed to every `_process_stock`) and once in `_analyze_core`; both pass it as
 `score_stock(..., benchmark_candles=...)`. A fetch failure -> None -> unmeasured -> dropped as "no data",
-never a fake 50. ROC over an ETF vs its index differs only by dividends over 20-50 days (well under the
+never a fake 50. **Dates, not positions:** `_roc` compares the last `period` bars of each series by index,
+so the benchmark series is trimmed to bars dated on or before the stock's last bar date, and if its last
+date then differs from the stock's last date the benchmark is treated as missing (unmeasured) rather than
+compared across different days. Test: a benchmark ending one day earlier -> unmeasured. ROC over an ETF vs its index differs only by dividends over 20-50 days (well under the
 RS thresholds' 0.5-point steps). Test: a relative_strength scan with benchmark bars yields a measured trend
 and the fetch is asked for `QQQ` on an NDX config / override and `SPY` on SPX.
 
@@ -97,7 +113,8 @@ The `, 50` fallback for a missing rule is removed; the fixtures that built `rule
 reaches the gate get a real trend rule.
 
 Funnel: `classify_stock_rejection` gets bucket `failed_direction_unmeasured`; `StockPipeline` gets
-`failed_direction_unmeasured: int = 0`. The stock `ScanFunnel` Direction stage subtracts both and labels
+`failed_direction_unmeasured: Optional[int] = None` (None = absent on a result persisted before the field
+existed, like `failed_direction`; the funnel treats None as 0). The stock `ScanFunnel` Direction stage subtracts both and labels
 them separately: `−N no conviction (trend < X)` and `−M no data`. The stage renders when
 `failed_direction + failed_direction_unmeasured > 0` (today it renders only on `failed_direction > 0`, which
 would hide an all-unmeasured drop). Jest test: `failed_direction: 0, failed_direction_unmeasured: 4` renders
@@ -130,6 +147,8 @@ question (data-side, and it affects bullish targets silently). Not code in this 
 (c) `direction_banner` when a stock scan ends empty and the direction gate removed any name: replace the
 causal claim ("market structure does not support ...") with counts:
 `No {direction} candidates survived. The direction-conviction gate removed {n} of {scanned} (trend below {X}); the rest were removed by other gates — see the pipeline.`
+`n` counts BOTH direction-gate reasons (`direction_conviction:` below the floor and
+`direction_conviction_unmeasured:` no data). When `n == scanned` the "the rest ..." clause is omitted.
 
 ## 6. Backlog: options-scan bar-window comment (scan.py)
 
@@ -187,31 +206,43 @@ becomes `regime_bars = []`; an empty series (or one holding only the forming bar
 `completed_intraday_bars` removes) means no `regime_signal`, so the headwind filter cannot fire and sizing
 takes `floor:unmeasured`.
 
-Change, mirroring the fire path exactly (`auto_trader._measure_trade_regime` + its lazy `measure()`):
-- **When the measurement is used** — `req.regime_filter` is on, or `resolve_sizing(regime_sizing)` is not
-  `None` — and the 15-min fetch raised or returned no completed bars, `_process_stock` drops the name with
-  reason `regime data unavailable: no completed 15-min bars for {symbol}` (the raised case adds the
-  exception text). With the filter off and sizing off the fire never fetches, so the scan does not refuse
-  either.
+Change, mirroring the fire path (`auto_trader._measure_trade_regime` + its lazy `measure()`). Not exactly:
+with `regime_filter` on the scan is stricter than the fire, which never reads that flag.
+- **When the measurement is used** — the YAML `regime_gate` is enabled (the resolved gate's `enabled` is
+  truthy, which is how `_regime_cap` reads it; shipped `true`), or `req.regime_filter` is on, or
+  `resolve_sizing(regime_sizing)` is not `None` — and the 15-min fetch raised or returned no completed bars,
+  `_process_stock` drops the name with reason `regime data unavailable: no completed 15-min bars for
+  {symbol}` (the raised case adds the exception text). Decision P3A-INTRADAY-REFUSAL-MATCHES-FIRE-2026-09-25
+  (Kenneth, plan round 3 B1): the fire measures whenever the YAML gate is enabled, so the scan must drop on
+  that condition too; `regime_filter` alone would miss the shipped config, since the UI never sends it.
+  With the gate, the filter and sizing all off, the fire never fetches, so the scan does not refuse either.
+- **One fetch, not two.** The regime copy reuses the 15-min bars `_process_stock` already fetched for the
+  signal (`_intraday_bars`), as it does today; the fetch's exception is captured once (`fetch_exc`) and
+  reused by the drop reason.
 - A series that arrived but is shorter than `min_obs`, or that `compute_omm` cannot measure, still
-  abstains and is floor-sized, exactly as the fire does. The daily timeframe is unchanged (a symbol with no
+  abstains and is floor-sized, as the fire does. The daily timeframe is unchanged (a symbol with no
   daily bars is already dropped earlier as `insufficient history`).
 - Funnel: `classify_stock_rejection` puts `regime data unavailable:` in `failed_history` (the funnel's
   "no history" stage, alongside `no price data`) — no schema or UI change. A test pins the bucket.
 - Analysis (`_analyze_core`): on the same condition it adds a REJECT `regime_data` flag worded as a scan
-  drop (`_scan_drop_flag`), so Analysis keeps agreeing with the scan (A5c).
+  drop (`_scan_drop_flag`), so Analysis keeps agreeing with the scan (A5c). The Analysis fetch binds its
+  exception (`except Exception as exc`) so the flag carries the same exception text as the scan's reason.
 - The scan has no deadline of its own; `fetch_intraday_candles` keeps its adapter timeouts. The fire's 25s
   deadline is the fire's concern (P3b).
 
-Tests: for an Intraday scan with the filter on — fetch raises -> dropped with the reason, bucket
+Tests: for an Intraday scan with the YAML gate enabled (shipped) and the filter off — fetch raises -> dropped
+(the case B1 found). For an Intraday scan with the filter on — fetch raises -> dropped with the reason, bucket
 `failed_history`; fetch returns `[]` -> dropped; fetch returns only a forming bar -> dropped; returns
-`min_obs - 1` completed bars -> kept, `sizing_basis == "floor:unmeasured"`. With filter off and sizing off,
-a raising fetch keeps the name. With filter off and sizing on, a raising fetch drops it. Swing
+`min_obs - 1` completed bars -> kept, `sizing_basis == "floor:unmeasured"`. With the gate, the filter and sizing all off
+(gate patched `enabled: false` in memory, never written to YAML), a raising fetch keeps the name. With filter off and sizing on, a raising fetch drops it. Swing
 (daily timeframe) unaffected. Analysis gets the REJECT flag on a raising fetch with the filter on.
 Mutation: remove the drop -> the raising-fetch test fails; drop the "measurement used" condition -> the
-filter-off/sizing-off test fails.
+all-off test fails; drop the gate term from the condition -> the gate-on/filter-off test fails.
 
 ## Out of scope, stated
+
+Logged as open questions, not built here: the options-scan half of item 12 (`routers/scan.py` code, where
+P3a may only edit comments); the `scanScheduleResolve.ts` risk_pct=0 hole (§1).
 
 Stock `direction_banner` is not rendered anywhere in the stocks UI today (only the options Step 4 shows its
 own). Not changed. The backend's `account_size=50_000` default remains for any non-UI caller that omits it; every
@@ -234,4 +265,8 @@ ones (options halves, split hypothesis, P3b items) stay open with a note.
 - Plan round 3 (2026-09-25, fresh subagent, bmad-review-adversarial-general): **NOT CLEAN, 2 blocking** — the 3-round cap is reached; stopped for Kenneth.
   - B1 (§12): the "measurement used" condition omits the YAML `regime_gate` (shipped `enabled: true`). The fire measures whenever that gate is enabled (auto_trader `_apply_regime_gate` -> `measure()`), and the scan applies the same gate via `score_stock(regime_gate=...)`. The UI never sends `regime_filter`. As written the scan would keep a name the fire refuses. Proposed: condition = `regime_filter or regime_gate.enabled or sizing on`; the keep test becomes gate-off + filter-off + sizing-off; add a gate-on test.
   - B2 (§1): Settings allows "max loss per trade" = 0; item 8 made `risk_pct` `gt=0`, so `scanSizingFromRisk()` would post 0 and every manual scan / Analysis would 422. Needs an explicit rule for <= 0 plus a jest case at 0.
-  - Non-blocking, to fold in: pipeline field is `Optional[int] = None` (not `int = 0`); §5c banner counts only `direction_conviction:` and says "the rest" when none are left; RS compares by position, not date (end-date check); Analysis must bind the fetch exception; reuse the signal's intraday bars instead of a second fetch; "exactly" -> the scan is stricter when `regime_filter` is on; log the options-scan half (routers/scan.py) as an open question; §2 "never sent" softened (a clamped 35 can be sent, no effect). `lib/scanScheduleResolve.ts:125` has the same risk_pct=0 hole (not P3a's; log it).
+  - Non-blocking, to fold in (ALL FOLDED IN for round 4): pipeline field is `Optional[int] = None` (not `int = 0`); §5c banner counts only `direction_conviction:` and says "the rest" when none are left; RS compares by position, not date (end-date check); Analysis must bind the fetch exception; reuse the signal's intraday bars instead of a second fetch; "exactly" -> the scan is stricter when `regime_filter` is on; log the options-scan half (routers/scan.py) as an open question; §2 "never sent" softened (a clamped 35 can be sent, no effect). `lib/scanScheduleResolve.ts:125` has the same risk_pct=0 hole (not P3a's; log it).
+- Kenneth, after round 3: B1 -> the scan drops when the YAML gate, the filter or sizing is on
+  (P3A-INTRADAY-REFUSAL-MATCHES-FIRE-2026-09-25); B2 -> a 0% max loss stops the scan with a message
+  (P3A-SCAN-RISK-ZERO-STOPS-2026-09-25); a round 4 past the cap is allowed
+  (P3A-PLAN-ROUND-4-ALLOWED-2026-09-25). Both blocking and all eight non-blocking findings folded in above.
