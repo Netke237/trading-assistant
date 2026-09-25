@@ -13,7 +13,7 @@ every main commit that landed after `sha`, including other pieces' already-merge
 round subjects.
 
 Seen live: A5c's "round 4" subject raised drift on MANUAL-IBKR-CONFIRM-AS-ERROR's
-honest count of 1. The drift cleared only once the branch reached main.
+honest count of 3. The drift cleared only once the branch reached main.
 
 The unnarrowed path (`base_ref..HEAD`) never had this problem, because main's
 commits are ancestors of `base_ref`. The boundary walk in `_target_scoped_base`
@@ -43,9 +43,26 @@ carries, which is the scope the unnarrowed path already uses.
 - The introducing-commit boundary.
 - Base-ref resolution.
 
-**Accepted residual.** A sibling branch's rounds for a *different* piece still
-count against this one. This is a false alarm: it is visible, and it clears when
-the count is recorded or the work is merged. It has not been seen in practice.
+**Residuals** (round 1; the helper's docstring states them too):
+
+- **SILENT, and Kenneth decides it.** Suppose a sibling branch was cut from main
+  before this piece opened. It carries a round of *this* piece, and it reaches
+  main before the branch merges main. The fix drops that round.
+  - In git's graph it looks exactly like another piece's merged round, so git
+    cannot tell the two apart.
+  - It is the unnarrowed span's existing rule (merged rounds are out of range)
+    applied to the narrowed span.
+  - Pinned by T5.
+- **LOUD: a sibling's rounds for another piece.** If they have not reached
+  main, they still count against this one.
+- **LOUD: only the resolved tightest ref is excluded.** If that ref lacks the
+  merged main commits, their rounds still count. Excluding every candidate ref
+  would fix this, but only by widening the silent case above.
+- **LOUD: merge subjects.** This branch's own "Merge origin/main (X round N)"
+  subject still counts.
+- **Pre-existing, unchanged.** Suppose a sibling cut from the feature *after*
+  the introducing commit reaches main. Then main contains the introducing
+  commit, no narrowing happens, and that round is out of range.
 
 ## 3. Tests (backend/tests/test_state_audit_bookkeeping.py)
 
@@ -55,11 +72,16 @@ the count is recorded or the work is merged. It has not been seen in practice.
 | T2 `test_merging_main_does_not_hide_this_pieces_own_undercount` | After the same main merge, round 2 on the branch with 1 declared is still drift. |
 | T3 `test_a_rounds_arriving_by_a_sibling_merge_still_count` | A round-3 subject arriving through a sibling-branch merge is still drift. This separates `^merged_ref` from `--first-parent`. |
 | T4 `test_the_merged_main_entrys_verify_probe_tracks_the_exclusion` | The entry's presence probe dies when either half is reverted: the `^merged_ref` append, or the call-site argument. |
+| T5 `test_this_pieces_round_that_reached_main_first_is_dropped` | Pins the silent residual. |
+| T6 `test_the_excluded_ref_is_the_resolved_base_not_a_fixed_name` | With a stale local main and an advanced origin/main, the exclusion is origin/main. |
+| T7 `test_a_malformed_merged_ref_degrades_to_no_evidence` | `HEAD~1` is refused by the shape guard (M4). |
 
 Mutations, all killed:
 - M1: `--first-parent` instead of `^merged_ref` (T3, T4).
 - M2: the call site drops `base_ref` (T1, T4).
 - M0: the whole fix reverted (T1).
+- M4: the `merged_ref` guard removed (T7).
+- M6: a hardcoded `^main` (T4, T6, T7).
 
 ## 4. State
 
@@ -72,4 +94,19 @@ Mutations, all killed:
 
 ## Audit rounds
 
-(none yet)
+**Round 1: plan and code together, fresh subagent. NOT CLEAN.**
+
+The plan was built before its audit, so this round audited the plan and the code
+together.
+
+- **Blocking (1).** The silent residual above was undocumented. It is now
+  documented, pinned by T5, and put to Kenneth.
+- **Non-blocking, all taken:**
+  - The loud residuals and the pre-existing case are documented.
+  - The guard is tested, by T7.
+  - The resolved-base test, T6, is added.
+  - The misquoted count (1) is corrected to 3.
+  - The `updated_by` chain is restored.
+  - The build-before-audit order is recorded.
+- **Noted:** the probe pattern depends on the helper appearing before the call
+  site in the file.

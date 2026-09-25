@@ -141,12 +141,28 @@ def _round_numbers_in_branch_subjects(
     MERGED IN from main after `sha`, so a branch that merged origin/main to
     stay current answered for other pieces' already-merged rounds: A5c's
     "round 4" subject drew drift on MANUAL-IBKR-CONFIRM-AS-ERROR's honest
-    count of 1. Merged history is out of range everywhere else here; this
+    count of 3. Merged history is out of range on the unnarrowed span; this
     makes the narrowed span agree. It is `^merged_ref`, not `--first-parent`:
     first-parent would also drop this branch's OWN commits that arrived by
-    merging a sibling branch, and those are exactly the rounds an undercount
-    hides in.
+    merging a sibling branch that has NOT reached main, and those are exactly
+    the rounds an undercount hides in.
 
+    WHAT IT COSTS, stated rather than discovered (round 1 of this piece):
+
+      - SILENT: a round of THIS piece that reached main on a sibling branch
+        before this branch merged main is dropped too. In the graph it is the
+        same shape as another piece's merged round, so git cannot tell them
+        apart. It is the unnarrowed span's existing rule -- merged rounds are
+        out of range -- now applied to the narrowed one.
+      - LOUD: only the ONE ref `_resolve_base_ref` picked is excluded, not
+        every candidate. When tightest-wins picks a ref that does not hold the
+        merged main commits (a local main moved onto the branch and never
+        pushed), their rounds still count. Excluding every candidate would
+        close that by widening the silent case above, so it stays a false
+        alarm.
+      - LOUD: this branch's own merge commit is not on main, so a subject like
+        "Merge origin/main (A5c round 4 clean) into ..." still counts. Name
+        rounds in merge subjects only for this branch's own piece.
     Returns (max_n, matching_subjects), or None when there is no evidence to
     read -- no git, no resolvable base, or a branch that is not ahead of it.
     Degrading to None is deliberate: this probe runs on every SessionStart, and

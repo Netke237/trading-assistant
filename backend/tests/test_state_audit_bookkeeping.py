@@ -1050,3 +1050,67 @@ def test_the_merged_main_entrys_verify_probe_tracks_the_exclusion(repo):
         assert not re.search(pattern, reverted, re.M), (
             f"the probe still certifies this shipped with {old!r} reverted"
         )
+
+
+def test_this_pieces_round_that_reached_main_first_is_dropped(repo):
+    """THE SILENT COST, pinned so it is a decision rather than a surprise
+    (round 1 finding 1). A sibling cut from main BEFORE the piece opened
+    carries a round of this piece, reaches main, and comes back in the
+    branch's main merge. In the graph that is the same shape as another
+    piece's merged round, so it is dropped with them -- the unnarrowed span's
+    rule that merged rounds are out of range, applied to the narrowed one."""
+    repo.write_state(_piece_state(None, []), "Record the decision")
+    piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
+    repo.write_state(piece, "Open the piece")
+    repo.commit("round 1: fixes on the piece")
+
+    repo.git("checkout", "-q", "-b", "sibling", "main")
+    (repo.path / "sibling.txt").write_text("s", encoding="utf-8")
+    repo.git("add", "-A")
+    repo.git("commit", "-q", "-m", "round 3: fixes on the piece")
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "sibling")
+    repo.set_origin_main("main")
+    repo.git("checkout", "-q", "feature")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "origin/main")
+
+    piece["already_shipped"][0].update(audit_rounds=1, audit_clean=True)
+    repo.write_state(piece, "Record the piece: clean after 1 round")
+    assert _mod.audit_bookkeeping_drift(piece) is None
+
+
+def test_the_excluded_ref_is_the_resolved_base_not_a_fixed_name(repo):
+    """The common real shape: local main stale, origin/main advanced and merged
+    into the branch. Tightest-wins picks origin/main, and THAT is what must be
+    excluded -- excluding the stale local main would let main's round back in."""
+    repo.write_state(_piece_state(None, []), "Record the decision")
+    piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
+    repo.write_state(piece, "Open the piece")
+    stale_main = repo.git("rev-parse", "main")
+
+    repo.git("checkout", "-q", "--detach", "main")
+    (repo.path / "main.txt").write_text("m", encoding="utf-8")
+    repo.git("add", "-A")
+    repo.git("commit", "-q", "-m", "round 4: fixes on another piece")
+    repo.set_origin_main("HEAD")
+    repo.git("checkout", "-q", "feature")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "origin/main")
+    assert repo.git("rev-parse", "main") == stale_main
+
+    piece["already_shipped"][0].update(audit_rounds=0)
+    repo.write_state(piece, "Record the piece")
+    assert _mod._resolve_base_ref()[0] == "origin/main"
+    assert _mod.audit_bookkeeping_drift(piece) is None
+    # And a stale local main as the exclusion would NOT have been enough.
+    scoped = _mod._target_scoped_base("origin/main", piece)
+    assert _mod._round_numbers_in_branch_subjects(scoped, "main")[0] == 4
+
+
+def test_a_malformed_merged_ref_degrades_to_no_evidence(repo):
+    """The ref-shape guard covers `merged_ref` as it does `base_ref`: nothing
+    that is not a plain ref name reaches git's argv."""
+    repo.commit("round 2: fixes")
+    assert _mod._round_numbers_in_branch_subjects("origin/main", "main")[0] == 2
+    # A revision git WOULD accept (it yields round 2 unguarded), refused by shape.
+    assert _mod._round_numbers_in_branch_subjects("origin/main", "HEAD~1") is None
+    assert _mod._round_numbers_in_branch_subjects("origin/main", "--all") is None
