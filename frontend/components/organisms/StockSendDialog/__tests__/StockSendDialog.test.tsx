@@ -224,4 +224,36 @@ describe('StockSendDialog — partial basket failure retry', () => {
     // with zero local record and zero indication anything needs attention.
     expect(await screen.findByText(/not yet tracked in Portfolio/)).toBeInTheDocument();
   });
+
+  // MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25): IBKR's confirmation question is
+  // now a 502 (it used to be an empty-id 200, which this dialog turned into a
+  // Portfolio position). Both rows are Auto-send, so AAPL's position proves
+  // the success path still runs beside the refused row.
+  it('an IBKR confirmation question (502) on one auto-send row shows its error and creates no position for it', async () => {
+    const addPosition = jest.fn().mockResolvedValue({ ok: true, status: 'ok' as const });
+    usePortfolioStore.setState({ addPosition });
+    (api.postStockOrder as jest.Mock).mockImplementation(({ symbol }: { symbol: string }) => {
+      if (symbol === 'MSFT') {
+        return Promise.reject(new Error(
+          'API /broker/stock-order → 502: IBKR did not place the order: it asked for a ' +
+          'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
+        ));
+      }
+      return Promise.resolve({ order_id: `${symbol}-1` });
+    });
+    const onSubmit = jest.fn();
+
+    render(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByText('IBKR Paper'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /submit 2 orders/i }));
+    });
+
+    expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+    const savedSymbols = addPosition.mock.calls.map(([p]: [{ symbol: string }]) => p.symbol);
+    expect(savedSymbols).toEqual(['AAPL']);
+    // Nothing was placed for MSFT, so it stays retryable.
+    expect(screen.getByRole('button', { name: /retry 1 failed order/i })).not.toBeDisabled();
+  });
 });

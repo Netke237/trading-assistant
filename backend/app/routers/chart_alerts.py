@@ -17,6 +17,8 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.market import completed_bars_for_interval
+from app.services.market_session import completed_session_bars
+from app.services.scheduling_tz import MARKET_TZ
 from app.database import get_db, AsyncSessionLocal
 from app.models.alert import AlertRuleModel, AlertHistoryModel
 from app.services.alert_evaluator import (
@@ -849,7 +851,10 @@ async def evaluate_and_notify_for_symbol(
     intraday `interval` -- completeness judged at `as_of`, the wall-clock time
     `all_candles` was fetched (chart_cache.get_intraday_with_fetched_at), since
     a cached candle that was forming then stays partial. None = time.time().
-    1D/1W are unchanged.
+
+    A4g: on 1D/1W the same readers -- plus the composite `bars_daily` (HMM_daily
+    and the strategy confirmations) -- drop the forming daily/weekly bar
+    (market_session.completed_session_bars, judged at `as_of`).
 
     A4e: `signals` must come from closed_candle_structure (both callers do), i.e.
     structure computed on the candles up to `closed_candle`, not the forming bar.
@@ -882,7 +887,13 @@ async def evaluate_and_notify_for_symbol(
 
         rule_inputs = [_deserialize_rule(row.rule_json, row) for row in rows]
 
-        _regime_candles = completed_bars_for_interval(all_candles or [], interval, now=as_of)[-MAX_LIVE_MODEL_CANDLES:]
+        # A4g: on 1D/1W drop the forming daily/weekly bar, judged at the FETCH time
+        # (`as_of`) like A4c -- a cached snapshot taken mid-session stays partial.
+        # Each helper is a no-op on the other's intervals, so intraday is unchanged.
+        _as_of_dt = datetime.fromtimestamp(as_of, MARKET_TZ) if as_of is not None else datetime.now(MARKET_TZ)
+        _regime_candles = completed_session_bars(
+            completed_bars_for_interval(all_candles or [], interval, now=as_of), interval, now=_as_of_dt,
+        )[-MAX_LIVE_MODEL_CANDLES:]
 
         needs_regime = any(c.kind == 'regime' for ri in rule_inputs for c in ri.group.conditions)
         regime_by_model = build_regime_snapshot(_regime_candles) if needs_regime else None
@@ -958,8 +969,10 @@ async def evaluate_and_notify_for_symbol(
                 if interval in ("1D", "1W"):
                     # all_candles is already daily/weekly data for this rule's own
                     # interval — reuse it instead of paying for an extra get_bars()
-                    # round-trip.
-                    _bars_daily = _model_candles
+                    # round-trip. A4g: its COMPLETED bars (`_regime_candles`), so
+                    # HMM_daily and the rsi/bb confirmations (require_choppy_regime
+                    # included) read what a composite watch on get_bars reads.
+                    _bars_daily = _regime_candles
                 else:
                     try:
                         _end = date.today()
