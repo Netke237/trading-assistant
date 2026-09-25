@@ -208,3 +208,14 @@ built. Rounds: plan stage and code stage each up to 3 (AUDIT-CAP-PER-STAGE-2026-
   - mutation (f) is also run on `placeMarketNow`;
   - the cap is asserted by counting a unique character.
   Plan stage CLOSED.
+- Code round 1 (2026-09-25, fresh subagent, diff e285f0f..d7ca72e): **CLEAN**, 0 blocking, 6 nits. All six were taken after the round:
+  - N1: test 4b now waits until the duplicate is parked on the leader's asyncio.Event (`_waiters`), not merely until time has passed.
+  - N2: the tag strip runs again after `html.unescape` (`&lt;br&gt;` → space), with a new test case; the mutant that drops the second strip is killed.
+  - N3: `set(body) == {"detail"}` replaces a trivially true `order_id` check.
+  - N4: the trade-card cases assert the button is enabled again after the error.
+  - N5: the source-text count test is removed (mutants a/b pin the wiring).
+  - N6: the frontend mutant actually run is named as "each send path swallows the rejection as an empty-id success (`.catch(() => ({order_id: ''}))`)", which simulates the old backend. It stands in for the plan's "move addPosition into the catch".
+  
+  The nits are test-strengthening plus one extra sanitising step; no behaviour of the decision changed, so no further round.
+  Re-verified after the nits and after merging origin/main (A5c): backend 3196 passed / 1 skipped, typecheck clean, state.py exit 0.
+  Stage CLOSED. MERGED to main.

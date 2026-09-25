@@ -145,7 +145,10 @@ def _confirmation_question(result) -> str | None:
     if getattr(result, "awaiting_confirmation", False) is not True:
         return None
     text = _HTML_TAG_RE.sub(" ", str(getattr(result, "message", "") or ""))
-    text = " ".join(html.unescape(text).split())
+    # Stripped again after unescaping: an entity-encoded tag ("&lt;br&gt;")
+    # only becomes tag-shaped once decoded.
+    text = _HTML_TAG_RE.sub(" ", html.unescape(text))
+    text = " ".join(text.split())
     return (text or _CONFIRMATION_QUESTION_FALLBACK)[:_CONFIRMATION_QUESTION_MAX_CHARS]
 
 

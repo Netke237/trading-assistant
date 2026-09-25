@@ -89,7 +89,7 @@ def test_confirmation_reply_is_a_502_with_the_question(path, payload, kind):
         resp = client.post(path, json=payload)
     assert resp.status_code == 502
     body = resp.json()
-    assert "order_id" not in body
+    assert set(body) == {"detail"}
     assert "IBKR did not place the order" in body["detail"]
     assert body["detail"].endswith(f"IBKR said: {QUESTION}")
 
@@ -155,7 +155,11 @@ async def test_concurrent_duplicate_during_confirmation_reply_re_asks_ibkr():
                 while not started.is_set():
                     await asyncio.sleep(0.005)
                 t2 = asyncio.create_task(client.post("/broker/stock-order", json=STOCK))
-                await asyncio.sleep(0.05)  # let the duplicate park on the leader's claim
+                # Wait until the duplicate is PARKED on the leader's claim (a
+                # waiter on its asyncio.Event), not merely not yet arrived.
+                event = next(iter(_idempotency_inflight.values()))
+                while not event._waiters:
+                    await asyncio.sleep(0.005)
                 assert len(calls) == 1, "the duplicate must wait, not run beside the leader"
                 assert len(_idempotency_inflight) == 1
                 release.set()
@@ -242,6 +246,7 @@ def test_long_question_is_capped_at_500_chars():
     ("price < 5 and qty > 3", "price < 5 and qty > 3"),
     ("a lone < stays", "a lone < stays"),
     ("Tom &amp; Jerry&nbsp;&lt;3", "Tom & Jerry <3"),
+    ("Confirm&lt;br&gt;please", "Confirm please"),
 ])
 def test_question_text_is_cleaned(message, expected):
     assert _confirmation_question(_confirm_result(message)) == expected
@@ -257,8 +262,3 @@ def test_helper_reads_only_a_real_true_flag():
     assert _confirmation_question(MagicMock()) is None
     assert _confirmation_question(SimpleNamespace(awaiting_confirmation=1, message=QUESTION)) is None
 
-
-def test_helper_is_the_one_both_routes_use():
-    import inspect
-    src = inspect.getsource(broker_mod)
-    assert src.count("_raise_if_awaiting_confirmation(result, rec_id, ") == 2

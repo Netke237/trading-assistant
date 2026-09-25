@@ -13,7 +13,7 @@ in docs/superpowers/PROJECT_STATE.json (Kenneth: "Yes I want to fix it").
 Process: plan -> adversarial round(s) until clean -> build -> code round(s) until clean -> merge to main.
 
 ## Status
-in-progress — BUILT (uncommitted→committed in this checkpoint); plan clean at round 2; CODE round 1 next.
+done — CLEAN (plan round 2, code round 1); merging to main.
 
 ## Done
 - e285f0f merged origin/claude/jolly-thompson-0q7paq (state commit 3efd25f: the decision above + closed open question) into this branch; resolved a PROJECT_STATE.json decisions-list conflict by keeping all three decisions; `scripts/state.py` exits 0.
@@ -27,8 +27,8 @@ in-progress — BUILT (uncommitted→committed in this checkpoint); plan clean a
 - [x] Rewrite the plan at docs/superpowers/plans/2026-09-25-manual-ibkr-confirm-as-error-plan.md. Must cover: which HTTP status (e.g. 409/502) + detail = IBKR's question; `broker_order_failed` log event, not `_filled`; response NOT cached as success by the idempotency claim (a retry must re-ask the broker, or deliberately return the same error; state which); `getattr` guard for non-IBKR results; frontend call sites in frontend/lib/api.ts + StockSendDialog / trade-card send path show the text as a failure; tests (backend route tests with a real OrderResult(awaiting_confirmation=True), frontend if touched); a PROJECT_STATE phase entry with a regex presence probe.
 - [x] Plan adversarial round (fresh subagent, bmad-review-adversarial-general) -> fix -> re-audit until clean (cap: 3 rounds per stage, decision AUDIT-CAP-PER-STAGE-2026-09-25).
 - [x] Build + tests (backend 3196 passed/1 skipped; frontend 1992 passed; typecheck clean; 7 backend + 5 frontend mutants killed).
-- [ ] Code adversarial round until clean (fresh subagent); record rounds in plan + PROJECT_STATE phase MANUAL-IBKR-CONFIRM-AS-ERROR (status shipped_unaudited until clean).
-- [ ] Record the phase + rounds in PROJECT_STATE.json on the branch BEFORE merging; merge --no-ff to main; `k_session.py finish`.
+- [x] Code adversarial round until clean (fresh subagent); record rounds in plan + PROJECT_STATE phase MANUAL-IBKR-CONFIRM-AS-ERROR (status shipped_unaudited until clean).
+- [x] Record the phase + rounds in PROJECT_STATE.json on the branch BEFORE merging; merge --no-ff to main; `k_session.py finish`.
 
 ## Blockers / open questions
 - None blocking. Kenneth-only housekeeping (unchanged): deleting merged remote branches; jolly-thompson-0q7paq is now safe to delete once this branch reaches main.

@@ -1091,6 +1091,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       expect(global.fetch).not.toHaveBeenCalled();
       expect(usePortfolioStore.getState().positions).toHaveLength(0);
       expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
+      // Nothing was placed, so the user can send again.
+      await waitFor(() => expect(screen.getByRole('button', { name: button })).toBeEnabled());
     });
   }
 });
