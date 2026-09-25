@@ -1,3 +1,7 @@
+import { eventDetailText } from '@/lib/scoreDetailText';
+import { GENERIC_STATUS_TOOLTIP, ruleContributionTooltip } from '@/lib/statusTooltips';
+import type { EventDetail } from '@/types/domain';
+
 describe('score detail text helpers', () => {
   it('triggerDetailText shows candle and signal count', () => {
     const detail = { candle: 'bullish_engulfing', macd_pass: true, rsi_pass: false, stoch_pass: true, momentum_count: 2, volume_bonus: false };
@@ -15,13 +19,22 @@ describe('score detail text helpers', () => {
   });
 
   it('eventDetailText formats earnings correctly', () => {
-    const detail = { event: 'earnings', days_to_event: 12 };
-    const text = `${detail.event} in ${detail.days_to_event}d`;
-    expect(text).toBe('earnings in 12d');
+    expect(eventDetailText({ event: 'earnings', days_to_event: 12 })).toBe('earnings in 12d');
+    expect(eventDetailText({ event: 'none' })).toBe('No upcoming event');
   });
 
-  it('renders no detailText when detail is undefined — no crash', () => {
-    // Just verify the helpers return undefined gracefully
-    expect(undefined).toBeUndefined(); // placeholder — real test is typecheck + no runtime crash
+  it('eventDetailText without a day count shows the event name alone', () => {
+    expect(eventDetailText({ event: 'earnings' })).toBe('earnings');
+  });
+
+  it('eventDetailText returns undefined with no detail or no event name', () => {
+    expect(eventDetailText(undefined)).toBeUndefined();
+    expect(eventDetailText({} as EventDetail)).toBeUndefined();
+    // A day count with no event name must not render "undefined in 5d".
+    expect(eventDetailText({ days_to_event: 5 } as EventDetail)).toBeUndefined();
+  });
+
+  it('the event rule tooltip falls back to the generic text, never "undefined in undefinedd"', () => {
+    expect(ruleContributionTooltip('event', 'CAUTION', undefined)).toBe(GENERIC_STATUS_TOOLTIP.CAUTION);
   });
 });

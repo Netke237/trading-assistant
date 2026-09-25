@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Status } from '@/lib/status';
-import { worstStatus } from '@/lib/status';
+import { riskBandStatus, worstStatus } from '@/lib/status';
 import type {
   PortfolioPosition,
   RiskLimits,
@@ -181,35 +181,12 @@ export const useRiskStore = create<RiskState>()(
           }
         }
 
-        const statuses: Status[] = [];
-        statuses.push(
-          totalExposurePct > limits.maxTotalExposurePct
-            ? 'REJECT'
-            : totalExposurePct > limits.maxTotalExposurePct * 0.8
-              ? 'CAUTION'
-              : 'PASS'
-        );
-        statuses.push(
-          concurrentPositions >= limits.maxConcurrentPositions
-            ? 'REJECT'
-            : concurrentPositions >= Math.floor(limits.maxConcurrentPositions * 0.8)
-              ? 'CAUTION'
-              : 'PASS'
-        );
-        statuses.push(
-          dailyRecommendations >= limits.maxDailyRecommendations
-            ? 'REJECT'
-            : dailyRecommendations >= Math.floor(limits.maxDailyRecommendations * 0.8)
-              ? 'CAUTION'
-              : 'PASS'
-        );
-        statuses.push(
-          largestConcentrationPct > limits.maxSingleTradeExposurePct
-            ? 'REJECT'
-            : largestConcentrationPct > limits.maxSingleTradeExposurePct * 0.8
-              ? 'CAUTION'
-              : 'PASS'
-        );
+        const statuses: Status[] = [
+          riskBandStatus('fraction', totalExposurePct, limits.maxTotalExposurePct),
+          riskBandStatus('count', concurrentPositions, limits.maxConcurrentPositions),
+          riskBandStatus('count', dailyRecommendations, limits.maxDailyRecommendations),
+          riskBandStatus('fraction', largestConcentrationPct, limits.maxSingleTradeExposurePct),
+        ];
 
         const status = worstStatus(...statuses);
 
