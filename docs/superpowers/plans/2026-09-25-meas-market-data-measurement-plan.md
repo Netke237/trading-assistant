@@ -1,4 +1,4 @@
-# MEAS — Market-data measurement: plan (v4, after plan rounds 1–3 and Kenneth's cap decision)
+# MEAS — Market-data measurement: plan (v5, v4 + the three round-4 fixes Kenneth approved)
 
 Package: **MEAS** (docs/superpowers/plans/2026-09-25-work-packages.md, section "MEAS").
 Decision implemented: BACKLOG-DECISIONS-2026-09-25, Q20 + Q28. This session prepares exact scan
@@ -272,8 +272,11 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
 ## 6. Reading rules, fixed before the data exists
 
 A proposal cites its rows. Below a sample floor the answer is **"not enough data"**. Only valid
-days (§5) count. Every proposed value applies to **both directions**, because that is how each
-key is implemented today, so each proposal shows its effect on both directions. If the data says
+days (§5) count. **Direction scope [r4 GL-3, Kenneth].** `confidence_reject_below` and
+`min_stock_score` are single keys shared by both directions, so a proposal for either applies to
+**both directions** and shows its effect on both. The direction floors are **separate** keys
+(`bullish_min_trend` / `bearish_min_trend`), and the floor rule below moves **`bearish_min_trend`
+only**; the bullish rate is a reference. For the shared keys, if the data says
 the two directions want different values, that is a **new question for Kenneth at proposal
 time**: a per-direction key is a code change, and it is not decided here.
 
@@ -292,8 +295,13 @@ candidate, and its **base** rejection is the gate that was varied:
     fundamentals (stock_scorer.py:1150).
   - Safety-flag rejects are not visible in `breakdown`. They cannot be admitted by C1 either, so
     they cannot produce a false attribution.
-- C5 / C5b: the base reason contains `stock_score_below_threshold`.
-- C6 [G3]: the base reason contains `volume_too_low` or `open_interest_too_low`.
+- C5 / C5b: the base reason contains `stock_score_below_threshold` **and** the added name's
+  `stockScore` in the C5 result lies in [35, 55) [r4 GL-2, Kenneth]. A name at or above 55 in C5
+  would have cleared the unchanged floor, so it is live-IV re-scoring drift, not a gate effect,
+  and is counted as drift.
+- C6 [G3]: the base reason contains `volume_too_low` or `open_interest_too_low` (C6 is report-only;
+  the same band idea applies: a name whose C6 contract would pass the unchanged liquidity floors is
+  reported as drift).
   `too_many_soft_failures` alone is **not** attributed, because it is raised by any mix of soft
   flags (IV, spread, liquidity bands).
 - Any other new name is counted as **drift** and reported, never used.
@@ -352,7 +360,10 @@ and `contractScore` ≥ the median `contractScore` of that day's base candidates
   - Rows are deduplicated on **(symbol, trading day, horizon, stock_basis)**, keeping the first
     scan of the day. An A-row and an O-row for the same name and day therefore both survive, and
     that pair is the ATM cross-check below.
-- **IV rank pass/caution per horizon, and preferred_iv_rank_max.**
+- **IV rank pass/caution per horizon, and preferred_iv_rank_max.** `preferred_iv_rank_max` is ONE
+  global key (contract_rules.yaml:69) [r4 GL-1, Kenneth]: it is computed on **both horizons
+  pooled**, against `preferred_iv_abs_max`, and yields a single value. Pass/caution stay per
+  horizon.
   - Floor: ≥ 30 deduplicated **rank** rows **per horizon**, over ≥ 2 valid days.
   - Rule (quantile matching on the same rows): q = the share of rows with `detail_iv_abs` ≤ the
     absolute cut (`iv_abs_pass_max` / the caution cut / `preferred_iv_abs_max`). The proposed rank
