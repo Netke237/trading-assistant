@@ -12,7 +12,7 @@ logged, and the rule's name gets an "(interval was 1D)" note. Then pick up the o
 open A4f items, but only when the owner chooses them.
 
 ## Status
-in-progress: A4f-rules is BUILT and code round 1 is running. The plan is clean at round 2.
+A4f-rules is CLEAN (plan: 2 rounds; code: 2 rounds) and recorded in PROJECT_STATE (`20304b2`). The merge to main is waiting on the owner's go-ahead.
 
 ## Done
 - A4f (the watch path) is already on main, from a parallel branch (merge `f49446e`).
@@ -29,13 +29,9 @@ in-progress: A4f-rules is BUILT and code round 1 is running. The plan is clean a
   - Backend 3176 passed / 1 skipped; frontend 1986; tsc clean.
 
 ## Next steps
-- [ ] Code round 1 (fresh subagent, bmad adversarial). Fix its findings; rounds are capped at 3 per stage.
-- [ ] When a round comes back clean, update PROJECT_STATE.json:
-  - Add a phase `A4F-RULES-HMM-INTRADAY-INTERVAL` with a probe on `migrate_hmm_intraday_rule_intervals`.
-  - Mark `decisions[0]` as built.
-  - Rewrite the design inputs in `open_questions[2]`.
-  - Add open questions: '5m' vs '5min' (plus `_INTERVAL_LABELS`), standard-rule HMM_intraday on '1D', and pinning `BAMENDJOU_STRATEGY_WATCHES_PATH` in conftest.
-- [ ] Merge to main (--no-ff) only when clean. Run `k_session.py finish` before or at the merge so `.k-session/` stays out of main.
+- [x] Code round 1 (1 gate-level, fixed) and round 2 (clean; nits folded). 20 backend mutants and 1 frontend mutant killed. Backend 3177/1 skipped, frontend 1986, tsc clean.
+- [x] PROJECT_STATE updated: phase `A4F-RULES-HMM-INTRADAY-INTERVAL`, decisions[0] marked built, open questions added.
+- [ ] Once the owner approves: run `python3 .k-session/k_session.py finish` (removes `.k-session/`), then `git merge --no-ff` this branch into main and push main. First record the merge in PROJECT_STATE's `main` field, following the precedent "written on the branch BEFORE the merge".
 
 ## Blockers / open questions
 - (Resolved: the owner chose (a).) The earlier options were:
