@@ -138,3 +138,34 @@ describe('P2-24 -- at a $0.01 mid the Premium stop row is read-only', () => {
     expect(screen.getByText(/Your pinned stop is kept and sent/)).toBeInTheDocument();
   });
 });
+
+describe('code round 1 fixes', () => {
+  it('C1-1: the ladder R:R keeps the scan-basis risk when the row shows the live-mid global', () => {
+    render(<TradeCard data={card()} liveMid={1.0} />);
+    fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
+    // (8.00 - 5.20) / 3.12 = 0.9x on one basis; /0.60 would print 4.7x.
+    expect(screen.getByText('0.9x')).toBeInTheDocument();
+    expect(screen.queryByText('4.7x')).not.toBeInTheDocument();
+  });
+
+  it('C1-2: EditableKV commits nothing on a bare blur when its value moved while it was open', () => {
+    const onChange = jest.fn();
+    const { rerender } = render(<dl><EditableKV label="X" value={0.6} onChange={onChange} /></dl>);
+    fireEvent.click(screen.getByLabelText('Edit X'));          // draft "0.6"
+    rerender(<dl><EditableKV label="X" value={2.4} onChange={onChange} /></dl>);
+    fireEvent.blur(screen.getByLabelText('Edit X'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('C1-2: on the card, a draft seeded from one live mid is not pinned when the displayed stop moves', () => {
+    // (patch() already ignores a commit equal to the overlay seed, so the
+    // reachable case is a draft seeded from a LIVE-mid display.)
+    const onEditsChange = jest.fn();
+    const { rerender } = render(<TradeCard data={card()} liveMid={1.0} onEditsChange={onEditsChange} />);
+    fireEvent.click(premiumRow());                               // draft "0.6"
+    rerender(<TradeCard data={card()} liveMid={4.0} onEditsChange={onEditsChange} />);  // value -> 2.40
+    fireEvent.blur(screen.getByLabelText('Edit Premium stop'));
+    expect(onEditsChange.mock.calls.some(([, meta]) => meta?.touched?.premiumStop)).toBe(false);
+    expect(premiumRow()).toHaveTextContent('$2.40');
+  });
+});

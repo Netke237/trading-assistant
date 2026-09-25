@@ -1749,14 +1749,19 @@ export function TradeCard({
    *  applied to the live mid, labelled "(global N%)". A touched field, or no
    *  live mid, shows the overlay as before.
    *
-   *  DISPLAY ONLY. It feeds the row and EditableTargetRow. The send paths read
-   *  the tracked touched flag and are unchanged (untouched sends null). The
-   *  barrier race's snapshot and `raceBarriersMoved` stay on
-   *  `overlay.premiumStop`, so a live mid arriving does not clear a finished
-   *  race -- the residual being that the race's premium barrier is the
-   *  scan-seeded dollar until the field is touched. No-op-blur safe: this is
-   *  the value EditableKV compares a bare focus-and-blur against, so it writes
-   *  nothing. */
+   *  DISPLAY ONLY -- it feeds the Premium stop row and nothing else. The send
+   *  paths read the tracked touched flag and are unchanged (untouched sends
+   *  null). The ladder's R:R (EditableTargetRow) stays on
+   *  `overlay.premiumStop`, because its reward leg is on the scan basis (code
+   *  round 1, C1-1). The barrier race's snapshot and `raceBarriersMoved` stay
+   *  on `overlay.premiumStop` too, so a live mid arriving does not clear a
+   *  finished race -- the residual being that the race's premium barrier is
+   *  the scan-seeded dollar until the field is touched.
+   *
+   *  A bare focus-and-blur writes nothing even when this value CHANGES while
+   *  the field is open (the one-shot live quote landing mid-edit): EditableKV
+   *  commits only after a keystroke (its `typedRef`), not by comparing the
+   *  draft with the current value (code round 1, C1-2). */
   const premiumStopTouched = touchedRef.current.premiumStop;
   const showsGlobalOnLiveMid = !premiumStopTouched && liveMid != null && liveMid > 0;
   const effectivePremiumStop = showsGlobalOnLiveMid
@@ -2922,7 +2927,12 @@ export function TradeCard({
                   index={i}
                   editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
                   entryLimit={overlay.entryLimit}
-                  premiumStop={effectivePremiumStop}
+                  // overlay.premiumStop, NOT effectivePremiumStop (code round
+                  // 1, C1-1): this is the R:R risk leg, and its reward leg
+                  // (estimatedOptionPrice - entryLimit) is on the SCAN basis.
+                  // A live-mid risk over a scan-mid reward mis-states the
+                  // ratio by scanMid / liveMid.
+                  premiumStop={overlay.premiumStop}
                   data={data}
                   onStockPriceChange={(v) => {
                     const next = [...overlay.targets];
@@ -3372,13 +3382,27 @@ export function EditableKV({
   // on screen is correct throughout, it is the typed one that was dropped.
   const [rejected, setRejected] = useState<string | null>(null);
 
+  /** CODE ROUND 1, C1-2 -- did the user TYPE since the editor opened? The
+   *  value-comparison guards in `save` compare the draft (seeded once, at
+   *  `startEdit`) with the CURRENT `value` prop, so a value that moves while
+   *  the field is open -- TradeCard's untouched premium stop switching from
+   *  the scan seed to `round(liveMid x global, 2)` when the live quote lands
+   *  -- made a bare focus-and-blur commit the stale seed as a deliberate,
+   *  touched stop. Nothing typed is nothing committed, whatever `value` did. */
+  const typedRef = useRef(false);
+
   const startEdit = useCallback(() => {
     setDraft(value == null ? '' : String(value));
     setRejected(null);
+    typedRef.current = false;
     setEditing(true);
   }, [value]);
 
   const save = useCallback(() => {
+    if (!typedRef.current) {
+      setEditing(false);
+      return;
+    }
     // A COMPLETE decimal literal, or nothing. `parseFloat` is happy to
     // TRUNCATE: it reads "2." as 2 and "2.7abc" as 2.7, and nothing downstream
     // can tell a finished number from an interrupted one.
@@ -3548,7 +3572,7 @@ export function EditableKV({
           inputMode="decimal"
           className={styles.editInput}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => { typedRef.current = true; setDraft(e.target.value); }}
           onBlur={save}
           onKeyDown={handleKey}
           autoFocus
