@@ -87,8 +87,8 @@ async def run_chart_alert_scheduler() -> None:
         # this tick evaluates anything. Once per server start; a failure (e.g. the
         # DB not up yet) is logged and retried next iteration until one run succeeds.
         if not rules_migrated:
-            from app.routers import chart_alerts as _chart_alerts
             try:
+                from app.routers import chart_alerts as _chart_alerts
                 await _chart_alerts.migrate_hmm_intraday_rule_intervals()
                 rules_migrated = True
             except Exception:

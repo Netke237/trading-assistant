@@ -7,7 +7,7 @@ change, and run_chart_alert_scheduler migrates stored ones to '5m' before its fi
 tick (name marked "(interval was 1D)", sustain clock reset, one WARNING).
 
 Isolation: every test uses its own in-memory SQLite engine; nothing here runs the app
-lifespan, reads or writes backend/config/*.yaml, or dispatches a notification.
+lifespan, writes backend/config/*.yaml, or dispatches a notification.
 """
 from __future__ import annotations
 
@@ -92,8 +92,10 @@ def test_r1_predicate_rejects_hmm_intraday_on_non_intraday_only():
 
 
 def test_r1_predicate_agrees_with_the_watch_store(monkeypatch, tmp_path):
-    # Plain import (no reload). If this is the first import, the module-level store
-    # loads the tmp path, never the tracked config/strategy_watches.yaml.
+    # Plain import (no reload). In a full run app.main has usually imported the module
+    # already, so its module-level store has READ the tracked yaml by then (read-only,
+    # not this test's doing); the setenv only matters if this test imports it first.
+    # The test itself uses StrategyWatchStore(path=None): no file read, no write.
     monkeypatch.setenv("BAMENDJOU_STRATEGY_WATCHES_PATH", str(tmp_path / "watches.yaml"))
     from app.services.strategy_watch_store import StrategyWatchStore
     from app.services.composite_trigger_evaluator import hmm_intraday_interval_error as err
@@ -138,6 +140,7 @@ async def test_r3_put_keeps_legacy_pair_but_refuses_new_bad_pairs():
     await _seed(Session, 'junk', '1D', 'not json')
     await _seed(Session, 'fine', '5m', _composite(HMM))
     await _seed(Session, 'strprim', '1D', {"__type": "composite", "primary": "HMM_intraday"})
+    await _seed(Session, 'notype', '1D', {"primary": {"model": "HMM_intraday"}, "logic": "AND", "conditions": []})
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as c:
         # (a) same pair: a toggle on a legacy rule the migration could not move
         r = await c.put('/alerts/rules/legacy', json=_body('1D', enabled=False, name='L'))
@@ -161,6 +164,9 @@ async def test_r3_put_keeps_legacy_pair_but_refuses_new_bad_pairs():
         # (h) a stored composite with a malformed (string) primary compares as changed
         #     -- a clean 422, not a 500 from reading the stored pair
         assert (await c.put('/alerts/rules/strprim', json=_body('1D'))).status_code == 422
+        # (i) a stored NON-composite row that happens to carry an HMM_intraday primary
+        #     is not "the same pair" as a composite HMM_intraday on '1D'
+        assert (await c.put('/alerts/rules/notype', json=_body('1D'))).status_code == 422
         # (g) intraday -> intraday is fine
         assert (await c.put('/alerts/rules/fine', json=_body('15m'))).status_code == 200
         assert (await _get(Session, 'fine')).interval == '15m'

@@ -221,7 +221,7 @@ async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict
         for row in result.scalars().all():
             try:
                 parsed = json.loads(row.rule_json)
-            except (TypeError, ValueError):
+            except Exception:
                 logger.debug('A4f rule migration: skipping %s, rule_json does not parse', row.id)
                 continue
             try:
