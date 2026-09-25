@@ -137,6 +137,7 @@ async def test_r3_put_keeps_legacy_pair_but_refuses_new_bad_pairs():
     await _seed(Session, 'std', '1D', {"logic": "AND", "conditions": []})
     await _seed(Session, 'junk', '1D', 'not json')
     await _seed(Session, 'fine', '5m', _composite(HMM))
+    await _seed(Session, 'strprim', '1D', {"__type": "composite", "primary": "HMM_intraday"})
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as c:
         # (a) same pair: a toggle on a legacy rule the migration could not move
         r = await c.put('/alerts/rules/legacy', json=_body('1D', enabled=False, name='L'))
@@ -157,6 +158,9 @@ async def test_r3_put_keeps_legacy_pair_but_refuses_new_bad_pairs():
         assert (await c.put('/alerts/rules/std', json=_body('1D'))).status_code == 422
         # (f) unparseable stored rule counts as changed
         assert (await c.put('/alerts/rules/junk', json=_body('1D'))).status_code == 422
+        # (h) a stored composite with a malformed (string) primary compares as changed
+        #     -- a clean 422, not a 500 from reading the stored pair
+        assert (await c.put('/alerts/rules/strprim', json=_body('1D'))).status_code == 422
         # (g) intraday -> intraday is fine
         assert (await c.put('/alerts/rules/fine', json=_body('15m'))).status_code == 200
         assert (await _get(Session, 'fine')).interval == '15m'
