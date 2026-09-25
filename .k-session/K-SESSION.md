@@ -29,7 +29,7 @@ in-progress. The plan is at round 1, not clean, with its findings folded in. Rou
 - [ ] Merge to main (`--no-ff`, with the main merge record written on the branch first), then `k_session.py finish`.
 
 ## Blockers / open questions
-- None blocking. Kenneth hasn't confirmed the message wording "…this resets all settings, including brokers and scheduled scans". Round 1 widened it from "also resets broker settings".
+- None. Kenneth confirmed the "resets all settings, including brokers and scheduled scans" wording (2026-09-25).
 
 ## Decisions
 - A5B-KEEP-MAIN-2026-09-25: main's A5b stays. The other branch's A5b is archived at `archive/peaceful-ritchie-a5b-4796924`.

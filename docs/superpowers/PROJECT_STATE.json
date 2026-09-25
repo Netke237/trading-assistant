@@ -1781,7 +1781,7 @@
     {
       "id": "A5D-READABLE-MESSAGE-2026-09-25",
       "q": "A Step-5 scan whose saved settings are malformed: (a) readable message, Step 5 only, request failures via stockScanFailureReason, hydration repair logged; (b) (a) plus repair a malformed confidenceGate at hydration; (c) scan without a gate, silently.",
-      "a": "(a) READABLE MESSAGE (Kenneth, 2026-09-25). The message points at Settings -> footer Reset (not 'Strategy scan': the gate lives in Settings -> Scan, whose form crashes on the same null), and says Reset also resets broker settings."
+      "a": "(a) READABLE MESSAGE (Kenneth, 2026-09-25). The message points at Settings -> footer Reset (not 'Strategy scan': the gate lives in Settings -> Scan, whose form crashes on the same null), and says Reset also resets broker settings. WORDING CONFIRMED (Kenneth, 2026-09-25): the message says Reset restores ALL settings -- \"Couldn't read your saved scan settings. Open Settings and press Reset to restore the defaults (this resets all settings, including brokers and scheduled scans).\" (widened from 'also resets broker settings' by plan round 1)."
     }
   ],
   "pending_kenneth": [
