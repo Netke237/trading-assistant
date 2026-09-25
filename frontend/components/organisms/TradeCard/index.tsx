@@ -25,6 +25,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
 import { premiumStopDollarBounds } from '@/lib/premiumStop';
+import { TIME_STOP_DTE } from '@/lib/alertEngine';
 import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
 import {
   type EditOverlay,
@@ -577,6 +578,9 @@ export function TradeCard({
   const firstPassageIsFreshRef = useRef(false);
 
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
+  // R3-7 -- the browser's copy of the GLOBAL premium stop. Residual: it can
+  // differ from the server's yaml until the Settings page has mounted once.
+  const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
   // Seeded from the restored estimate's own context when the parent splices a
   // cached estimate back in — otherwise the % inputs would show the settings
   // default while the restored rows show the percentages the estimate was
@@ -1633,8 +1637,16 @@ export function TradeCard({
    *  `data`, which comes from `scanResult` -- and scanStore persists that to
    *  localStorage, so after a reload they can be days stale while the page
    *  shows "Live stock:" and "Live mid:" a few rows up. See the props' notes. */
-  const anchorStockPrice = liveStockPrice ?? arithmeticLiveStockPrice ?? data.price;
-  const anchorMid = liveMid ?? data.contractDetails?.mid ?? 0;
+  //
+  //  P2-23 (R1-11, R2-13) -- each step must be POSITIVE to win: a literal 0
+  //  (a dead quote) falls through to the next anchor instead of disabling the
+  //  bounds. The mid falls back to the plan's own entry limit, so a card with
+  //  no live and no contract mid still bounds Entry limit and Premium stop;
+  //  only a card with none of the three degrades to `{min: 0.01}`.
+  const firstPositive = (...xs: (number | null | undefined)[]) =>
+    xs.find((x): x is number => x != null && Number.isFinite(x) && x > 0) ?? 0;
+  const anchorStockPrice = firstPositive(liveStockPrice, arithmeticLiveStockPrice, data.price);
+  const anchorMid = firstPositive(liveMid, data.contractDetails?.mid, data.entry.limit);
 
   /** Bounds for the Invalidation field, which is now load-bearing: it is what
    *  `buildPaperPosition` stores as `PortfolioPosition.stop`, and
@@ -1720,6 +1732,36 @@ export function TradeCard({
     if (!(anchorMid > 0)) return { min: 0.01, max: undefined as number | undefined };
     return premiumStopDollarBounds(anchorMid);
   }, [anchorMid]);
+
+  /** P2-24 (R1-12, R2-12) -- at a mid of $0.01 the band collapses to one
+   *  penny, which is 100% of the mid and produces no stop. The row is then
+   *  read-only. Only for a POSITIVE anchor whose band yields no stop: with no
+   *  anchor at all the field stays editable as before. */
+  const premiumStopReadOnly = anchorMid > 0
+    && premiumStopBounds.max != null
+    && premiumStopPctFromDollars(premiumStopBounds.max, anchorMid) === undefined;
+
+  /** P2-19 (R1-14, R2-11) -- what the untouched Premium stop row SHOWS.
+   *
+   *  The seed is `round(scan_mid x global, 2)` from the scan, which after a
+   *  reload can be days old: a $5.20 scan mid showed a $3.12 stop against a
+   *  live $1.00 mid. Untouched and with a live mid, the row shows the global
+   *  applied to the live mid, labelled "(global N%)". A touched field, or no
+   *  live mid, shows the overlay as before.
+   *
+   *  DISPLAY ONLY. It feeds the row and EditableTargetRow. The send paths read
+   *  the tracked touched flag and are unchanged (untouched sends null). The
+   *  barrier race's snapshot and `raceBarriersMoved` stay on
+   *  `overlay.premiumStop`, so a live mid arriving does not clear a finished
+   *  race -- the residual being that the race's premium barrier is the
+   *  scan-seeded dollar until the field is touched. No-op-blur safe: this is
+   *  the value EditableKV compares a bare focus-and-blur against, so it writes
+   *  nothing. */
+  const premiumStopTouched = touchedRef.current.premiumStop;
+  const showsGlobalOnLiveMid = !premiumStopTouched && liveMid != null && liveMid > 0;
+  const effectivePremiumStop = showsGlobalOnLiveMid
+    ? Math.round((liveMid as number) * globalPremiumStopPct * 100) / 100
+    : overlay.premiumStop;
 
   /** Bounds for the Entry limit — the field this branch made into the order's
    *  `limit_price`.
@@ -2783,13 +2825,11 @@ export function TradeCard({
              Risk-Reward. Final Recommendation is explicitly excluded (built
              standalone, Feature 8). Default collapsed; state persists per
              browser under a colon-form localStorage key. */}
-        <CollapsibleSection
-          title="Fixed % Ladder Plan"
-          storageKey="bamendjou:tradecard-ladder-collapsed"
-          defaultCollapsed
-          className={styles.fullWidth}
-        >
-          <section className={styles.planCard}>
+        {/* P2-21 -- the Exit Plan (Invalidation, Premium stop, Time exit) is
+             ALWAYS VISIBLE, directly above the collapsible ladder group: two of
+             its three rows are what the order stores as the position's stops,
+             and they were hidden behind a collapsed-by-default section. */}
+          <section className={`${styles.planCard} ${styles.fullWidth}`}>
             <Text size={14} weight={600}>Exit Plan</Text>
             <dl className={styles.kvList}>
               <EditableKV
@@ -2809,25 +2849,52 @@ export function TradeCard({
                 // missing_invalidation).
                 nullLabel="not computed — re-run the scan"
               />
-              <EditableKV
-                label="Premium stop"
-                value={overlay.premiumStop}
-                onChange={(v) => patch({ premiumStop: v })}
-                onRevert={() => revert('premiumStop')}
-                prefix="$"
-                min={premiumStopBounds.min}
-                max={premiumStopBounds.max}
-                mono
-              />
-              {/* READ-ONLY for the same reason as Max fill above — no reader
-                  outside its own input. Note this field ALSO disagrees with the
-                  alert that bears its name: TIME_STOP fires on a hardcoded
-                  `dteRemaining <= 3` (lib/alertEngine.ts), so a card reading
-                  "18d" produces a 3-DTE alert. Honouring the planned figure
-                  needs a persisted per-position field, which is the deferred
-                  build; making the row read-only at least stops the card
-                  offering to change a number nothing reads. */}
-              <KV label="Time stop" value={`${data.exit.timeStopDays}d`} mono />
+              {premiumStopReadOnly ? (
+                // P2-24 / R3-2 / decision Q-P2-2: a stop the user already typed
+                // is KEPT and shown as pinned (and still sent); an untouched
+                // field says the global applies.
+                <>
+                  <KV
+                    label="Premium stop"
+                    value={premiumStopTouched && overlay.premiumStop != null
+                      ? `$${overlay.premiumStop.toFixed(2)} (pinned)`
+                      : `global (${Number((globalPremiumStopPct * 100).toFixed(2))}%)`}
+                    mono
+                  />
+                  <div>
+                    <Text size={10} tone="dim">
+                      {premiumStopTouched
+                        ? 'The mid is too small to edit a per-contract stop here. Your pinned stop is kept and sent; the server derives it against the fill, and drops it (with a notice) if it is at or above the fill.'
+                        : 'The mid is too small for a per-contract premium stop — the global stop applies.'}
+                    </Text>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <EditableKV
+                    label="Premium stop"
+                    value={effectivePremiumStop}
+                    onChange={(v) => patch({ premiumStop: v })}
+                    onRevert={() => revert('premiumStop')}
+                    prefix="$"
+                    min={premiumStopBounds.min}
+                    max={premiumStopBounds.max}
+                    mono
+                  />
+                  {showsGlobalOnLiveMid && (
+                    <div>
+                      <Text size={10} tone="dim">
+                        {`(global ${Number((globalPremiumStopPct * 100).toFixed(2))}%)`}
+                      </Text>
+                    </div>
+                  )}
+                </>
+              )}
+              {/* P2-03 (decision Q8) -- the exit the alerts actually make: an
+                  option position raises TIME_STOP at TIME_STOP_DTE days to
+                  expiry (alertEngine.ts, alert_generator.py). The plan's own
+                  `timeStopDays` fires nothing and is no longer shown. */}
+              <KV label="Time exit" value={`${TIME_STOP_DTE} DTE`} mono />
             </dl>
             <Text size={10} tone="dim">
               Invalidation is a fixed-% stop, independent of the Arithmetic card&apos;s structural/ATR stop above.
@@ -2838,6 +2905,12 @@ export function TradeCard({
             </Text>
           </section>
 
+        <CollapsibleSection
+          title="Fixed % Ladder Plan"
+          storageKey="bamendjou:tradecard-ladder-collapsed"
+          defaultCollapsed
+          className={styles.fullWidth}
+        >
           <section className={`${styles.planCard} ${styles.targetsCard}`}>
             <Text size={14} weight={600}>Sell-to-Close Plan</Text>
             <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
@@ -2849,7 +2922,7 @@ export function TradeCard({
                   index={i}
                   editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
                   entryLimit={overlay.entryLimit}
-                  premiumStop={overlay.premiumStop}
+                  premiumStop={effectivePremiumStop}
                   data={data}
                   onStockPriceChange={(v) => {
                     const next = [...overlay.targets];
@@ -3249,7 +3322,8 @@ function EditableTargetRow({
   );
 }
 
-function EditableKV({
+/** Exported for tests only (P2-20). */
+export function EditableKV({
   label,
   value,
   onChange,
@@ -3395,7 +3469,9 @@ function EditableKV({
       setEditing(false);
       return;
     }
-    const next = decimals === 0 ? Math.round(parsed) : Math.round(parsed * 100) / 100;
+    // P2-20 -- rounds at THIS field's `decimals`, not always at 2.
+    const scale = 10 ** decimals;
+    const next = Math.round(parsed * scale) / scale;
     // A BLUR IS NOT AN EDIT. `save` runs on every blur, so clicking into a
     // field to read it and clicking away used to emit `onChange(sameValue)`.
     // That was invisible while the page inferred "did the user touch this?" by

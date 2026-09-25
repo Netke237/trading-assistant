@@ -96,9 +96,9 @@ export const PREMIUM_STOP_MAX_PCT = 0.99;
  *  the backend refuses to store (`0 < ratio < 1`) and which
  *  `barrierRace.premiumStopPctFromDollars` returns undefined for, so at a
  *  $0.01 mid the field offers exactly one dollar and that dollar produces no
- *  stop. Logged rather than fixed -- no caller disables the field there yet,
- *  and the send path does disclose the drop. See round_2_batch_followups
- *  R2-6. */
+ *  stop. TradeCard therefore renders the row READ-ONLY there (P2-24): the
+ *  global applies, or a stop the user already typed is kept and shown as
+ *  pinned (decision Q-P2-2). See round_2_batch_followups R2-6. */
 export function premiumStopDollarBounds(mid: number): { min: number; max: number } {
   const cents = Math.round(mid * 100);
   const min = Math.max(0.01, Math.ceil(cents * PREMIUM_STOP_MIN_PCT) / 100);

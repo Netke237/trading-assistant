@@ -726,6 +726,16 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     fireEvent.click(limitBtn);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     const direct = usePortfolioStore.getState().positions[0]!;
+    // P2-06: `premiumStopDollar` is create-only transport and is dropped from
+    // the row once the server accepts it, so the dollar each path SENT is read
+    // off the POST itself.
+    const lastPostedPremiumStop = () => {
+      const posts = (global.fetch as jest.Mock).mock.calls.filter(
+        ([url, init]) => String(url).endsWith('/api/portfolio') && (init as RequestInit | undefined)?.method === 'POST',
+      );
+      return JSON.parse((posts[posts.length - 1]![1] as RequestInit).body as string).premiumStopDollar;
+    };
+    const directPremiumStop = lastPostedPremiumStop();
 
     cleanup();
     act(() => { usePortfolioStore.setState({ positions: [] }); });
@@ -740,10 +750,11 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     fireEvent.click(submit);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     const basket = usePortfolioStore.getState().positions[0]!;
+    const basketPremiumStop = lastPostedPremiumStop();
 
     // The three threaded fields agree across the two paths...
     expect(basket.stop).toBe(direct.stop);
-    expect(basket.premiumStopDollar).toBe(direct.premiumStopDollar);
+    expect(basketPremiumStop).toBe(directPremiumStop);
     // ...including the entry price, which is the denominator the premium stop
     // is derived against. The live mid (4.0) differs from the scan mid (2.5),
     // so this assertion has something to catch.
@@ -759,9 +770,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // ...and they are the EDITED values, not the card's originals. Without
     // this the assertions above would pass on two identically-wrong rows.
     expect(direct.stop).toBe(132);
-    expect(direct.premiumStopDollar).toBe(0.9);
+    expect(directPremiumStop).toBe(0.9);
     expect(basket.stop).toBe(132);
-    expect(basket.premiumStopDollar).toBe(0.9);
+    expect(basketPremiumStop).toBe(0.9);
     expect(basket.stop).not.toBe(CARD_INVALIDATION);
     // Confirmed gap as of build step 4: the send gate blocked an UNPICKED
     // send on both paths, but nothing carried a MADE pick's values onto
