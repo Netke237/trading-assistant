@@ -287,3 +287,7 @@ ones (options halves, split hypothesis, P3b items) stay open with a note.
 - Plan round 5 (2026-09-25, fresh subagent, the F1 fix only, allowed by Kenneth P3A-PLAN-ROUND-5-ALLOWED): **CLEAN — no gate-level findings.**
   Below-gate note taken anyway: the §12 drop is decided at the regime block (after the price checks), from the
   fetch result captured earlier, so a sub-min-price name keeps its price reason in the funnel.
+- Code round 1 (2026-09-25, fresh subagent, c05971a..7afa243): **NOT CLEAN, 1 gate-level.** F1: `risk_pct` gt=0 made
+  scan schedules stored at 0% invalid (whole schedule list 500s; every fire errors). Kenneth:
+  P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT-2026-09-25 -> a `mode="before"` validator maps a stored 0 to None
+  (1% default x conviction, what those schedules did before). Everything else checked clean.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.schemas import SentimentData, FundamentalsOut
 
 
@@ -36,6 +36,19 @@ class StockScanRequest(BaseModel):
     # None (with no risk_fixed_usd) still means the 1% default, now sized by
     # the conviction multiplier like any other percentage.
     risk_pct:           Optional[float] = Field(0.01, gt=0, le=1)
+
+    @field_validator("risk_pct", mode="before")
+    @classmethod
+    def _stored_zero_is_unset(cls, v):
+        # Decision P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT-2026-09-25 (Kenneth):
+        # scan schedules saved while "Max loss per trade" was 0% carry
+        # risk_pct 0 in scan_schedule.yaml. Before gt=0 they sized at the 1%
+        # default; they still do (now conviction-adjusted, like any None) rather
+        # than failing every fire and 500-ing the whole schedule list. Manual
+        # scans never post 0 -- the frontend stops them with a message.
+        if v == 0 and not isinstance(v, bool):
+            return None
+        return v
     risk_fixed_usd:     Optional[float] = None
     bt_min_trades:      int   = 5
     bt_min_win_rate:    float = 0.45

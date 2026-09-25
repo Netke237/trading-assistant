@@ -272,12 +272,33 @@ def test_risk_pct_none_is_the_default_one_percent_conviction_sized():
     assert card.shares == int(50_000 * 0.01 * mult / 4.0)
 
 
-def test_risk_pct_zero_and_account_zero_are_refused():
+def test_negative_risk_pct_and_account_zero_are_refused():
     base = dict(universe=["X"], direction="Bullish", horizon="Swing", strategy="pullback_ema")
     with pytest.raises(ValidationError):
-        StockScanRequest(**base, risk_pct=0)
+        StockScanRequest(**base, risk_pct=-0.01)
     with pytest.raises(ValidationError):
         StockScanRequest(**base, account_size=0)
+
+
+@pytest.mark.parametrize("zero", [0, 0.0])
+def test_a_stored_zero_risk_pct_runs_at_the_default(zero):
+    """Decision P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT-2026-09-25: a schedule saved
+    at 0% still validates and sizes like `risk_pct=None` (1% x conviction)."""
+    req = StockScanRequest(universe=["X"], direction="Bearish", horizon="Swing",
+                           strategy="pullback_ema", risk_pct=zero)
+    assert req.risk_pct is None
+    card, _ = _run(req, _omm(20))
+    assert card.dollar_risk == pytest.approx(round(50_000 * 0.01 * conviction_mult(20, _ON), 2))
+
+
+def test_a_stored_zero_percent_schedule_entry_still_validates():
+    """Code round 1 F1: one such entry used to 500 the whole schedule list."""
+    from app.schemas.scan_schedule import ScanScheduleEntry
+    ScanScheduleEntry.model_validate(dict(
+        id="x", label="l", mode="stocks", profile_id="p", profile_name="n",
+        profile_synced_at="2026-09-01T00:00:00Z", pattern="fixed_time", fire_time="09:30",
+        resolved_request={"universe": ["SP500"], "direction": "Bullish", "horizon": "Swing",
+                          "strategy": "pullback_ema", "account_size": 100000, "risk_pct": 0}))
 
 
 # ── bearish target ladder never goes non-positive ────────────────────────────
