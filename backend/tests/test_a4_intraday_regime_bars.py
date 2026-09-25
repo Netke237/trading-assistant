@@ -33,9 +33,20 @@ INTRADAY = [
 
 
 def _sem():
+    """A fake scan semaphore that records whether it is currently held."""
     sem = MagicMock()
-    sem.__aenter__ = AsyncMock(return_value=sem)
-    sem.__aexit__ = AsyncMock(return_value=False)
+    sem.held = False
+
+    async def _enter(*_a):
+        sem.held = True
+        return sem
+
+    async def _exit(*_a):
+        sem.held = False
+        return False
+
+    sem.__aenter__ = AsyncMock(side_effect=_enter)
+    sem.__aexit__ = AsyncMock(side_effect=_exit)
     return sem
 
 
@@ -74,6 +85,35 @@ async def test_options_scan_measures_intraday_on_15_minute_bars():
     assert set(closes) == {50.0} and len(closes) == len(INTRADAY), (
         "the Intraday regime must be measured on the 15-minute series, not the daily candles"
     )
+
+
+@pytest.mark.asyncio
+async def test_options_scan_intraday_fetch_runs_under_the_scan_semaphore():
+    """The 15-min fetch is a network call per symbol; it must count against
+    the scan's concurrency limit like every other fetch in the worker."""
+    sem = _sem()
+    held_at_fetch: list[bool] = []
+
+    def _fetch(*_a, **_k):
+        held_at_fetch.append(sem.held)
+        return INTRADAY
+
+    with patch("app.routers.scan.fetch_candles_async"), \
+         patch("app.routers.scan.fetch_price_async", new_callable=AsyncMock, return_value=181.0), \
+         patch("app.routers.scan.fetch_company_name_async", new_callable=AsyncMock, return_value="X"), \
+         patch("app.routers.scan.fetch_fundamentals_calendar", new_callable=AsyncMock, return_value={}), \
+         patch("app.routers.scan.fetch_calendar_dates_async", new_callable=AsyncMock, return_value=(None, None)), \
+         patch("app.routers.scan.fetch_intraday_candles", side_effect=_fetch), \
+         patch("app.routers.scan._compute_omm", return_value=None), \
+         patch("app.routers.scan._compute_dhmm", return_value=None), \
+         patch("app.routers.scan.score_stock") as score, \
+         patch("app.routers.scan.log_event"):
+        score.return_value = MagicMock(status="REJECT", score=20, rules=[], components={})
+        await _process_symbol(
+            symbol="AAPL", direction="Bullish", horizon="Intraday", client=AsyncMock(),
+            sem=sem, scan_id="a4", bars_map={"AAPL": DAILY},
+        )
+    assert held_at_fetch == [True]
 
 
 @pytest.mark.asyncio
@@ -174,9 +214,15 @@ def test_the_three_readers_fetch_the_same_15_minute_series():
     """Stock scan, options scan and fire path must ask for the same bars, or
     Stocks mode, Options mode and the auto-trader drift apart again."""
     spec = 'fetch_intraday_candles, symbol, "15min", 55'
-    assert spec in inspect.getsource(stock_scan._process_stock), (
+    # The stock scan reads one module constant on all three of its paths
+    # (P3a): pin the constant and that each path uses it.
+    assert stock_scan._INTRADAY_FETCH_DAYS == 55, (
         "the stock scan's reader changed -- move the other two with it"
     )
+    ss_spec = 'fetch_intraday_candles, symbol, "15min", _INTRADAY_FETCH_DAYS'
+    # ONE fetch in _process_stock since P3a item 12 (signal + regime share it).
+    assert inspect.getsource(stock_scan._process_stock).count(ss_spec) == 1
+    assert ss_spec in inspect.getsource(stock_scan._analyze_core)
     import app.routers.scan as scan_mod
     assert spec in inspect.getsource(scan_mod._process_symbol)
     assert 'fetch_intraday_candles(symbol, "15min", 55)' in inspect.getsource(

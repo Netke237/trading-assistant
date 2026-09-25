@@ -4,6 +4,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody, type StockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { scanSizingFromRisk } from '@/lib/stockScan';
 
 export type HorizonEnum = 'Intraday' | 'Swing' | 'Position';
 
@@ -40,6 +41,9 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     };
   }
   const ctx = scan.context;
+  // The user's sizing (P3a); throws ScanSizingError on 0%, which `analyze`
+  // shows as its error.
+  const sizing = scanSizingFromRisk();
   const { universe: _u, ...rest } = buildStockScanRequestBody({
     universe: [],
     direction: ctx?.direction ?? 'Bullish',
@@ -49,8 +53,8 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     requireReversal: (scan.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false,
     scanOverrides: scan.scanOverrides,
     confidenceGate: useSettingsStore.getState().confidenceGate,
-    accountSize: 50_000,
-    riskPct: 0.01,
+    accountSize: sizing.accountSize,
+    riskPct: sizing.riskPct,
   });
   return { req: { ...rest, symbol, horizon: _horizonEnum(ctx?.horizon) }, basis: 'current-settings' };
 }

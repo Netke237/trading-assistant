@@ -226,8 +226,9 @@ def _build_target_ladder(
     function has to. Callers pass their own objective as ``primary`` and their
     outward continuations as ``extensions`` — including ``None`` and values that
     may land on the wrong side of entry — and get back a ladder that is
-    guaranteed non-empty, strictly on the profitable side of entry, strictly
-    monotonic, and ordered nearest-first.
+    strictly on the profitable side of entry, strictly positive, strictly
+    monotonic, and ordered nearest-first — or empty when no such rung exists
+    (see Returns).
 
     WHY ``primary`` IS A SEPARATE ARGUMENT — the one thing not to "simplify".
     Pooling every candidate into one list and sorting by distance would let a
@@ -279,7 +280,12 @@ def _build_target_ladder(
 
     Returns:
         1..3 prices, rounded to 2dp, strictly ordered away from entry. Empty
-        only when the inputs are degenerate (``risk <= 0`` or ``entry <= 0``).
+        when the inputs are degenerate (``risk <= 0`` or ``entry <= 0``), or on
+        a BEARISH ladder whose every rung, the fallback included, lands at or
+        below zero (risk larger than ~entry / fallback_mult). Every caller turns
+        empty into "no signal on this bar": no positive short target exists, and
+        emitting one anyway handed backtesting.py a negative ``tp`` that it
+        asserts on, so the whole symbol was removed as a failed backtest.
     """
     sign = 1.0 if direction == "Bullish" else -1.0
     risk = abs(entry - stop)
@@ -337,6 +343,11 @@ def _build_target_ladder(
         if sign * (rounded - entry_r) <= 0:
             # Sub-cent risk. One tick is the smallest thing _entry_side accepts.
             rounded = round(entry_r + sign * 0.01, 2)
+        if rounded <= 0:
+            # Only a bearish fallback can get here (bullish rungs sit above a
+            # positive entry). Never clamped to a token positive price: that
+            # would be a target the strategy never derived.
+            return []
         ladder.append(rounded)
 
     return ladder

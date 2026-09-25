@@ -141,7 +141,8 @@ describe('T2 — literal pins (so T1 cannot pass with both paths wrong)', () => 
     expect(b.rsi_oversold).toBe(27);
     expect(b.bt_min_trades).toBe(12);
     expect(b.shortlist_max_candidates).toBe(17);
-    expect(b.risk_pct).toBe(0.01);
+    // P3a: the user's max loss per trade from Settings → Risk, not a hardcoded 1%.
+    expect(b.risk_pct).toBe(useRiskStore.getState().limits.maxLossPerTradePct);
     expect(b.mean_reversion_variants).toBeUndefined();
   });
 
