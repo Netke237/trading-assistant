@@ -24,6 +24,7 @@ from app.services.alert_evaluator import (
     RegimeCondition, ConditionGroup, evaluate_rules, build_regime_snapshot,
     is_cooldown_passed, _STRUCTURE_LABELS,
 )
+from app.services.composite_trigger_evaluator import hmm_intraday_interval_error
 from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
 from app.services.market_structure import compute_structure
@@ -177,6 +178,68 @@ def _rule_to_dict(row: AlertRuleModel) -> dict:
         base['rule_type'] = 'standard'
         base['group'] = parsed
     return base
+
+
+def _composite_primary_model(composite: object) -> object:
+    primary = composite.get('primary') if isinstance(composite, dict) else None
+    return primary.get('model') if isinstance(primary, dict) else None
+
+
+_NOT_COMPOSITE = object()
+
+
+def _stored_pair(row: AlertRuleModel) -> tuple:
+    """(interval, primary model) of a stored COMPOSITE rule; a sentinel model for
+    anything else (unparseable, non-dict, standard) so it never equals a new pair."""
+    try:
+        parsed = json.loads(row.rule_json)
+    except (TypeError, ValueError):
+        return (row.interval, _NOT_COMPOSITE)
+    if not isinstance(parsed, dict) or parsed.get('__type') != 'composite':
+        return (row.interval, _NOT_COMPOSITE)
+    return (row.interval, _composite_primary_model(parsed))
+
+
+async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict]:
+    """A4f-rules (decision A4F-MIGRATE-LEGACY-RULES-TOO-2026-09-25): a composite
+    HMM_intraday rule stored on '1D'/'1W' never fires -- evaluate_and_notify_for_symbol
+    hands the HMM no intraday bars on those intervals. Move each to '5m' (what the
+    dialog displayed), mark its name "(interval was 1D)", reset its sustain clock and
+    log the list. Every such row (disabled ones and any user_id included); only
+    '1D'/'1W', the two spellings that path treats as daily/weekly. Idempotent: a
+    migrated row is '5m'. Run once per server start by run_chart_alert_scheduler
+    before its first tick."""
+    factory = session_factory or AsyncSessionLocal
+    migrated: list[dict] = []
+    async with factory() as db:
+        result = await db.execute(
+            select(AlertRuleModel).where(AlertRuleModel.interval.in_(('1D', '1W')))
+        )
+        for row in result.scalars().all():
+            try:
+                parsed = json.loads(row.rule_json)
+            except (TypeError, ValueError):
+                logger.debug('A4f rule migration: skipping %s, rule_json does not parse', row.id)
+                continue
+            if not isinstance(parsed, dict) or parsed.get('__type') != 'composite':
+                continue
+            if _composite_primary_model(parsed) != 'HMM_intraday':
+                continue
+            old = row.interval
+            note = f' (interval was {old})'
+            row.interval = '5m'
+            row.name = row.name[:200 - len(note)] + note
+            row.condition_state = '{}'
+            migrated.append({'id': row.id, 'symbol': row.symbol, 'name': row.name, 'from': old})
+        if migrated:
+            await db.commit()
+    if migrated:
+        listing = ', '.join(f"{m['id']} {m['symbol']} {m['from']!r}" for m in migrated)
+        logger.warning(
+            "A4f: migrated %d HMM_intraday composite rule(s) from a daily/weekly interval "
+            "to '5m' (on that interval they could not fire): [%s]", len(migrated), listing,
+        )
+    return migrated
 
 def _history_to_dict(row: AlertHistoryModel) -> dict:
     return {
@@ -489,6 +552,9 @@ async def create_rule(body: AlertRuleCreate, db: AsyncSession = Depends(get_db))
     if body.rule_type == 'composite':
         if not body.composite_def:
             raise HTTPException(status_code=422, detail='composite_def is required when rule_type is "composite"')
+        _err = hmm_intraday_interval_error(body.composite_def, body.interval)
+        if _err:
+            raise HTTPException(status_code=422, detail=_err)
         rule_json = json.dumps({"__type": "composite", **body.composite_def})
     else:
         rule_json = json.dumps(body.group.model_dump())
@@ -533,6 +599,14 @@ async def replace_rule(rule_id: str, body: AlertRuleCreate, db: AsyncSession = D
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail='Rule not found')
+    # A4f-rules: refuse an HMM_intraday composite on a non-intraday interval --
+    # unless this PUT leaves the stored (interval, primary model) pair as it is, so a
+    # legacy rule the startup migration could not move stays toggleable/renameable.
+    # A stale '1D' sent back onto a migrated '5m' rule changes the pair: refused.
+    if body.rule_type == 'composite' and body.composite_def:
+        _err = hmm_intraday_interval_error(body.composite_def, body.interval)
+        if _err and _stored_pair(row) != (body.interval, _composite_primary_model(body.composite_def)):
+            raise HTTPException(status_code=422, detail=_err)
     row.name = body.name
     row.symbol = body.symbol.upper()
     row.interval = body.interval
