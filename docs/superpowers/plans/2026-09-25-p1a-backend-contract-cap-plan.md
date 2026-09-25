@@ -265,3 +265,16 @@ P1b's and out of scope here, except the merge-order constraint in §0.
 A fresh subagent ran bmad-review-adversarial-general and found 0 gate-level findings. It confirmed all three callers of `check_position_risk`, the §0 merge-order hazard, and that M1, M5 and M16/M17 can fail. Two notes below the gate are carried into the build:
 - The existing `test_gates_off_a_qty_over_the_per_trade_clamp_is_flagged` asserts that `adjusted_size is None`. That precondition is updated where the real-qty judgement changes it; the test is not deleted.
 - Test 16 applies its "no digit other than `{qty}`" check after `{contract}` is removed from the text.
+
+## Code round 1 (2026-09-25): NOT clean, 1 finding, fixed
+
+**F1 (MEDIUM, gate a+b): the 409 remedy "raise that position's Contracts by {qty} in Portfolio" stores a wrong number.**
+- The drawer PATCH cannot change `entry_price`, and it does not average it. So the added contracts would be stored at the existing row's entry, not at this fill.
+- That gives a wrong P&L, a PREMIUM_STOP anchored to the old premium, and a PATCH exposure check judged on the wrong capital.
+
+**Fix, which supersedes §4c's text:** the page offers ONE remedy: `…NOT booked as a second row, and its {q} contract(s) are untracked. Close the extra {q} at the broker. Do not raise that position's Contracts to cover them: Portfolio would book them at that position's entry price, not this fill.`
+- Test 16 now asserts the close remedy, the explicit "Do not raise", and the absence of "raise that position's Contracts by".
+- A mutation that restores the raise remedy turns it red.
+- Weighted-average entry on a qty increase is re-logged at close for P6 (the drawer PATCH owner). It is not needed here.
+
+Everything else was checked and found sound: the lock (one per loop, never re-entered, and neither booking call site runs inside `to_thread`), the 409/500/recovery paths, the early returns, both callers, the Q18 numbers, and the scan-price fallback.

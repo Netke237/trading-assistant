@@ -349,7 +349,7 @@ async def test_a_duplicate_contract_is_refused_and_leaves_the_session_usable(
         assert second.booked is False
         # P1a: the duplicate-contract refusal names its own remedy.
         assert "778" in second.error and "already open" in second.error
-        assert "raise that position's Contracts" in second.error
+        assert "Close the extra 1 at the broker" in second.error
         # The rollback left the session usable.
         n = (await s.execute(select(func.count(PortfolioPositionModel.id)))).scalar_one()
     assert n == 1
@@ -654,7 +654,11 @@ async def test_p1a_16_the_duplicate_contract_page_names_its_own_remedy(
     text = env.notify.await_args.kwargs["reason"]
     assert text.startswith(f"Order 778 for {CONTRACT}: ")
     assert "NOT booked as a second row" in text
-    assert "raise that position's Contracts by 3" in text
+    assert "Close the extra 3 at the broker" in text
+    # Code round 1: raising the existing row's Contracts would store the added
+    # lot at that row's entry price, so it must never be offered as a remedy.
+    assert "raise that position's Contracts by" not in text
+    assert "Do not raise that position's Contracts" in text
     assert "Add it by hand" not in text
     rest = text.replace(CONTRACT, "").replace("Order 778", "")
     assert [ch for ch in rest if ch.isdigit()] == ["3", "3"], "no number but {qty}"

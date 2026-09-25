@@ -307,12 +307,17 @@ async def _alert_unverified(fired: FiredOrder, rec_id: str) -> None:
 
 
 def _duplicate_contract_reason(fired: FiredOrder) -> str:
+    # ONE remedy only. "Raise that position's Contracts in Portfolio" is NOT
+    # offered (P1a code round 1): the drawer PATCH cannot change entry_price
+    # and does not average it, so the added contracts would be stored at the
+    # existing row's entry, not this fill -- a wrong P&L, a PREMIUM_STOP
+    # anchored to the old premium, and an exposure check on the wrong capital.
     q = fired.strategy.quantity
     return (
         "a position for this contract is already open, so this order was NOT booked "
-        f"as a second row. Either close the extra {q} at the broker, or raise that "
-        f"position's Contracts by {q} in Portfolio (refused if the total passes the "
-        "per-trade contract limit or an exposure cap; then close it at the broker)."
+        f"as a second row, and its {q} contract(s) are untracked. Close the extra "
+        f"{q} at the broker. Do not raise that position's Contracts to cover them: "
+        "Portfolio would book them at that position's entry price, not this fill."
     )
 
 
