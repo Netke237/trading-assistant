@@ -8,7 +8,7 @@
 Build work package P2 (see `docs/superpowers/plans/2026-09-25-work-packages.md`): 23 backlog entries + Kenneth's decisions Q6, Q7, Q8, Q9, Q15. Plan: `docs/superpowers/plans/2026-09-25-p2-premium-stop-position-editing-plan.md`.
 
 ## Status
-BUILD stage. Plan closed by Kenneth after 5 plan rounds (none clean; section J applied, decision P2-PLAN-STAGE-CLOSED-BY-OWNER-2026-09-25). Baseline on main c05971a: frontend 3680, backend 3345 passed / 1 skipped.
+BUILT, not yet code-audited. All 24 plan items built with tests; mutation checks done (see Done). origin/main (P3a, task claims, P3c decisions) merged in. Claim taken on P2-PREMIUM-STOP-POSITION-EDITING (scripts/claim.py). Full suites running; next: code round 1 (= round 6).
 
 ## Done
 - fe495ca plan r0; c759fb1 r1 revisions (8 major/12 minor); 10630b7 r2 revisions (6 major/9 minor); 411d7e6 r3 revisions (2 major/7 minor, unaudited) — originally on `claude/quirky-pasteur-r1kt0v`, merged onto current main (which now carries P3b) in this branch.
@@ -17,10 +17,10 @@ BUILD stage. Plan closed by Kenneth after 5 plan rounds (none clean; section J a
 
 ## Next steps
 - [x] PROJECT_STATE.json: phase P2-PREMIUM-STOP-POSITION-EDITING (audit_rounds 3, not clean, active_phase), decisions P2-*-2026-09-25, open questions Q-P2-1 + narrowed F2.
-- [ ] Plan round 4: fresh subagent, bmad-review-adversarial-general, over the whole plan with focus on section G + H. If NOT CLEAN, stop and bring findings to Kenneth (no 5th round without asking).
-- [ ] Re-baseline tests on current main (P3b changed backend test count).
-- [ ] Build per plan (tests first, mutation checks), P2-owned files only (plan "Not touched" list: step-7 page, position_writer.py, auto_trader.py, routers/portfolio.py, schemas, ClosePositionDrawer).
-- [ ] Code adversarial rounds until clean (cap 3 per stage, then ask Kenneth).
+- [x] Plan rounds 4 and 5 (both not clean; Kenneth closed the plan stage and chose to build).
+- [x] Re-baseline on main c05971a: frontend 3680, backend 3345 passed / 1 skipped.
+- [x] Build per plan. One P1-owned TEST edited out of necessity: step-7 edited-fields-sync.test.tsx now reads the POSTED premiumStopDollar (P2-06 drops it from the synced row). No P1 app code touched.
+- [ ] Code adversarial round 1 (= round 6; cap 3 code rounds, then ask Kenneth). Scope: `git diff origin/main HEAD` minus plan/state docs; gate-level only.
 - [ ] Update PROJECT_STATE.json after each round (audit_rounds 4, ...); at the end close P2 backlog entries with evidence and set status shipped.
 - [ ] Merge into main (--no-ff, state record written before the merge), then `k_session.py finish`.
 
