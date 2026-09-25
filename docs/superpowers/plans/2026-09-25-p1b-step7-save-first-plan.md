@@ -119,3 +119,42 @@ a user or on a broker order, or corrupt persisted data.
 - The phase becomes shipped when its code round is clean.
 - Closes: round_11_followups items 5 and 7, round_13_followups item 7 (the TradeCard `max` stays with P2), and round_2_batch_followups item 3.
 - Re-logged, for the broker/adapters owner (unassigned): post-submit parse errors should raise `RuntimeError` rather than `ValueError`, and a broker 4xx should be told apart from a transport failure in the 502 detail.
+
+---
+
+## Revisions after plan round 1 (these SUPERSEDE §2-§6 where they conflict)
+
+Round 1 (a fresh subagent) found 2 MEDIUM and 2 LOW gate-level findings. It confirmed several things against the code:
+- the save-first order;
+- every class on the auto-delete list;
+- the double-click guard (`page.tsx:1398-1411`);
+- that no 30s sync runs on Step 7;
+- that `adjustedQty` matches the saved qty.
+
+U-n answers finding n.
+
+**U1 (MEDIUM): offline, a `→ 404` on the cleanup delete proves nothing.** After an offline save, the create may still be in flight on the server: its live fetches take up to 8s before it commits. A DELETE that lands during them answers 404, and the row commits afterwards. So in the OFFLINE branch only:
+- the best-effort delete still runs;
+- whatever it answers (ok, 404, a throw), the banner always carries ` If ${recId} appears in Portfolio, delete it.`;
+- `recId` is always pushed onto `unknownRecIds`, so the Remove button shows.
+
+The not-ok/not-offline branch keeps §2 step 3's rule. There the server has answered, so its write is over and a 404 is final.
+
+Test: offline plus a mocked delete that resolves (and, separately, one that throws `→ 404`) → the suffix and the Remove button are both present. Mutation M23: treat a 404 as final in the offline branch → red.
+
+**U2 (MEDIUM): a result must never land on a different candidate.** Prev/Next stay enabled during a send (`CandidateNav/index.tsx:48,65`), and CandidateNav is not P1's file. So every message `placeDirectOrder` writes names its own contract:
+- `label = contractLabel(card's contract)` is captured when the send starts, and is never re-read.
+- Every `orderError` text, every save note (`sizeNote`) and every `unknownRecIds` entry is prefixed `${label}: `. So is the green line: `paperOrderId` becomes `{ label, id } | null`, rendered `${label}: Order placed — ID: ${id}`. `unknownRecIds` becomes `{ recId, label }[]`, and each button reads `Remove tracked position ${recId} (${label})`.
+- Each message is then true on whichever card is showing. The `[active]` effect's clears (`page.tsx:607`) are unchanged, except that `unknownRecIds` stays uncleared, per §3.
+- `applyPersistedPosition`/`addPosition` act on the saved row, which carries its own contract, so the local store is right whatever card is active.
+
+Test: Place Limit on AAA, then Next to BBB, then resolve the broker → BBB shows `AAA … Order placed — ID` (the AAA label), and no text without a label. With a resize, the note names AAA and "sent for 2". Mutation M24: drop the label from the green line → red.
+
+**U3 (LOW, gate c): pin M22 properly.** In §5 test 7, the kept "substring, not prefix" case uses a detail that contains the exact full marker after the start: `Tradier paper order failed: HTTP 400 — IBKR did not place the order: x` (after `→ 502: `). M22 (`.includes(...)`) then auto-deletes it and turns red.
+
+**U4 (LOW, gate c): a 2xx save whose body did not parse is NOT confirmed.** `persistPosition` swallows a body parse failure into `{ok:true, entryPrice:null}` with no `adjustedQty` (`portfolioStore.ts:400-417`). So the page cannot know whether the server resized. The router's 201 body always carries a positive `entryPrice` (schema `gt=0`, and the writer replaces the entry only with a positive live quote). So:
+- `saved.ok && saved.entryPrice == null` is treated as unconfirmed.
+- No order is sent. The page runs U1's offline handling: a best-effort delete, the "If … delete it." suffix, and a Remove button.
+- The banner is `${label}: Portfolio saved it but its reply could not be read, so NO order was sent.`
+
+Test: persist resolves `{ok:true, entryPrice:null}` → `postOptionOrder` is not called, and the delete and the button are present. Mutation M25: drop the check → red.

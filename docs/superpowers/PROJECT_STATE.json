@@ -1068,7 +1068,7 @@
       "id": "P1B-STEP7-SAVE-FIRST",
       "name": "P1b (split from P1): Step-7 Place Limit/Market save the position first, send the gate-approved qty, auto-delete the saved row only on provably pre-submit failures, keep it with an UNKNOWN banner + per-recId Remove button otherwise; Tastytrade Market guard; paperOrderId and positive-mid fixes (P1-CARD-SAVE-FIRST-SEND-TRIMMED)",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
@@ -1077,7 +1077,7 @@
         "pattern": "deletePortfolioPosition",
         "note": "Pending: the phase is not_started; this probe turns true when api.ts gains deletePortfolioPosition."
       },
-      "note": "Branch claude/order-booking-safety-7evlql. Plan: docs/superpowers/plans/2026-09-25-p1b-step7-save-first-plan.md (self-contained; folds the page half of the P1 plan and its R/S/T answers). Starts after P1a's build. P1a's merge waits on this phase."
+      "note": "Branch claude/order-booking-safety-7evlql. Plan: docs/superpowers/plans/2026-09-25-p1b-step7-save-first-plan.md (self-contained; folds the page half of the P1 plan and its R/S/T answers). Starts after P1a's build. P1a's merge waits on this phase. || Plan round 1 (fresh subagent, 2026-09-25): NOT clean -- 2 MEDIUM (offline 404 is not proof: the create can commit after the cleanup DELETE; a send's result lands on whichever candidate is showing), 2 LOW gate-c (M22 test input could not fail; an unparsed 2xx body loses adjustedQty). Answered as U1-U4 in the plan. Plan round 2 reviews U1-U4 only."
     },
     {
       "id": "STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES",
