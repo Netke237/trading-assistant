@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import AlertsPage from '../page';
 import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -148,5 +148,43 @@ describe('Alerts page — a fired row is labelled with the threshold it fired at
     render(<AlertsPage />);
 
     expect(screen.getByText('Premium stop (–60%)')).toBeInTheDocument();
+  });
+});
+
+// ── A4f-rules ────────────────────────────────────────────────────────────────
+// The backend migrates stored HMM_intraday composite rules off '1D'/'1W' to '5m'
+// and marks the name. The rules table reads the persisted local copy, so the page
+// must refresh from GET /alerts/rules on mount -- otherwise it shows (and a toggle
+// re-PUTs) the stale '1D'.
+describe('Alerts page — rules are refreshed from the backend on mount (A4f-rules)', () => {
+  const composite = { primary: { model: 'HMM_intraday', to_state: 'Bull' }, confirmations: [] };
+  const rule = (over: Record<string, unknown>) => ({
+    id: 'r1', name: 'X', symbol: 'AAPL', interval: '1D', enabled: true,
+    group: { logic: 'AND', conditions: [] }, cooldown_minutes: 60, expiry_date: null,
+    created_at: '2026-09-01T00:00:00', last_triggered_at: null,
+    rule_type: 'composite', composite_def: composite, ...over,
+  });
+
+  it('shows the server copy of a migrated rule, not the stale local one', async () => {
+    useChartAlertStore.setState({ rules: [rule({})] } as any);
+    const fetchMock = jest.fn((url: string) => {
+      if (String(url).endsWith('/alerts/rules')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([rule({ interval: '5m', name: 'X (interval was 1D)' })]),
+        });
+      }
+      return Promise.resolve({ ok: false });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<AlertsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rules' }));
+
+    expect(await screen.findByText('X (interval was 1D)')).toBeInTheDocument();
+    expect(screen.getByText('5m')).toBeInTheDocument();
+    expect(screen.queryByText('1D')).not.toBeInTheDocument();
+    const ruleGets = fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/alerts/rules'));
+    expect(ruleGets).toHaveLength(1);
   });
 });

@@ -14,6 +14,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def hmm_intraday_interval_error(trigger_def: object, interval: object) -> str | None:
+    """A4f-rules: the message to refuse a composite HMM_intraday definition on a
+    non-intraday interval with, else None. Never raises: a non-dict trigger_def /
+    primary means "no model" (other validation owns malformed bodies).
+
+    Deliberately NOT built on strategy_watch_store._primary_model: importing that
+    module instantiates its module-level store, whose load() reads and can rewrite
+    config/strategy_watches.yaml. Same wording as add_composite_watch's ValueError;
+    tests/test_a4f_rules_hmm_intraday_interval.py pins that both accept/reject the
+    same intervals with the same message."""
+    primary = trigger_def.get("primary") if isinstance(trigger_def, dict) else None
+    model = primary.get("model") if isinstance(primary, dict) else None
+    if model != "HMM_intraday":
+        return None
+    from app.data.market import is_intraday_interval
+    if is_intraday_interval(interval):
+        return None
+    return f"HMM_intraday needs an intraday interval (e.g. 5m, 15m, 1h), got {interval!r}"
+
+
 def _check_primary_omm(trigger_def: dict, omm_result) -> bool:
     """Check OMM primary condition. omm_result is OmmResult dataclass or None."""
     if omm_result is None:
