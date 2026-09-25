@@ -1980,7 +1980,9 @@ def _alert_order_failed(symbol: str, exc: Exception) -> None:
     was routinely asserting one that could not exist — "check the broker" on an
     expired credential, every time. Those now raise `OrderNotSubmittedError`
     and page `_alert_not_submitted` instead. What reaches here is exactly what
-    got past `adapter.place_order`, where the claim is true and conservative.
+    got past `adapter.place_order` (except IBKR's confirmation question,
+    `OrderAwaitingConfirmationError`, which goes to the not-submitted alert),
+    where the claim is true and conservative.
     """
     _alert_refusal(
         symbol,
@@ -2004,7 +2006,8 @@ def _alert_not_submitted(symbol: str, exc: Exception, *,
     THE COUNTERPART TO `_alert_order_failed`, added by F2 of round 1, and the
     pair only works because each states what its own half provably knows.
     `fire()` reached this branch from `OrderNotSubmittedError`, which is raised
-    strictly before `adapter.place_order` — so no position can exist, and
+    strictly before `adapter.place_order` (except `OrderAwaitingConfirmationError`,
+    below) — so no position can exist, and
     hedging with "check the broker" would keep the wild goose chase F2 is about
     while merely sounding more careful.
 
@@ -2137,7 +2140,8 @@ def execute_option_order(strategy: ArmedStrategy):
     builds the order object, reads the credential store, and resolves the
     adapter. Only `place_order`, deliberately OUTSIDE the `try`, can reach a
     broker, so only it may raise the error `fire()` records as "may have
-    landed". Anything moved across that line changes what Kenneth is told about
+    landed". The one check after it (`OrderAwaitingConfirmationError`) reads the
+    broker's own answer that it took no order. Anything moved across that line changes what Kenneth is told about
     a possibly-live position, in one direction or the other.
     """
     from app.services.broker_router import build_router_from_credentials

@@ -44,3 +44,7 @@ order at the full premium and paged nothing.
 `backend/tests/test_autotrade_ibkr_confirm_not_submitted.py`. The adapter shape
 cases, the real adapter via respx through `maybe_fire_on_scan`, the alert text
 through the real `notify_alert`, and `fire()`'s log line. 5 mutants killed.
+
+## Rounds
+- Round 1 (367ac6b): not clean. 1 blocking finding: the scan-reject-log test counted two REJECTED warnings. 3 nits. All fixed in 1c76609.
+- Round 2 (367ac6b~1..1c76609): **clean**, with 3 nits. Stale docstrings fixed. Left as is, fail-closed: a reply with an `id` and an empty `message: []` is not flagged, so it books the full premium. IBKR does not document that shape.
