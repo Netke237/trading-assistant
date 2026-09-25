@@ -291,3 +291,4 @@ ones (options halves, split hypothesis, P3b items) stay open with a note.
   scan schedules stored at 0% invalid (whole schedule list 500s; every fire errors). Kenneth:
   P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT-2026-09-25 -> a `mode="before"` validator maps a stored 0 to None
   (1% default x conviction, what those schedules did before). Everything else checked clean.
+- Code round 2 (2026-09-25, fresh subagent, the F1 fix only): **CLEAN — no gate-level findings.**
