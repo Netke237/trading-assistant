@@ -960,3 +960,93 @@ def test_the_null_pointer_entrys_verify_probe_tracks_the_early_return(repo):
     assert not re.search(pattern, reverted, re.M), (
         "the probe still certifies this shipped with the early return removed"
     )
+
+
+# --- merging main into the branch must not import main's round numbers ------
+
+def _open_piece_then_merge_main_carrying(repo, main_subject: str) -> dict:
+    """A piece is opened on the branch, main gains another piece's round in
+    the meantime, and the branch merges origin/main to stay current -- the
+    order MANUAL-IBKR-CONFIRM-AS-ERROR actually took with A5c's round 4."""
+    # A state commit that predates the entry, so the scoped base narrows to
+    # the commit that introduces it (the real branch carried the decision
+    # commit first).
+    repo.write_state(_piece_state(None, []), "Record the decision")
+    piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
+    repo.write_state(piece, "Open the piece")
+    repo.commit("round 1: fixes on the piece")
+
+    repo.git("checkout", "-q", "main")
+    (repo.path / "main.txt").write_text(main_subject, encoding="utf-8")
+    repo.git("add", "-A")
+    repo.git("commit", "-q", "-m", main_subject)   # own file: the merge must not conflict
+    repo.set_origin_main("main")
+    repo.git("checkout", "-q", "feature")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "origin/main")
+
+    piece["already_shipped"][0].update(audit_rounds=1, audit_clean=True)
+    repo.write_state(piece, "Record the piece: clean after 1 round")
+    return piece
+
+
+def test_rounds_merged_in_from_main_are_not_this_pieces(repo):
+    """THE DEFERRED FALSE POSITIVE. The scoped base is the commit that
+    introduced the entry, and `sha..HEAD` alone includes every commit the
+    branch merged in from main after that sha -- so another piece's already
+    merged "round 4" subject counted against an honest file declaring 1."""
+    piece = _open_piece_then_merge_main_carrying(repo, "round 4: fixes on another piece")
+
+    assert _mod._target_scoped_base("origin/main", piece) != "origin/main"
+    assert _mod.audit_bookkeeping_drift(piece) is None
+
+
+def test_merging_main_does_not_hide_this_pieces_own_undercount(repo):
+    """The exclusion drops only what main already carries: this branch's own
+    rounds still count after the merge, so an undercount stays drift."""
+    piece = _open_piece_then_merge_main_carrying(repo, "unrelated work on main")
+    repo.commit("round 2: fixes on the piece")
+
+    severity, message = _mod.audit_bookkeeping_drift(piece)
+    assert severity == "drift"
+    assert "reach round 2" in message
+
+
+def test_a_rounds_arriving_by_a_sibling_merge_still_count(repo):
+    """Why the exclusion is `^merged_ref` and not `--first-parent`. This
+    piece's round can reach the branch through a merge of ANOTHER branch
+    (MANUAL-IBKR-CONFIRM-AS-ERROR's own decision commit came in that way from
+    claude/jolly-thompson-0q7paq). First-parent would drop it and hide the
+    undercount; excluding only what main carries keeps it."""
+    piece = _open_piece_then_merge_main_carrying(repo, "unrelated work on main")
+    repo.git("checkout", "-q", "-b", "sibling")
+    (repo.path / "sibling.txt").write_text("s", encoding="utf-8")
+    repo.git("add", "-A")
+    repo.git("commit", "-q", "-m", "round 3: fixes on the piece")
+    repo.git("checkout", "-q", "feature")
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "sibling")
+
+    severity, message = _mod.audit_bookkeeping_drift(piece)
+    assert severity == "drift"
+    assert "reach round 3" in message
+
+
+def test_the_merged_main_entrys_verify_probe_tracks_the_exclusion(repo):
+    """Same modelling error as ROUND 1 FINDING 4, refused up front: the probe
+    must die when the exclusion is reverted, at the helper or at the call."""
+    real_root = Path(__file__).parent.parent.parent
+    state = json.loads((real_root / STATE_REL).read_text(encoding="utf-8"))
+    entry = next(i for i in state["already_shipped"]
+                 if i["name"].startswith("STATE-PROBE-MERGED-MAIN-ROUNDS"))
+    pattern = entry["verify"]["pattern"]
+    src = (real_root / entry["verify"]["path"]).read_text(encoding="utf-8")
+
+    assert re.search(pattern, src, re.M), "the entry's probe does not match the real file"
+    for old, new in (
+        ('revs.append(f"^{merged_ref}")', "pass"),
+        ("_target_scoped_base(base_ref, state), base_ref,", "_target_scoped_base(base_ref, state),"),
+    ):
+        reverted = src.replace(old, new)
+        assert reverted != src, f"the revert fixture no longer matches: {old}"
+        assert not re.search(pattern, reverted, re.M), (
+            f"the probe still certifies this shipped with {old!r} reverted"
+        )
