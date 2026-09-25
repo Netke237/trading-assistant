@@ -54,7 +54,7 @@ def test_process_stock_passes_commission_from_get_costs():
     card = MagicMock()
     card.status = "PASS"
     card.score = 70
-    card.rules = []
+    card.rules = [_measured_trend()]
 
     async def run():
         # _process_stock always dispatches run_strategy_backtest through the
@@ -153,7 +153,7 @@ def test_analyze_core_passes_commission_from_get_costs():
     card = MagicMock()
     card.status = "PASS"
     card.score = 70
-    card.rules = []
+    card.rules = [_measured_trend()]
 
     async def run():
         # Same ProcessPoolExecutor-vs-MagicMock pickling problem as
@@ -175,3 +175,10 @@ def test_analyze_core_passes_commission_from_get_costs():
     asyncio.run(run())
     assert "commission" in captured, "run_strategy_backtest was not called with a commission= kwarg"
     assert captured["commission"] == 0.005
+
+
+def _measured_trend():
+    """A measured, passing trend rule: since P3a the direction gate removes a
+    card with no trend rule (or an unmeasured one) as "no data"."""
+    from app.scoring.stock_scorer import RuleResult
+    return RuleResult("trend", "PASS", 90, {})

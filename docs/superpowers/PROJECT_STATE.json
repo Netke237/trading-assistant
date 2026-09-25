@@ -2075,6 +2075,11 @@
       "q": "STATE-PROBE-MERGED-MAIN-ROUNDS excludes main's commits from the narrowed round span. That also drops a round of THIS piece that reached main first on a sibling branch (git cannot tell it from another piece's merged round). Accept that as a documented, silent case?",
       "a": "ACCEPT (Kenneth, 2026-09-25: 'Accept it (Recommended)'). Keep the fix; the case stays documented in the helper's docstring and the plan, pinned by test_this_pieces_round_that_reached_main_first_is_dropped. Round 2 next.",
       "by": "Kenneth 2026-09-25"
+    },
+    {
+      "id": "P3A-UNMEASURED-TREND-REMOVE-2026-09-25",
+      "q": "Q11 follow-up (raised by P3a plan round 1): when a stock's trend score cannot be measured (too few bars for the MA; no benchmark for relative_strength), should the stock-scan direction gate REMOVE the name (counted as 'no data' in the funnel) or KEEP it flagged unmeasured?",
+      "a": "Kenneth, 2026-09-25: REMOVE (fail closed; the funnel counts it as 'no data'). Paired with P3a making relative_strength actually measurable (benchmark ETF fetched per scan), so the method does not empty every scan."
     }
   ],
   "pending_kenneth": [
