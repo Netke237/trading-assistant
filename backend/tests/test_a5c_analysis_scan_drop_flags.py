@@ -324,6 +324,37 @@ async def test_t4_multi_is_evaluated_for_real_and_backtested_like_the_scan(monke
 
 
 @pytest.mark.asyncio
+async def test_t4_multi_cache_miss_runs_the_rsi_proxy_backtest_in_both_legs(monkeypatch):
+    """Code round 1 (F1): the cache stub above always answers, so nothing
+    exercised the run_strategy_backtest CALL. On a miss, a wrong strategy there
+    would be cached under the scan's key and poison later scans too."""
+    _offline(monkeypatch)
+    _multi_stubs(monkeypatch, {"mean_reversion_rsi", "mean_reversion_bb"}, [])
+    monkeypatch.setattr(ss, "_get_backtest_cached", lambda key: None)
+    monkeypatch.setattr(ss, "_BACKTEST_CACHE", {})
+    monkeypatch.setattr(ss, "_BACKTEST_POOL", None)        # default thread pool
+    runs: list = []
+
+    def _spy_run(bars, *, strategy, direction, min_trades, min_win_rate, params, commission):
+        runs.append({"strategy": strategy, "bars": bars, "params": params})
+        return _bt(False)
+    monkeypatch.setattr(ss, "run_strategy_backtest", _spy_run)
+
+    scan = await _scan(**_MULTI)
+    assert scan["reason"] == "backtest gate: 38% win over 12 trades"
+    core = await _analyze(**_MULTI)
+    _one_reject(core, "backtest", scan["reason"])
+
+    expected_params = ss._multi_bt_params(StockScanRequest(
+        universe=["TEST"], direction="Bullish", horizon="Swing", **_MULTI))
+    assert len(runs) == 2
+    for r in runs:
+        assert r["strategy"] == "mean_reversion_rsi"
+        assert r["bars"] is _BARS
+        assert r["params"] == expected_params
+
+
+@pytest.mark.asyncio
 async def test_t4_multi_too_few_confirmations(monkeypatch):
     _offline(monkeypatch)
     _multi_stubs(monkeypatch, {"mean_reversion_rsi"}, [])
