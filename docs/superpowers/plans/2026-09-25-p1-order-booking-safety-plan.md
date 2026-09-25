@@ -276,3 +276,60 @@ round_11_followups items 5 and 7; round_13_followups item 7 (the money half:
 server refusal + save-first; the TradeCard input `max` is P2's file, re-logged as
 one line for P2); round_2_batch_followups item 3. Entry 61 (stock clamp) stays open
 and is re-pointed at the queued phase.
+
+---
+
+## Revisions after plan round 1 (these SUPERSEDE the sections they name)
+
+Round 1 (fresh subagent, bmad-review-adversarial-general) found 1 HIGH, 7 MEDIUM and 6 LOW. Each one is answered below. R-n answers finding n.
+
+**R1 (HIGH) — §4a.4 deletes only when nothing can have been placed.** A thrown `postOptionOrder` is classified from the `api.ts` error text `API /broker/option-order → NNN: detail`:
+- **DEFINITELY NOT PLACED → delete the saved row:**
+  - HTTP 400 (the adapter's ValueError), 422 (request validation), 503 (credentials);
+  - a 502 whose detail contains "did not place the order" (the IBKR confirmation reply, `routers/broker.py:166-171`);
+  - a 200 whose `status` is a stated rejection (see R10).
+- **EVERYTHING ELSE → KEEP the row:** any other 502 (the adapters fold connection errors and read timeouts into RuntimeError → 502), a fetch `TypeError` or other network failure, an unparseable error. The banner reads: `Order status UNKNOWN (${why}). The tracked position ${recId} was KEPT — verify at the broker; if no order exists there, delete the position in Portfolio.` No automatic retry. The dedup never caches a failed request, so a blind retry could double the order, and the kept row's 409 now blocks one (R2).
+
+Keeping a row with no order is the safer failure. It raises alerts about a position that does not exist. The opposite failure is a real order with no stop alert. The new test "`TypeError` → delete NOT called, UNKNOWN banner" pins this, and so does "502 connection error → kept".
+
+**R2 — offline persist and a 409 on persist.**
+- `saved.offline`: the response may have been lost after the commit. Make a best-effort `api.deletePortfolioPosition(pos.recId)` (a 404 counts as fine). The banner: `Portfolio tracking could not be confirmed, so NO order was sent.` If that delete also throws, add: `If ${recId} appears in Portfolio, delete it.`
+- A persist rejection whose detail contains "already exists" (the duplicate-contract 409) shows its own message: `No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`
+
+**R3 — the `judged_size` clause gets a test that can fail.** New writer test 6b: direct call, gates off, `|STOCK` contract, qty 20 at a price where 20 shares fit every cap, and the REAL `check_position_risk`. The check is approved with no resize, and `over_exposure is True` only through `judged_size (5) != 20`. The log names "judged 5". M3 now turns 6b red.
+
+**R4 — existing tests this change breaks, each updated (never deleted):**
+- `test_position_writer_gates.py:145-159`: the `max_contracts_per_trade {cap}` log assertion becomes the new breach text. Gates off at qty > cap now logs the `exceeds_max_contracts_per_trade` reason.
+- `test_o4_step4_booking.py:350`: `"already exists" in second.error` becomes "already open" / "raise that position's Contracts" (per R5).
+- `edited-fields-sync.test.tsx:1030-1062` ("broker down") and `:1069-1096` (IBKR confirm 502): the harness gains a persist fetch mock that returns 201. The confirm-502 test asserts exactly one POST `/api/portfolio` and one DELETE `/api/portfolio/<recId>`, still no "Order placed" line, and the banner shows IBKR's text. "broker down" (a plain `Error('broker down')`, no status) now expects the UNKNOWN / kept banner.
+- Any other Step-7 test that asserts the broker is called before the persist: found during the build and listed in the build commit.
+
+**R5 — the 409 page text.** `a position for {contract} is already open, so this order was NOT booked as a second row. Either close the extra {qty} at the broker, or raise that position's Contracts by {qty} in Portfolio (the raise is refused if the total passes the {cap}-contract per-trade limit or an exposure cap; then close it at the broker).`
+
+**R6 — §3b's recovery path always pages.** It is booked, but the outcome flags are lost, so it pages `AUTO_TRADE_BOOKED_UNVERIFIED` (rec_id key `auto-trade-booked-unverified:<SYM>`): `{Order} for {contract} was booked as {rec_id}, but the write failed after its commit, so its stop side and exposure were NOT checked — verify both in Portfolio.` New test 15b pins the page.
+
+**R7 — the lock's scope is stated honestly.** `_BOOKING_LOCK` serialises `create_position` against `create_position` only (card POST, basket POST, auto-trade booking). The docstring says so. The locks live in a `weakref.WeakKeyDictionary` keyed by loop. The entry "…CONCURRENCY…" closes for the create↔create race it names (s6.5's gates-off bookings, plus the card path). Two new open lines are re-logged: the drawer PATCH qty-increase race (`routers/portfolio.py`, P6) and the `/fire` pre-broker snapshot race (`routers/auto_trade.py` / `auto_trader.py`, P3b/P6).
+
+**R8 — follow-ups re-logged in open_questions, one line each, for their owners:**
+- `lib/risk.ts` `checkTradeRisk` has no contract cap, so SendToBrokerDialog shows "Within risk limits" for a 6-lot the backend refuses (P2);
+- `portfolio/page.tsx` `REJECTION_LABELS` has no `exceeds_max_contracts_per_trade` label (Portfolio page; unowned, so Kenneth assigns it);
+- `/auto-trade/arm` accepts quantity > 5, and the fire then refuses it after consuming the arm (P3b/P6);
+- the TradeCard Contracts input has no `max` (P2).
+
+**R9 — local state on a delete.** After a successful delete, or a 404 (already gone), the page also drops any store row with that recId: `usePortfolioStore.setState(s => ({ positions: s.positions.filter(r => r.recId !== recId) }))`. A 30s `syncFromBackend` during the broker wait can have pulled the row in. This is a store call, not an edit to portfolioStore.ts, and it sends no second DELETE.
+
+**R10 — status check and scope.**
+- The rejection test is `String(res?.status ?? '').trim().toLowerCase()` in the set {rejected, inactive, error, canceled, cancelled, expired}. A missing status counts as placed. This matches the backend's `_is_rejected_status` and the existing mocks.
+- The delete/keep logic wraps ONLY the `postOptionOrder` call and the status check. `applyPersistedPosition` and later steps run outside that try, and their failure shows `Order placed (ID …) but the local view failed to update: …` without touching the row.
+- `deletePortfolioPosition` treats a 404 as success. The page checks for `→ 404` in the thrown error.
+
+**R11 — §2c.** `RiskCheckResult` gains `max_contracts: Optional[int]`, set from the config the check already read. The writer builds the sentence from it and makes no config read of its own. The public `max_contracts_per_trade()` getter is dropped. The 422 detail is the sentence followed by `" Also: " + " ".join(other hard reasons)` when there are any. Test 5 adds a case where the cap and `total_exposure_limit_reached` occur together, and both appear.
+
+**R12 — §3b.** The recovery SELECT matches `rec_id == rec_id AND contract == body.contract`. It is skipped when the write failed with an `HTTPException` whose status is 409 or 500, because those are the writer's own decided outcomes. Only a non-HTTP exception, or an exception after the commit, reaches it.
+
+**R13 — the tests, made to discriminate.**
+- Test 2: portfolio 100k, premium 1.70. A 5-lot costs 850 (0.85%) and fits. Use a premium of 9.00 instead: a 5-lot is 4,500 (4.5%) and fits the 5% cap; a 6-lot is 5,400 (5.4%) and breaches it. With the clamp restored, the 6-lot is judged at 5 → no `size_reduced` (M1 red). Without it → `size_reduced` plus the cap reason.
+- Test 12: two variants. One is the plain body (the quote fetcher is patched and awaited). The other has `stopIsUserSet=True` (the price fetcher is patched and awaited). Restoring either bound default turns one red.
+- Test 13: two different symbols, each at 4% single. The seeded exposure is 18%, so each alone totals 22% (fits 25%) and both together total 26%. Expect one 201 and one `total_exposure_limit_reached`.
+
+**R14 — Q12's scope is stated in the §3a docstring.** Only USER-SET stops are direction-checked (`position_writer.py:277`). A plan-derived armed stop is re-anchored, not checked. `stop_required` still refuses a missing or non-positive one. Re-logged as one open line for the owner (P3b), if it wants the check on plan-derived stops too.
