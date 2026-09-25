@@ -78,8 +78,26 @@ REGIME_URLS = {
     "position": "/api/regime?horizon=position&lookback=20&threshold=0.02&smoothing=0",
 }
 
-# Thresholds under measurement: must equal HEAD, and the app never writes them.
+# Thresholds under measurement: frozen with the gate code (plan §4.0).
 GATED_CONFIG = ("scoring_rules.yaml", "contract_rules.yaml")
+# Kenneth's decision MEAS-PLAN-CAP-DECISIONS-2026-09-25 (1): every day runs on one
+# tagged post-P3a commit; these paths must equal the tag in the working tree.
+DEFAULT_FREEZE_TAG = "meas-freeze-1"
+FROZEN_PATHS = (
+    "backend/app/routers/scan.py",
+    "backend/app/routers/stock_scan.py",
+    "backend/app/scoring/stock_scorer.py",
+    "backend/app/scoring/contract_validator.py",
+    "backend/app/scoring/signal_confidence.py",
+    "backend/app/services/strategy_engine.py",
+    "backend/app/services/strategy_backtest.py",
+    "backend/app/data/market.py",
+) + tuple(f"backend/config/{n}" for n in GATED_CONFIG)
+# A data source that is serving: the data-sources router downgrades a connected
+# probe to 'degraded' under a tripped circuit (plan §4.4).
+UP = ("connected", "degraded")
+# Stock scans carry no `state`; per-symbol exceptions land in other_rejected (§4.10).
+STOCK_ERROR_INVALID_SHARE = 0.02
 # Read by the scans; a change DURING the run invalidates it. strategy_params.yaml
 # is rewritten by strategy adopt / tuning, so it is recorded, not required = HEAD.
 RUN_INVARIANT_CONFIG = GATED_CONFIG + ("strategy_params.yaml",)
@@ -88,6 +106,8 @@ RUN_INVARIANT_CONFIG = GATED_CONFIG + ("strategy_params.yaml",)
 CORE_START_EARLIEST = (13, 0)
 CORE_START_LATEST = (13, 15)
 CORE_DONE_BY = (15, 0)
+C_SCAN_PROJECTED_BASE_END = (14, 50)   # C-scans give way to the bases (plan §3)
+DEFAULT_SCAN_MIN = {"/api/scan": 7.4, "/api/stock-scan": 5.0}
 LAST_SCAN_START_BY = (15, 40)   # a scan takes ~5 min; nothing may start later
 ALL_DONE_BY = (15, 55)
 
@@ -196,11 +216,25 @@ def config_state(repo: Path) -> dict:
     return {"sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in config_files(repo)}}
 
 
-def copy_config(repo: Path, dest: Path) -> None:
-    """Keep the exact config the run saw (the app rewrites some of it at runtime)."""
+def tracked_config_names(repo: Path) -> set[str]:
+    """backend/config/*.yaml files git tracks. Gitignored ones (settings.yaml holds
+    smtp_password / bot_token; the *_schedule.yaml runtime files) are NOT in this set."""
+    out = git(repo, "ls-files", "--", "backend/config")
+    return {Path(line).name for line in out.splitlines() if line.endswith(".yaml")}
+
+
+def copy_config(repo: Path, dest: Path) -> list[str]:
+    """Keep the exact config the run saw (the app rewrites some of it at runtime) --
+    ONLY git-tracked files. Everything else is hashed in the manifest, never copied:
+    the day folder is meant to be committed (plan §4.3, round-3 G1)."""
+    tracked = tracked_config_names(repo)
     dest.mkdir(parents=True, exist_ok=True)
+    copied = []
     for p in config_files(repo):
-        (dest / p.name).write_bytes(p.read_bytes())
+        if p.name in tracked:
+            (dest / p.name).write_bytes(p.read_bytes())
+            copied.append(p.name)
+    return copied
 
 
 def git(repo: Path, *args: str) -> str:
@@ -211,13 +245,20 @@ def git(repo: Path, *args: str) -> str:
         raise Stop(f"git {' '.join(args)} failed: {e}") from None
 
 
-def check_config_clean(ctx) -> None:
-    """§4.3: the thresholds under measurement must equal HEAD. Only the GATED files --
-    the app rewrites others (strategy watches, risk, strategy params) at runtime."""
-    dirty = git(ctx.repo, "status", "--porcelain", "--", *[f"backend/config/{n}" for n in GATED_CONFIG])
-    if dirty:
-        raise Stop(f"{', '.join(GATED_CONFIG)} differ from HEAD:\n{dirty}\n"
+def check_freeze(ctx) -> dict:
+    """§4.0: gate code + the thresholds under measurement must equal the freeze tag in
+    the WORKING TREE (uncommitted edits included). Returns what the manifest records."""
+    tag = ctx.freeze_tag
+    try:
+        tag_commit = git(ctx.repo, "rev-parse", "--verify", f"refs/tags/{tag}^{{commit}}")
+    except Stop:
+        raise Stop(f"freeze tag {tag!r} not found. No measurement day runs before P3a is merged and "
+                   f"main is tagged (PROTOCOL.md step 0).") from None
+    changed = git(ctx.repo, "diff", "--name-only", tag_commit, "--", *FROZEN_PATHS)
+    if changed:
+        raise Stop(f"frozen gate code/config differs from tag {tag}:\n{changed}\n"
                    "Do NOT run git checkout -- show this diff to a Claude session first.")
+    return {"tag": tag, "commit": tag_commit}
 
 
 def source_status(ctx, source_id: str) -> str | None:
@@ -228,11 +269,59 @@ def source_status(ctx, source_id: str) -> str | None:
 
 
 def iv_bases(result: dict) -> list[str | None]:
+    """Per-candidate stock IV basis; a null figure is basis 'none' (plan §4.4)."""
     out = []
     for c in result.get("candidates") or []:
         vd = ((c.get("stockBreakdown") or {}).get("volDetail") or {})
-        out.append(vd.get("iv_basis"))
+        out.append("none" if vd.get("iv_rank") is None else vd.get("iv_basis"))
     return out
+
+
+def c6_override_not_applied(result: dict) -> bool:
+    """§6 / round-3 G3: only the liquidity HARD flags, plus the echoed soft bands.
+    too_many_soft_failures alone is not evidence -- any mix of soft flags raises it."""
+    reasons = json.dumps(result.get("rejected") or [])
+    if "volume_too_low" in reasons or "open_interest_too_low" in reasons:
+        return True
+    for c in result.get("candidates") or []:
+        ld = ((c.get("contractBreakdown") or {}).get("liquidityDetail") or {})
+        if ld.get("preferred_volume_min") != 0 or ld.get("preferred_oi_min") != 0:
+            return True
+    return False
+
+
+def completeness_flags(endpoint: str, result: dict) -> list[str]:
+    """§4.10: options `state` != COMPLETED; stock per-symbol errors (other_rejected)."""
+    if endpoint == OPT:
+        state = result.get("state")
+        return [] if state == "COMPLETED" else [f"state:{state}"]
+    pipe = result.get("pipeline") or {}
+    errors, scanned = pipe.get("other_rejected") or 0, pipe.get("scanned") or 0
+    if not errors:
+        return []
+    flags = [f"errors:{errors}"]
+    if scanned == 0 or errors / scanned > STOCK_ERROR_INVALID_SHARE:
+        flags.append("INVALID:errors")
+    return flags
+
+
+def _minutes(t: dt.datetime) -> float:
+    return t.hour * 60 + t.minute + t.second / 60
+
+
+def projected_base_end(ctx, m: dict, remaining: list) -> tuple[int, int]:
+    """§3: now + every remaining scan (this one included), each at the mean duration of
+    this run's completed scans of the same endpoint, else the 09-18 figure."""
+    durs: dict[str, list[float]] = {}
+    for s in m["scans"]:
+        if "end_utc_s" in s and "start_utc_s" in s:
+            durs.setdefault(s["endpoint"], []).append((s["end_utc_s"] - s["start_utc_s"]) / 60)
+    total = 0.0
+    for _sid, endpoint, _b, _c in remaining:
+        d = durs.get(endpoint)
+        total += sum(d) / len(d) if d else DEFAULT_SCAN_MIN[endpoint]
+    end = _minutes(ctx.clock.et()) + total
+    return (int(end // 60), int(end % 60))
 
 
 def check_window_before_scan(ctx, scan_id: str) -> None:
@@ -251,6 +340,7 @@ class Ctx:
         self.clock = Clock(args.now)
         self.out_root = Path(args.out_root).resolve() if args.out_root else HERE / "scans"
         self.tag = args.run_tag
+        self.freeze_tag = args.freeze_tag
 
     def day_dir(self) -> Path:
         name = self.clock.et().date().isoformat() + (f"-{self.tag}" if self.tag else "")
@@ -283,7 +373,8 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
     name = f"{scan_id}-{base_file}"
     write_bytes(folder / f"{name}.request.json", raw_body)
     rec = {"id": scan_id, "endpoint": endpoint, "base": base_file, "change": change,
-           "request_file": f"{name}.request.json", "start": stamp(ctx), "flags": []}
+           "request_file": f"{name}.request.json", "start": stamp(ctx),
+           "start_utc_s": ctx.clock.utc().timestamp(), "flags": []}
     m["scans"].append(rec)
     ctx.save_manifest(m)
     print(f"[{rec['start']['et']}] {scan_id} {endpoint} {base_file} {change or ''} ...", flush=True)
@@ -292,7 +383,11 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
     write_bytes(folder / f"{name}.result.json", raw)
     rec["result_file"] = f"{name}.result.json"
     rec["end"] = stamp(ctx)
+    rec["end_utc_s"] = ctx.clock.utc().timestamp()
     result = json.loads(raw.decode("utf-8"))
+    rec["flags"].extend(completeness_flags(endpoint, result))
+    if scan_id in BASE_IDS and any(f.startswith(("state:", "INVALID:")) for f in rec["flags"]):
+        m["day_invalid"] = sorted(set(m.get("day_invalid", [])) | {scan_id})
     rec["scan_id"] = result.get("scan_id")
     rec["candidates"] = len(result.get("candidates") or [])
 
@@ -311,10 +406,8 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
                 rec["flags"].append("INVALID:percentile_source_still_on")
         elif bases and sum(b != "rank" for b in bases) / len(bases) > IV_MISMATCH_MAX_SHARE:
             rec["flags"].append("iv_source_mismatch")
-    if scan_id == "C6":
-        reasons = json.dumps(result.get("rejected") or [])
-        if any(r in reasons for r in ("volume_too_low", "open_interest_too_low", "too_many_soft_failures")):
-            rec["flags"].append("override_not_applied:liquidity")
+    if scan_id == "C6" and c6_override_not_applied(result):
+        rec["flags"].append("override_not_applied:liquidity")
 
     if scan_id in BASE_IDS and _hm(ctx.clock.et()) > CORE_DONE_BY:
         rec["flags"].append("late_for_comparison")
@@ -349,28 +442,41 @@ def cmd_core(ctx) -> None:
     if folder.exists():
         raise Stop(f"{folder} already exists -- never overwritten. Use --run-tag <new tag> for a rerun.")
 
-    check_config_clean(ctx)
+    freeze = check_freeze(ctx)
     check_no_enabled_schedules(ctx)
     check_auto_trade_disarmed(ctx)
     tasty = source_status(ctx, "tastytrade")
-    if tasty != "connected":
-        raise Stop(f"tastytrade (IV rank source) is {tasty!r}, not 'connected' -- the rank "
+    if tasty not in UP:
+        raise Stop(f"tastytrade (IV rank source) is {tasty!r}, not up -- the rank "
                    "measurement would be wasted. Fix the connection first.")
-    if source_status(ctx, "ibkr") == "connected":
-        raise Stop("IBKR gateway is connected -- stop it for the run: its IV ranks override "
+    ibkr = source_status(ctx, "ibkr")
+    if ibkr in UP:
+        raise Stop(f"IBKR gateway is {ibkr} -- stop it for the run: its IV ranks override "
                    "tastytrade's, and a day must use one rank vendor.")
 
     folder.mkdir(parents=True)
     m = {"protocol": "docs/superpowers/measurements/PROTOCOL.md", "base_url": ctx.base,
-         "git_head": git(ctx.repo, "rev-parse", "HEAD"), "started_at": stamp(ctx),
+         "git_head": git(ctx.repo, "rev-parse", "HEAD"), "freeze": freeze, "started_at": stamp(ctx),
          "config_start": config_state(ctx.repo), "regime_urls": REGIME_URLS,
          "scans": [], "flags": [], "status": "running"}
+    if tasty == "degraded":
+        m["flags"].append("tastytrade_degraded_at_start")
     ctx.save_manifest(m)
-    copy_config(ctx.repo, folder / "config-start")
+    m["config_copied"] = copy_config(ctx.repo, folder / "config-start")
     snapshot(ctx, folder, "start")
     print("NOTE: every POST /api/scan replaces the app's 'last scan' and its rank deltas.", flush=True)
     try:
-        for scan in DAY_SCANS:
+        skipping_c = False
+        for i, scan in enumerate(DAY_SCANS):
+            if scan[0].startswith("C"):
+                if not skipping_c and projected_base_end(ctx, m, DAY_SCANS[i:]) > C_SCAN_PROJECTED_BASE_END:
+                    skipping_c = True
+                if skipping_c:
+                    m["scans"].append({"id": scan[0], "endpoint": scan[1], "base": scan[2],
+                                       "change": scan[3], "skipped": "time", "at": stamp(ctx), "flags": []})
+                    ctx.save_manifest(m)
+                    print(f"[{stamp(ctx)['et']}] {scan[0]} skipped: bases projected past 14:50 ET", flush=True)
+                    continue
             run_scan(ctx, m, folder, scan)
         _finish(ctx, m, folder, "core_end")
         m["status"] = "core_complete"
@@ -391,15 +497,18 @@ def cmd_ivabs(ctx) -> None:
         raise Stop(f"core run status is {m.get('status')!r}, not 'core_complete'.")
     if any(s["id"].startswith("A") for s in m["scans"]):
         raise Stop("A-scans already recorded for this run -- never overwritten. Use a new --run-tag.")
+    freeze = check_freeze(ctx)
+    if freeze != m.get("freeze"):
+        raise Stop(f"freeze {freeze} differs from the core run's {m.get('freeze')}.")
     tasty = source_status(ctx, "tastytrade")
     ibkr = source_status(ctx, "ibkr")
     if tasty != "unconfigured":
         raise Stop(f"tastytrade is {tasty!r}; it must be 'unconfigured' (backend started with "
                    "BAMENDJOU_CREDS_PATH pointing at the stripped copy -- PROTOCOL.md step 4).")
-    if ibkr == "connected":
-        raise Stop("IBKR gateway is connected -- stop it; it is an IV rank source too.")
+    if ibkr in UP:
+        raise Stop(f"IBKR gateway is {ibkr} -- stop it; it is an IV rank source too.")
     tradier = source_status(ctx, "tradier")
-    if tradier != "connected":
+    if tradier not in UP:
         raise Stop(f"tradier (option chains) is {tradier!r} -- BAMENDJOU_CREDS_PATH probably points at a "
                    "missing or wrong file, which loads EMPTY credentials. Check the path (PROTOCOL.md step 4).")
     check_auto_trade_disarmed(ctx)
@@ -426,7 +535,7 @@ def cmd_restore_check(ctx) -> None:
         m = ctx.load_manifest()
         m["restore_check"] = rec
         ctx.save_manifest(m)
-    if tasty != "connected":
+    if tasty not in UP:
         raise Stop(f"tastytrade is {tasty!r} after the restart -- the backend is still running on the "
                    "stripped copy. Close that window, open a NEW cmd window and run start-backend.bat.")
     print("tastytrade connected again. Delete the stripped copy now (PROTOCOL.md step 7).")
@@ -460,6 +569,8 @@ def main(argv=None) -> int:
     ap.add_argument("command", choices=["core", "ivabs", "restore-check", "strip-creds"])
     ap.add_argument("--base", default=DEFAULT_BASE, help="backend URL (default %(default)s)")
     ap.add_argument("--run-tag", default=None, help="sub-run name for a same-day rerun, e.g. run2")
+    ap.add_argument("--freeze-tag", default=DEFAULT_FREEZE_TAG,
+                    help="git tag every measurement day runs on (default %(default)s)")
     ap.add_argument("--out", help="strip-creds: output path OUTSIDE the repository")
     ap.add_argument("--repo", default=str(DEFAULT_REPO), help=argparse.SUPPRESS)
     ap.add_argument("--out-root", default=None, help=argparse.SUPPRESS)   # tests only
