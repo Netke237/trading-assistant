@@ -144,9 +144,12 @@ class StrategyWatchStore:
             raise ValueError(f"unknown strategy: {strategy_key}")
         with self._lock:
             for w in self._watches:
-                # Composite rows carry no strategy_key and never duplicate a strategy watch.
-                if (w.get("watch_type") != "composite" and w["symbol"] == symbol
-                        and w["strategy_key"] == strategy_key
+                # Composites carry no strategy_key and can never duplicate a
+                # strategy watch; indexing one raised KeyError (a 500, and a
+                # half-applied bulk add).
+                if w.get("watch_type") == "composite":
+                    continue
+                if (w["symbol"] == symbol and w.get("strategy_key") == strategy_key
                         and w.get("direction", "Bullish") == direction):
                     raise ValueError(f"{symbol}/{strategy_key}/{direction} already watched")
             entry = {

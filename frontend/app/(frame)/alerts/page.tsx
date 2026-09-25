@@ -256,6 +256,15 @@ export default function AlertsPage() {
       .catch(() => setWatchesLoaded(true));
   }, []);
 
+  // A4f-rules: this table reads the persisted (localStorage) rules, and a toggle
+  // re-PUTs the local interval + composite_def. Refresh from the backend on mount so,
+  // once the sync returns, a rule the backend migrated (e.g. '1D' -> '5m') is not shown
+  // -- or re-sent -- stale. (A toggle before it returns still sends the old pair; the
+  // backend refuses that PUT with 422, which putRuleToAPI ignores.)
+  useEffect(() => {
+    useChartAlertStore.getState().syncRules();
+  }, []);
+
   useEffect(() => {
     if (tab === 'watches' && !watchesLoaded) loadWatches();
   }, [tab, watchesLoaded, loadWatches]);

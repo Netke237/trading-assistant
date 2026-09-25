@@ -129,8 +129,46 @@ def _git(*args: str) -> str | None:
     return proc.stdout if proc.returncode == 0 else None
 
 
-def _round_numbers_in_branch_subjects(base_ref: str | None) -> tuple[int, list[str]] | None:
+def _round_numbers_in_branch_subjects(
+    base_ref: str | None, merged_ref: str | None = None,
+) -> tuple[int, list[str]] | None:
     """Highest `round N` mentioned in this branch's commit SUBJECTS.
+
+    `base_ref` is where the span starts -- the resolved base, or the narrower
+    commit `_target_scoped_base` picked. `merged_ref` is the resolved base
+    itself, and every commit it already carries is dropped from the span.
+    Without that, a narrowed `sha..HEAD` took in every commit the branch
+    MERGED IN from main after `sha`, so a branch that merged origin/main to
+    stay current answered for other pieces' already-merged rounds: A5c's
+    "round 4" subject drew drift on MANUAL-IBKR-CONFIRM-AS-ERROR's honest
+    count of 3. Merged history is out of range on the unnarrowed span; this
+    makes the narrowed span agree. It is `^merged_ref`, not `--first-parent`:
+    first-parent would also drop this branch's OWN commits that arrived by
+    merging a sibling branch that has NOT reached main, and those are exactly
+    the rounds an undercount hides in.
+
+    WHAT IT COSTS, stated rather than discovered (round 1 of this piece):
+
+      - SILENT: a round of THIS piece that reached main on a sibling branch
+        before this branch merged main is dropped too. In the graph it is the
+        same shape as another piece's merged round, so git cannot tell them
+        apart. It is the unnarrowed span's existing rule -- merged rounds are
+        out of range -- now applied to the narrowed one.
+      - LOUD: only the ONE ref `_resolve_base_ref` picked is excluded, not
+        every candidate. When tightest-wins picks a ref that does not hold the
+        merged main commits (a local main moved onto the branch and never
+        pushed), their rounds still count. Excluding every candidate would
+        close that by widening the silent case above, so it stays a false
+        alarm.
+      - LOUD: this branch's own merge commit is not on main, so a subject like
+        "Merge origin/main (A5c round 4 clean) into ..." still counts. Name
+        rounds in merge subjects only for this branch's own piece.
+      - LOUD: a sibling branch's rounds for ANOTHER piece that have not
+        reached main still count against this one when that sibling is merged
+        in. They are not on main, so nothing marks them as someone else's.
+      - PRE-EXISTING, unchanged: a sibling cut from this branch AFTER the
+        entry's introducing commit that reaches main first puts that commit on
+        main, so no narrowing happens and its rounds are out of range.
 
     Returns (max_n, matching_subjects), or None when there is no evidence to
     read -- no git, no resolvable base, or a branch that is not ahead of it.
@@ -142,11 +180,17 @@ def _round_numbers_in_branch_subjects(base_ref: str | None) -> tuple[int, list[s
     backward references ("round 12's follow-ups", "round 7 rejected finding 8")
     that would fire this on every session.
     """
-    if not base_ref or not re.fullmatch(r"[0-9A-Za-z._/-]+", base_ref):
+    ref_shape = r"[0-9A-Za-z._/-]+"
+    if not base_ref or not re.fullmatch(ref_shape, base_ref):
         return None
+    revs = [f"{base_ref}..HEAD"]
+    if merged_ref and merged_ref != base_ref:
+        if not re.fullmatch(ref_shape, merged_ref):
+            return None
+        revs.append(f"^{merged_ref}")
     try:
         proc = subprocess.run(
-            ["git", "log", "--format=%s", f"{base_ref}..HEAD"],
+            ["git", "log", "--format=%s", *revs],
             cwd=ROOT, capture_output=True, text=True, timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
@@ -522,7 +566,9 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"this run. That is an UNCHECKED bill, not a clean one."
         )
 
-    evidence = _round_numbers_in_branch_subjects(_target_scoped_base(base_ref, state))
+    evidence = _round_numbers_in_branch_subjects(
+        _target_scoped_base(base_ref, state), base_ref,
+    )
     if evidence is None:
         return None
     git_max, subjects = evidence

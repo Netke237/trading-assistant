@@ -1,5 +1,11 @@
 # COMPOSITE-WATCH-STRATEGY-KEY-CRASH — plan
 
+> **SUPERSEDED at merge (2026-09-25).** The same bug was fixed in parallel by
+> COMPOSITE-WATCH-KEYERROR (`2026-09-25-composite-watch-keyerror-plan.md`), which
+> reached main first. Main's code was kept, because it has the same two guards plus
+> once-per-entry arming. From this plan, only T5/T6 (router) and the fixture fix
+> landed.
+
 Date: 2026-09-25. Picked by Kenneth as the next task (`open_questions[0]`, logged by
 the A4f build). Backend only, one layer, well under 500 lines.
 
