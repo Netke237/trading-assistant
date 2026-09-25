@@ -35,11 +35,14 @@ Change: one helper in `stockScan.ts`, `scanSizingFromRisk()`, returns
 The fourth manual path is the Step-4 Pre-Breakout **pullback** sub-mode
 (`step-4-prebreakout/page.tsx`), which posts `/api/stock-scan` with no sizing, so the backend's 50k/1%
 defaults apply and that result is persisted as the stock session other devices hydrate. It sends
-`scanSizingFromRisk()` too. (The fib and prebreakout sub-modes call other endpoints that size nothing.)
+the user's sizing too. That path posts a hand-built **snake_case** literal (it does not go through
+`buildStockScanRequestBody`), and `StockScanRequest` silently ignores unknown keys, so the body must set
+`account_size: sizing.accountSize, risk_pct: sizing.riskPct` explicitly (`const sizing = scanSizingFromRisk()`)
+— never a spread of the camelCase helper result. (The fib and prebreakout sub-modes call other endpoints that size nothing.)
 The Analysis `last-scan` basis is unchanged: it replays the exact body the scan ran with, sizing included.
 The stale "hardcoded here" comments are replaced.
 
-Tests (jest): for each of the three paths, set riskStore to non-default values (73 000 / 0.02) and assert
+Tests (jest): for each of the FOUR paths (Steps 3/4 `runStockScan`, Step 5, Analysis, Step-4 Pre-Breakout pullback), set riskStore to non-default values (73 000 / 0.02) and assert
 the posted body carries `account_size: 73000, risk_pct: 0.02`. Mutation: revert any one site -> its test fails.
 
 ## 2. Q5 — `min_stock_score` in the Step-3 panel
