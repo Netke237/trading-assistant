@@ -13,8 +13,9 @@ import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import Step5 from '../page';
 
+const mockPush = jest.fn();
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ push: mockPush, replace: jest.fn() }),
   usePathname: () => '/screener/step-5-strategy',
 }));
 
@@ -38,6 +39,7 @@ const PREFIX = 'Step 5: building the stock-scan request failed';
 let consoleError: jest.SpyInstance;
 
 function reset() {
+  mockPush.mockReset();
   m(api.postStockScan).mockReset();
   m(api.postStockScan).mockResolvedValue({ scan_id: 'S', timestamp: '2026-09-25T10:00:00+00:00', rejected: [], candidates: [] });
   m(api.getLastStockScanStatus).mockReset();
@@ -137,5 +139,8 @@ describe('A5d — Step 5 scan failure messages', () => {
 
     expect(m(api.postStockScan)).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(STOCK_SCAN_SETTINGS_INVALID)).toBeNull();
+    // A clean success: it navigated on, and no other failure text replaced the message.
+    expect(mockPush).toHaveBeenCalledWith('/screener/step-6-backtest');
+    expect(screen.queryByText(/could not|failed|Error|API \//i)).toBeNull();
   });
 });

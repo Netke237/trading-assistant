@@ -12,7 +12,7 @@ pre-request failure shows `STOCK_SCAN_SETTINGS_INVALID`, a post-request failure 
 `stockScanFailureReason(e)`.
 
 ## Status
-BUILT (status shipped_unaudited). Frontend 142 suites / 1990 tests pass and typecheck is clean. state.py is red only on the plan-stage cap check, which is expected and clears when the code round comes back clean or on merge. Code audit round 4 is next; the code stage has its own cap of 3.
+CLEAN at code round 4, status `shipped`, and state.py exits 0. Waiting on Kenneth's go to merge to main.
 
 ## Done
 - c0937ad, c44e867, 956ad65: the A5d plan and its round-1 record, written on `claude/peaceful-ritchie-b59i77`.
@@ -27,7 +27,7 @@ BUILT (status shipped_unaudited). Frontend 142 suites / 1990 tests pass and type
 - [x] Tests T1–T5 in `frontend/app/(frame)/screener/step-5-strategy/__tests__/a5dReadableScanError.test.tsx`. Reuse the harness in the sibling `a5bSharedRequest.test.tsx`.
 - [x] Mutation checks M1–M7 (plan §3). Each one must turn a test red, then be reverted.
 - [x] Switch the phase's verify from `defect_marker` to a presence probe on `STOCK_SCAN_SETTINGS_INVALID` in the page. Set status to built.
-- [ ] Code audit round 4 (fresh subagent) on `git diff origin/main -- frontend/`, repeated until clean. The code stage allows rounds 4 to 6. When it is clean, set status `shipped` and `audit_clean: true`.
+- [x] Code audit round 4: CLEAN. Nits folded in; T5 now also checks navigation. Was: code audit round 4 (fresh subagent) on `git diff origin/main -- frontend/`, repeated until clean. The code stage allows rounds 4 to 6. When it is clean, set status `shipped` and `audit_clean: true`.
 - [ ] Merge to main (`--no-ff`, with the main merge record written on the branch first), then `k_session.py finish`.
 
 ## Blockers / open questions
