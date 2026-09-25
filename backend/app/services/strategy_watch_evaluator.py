@@ -95,8 +95,14 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
     for w in strategy_watch_store.list_watches():
         if not w.get("enabled"):
             continue
+        # Strategy watches only -- composites have their own loop below and
+        # carry no strategy_key (add_composite_watch never writes one). Reading
+        # w["strategy_key"] on one raised KeyError and aborted the WHOLE tick, so
+        # no watch of either kind was ever notified while a composite was enabled.
+        if w.get("watch_type") == "composite":
+            continue
         symbol = w["symbol"]
-        key = w["strategy_key"]
+        key = w.get("strategy_key")
         fn = _SIGNAL_FNS.get(key)
         if fn is None:
             continue
@@ -274,10 +280,26 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
             logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
             continue
 
+        watch_state = dict(w.get("last_state") or {})
+        # ONCE PER ENTRY (Kenneth, 2026-09-25). evaluate_scheduled is
+        # level-triggered -- true on every run while the regime holds -- so
+        # without this a composite re-sent the same "setup" alert every run.
+        # armed = already alerted for the current entry; it re-arms (-> idle)
+        # only when the condition goes false. Fetch/evaluate failures above
+        # `continue` with the state untouched, so an outage neither re-arms nor
+        # fires.
+        if watch_state.get("phase", "idle") == "armed":
+            if not fired:
+                strategy_watch_store.update_state(
+                    w["id"],
+                    {**{k: v for k, v in watch_state.items() if k != "pending_entry_since"},
+                     "phase": "idle"},
+                )
+            continue
+
         sustain_min = trigger_def.get("sustain_minutes")
         if isinstance(sustain_min, (int, float)) and sustain_min < 0:
             sustain_min = 0
-        watch_state = dict(w.get("last_state") or {})
         if sustain_min:
             try:
                 if fired:
@@ -316,6 +338,12 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
             entry=None, stop=None, target=None, rr_ratio=None,
             close=close,
             reason=_reason,
+        )
+        strategy_watch_store.update_state(
+            w["id"],
+            {**{k: v for k, v in watch_state.items() if k != "pending_entry_since"},
+             "phase": "armed", "direction": wdir,
+             "last_event": "entry", "last_event_at": _now_iso()},
         )
         events.append(event)
 

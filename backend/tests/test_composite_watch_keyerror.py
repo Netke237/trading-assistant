@@ -119,3 +119,97 @@ async def test_evaluate_and_notify_sends_one_notification_per_event(store):
 
     assert len(events) == 2
     assert sent.await_count == 2
+
+
+# ── Round 1 F1: ONCE PER ENTRY (Kenneth, 2026-09-25) ────────────────────────
+# evaluate_scheduled is level-triggered, so before this a composite re-sent the
+# same "setup" alert on every scheduler run while its regime held.
+
+def _composite_state(store):
+    return next(w for w in store.list_watches()
+                if w.get("watch_type") == "composite")["last_state"]
+
+
+async def _run_fires(store, fires: bool):
+    return [e for e in await _run(store, composite_fires=fires)
+            if e.strategy_key == "composite"]
+
+
+@pytest.mark.asyncio
+async def test_a_held_condition_alerts_once_not_every_run(store):
+    store.add_composite_watch("AAPL", _TRIGGER)
+
+    assert len(await _run_fires(store, True)) == 1
+    assert _composite_state(store)["phase"] == "armed"
+    assert _composite_state(store)["last_event"] == "entry"
+    assert await _run_fires(store, True) == []
+    assert await _run_fires(store, True) == []
+
+
+@pytest.mark.asyncio
+async def test_true_false_true_alerts_twice(store):
+    store.add_composite_watch("AAPL", _TRIGGER)
+
+    assert len(await _run_fires(store, True)) == 1
+    assert await _run_fires(store, False) == []
+    assert _composite_state(store)["phase"] == "idle"
+    # the display record of the last alert survives the re-arm
+    assert _composite_state(store)["last_event"] == "entry"
+    assert len(await _run_fires(store, True)) == 1
+
+
+@pytest.mark.asyncio
+async def test_sustained_fire_alerts_once_and_clears_the_pending_clock(store):
+    from datetime import datetime, timedelta, timezone
+    w = store.add_composite_watch("AAPL", {**_TRIGGER, "sustain_minutes": 5})
+    past = (datetime.now(timezone.utc) - timedelta(minutes=6)).isoformat()
+    store.update_state(w["id"], {"pending_entry_since": past})
+
+    assert len(await _run_fires(store, True)) == 1
+    assert "pending_entry_since" not in _composite_state(store)
+    assert await _run_fires(store, True) == []
+    assert await _run_fires(store, True) == []
+
+
+@pytest.mark.asyncio
+async def test_an_evaluation_failure_leaves_the_state_untouched(store):
+    store.add_composite_watch("AAPL", _TRIGGER)
+    assert len(await _run_fires(store, True)) == 1
+    before = dict(_composite_state(store))
+
+    p = _patches(store, composite_fires=False)
+    with p[0], p[1], p[2], p[4], patch(
+        "app.services.composite_trigger_evaluator.evaluate_scheduled",
+        side_effect=RuntimeError("feed down"),
+    ):
+        await ev.evaluate_all()
+
+    assert _composite_state(store) == before  # still armed: an outage does not re-arm
+
+
+@pytest.mark.asyncio
+async def test_a_legacy_empty_state_reads_as_idle(store):
+    w = store.add_composite_watch("AAPL", _TRIGGER)
+    store._watches[0]["last_state"] = {}
+    assert len(await _run_fires(store, True)) == 1
+
+
+# ── Round 1 F2: add_watch's duplicate check hit the same KeyError ───────────
+
+def test_adding_a_strategy_watch_beside_a_composite_works(store):
+    store.add_composite_watch("MSFT", _TRIGGER)
+    w = store.add_watch("MSFT", "pullback_ema")
+    assert w["strategy_key"] == "pullback_ema"
+
+
+def test_a_bulk_add_across_a_composite_adds_every_symbol(store):
+    store.add_composite_watch("MSFT", _TRIGGER)
+    added = store.add_watches_bulk(["AAPL", "MSFT", "NVDA"], "pullback_ema")
+    assert [w["symbol"] for w in added] == ["AAPL", "MSFT", "NVDA"]
+
+
+def test_the_duplicate_check_still_refuses_a_real_duplicate(store):
+    store.add_composite_watch("MSFT", _TRIGGER)
+    store.add_watch("MSFT", "pullback_ema")
+    with pytest.raises(ValueError, match="already watched"):
+        store.add_watch("MSFT", "pullback_ema")

@@ -87,3 +87,50 @@ that honestly rather than inventing a test for it.
 
 ## Verification
 Full backend suite (baseline on main 489202d measured before the change). Frontend untouched.
+
+## Amendment after round 1 (the plan) — two gate-level findings, both taken
+
+**F1. The fix makes the composite loop reachable, and that loop re-fires every run.**
+`evaluate_scheduled` is level-triggered (`state == to_state` plus thresholds), and a
+composite fire never writes state, so while a regime holds, every scheduler run (EOD daily;
+poll mode up to ~7/day; every manual `/evaluate`) sends another identical "Long setup".
+With `sustain_minutes` it is the same, because `pending_entry_since` is never cleared after a
+fire. The plan's "no change to the composite loop" was wrong.
+
+**Kenneth's decision (2026-09-25): ONCE PER ENTRY.** A composite alerts when its condition
+becomes true, then stays quiet until the condition goes false and comes back. This is the
+same shape as the strategy watches' idle/armed state machine.
+
+Composite loop, after `fired` is computed by `evaluate_scheduled` (the existing
+`get_bars` / `evaluate_scheduled` failure paths `continue` with state UNCHANGED, so a data
+outage neither re-arms nor fires):
+- `phase = last_state.get("phase", "idle")` (a legacy `{}` state reads as idle).
+- **armed and fired** → `continue`: no event, no write.
+- **armed and not fired** → `update_state(..., {**state minus pending_entry_since,
+  "phase": "idle"})`, keeping `last_event` / `last_event_at` for display, then `continue`.
+  This re-arms the watch for the next entry.
+- **idle** → the existing sustain logic, unchanged. On a sustained fire: emit the event AND
+  `update_state(..., {**state minus pending_entry_since, "phase": "armed", "direction": wdir,
+  "last_event": "entry", "last_event_at": now})`.
+
+Consequences, stated rather than hidden:
+- On the first run after merge, each composite whose condition already matches alerts ONCE.
+  That is the intended "first time" notification.
+- A disabled watch is not evaluated, so it keeps its phase. Re-enabling it while the same
+  regime still holds sends nothing; it alerts on the next entry. There is no trigger edit
+  path (the store has create/delete/enable only), so a stale `armed` cannot outlive a
+  changed definition.
+- `update_state` REPLACES `last_state` with `_fresh_state()` overlaid by the new dict,
+  so omitting `pending_entry_since` removes it.
+
+**F2. The same KeyError in `StrategyWatchStore.add_watch`'s duplicate check.**
+`w["strategy_key"]` over every same-symbol watch means adding a strategy watch for a symbol
+that has a composite 500s, and `add_watches_bulk` saves the symbols before it, then raises
+and silently drops the rest. Fix: skip `watch_type == "composite"` in that loop and read
+`w.get("strategy_key")`.
+
+**Tests added:** two `evaluate_all` runs against the real store with the condition held true
+give exactly ONE composite event; true → false → true gives two; sustain + hold gives one
+and clears `pending_entry_since`; an `evaluate_scheduled` exception leaves state unchanged;
+`add_watch` / `add_watches_bulk` for a symbol that has a composite succeed and add all
+symbols.
