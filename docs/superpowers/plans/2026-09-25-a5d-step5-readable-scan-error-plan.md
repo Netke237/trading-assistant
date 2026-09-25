@@ -1,7 +1,8 @@
 # A5d — a Step-5 scan that fails says why in plain English (plan)
 
-Date: 2026-09-25. Planned against main at `e2bf498` (branch `claude/peaceful-ritchie-b59i77`,
-restarted from main). Frontend only, one build commit.
+Date: 2026-09-25. Planned against main at `e2bf498` on `claude/peaceful-ritchie-b59i77`; [R3-2] now
+carried on `claude/ecstatic-planck-qi9c39` over main `489202d` (the only frontend change since e2bf498 is
+CompositeAlertDialog, so every line ref holds). Frontend only, one build commit.
 
 Origin: the follow-up logged by the parallel A5b build (round-3 note 5 on this branch, superseded
 by main's A5b per decision `A5B-KEEP-MAIN-2026-09-25`). It applies unchanged to main's A5b:
@@ -113,7 +114,9 @@ file, so an uncast `confidenceGate: null` fails the compile.
 
 - **T1 — `confidenceGate: null`.** The rendered error is exactly `STOCK_SCAN_SETTINGS_INVALID`;
   no text matching `/TypeError|Cannot read/` is in the document; `postStockScan` was never called;
-  `console.error` was called once with the page's prefix and a `TypeError`.
+  `console.error` was called once with the page's prefix and a `TypeError`. [R3-3] T1 also asserts
+  the rendered text equals the literal owner-decided string (decision
+  A5D-READABLE-MESSAGE-2026-09-25, amended), so an edit to the constant goes red.
 - **T2 — a non-null malformed gate** `{ enabled: true }` (no `atrMult`), with `scanOverrides`
   carrying no `confidence_atr_mult_*` keys so the builder reaches `atrMultForHorizon` → same
   message, no post, `console.error` once. [R1-1: replaces the unreachable `scanOverrides: null`.]
@@ -154,9 +157,11 @@ Backend untouched.
 New phase `A5D-STEP5-READABLE-SCAN-ERROR`, `depends_on: [A5B-STEP5-SHARED-REQUEST]`, verify
 `defect_marker` on `setError\(String\(e\)\)` in the Step-5 page while unbuilt; switched to a
 presence probe on `STOCK_SCAN_SETTINGS_INVALID` in that page by the build commit. [R2-3] The same
-commit moves `status` off `planned` (to `built`, then `shipped` at the clean code round) and
-updates `audit_rounds` and the note — a present probe with status `planned` is drift
-(`state.py:626-636`). `active_phase` points at it.
+commit moves `status` off `planned` to `"shipped_unaudited"` with `audit_clean: false` [R3-1: `built`
+is not in `state.py:65`'s `SHIPPED` set and would be drift too], with the probe literally
+`{"kind": "present", "pattern": "STOCK_SCAN_SETTINGS_INVALID"}`, and updates `audit_rounds` and the
+note; the clean code round moves it to `"shipped"` / `audit_clean: true`. A present probe with a
+non-shipped status is drift (`state.py:626-636`). `active_phase` points at it.
 
 ## 6. Out of scope — logged, not fixed
 
@@ -168,6 +173,14 @@ updates `audit_rounds` and the note — a present probe with status `planned` is
   `runStockScan` test drives a malformed gate (`stockScan.test.ts:451` unit-tests
   `stockScanFailureReason(…, false)` only), so giving Step 3/4 the same message is cheap; it is
   outside Kenneth's Step-5-only decision, so it is logged for him.
+- [R3-4] **Pre-`try` store writes are unguarded.** `page.tsx:213-214` (`setActiveStrategy`,
+  `setStockScanResult(null)`) run before the `try`; a persisted-write throw (quota, blocked
+  storage) escapes `runScan` as an unhandled rejection. `runStockScan` moved these inside its `try`
+  (`stockScan.ts:269-278`). Pre-existing; the remaining Step-5 gap next to Step 3/4 parity.
+- [R3-5] **A local throw after a successful post reads as a scan failure.** If
+  `setStockScanResult(result, requestBody)` or `router.push` throws, `reachedRequest` is already
+  true, so the user sees `stockScanFailureReason`'s raw text though the backend ran the scan.
+  A5d's "after the request" branch knowingly includes these; pre-existing, not covered by T1–T5.
 - [R2-8] **A saved search profile can reinstate a malformed gate after Reset.**
   `searchProfileSnapshot.ts:31` snapshots `{ ...settings.confidenceGate }` (`{}` for a null gate);
   applying the profile (`:105`) writes it back, and scheduled runs of that profile read it
@@ -199,3 +212,9 @@ on Steps 3/4 ("API /api/stock-scan → 422: …", or "…could not reach the bac
   [R2-4]; `as never` casts [R2-5]; `:228` [R2-6]; M3 also reddens T3 [R2-7]; search-profile
   reinstatement and silent ungated scan logged in §6 [R2-8, R2-9]; recovery path depends on the
   default Brokers section [R2-10].
+- Round 3 (plan, fresh subagent, prototyped §2 + T1–T5 in a scratch copy: 17/17, tsc 0, all seven
+  mutations red as listed or wider): 1 blocking — §5's status `built` is not in `state.py`'s
+  `SHIPPED` set, so the build commit would fail `state.py` [R3-1, fixed: `shipped_unaudited`].
+  Non-blocking, folded: stale header [R3-2]; T1 pins the literal wording [R3-3]; §6 logs the
+  pre-`try` writes [R3-4] and post-response local throws [R3-5]. PLAN-STAGE CAP REACHED (3 rounds
+  without clean, AUDIT-CAP-PER-STAGE-2026-09-25): stopped for Kenneth.
