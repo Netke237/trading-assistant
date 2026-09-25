@@ -12,39 +12,33 @@ logged, and the rule's name gets an "(interval was 1D)" note. Then pick up the o
 open A4f items, but only when the owner chooses them.
 
 ## Status
-in-progress. The owner chose (a) A4f-rules. Plan written: `docs/superpowers/plans/2026-09-25-a4f-rules-hmm-intraday-interval-plan.md`. Plan round 1 pending.
+in-progress: A4f-rules is BUILT and code round 1 is running. The plan is clean at round 2.
 
 ## Done
-- A4f (the watch path) is ALREADY ON MAIN. It came from a parallel branch
-  (`claude/wizardly-ritchie-ndb5sg`, merge `f49446e`) and is audit-clean at round 2.
-  It covers: the dialog defaults HMM_intraday to '5m'; `StrategyWatchStore` rejects
-  HMM_intraday with a non-intraday interval (400); `load()` migrates stored watches
-  to '5m' and sets `interval_migrated_from`.
-- `claude/dazzling-ride-0unofk` (a second A4f session, interrupted) is SUPERSEDED.
-  Its plan commits (`db1281e`, `3622046`) were never audited clean. Its fix for plan
-  round 2 was never committed. Its only unique content was the rules decision and a
-  correction, and both are now recorded on this branch.
-- `42347af`: PROJECT_STATE.json records the rules decision (`decisions[0]`, marked
-  NOT BUILT) and corrects `open_questions[2]`(a).
+- A4f (the watch path) is already on main, from a parallel branch (merge `f49446e`).
+- `claude/dazzling-ride-0unofk` is superseded; its unique content was recorded in `42347af`.
+- The A4f-rules plan, `docs/superpowers/plans/2026-09-25-a4f-rules-hmm-intraday-interval-plan.md`:
+  round 1 NOT CLEAN (4 gate-level, all taken); round 2 CLEAN (12 sub-gate items taken into the build, §7).
+- The A4f-rules build (checkpoint after `9215c3b`):
+  - `hmm_intraday_interval_error` in `composite_trigger_evaluator.py`.
+  - `POST /alerts/rules` returns 422 for this pair; `PUT` does too, but allows a stored legacy pair it leaves unchanged.
+  - `migrate_hmm_intraday_rule_intervals` in `chart_alerts.py`, run at the top of `run_chart_alert_scheduler()` and retried until it succeeds once.
+  - The Alerts page calls `syncRules()` on mount.
+  - Tests: `backend/tests/test_a4f_rules_hmm_intraday_interval.py` (8) and 1 frontend case.
+  - 17 backend mutants and 1 frontend mutant were all killed.
+  - Backend 3176 passed / 1 skipped; frontend 1986; tsc clean.
 
 ## Next steps
-- [x] The owner chose (a) A4f-rules.
-- [x] Plan written (see Status). Rule migration runs at the top of `run_chart_alert_scheduler()`, not as a lifespan line, so tests never run the real lifespan.
-- [ ] If A4f-rules is chosen: write a plan in `docs/superpowers/plans/` covering:
-  (1) a one-shot migration of stored rules as an explicit `lifespan` step in
-  `backend/app/main.py`, before any scheduler starts, not on import;
-  (2) `/alerts/rules` (`backend/app/routers/chart_alerts.py`) rejects new
-  HMM_intraday rules on a non-intraday interval, and rejects edits that move a rule
-  back onto one (reuse `app.data.market.is_intraday_interval`);
-  (3) the Alerts page (`frontend/app/(frame)/alerts/`) reads rules from localStorage
-  without re-syncing, so it must refresh rules from the backend when it opens,
-  otherwise a toggle there after migration sends the stale '1D' back;
-  (4) reset the migrated rule's half-finished "must hold for N minutes" timer;
-  (5) tests use a temp store and never run the real lifespan.
-- [ ] Run adversarial plan round 1 (skill `K-adversarial-audit-loop`), build, run the code round, and merge only when a round comes back clean.
+- [ ] Code round 1 (fresh subagent, bmad adversarial). Fix its findings; rounds are capped at 3 per stage.
+- [ ] When a round comes back clean, update PROJECT_STATE.json:
+  - Add a phase `A4F-RULES-HMM-INTRADAY-INTERVAL` with a probe on `migrate_hmm_intraday_rule_intervals`.
+  - Mark `decisions[0]` as built.
+  - Rewrite the design inputs in `open_questions[2]`.
+  - Add open questions: '5m' vs '5min' (plus `_INTERVAL_LABELS`), standard-rule HMM_intraday on '1D', and pinning `BAMENDJOU_STRATEGY_WATCHES_PATH` in conftest.
+- [ ] Merge to main (--no-ff) only when clean. Run `k_session.py finish` before or at the merge so `.k-session/` stays out of main.
 
 ## Blockers / open questions
-- Which item comes next is the owner's choice:
+- (Resolved: the owner chose (a).) The earlier options were:
   (a) A4f-rules, the decision above;
   (b) `open_questions[0]`, the recommended next item (about one line): `strategy_watch_evaluator.evaluate_all`
       reads `w['strategy_key']` for every enabled watch. Composite watches have no
