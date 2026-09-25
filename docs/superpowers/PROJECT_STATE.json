@@ -1068,8 +1068,8 @@
       "id": "P3A-SCAN-SIZING-SIGNALS",
       "name": "P3a work package: scan sizing & signal correctness -- manual scans size from Settings (0% stops with a message), min_stock_score in Step 3, unmeasured trend removed as 'no data', RS benchmark measured, bearish negative target, risk_pct null keeps the conviction mult, intraday regime-fetch drop matching the fire",
       "status": "in_progress",
-      "audit_rounds": 4,
-      "audit_clean": false,
+      "audit_rounds": 5,
+      "audit_clean": true,
       "depends_on": [
         "P3B-AUTOTRADER-HARDENING"
       ],
@@ -1079,7 +1079,7 @@
         "pattern": "class ScanSizingError",
         "note": "ABSENT until the frontend half lands; switch to the plan's `present` probe on failed_direction_unmeasured in backend/app/routers/stock_scan.py at ship."
       },
-      "note": "Plan round 4 NOT CLEAN (1 gate-level: the one-fetch rule dropped every non-VWAP Intraday name); fixed in the plan, awaiting Kenneth on a round 5. || 2026-09-25. Plan docs/superpowers/plans/2026-09-25-p3a-scan-sizing-signals-plan.md. Plan rounds 1-3 NOT clean (round 3: 2 blocking, cap reached). Kenneth answered B1/B2 and allowed a round 4 (P3A-INTRADAY-REFUSAL-MATCHES-FIRE, P3A-SCAN-RISK-ZERO-STOPS, P3A-PLAN-ROUND-4-ALLOWED). Backend half (items 3-11) already built at a2365a3; item 12 + frontend half pending."
+      "note": "PLAN CLEAN at round 5 (Kenneth allowed rounds 4 and 5 past the cap); building. || Plan round 4 NOT CLEAN (1 gate-level: the one-fetch rule dropped every non-VWAP Intraday name); fixed in the plan, awaiting Kenneth on a round 5. || 2026-09-25. Plan docs/superpowers/plans/2026-09-25-p3a-scan-sizing-signals-plan.md. Plan rounds 1-3 NOT clean (round 3: 2 blocking, cap reached). Kenneth answered B1/B2 and allowed a round 4 (P3A-INTRADAY-REFUSAL-MATCHES-FIRE, P3A-SCAN-RISK-ZERO-STOPS, P3A-PLAN-ROUND-4-ALLOWED). Backend half (items 3-11) already built at a2365a3; item 12 + frontend half pending."
     }
   ],
   "already_shipped": [
@@ -1323,6 +1323,12 @@
     }
   ],
   "decisions": [
+    {
+      "id": "P3A-PLAN-ROUND-5-ALLOWED-2026-09-25",
+      "q": "P3a plan round 4 NOT CLEAN (1 finding: the one-fetch rule dropped every non-VWAP Intraday name; fixed in the plan). Run a round 5 on that fix only?",
+      "a": "Yes: a round 5 reviewing only the fix; build if clean.",
+      "by": "Kenneth 2026-09-25 (P3a)"
+    },
     {
       "id": "P3A-INTRADAY-REFUSAL-MATCHES-FIRE-2026-09-25",
       "q": "P3a plan round 3 B1: the scan's intraday regime-fetch drop fired only when regime_filter or regime sizing is on, but the fire measures (and so refuses) whenever the YAML regime_gate is enabled (shipped on), and the UI never sends regime_filter. When should the scan drop a name whose 15-min fetch failed?",

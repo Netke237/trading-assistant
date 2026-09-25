@@ -284,3 +284,6 @@ ones (options halves, split hypothesis, P3b items) stay open with a note.
   regime needs it; drop only from a fetch that ran; pullback_ema keep test + mutation). Everything else in
   the round-4 diff checked fine (B1 vs fire path, B2 0% stop, the eight folded items). Round 4 was the
   round Kenneth allowed past the cap; stopped for Kenneth before a round 5.
+- Plan round 5 (2026-09-25, fresh subagent, the F1 fix only, allowed by Kenneth P3A-PLAN-ROUND-5-ALLOWED): **CLEAN — no gate-level findings.**
+  Below-gate note taken anyway: the §12 drop is decided at the regime block (after the price checks), from the
+  fetch result captured earlier, so a sub-min-price name keeps its price reason in the funnel.
