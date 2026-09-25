@@ -2,18 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/clever-goldberg-ssmf4z",
-      "claimed_at": "2026-09-25T16:25:22Z",
-      "expires_at": "2026-09-25T19:25:22Z",
-      "note": "MEAS build: PROTOCOL.md, RESULTS-SHEET.md, runner round-4 fixes, scratch tests, code round",
-      "task": "MEAS-MARKET-DATA-MEASUREMENT"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/confident-volta-mja4lz",
-      "claimed_at": "2026-09-25T17:02:36Z",
-      "expires_at": "2026-09-25T20:02:36Z",
-      "note": "P3c plan",
+      "claimed_at": "2026-09-25T21:45:31Z",
+      "expires_at": "2026-09-26T00:45:31Z",
+      "note": "P3c plan + implementation",
       "task": "P3C-SCAN-SIZING-LEFTOVERS"
     }
   ]
