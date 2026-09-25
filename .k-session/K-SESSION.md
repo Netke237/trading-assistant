@@ -12,7 +12,7 @@ pre-request failure shows `STOCK_SCAN_SETTINGS_INVALID`, a post-request failure 
 `stockScanFailureReason(e)`.
 
 ## Status
-in-progress. The plan is at round 1, not clean, with its findings folded in. Round 2 still has to run.
+in-progress. Plan round 2 was NOT clean (1 blocking: false Reset wording), folded in. Plan round 3 next (the last before the per-stage cap).
 
 ## Done
 - c0937ad, c44e867, 956ad65: the A5d plan and its round-1 record, written on `claude/peaceful-ritchie-b59i77`.
@@ -20,7 +20,8 @@ in-progress. The plan is at round 1, not clean, with its findings folded in. Rou
 - A previous session got further than this. It ran a clean plan round 2, built the change, wrote a 5-test file (17/17 green alongside the A5b suite) and started mutation checks. None of that was pushed and the container is gone, so it is **lost** and has to be redone.
 
 ## Next steps
-- [ ] Plan round 2: a fresh subagent runs bmad-review-adversarial-general on the plan. Record the round in the plan's Audit record and in the PROJECT_STATE phase note.
+- [x] Plan round 2: not clean, findings [R2-1..R2-10] folded into the plan.
+- [ ] Plan round 3: a fresh subagent runs bmad-review-adversarial-general on the plan. Record it in the plan's Audit record and the PROJECT_STATE phase note. If not clean, stop and tell Kenneth (cap).
 - [ ] Build per plan §2. Add `STOCK_SCAN_SETTINGS_INVALID` to `frontend/lib/stockScan.ts`. In `frontend/app/(frame)/screener/step-5-strategy/page.tsx` `runScan`, add a `reachedRequest` flag, the catch mapping, and `console.error` for pre-request failures.
 - [ ] Tests T1–T5 in `frontend/app/(frame)/screener/step-5-strategy/__tests__/a5dReadableScanError.test.tsx`. Reuse the harness in the sibling `a5bSharedRequest.test.tsx`.
 - [ ] Mutation checks M1–M7 (plan §3). Each one must turn a test red, then be reverted.
@@ -29,7 +30,7 @@ in-progress. The plan is at round 1, not clean, with its findings folded in. Rou
 - [ ] Merge to main (`--no-ff`, with the main merge record written on the branch first), then `k_session.py finish`.
 
 ## Blockers / open questions
-- None. Kenneth confirmed the "resets all settings, including brokers and scheduled scans" wording (2026-09-25).
+- None. The final message wording is "…(this also resets your broker accounts, regime and gate settings)." Kenneth re-chose it after round 2 showed that "scheduled scans" was false.
 
 ## Decisions
 - A5B-KEEP-MAIN-2026-09-25: main's A5b stays. The other branch's A5b is archived at `archive/peaceful-ritchie-a5b-4796924`.
