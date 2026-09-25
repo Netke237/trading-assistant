@@ -381,3 +381,52 @@ Tests (FE): a 400 "Expecting value: line 1 column 1" keeps the row, shows the bu
 - §5 test 21 refers to the EXISTING `test_the_containers_are_copied_not_shared`.
 - The 404 rule is settled in S8.
 - The no-order-id 2xx is settled in S1.
+
+---
+
+## Revisions after plan round 3 (these SUPERSEDE R1-R14 and S1-S11 where they conflict)
+
+Round 3 (fresh subagent) found 0 HIGH, 2 MEDIUM and 7 LOW. It verified S1's five auto-delete classes against the code: each is raised before any broker submission, and no path leaves a live order untracked or deletes a row whose order may be live. T-n answers round 3's findings in order: T1-T2 are M-1 and M-2, T3-T9 are L-1 to L-7. Kenneth approved a 4th plan round over the 3-round cap.
+
+**T1 (M-1) — S8's persist-failure rule depends on the detail TEXT only.** The page never sees the HTTP status: `persistPosition` returns `{ok, offline?, detail?, …}` (`frontend/lib/portfolioStore.ts:389-429`), and `errorDetail` returns the backend's text, falling back to `HTTP ${status}` only when there is none (`:311-323`). `portfolioStore.ts` is P2's file and is not edited. The rule that replaces S8's first bullet:
+- After ANY `!saved.ok && !saved.offline`, make a best-effort `api.deletePortfolioPosition(pos.recId)`, UNLESS the detail contains `duplicate rec_id` (`position_writer.py:558`: that rec_id belongs to another row, so it must never be deleted).
+- Why the text alone is enough: `pos.recId` is generated fresh for this send. On a 409 (the existing row has a DIFFERENT rec_id) or a 422 (nothing written), the DELETE returns 404, which the page treats as already removed. On a 500 after the commit (detail `HTTP 500` or any other text), it removes the committed row. So the delete is harmless where nothing was written and needed where something was.
+- S8's 409/422 exclusions are dropped. S8's other bullets stand.
+- FE tests: a `duplicate rec_id` detail → `deletePortfolioPosition` NOT called. A detail `HTTP 500` → called with the recId. A 422 risk detail → called, and a mocked 404 rejection shows no "delete it" line.
+
+**T2 (M-2) — S2's second duplicate check vs `test_portfolio_concurrent_add.py`.** That test (`:78-113`) fakes the race by emptying only the FIRST `AsyncSession.execute`. With S2's re-check under the lock, the SECOND contract SELECT finds the pre-inserted row and raises the 409 itself, so the test still passes but no longer reaches `commit` or the `IntegrityError` contract-collision branch (`position_writer.py:532-552`), which is its only pin. The fix:
+- The patched `execute` empties EVERY contract-existence SELECT: it matches statements that select `PortfolioPositionModel.id` filtered on `contract`, not the call count. The `IntegrityError` branch's own re-check (also a contract SELECT) is made distinguishable by running AFTER a `rollback`: a `db.rollback` spy flips a flag, and from then on the patched `execute` passes through.
+- New assertion: the `db.rollback` spy was awaited, so the 409 came from the `IntegrityError` path.
+- The sibling `test_rec_id_collision_race_returns_500_not_409` gets the same treatment if its bypass relies on the call count. The build checks this and lists it in the commit.
+- `backend/tests/test_portfolio_concurrent_add.py` is added to §0's table and to R4's list of existing tests updated.
+- Mutation M17: S2's re-check made to run BEFORE the lock instead of inside it → test 13b red (one 422 appears). The concurrent-add test is not a mutation target for S2; it pins the `IntegrityError` branch, and M18 (the branch answering 500 for a contract collision) turns it red.
+
+**T3 (L-1) — §5 test 4 is replaced.** R11 drops the `max_contracts_per_trade()` getter. Test 4 now asserts `result.max_contracts == cfg["sizing"]["max_contracts_per_trade"]` on three results: an approved one, the cap refusal, and an early return (for example a zero portfolio value), wherever the check returns.
+
+**T4 (L-2) — the one persist-failure banner, final.**
+- Detail contains `already exists` → R2's dedicated text survives: `No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`
+- Any other `!ok` (not offline) → `No order was sent — ${detail}.`
+- Either one gets ` If ${recId} appears in Portfolio, delete it.` appended when T1's delete was attempted and threw anything other than `→ 404`.
+- Offline → R2's text, `Portfolio tracking could not be confirmed, so NO order was sent.`, and the same "If … delete it." line when its delete threw anything other than `→ 404`.
+§4a.2's "portfolio tracking refused it:" wording is dropped.
+
+**T5 (L-3) — the full 409 page text (auto_trade_booking, duplicate contract), written once. It supersedes §3c, R5 and S4:**
+`{Order} for {contract}: a position for this contract is already open, so this order was NOT booked as a second row. Either close the extra {qty} at the broker, or raise that position's Contracts by {qty} in Portfolio (refused if the total passes the per-trade contract limit or an exposure cap; then close it at the broker).`
+`{Order}` is the same order label the other booking pages use (order id, or "no order id" per item 13). Test 16 asserts the substrings `NOT booked as a second row`, `raise that position's Contracts by`, and the absence of `Add it by hand` and of any digit that is not `{qty}`.
+
+**T6 (L-4) — the IBKR 502 match uses the exact prefix.** It auto-deletes only when the detail STARTS WITH `IBKR did not place the order:` (`routers/broker.py:166-171`), checked on the text after `api.ts`'s `→ 502: `. Other adapters echo the broker's own text into their 502 detail (`ibkr_paper.py:147-149`, `tradier_paper.py:121`, `alpaca_paper_execution.py:66-68`), so a substring match could delete a row whose order is live. New FE test: a 502 `Tradier paper order failed: … did not place the order …` (substring present, prefix absent) keeps the row.
+
+**T7 (L-5) — no Market orders to Tastytrade.** `TastytradePaperAdapter` refuses non-limit orders (`tastytrade_paper.py:106-111`), and the refusal is re-wrapped as a RuntimeError → 502 (`:126-127`, `routers/broker.py:335-340`). So every Place Market with Tastytrade would save a row, send nothing, and land on the UNKNOWN banner. In page.tsx (P1-owned), the "Right Now — Market" button is `disabled` when `selectedBroker === 'tastytrade_paper'`, with the title `Tastytrade paper accepts limit orders only — use Place Limit.` `placeDirectOrder('MKT')` also returns early with that text in `orderError` for the same broker, before any save, as a guard for keyboard or programmatic triggers. The adapter's error text is NOT added to the auto-delete list, because S1 forbids matching adapter texts the page does not own. FE test: broker `tastytrade_paper` → the Market button is disabled, and calling the handler anyway sends neither a persist POST nor `postOptionOrder`. Mutation M19: drop the guard → red.
+
+**T8 (L-6) — the Remove button has its own state.** The kept rec_id lives in `const [unknownRecId, setUnknownRecId] = useState<string | null>(null)`, apart from `orderError`. The button renders whenever `unknownRecId` is set, under whatever banner shows. Its lifetime:
+- It is set on the S1 UNKNOWN branch.
+- It is cleared ONLY by a successful click (the DELETE succeeded or threw `→ 404`), or by unmount.
+- It is NOT cleared by Prev/Next (`page.tsx:607`), a basket submit (`:1179`), or a new direct send. A later UNKNOWN send overwrites it, and the earlier rec_id stays named in the Portfolio instruction of its own banner. So that it is not lost silently, a second UNKNOWN while one is pending turns the value into a list: `unknownRecIds: string[]`, one Remove button per rec_id, each labelled with its rec_id.
+- The label reads `Remove tracked position ${recId}`. Because the card can change under it, the click removes by rec_id and never reads the active card.
+FE test: an UNKNOWN send, then Next, then Prev → the button is still there, and clicking it deletes that rec_id. Mutation M20: clear it in the `[active]` effect → red.
+
+**T9 (L-7) — the two tests, specified exactly.**
+- Test 13 (and 13b): the interleaving is forced, not hoped for. `AsyncSession.commit` is wrapped: `await asyncio.wait_for(barrier.wait(), timeout=0.5)` on a two-party `asyncio.Barrier` (Python 3.11), catching `TimeoutError` and `asyncio.BrokenBarrierError`, then the real commit. With the lock (correct code), the second create is blocked on the lock, so the first times out at the barrier and commits: the result is one 201 and one 422 (13b: one 409). With M5 (no lock), both SELECTs run and both reach the barrier before either commits, so both pass and the test is red every time. The `asyncio.sleep(0)` quote fetcher is dropped.
+- Test 15 (M7): the patched `create_position` commits the row and then raises `RuntimeError("post-commit failure")`, a NON-HTTP exception, because R12 skips the recovery SELECT for an `HTTPException` 409/500. Test 15b (R6's page) uses the same patch. M7 (skip the recovery SELECT) then turns 15 red.
+
+**§7 mutation list, additions:** M17 (T2), M18 (T2), M19 (T7), M20 (T8), plus FE mutations: M21, T1's delete skipped on an `HTTP 500` detail → red; M22, T6 back to a substring match → red.
