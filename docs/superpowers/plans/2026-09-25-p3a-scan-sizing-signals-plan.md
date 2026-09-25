@@ -228,3 +228,10 @@ or runs the app lifespan.
 One phase `P3A-SCAN-SIZING-SIGNALS`, verify probe `present` on `failed_direction_unmeasured` in
 `backend/app/routers/stock_scan.py`. Finished entries move to closed_questions with evidence; the partial
 ones (options halves, split hypothesis, P3b items) stay open with a note.
+
+## Review log
+
+- Plan round 3 (2026-09-25, fresh subagent, bmad-review-adversarial-general): **NOT CLEAN, 2 blocking** — the 3-round cap is reached; stopped for Kenneth.
+  - B1 (§12): the "measurement used" condition omits the YAML `regime_gate` (shipped `enabled: true`). The fire measures whenever that gate is enabled (auto_trader `_apply_regime_gate` -> `measure()`), and the scan applies the same gate via `score_stock(regime_gate=...)`. The UI never sends `regime_filter`. As written the scan would keep a name the fire refuses. Proposed: condition = `regime_filter or regime_gate.enabled or sizing on`; the keep test becomes gate-off + filter-off + sizing-off; add a gate-on test.
+  - B2 (§1): Settings allows "max loss per trade" = 0; item 8 made `risk_pct` `gt=0`, so `scanSizingFromRisk()` would post 0 and every manual scan / Analysis would 422. Needs an explicit rule for <= 0 plus a jest case at 0.
+  - Non-blocking, to fold in: pipeline field is `Optional[int] = None` (not `int = 0`); §5c banner counts only `direction_conviction:` and says "the rest" when none are left; RS compares by position, not date (end-date check); Analysis must bind the fetch exception; reuse the signal's intraday bars instead of a second fetch; "exactly" -> the scan is stricter when `regime_filter` is on; log the options-scan half (routers/scan.py) as an open question; §2 "never sent" softened (a clamped 35 can be sent, no effect). `lib/scanScheduleResolve.ts:125` has the same risk_pct=0 hole (not P3a's; log it).

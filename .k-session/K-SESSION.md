@@ -10,7 +10,7 @@ frontend half built, plan item 12 (intraday regime-fetch refusal) built, code re
 clean, PROJECT_STATE entry, merge to main. Plan: docs/superpowers/plans/2026-09-25-p3a-scan-sizing-signals-plan.md
 
 ## Status
-in-progress — plan round 3 next
+BLOCKED on Kenneth — plan round 3 NOT CLEAN (2 blocking), 3-round cap reached
 
 ## Done
 - 29b548e plan after round 1 + decision P3A-UNMEASURED-TREND-REMOVE (on the old branch claude/wizardly-lovelace-cub58h)
@@ -20,7 +20,8 @@ in-progress — plan round 3 next
 - plan item 12 + decision P3A-INTRADAY-REGIME-FETCH-REFUSES-2026-09-25 recorded (this checkpoint)
 
 ## Next steps
-- [ ] Plan review round 3 (fresh subagent, bmad-review-adversarial-general) over the whole plan incl. item 12. Round 3 is the cap: if not clean, stop for Kenneth.
+- [x] Plan review round 3: NOT CLEAN (B1 item-12 condition misses YAML regime_gate; B2 risk_pct=0 -> 422). See plan 'Review log'.
+- [ ] Kenneth: answer the B1/B2 questions and whether a round 4 is allowed past the cap; then fold all findings into the plan and re-review
 - [ ] Build item 12 (backend/app/routers/stock_scan.py `_process_stock` + `_analyze_core`, classify_stock_rejection) + tests
 - [ ] Build frontend half: item 1 (scanSizingFromRisk, 4 paths), item 2 (min_stock_score PARAM_DEFS + default 35 + body), item 3 funnel "no data" line + direction_min_trend label
 - [ ] Mutation checks per plan; full backend + frontend suites
@@ -29,7 +30,9 @@ in-progress — plan round 3 next
 - [ ] Merge origin/main, rerun checks, merge --no-ff to main, push; `k_session.py finish`
 
 ## Blockers / open questions
-- None open. Whether plan round 2 was clean was never recorded; round 3 settles it.
+- B1: should the scan's item-12 refusal also trigger on the YAML regime_gate being enabled (the fire does)?
+- B2: risk_pct <= 0 from Settings: send null (backend 1% default) or refuse client-side?
+- Round 4 past the 3-round cap?
 
 ## Decisions
 - Continue on claude/cool-allen-5ih4v0 (Kenneth), old P3a branch left as-is.
