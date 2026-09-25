@@ -122,6 +122,11 @@ is true for every strategy row. `add_watches_bulk` needs no change: it calls
   the composite router), 3 minor (tick-consequence described wrongly; `/evaluate`
   500 missed; M4 kill reason wrong), 2 nits (patch `describe_match`; frontend
   observation understated). All six taken into this amendment.
+- Side effect seen after round 1: the reviewer's probe seeded through
+  `POST /api/composite-watches/`, whose un-reloaded store still points at the real
+  `backend/config/strategy_watches.yaml`, and wrote a row there (reverted). This is
+  more evidence for the round-1 major finding. Implementation check: after the backend
+  suite runs, `git status --short backend/config` must be empty.
 
 ## Mutation plan (each must turn a test red)
 
