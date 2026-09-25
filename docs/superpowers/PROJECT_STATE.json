@@ -1085,16 +1085,16 @@
       "id": "P4B-STRATEGY-COMPOSITE-WATCHES",
       "name": "P4b strategy & composite watches: conftest pin, per-watch isolation (Q17), state committed after delivery + run lock, 4h HMM history, VWAP confirmation like the regime models (interval threaded, completed bars, daily variant on 1D/1W, same answer on watch and rule paths), momentum confirmations read a number, GET /api/strategy-watch/ lists strategy watches only",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
         "kind": "defect_marker",
-        "path": "backend/app/services/composite_trigger_evaluator.py",
-        "pattern": "if fn\\(slice_bars, direction=direction\\) is not None:",
-        "note": "DEFECT MARKER while in progress: the VWAP signal is still called without interval. On merge this flips to kind 'absent' of the same pattern. Plan: docs/superpowers/plans/2026-09-25-p4b-strategy-composite-watches-plan.md."
+        "path": "backend/app/routers/strategy_watch.py",
+        "pattern": "return strategy_watch_store\\.list_watches\\(\\)",
+        "note": "DEFECT MARKER while in progress: GET /api/strategy-watch/ still returns composites too (T7, the last task). Gone = T7 landed, i.e. the whole package is built; kind stays defect_marker. Moved here from the VWAP marker in plan r3 (round 2 finding 11): that marker disappears at T5, before T6/T7. Plan: docs/superpowers/plans/2026-09-25-p4b-strategy-composite-watches-plan.md."
       },
-      "note": "Branch claude/cool-heisenberg-6lsa3a, claim P4B-STRATEGY-COMPOSITE-WATCHES. Plan r1 written 2026-09-25; decisions P4B-DECISIONS-2026-09-25."
+      "note": "Branch claude/cool-heisenberg-6lsa3a, claim P4B-STRATEGY-COMPOSITE-WATCHES. Decisions P4B-DECISIONS-2026-09-25 (D1-D5). Plan round 1 (on r1): NOT CLEAN, 2 HIGH / 5 MEDIUM / 9 LOW -> r2. Plan round 2 (on r2): NOT CLEAN, 1 CRITICAL / 3 HIGH / 5 MEDIUM / 4 LOW -> r3 (critical: completed_session_bars pops get_bars' ISO-string-dated last bar; replaced by completed_daily_rows)."
     }
   ],
   "already_shipped": [
@@ -2175,8 +2175,8 @@
     },
     {
       "id": "P4B-DECISIONS-2026-09-25",
-      "q": "P4b new questions: (1) may P4b edit routers/chart_alerts.py (P4a-owned) for the composite block? (2) VWAP confirmation on 4h? (3) delivery-gated watch state when no notification channel is enabled? After plan round 1: (4) may P4b edit routers/composite_watch.py (unowned) for /regime-snapshot? (5) watches store '15m' while rules store '15min' and the two spellings fetch different series (yfinance RTH vs Tradier-merged incl. extended hours) -- map the watch spelling, or defer parity to W2-INTERVAL?",
-      "a": "Kenneth, 2026-09-25: (1) YES -- composite-rule block (~:953-1005) and its A4e docstring VWAP sentence only; P4a's plan must not rework those lines. (2) the intraday VWAP signal on completed 4h bars; add '4h' to mean_reversion_vwap_signal's interval allow-list in strategy_engine.py (one line). (3) no channel enabled -> the watch arms as today (nothing to retry); channels enabled but none delivered -> the transition is not committed and retries next run. (4) YES -- the /regime-snapshot HMM_intraday history-days argument only. (5) MAP: the composite watch evaluator translates 1m/5m/15m/30m -> 1min/5min/15min/30min (read-side only, stored value not migrated) before fetch_intraday_candles and completed_bars_for_interval; accepted side effect: HMM_intraday watches on those intervals read the rule path's Tradier-merged series.",
+      "q": "P4b new questions: (1) may P4b edit routers/chart_alerts.py (P4a-owned) for the composite block? (2) VWAP confirmation on 4h? (3) delivery-gated watch state when no notification channel is enabled? After plan round 1: (4) may P4b edit routers/composite_watch.py (unowned) for /regime-snapshot? (5) watches store '15m' while rules store '15min' and the two spellings fetch different series (yfinance RTH vs Tradier-merged incl. extended hours) -- map the watch spelling, or defer parity to W2-INTERVAL? After plan round 2: (4b) extend D4 so /regime-snapshot also applies the D5 spelling map?",
+      "a": "Kenneth, 2026-09-25: (1) YES -- composite-rule block (~:953-1005) and its A4e docstring VWAP sentence only; P4a's plan must not rework those lines. (2) the intraday VWAP signal on completed 4h bars; add '4h' to mean_reversion_vwap_signal's interval allow-list in strategy_engine.py (one line). (3) no channel enabled -> the watch arms as today (nothing to retry); channels enabled but none delivered -> the transition is not committed and retries next run. (4) YES -- the /regime-snapshot HMM_intraday history-days argument only. (5) MAP: the composite watch evaluator translates 1m/5m/15m/30m -> 1min/5min/15min/30min (read-side only, stored value not migrated) before fetch_intraday_candles and completed_bars_for_interval; accepted side effect: HMM_intraday watches on those intervals read the rule path's Tradier-merged series. (4b) YES -- /regime-snapshot's HMM_intraday fetch uses the same watch_fetch_interval + intraday_history_days as the watch, so the dialog preview fits on the series the watch reads.",
       "by": "Kenneth 2026-09-25 (P4b)"
     }
   ],

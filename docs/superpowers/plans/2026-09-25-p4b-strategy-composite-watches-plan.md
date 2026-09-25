@@ -1,10 +1,11 @@
-# P4b — Strategy & composite watches (plan r2)
+# P4b — Strategy & composite watches (plan r3)
 
 Package: `docs/superpowers/plans/2026-09-25-work-packages.md` § P4b. Branch `claude/cool-heisenberg-6lsa3a`,
 off `origin/main` 2f67e6f. Claim `P4B-STRATEGY-COMPOSITE-WATCHES`.
 
 r2 = r1 + plan round 1's 16 findings (2 HIGH, 5 MEDIUM, 9 LOW) + Kenneth's D4/D5. Each r1 finding is tagged
 `[r1#n]` where it is fixed.
+r3 = r2 + plan round 2's 13 findings (1 CRITICAL, 3 HIGH, 5 MEDIUM, 4 LOW) + D4 extended. Tagged `[r2#n]`.
 
 ## Decisions this plan implements
 
@@ -24,8 +25,9 @@ New, asked this session (recorded as decision `P4B-DECISIONS-2026-09-25`):
   `mean_reversion_vwap_signal`'s interval allow-list in `strategy_engine.py` (one line; P3a merged).
 - **D3** Delivery-gated state: when **no** notification channel is enabled, the watch arms as today (nothing to
   retry). When at least one is enabled and none delivered, the transition is **not** committed and retries next run.
-- **D4** (asked after plan round 1, [r1#11]) P4b may edit `routers/composite_watch.py`, **the `/regime-snapshot`
-  HMM_intraday history-days argument only**.
+- **D4** (asked after plan round 1, [r1#11]; extended after round 2, [r2#8]) P4b may edit `routers/composite_watch.py`,
+  **the `/regime-snapshot` HMM_intraday fetch only**: its history-days argument **and** the D5 spelling translation,
+  so the dialog's preview fits on the same series the watch will read.
 - **D5** (asked after plan round 1, [r1#2]) The composite **watch** evaluator translates its stored interval to the
   chart/fetch spelling (`1m→1min`, `5m→5min`, `15m→15min`, `30m→30min`; `1h`/`4h`/`1D`/`1W` unchanged) before
   `fetch_intraday_candles` and `completed_bars_for_interval`, so a watch reads the **same bars** a rule of that
@@ -38,14 +40,22 @@ New, asked this session (recorded as decision `P4B-DECISIONS-2026-09-25`):
 Owned: `services/strategy_watch_evaluator.py`, `services/composite_trigger_evaluator.py`,
 `routers/strategy_watch.py`, `backend/tests/conftest.py`, new/edited tests.
 Granted: `routers/chart_alerts.py` (D1: composite block ~:953-1005 + the A4e docstring sentence about VWAP),
-`services/strategy_engine.py` (D2: the allow-list tuple only), `routers/composite_watch.py` (D4: one argument).
+`services/strategy_engine.py` (D2: the allow-list tuple only), `routers/composite_watch.py` (D4: the
+`/regime-snapshot` HMM_intraday fetch call, :80-82).
+Imports of `app.data.market` functions in the evaluator **stay lazy (inside the function)** — existing tests patch
+`app.data.market.fetch_intraday_candles` / `completed_bars_for_interval` at the source module.
 **Called, not edited:** `data/market.py` (`fetch_intraday_candles`, `completed_bars_for_interval`,
 `normalize_interval`), `services/market_session.py` (`completed_session_bars`), `notifications/dispatch.py`
 (`load_notification_config`). `strategy_watch_store.py`, `strategy_watch_scheduler.py`, the frontend: **no change**.
 
 ## Existing tests this plan changes [r1#1, r1#16]
 
-Baseline: the 10 touched test files = 214 passed (round 1 measurement). Every change below is listed so the build
+Baseline [r2 intro]: the build re-measures and records it before T1, over these named files —
+`test_strategy_watch_evaluator`, `test_composite_watch_keyerror`, `test_chart_alerts_composite_ws`,
+`test_composite_trigger`, `test_a4c_user_alert_completed_bars`, `test_a4g_forming_daily_weekly_bar`,
+`test_a4f_hmm_intraday_interval`, `test_composite_sustain`, `test_composite_detailed_parity`,
+`test_strategy_watch_router` (round 1 counted 214 passed, round 2 counted 248 passed + 1 skipped on the same tree —
+the rounds used different file lists; the build's own number is authoritative). Every change below is listed so the build
 does not "discover" them; each is either a **signature update** (no meaning change) or a **deliberate flip** (the
 decision changed; comment points at this phase).
 
@@ -56,9 +66,12 @@ decision changed; comment points at this phase).
 | `test_a4c...::test_u3_vwap_confirmation_keeps_the_forming_candle` (:211-226) | pinned the old decision | **flip + rename** `..._reads_completed_bars`; assert `seen == [candles[:-1]]` |
 | `test_a4g_forming_daily_weekly_bar.py:257-262` (`_strat`) | same lambda shape; `:274 strat_daily == [expected]` fails for 1D/1W | signature: add `**kw` (the assertion keeps its meaning: rsi/bb still read the daily list) |
 | `test_composite_watch_keyerror.py:268` (`_call`) | default `interval=None` → VWAP never judged → not starved → `:293-296` and `:331-332` get False instead of None | pass `interval="15m"` in `_call` (keeps the pins' meaning; not weakened) |
-| `test_composite_watch_keyerror.py:357-373` (intraday outage end-to-end) | store default `'1D'` → after T5 no intraday fetch; `side_effect=[_bars(300), [], []]` never consumed; test passes vacuously | create the watch with `interval="15m"`; also assert the intraday stub **was called** |
+| `test_composite_watch_keyerror.py:357-373` (intraday outage end-to-end) | store default `'1D'` → after T5 no intraday fetch; `side_effect=[_bars(300), [], []]` never consumed; test passes vacuously | create the watch with `interval="15m"`; the healthy intraday stub returns bars with **int unix timestamps in the past** [r2#13] (string times are all dropped by `completed_bars_for_interval`, market.py:589-593, so r2's fix modelled an outage on every run); assert the intraday stub **was called** |
 | `test_strategy_watch_evaluator.py:352-365` | patches `evaluate_all`; T3's `evaluate_and_notify` calls `_collect`, so result `[]` | patch `_collect` returning `[_Transition(ev, id, state)]`; assert `result == [ev]` |
+| `test_strategy_watch_evaluator.py:326-351` (`..._fetches_intraday_for_vwap_confirmation_even_when_model_not_hmm_intraday`) [r2#4] | `_composite_watch()` (:294-301) has no `interval` → '1D' after T5 → no intraday fetch → `assert_called_once` fails | give the watch `interval="15m"`; add a 1D mirror asserting **no** intraday fetch |
+| `test_a4f_hmm_intraday_interval.py:219` (`test_b2d_evaluator_fetches_migrated_watch_at_5m`) [r2#3] | asserts fetch `interval == "5m"`; D5 sends `"5min"` | **flip**: assert `"5min"`, comment cites D5 |
 | `test_chart_alerts_composite_ws.py:188` | daily rule → `bars_intraday []` | **flip**: daily variant on completed daily bars |
+| any test feeding a composite **watch** ISO-string daily bars and relying on the last bar | T5's `completed_daily_rows` drops today's bar only when `now` is before today's close; tests whose last bar is dated **today** with no `now` injected become clock-dependent | build greps the touched files for `date.today()`-built fixtures and injects `now`; each hit is added to this table |
 
 The build runs the full backend suite after T3 and after T5 and adds any breakage not in this table to it
 (with its reason) before fixing — no silent edits.
@@ -76,10 +89,8 @@ The build runs the full backend suite after T3 and after T5 and adds any breakag
    measured **two** refusal keys, round 4 measured **four** on a later tree (headwind:AAPL, headwind:NVDA,
    sizing-config, regime-gate-config); the count depends on which alert-reaching tests exist, so no number is pinned.
    No code change.
-3. **Notification config pin [r1#5]:** new autouse fixture `_no_real_notification_config` patching
-   `app.services.strategy_watch_evaluator.load_notification_config` to return `{}` (no channel enabled) unless a
-   test overrides it. `backend/config/settings.yaml` is gitignored (.gitignore:59) and machine-specific, so no
-   evaluator test may read it.
+(The notification-config fixture moved to T3 [r2#5]: the evaluator gains the `load_notification_config` import
+only in T3, and `monkeypatch.setattr` on a missing attribute raises.)
 
 Test: `test_conftest_pins_strategy_watches_path` — `os.environ["BAMENDJOU_STRATEGY_WATCHES_PATH"]` is not the
 tracked `config/strategy_watches.yaml` and `strategy_watch_store._path` resolves outside `backend/config`.
@@ -106,8 +117,9 @@ move, not a rewrite; the existing inner try/excepts stay.
 Tests [r1#14] — a bad watch sits between two healthy ones; both healthy watches fire and have their state written;
 the bad one's state is untouched. One test per loop:
 - strategy loop: `last_state="x"` → `dict(w["last_state"])` (evaluator :128) raises ValueError, uncaught today.
-- composite loop: `evaluate_scheduled` patched True and the last daily bar's `close="bad"` →
-  `float(bars[-1]["close"])` (:333) raises ValueError, uncaught today. (`dict(w.get("last_state") or {})` tolerates
+- composite loop: `evaluate_scheduled` patched True and **every** daily bar's `close="bad"` [r2#10] →
+  `float(bars[-1]["close"])` (:333) raises ValueError, uncaught today. (Every bar, not just the last: after T5
+  the completed-daily trim may drop the last bar, and the test must keep raising.) This test is re-run after T5. (`dict(w.get("last_state") or {})` tolerates
   None, and `describe_match`/`format_composite_reason` sit inside a try, so neither works as the trigger.)
 Mutation: remove the try → test fails with the exception.
 
@@ -148,7 +160,12 @@ Mutation: remove the try → test fails with the exception.
    - Retry semantics: an undelivered strategy-watch entry stays `idle` (with `pending_entry_since` if sustain is on,
      so the retry is not re-delayed); an undelivered exit stays `armed`; a composite stays un-armed and re-fires
      while its condition holds.
-6. `_run_lock()`: a module-level `asyncio.Lock`, created lazily **per running loop**
+6. **Notification config pin [r1#5, r2#5, r2#12]** (in T3's commit, alongside the import): autouse fixture
+   `_no_real_notification_config` in conftest patching **both** `app.services.strategy_watch_evaluator.load_notification_config`
+   and `app.services.notifications.dispatch.load_notification_config` (the one `notify_enabled_channels` reads,
+   dispatch.py:71) to return `{}` unless a test overrides it. Default `raising=True`. `backend/config/settings.yaml` is
+   gitignored (.gitignore:59) and machine-specific, so no test reads it and none can send real mail through it.
+7. `_run_lock()`: a module-level `asyncio.Lock`, created lazily **per running loop**
    (`_lock_loop`, `_lock` globals; recreate when `asyncio.get_running_loop()` differs) so pytest's per-test event
    loops never meet a lock bound to a dead loop. Both `run_now()` and the scheduler go through
    `evaluate_and_notify` on one loop, so both are serialised; the second run waits, then sees the committed state.
@@ -182,15 +199,26 @@ def intraday_history_days(interval: str) -> int:
     return _INTRADAY_HISTORY_DAYS.get(normalize_interval(interval), 55)
 ```
 
+Also here (one home for both, used by the watch and the snapshot) [r2#8]:
+
+```python
+_WATCH_TO_FETCH_INTERVAL = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min"}   # D5
+def watch_fetch_interval(interval: str) -> str:
+    return _WATCH_TO_FETCH_INTERVAL.get(interval, interval)
+```
+
 Used by the composite-watch fetch in `strategy_watch_evaluator` and by `routers/composite_watch.py`
-`/regime-snapshot` (D4; the dialog's snapshot and the watch read the same history).
+`/regime-snapshot` (D4): `iv = watch_fetch_interval(interval)`, then
+`completed_bars_for_interval(fetch_intraday_candles(symbol, interval=iv, days=intraday_history_days(iv)), iv)`.
+The dialog's snapshot and the watch then read the same series **and** the same history.
 
 Bar counts [r1#12], corrected: 180 days → yfinance "6mo" of 1h resampled to 4h on epoch-aligned buckets
 (market.py:266): 2 bars per session in EDT, 3 in EST → ~125 sessions ≈ **250–375** bars > `regime_hmm.MIN_BARS`
 200. 1h stays 55 days → yfinance "60d" (market.py:283-292) ≈ 41 sessions × 7 ≈ **~287** bars > 200.
 
 Tests: `fetch_intraday_candles` stub records `days`; a 4h HMM_intraday watch requests 180, a 15m one 55;
-`/regime-snapshot?model=HMM_intraday&interval=4h` requests 180. The defect marker
+`/regime-snapshot?model=HMM_intraday&interval=4h` requests 180; `/regime-snapshot?...&interval=15m` fetches
+`interval="15min"` (D4 extension; mutation: drop the map in the router → fails). The defect marker
 `fetch_intraday_candles(symbol, interval=interval, days=55)` disappears from the evaluator.
 Mutation: map 4h → 55 → test fails.
 
@@ -219,12 +247,25 @@ Mutation: map 4h → 55 → test fails.
      is not matched (never the daily variant on weekly bars).
    - vwap with bar type None: skipped.
    - The ≥60-bar floor, the 3-bar lookback and the 120-bar slice stay as they are for both variants.
+   - [r2#11] The loop calls one local `call = partial(fn, direction=direction, **extra)` built per key
+     (`extra = {"interval": ...}` for intraday VWAP, `{}` otherwise) and tests `if call(slice_bars) is not None:` —
+     so the defect-marker line `if fn(slice_bars, direction=direction) is not None:` is gone for **every** key,
+     rsi/bb included. The build greps for the marker after T5.
+6. **`completed_daily_rows(bars, now: datetime) -> list[dict]`** [r2#1] — new helper, the completed-daily trim for
+   `get_bars` output. `get_bars` rows carry `time` as an **ISO date string** (historical_store.py:157), which
+   `completed_session_bars` treats as undatable and pops (market_session.py:264-271) — it would drop the last
+   **completed** bar every run. The helper: `close = market_session.last_session_close(now)`; walk trailing bars and
+   drop a bar while it is after `close` — a `str` time compared as `date.fromisoformat(t[:10]) > close.date()`, an
+   `int` (non-bool) time as `t > close.timestamp()`; any other `time` on the last bar → drop that bar only (fail
+   closed, same as A4g). Order preserved, input not mutated. `completed_session_bars` itself is not touched.
 3. `interval` (and `bars_vwap_daily`) keyword params are added to `_check_strategy_signals`,
    `evaluate_from_context`, `evaluate_from_context_detailed`, `evaluate_scheduled`, `describe_match` and threaded
    straight through. Default `None` = VWAP never matches (fail closed, like today's 1D rule path) — every in-repo
    caller passes it after this change.
-4. `evaluate_scheduled`'s starved count uses `_strategy_bar_type(key, interval)` and the same bar list the matcher
-   would read (so a 1D watch with < 60 daily bars is "no reading", not "False").
+4. `evaluate_scheduled`'s starved count uses `_strategy_bar_type(key, interval)` and **the same bar list the matcher
+   would read** — one private `_vwap_bars(interval, bars_daily, bars_intraday, bars_vwap_daily)` used by both
+   (so a 1D watch with < 60 daily bars is "no reading", not "False"; on weekly with `bars_vwap_daily` None or short →
+   starved, i.e. "no reading" under `unknown_as_none`) [r2#2].
 5. The **caller supplies completed bars**; the evaluator does not trim. Docstrings of `evaluate_from_context` /
    `evaluate_scheduled` drop "strategy confirmations keep bars_intraday (regime models only)" and say: bars_intraday
    must be completed bars of `interval`.
@@ -232,25 +273,30 @@ Mutation: map 4h → 55 → test fails.
 ### Watch path (`strategy_watch_evaluator._eval_composite_watch`)
 
 ```python
-_WATCH_TO_FETCH_INTERVAL = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min"}   # D5
 interval = w.get("interval", "1D")                                    # [r1#15] the store's default
-fetch_iv = _WATCH_TO_FETCH_INTERVAL.get(interval, interval)
-bars = completed_session_bars(await get_bars(symbol, start, end), "1D", now)                 # [r1#3]
+fetch_iv = watch_fetch_interval(interval)                             # D5 (T4 helper)
+bars = completed_daily_rows(await get_bars(symbol, start, end), now_dt)   # [r1#3, r2#1]
 vwap_intraday = "mean_reversion_vwap" in confirmations and _strategy_bar_type("mean_reversion_vwap", fetch_iv) == "intraday"
 needs_intraday = model == "HMM_intraday" or vwap_intraday
 if needs_intraday:
     raw = fetch_intraday_candles(symbol, interval=fetch_iv, days=intraday_history_days(fetch_iv))
-    bars_intraday = completed_bars_for_interval(raw, fetch_iv)
+    bars_intraday = completed_bars_for_interval(raw, fetch_iv, now=now_ts)          # [r2#6]
+vwap_daily = bars if normalize_interval(fetch_iv) == "weekly" else None             # [r2#2]
 evaluate_scheduled(symbol, trigger_def, bars, bars_intraday,
                    regime_bars_intraday=bars_intraday if model == "HMM_intraday" else None,
-                   interval=fetch_iv, unknown_as_none=True)
-describe_match(..., bars_intraday=bars_intraday, interval=fetch_iv)
+                   interval=fetch_iv, bars_vwap_daily=vwap_daily, unknown_as_none=True)
+describe_match(..., bars_intraday=bars_intraday, interval=fetch_iv, bars_vwap_daily=vwap_daily)
 ```
-- `now` is one timestamp taken at the top of `_collect` and passed down (tests inject it).
-- [r1#3] `get_bars(..., end=today)` can persist today's forming daily bar (Alpaca date-only end, per the A4g
-  record); `completed_session_bars(..., "1D", now)` drops it, matching the rule path's `_regime_candles`
-  (chart_alerts.py:894). This applies to **all** consumers of the composite watch's daily bars (OMM/HMM_daily,
-  rsi/bb, VWAP daily) — same bars as a 1D rule. Strategy (non-composite) watches are unchanged.
+- **Clock [r2#6]:** `_collect(sustain_minutes, now_ts: float | None = None)` takes one instant —
+  `now_ts = time.time()` if None — and derives `now_dt = datetime.fromtimestamp(now_ts, MARKET_TZ)` (aware, what
+  `last_session_close` needs). `now_ts` goes to `completed_bars_for_interval` (float, market.py:621-624), `now_dt`
+  to `completed_daily_rows`. `evaluate_all`/`evaluate_and_notify` pass through an optional `now_ts` (tests inject it;
+  the scheduler and `run_now` pass nothing). The sustain clock keeps `datetime.now(timezone.utc)` (unchanged).
+- [r1#3, r2#1] `get_bars(..., end=today)` can persist today's forming daily bar (Alpaca date-only end, per the A4g
+  record); `completed_daily_rows` drops it and **keeps** a completed last bar. This applies to **all** consumers of
+  the composite watch's daily bars (OMM/HMM_daily, rsi/bb, VWAP daily). Strategy (non-composite) watches are
+  unchanged.
+- 1W watch [r2#2]: VWAP runs the daily variant on the completed daily `bars` (passed as `bars_vwap_daily`).
 - A **1D/1W** watch no longer fetches "intraday" bars at its daily interval; VWAP reads `bars` through the daily
   variant.
 - The HMM fit already read completed bars; only the VWAP read moves from raw to completed, and (D5) the source
@@ -261,9 +307,13 @@ describe_match(..., bars_intraday=bars_intraday, interval=fetch_iv)
 - Intraday rules: `bars_intraday=_regime_candles` (completed bars of the rule's interval, as the HMM already uses)
   instead of `_model_candles` (forming bar included). `_model_candles` is then unused → removed.
 - 1D rules: `_bars_daily` is already `_regime_candles` (completed daily) → the daily variant reads it. No change.
+- Intraday rules' daily bars [r2#9]: the existing `_bars_daily = await get_bars(...)` branch (chart_alerts.py:973-976,
+  inside D1) becomes `completed_daily_rows(await get_bars(...), _as_of_dt)`, so an intraday rule's rsi/bb read the same
+  completed daily bars as an intraday watch.
 - 1W rules: `_regime_candles` are **weekly** bars, so for a rule listing `mean_reversion_vwap` fetch
   `get_bars(symbol, today-730d, today)` once per tick (only if some composite row lists VWAP), pass it through
-  `completed_session_bars(..., "1D", as_of)` [r1#3], and pass it as `bars_vwap_daily`. On a `get_bars` failure
+  `completed_daily_rows(..., _as_of_dt)` [r1#3, r2#1, r2#7] (the block's existing aware datetime,
+  chart_alerts.py:892 — never the float `as_of`), and pass it as `bars_vwap_daily`. On a `get_bars` failure
   `bars_vwap_daily = []` [r1#6] (fail closed: VWAP not matched; logged), never None.
   rsi/bb/HMM_daily on 1W keep reading weekly bars (pre-existing, out of scope — logged, not changed).
 - Pass `interval=interval` to `evaluate_from_context_detailed`.
@@ -279,7 +329,8 @@ Existing `test_strategy_engine` 1D/weekly → None tests still hold; stock_scan 
 
 Fixture bars built so the intraday VWAP signal fires on bar[-1] only when the forming bar is **included** (and a
 mirror set that fires only on completed bars), plus a daily set that fires the daily variant.
-1. Watch, stored '15m', forming bar present: stub `fetch_intraday_candles` + fixed `now` → VWAP matched only on
+1. Watch, stored '15m', forming bar present: stub `fetch_intraday_candles` (int unix times) + injected `now_ts`
+   (reaches `completed_bars_for_interval`, [r2#6]) → VWAP matched only on
    completed bars (forming-only setup → not fired; completed setup → fired).
 2. Rule path, '15min': same candles through `evaluate_and_notify_for_symbol` with `as_of` → same answer as (1).
    **Parity test:** for each fixture, watch-path result == rule-path result.
@@ -289,12 +340,20 @@ mirror set that fires only on completed bars), plus a daily set that fires the d
 4. `interval` threaded: spy on `mean_reversion_vwap_signal` records `interval="15m"` for a '15min' rule and
    `"4h"` for a 4h watch.
 5. 1D watch: no `fetch_intraday_candles` call; the daily variant is called on `bars` (spy); fires on the daily set.
-   With `get_bars` returning a forming bar dated today and `now` mid-session, that bar is **not** in what the
-   variant reads [r1#3].
+   All daily fixtures use **ISO-string** times, as `get_bars` does in production [r2#1]:
+   (a) `now_ts` mid-session, last bar dated today → that bar is **not** read;
+   (b) `now_ts` after 16:00 ET, last bar dated today → that bar **is** read (the completed bar is kept);
+   (c) `now_ts` on a Saturday, last bar dated Friday → kept.
+   Mutation: swap `completed_daily_rows` for `completed_session_bars` → (b) and (c) fail.
 6. 1D rule: daily variant on `_regime_candles`; same answer as (5) on the same daily bars.
-7. 1W rule: `get_bars` stub called; daily variant reads it (not the weekly candles); 1W watch same answer.
-   `get_bars` raising → VWAP not matched, no exception, and the daily variant is **not** called on weekly bars
-   [r1#6].
+7. 1W rule, called with a **real float `as_of`** [r2#7]: `get_bars` stub called; daily variant reads it (not the
+   weekly candles). 1W **watch** on the same daily bars → same answer (daily variant on `bars_vwap_daily=bars`)
+   [r2#2]. `get_bars` raising on the rule path → VWAP not matched, no exception, and the daily variant is **not**
+   called on weekly bars [r1#6]. Mutation: pass `as_of` instead of `_as_of_dt` → the real-`as_of` case fails.
+7b. Intraday rule (15min) listing rsi: the `get_bars` rows reach the matcher through `completed_daily_rows`
+   (forming daily bar dropped at a mid-session `as_of`) [r2#9].
+7c. `completed_daily_rows` unit tests: string times, int times, mixed, a non-str/non-int last `time` (dropped,
+   earlier bars kept), empty list, input not mutated.
 8. 4h: the intraday signal no longer returns None on `interval="4h"` for a firing fixture.
 9. Starved: 1D watch with 30 daily bars and VWAP required → `evaluate_scheduled(..., unknown_as_none=True)` is
    None; unknown interval ('2h') → VWAP never matches, result False (not None).
@@ -347,6 +406,10 @@ Test: store holding one strategy + one composite → GET returns only the strate
   730 days on 1h/4h (chart_cache.py:38, :83-84), capped at 1500 bars. The same symbol/interval can fit a different
   HMM on the watch and the rule, and `/regime-snapshot` matches the watch, not a rule. Logged as an open question.
 - `open_questions[9]` counts are recorded, not re-measured (T1).
+- **dispatch null block [r2#12]:** with `gmail: null` and telegram enabled, `notify_enabled_channels` raises at
+  `gmail.get` before telegram is tried (dispatch.py, not P4b's file); `_any_channel_enabled` returns True, so the
+  transition is never committed and retries every run. T3 logs the raise; a new open question records the dispatch
+  bug for its owner.
 
 ## PROJECT_STATE.json [r1#10]
 
@@ -359,9 +422,16 @@ Test: store holding one strategy + one composite → GET returns only the strate
   `shipped_unaudited` (the pattern is now found). Its `kind` stays `absent`.
 - T4's commit: HMM-INTRADAY-4H-HISTORY (defect_marker `fetch_intraday_candles\(symbol, interval=interval, days=55\)`)
   → `shipped_unaudited`. Kind stays `defect_marker`.
-- T5's commit: VWAP-CONFIRMATION-LIKE-REGIME-MODELS and P4B-STRATEGY-COMPOSITE-WATCHES (both defect_marker on
-  `if fn\(slice_bars, direction=direction\) is not None:`) → `shipped_unaudited`. Kinds stay `defect_marker`.
+- T5's commit: VWAP-CONFIRMATION-LIKE-REGIME-MODELS (defect_marker on
+  `if fn\(slice_bars, direction=direction\) is not None:`) → `shipped_unaudited`. Kind stays `defect_marker`.
   (r1 and the handoff said "flip to `absent` on merge" — wrong: `absent` of a gone pattern would read NOT BUILT.)
+- The umbrella P4B-STRATEGY-COMPOSITE-WATCHES shares that marker, so it would read BUILT at T5 while T6/T7 are
+  unbuilt [r2#11]. In **this r3 commit** its verify moves to a marker that disappears only at T7:
+  `defect_marker` of `return strategy_watch_store\.list_watches\(\)` in `backend/app/routers/strategy_watch.py`
+  (the build confirms the exact line before committing; T7 replaces it with the filtered comprehension), and its
+  note drops the stale "On merge this flips to kind 'absent'" sentence. It goes `shipped_unaudited` in T7's commit.
+- Plan rounds are recorded on the P4B entry as they run [r2#11]: `audit_rounds` counts plan + code rounds,
+  `audit_clean` stays false until a clean **code** round; each round's verdict goes in the entry's note.
 - After the clean code round: those four → `shipped` with `audit_rounds`/`audit_clean` filled.
 - On merge: open_questions [3], [4], [6], [7], [9], [61] (with the T6 scope note), [64], [65] and the [56] VWAP half →
   closed_questions with evidence (indices shift; match by opening words). New open questions: composite momentum
