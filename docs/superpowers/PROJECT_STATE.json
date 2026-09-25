@@ -799,12 +799,12 @@
       "id": "A5D-STEP5-READABLE-SCAN-ERROR",
       "name": "A5d: a Step-5 stock scan that fails says why in plain English -- malformed saved settings (e.g. confidenceGate: null) show a Settings -> Reset message instead of a raw TypeError; a request failure reuses stockScanFailureReason",
       "status": "planned",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "A5B-STEP5-SHARED-REQUEST"
       ],
-      "note": "2026-09-25: PLAN written (docs/superpowers/plans/2026-09-25-a5d-step5-readable-scan-error-plan.md) on claude/peaceful-ritchie-b59i77 off main e2bf498, per decision A5D-READABLE-MESSAGE-2026-09-25. NEXT: plan round 1.",
+      "note": "2026-09-25: PLAN round 1 NOT CLEAN (fresh subagent): 1 blocking -- T2 (scanOverrides: null) is unreachable (not persisted) and crashes the page render; replaced by a malformed non-null gate. 6 non-blocking folded in (line ref, §6 wording, message says Reset restores ALL settings, M7 + console.error not-called in T3/T4, T5 waits for finally, 'likely cause'). NEXT: plan round 2. || 2026-09-25: PLAN written (docs/superpowers/plans/2026-09-25-a5d-step5-readable-scan-error-plan.md) on claude/peaceful-ritchie-b59i77 off main e2bf498, per decision A5D-READABLE-MESSAGE-2026-09-25. NEXT: plan round 1.",
       "verify": {
         "kind": "defect_marker",
         "path": "frontend/app/(frame)/screener/step-5-strategy/page.tsx",

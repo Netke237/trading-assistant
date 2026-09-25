@@ -17,7 +17,7 @@ without a gate".
 
 ## 1. Defect, verified on today's tree
 
-`frontend/app/(frame)/screener/step-5-strategy/page.tsx` `runScan` (`:211-261`):
+`frontend/app/(frame)/screener/step-5-strategy/page.tsx` `runScan` (`:212-262`):
 
 ```ts
 try {
@@ -37,10 +37,14 @@ Two user-visible faults, both from `String(e)`:
    version 24; `migrate()` only runs on a version bump, and `persist()`'s default merge is shallow,
    so a stored `confidenceGate: null` survives hydration as `null`.
    `buildStockScanRequestBody` then reads `atrMultForHorizon(null, …)` / `confidenceGate.enabled`
-   and throws. Step 5 renders `TypeError: Cannot read properties of null (reading '…')`. Same for a
-   null `scanStore.scanOverrides` (`scan.scanOverrides.pullback_require_reversal` in the page, then
-   `Object.entries(null)` in the builder). Before A5b, Step 5 never read the gate, so this is a
-   regression A5b introduced.
+   and throws. Step 5 renders `TypeError: Cannot read properties of null (reading '…')`. A
+   non-null but malformed gate (e.g. `{ enabled: true }` with no `atrMult`) throws the same way in
+   `atrMultForHorizon` whenever Step 3 has no full ATR override. Before A5b, Step 5 never read the
+   gate, so this is a regression A5b introduced. [R1-1] `scanStore.scanOverrides` is NOT a reachable
+   source: it is not in `scanStore`'s `partialize` (`scanStore.ts:684-724`), and a null there would
+   crash the page's render (`page.tsx:122-123`) before `runScan` ever ran. Other persisted fields
+   (e.g. a non-string `scanStore.context.horizon`, `.split` at `page.tsx:231`) can also throw before
+   the request; they get the same message, which names the likely cause, not the only one.
 2. **A request failure shows an `Error: ` prefix and no hint.** `String(new Error('API
    /api/stock-scan → 422: …'))` is `Error: API /api/stock-scan → 422: …`; a transport failure is a
    bare `TypeError: Failed to fetch` without Step 3/4's "could not reach the backend at …" hint.
@@ -57,11 +61,12 @@ which also resets broker settings. The message says so.
 
 ```ts
 /** What a manual scan shows when building its request from the saved stores
- *  threw — nothing was sent, the fault is a malformed persisted setting
- *  (e.g. `confidenceGate: null`). Points at the footer Reset because the
- *  Settings → Scan form reads the same gate while rendering. A5d. */
+ *  threw — nothing was sent. The likely cause (not the only possible one) is a
+ *  malformed persisted setting, e.g. `confidenceGate: null`. Points at the
+ *  footer Reset because the Settings → Scan form reads the same gate while
+ *  rendering. Reset restores EVERY setting, so the message says so. A5d. */
 export const STOCK_SCAN_SETTINGS_INVALID =
-  "Couldn't read your saved scan settings. Open Settings and press Reset to restore the defaults (this also resets broker settings).";
+  "Couldn't read your saved scan settings. Open Settings and press Reset to restore the defaults (this resets all settings, including brokers and scheduled scans).";
 ```
 
 `stockScanFailureReason` and `runStockScan` are unchanged (Step 3/4 keep showing the raw
@@ -96,17 +101,22 @@ button is clicked, the test waits for the loading state to clear.
 - **T1 — `confidenceGate: null`.** The rendered error is exactly `STOCK_SCAN_SETTINGS_INVALID`;
   no text matching `/TypeError|Cannot read/` is in the document; `postStockScan` was never called;
   `console.error` was called once with the page's prefix and a `TypeError`.
-- **T2 — `scanOverrides: null`** (the other store the builder reads) → same message, no post.
+- **T2 — a non-null malformed gate** `{ enabled: true }` (no `atrMult`), with `scanOverrides`
+  carrying no `confidence_atr_mult_*` keys so the builder reaches `atrMultForHorizon` → same
+  message, no post, `console.error` once. [R1-1: replaces the unreachable `scanOverrides: null`.]
 - **T3 — API error after the request.** `postStockScan` rejects
   `new Error('API /api/stock-scan → 422: universe is empty')` → the rendered error is exactly
-  `API /api/stock-scan → 422: universe is empty` (no `Error: ` prefix, not the settings message).
+  `API /api/stock-scan → 422: universe is empty` (no `Error: ` prefix, not the settings message);
+  `console.error` NOT called.
 - **T4 — transport failure after the request.** `postStockScan` rejects
   `new TypeError('Failed to fetch')` → the rendered error is exactly `stockScanFailureReason(new
   TypeError('Failed to fetch'))`, and contains `could not reach the backend at
   http://localhost:8000`. A `TypeError` after the post is NOT the settings message (this pins the
-  `reachedRequest` boundary from the other side).
+  `reachedRequest` boundary from the other side); `console.error` NOT called.
 - **T5 — recovery.** After T1's failure, restore a valid gate and click again: the post happens,
-  the error line is gone (the existing `setError(null)` at the start of `runScan`).
+  the error line is gone (the existing `setError(null)` at the start of `runScan`). The test waits
+  for `getLastStockScanStatus` (called in `finally`) before ending, so no success-path work runs
+  after the console spy is restored.
 
 ### Mutation checks (each must turn at least one test red, then be reverted)
 
@@ -117,7 +127,8 @@ button is clicked, the test waits for the loading state to clear.
 | M3 | `reachedRequest = true` moved after the `await` | T4 |
 | M4 | always `STOCK_SCAN_SETTINGS_INVALID` | T3, T4 |
 | M5 | always `stockScanFailureReason(e, reachedRequest)` | T1, T2 |
-| M6 | drop the `console.error` | T1 |
+| M6 | drop the `console.error` | T1, T2 |
+| M7 | drop the `if (!reachedRequest)` guard on the `console.error` | T3, T4 |
 
 ## 4. Verification
 
@@ -137,12 +148,21 @@ points at it.
   Settings → Scan form crashes on it too. Replacing a malformed gate with
   `DEFAULT_CONFIDENCE_GATE` at load would fix both, but touches every reader (Kenneth chose the
   message-only option).
-- **Step 3/4 parity**: `runStockScan`'s pre-request failure still shows the raw text (pinned by
-  `stockScan.test.ts` "withholds the hint from a TypeError thrown before the request was sent").
-  Giving it the same message is a one-liner but changes a pinned, shipped behaviour — Kenneth's call.
+- **Step 3/4 parity**: `runStockScan`'s pre-request failure still shows the raw text. No
+  `runStockScan` test drives a malformed gate (`stockScan.test.ts:451` unit-tests
+  `stockScanFailureReason(…, false)` only), so giving Step 3/4 the same message is cheap; it is
+  outside Kenneth's Step-5-only decision, so it is logged for him.
 
 ## 7. What this changes for the user
 
 A Step-5 scan with corrupted saved settings says "Couldn't read your saved scan settings. Open
-Settings and press Reset…" instead of a JavaScript error. A backend error reads the same as it does
+Settings and press Reset… (this resets all settings, including brokers and scheduled scans)" instead of a JavaScript error. A backend error reads the same as it does
 on Steps 3/4 ("API /api/stock-scan → 422: …", or "…could not reach the backend at …").
+
+## Audit record
+
+- Round 1 (plan, fresh subagent): 1 blocking — T2 (`scanOverrides: null`) unreachable and crashes
+  the render; replaced by a malformed non-null gate [R1-1]. Non-blocking, all folded in: line ref
+  `:212-262`; §6 "pinned" overstated; message now says Reset restores all settings (Reset wipes
+  schedules, gates, spreads, not just brokers); M7 + `console.error` not-called in T3/T4; T5 waits
+  for `finally`; the constant's comment says "likely cause".
