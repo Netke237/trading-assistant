@@ -1,0 +1,35 @@
+{
+  "task_id": "a4f-follow-ups-build-kenneth-s-decision--202609250648",
+  "goal": "A4f follow-ups: build Kenneth's decision to migrate stored HMM_intraday composite rules on 1D/1W to 5m, then the remaining open A4f items",
+  "branch": "claude/hopeful-volta-ujru28",
+  "base": "main",
+  "created_at": "2026-09-25T06:48:02+00:00",
+  "updated_at": "2026-09-25T06:48:28+00:00",
+  "saved_commit": "42347af",
+  "log": [
+    {
+      "at": "2026-09-25T06:48:02+00:00",
+      "agent": "claude",
+      "handle": "anon",
+      "location": "cloud",
+      "event": "init",
+      "commit": "42347af"
+    },
+    {
+      "at": "2026-09-25T06:48:28+00:00",
+      "agent": "claude",
+      "handle": "anon",
+      "location": "cloud",
+      "event": "checkpoint",
+      "commit": "42347af",
+      "note": "resume: reconciled handoff -- parallel A4f shipped on main; rules decision recorded, next item awaits the owner"
+    }
+  ],
+  "lock": {
+    "holder": "claude@anon/cloud",
+    "since": "2026-09-25T06:48:02+00:00",
+    "heartbeat_at": "2026-09-25T06:48:28+00:00"
+  },
+  "schema_version": 1,
+  "tool_version": "1.0.0"
+}
