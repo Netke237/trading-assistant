@@ -10,7 +10,7 @@ calls /settings/credentials.
 Standard library only, except `strip-creds`, which needs PyYAML -- run the whole
 thing with the backend's interpreter (Windows: backend\\.venv\\Scripts\\python.exe).
 
-    python run_measurement_day.py core                  # O1-O4, S1-S4, C1-C6
+    python run_measurement_day.py core                  # O1-O4 with paired C-scans, S1-S4
     python run_measurement_day.py strip-creds --out C:\\Users\\me\\meas-creds.yaml
     (restart the backend with BAMENDJOU_CREDS_PATH set -- PROTOCOL.md step 4)
     python run_measurement_day.py ivabs                 # A1, A2 (percentile source OFF)
@@ -46,9 +46,17 @@ GET_TIMEOUT_S = 90
 # (id, endpoint, base body file, change applied to a deep copy of the base body)
 OPT = "/api/scan"
 STK = "/api/stock-scan"
-CORE_SCANS = [
+# Each counterfactual (C*) runs IMMEDIATELY after its base, to limit market drift
+# between the pair (plan §3); a C-scan's body is its base plus exactly one change.
+DAY_SCANS = [
     ("O1", OPT, "options-position-bearish", None),
+    ("C1", OPT, "options-position-bearish", {"confidence_reject_below": 30}),
+    ("C5", OPT, "options-position-bearish", {"overrides": {"min_stock_score": 35}}),
+    ("C6", OPT, "options-position-bearish", {"overrides": {"min_volume": 0, "min_open_interest": 0,
+                                                           "preferred_volume_min": 0, "preferred_oi_min": 0}}),
     ("O2", OPT, "options-position-bullish", None),
+    ("C1b", OPT, "options-position-bullish", {"confidence_reject_below": 30}),
+    ("C5b", OPT, "options-position-bullish", {"overrides": {"min_stock_score": 35}}),
     ("O3", OPT, "options-swing-bearish", None),
     ("O4", OPT, "options-swing-bullish", None),
     ("S1", STK, "stocks-swing-bearish", None),
@@ -56,28 +64,29 @@ CORE_SCANS = [
     ("S3", STK, "stocks-position-bearish", None),
     ("S4", STK, "stocks-position-bullish", None),
 ]
-COUNTERFACTUAL_SCANS = [
-    ("C1", OPT, "options-position-bearish", {"confidence_reject_below": 30}),
-    ("C2", OPT, "options-position-bearish", {"confidence_reject_below": 25}),
-    ("C3", STK, "stocks-position-bearish", {"confidence_reject_below": 30}),
-    ("C4", STK, "stocks-position-bearish", {"confidence_reject_below": 25}),
-    ("C5", OPT, "options-position-bearish", {"overrides": {"min_stock_score": 35}}),
-    ("C6", OPT, "options-position-bearish", {"overrides": {"min_volume": 0, "min_open_interest": 0}}),
-]
 IVABS_SCANS = [
     ("A1", OPT, "options-position-bearish", None),
     ("A2", OPT, "options-swing-bearish", None),
 ]
-CORE_IDS = {s[0] for s in CORE_SCANS}
+BASE_IDS = {"O1", "O2", "O3", "O4", "S1", "S2", "S3", "S4"}
+# Only these feed the IV sample store (plan §6): C-scans admit names under lowered gates.
+ENVELOPE_IDS = {"O1", "O2", "O3", "O4", "A1", "A2"}
+IV_MISMATCH_MAX_SHARE = 0.20
 
+# The daily OMM does not depend on `horizon`, so one pinned call is enough.
 REGIME_URLS = {
     "position": "/api/regime?horizon=position&lookback=20&threshold=0.02&smoothing=0",
-    "swing": "/api/regime?horizon=swing&lookback=20&threshold=0.02&smoothing=0",
 }
+
+# Thresholds under measurement: must equal HEAD, and the app never writes them.
+GATED_CONFIG = ("scoring_rules.yaml", "contract_rules.yaml")
+# Read by the scans; a change DURING the run invalidates it. strategy_params.yaml
+# is rewritten by strategy adopt / tuning, so it is recorded, not required = HEAD.
+RUN_INVARIANT_CONFIG = GATED_CONFIG + ("strategy_params.yaml",)
 
 # ── Time windows (plan §4.6). ET is authoritative. ────────────────────────────
 CORE_START_EARLIEST = (13, 0)
-CORE_START_LATEST = (13, 45)
+CORE_START_LATEST = (13, 15)
 CORE_DONE_BY = (15, 0)
 LAST_SCAN_START_BY = (15, 40)   # a scan takes ~5 min; nothing may start later
 ALL_DONE_BY = (15, 55)
@@ -178,11 +187,20 @@ def check_no_enabled_schedules(ctx) -> None:
         raise Stop(f"scan schedule entries are enabled: {enabled}. Disable them for the run.")
 
 
-def config_state(repo: Path) -> dict:
+def config_files(repo: Path) -> list[Path]:
     cfg = repo / "backend" / "config"
-    hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(cfg.glob("*.yaml"))
-              if p.name != "local_credentials.yaml"}
-    return {"sha256": hashes}
+    return [p for p in sorted(cfg.glob("*.yaml")) if p.name != "local_credentials.yaml"]
+
+
+def config_state(repo: Path) -> dict:
+    return {"sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in config_files(repo)}}
+
+
+def copy_config(repo: Path, dest: Path) -> None:
+    """Keep the exact config the run saw (the app rewrites some of it at runtime)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    for p in config_files(repo):
+        (dest / p.name).write_bytes(p.read_bytes())
 
 
 def git(repo: Path, *args: str) -> str:
@@ -194,10 +212,12 @@ def git(repo: Path, *args: str) -> str:
 
 
 def check_config_clean(ctx) -> None:
-    """§4.3: tracked YAML must equal HEAD."""
-    dirty = git(ctx.repo, "status", "--porcelain", "--", "backend/config")
+    """§4.3: the thresholds under measurement must equal HEAD. Only the GATED files --
+    the app rewrites others (strategy watches, risk, strategy params) at runtime."""
+    dirty = git(ctx.repo, "status", "--porcelain", "--", *[f"backend/config/{n}" for n in GATED_CONFIG])
     if dirty:
-        raise Stop(f"backend/config differs from HEAD:\n{dirty}\nRestore it (or commit it on main) first.")
+        raise Stop(f"{', '.join(GATED_CONFIG)} differ from HEAD:\n{dirty}\n"
+                   "Do NOT run git checkout -- show this diff to a Claude session first.")
 
 
 def source_status(ctx, source_id: str) -> str | None:
@@ -276,23 +296,27 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
     rec["scan_id"] = result.get("scan_id")
     rec["candidates"] = len(result.get("candidates") or [])
 
+    rec["shortlist_truncated"] = result.get("shortlist_truncated")
+    if result.get("shortlist_truncated"):
+        rec["flags"].append("shortlist_truncated")
     if endpoint == OPT:
-        write_json(folder / f"{name}.envelope.json", {"request": body, "result": result})
-        rec["envelope_file"] = f"{name}.envelope.json"
+        if scan_id in ENVELOPE_IDS:
+            write_json(folder / f"{name}.envelope.json", {"request": body, "result": result})
+            rec["envelope_file"] = f"{name}.envelope.json"
         bases = iv_bases(result)
-        rec["iv_bases"] = bases
+        rec["iv_basis_counts"] = {str(b): bases.count(b) for b in sorted(set(bases), key=str)}
         if scan_id.startswith("A"):
             iv_ranks = [((c.get("contractDetails") or {}).get("ivRank")) for c in result.get("candidates") or []]
             if any(b == "rank" for b in bases) or any(r is not None for r in iv_ranks):
                 rec["flags"].append("INVALID:percentile_source_still_on")
-        elif any(b != "rank" for b in bases):
+        elif bases and sum(b != "rank" for b in bases) / len(bases) > IV_MISMATCH_MAX_SHARE:
             rec["flags"].append("iv_source_mismatch")
     if scan_id == "C6":
         reasons = json.dumps(result.get("rejected") or [])
-        if "volume_too_low" in reasons or "open_interest_too_low" in reasons:
-            rec["flags"].append("override_not_applied:min_volume_or_oi")
+        if any(r in reasons for r in ("volume_too_low", "open_interest_too_low", "too_many_soft_failures")):
+            rec["flags"].append("override_not_applied:liquidity")
 
-    if scan_id in CORE_IDS and _hm(ctx.clock.et()) > CORE_DONE_BY:
+    if scan_id in BASE_IDS and _hm(ctx.clock.et()) > CORE_DONE_BY:
         rec["flags"].append("late_for_comparison")
     if _hm(ctx.clock.et()) > ALL_DONE_BY:
         rec["flags"].append("finished_after_1555_ET")
@@ -304,8 +328,12 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
 def _finish(ctx, m: dict, folder: Path, label: str) -> None:
     snapshot(ctx, folder, label)
     m[f"config_{label}"] = config_state(ctx.repo)
-    if m[f"config_{label}"] != m["config_start"]:
-        m["flags"].append(f"INVALID:config_changed_during_run({label})")
+    before, after = m["config_start"]["sha256"], m[f"config_{label}"]["sha256"]
+    changed = sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n))
+    m.setdefault("config_changed", {})[label] = changed
+    bad = [n for n in changed if n in RUN_INVARIANT_CONFIG]
+    if bad:
+        m["flags"].append(f"INVALID:config_changed_during_run({label}:{','.join(bad)})")
     m[f"{label}_at"] = stamp(ctx)
 
 
@@ -315,8 +343,8 @@ def cmd_core(ctx) -> None:
     if et.weekday() >= 5:
         raise Stop(f"{et.date()} is a weekend in New York -- no session.")
     if not (CORE_START_EARLIEST <= _hm(et) <= CORE_START_LATEST):
-        raise Stop(f"it is {et:%H:%M} ET; the core block must START between 13:00 and 13:45 ET "
-                   "(comparability with 2026-09-18, which started 13:20 ET).")
+        raise Stop(f"it is {et:%H:%M} ET; the core block must START between 13:00 and 13:15 ET "
+                   "(the run takes ~1.5 h and must end well before the close).")
     folder = ctx.day_dir()
     if folder.exists():
         raise Stop(f"{folder} already exists -- never overwritten. Use --run-tag <new tag> for a rerun.")
@@ -328,6 +356,9 @@ def cmd_core(ctx) -> None:
     if tasty != "connected":
         raise Stop(f"tastytrade (IV rank source) is {tasty!r}, not 'connected' -- the rank "
                    "measurement would be wasted. Fix the connection first.")
+    if source_status(ctx, "ibkr") == "connected":
+        raise Stop("IBKR gateway is connected -- stop it for the run: its IV ranks override "
+                   "tastytrade's, and a day must use one rank vendor.")
 
     folder.mkdir(parents=True)
     m = {"protocol": "docs/superpowers/measurements/PROTOCOL.md", "base_url": ctx.base,
@@ -335,10 +366,11 @@ def cmd_core(ctx) -> None:
          "config_start": config_state(ctx.repo), "regime_urls": REGIME_URLS,
          "scans": [], "flags": [], "status": "running"}
     ctx.save_manifest(m)
+    copy_config(ctx.repo, folder / "config-start")
     snapshot(ctx, folder, "start")
     print("NOTE: every POST /api/scan replaces the app's 'last scan' and its rank deltas.", flush=True)
     try:
-        for scan in CORE_SCANS + COUNTERFACTUAL_SCANS:
+        for scan in DAY_SCANS:
             run_scan(ctx, m, folder, scan)
         _finish(ctx, m, folder, "core_end")
         m["status"] = "core_complete"
@@ -366,8 +398,12 @@ def cmd_ivabs(ctx) -> None:
                    "BAMENDJOU_CREDS_PATH pointing at the stripped copy -- PROTOCOL.md step 4).")
     if ibkr == "connected":
         raise Stop("IBKR gateway is connected -- stop it; it is an IV rank source too.")
+    tradier = source_status(ctx, "tradier")
+    if tradier != "connected":
+        raise Stop(f"tradier (option chains) is {tradier!r} -- BAMENDJOU_CREDS_PATH probably points at a "
+                   "missing or wrong file, which loads EMPTY credentials. Check the path (PROTOCOL.md step 4).")
     check_auto_trade_disarmed(ctx)
-    m["ivabs_sources"] = {"tastytrade": tasty, "ibkr": ibkr}
+    m["ivabs_sources"] = {"tastytrade": tasty, "ibkr": ibkr, "tradier": tradier}
     snapshot(ctx, folder, "ivabs_start")
     try:
         for scan in IVABS_SCANS:
