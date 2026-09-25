@@ -1,5 +1,15 @@
 import type { AlertKind, AlertType, TargetLevel, Direction, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
-import { resolvePremiumStopPct, premiumStopThresholdPrice, PREMIUM_STOP_PCT_FALLBACK } from './premiumStop';
+import { resolvePremiumStopPct, premiumStopThresholdPrice, PREMIUM_STOP_PCT_FALLBACK, pythonRound4 } from './premiumStop';
+
+/** An option position raises TIME_STOP at this many days to expiry or fewer.
+ *
+ *  One number for the browser engine's comparison below, TradeCard's
+ *  "Time exit: 3 DTE" row and the Portfolio drawer's "3 DTE or less" text, so
+ *  the card cannot promise an exit the alert does not make (decision Q8).
+ *  Two readers are NOT tied to it and keep a literal 3: the backend's
+ *  `alert_generator.py` (`<= 3`) and the Alerts page label
+ *  (`app/(frame)/alerts/page.tsx`). Change all three together. */
+export const TIME_STOP_DTE = 3;
 
 export interface AlertPosition {
   recId: string;
@@ -284,8 +294,10 @@ export function scanPortfolio(
         // (`reference_value=round(threshold_price, 4)`). Writing the unrounded
         // float here gave one alert type two shapes in position_alert_history
         // -- 2.6816 from the backend, 2.68164 from here -- decided by nothing
-        // more than which engine happened to fire first.
-        referenceValue: Math.round(premiumStopPrice * 10000) / 10000,
+        // more than which engine happened to fire first. `pythonRound4`, not
+        // `Math.round(x * 1e4) / 1e4`: the latter disagrees with Python's
+        // round() on near-halves and on exact ties (see its doc).
+        referenceValue: pythonRound4(premiumStopPrice),
         // The RESOLVED fraction, the same one the comparison above used and
         // the same one the backend logs as `thresholdPct` -- never the global,
         // which would misreport why a pinned position fired
@@ -308,7 +320,7 @@ export function scanPortfolio(
     // every stock position without this guard. Mirrors the backend's own
     // alert_generator.py, whose parse_expiry_from_contract already returns
     // None (never fires) for a `|STOCK` contract.
-    if (!isStock && p.dteRemaining <= 3 && enabled('TIME_STOP')) {
+    if (!isStock && p.dteRemaining <= TIME_STOP_DTE && enabled('TIME_STOP')) {
       out.push({
         recId: p.recId,
         kind: 'Action',

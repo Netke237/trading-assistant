@@ -870,6 +870,52 @@ describe('AutoTradeArm — O4 step 6: the caution under the buttons', () => {
     act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null }); });
     render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
     expect(screen.queryByText(/not tracked as a position/)).not.toBeInTheDocument();
-    expect(screen.getByText(/booked as a position with the invalidation, premium stop and exit/)).toBeInTheDocument();
+    expect(screen.getByText(/booked as a position with the invalidation you typed/)).toBeInTheDocument();
+  });
+});
+
+// ── P2-18 (plan 2026-09-25-p2-premium-stop-position-editing-plan.md) ────────
+describe('AutoTradeArm — P2-18 premium-stop caution, unbooked fire, booking wording', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { useSettingsStore } = require('@/lib/settingsStore');
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+      useSettingsStore.setState({ premiumStopPct: 0.6 });
+    });
+  });
+
+  it('(a) a dollar stop at or above today\'s premium explains what the booking will do', () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={3.0} liveMid={2.5} methodPick={pick()} />);
+    expect(screen.getByText(
+      "Your $3.00 premium stop is at or above today's $2.50 premium. If the fill is at or below $3.00, "
+      + 'the booked position inherits the global stop (60%); above it, your $3.00 stop applies.',
+    )).toBeInTheDocument();
+  });
+
+  it('(a) no caution below the premium, or with no typed stop', () => {
+    const { unmount } = render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={2.5} methodPick={pick()} />);
+    expect(screen.queryByText(/at or above today's/)).not.toBeInTheDocument();
+    unmount();
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    expect(screen.queryByText(/at or above today's/)).not.toBeInTheDocument();
+  });
+
+  it('(b) an unbooked fire shows the order id in caution, never "Auto-trade fired"', async () => {
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });
+    (api.fireAutoTrade as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-9', booked: false, book_error: 'x' });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Fire now' }));
+    expect(await screen.findByText(/Order sent — ID: ORD-9 \(not booked\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/Auto-trade fired/)).not.toBeInTheDocument();
+  });
+
+  it('(c) the booking note names the invalidation rule book_fired_order applies', () => {
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    expect(screen.getByText(/the invalidation you typed, or the plan's invalidation moved with the stock price at booking/)).toBeInTheDocument();
+    expect(screen.queryByText(/with the invalidation, premium stop and exit\s+plan this card had/)).not.toBeInTheDocument();
   });
 });
