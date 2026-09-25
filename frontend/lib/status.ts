@@ -72,6 +72,26 @@ export function worstStatus(...statuses: Status[]): Status {
 }
 
 /**
+ * The one comparator for the four RiskPanel bands — riskStore.computeMetrics (the
+ * badge) and statusTooltips.riskStatusTooltip (its tooltip) both call this, so the
+ * tooltip cannot state a different verdict than the badge beside it
+ * (RISK-TOOLTIP-SHARED-COMPARATORS). The bands are NOT uniform:
+ *  - 'fraction' (total exposure, largest concentration): REJECT strictly above the
+ *    cap, CAUTION strictly above 80% of it.
+ *  - 'count' (concurrent positions, daily recommendations): REJECT at-or-above the
+ *    cap, CAUTION at-or-above floor(80%) of it — so a cap of 1 reads CAUTION at 0
+ *    and a cap of 2 reads CAUTION at 1 (kept as-is; changing it is a product call).
+ */
+export type RiskBandKind = 'fraction' | 'count';
+
+export function riskBandStatus(kind: RiskBandKind, value: number, cap: number): Status {
+  if (kind === 'fraction') {
+    return value > cap ? 'REJECT' : value > cap * 0.8 ? 'CAUTION' : 'PASS';
+  }
+  return value >= cap ? 'REJECT' : value >= Math.floor(cap * 0.8) ? 'CAUTION' : 'PASS';
+}
+
+/**
  * Maps a Status to a Data-primitive tone. DataTone has no PENDING/NO_DATA
  * slot, so both map to 'dim' (the established "unknown/inactive" tone) —
  * an exhaustive Record so a future Status addition fails to compile here
