@@ -22,7 +22,8 @@ def hmm_intraday_interval_error(trigger_def: object, interval: object) -> str | 
     Deliberately NOT built on strategy_watch_store._primary_model: importing that
     module instantiates its module-level store, whose load() reads and can rewrite
     config/strategy_watches.yaml. Same wording as add_composite_watch's ValueError;
-    tests/test_a4f_rules_hmm_intraday_interval.py pins that both agree."""
+    tests/test_a4f_rules_hmm_intraday_interval.py pins that both accept/reject the
+    same intervals with the same message."""
     primary = trigger_def.get("primary") if isinstance(trigger_def, dict) else None
     model = primary.get("model") if isinstance(primary, dict) else None
     if model != "HMM_intraday":

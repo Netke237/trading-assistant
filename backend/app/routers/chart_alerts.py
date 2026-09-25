@@ -207,8 +207,11 @@ async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict
     dialog displayed), mark its name "(interval was 1D)", reset its sustain clock and
     log the list. Every such row (disabled ones and any user_id included); only
     '1D'/'1W', the two spellings that path treats as daily/weekly. Idempotent: a
-    migrated row is '5m'. Run once per server start by run_chart_alert_scheduler
-    before its first tick."""
+    migrated row is '5m'. run_chart_alert_scheduler calls it at the top of each loop
+    iteration until one call succeeds -- normally once, before the first tick; after
+    a failure (e.g. the DB not up yet) ticks run, on unmigrated rules that cannot
+    fire anyway, until a retry succeeds. A row that raises unexpectedly is logged
+    and skipped, so it cannot block the others or make every retry fail."""
     factory = session_factory or AsyncSessionLocal
     migrated: list[dict] = []
     async with factory() as db:
@@ -221,14 +224,19 @@ async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict
             except (TypeError, ValueError):
                 logger.debug('A4f rule migration: skipping %s, rule_json does not parse', row.id)
                 continue
-            if not isinstance(parsed, dict) or parsed.get('__type') != 'composite':
+            try:
+                if not isinstance(parsed, dict) or parsed.get('__type') != 'composite':
+                    continue
+                if _composite_primary_model(parsed) != 'HMM_intraday':
+                    continue
+                old = row.interval
+                note = f' (interval was {old})'
+                new_name = (row.name or '')[:200 - len(note)] + note
+            except Exception:
+                logger.warning('A4f rule migration: skipping %s, unexpected row shape', row.id, exc_info=True)
                 continue
-            if _composite_primary_model(parsed) != 'HMM_intraday':
-                continue
-            old = row.interval
-            note = f' (interval was {old})'
             row.interval = '5m'
-            row.name = row.name[:200 - len(note)] + note
+            row.name = new_name
             row.condition_state = '{}'
             migrated.append({'id': row.id, 'symbol': row.symbol, 'name': row.name, 'from': old})
         if migrated:

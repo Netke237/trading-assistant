@@ -102,10 +102,10 @@ def test_r1_predicate_agrees_with_the_watch_store(monkeypatch, tmp_path):
     for iv in ['5m', '15m', '30m', '1h', '60m', '4h', '1min', '1D', '1W', 'daily', '1d', 'foo']:
         try:
             store.add_composite_watch('AAPL', dict(HMM), interval=iv)
-            watch_ok = True
-        except ValueError:
-            watch_ok = False
-        assert (err(HMM, iv) is None) == watch_ok, iv
+            watch_msg = None
+        except ValueError as exc:
+            watch_msg = str(exc)
+        assert err(HMM, iv) == watch_msg, iv
 
 
 # ── R2: POST ─────────────────────────────────────────────────────────────────
@@ -313,3 +313,26 @@ async def test_r6_failed_migration_is_logged_and_retried_until_it_succeeds(monke
             await sched.run_chart_alert_scheduler()
     assert order == ['migrate', 'tick', 'migrate', 'tick']
     assert any('migration failed' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_r4b_one_unexpected_row_does_not_block_the_others(monkeypatch, caplog):
+    import app.routers.chart_alerts as ca
+    _, Session = await _make_app()
+    await _seed(Session, 'boom', '1D', {**_composite(HMM), "boom": True}, name='Boom')
+    await _seed(Session, 'good', '1D', _composite(HMM), name='Good')
+    real = ca._composite_primary_model
+
+    def flaky(parsed):
+        if isinstance(parsed, dict) and parsed.get('boom'):
+            raise RuntimeError('unexpected shape')
+        return real(parsed)
+
+    monkeypatch.setattr(ca, '_composite_primary_model', flaky)
+    with caplog.at_level(logging.WARNING, logger='app.routers.chart_alerts'):
+        out = await ca.migrate_hmm_intraday_rule_intervals(Session)
+    assert [m['id'] for m in out] == ['good']
+    assert (await _get(Session, 'good')).interval == '5m'
+    boom = await _get(Session, 'boom')
+    assert (boom.interval, boom.name) == ('1D', 'Boom')
+    assert any('skipping boom' in r.getMessage() for r in caplog.records)
