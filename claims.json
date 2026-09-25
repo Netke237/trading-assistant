@@ -1,0 +1,12 @@
+{
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/clever-goldberg-ssmf4z",
+      "claimed_at": "2026-09-25T16:25:22Z",
+      "expires_at": "2026-09-25T19:25:22Z",
+      "note": "MEAS build: PROTOCOL.md, RESULTS-SHEET.md, runner round-4 fixes, scratch tests, code round",
+      "task": "MEAS-MARKET-DATA-MEASUREMENT"
+    }
+  ]
+}
