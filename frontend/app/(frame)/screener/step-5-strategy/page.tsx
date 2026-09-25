@@ -8,6 +8,7 @@ import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { stockScanFailureReason, STOCK_SCAN_SETTINGS_INVALID } from '@/lib/stockScan';
 import { useShallow } from 'zustand/shallow';
 import { api, getLastDataRefresh } from '@/lib/api';
 import styles from './page.module.css';
@@ -214,6 +215,9 @@ export default function Step5StrategyPage() {
     setStockScanResult(null);
     setLoadingStrategy(stratKey);
     setError(null);
+    // A5d: same boundary as runStockScan — a throw before the post is our own
+    // request building (most likely a malformed saved setting), not a failed scan.
+    let reachedRequest = false;
     try {
       // A5: hoisted so the exact body travels with its result (Analysis replays it).
       // A5b: built by the same builder runStockScan (Steps 3/4) uses, so a
@@ -240,11 +244,14 @@ export default function Step5StrategyPage() {
         accountSize: portfolioValue,
         riskPct: 0.01,
       });
+      reachedRequest = true;
       const result = await api.postStockScan(requestBody);
       setStockScanResult(result, requestBody);
       router.push('/screener/step-6-backtest');
     } catch (e) {
-      setError(String(e));
+      // The raw error goes to the console so the detail survives for debugging.
+      if (!reachedRequest) console.error('Step 5: building the stock-scan request failed', e);
+      setError(reachedRequest ? stockScanFailureReason(e) : STOCK_SCAN_SETTINGS_INVALID);
     } finally {
       setLoadingStrategy(null);
       // Refresh last-run status/strategy from the backend so TopBar/Settings
