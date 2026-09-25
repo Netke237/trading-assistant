@@ -88,11 +88,17 @@ async def stream(
                         })
                         # Phase 4: evaluate alert rules on candle-close
                         try:
-                            from app.routers.chart_alerts import evaluate_and_notify_for_symbol
+                            from app.routers.chart_alerts import (
+                                closed_candle_structure, evaluate_and_notify_for_symbol,
+                            )
                             # candles[-2] is the just-closed candle; candles[-1] is the new open
                             closed = candles[-2] if len(candles) >= 2 else candles[-1]
+                            # A4e: the alert decision gets structure computed up to the
+                            # closed candle; `signals` above (full list) is display only.
+                            alert_signals = await asyncio.to_thread(
+                                closed_candle_structure, candles, closed, interval, symbol, ht_candles)
                             triggered = await evaluate_and_notify_for_symbol(
-                                symbol, interval, closed, candles, signals, as_of=_fetched_at,
+                                symbol, interval, closed, candles, alert_signals, as_of=_fetched_at,
                             )
                             for entry in triggered:
                                 await websocket.send_json({
