@@ -153,14 +153,16 @@ Wave 1 runs in parallel (6 sessions: P1, P2, P3a, P3b, P4a, P4b). Wave 2 starts 
 Added 2026-09-25 (decision P3C-PACKAGE-CREATED-2026-09-25). P3a and P3b are merged; these items were deferred by them into files no package owned.
 
 - **Wave:** 1 (added late)  **Money impact:** HIGH — an options candidate the auto-trader would refuse is still proposed; the fire endpoint can block the event loop  **Size:** M
-- **Owned files:** backend/app/routers/scan.py (code, not only comments); backend/app/scoring/conviction_sizing.py; frontend/lib/scanScheduleResolve.ts; backend/app/routers/auto_trade.py (the /fire path only — ArmRequest stays P6's); their tests.
+- **Owned files:** backend/app/routers/scan.py (code, not only comments); backend/app/scoring/conviction_sizing.py; frontend/lib/scanScheduleResolve.ts; backend/app/routers/auto_trade.py (the /fire path only — ArmRequest stays P6's); their tests. Plus, for the 0% warning only: the scan-schedule list in frontend/app/(frame)/settings/page.tsx.
 - **Shared with P6:** the one new `schemas/__init__.py` field the options direction gate needs (a measured/unmeasured trend flag). P3c may add that single field; coordinate through PROJECT_STATE.json so P6 does not collide.
 - **Do not touch:** stock_scan.py, stock_scorer.py (P3a, merged — reuse `_regime_data_drop` and `RuleResult.measured` by calling them); auto_trader.py (P3b, merged — call, do not edit, unless Kenneth widens this).
 
 **Kenneth's decisions to implement:**
 
 - P3A-INTRADAY-REFUSAL-MATCHES-FIRE-2026-09-25 applies to the options scan too: drop an Intraday options name whose 15-min regime fetch failed when the fire would refuse it.
-- P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT-2026-09-25 stands for schedules unless Kenneth changes it (open: should a 0% schedule stop like the manual paths? ask at plan time, do not decide).
+- P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25: a 0% schedule keeps running at the 1% default (P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT stands) and the schedule UI shows a warning that the 0% is ignored.
+- P3C-DATA-CHECKS-STAY-IN-P3C-2026-09-25: items 5 and 6 stay here; P3c writes a read-only check script that Kenneth runs on his machine; fixes follow the evidence.
+- P1-P3C-RUN-IN-PARALLEL-2026-09-25: P3c runs in parallel with P1 (no shared files).
 
 **Backlog entries:**
 
@@ -172,7 +174,7 @@ Added 2026-09-25 (decision P3C-PACKAGE-CREATED-2026-09-25). P3a and P3b are merg
 6. Options scan regime series length still depends on the data source (bar-count difference). Investigate first. — *entry begins:* "P3a (2026-09-25) FIXED the comment (441 calendar days ~ 306 trading days). STILL OPEN: the source-length residual (scan.py code)…"
 7. POST /auto-trade/fire runs `fire()` on the event loop, so a stalled regime fetch can block the server for up to ~25s (P3b deferral). — *entry begins:* "LOGGED BY P3c SETUP (2026-09-25), P3b DEFERRAL…"
 
-Items 5 and 6 are investigate-first: the plan states what is measured and how before any code change.
+Items 5 and 6 are investigate-first: the plan states what is measured and how, via a read-only script Kenneth runs, before any code change.
 
 ## P4a — Chart alert rules: sync, toggle, missed candles
 
