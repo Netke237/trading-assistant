@@ -2134,6 +2134,11 @@
       "id": "P1B-SPLIT-AGAIN-2026-09-25",
       "q": "P1b (Step-7 save-first) hit the 3-round plan cap; every round found one problem in the same area (what the page shows when a saved row may have no order behind it). How to continue?",
       "a": "Kenneth, 2026-09-25: SPLIT P1b AGAIN. P1b-i (phase P1B1-STEP7-SAVE-FIRST-CORE): save first, send the gate-approved qty, the provably-pre-submit auto-delete list, results labelled with their contract; a row that may have no order gets a PLAIN persistent note (contract + rec_id + 'check the broker, then delete it in Portfolio'), no Remove/Dismiss buttons. P1b-ii (phase P1B2-STEP7-ORPHAN-ROW-UI): the per-recId Remove/Dismiss UI (the U/V/W answers, incl. W1's kind-typed entries and confirm step). P1b-i ships first. Both new phases start at round 0 (fresh plan stage), same as the P1 -> P1a/P1b split."
+    },
+    {
+      "id": "P1B1-NOTE-IN-MEMORY-2026-09-25",
+      "q": "P1b-i's plain note (a row that may have no order) lived in Step 7's page state, so following it to Portfolio or reloading lost it. Keep it page-lifetime, or keep it in memory across pages?",
+      "a": "Kenneth, 2026-09-25: IN MEMORY. The note lives in a non-persisted Zustand store (frontend/lib/directSendNotesStore.ts): it survives Prev/Next, basket sends, new sends and navigation away from and back to Step 7; only a full reload clears it. No localStorage."
     }
   ],
   "pending_kenneth": [
