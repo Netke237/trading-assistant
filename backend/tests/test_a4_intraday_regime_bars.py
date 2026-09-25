@@ -149,7 +149,9 @@ def test_fire_path_swing_stays_on_the_daily_window(mocker):
     assert set(omm.call_args.args[0]) == {181.0}
 
 
-@pytest.mark.parametrize("intraday", [[], INTRADAY[:10]])
+# `[]` left this list with P3b: no bars at all now REFUSES the fire
+# (P3B-REGIME-BARS-MISSING-REFUSES-2026-09-25, pinned in test_auto_trader.py).
+@pytest.mark.parametrize("intraday", [INTRADAY[:10]])
 def test_an_unmeasurable_intraday_fire_sizes_at_the_floor_never_full(mocker, intraday):
     """The gate abstains on the same input; SIZING-4's floor still bounds it."""
     from app.data.ibkr_paper import OrderResult

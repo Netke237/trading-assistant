@@ -629,12 +629,14 @@ def test_vol_sizing_bearish_floors_at_the_ramp_end(mocker):
 
 
 def test_vol_sizing_bearish_is_GRADED_when_the_regime_opposes(mocker):
-    """Bearish, own regime -20: 0.475 -> round(1.9) = 2.
+    """Bearish, own regime -20: 0.475 -> 1.9, ROUNDED DOWN to 1.
 
     The two-sided ramp grades the opposed half: this sits between the floor at
-    -40 and the midpoint at 0.
+    -40 and the midpoint at 0. Was round(1.9) = 2 until decision
+    P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25 (floor, never sizes up); the
+    grading itself is pinned by the 3 at +20 and the 2 at 0.
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=-20) == 2
+    assert _fired_quantity(mocker, direction="Bearish", conviction=-20) == 1
 
 
 def test_vol_sizing_bearish_scales_up_when_regime_favours(mocker):
@@ -657,8 +659,9 @@ def test_vol_sizing_bearish_full_size_when_its_regime_strongly_favours(mocker):
 
 
 def test_vol_sizing_bearish_at_neutral_conviction_sits_mid_ramp(mocker):
-    """Bearish at 0 -> the ramp's MIDPOINT 0.65 -> round(2.6) = 3."""
-    assert _fired_quantity(mocker, direction="Bearish", conviction=0) == 3
+    """Bearish at 0 -> the ramp's MIDPOINT 0.65 -> 2.6, rounded DOWN to 2
+    (was round() = 3 until P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25)."""
+    assert _fired_quantity(mocker, direction="Bearish", conviction=0) == 2
 
 
 def test_vol_sizing_bullish_full_size_at_high_conviction_unchanged(mocker):
@@ -1325,18 +1328,32 @@ def test_regime_gate_honours_require_stable_for_reject(mocker):
     assert qty == 4, "Fragile cannot hard-drop, so it fires"
 
 
-def test_regime_gate_abstains_when_the_bars_cannot_be_measured(mocker, caplog):
-    """No bars -> no measurement -> no gate, and it says so out loud.
+def test_regime_gate_refuses_when_no_bars_come_back(mocker):
+    """No bars -> REFUSED, not abstained (P3B-REGIME-BARS-MISSING-REFUSES-2026-09-25).
 
-    Abstaining is fail-OPEN on purpose: the scan passes `regime_gate=None` when
-    it has no regime signal, so a fire path that refused here would be stricter
-    than the scan under the same name.
+    It used to abstain and fire at the armed quantity. The scan DROPS a symbol
+    whose candles it cannot get, so the fire path now refuses too. (A SHORT
+    series still abstains -- see the test below.)
     """
+    from app.services.auto_trader import RegimeDataUnavailableError
+    with pytest.raises(RegimeDataUnavailableError):
+        _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                   horizon="Position", bars=[])
+
+
+def test_regime_gate_still_abstains_on_a_short_series(mocker, caplog):
+    """Bars that arrived but are under min_obs -> no gate, said out loud.
+
+    The scan runs no regime gate on a series it cannot measure, so this half
+    stays fail-OPEN.
+    """
+    short = _fixture_bars("MSFT")[:5]
     with caplog.at_level("WARNING", logger="app.services.auto_trader"):
-        qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
-                               horizon="Position", bars=[])
+        qty, svc, _ = _gate_fire(mocker, symbol="MSFT", direction="Bullish",
+                                 horizon="Position", bars=short)
     assert qty == 4
     assert "NOT evaluated" in caplog.text and "MSFT" in caplog.text
+    assert svc.get_state().history[-1]["regime_gate"] == "abstained"
 
 
 def test_regime_gate_abstains_when_the_armed_strategy_carries_no_horizon(mocker, caplog):
@@ -4526,3 +4543,307 @@ def test_a_malformed_premium_stop_key_no_longer_affects_the_fire(mocker):
     row = svc.get_state().history[-1]
     assert row["order_id"] == "q2"
     assert row["premium_at_risk"] == pytest.approx(250.0)
+
+
+# ── P3b: auto-trader hardening (docs/superpowers/plans/2026-09-25-p3b-auto-trader-hardening-plan.md) ──
+
+
+def _doc_with(**overrides):
+    """The real scoring doc with top-level blocks replaced — IN MEMORY ONLY.
+    Never written to backend/config; patched in over `_load_scoring_doc`."""
+    import copy
+    import app.services.auto_trader as at
+    doc = copy.deepcopy(at._load_scoring_doc())
+    doc.update(overrides)
+    return doc
+
+
+@pytest.mark.parametrize("fault", ["type_error", "float_value_error"])
+def test_a_daily_loss_config_fault_writes_one_risk_check_failed_row(mocker, fault):
+    """Phase AUTOTRADE-DAILY-LOSS-FAULT-TEST (2A-GATE round 6's missing guard).
+
+    `_check_daily_loss` failing -- a TypeError, or the `float()` ValueError on
+    a `max_daily_loss_pct: "2%"` -- has consumed the armed order, so it must
+    leave EXACTLY ONE `risk_check_failed` row (not `daily_loss_blocked`: the
+    breaker never evaluated) and page the unclassified alert once.
+    """
+    at, svc = _scan_trigger_service(mocker)
+    if fault == "type_error":
+        mocker.patch.object(AutoTradeService, "_check_daily_loss",
+                            staticmethod(mocker.Mock(side_effect=TypeError("breaker broke"))))
+    else:
+        mocker.patch.object(AutoTradeService, "_risk_config",
+                            return_value={"max_daily_loss_pct": "2%",
+                                          "premium_stop_pct": 0.60})
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+    before = len(svc.get_state().history)
+
+    svc.maybe_fire_on_scan()
+
+    rows = svc.get_state().history[before:]
+    assert len(rows) == 1, rows
+    assert rows[0]["status"] == "risk_check_failed"
+    assert rows[0]["error"].startswith("daily-loss check failed:")
+    assert rows[0]["premium_at_risk"] == 0.0
+    assert rows[0]["attempt_id"]
+    execute.assert_not_called()
+    assert svc.get_state().armed is False
+    assert unclassified.call_count == 1
+    assert unclassified.call_args.args[0] == "MSFT"
+
+
+def test_an_ibkr_reply_with_an_id_and_an_empty_message_list_is_a_question(mocker):
+    """P3b E1: `{"id": ..., "message": []}` is the reply-message shape with no
+    text. It used to read as an order with no id; it is a question now."""
+    import app.data.ibkr_paper as ib
+    from app.data.ibkr_paper import BrokerOrder, IbkrPaperAdapter
+
+    class _Resp:
+        status_code = 200
+        text = ""
+
+        def __init__(self, body):
+            self._body = body
+
+        def json(self):
+            return self._body
+
+    mocker.patch.object(ib, "paper_gateway_available", return_value=True)
+    adapter = IbkrPaperAdapter(base_url="https://localhost:7499/v1/api",
+                               account_id="DU123456")
+    order = BrokerOrder(symbol="MSFT", action="BUY", effect="OPEN", quantity=1,
+                        order_type="LMT", limit_price=2.5, sec_type="OPT", conid=123)
+    for body, expected in [
+        ([{"id": "abc", "message": []}], True),
+        ([{"id": "abc", "message": ""}], True),
+        ([{"id": "abc"}], False),                       # no message key at all
+        ([{"order_id": "1", "id": "abc", "message": []}], False),  # an order
+    ]:
+        mocker.patch.object(ib.httpx, "post", return_value=_Resp(body))
+        assert adapter.place_order(order).awaiting_confirmation is expected, body
+
+
+def test_a_bad_arm_request_reject_threshold_does_not_blame_the_yaml(mocker):
+    """P3b E3: the NaN came from the ARM REQUEST, the YAML is fine -- the
+    refusal must say so rather than send the operator to scoring_rules.yaml."""
+    from app.services.auto_trader import RegimeGateConfigError
+    with pytest.raises(RegimeGateConfigError) as ei:
+        _gate_fire(mocker, reject_pct=float("nan"))
+    msg = str(ei.value)
+    assert "armed with" in msg and "not scoring_rules.yaml" in msg
+    assert "scoring_rules.yaml's regime_gate.headwind_reject_pct" not in msg
+
+
+def test_a_bad_yaml_reject_threshold_still_names_the_yaml(mocker, monkeypatch):
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeGateConfigError
+    monkeypatch.setattr(at, "_load_regime_gate_config", lambda: {
+        "enabled": True, "headwind_caution_pct": -15,
+        "headwind_reject_pct": "x", "require_stable_for_reject": True,
+    })
+    with pytest.raises(RegimeGateConfigError) as ei:
+        _gate_fire(mocker)
+    assert "scoring_rules.yaml's regime_gate.headwind_reject_pct" in str(ei.value)
+
+
+def test_the_gate_config_alert_lead_does_not_blame_the_yaml(mocker):
+    import app.services.auto_trader as at
+    sent = mocker.patch.object(at, "_alert_refusal")
+    at._alert_regime_gate_config_refusal("MSFT", Exception("detail"))
+    reason = sent.call_args.args[2]
+    assert "scoring_rules.yaml's regime_gate block cannot be read" not in reason
+    assert reason.endswith("detail")
+
+
+def test_forget_alerts_reports_a_hold_that_survives_on_disk(mocker):
+    """P3b E4: the memory hold clears but the file write fails -> False."""
+    import app.services.notifications.alert_notifier as an
+    an._fired["k1|T"] = 1.0
+    mocker.patch.object(an, "_save_dedup", return_value=False)
+    assert an.forget_alerts({"k1"}) is False
+    assert "k1|T" not in an._fired
+    mocker.patch.object(an, "_save_dedup", return_value=True)
+    assert an.forget_alerts({"k1"}) is True
+
+
+def test_save_dedup_returns_false_when_it_cannot_write(mocker):
+    import app.services.notifications.alert_notifier as an
+    mocker.patch.object(an.tempfile, "mkstemp", side_effect=OSError("disk full"))
+    assert an._save_dedup() is False
+
+
+def test_a_delivered_discrete_alert_whose_hold_stays_on_disk_is_logged(mocker, caplog):
+    import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
+
+    async def _delivered(**_kw):
+        return True
+
+    mocker.patch.object(an, "notify_alert", _delivered)
+    mocker.patch.object(an, "forget_alerts", return_value=False)
+    with caplog.at_level("ERROR", logger="app.services.auto_trader"):
+        at._alert_refusal("MSFT", "x refusal", "r", "rec", "T", discrete=True)
+    assert "dedup file could not be written" in caplog.text
+
+
+def test_a_good_fire_logs_a_config_hold_that_stays_on_disk(mocker, caplog):
+    import app.services.auto_trader as at
+    import app.services.notifications.alert_notifier as an
+    mocker.patch.object(an, "forget_alerts", return_value=False)
+    with caplog.at_level("ERROR", logger="app.services.auto_trader"):
+        at._clear_config_refusal_holds()
+    assert "dedup file could not be written" in caplog.text
+
+
+# E7: missing bars refuse (decision P3B-REGIME-BARS-MISSING-REFUSES-2026-09-25)
+
+def test_the_regime_fetch_deadline_outlasts_the_provider_timeout():
+    """8s was shorter than fetch_candles' 10s httpx timeout, so the yfinance
+    fallback could never answer after a stalled Tradier call."""
+    import app.services.auto_trader as at
+    assert at._REGIME_FETCH_DEADLINE_S == 25.0
+    assert at._REGIME_FETCH_DEADLINE_S > 10
+
+
+@pytest.mark.parametrize("how", ["timeout", "raises", "empty", "none"])
+def test_missing_regime_bars_refuse_the_fire_and_alert(mocker, how):
+    import threading
+    import app.services.auto_trader as at
+    from app.data.ibkr_paper import OrderResult
+    release = threading.Event()
+
+    def _fetch(symbol):
+        if how == "timeout":
+            release.wait(5)
+            return []
+        if how == "raises":
+            raise RuntimeError("tradier down")
+        return [] if how == "empty" else None
+
+    mocker.patch.object(at, "_REGIME_FETCH_DEADLINE_S", 0.05)
+    mocker.patch.object(at, "_fetch_scan_window_bars", _fetch)
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    _forbid_spx_cache(mocker)
+    execute = mocker.patch("app.services.auto_trader.execute_option_order",
+                           return_value=OrderResult("x", "ok", "ibkr_paper"))
+    alert = mocker.patch.object(at, "_alert_regime_data_refusal")
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+
+    svc = AutoTradeService()
+    s = _make_armed(symbol="MSFT", qty=4)
+    svc.arm(dataclasses.replace(s, horizon="Position"))
+    try:
+        svc.maybe_fire_on_scan()
+    finally:
+        release.set()
+
+    execute.assert_not_called()
+    row = svc.get_state().history[-1]
+    assert row["status"] == "regime_data_blocked"
+    assert row["premium_at_risk"] == 0.0
+    assert svc.get_state().armed is False
+    assert alert.call_count == 1 and alert.call_args.args[0] == "MSFT"
+    assert unclassified.call_count == 0
+
+
+def test_missing_bars_refuse_even_with_the_gate_disabled_and_sizing_on(mocker, monkeypatch):
+    """Sizing measures on its own when the gate is off; no bars refuse there too
+    instead of sizing at the floor."""
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeDataUnavailableError
+    monkeypatch.setattr(at, "_load_regime_gate_config", lambda: {"enabled": False})
+    with pytest.raises(RegimeDataUnavailableError):
+        _gate_fire(mocker, bars=[], sizing_on=True)
+
+
+def test_missing_bars_do_not_matter_with_gate_and_sizing_both_off(mocker, monkeypatch):
+    import app.services.auto_trader as at
+    monkeypatch.setattr(at, "_load_regime_gate_config", lambda: {"enabled": False})
+    qty, _, fetch = _gate_fire(mocker, bars=[])
+    assert qty == 4 and fetch.call_count == 0
+
+
+def test_the_gate_and_sizer_share_one_refusing_measurement(mocker):
+    """`_measure_once` memoises a refusal: one fetch, same outcome for both."""
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeDataUnavailableError
+    m = mocker.patch.object(at, "_measure_trade_regime",
+                            side_effect=RegimeDataUnavailableError("no bars"))
+    measure = at._measure_once(_make_armed())
+    for _ in range(2):
+        with pytest.raises(RegimeDataUnavailableError):
+            measure()
+    assert m.call_count == 1
+
+
+def test_a_consumed_regime_data_row_routes_to_its_own_alert(mocker):
+    import app.services.auto_trader as at
+    alert = mocker.patch.object(at, "_alert_regime_data_refusal")
+    svc = AutoTradeService()
+    svc._state.history.append({"attempt_id": "a1", "status": "regime_data_blocked",
+                               "symbol": "MSFT"})
+    svc._alert_for_consumed_attempt("a1", "MSFT", Exception("x"))
+    assert alert.call_count == 1
+
+
+# E9: a malformed regime.<horizon> block is a recorded config refusal
+
+@pytest.mark.parametrize("regime", [
+    ["not", "a", "mapping"],
+    {"position": "lookback 20"},
+    {"position": {"lookback": 50, "window": 750, "min_obs": "ten", "timeframe": "1day"}},
+    {"position": {"lookback": 50, "window": 750, "min_obs": True, "timeframe": "1day"}},
+])
+@pytest.mark.parametrize("gate_enabled", [True, False])
+def test_a_malformed_regime_block_is_recorded_as_a_config_refusal(
+        mocker, monkeypatch, regime, gate_enabled):
+    import app.services.auto_trader as at
+    from app.services.auto_trader import RegimeGateConfigError
+    doc = _doc_with(regime=regime)
+    if not gate_enabled:
+        doc["regime_gate"] = {"enabled": False}
+    monkeypatch.setattr(at, "_load_scoring_doc", lambda: doc)
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    execute = mocker.patch("app.services.auto_trader.execute_option_order")
+    mocker.patch("app.data.market.fetch_candles", return_value=_fixture_bars("MSFT"))
+    svc = AutoTradeService()
+    svc.arm(dataclasses.replace(_make_armed(symbol="MSFT", qty=4), horizon="Position"))
+    with pytest.raises(RegimeGateConfigError) as ei:
+        svc.fire()
+    assert "regime" in str(ei.value)
+    execute.assert_not_called()
+    assert svc.get_state().history[-1]["status"] == "regime_gate_config_blocked"
+
+
+def test_a_missing_regime_horizon_still_abstains(mocker, monkeypatch):
+    import app.services.auto_trader as at
+    doc = _doc_with(regime={})
+    monkeypatch.setattr(at, "_load_scoring_doc", lambda: doc)
+    qty, svc, _ = _gate_fire(mocker)
+    assert qty == 4
+    assert svc.get_state().history[-1]["regime_gate"] == "abstained"
+
+
+# E11: contracts round DOWN (decision P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25)
+
+@pytest.mark.parametrize("qty,mult,expected", [
+    (5, 0.3, 1),     # 1.5: round() gave 2
+    (5, 0.5, 2),     # 2.5
+    (10, 0.7, 7),    # 6.999... in floats must not lose a contract
+    (1, 0.3, 1),     # never below 1
+    (4, 1.0, 4),
+])
+def test_contract_sizing_rounds_down(qty, mult, expected):
+    import app.services.auto_trader as at
+    assert at._sized_quantity(qty, mult) == expected
+
+
+def test_the_unmeasured_floor_rounds_down_too(mocker):
+    """5 x min_mult 0.30 = 1.5 -> 1 on the floor path (round() gave 2)."""
+    import app.services.auto_trader as at
+    mocker.patch.object(at, "_measure_trade_regime", return_value=None)
+    mocker.patch.object(at, "_load_regime_gate_config", return_value={"enabled": False})
+    out = at._apply_vol_sizing(dataclasses.replace(_make_armed(qty=5), horizon="Position"))
+    assert out.sizing_basis == "floor:unmeasured"
+    assert out.quantity == 1
