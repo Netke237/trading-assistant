@@ -165,7 +165,7 @@ Open questions for Kenneth raised by the plan rounds:
 
 ## H. Kenneth's answers after the round-3 cap (2026-09-25)
 
-- **Plan cap:** a 4th plan round is allowed, auditing section G's unreviewed fixes (and the whole plan).
+- **Plan cap:** a 4th plan round is allowed. Per audit_rule (2) it reviews section G's unreviewed fixes and these answers, plus their interactions with the already-reviewed plan (not the whole plan again).
 - **Q-P2-1 (short stock percent stop fires on a price fall):** log only for now. P2 keeps the truthful relabel (R2-10); no behaviour change. Stays an open question in PROJECT_STATE.
 - **Q-P2-2 (mid too low for any band stop, but a typed dollar stop exists):** keep and show it. The cached pinned dollar is not cleared; the read-only row labels it as pinned (R3-2 as written).
 - **Q-P2-3 (threshold below $0.01):** warn only. F2 stays open, narrowed to `entry × (1 − pct) < $0.01`; the drawer and Settings cautions (R2-3/R2-6, R3-6) are the whole change.
