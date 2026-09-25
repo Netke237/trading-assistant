@@ -10,7 +10,7 @@ frontend half built, plan item 12 (intraday regime-fetch refusal) built, code re
 clean, PROJECT_STATE entry, merge to main. Plan: docs/superpowers/plans/2026-09-25-p3a-scan-sizing-signals-plan.md
 
 ## Status
-Plan round 4 in review (Kenneth allowed it past the cap; B1/B2 answered and folded in)
+BLOCKED on Kenneth — plan round 4 NOT CLEAN (1 finding, fixed in the plan); round 5 needs his OK
 
 ## Done
 - 29b548e plan after round 1 + decision P3A-UNMEASURED-TREND-REMOVE (on the old branch claude/wizardly-lovelace-cub58h)
@@ -22,7 +22,8 @@ Plan round 4 in review (Kenneth allowed it past the cap; B1/B2 answered and fold
 ## Next steps
 - [x] Plan review round 3: NOT CLEAN (B1 item-12 condition misses YAML regime_gate; B2 risk_pct=0 -> 422). See plan 'Review log'.
 - [x] Kenneth answered B1 (match the fire: gate/filter/sizing), B2 (0% stops with a message), round 4 allowed; all findings folded into the plan
-- [ ] Plan review round 4 (fresh subagent); build only if clean
+- [x] Plan review round 4: NOT CLEAN (F1 one-fetch rule, fixed in plan)
+- [ ] Kenneth: allow a plan round 5 on the F1 fix only?
 - [ ] Build item 12 (backend/app/routers/stock_scan.py `_process_stock` + `_analyze_core`, classify_stock_rejection) + tests
 - [ ] Build frontend half: item 1 (scanSizingFromRisk, 4 paths), item 2 (min_stock_score PARAM_DEFS + default 35 + body), item 3 funnel "no data" line + direction_min_trend label
 - [ ] Mutation checks per plan; full backend + frontend suites
@@ -31,7 +32,7 @@ Plan round 4 in review (Kenneth allowed it past the cap; B1/B2 answered and fold
 - [ ] Merge origin/main, rerun checks, merge --no-ff to main, push; `k_session.py finish`
 
 ## Blockers / open questions
-- none open (state.py shows the hard-cap drift by design until round 4 is clean)
+- Round 5 past the cap? (state.py shows the hard-cap drift by design until a plan round is clean)
 
 ## Decisions
 - Continue on claude/cool-allen-5ih4v0 (Kenneth), old P3a branch left as-is.

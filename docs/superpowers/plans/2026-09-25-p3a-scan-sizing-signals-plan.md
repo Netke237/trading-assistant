@@ -216,9 +216,13 @@ with `regime_filter` on the scan is stricter than the fire, which never reads th
   (Kenneth, plan round 3 B1): the fire measures whenever the YAML gate is enabled, so the scan must drop on
   that condition too; `regime_filter` alone would miss the shipped config, since the UI never sends it.
   With the gate, the filter and sizing all off, the fire never fetches, so the scan does not refuse either.
-- **One fetch, not two.** The regime copy reuses the 15-min bars `_process_stock` already fetched for the
-  signal (`_intraday_bars`), as it does today; the fetch's exception is captured once (`fetch_exc`) and
-  reused by the drop reason.
+- **One fetch, when either consumer needs it (round 4 F1).** In `_process_stock` the signal fetch runs only
+  for `req.strategy in _INTRADAY_STRATEGIES` (= `mean_reversion_vwap`); for every other strategy the regime
+  copy does its own fetch today. `rcfg` is loaded BEFORE the signal fetch, and ONE 15-min fetch runs when
+  `req.strategy in _INTRADAY_STRATEGIES or rcfg["timeframe"] == "15min"`; its result feeds both the signal
+  and the regime copy, and its exception is captured once (`fetch_exc`). The drop in this item is decided
+  only from a fetch that actually ran — never from the empty default of a fetch that was skipped.
+  (`_analyze_core` already fetches unconditionally and is unchanged in this respect.)
 - A series that arrived but is shorter than `min_obs`, or that `compute_omm` cannot measure, still
   abstains and is floor-sized, as the fire does. The daily timeframe is unchanged (a symbol with no
   daily bars is already dropped earlier as `insufficient history`).
@@ -235,9 +239,12 @@ Tests: for an Intraday scan with the YAML gate enabled (shipped) and the filter 
 `failed_history`; fetch returns `[]` -> dropped; fetch returns only a forming bar -> dropped; returns
 `min_obs - 1` completed bars -> kept, `sizing_basis == "floor:unmeasured"`. With the gate, the filter and sizing all off
 (gate patched `enabled: false` in memory, never written to YAML), a raising fetch keeps the name. With filter off and sizing on, a raising fetch drops it. Swing
-(daily timeframe) unaffected. Analysis gets the REJECT flag on a raising fetch with the filter on.
+(daily timeframe) unaffected. **Non-VWAP strategy on the Intraday horizon (round 4 F1):** `pullback_ema`,
+gate on, fetch returns >= `min_obs` completed bars -> kept with a measured regime (not `floor:unmeasured`),
+and the fetch was called exactly once; same strategy, fetch raises -> dropped. Analysis gets the REJECT flag on a raising fetch with the filter on.
 Mutation: remove the drop -> the raising-fetch test fails; drop the "measurement used" condition -> the
-all-off test fails; drop the gate term from the condition -> the gate-on/filter-off test fails.
+all-off test fails; drop the gate term from the condition -> the gate-on/filter-off test fails. Reuse the
+skipped signal fetch's `[]` for a non-VWAP strategy -> the pullback_ema keep test fails.
 
 ## Out of scope, stated
 
@@ -270,3 +277,10 @@ ones (options halves, split hypothesis, P3b items) stay open with a note.
   (P3A-INTRADAY-REFUSAL-MATCHES-FIRE-2026-09-25); B2 -> a 0% max loss stops the scan with a message
   (P3A-SCAN-RISK-ZERO-STOPS-2026-09-25); a round 4 past the cap is allowed
   (P3A-PLAN-ROUND-4-ALLOWED-2026-09-25). Both blocking and all eight non-blocking findings folded in above.
+- Plan round 4 (2026-09-25, fresh subagent): **NOT CLEAN, 1 gate-level finding.** F1 (§12, new this round):
+  "reuse the signal's bars" was false for `_process_stock` — the signal fetch runs only for
+  `mean_reversion_vwap`, so with the gate now in the condition every non-VWAP Intraday scan on the shipped
+  config would drop every name. Fixed in the plan above (one fetch when either the signal or the 15-min
+  regime needs it; drop only from a fetch that ran; pullback_ema keep test + mutation). Everything else in
+  the round-4 diff checked fine (B1 vs fire path, B2 0% stop, the eight folded items). Round 4 was the
+  round Kenneth allowed past the cap; stopped for Kenneth before a round 5.
