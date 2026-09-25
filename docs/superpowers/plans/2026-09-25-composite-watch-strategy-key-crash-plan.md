@@ -15,9 +15,9 @@ subscript `w["strategy_key"]` on every row, composite ones included:
    already been evaluated and their new state saved (`update_state`, e.g. idle →
    armed), but the `events` list is discarded with the exception, so those
    notifications are lost for good while the watch sits armed. Rows after it and the
-   whole composite loop are never reached. In eod mode `_last_eod_run_date` is never
-   set (`strategy_watch_scheduler.py:65-67`), so the failing run is retried on every
-   tick. The manual `POST /api/strategy-watch/evaluate` (`run_now` →
+   whole composite loop are never reached. The failing run is retried on every tick in
+   both modes: eod never sets `_last_eod_run_date` (`strategy_watch_scheduler.py:65-67`),
+   poll never sets `_last_run_at` (`:78-79`). The manual `POST /api/strategy-watch/evaluate` (`run_now` →
    `evaluate_and_notify` → `evaluate_all`, no guard) returns 500. Consequence for A4f:
    migrated HMM_intraday composite watches are not live either.
 2. `StrategyWatchStore.add_watch` duplicate check (`w["symbol"] == symbol and
@@ -93,7 +93,8 @@ is true for every strategy row. `add_watches_bulk` needs no change: it calls
   armed state was already saved.
 - **T2** `test_strategy_watch_evaluator.py`: same store, `evaluate_scheduled` → `True`
   and `describe_match` patched (both at `app.services.composite_trigger_evaluator.*`,
-  since the evaluator imports them inside the function)
+  since the evaluator imports them inside the function; `describe_match` returns a
+  realistic detail dict so the real `format_composite_reason` runs, no fallback)
   → the composite event is emitted as well (the strategy-loop skip does not starve
   the composite loop) — two events, MSFT `pullback_ema` entry and AAPL `composite`.
 - **T3** `test_strategy_watch_store.py`: `add_composite_watch("AAPL", …)` then
@@ -114,7 +115,9 @@ is true for every strategy row. `add_watches_bulk` needs no change: it calls
 - **T6** `test_strategy_watch_router.py`: same seeding, plus
   `app.services.strategy_watch_evaluator.strategy_watch_store` patched to the
   reloaded store (the evaluator also holds the pre-reload object), `get_bars` and
-  `evaluate_scheduled` patched; `POST /api/strategy-watch/evaluate` → 200.
+  `evaluate_scheduled` patched **→ `False`** with an **OMM** `trigger_def` (no intraday
+  fetch), and `notify_enabled_channels` patched in the evaluator so nothing can be sent;
+  `POST /api/strategy-watch/evaluate` → 200.
 
 ## Review log
 
@@ -122,11 +125,21 @@ is true for every strategy row. `add_watches_bulk` needs no change: it calls
   the composite router), 3 minor (tick-consequence described wrongly; `/evaluate`
   500 missed; M4 kill reason wrong), 2 nits (patch `describe_match`; frontend
   observation understated). All six taken into this amendment.
+- Round 2 (plan): **CLEAN**. The reviewer prototyped all 8 tests (7 red on main with
+  `KeyError`; T3b green on main by design; all green with C1+C2) and ran M1–M5: each
+  one is killed. Five nits taken: T6 pins `evaluate_scheduled → False` + OMM + a
+  notify patch; T2's `describe_match` returns a real dict; the fixture drops its fake
+  `strategy_key`; the retry claim covers poll mode as well; the config check is in
+  Verification.
 - Side effect seen after round 1: the reviewer's probe seeded through
   `POST /api/composite-watches/`, whose un-reloaded store still points at the real
   `backend/config/strategy_watches.yaml`, and wrote a row there (reverted). This is
   more evidence for the round-1 major finding. Implementation check: after the backend
   suite runs, `git status --short backend/config` must be empty.
+
+- **Fixture fix:** `_composite_watch()` in `test_strategy_watch_evaluator.py` drops its
+  `"strategy_key": "composite"`, which no real row has and which hid this bug. The
+  existing composite tests then run on the real row shape.
 
 ## Mutation plan (each must turn a test red)
 
@@ -142,6 +155,7 @@ is true for every strategy row. `add_watches_bulk` needs no change: it calls
 
 - `cd backend && .venv/bin/python -m pytest tests/test_strategy_watch_*.py tests/test_composite_watch_router.py`
   then the full backend suite; the scratch repro prints no `KeyError`.
+- `git status --short backend/config` is empty after the suite runs.
 - `python3 scripts/state.py` exits 0 after the state record is added.
 
 ## State record
