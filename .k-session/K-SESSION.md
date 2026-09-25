@@ -11,25 +11,30 @@ bar / this week's forming weekly bar. Move `auto_trader._todays_bar_is_unclosed`
 `backend/app/services/market_session.py` (moved, not copied).
 
 ## Status
-in-progress — plan restored, round-1 amendment and build must be REDONE (see Notes).
+in-progress — plan amended (F1), build done and green on targeted tests; mutations + full suite next.
 
 ## Done
 - Plan written, pre-round-1: `docs/superpowers/plans/2026-09-25-a4g-forming-daily-weekly-bar-plan.md`
   (commit 153407e on `claude/loving-mayer-sdyltu`; file copied onto this branch).
+- Plan amended with round 1 F1 (close-instant comparison, §3 step 2, §6a); market_session.py built
+  (helper moved from auto_trader; last_session_close/last_week_close/week_is_unclosed/
+  completed_session_bars); chart_alerts wired (D1/D2/D3); auto-trader tests re-pointed at
+  market_session (clock + hours seam); A4c 1D test rewritten to A4g semantics; 43 A4g tests pass.
 
 ## Next steps
-- [ ] Amend the plan with round 1's finding F1: decide whether the last bar is still forming by comparing
+- [x] Amend the plan with round 1's finding F1: decide whether the last bar is still forming by comparing
       its timestamp with the last session close (an instant), not by matching calendar dates. Record round 1
       (not clean, F1 taken) in the plan.
-- [ ] Build `backend/app/services/market_session.py`: `todays_bar_is_unclosed` (moved verbatim with its
+- [x] Build `backend/app/services/market_session.py`: `todays_bar_is_unclosed` (moved verbatim with its
       docstring, `_market_session_open`, `_NYSE_OPEN`, `MARKET_TZ`), `week_is_unclosed`,
       `completed_session_bars(bars, interval, now=None)`.
-- [ ] `auto_trader.py`: import `todays_bar_is_unclosed as _todays_bar_is_unclosed`; keep the module-global
+- [x] `auto_trader.py`: import `todays_bar_is_unclosed as _todays_bar_is_unclosed`; keep the module-global
       name so existing `mocker.patch.object(at, "_todays_bar_is_unclosed", ...)` tests still patch the call site.
-- [ ] Wire readers D1/D2/D3 (plan §2) in `chart_alerts.py` for 1D/1W: regime snapshot, composite OMM, and
+- [x] Wire readers D1/D2/D3 (plan §2) in `chart_alerts.py` for 1D/1W: regime snapshot, composite OMM, and
       `bars_daily` (HMM_daily + rsi/bb confirmations + `require_choppy_regime`).
-- [ ] Adjust existing tests broken by the move; write `backend/tests/test_a4g_forming_daily_weekly_bar.py`
-      (previous attempt: 34 tests); run the plan's 10 mutations, all must be killed.
+- [x] Adjust existing tests broken by the move; write `backend/tests/test_a4g_forming_daily_weekly_bar.py`
+      (43 tests).
+- [ ] Run the plan's mutations (§6 list), all must be killed.
 - [ ] Full suites (backend + frontend if touched) + `python3 scripts/state.py` exit 0.
 - [ ] Adversarial round 2 (plan amendment + code) via K-adversarial-audit-loop; loop until clean.
 - [ ] Record A4g in `docs/superpowers/PROJECT_STATE.json` (phase, decision, logged items).

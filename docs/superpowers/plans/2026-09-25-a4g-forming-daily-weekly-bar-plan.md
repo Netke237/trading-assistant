@@ -82,17 +82,24 @@ New module `app/services/market_session.py`:
   - Only the **newest** bars can be forming, so only trailing bars are examined:
     1. If the last bar's `time` is not an int (or is a bool), drop **that one bar** (fail closed, as in
        A4b). No live source produces one.
-    2. Then, while the last bar is in the **current period** and the period is unclosed, drop it.
-       - Daily: current period means the bar's day equals `now`'s ET date, and the period is unclosed
-         when `todays_bar_is_unclosed(now)`.
-       - Weekly: current period means the bar's week-Monday equals `now`'s ET week-Monday, and the
-         period is unclosed when `week_is_unclosed(now)`.
-  - **Bar day, robust to the stamp convention.** yfinance stamps daily bars at 00:00 ET. IBKR's daily
-    stamp convention is not verified here. A bar counts as today's if **either** its ET date **or** its
-    UTC date equals today's ET date: 00:00 ET, 00:00 UTC, session open and session close all map to D
-    under one of the two. Weekly uses the same either/or on the week-Monday. The only false positive is
-    a bar stamped in the ET evening of D-1 whose UTC date is D. That is dropped while today is unclosed,
-    which is the conservative direction.
+    2. Then, while the last bar's `time` is **after the last completed close** (strictly `>`), drop it.
+       Stop at the first bar that is not (or is undatable).
+       - Daily: `last_session_close(now)` = today's 16:00 ET when today is a weekday and
+         `todays_bar_is_unclosed(now)` is False; otherwise the previous weekday's 16:00 ET.
+       - Weekly: `last_week_close(now)` = this week's Friday 16:00 ET when `week_is_unclosed(now)` is
+         False; otherwise the previous week's Friday 16:00 ET.
+  - **Round 1 F1 (taken): compare the bar's timestamp with an INSTANT, not calendar dates.** The earlier
+    draft matched the bar's ET-or-UTC date against today's ET date. A bar is one session's bar whatever
+    its stamp convention, and every convention in use stamps it at or after the previous close and at or
+    before its own close: 00:00 ET (yfinance), 00:00 UTC (= previous evening ET), session open, session
+    close (IBKR is not verified). So "stamp > last completed close" is true for exactly the forming bar
+    and false for every completed one, with no date arithmetic across zones. At the close itself a
+    close-stamped bar (`time == close`) is kept, hence strict `>`. Weekly works the same way for
+    Monday-00:00 (yfinance), Sunday-evening-ET and Friday stamps. The only false positive is a bar
+    stamped AFTER its own close (e.g. 20:00 ET): it is dropped until that stamp passes, the conservative
+    direction. Weekends need no special case: on Sat/Sun the last close is Friday 16:00, and no bar is
+    newer. (Guard (i) reads Sat before 09:30 as "unclosed"; `last_session_close` checks the weekday first,
+    so that quirk does not reach here.)
   - Order is preserved and the input list is not mutated.
 
 **The `now` for the chart path is the fetch time**, as in A4c. `chart_cache` holds a 1D/1W snapshot for
@@ -132,7 +139,9 @@ Docstring: the "1D/1W are unchanged" sentence of the A4c paragraph is replaced b
    - Wed 16:01: today's bar kept.
    - Wed 08:00: a today-stamped bar dropped.
    - Sat: nothing dropped.
-   - A 00:00-UTC-stamped today bar is dropped at Wed 10:00 ET (the UTC-date limb).
+   - A 00:00-UTC-stamped today bar is dropped at Wed 10:00 ET and kept at Wed 17:00 ET.
+   - A close-stamped (16:00 ET) today bar is dropped at 15:59 and kept at 16:01.
+   - Monday 10:00: Friday's bar kept, today's dropped (the previous weekday skips the weekend).
    - Undatable last bar: dropped (that one only); an undatable middle bar is kept.
    - `15min`/`1h` unchanged; the input is not mutated.
 2. Weekly: at Wed 10:00, this week's bar is dropped and last week's kept. At Fri 15:59 dropped, at Fri
@@ -152,13 +161,22 @@ Docstring: the "1D/1W are unchanged" sentence of the A4c paragraph is replaced b
 
 Mutations before the round:
 - `<` vs `<=` at 16:00 via guard (i), inherited;
-- drop the UTC-date limb;
+- `>=` instead of `>` against the close instant (drops a close-stamped completed bar);
+- the previous weekday computed as `date - 1 day` (Monday reads Sunday's 16:00);
 - the weekly rule reads the daily test;
 - `now` taken as wall clock instead of `as_of`;
 - D3 left on `_model_candles`;
 - the helper skipped entirely;
 - drop all undatable bars instead of the last one;
 - Friday treated as closed all day.
+
+## 6a. Adversarial round 1 (plan) — NOT CLEAN, one finding, taken
+
+- **F1**: the ET-or-UTC calendar-date match for "today's bar" rests on assumptions about stamp
+  conventions across zones and has a false-positive/negative surface at the date edges. Fix: compare the
+  bar's timestamp with the last completed close instant (§3, step 2). Taken as proposed by the reviewer.
+- Note: the first build of this plan (previous session) was lost uncommitted; this amendment and the
+  build are redone from this plan. Round 2 covers the amendment and the code.
 
 ## 7. Done means
 

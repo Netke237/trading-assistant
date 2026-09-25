@@ -9,35 +9,20 @@ import uuid
 import yaml
 from collections import deque
 from dataclasses import dataclass, field, replace as _dc_replace
-from datetime import date, datetime, time as dtime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Literal, Optional, get_args
 from app.schemas import Direction, Horizon
-from app.services.scheduling_tz import MARKET_TZ
 
 if TYPE_CHECKING:
     # For `FiredOrder`'s annotation only: `execute_option_order` imports the
     # adapter module lazily, and that stays true.
     from app.data.ibkr_paper import OrderResult
-# The scheduler's real NYSE-hours test, reused rather than re-implemented (guard
-# (i); see `_todays_bar_is_unclosed`). Aliased because `_market_is_open` already
-# lives in this file and means something entirely different -- a price probe --
-# and confusing the two IS the defect this closes. Imported at MODULE level on
-# purpose: an ImportError must be a loud startup failure, not a raise inside
-# `_fetch_scan_window_bars`, which `_measure_trade_regime` catches into an
-# abstain that FIRES UNGATED. No new failure mode at app level either --
-# routers/strategy_watch.py already imports this module at startup.
-#
-# THE PRICE, STATED RATHER THAN LEFT TO BE MEASURED (round 1 finding F-8):
-# 0.299s of marginal import time, and it pulls historical_store,
-# notifications/dispatch, strategy_engine and strategy_watch_evaluator into
-# THIS module's import graph. Inert under uvicorn, which imports all of them
-# anyway -- but it is a new import-time failure surface for scripts and narrow
-# test runs that previously needed none of it. The cheaper shape was a
-# three-line hours test in `scheduling_tz.py`, which already owns MARKET_TZ and
-# carries no chain; reusing the scheduler's ONE definition was preferred over a
-# second copy of the boundaries, and that trade is the reason, not an oversight.
-from app.services.strategy_watch_scheduler import _market_open as _market_session_open
+# Guard (i)'s session test lives in market_session.py since A4g (moved, not
+# copied: the 1D/1W chart alert path uses it too). Imported under its old private
+# name so `_fetch_scan_window_bars` and the tests that patch
+# `auto_trader._todays_bar_is_unclosed` keep reaching the name that runs.
+from app.services.market_session import todays_bar_is_unclosed as _todays_bar_is_unclosed
 from app.scoring.conviction_sizing import (
     SizingConfigError,
     conviction_mult,
@@ -554,132 +539,6 @@ _SCAN_BAR_WINDOW_DAYS = int(1.75 * 252)
 # is never the length the regime is measured on.
 _REGIME_FETCH_BARS = 400
 
-# NYSE regular-session OPEN, in MARKET_TZ. The scheduler's `_market_open`
-# answers "is the session in progress" and does not expose its boundaries, so
-# the one boundary this file needs that it cannot ask for is named here.
-_NYSE_OPEN = dtime(9, 30)
-
-
-def _todays_bar_is_unclosed(now: datetime | None = None) -> bool:
-    """True while a bar dated TODAY is still being written.
-
-    GUARD (i), decision AUTOTRADE-2B-CORE-F1-GUARD-I-SESSION-TEST-2026-09-21
-    (Kenneth). Option A's end-trim justified itself with "on the fire path the
-    market is provably open", and THAT PREMISE IS FALSE. `fire()` gates on
-    `_market_is_open`, which is a PRICE-AVAILABILITY probe -- `fetch_price`
-    serves close/previous_close around the clock (market.py:464/:474/:479) and
-    that function's own docstring says the market "appears open". Neither fire
-    path has an hours gate at all. So after 16:00 ET the unconditional trim was
-    dropping a bar that had CLOSED, which the scan had seen: measured at 0.50%
-    of Position fires flipping, including scan PASS -> gate ABSTAIN, and an
-    abstain fires UNGATED AT FULL ARMED QUANTITY.
-
-    THE TEST IS REAL SESSION HOURS IN `MARKET_TZ`, NOT A PRICE PROBE, and it is
-    the scheduler's existing one rather than a second copy: `_market_open`
-    (strategy_watch_scheduler.py:23) is a weekday + 09:30-16:00 America/New_York
-    wall-clock test, tracked via a real IANA zone so it stays correct across
-    both the US's and the operator's own DST transition weeks.
-
-    TWO CLAUSES, AND BOTH ARE LOAD-BEARING -- `_market_open` alone is not the
-    whole question:
-      - MID-SESSION (weekday 09:30-16:00) -- the case the decision names. The
-        bar is provably still being written, with ONE EXCEPTION at the edge:
-        `_market_open`'s upper bound is INCLUSIVE (`<= dtime(16, 0)`), so
-        16:00:00.000000 reads unclosed and TRIMS a bar that has just closed,
-        while 16:00:00.000001 reads complete and keeps it. The truth table pins
-        16:00 as True because that is what the code does; the phrase "provably
-        still being written" is false for that one microsecond-wide instant and
-        true everywhere else in the clause. Left as-is rather than moved to `<`:
-        the probability is ~0, and the alternative is a SECOND divergence from
-        the scheduler's boundary for no measurable gain.
-      - BEFORE THE OPEN (t < 09:30) -- `_market_open` reads False here, and
-        reading that as "closed, so today's bar is complete" would KEEP a bar
-        for a session that has not started. That is round 3's defect with the
-        sign flipped, so pre-open trims exactly as it did before this guard.
-    Everything else -- after 16:00 on a session day -- KEEPS today's bar,
-    which is the whole point of the guard.
-
-    `now` IS NORMALISED, NOT TRUSTED (round 1 finding F-3). An AWARE instant is
-    converted to MARKET_TZ before either clause reads it, so a caller handing
-    this UTC gets the same answer as one handing it New York -- without that
-    conversion the same real instant reads False at NY 20:00 and True as the
-    identical 00:00+00:00, because `now.time()` is a WALL-CLOCK read and does
-    not care which wall. A NAIVE datetime RAISES rather than being guessed at:
-    reading it as MARKET_TZ wall-clock and letting `.astimezone()` read it as
-    the HOST's zone are both defensible and they differ, so the ambiguity is
-    refused at the door. Consequence worth stating: the DST correctness claimed
-    above is a property of THIS FUNCTION, not merely of its default branch.
-
-    THE RAISE'S OWN RESIDUAL, because this file's exceptions are not free: it
-    is thrown inside `_fetch_scan_window_bars`, whose caller
-    `_measure_trade_regime` catches bare `Exception -> return None`, and that
-    abstain FIRES UNGATED AT FULL ARMED QUANTITY. So a naive argument would be
-    a loud failure in a test run and a SILENT fail-open in production. It is
-    unreachable today -- the one production call site (the end-trim) passes no
-    argument at all and takes the `None` branch -- and it is pinned unreachable
-    by the call-site test, which drives the real helper through that call site.
-    A caller that ever wants to pass an instant must pass an aware one; the
-    contract is enforced where enforcing it is cheap.
-
-    RESIDUALS, NAMED RATHER THAN LEFT FOR THE NEXT READER TO FIND:
-      - HALF DAYS. `_market_open` has no holiday calendar and no early-close
-        table, so on the THREE sessions NYSE normally closes early at 13:00 ET
-        (July 3rd or the observed 5th, the day after Thanksgiving, and Christmas
-        Eve) a completed bar is still trimmed between 13:00 and 16:00. That is
-        the OLD behaviour surviving on 3 days instead of 365, not a new defect.
-      - FULL HOLIDAYS. `_market_open` reads True 09:30-16:00 on Thanksgiving,
-        so a bar dated today would be trimmed -- but no session ran, so no
-        feed emits one and `last_day >= today` is False. Inert.
-      - WEEKENDS after 09:30 read "complete" here. Same reason: there is no
-        bar dated a Saturday to keep or drop.
-      - `date.today()` is the HOST's date while this test is the MARKET's, and
-        they disagree for part of every day. Traced rather than waved at, and
-        NEITHER LIMB IS CHANGED BY THIS GUARD:
-          * host AHEAD of New York (the operator's own Europe/Berlin, +6):
-            between the host's midnight and NY's, host-today is NY-TOMORROW, so
-            `last_day >= today` is False and the end-trim is skipped before this
-            function is ever called. EVERY OFFSET IN THIS BLOCK IS RELATIVE TO
-            NEW YORK, NOT TO UTC -- so a UTC host is +4 in EDT and +5 in EST,
-            and Berlin, at UTC+2 in summer, is +6. THAT WINDOW IS NY `[24:00 -
-            offset, 24:00)`, so it lies wholly after the 16:00 close ONLY WHILE
-            `24 - offset >= 16`, i.e. offset <= +8h. Berlin (+6) and a UTC host
-            (+4/+5) satisfy it and are the deployments this ships on, so the
-            limb holds HERE -- and it is NOT vacuous here either: on the UTC
-            host this runs and tests on, that window is a real NY 20:00-24:00
-            in EDT and 19:00-24:00 in EST -- four to five hours every evening,
-            per the +4/+5 above -- in which the end-trim, and with it this whole
-            session test, is never reached. Keeping the bar is the
-            right answer throughout it, which is why the limb holds -- but
-            it does not generalise to "host ahead of New York": at >= +9h (Tokyo
-            is +13) the window reaches back INTO THE LIVE SESSION, where skipping
-            the trim keeps a genuinely unclosed bar. The BEHAVIOUR there belongs
-            to the `date.today()` anchor this diff scopes out; the BOUND is
-            stated here because a load-bearing comment that overstates its own
-            reach is this target's own definition of a defect.
-          * host BEHIND New York (a US-west host, -3): between NY's midnight and
-            the host's, host-today is NY-YESTERDAY, so the trim can act on
-            NY-yesterday's COMPLETED bar. This test reads "unclosed" there
-            (pre-open), so it drops that bar exactly as the unconditional trim
-            did.
-        That second limb is the host-date ANCHOR's residual, not this test's,
-        and it is out of guard (i)'s scope -- the fix for it is anchoring
-        `today` in MARKET_TZ, which is a change to the trim and belongs to
-        whatever target takes it.
-    """
-    if now is None:
-        now = datetime.now(MARKET_TZ)
-    elif now.tzinfo is None or now.utcoffset() is None:
-        raise ValueError(
-            "_todays_bar_is_unclosed needs an AWARE instant -- a naive datetime "
-            "is read as MARKET_TZ wall-clock by one plausible reading and as the "
-            "host's own zone by another, and the two disagree by the host's "
-            "offset. Pass datetime.now(MARKET_TZ), or any aware instant."
-        )
-    else:
-        now = now.astimezone(MARKET_TZ)
-    if _market_session_open(now):
-        return True
-    return now.time() < _NYSE_OPEN
 
 
 def _fetch_scan_window_bars(symbol: str) -> list[dict]:
