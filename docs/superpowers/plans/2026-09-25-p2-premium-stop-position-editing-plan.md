@@ -162,3 +162,10 @@ Open questions for Kenneth raised by the plan rounds:
 - **Q-P2-1:** a SHORT stock's per-position percent stop fires on a price FALL, which is a gain for a short (alertEngine.ts:266, direction-blind).
 - **Q-P2-2:** clear a cached per-position dollar when the card's mid drops to where the band offers no stop?
 - **Q-P2-3:** below $0.01 thresholds (entry × (1 − pct) < $0.01), which F2 narrows to: change behaviour, or warn only (the plan warns only)?
+
+## H. Kenneth's answers after the round-3 cap (2026-09-25)
+
+- **Plan cap:** a 4th plan round is allowed, auditing section G's unreviewed fixes (and the whole plan).
+- **Q-P2-1 (short stock percent stop fires on a price fall):** log only for now. P2 keeps the truthful relabel (R2-10); no behaviour change. Stays an open question in PROJECT_STATE.
+- **Q-P2-2 (mid too low for any band stop, but a typed dollar stop exists):** keep and show it. The cached pinned dollar is not cleared; the read-only row labels it as pinned (R3-2 as written).
+- **Q-P2-3 (threshold below $0.01):** warn only. F2 stays open, narrowed to `entry × (1 − pct) < $0.01`; the drawer and Settings cautions (R2-3/R2-6, R3-6) are the whole change.
