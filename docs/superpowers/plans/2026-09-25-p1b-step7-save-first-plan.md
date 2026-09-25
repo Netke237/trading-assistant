@@ -207,3 +207,9 @@ It found 2 issues. The answers below are PROPOSED and have NOT been audited:
 **W2 (LOW, gate c): V2's second push has no test.**
 - *Proposed test:* persist `{ok:false, detail:'HTTP 500'}`, the delete rejects `→ 500: x`, then Next, and the Remove button for that recId is present.
 - *Mutation M28:* skip that push → red.
+
+## Kenneth's call at the cap (2026-09-25): SPLIT AGAIN
+
+Decision P1B-SPLIT-AGAIN-2026-09-25. This plan is superseded, but it stays as the source for two new phases:
+- **P1b-i, `P1B1-STEP7-SAVE-FIRST-CORE`**. Takes: §2 (save first, send the approved qty), the provably-pre-submit auto-delete list, and results labelled with their contract. A row that may have no order behind it gets a plain persistent note naming the contract and rec_id: "check the broker, then delete it in Portfolio". It has no Remove or Dismiss buttons. It needs its own short plan, with a fresh plan stage (cap 3). P1a's merge waits on this phase.
+- **P1b-ii, `P1B2-STEP7-ORPHAN-ROW-UI`**. Takes: §3, the U/V revisions, and W1-W2, which are still unaudited: the per-recId Remove/Dismiss UI. Fresh plan stage. It does not block the merge.
