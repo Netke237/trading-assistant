@@ -133,8 +133,8 @@ a None benchmark leaves the trend unmeasured, the fail-closed outcome. **Cost, s
 relative_strength is on, this is one `get_bars` for the ETF proxy (SPY/QQQ) per scan — on a stale store that is a
 5-year provider fetch AND a DB write (`get_bars` stores what it fetched), on the options path for the first time.
 It is the same call the stock scan already makes per scan. `_process_symbol` gains `rs_benchmark: list[dict] | None = None` and
-passes `benchmark_candles=_aligned_benchmark(rs_benchmark, candles)` (also imported from stock_scan) to BOTH
-`score_stock` calls. The stock scan hands `bars[-120:]`; the options scan scores on its full `candles` — the
+passes `benchmark_candles=_bench` (`_bench = _aligned_benchmark(rs_benchmark, candles)`, computed once; helper
+imported from stock_scan) to BOTH `score_stock` calls. The stock scan hands `bars[-120:]`; the options scan scores on its full `candles` — the
 alignment is by last date, so the slice does not matter to `_aligned_benchmark`.
 This is a behaviour change for relative_strength users of the options scan: the trend becomes a real reading
 instead of a flat CAUTION 50. That is the options scan catching up with the stock scan, not a new rule.
@@ -144,7 +144,16 @@ an options name that missed the DB is scored on `fetch_candles_async` bars (Trad
 comes from the DB store; if their last dates differ `_aligned_benchmark` returns None and the name is removed as
 unmeasured. The scan logs one INFO line per scan with the count of names whose benchmark failed to align
 (`SCAN %s rs_benchmark: misaligned=%d of %d`), so a systematic loss is visible; logged as an open question.
-Test: a DB-miss name whose fetched last date ≠ the benchmark's → removed unmeasured, counted in that line.
+**How the count gets back (r3-M2):** the reject reason cannot carry it (every unmeasured drop gets the same
+`_direction_conviction_drop` text, and `_process_symbol` returns only `TradeCardData | RejectedCandidate`), and
+`_execute_scan_core` has no candles for DB-miss names to recompute it. So `_execute_scan_core` creates
+`_rs_misaligned: list[str] = []` before the fan-out and passes it as `_process_symbol(..., rs_misaligned=...)`
+(default None); `_process_symbol` computes `_bench = _aligned_benchmark(rs_benchmark, candles)` once, and when
+`rs_benchmark is not None and _bench is None` appends `symbol`. All `_process_symbol` calls run as coroutines on
+the one event loop (`gather`), so the append needs no lock. After `gather` the line logs `len(_rs_misaligned)`
+of `len(symbols)`, only when `_rs_bench is not None`.
+Test: a DB-miss name whose fetched last date ≠ the benchmark's → removed unmeasured, and the INFO line reads
+`misaligned=1 of 1` (caplog).
 
 Change — **inside `_process_symbol`, on the PRE-SCREEN card, calling the stock helper**:
 
@@ -196,8 +205,10 @@ Tests (`tests/test_p3c_options_direction_unmeasured.py`):
   with the benchmark fetch returning None → the name is removed unmeasured.
 - Funnel: one unmeasured + one measured-below-floor + one kept → `failed_direction == 2`, `other_rejected == 0`,
   no banner; both removed and nothing kept → banner equals the stock form ("removed 2 of 2"), and contains no
-  "market structure"; the existing banner tests in test_scan_direction_funnel.py that assert the old text are
-  updated to the new text (listed in the commit).
+  "market structure". (r3-L5: no existing backend test asserts the old text — test_scan_direction_funnel.py:150,
+  :162 only check truthiness, so none change. The only copy of the old text is a frontend fixture,
+  `step-4-ranking/__tests__/emptyStateBanner.test.tsx:21-22`, outside P3c's files; it still passes but is now
+  misleading — logged as an open question for its owner.)
 - Classification guard (r2-L8): add `("direction_conviction_unmeasured: no trend measurement for Bullish Swing",
   "failed_direction")` to `_REAL_REASONS`.
 
@@ -230,8 +241,10 @@ Decision P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25: behaviour unchanged (the backe
 - Options entries are never flagged: the options request carries no `risk_pct`.
 
 Tests (jest): `scheduleRiskIgnored` true for stocks/0, false for stocks/0.02, stocks/undefined, options;
-a render test of `ScheduleEntryRow` (or the section with a mocked `api.getScanSchedule`) shows the text for a
-stocks entry with `risk_pct: 0` and not for `0.02`.
+a render test of `SettingsPage` (r3-L6: `ScheduleEntryRow` is private, page.tsx:706, and a Next 15 `page.tsx`
+may not add named exports) with `api.getScanSchedule` and `api.getScanScheduleEntryRuns` mocked, navigated to the
+Scan section — the pattern `__tests__/RiskForm.hydration.test.tsx` already uses — shows the text for a stocks
+entry with `risk_pct: 0` and not for `0.02`.
 
 ## 4. conviction_sizing refusal messages
 
@@ -240,7 +253,12 @@ stocks entry with `risk_pct: 0` and not for `0.02`.
 - (3) `min_mult` outside (0, 1]: the message is built per case instead of one sentence that names both
   "above 1" and "0":
   - `> 1`: "... is a FRACTION of full size, so a floor above 1 is not a floor at all" (+ hint, below).
-  - `== 0`: the existing zero sentence + the existing "To stop trading in a headwind" advice.
+  - `== 0` (r3-M3 — the existing zero sentence is FALSE since P3a removed `or 0.01`: a 0 multiplier no longer
+    falls through to 1%): "... a floor of 0 does not remove the position: the multiplier sizes it to the MINIMUM
+    — 1 share on the stock card (`max(1, …)`, stock_scan.py:1015) and 1 contract on the fire path
+    (`_sized_quantity`'s `max(1, …)`, auto_trader.py:1392) — in every headwind, however strong." + the existing
+    "To stop trading in a headwind" advice. The module comment above the raise (conviction_sizing.py ~:300-308)
+    that restates the fall-through is corrected in the same commit.
   - `< 0`: "... is negative — a multiplier floor cannot be below 0; write a fraction in (0, 1], e.g. 0.3".
   All three keep the prefix `scoring_rules.yaml: regime_sizing.min_mult is {min_mult}, outside (0, 1]`.
 - (4) the `/100` hint is offered only when the value reads as a whole percent: `float(min_mult).is_integer()`
@@ -250,7 +268,9 @@ stocks entry with `risk_pct: 0` and not for `0.02`.
   The "sizes every order at FULL" sentence is unchanged.
 
 Tests (extend `tests/test_conviction_sizing.py`): message for -0.1 contains "negative" and does NOT
-contain "above 1" or "FALSY"; 1.01 has no "Did you mean"; 30 → "0.3"; 0 unchanged (existing test);
+contain "above 1" or "FALSY"; 1.01 has no "Did you mean"; 30 → "0.3"; 0 → contains "1 share" and "do not set
+the floor to zero" and NOT "1%" / "FALSY" — the existing zero test (test_conviction_sizing.py ~:420-458, asserts
+`"1%" in msg`) and its docstring are rewritten to the current behaviour in the same commit (r3-M3);
 full 0.004 no "Did you mean"; full 0.4 → "40". All still raise `SizingConfigError`.
 
 ## 5. Negative bearish backtest price — measure, then fix
@@ -294,6 +314,14 @@ the maximum ratio of ATR(14) as `_read_bars` returns the series to ATR(14) on a 
 the detected split ratios applied backwards (independent of stored `adj_factor`), and the MINIMUM bearish
 pullback_ema target (`current - risk × rr_target_mult`, strategy_engine's formula as a pure function) on each
 series, with dates; and the same values on the 5 bars either side of each detected split.
+**Target formula, exact (r3-L4)** — reimplemented from strategy_engine.py:459-500 with the default params from
+`strategy_params.yaml` (`pullback_ema`): `risk = (fast_ema + atr × atr_stop_mult) - current`; BOTH extension
+rungs `current - risk × rr_target_mult × k` for k ∈ {1, 1.5}, plus the `prior_extreme` rung; the reported value is
+the minimum rung. It is reported twice: on bars where the bearish setup passes (price below the EMA, MAs stacked,
+within tolerance, reversal bar if enabled) — the number comparable to a backtest — and, separately, on all bars.
+`pullback_ema_signal` is not called for this (P3a's ladder now drops non-positive rungs, which would hide the
+effect). The reimplementation is pinned by one fixture check: on a bar where `pullback_ema_signal` fires bearish,
+the script's stop equals the signal's `stop_price`.
 LYB had no split: for it the script prints `NO SPLIT IN WINDOW` and the line "the split hypothesis does not
 explain LYB's negative target" with its minimum target, so the evidence is not over-read.
 
@@ -337,13 +365,19 @@ I/O (market-open check ~3s, regime fetch ≤ 25s deadline since P3b — auto_tra
 
 Change: `fire()` runs on a DEDICATED single-worker executor, `_FIRE_EXECUTOR =
 ThreadPoolExecutor(max_workers=1, thread_name_prefix="auto-trade-fire")` in auto_trade.py, via
-`loop.run_in_executor` (r2-L13): the default executor is shared with a running scan's `to_thread` calls (intraday
+`cf = _FIRE_EXECUTOR.submit(...)` + `await asyncio.wrap_future(cf)` (r2-L13; r3-M1 — the handler keeps the
+`concurrent.futures.Future` itself, see Cancellation): the default executor is shared with a running scan's `to_thread` calls (intraday
 fetch, HMM, confidence, quotes), so a manual fire during a large scan could queue before its market-open check
 even starts. One worker also SERIALISES two concurrent `/fire` calls: the second enters `fire()` only after the
 first has disarmed, and gets `ArmPreservedError` → 400.
 Precedent that `fire()` is safe off the loop: `run_scan` already runs `maybe_fire_on_scan` → `fire()` in a worker
 thread (scan.py:1832); `fire()` guards its state with a `threading.Lock`. The DB read stays on the loop before the
-call; `book_fired_order(fired, db)` stays on the loop after it (the session never enters the thread). Exceptions
+call; `book_fired_order(fired, db)` stays on the loop after it (the session never enters the thread).
+**DB connection (r3-L7):** after the snapshot read and before the await, the handler calls `await db.rollback()`
+(the read opened a transaction and holds a pool connection; nothing is written), so a `/fire` queued behind the
+single worker — up to ~3s market check + 25s regime deadline + broker call — does not pin a connection;
+`book_fired_order`'s first statement checks one out again. Test: after the await begins, the session reports no
+active transaction (`db.in_transaction()` is False). Exceptions
 propagate from the executor with their type, so the handlers are unchanged. The executor's worker is a normal
 non-daemon thread, joined at interpreter exit like the default executor's.
 
@@ -354,14 +388,19 @@ behind `asyncio.to_thread`") is rewritten: `fire()` now runs off the loop, the s
 **Cancellation (r1-M9, corrected by r2-M4).** Main.py installs only CORSMiddleware, so a client disconnect does not
 cancel the handler; a forced/timed-out shutdown does, and then `asyncio.run`'s teardown cancels every task —
 an asyncio-side done-callback would see only "cancelled" and lose the result. So the logging is on the THREAD
-side: the handler captures `armed_symbol = _armed_state.strategy.symbol` before the call and submits
-`_fire_and_report(cancelled: threading.Event, armed_symbol, **kwargs)`, which calls `auto_trader.fire(...)` and,
-when it returns or raises, checks `cancelled.is_set()`; if set it logs at ERROR
-`"POST /auto-trade/fire for {symbol} was cancelled while fire() ran; this outcome was NOT booked: {FiredOrder or
-exception}"` — then returns/re-raises as before. The handler, on `CancelledError` at the await, sets `cancelled`,
-and — if the executor future is already done and not cancelled (the thread finished just before the cancel) —
-logs the same line itself from the future's result, then re-raises. The executor's thread is joined at shutdown,
-so the thread-side line is written. Booking is not attempted after a cancel (the request's session is gone).
+side of the `concurrent.futures.Future` (r3-M1 replaces r2's Event + double check, which had a race — worker
+checks the unset Event, handler sets it, handler sees `.done()` False, worker returns: nothing logged — and could
+not be built on `run_in_executor`, whose asyncio future is cancelled with the task, so no result is readable). The
+handler captures `armed_symbol = _armed_state.strategy.symbol` before the call, submits `cf =
+_FIRE_EXECUTOR.submit(auto_trader.fire, ...)` and awaits `asyncio.wrap_future(cf)`. On `CancelledError` it calls
+`cf.add_done_callback(functools.partial(_log_unbooked, armed_symbol))` and re-raises. `add_done_callback` runs the
+callback at once if `cf` is already done, otherwise in the worker thread when `fire()` finishes; the Future's
+internal lock makes that hand-off atomic, so exactly one of the two happens and there is no window. (The
+`wrap_future` cancel propagates `cf.cancel()`, which is a no-op on a running future and, on a still-QUEUED one,
+cancels it — `fire()` never ran, nothing to book; `_log_unbooked` then logs "cancelled before fire() ran" at
+WARNING.) `_log_unbooked` logs at ERROR `"POST /auto-trade/fire for {symbol} was cancelled while fire() ran; this
+outcome was NOT booked: {cf.result() or cf.exception()}"`. The executor's thread is joined at shutdown, so a
+thread-side callback is written. Booking is not attempted after a cancel (the request's session is gone).
 The same gap on `run_scan`'s `maybe_fire_on_scan` call is logged as an open question.
 
 Stale docstrings outside P3c (round-1 L11): auto_trader.py:1548-1550 ("reachable from the event-loop thread,
@@ -380,9 +419,13 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   second's enter ≥ the first's exit — serialisation); and EITHER the wrapper recorded two calls with exactly one
   `ArmPreservedError` raised from inside `fire()`, OR it recorded one call (the loser stopped at the endpoint's
   own armed check) — both are correct refusals, and the test says which it saw.
-- Cancellation: `fire` held on a `threading.Event`; the handler task is cancelled; the Event is released; assert
-  the ERROR line names the symbol and the FiredOrder, and `book_fired_order` was not called. Second case: the
-  future completes, then the cancel lands before the await resumes → the handler-side line is logged.
+- Cancellation (r3-M1): `fire` held on a `threading.Event`. Case A — the handler task is cancelled, then the
+  Event is released → the ERROR line (written from the worker thread) names the symbol and the FiredOrder.
+  Case B, the race — the Event is released and `cf` completes BETWEEN the cancel and the handler's
+  `add_done_callback` (sequenced by waiting on `cf` before delivering the cancel) → the line is logged once, at
+  once, from the loop. Case C — `fire` raises after the cancel → the line names the exception. Case D — a second
+  `/fire` still queued when cancelled → WARNING "cancelled before fire() ran", `fire` never called. Every case:
+  exactly one line, `book_fired_order` not called.
 
 ## State updates (PROJECT_STATE.json)
 
@@ -393,7 +436,8 @@ direction", "LOGGED BY P3a (2026-09-25), NOTE: frontend", "LOGGED BY P3c SETUP" 
 FIXED (a) _build_target_ladder" and "P3a (2026-09-25) FIXED the comment (441" updated with "check script
 shipped, awaiting Kenneth's run" (not closed). New entries: the stale stock_scan.py and auto_trader.py
 comments (L11, L12), the scan-vs-fire END difference (item 6), `run_scan`'s cancellation gap (item 7),
-the relative_strength DB-miss misalignment residual (r2-M6), the ScanFunnel unmeasured stage (r2-M7).
+the relative_strength DB-miss misalignment residual (r2-M6), the ScanFunnel unmeasured stage (r2-M7), the
+stale "market structure does not support" text in the frontend fixture `step-4-ranking/__tests__/emptyStateBanner.test.tsx:21-22` (r3-L5).
 The two Kenneth decisions above go to the front of `decisions`. One new decision
 per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `direction_conviction_unmeasured` in scan.py.
 
@@ -449,3 +493,17 @@ None open. Q1 and Q2 of r1 were answered (decisions at the top).
 | 11 | LOW | benchmark call can raise; writes to DB | fixed: wrapped → None; cost and write stated |
 | 12 | LOW | dangling "see Q1" | fixed: points to the decision |
 | 13 | LOW | manual fire can queue behind a scan on the default executor | fixed: dedicated single-worker executor |
+
+## Round-3 log (7 findings)
+
+All 13 round-2 resolutions verified present in the body and correct against the code.
+
+| # | Sev | Finding | Resolution (r4) |
+|---|---|---|---|
+| M1 | MEDIUM | §7 Event + double check races (nothing logged) and can't be built on `run_in_executor` | `submit` + `wrap_future`; on cancel `cf.add_done_callback(_log_unbooked)` — atomic under the Future's lock; four tests incl. the race |
+| M2 | MEDIUM | §2 misaligned-benchmark count had no path back to the scan | per-scan `_rs_misaligned` list passed into `_process_symbol`; caplog test |
+| M3 | MEDIUM | §4 kept the zero-floor "falls through to 1%" sentence, false since P3a | zero case rewritten (min 1 share / 1 contract); existing test + docstring + module comment updated |
+| L4 | LOW | §5 minimum-target formula didn't match the backtest | exact reimplementation, both rungs + prior_extreme, setup-bars vs all-bars, pinned to `stop_price` |
+| L5 | LOW | §2 said banner tests assert old text; none do | sentence dropped; stale frontend fixture logged as open question |
+| L6 | LOW | §3 `ScheduleEntryRow` is private and page.tsx can't export it | render `SettingsPage` with mocks (RiskForm.hydration pattern) |
+| L7 | LOW | §7 queued `/fire` calls each pin a DB connection | `await db.rollback()` before the await; test |
