@@ -2175,8 +2175,8 @@
     },
     {
       "id": "P4B-DECISIONS-2026-09-25",
-      "q": "P4b new questions: (1) may P4b edit routers/chart_alerts.py (P4a-owned) for the composite block? (2) VWAP confirmation on 4h? (3) delivery-gated watch state when no notification channel is enabled?",
-      "a": "Kenneth, 2026-09-25: (1) YES -- composite-rule block (~:953-1005) and its A4e docstring VWAP sentence only; P4a's plan must not rework those lines. (2) the intraday VWAP signal on completed 4h bars; add '4h' to mean_reversion_vwap_signal's interval allow-list in strategy_engine.py (one line). (3) no channel enabled -> the watch arms as today (nothing to retry); channels enabled but none delivered -> the transition is not committed and retries next run.",
+      "q": "P4b new questions: (1) may P4b edit routers/chart_alerts.py (P4a-owned) for the composite block? (2) VWAP confirmation on 4h? (3) delivery-gated watch state when no notification channel is enabled? After plan round 1: (4) may P4b edit routers/composite_watch.py (unowned) for /regime-snapshot? (5) watches store '15m' while rules store '15min' and the two spellings fetch different series (yfinance RTH vs Tradier-merged incl. extended hours) -- map the watch spelling, or defer parity to W2-INTERVAL?",
+      "a": "Kenneth, 2026-09-25: (1) YES -- composite-rule block (~:953-1005) and its A4e docstring VWAP sentence only; P4a's plan must not rework those lines. (2) the intraday VWAP signal on completed 4h bars; add '4h' to mean_reversion_vwap_signal's interval allow-list in strategy_engine.py (one line). (3) no channel enabled -> the watch arms as today (nothing to retry); channels enabled but none delivered -> the transition is not committed and retries next run. (4) YES -- the /regime-snapshot HMM_intraday history-days argument only. (5) MAP: the composite watch evaluator translates 1m/5m/15m/30m -> 1min/5min/15min/30min (read-side only, stored value not migrated) before fetch_intraday_candles and completed_bars_for_interval; accepted side effect: HMM_intraday watches on those intervals read the rule path's Tradier-merged series.",
       "by": "Kenneth 2026-09-25 (P4b)"
     }
   ],
