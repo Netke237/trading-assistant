@@ -8,7 +8,7 @@
 Build work package P2 (see `docs/superpowers/plans/2026-09-25-work-packages.md`): 23 backlog entries + Kenneth's decisions Q6, Q7, Q8, Q9, Q15. Plan: `docs/superpowers/plans/2026-09-25-p2-premium-stop-position-editing-plan.md`.
 
 ## Status
-Plan stage. Rounds 1–3 NOT CLEAN (cap hit); Kenneth approved a 4th plan round and answered Q-P2-1/2/3 (section H). Plan round 4 (scope: sections G+H + interactions, gate-level only) launched; test re-baseline running. Nothing built yet.
+Plan stage. Rounds 1–3 NOT CLEAN (cap hit); Kenneth approved a 4th plan round and answered Q-P2-1/2/3 (section H). Plan round 4 NOT CLEAN (2 gate-level: R4-1, R4-2; proposed fixes in plan section I, unreviewed). STOPPED for Kenneth: apply section I and run a 5th round, or apply section I without another round? Nothing built yet.
 
 ## Done
 - fe495ca plan r0; c759fb1 r1 revisions (8 major/12 minor); 10630b7 r2 revisions (6 major/9 minor); 411d7e6 r3 revisions (2 major/7 minor, unaudited) — originally on `claude/quirky-pasteur-r1kt0v`, merged onto current main (which now carries P3b) in this branch.
@@ -25,7 +25,7 @@ Plan stage. Rounds 1–3 NOT CLEAN (cap hit); Kenneth approved a 4th plan round 
 - [ ] Merge into main (--no-ff, state record written before the merge), then `k_session.py finish`.
 
 ## Blockers / open questions
-- None blocking. Q-P2-1 logged-only (not built).
+- BLOCKING: Kenneth's call after plan round 4 (see Status). Q-P2-1 logged-only (not built).
 
 ## Decisions
 - P2, not P1 — the earlier "P1" mention was a typo.

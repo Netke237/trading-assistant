@@ -169,3 +169,12 @@ Open questions for Kenneth raised by the plan rounds:
 - **Q-P2-1 (short stock percent stop fires on a price fall):** log only for now. P2 keeps the truthful relabel (R2-10); no behaviour change. Stays an open question in PROJECT_STATE.
 - **Q-P2-2 (mid too low for any band stop, but a typed dollar stop exists):** keep and show it. The cached pinned dollar is not cleared; the read-only row labels it as pinned (R3-2 as written).
 - **Q-P2-3 (threshold below $0.01):** warn only. F2 stays open, narrowed to `entry × (1 − pct) < $0.01`; the drawer and Settings cautions (R2-3/R2-6, R3-6) are the whole change.
+
+## I. Plan round 4 (NOT CLEAN: 2 gate-level) — the round Kenneth authorised past the cap. Fixes below are proposed, NOT applied as reviewed. Stopped for Kenneth.
+
+Both findings were re-verified against the code: Settings accepts any typed value up to 1.0 (`settings/page.tsx:1433-1438`, `max={1.0}`, `step={0.05}`), the backend accepts `le=1.0` (`risk_settings.py:47-50`), and GET returns the stored value unclamped (`risk_settings.py:121`).
+
+- **R4-1 (G/R3-1 + F/R2-7 drawer hint).** The "Stored 100% can never fire" caution and the drawer's "The global stop is 100% and can never fire" hint are keyed on `global > PREMIUM_STOP_MAX_PCT`. A stored 0.995 is reachable and DOES fire (at `entry × 0.005` in both engines), so the user would see a wrong percentage and a false never-fires claim next to a "fires at" preview that disagrees. Proposed fix: the never-fires text only when `global >= 1`. For `0.99 < global < 1`: "Stored {premiumStopPctLabel(global)} is above the 99% maximum. Save to apply 99%." with no never-fires claim; the drawer hint stays silent there. Tests pin both texts at 1.0 and at 0.995.
+- **R4-2 (G/R3-6 + E/R1-3).** The Settings hint's entry limit `0.01/(1−pct)` becomes `$Infinity` at a loaded legacy 1.0, the exact case R3-5 tests. Proposed fix: hide the sub-cent hint while `pct >= 1` (the R4-1 caution covers it) and compute it from the clamped value otherwise; round the limit UP to the cent. Test at a loaded 1.0: no "Infinity" anywhere on the page.
+
+Below the gate (logged, not fixed): R3-8's "strict" wording means `<=`; R3-9 option-path labels are `T{pct}%`, so after a target-% change the matched label follows the percentage, not the rung position; an untouched read-only row at a $0.01 mid shows `$0.01 (global 60%)`; the server's "never fires at 1.0" holds unless a quote of exactly 0 reaches `generate_alerts` (`alerts.py:48` filters only None); R3-3 and R3-7 residuals as already stated.
