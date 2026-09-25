@@ -56,7 +56,8 @@ def test_a_rejected_order_logs_rejected_not_fired(mocker, caplog, status):
                 if r.levelno == logging.WARNING and "REJECTED" in r.getMessage()]
     assert len(warnings) == 1
     msg = warnings[0].getMessage()
-    assert "MSFT" in msg and "o-9" in msg and status in msg
+    assert "MSFT" in msg and "ibkr_paper" in msg
+    assert repr(status) in msg and repr("o-9") in msg
     # The config was read and applied, so the hold still clears.
     clear.assert_called_once_with()
 

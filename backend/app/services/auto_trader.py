@@ -2731,17 +2731,19 @@ class AutoTradeService:
             if _is_rejected_status(fired.result.status):
                 logger.warning(
                     "AutoTrader: scan completion trigger's order for %s was "
-                    "REJECTED by the broker (status %s, order %s)",
-                    fired.strategy.symbol, fired.result.status,
-                    fired.result.order_id,
+                    "REJECTED by the broker (%s, status %r, order %r, "
+                    "attempt %s)",
+                    fired.strategy.symbol, fired.result.broker,
+                    fired.result.status, fired.result.order_id,
+                    fired.attempt_id,
                 )
             else:
                 logger.info("AutoTrader: fired on scan completion trigger")
             # The config blocks were read and applied, so any standing
             # config-refusal alert is over. That holds on a rejection too: the
             # broker can only reject an order that was built from them. See
-            # the helper for why this lives
-            # here and not as `discrete=True` on those two alerts.
+            # the helper for why this lives here and not as `discrete=True` on
+            # those two alerts.
             _clear_config_refusal_holds()
             return fired
         except RegimeHeadwindError as exc:
