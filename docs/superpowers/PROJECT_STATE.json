@@ -2144,6 +2144,11 @@
       "id": "P1B1-MINIMAL-REMOVE-2026-09-25",
       "q": "P1b-i's plan hit the 3-round cap. Round 3: Portfolio has no delete action (only Close, which books a fake closed trade into History), shows the raw contract rather than the note's label, and an in-memory note never retires. (A) bring a minimal per-note Remove back into P1b-i; (B) keep no buttons and describe Close-then-delete-from-History; (C) other?",
       "a": "Kenneth, 2026-09-25: (A). Each persistent note gets ONE Remove button that hard-DELETEs exactly that note's rec_id after a confirm step. No Dismiss button. This takes a minimal part of P1b-ii into P1b-i; P1b-ii keeps anything beyond it."
+    },
+    {
+      "id": "P1B1-DELTA-REVIEW-2026-09-25",
+      "q": "P1b-i's plan is past its 3-round cap; option A's Remove section (A1-A6) is unaudited. One more review of that section only, or build now?",
+      "a": "Kenneth, 2026-09-25: ONE DELTA REVIEW (plan round 4, A1-A6 only). Clean -> build. Not clean -> stop and report to Kenneth; no further plan rounds."
     }
   ],
   "pending_kenneth": [
