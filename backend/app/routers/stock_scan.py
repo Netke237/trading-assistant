@@ -49,7 +49,7 @@ from app.services.historical_store import get_bars as get_historical_bars
 # _atr is the SAME ATR(14) /contracts/exit-plan uses (contracts.py imports it
 # from here too) -- not strategy_engine's same-named one, which is a different
 # implementation. The two endpoints must build their ATR floor on one number.
-from app.scoring.stock_scorer import score_stock, _atr
+from app.scoring.stock_scorer import score_stock, _atr, resolve_rs_benchmark
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
@@ -163,6 +163,20 @@ _SIGNAL_FNS = {
 # Strategies that require intraday (15m) bars instead of daily bars for signal + backtest.
 _INTRADAY_STRATEGIES = frozenset({"mean_reversion_vwap"})
 
+# Days of 15-minute bars fetched on every path here (scan signal, scan regime,
+# Analysis). One number so Analysis cannot measure a different series than the
+# scan it explains; the auto-trader's fire path uses the same 55.
+_INTRADAY_FETCH_DAYS = 55
+
+# Risk fraction when a request carries neither risk_pct nor risk_fixed_usd.
+_DEFAULT_RISK_PCT = 0.01
+
+# ETF proxy fetched for a relative_strength trend benchmark. An index and its
+# ETF differ in ROC only by dividends over the 20-50 day RS window. A name not
+# listed here fetches nothing -> the trend is unmeasured, never scored against
+# a substitute index.
+_RS_BENCHMARK_PROXY = {"SPX": "SPY", "NDX": "QQQ"}
+
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "pullback_ema":          lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type, "require_reversal": r.pullback_require_reversal},
     "breakout_base":         lambda r: {"volume_mult": r.breakout_volume_mult},
@@ -236,32 +250,25 @@ def _direction_conviction_drop(symbol: str, card, min_trend: float | None,
     # score either way. Thresholds live in scoring_rules.yaml
     # (horizons.<horizon>.direction_conviction); `None` means exempt,
     # which is how Intraday is excused rather than by naming it here.
-    # Must stay identical to the options gate in routers/scan.py — both
-    # now read the same resolver, which is what keeps them in step.
+    # The FLOOR must stay identical to the options gate in routers/scan.py —
+    # both read the same resolver, which is what keeps them in step. The
+    # unmeasured check below is stock-scan only (see its note).
     if min_trend is None:
         return None
-    # The `, 50` fallback is KEPT, unlike the `if _c.stockBreakdown
-    # else 50` removed from the options gate. They look like twins
-    # and are not: that one guarded a REQUIRED pydantic field on a
-    # model that is always truthy, so it was provably dead code,
-    # while this one fires for any card whose `rules` carries no
-    # trend entry — which several test fixtures build deliberately
-    # (`rules=[]`) to exercise backtest and signal paths. Raising
-    # here instead breaks four tests that are not about this gate.
-    #
-    # Unreachable in production: score_stock always appends
-    # trend_result (stock_scorer.py:1089) and every _trend_* branch
-    # returns a RuleResult named "trend".
-    #
-    # The 50 DID change meaning when the gate became a floor — at
-    # Bearish/Position it went from rejected (old ceiling of 40) to
-    # passing (floor of 40). That is the bullish side's behaviour,
-    # now mirrored, and it is one instance of a wider problem the
-    # gate has: it reads a single integer and cannot tell a measured
-    # 50 from "no measurement". Tracked as an open question in
-    # PROJECT_STATE.json rather than patched here, because the fix
-    # is a scorer-contract change, not a gate change.
-    _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
+    # A trend rule with nothing to measure (too few bars for its MA, no
+    # benchmark series for relative strength) carries a placeholder score --
+    # 0 for crossover/additive, 50 for relative strength -- that this gate used
+    # to judge as if it were a reading, so the same "no data" was removed on one
+    # method and passed on another. It is now removed as UNMEASURED, under its
+    # own reason and funnel bucket (decisions Q11 and
+    # P3A-UNMEASURED-TREND-REMOVE-2026-09-25). A card with no trend rule at all
+    # is the same case: nothing was measured. The options gate in
+    # routers/scan.py reads an int (`stockBreakdown.trend`) and cannot see this.
+    _trend = next((r for r in card.rules if r.name == "trend"), None)
+    if _trend is None or not getattr(_trend, "measured", True):
+        return {"symbol": symbol,
+                "reason": f"direction_conviction_unmeasured: no trend measurement for {direction} {horizon}"}
+    _trend_score = _trend.score
     if _trend_score < min_trend:
         return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {min_trend:g} for {direction} {horizon}"}
     return None
@@ -277,6 +284,37 @@ def _regime_headwind(regime_signal: dict | None, regime_gate: dict) -> bool:
 
 def _no_setup_drop(symbol: str, strategy: str) -> dict:
     return {"symbol": symbol, "reason": f"no {strategy} setup"}
+
+
+def _min_score_drop(symbol: str, card, min_stock_score: float | None) -> dict | None:
+    """Step-3 "Min stock score" (Q5). The `REJECT score=` prefix files it under
+    failed_score, the same funnel stage as the status REJECT it extends."""
+    if min_stock_score is not None and card.score < min_stock_score:
+        return {"symbol": symbol, "reason": f"REJECT score={card.score} < min {min_stock_score:g}"}
+    return None
+
+
+async def _rs_benchmark_candles(req) -> list[dict] | None:
+    """The benchmark bars a relative_strength trend rule needs, or None.
+
+    None when the effective trend method is not relative_strength, when the
+    benchmark has no ETF proxy, or when the fetch fails or returns nothing --
+    the last three leave the trend UNMEASURED, which the direction gate removes
+    as "no data" instead of scoring a placeholder 50."""
+    name = resolve_rs_benchmark(req.horizon, req.overrides)
+    if name is None:
+        return None
+    proxy = _RS_BENCHMARK_PROXY.get(name.upper())
+    if proxy is None:
+        logger.warning("relative_strength benchmark %r has no ETF proxy -- trend left unmeasured", name)
+        return None
+    end = date.today()
+    try:
+        bars = await get_historical_bars(proxy, end - timedelta(days=_HISTORY_YEARS * 365), end)
+    except Exception as exc:
+        logger.warning("relative_strength benchmark %s fetch failed: %s", proxy, exc)
+        return None
+    return bars or None
 
 
 def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict]) -> tuple[object | None, dict | None]:
@@ -379,6 +417,10 @@ def classify_stock_rejection(reason: str) -> str:
         return "failed_history"
     if reason.startswith("REJECT score="):
         return "failed_score"
+    # Listed beside "direction_conviction:" (which it does not match) so the
+    # two direction buckets read as a pair.
+    if reason.startswith("direction_conviction_unmeasured:"):
+        return "failed_direction_unmeasured"
     if reason.startswith("direction_conviction:"):
         return "failed_direction"
     if reason == "regime headwind":
@@ -559,7 +601,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     # Always fetch intraday bars — the analysis page shows all three horizon blocks
     # (Intraday / Swing / Position) regardless of req.horizon, so we always need them.
     try:
-        _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 80)
+        _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", _INTRADAY_FETCH_DAYS)
     except Exception:
         _intraday_bars = []
     if (_drop := _intraday_history_drop(symbol, req.strategy, _intraday_bars)):
@@ -614,9 +656,12 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         regime_gate=(_regime_gate or None) if regime_signal else None,
         fundamentals=_fh, fundamentals_gate=fund_gate,
         overrides=req.overrides,
+        benchmark_candles=await _rs_benchmark_candles(req),
     )
     if card.status == "REJECT":
         gate_flags.append({"gate": "score", "status": "REJECT", "detail": f"score={card.score}"})
+    elif (_drop := _min_score_drop(symbol, card, req.min_stock_score)):
+        gate_flags.append(_scan_drop_flag("score", _drop))
 
     if (_drop := _direction_conviction_drop(symbol, card, _min_trend, req.direction, req.horizon)):
         gate_flags.append(_scan_drop_flag("direction_conviction", _drop))
@@ -893,7 +938,10 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     risk_per_share = abs(entry - stop)
     if risk_per_share <= 0:
         return 0, 0.0
-    dollar_risk = risk_fixed if risk_fixed else (account * (risk_pct or 0.01))
+    # The caller resolves the fallback and applies the conviction multiplier
+    # before this point; a `risk_pct or 0.01` here used to replace a None with
+    # an UNSIZED 1% and so drop the multiplier.
+    dollar_risk = risk_fixed if risk_fixed else (account * risk_pct)
     shares = max(1, int(dollar_risk / risk_per_share))
     return shares, round(dollar_risk, 2)
 
@@ -905,6 +953,7 @@ async def _process_stock(
     price_map: dict[str, dict],
     benchmark_closes: list[float],
     fund_gate: dict | None = None,
+    rs_benchmark_candles: list[dict] | None = None,
 ) -> PositionCardOut | dict:
     # Resolved OUTSIDE the `try` below, which converts every exception into a
     # per-symbol rejection: a malformed threshold has to propagate as an error,
@@ -930,7 +979,7 @@ async def _process_stock(
             if req.strategy in _INTRADAY_STRATEGIES:
                 try:
                     intraday_bars = await asyncio.to_thread(
-                        fetch_intraday_candles, symbol, "15min", 55
+                        fetch_intraday_candles, symbol, "15min", _INTRADAY_FETCH_DAYS
                     )
                 except Exception as exc:
                     logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
@@ -965,7 +1014,7 @@ async def _process_stock(
                 try:
                     # A4b: completed bars only (decision A4B-DROP-FORMING-15MIN-BAR).
                     regime_bars = completed_intraday_bars(await asyncio.to_thread(
-                        fetch_intraday_candles, symbol, "15min", 55
+                        fetch_intraday_candles, symbol, "15min", _INTRADAY_FETCH_DAYS
                     ))
                 except Exception as exc:
                     logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
@@ -1033,9 +1082,12 @@ async def _process_stock(
                 fundamentals=_fh,
                 fundamentals_gate=fund_gate,
                 overrides=req.overrides,
+                benchmark_candles=rs_benchmark_candles,
             )
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
+            if (_drop := _min_score_drop(symbol, card, req.min_stock_score)):
+                return _drop
 
             # Direction-conviction floor (shared with _analyze_core — A5c).
             # `_min_trend` was resolved at the top of this function.
@@ -1138,7 +1190,11 @@ async def _process_stock(
                 # SIZING-4-UNMEASURED-FLOOR-2026-09-24); this card's `shares` is
                 # what StockSendDialog sends.
                 mult, sizing_basis = _sizing[0], "floor:unmeasured"
-            sized_risk_pct = (req.risk_pct * mult) if req.risk_pct is not None else None
+            # The 1% default is resolved HERE, before the multiplier, so a
+            # request with neither risk_pct nor risk_fixed_usd is conviction-
+            # sized like any other (it used to fall through to a flat 1%).
+            _base_pct = req.risk_pct if req.risk_pct is not None else _DEFAULT_RISK_PCT
+            sized_risk_pct = _base_pct * mult
             sized_risk_fixed = (req.risk_fixed_usd * mult) if req.risk_fixed_usd is not None else None
             shares, dollar_risk = _position_size(
                 req.account_size, sized_risk_pct, sized_risk_fixed,
@@ -1315,7 +1371,7 @@ async def _execute_stock_scan_core(
     # an HTTPException WITHOUT logging it — so raising a 500 here would
     # otherwise leave no server-side trace at all.
     try:
-        load_direction_conviction_min_trend(req.direction, req.horizon)
+        _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     except ValueError as e:
         logger.error("STOCK SCAN %s aborted on malformed scoring_rules.yaml: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -1324,15 +1380,28 @@ async def _execute_stock_scan_core(
     # the same 500 — but it is the one block on this list that changes MONEY
     # rather than which names come back: it multiplies the share count every
     # card below carries. So it is validated ONCE here instead of being left to
-    # the per-symbol worker, where `asyncio.gather(..., return_exceptions=True)`
-    # at :1167 would turn one broken key into a universe of rejected symbols.
+    # the per-symbol worker, where the `asyncio.gather(..., return_exceptions=True)`
+    # below would turn one broken key into a universe of rejected symbols.
     #
     # `.get("regime_sizing")` with no default on purpose: an absent block and an
     # explicitly null one both mean sizing is off (multiplier 1.0), which is a
     # configuration, not a failure. Only a block that is PRESENT and unusable
     # refuses the scan — §9.1's fail-closed posture, Kenneth 2026-09-17.
+    #
+    # The document itself is loaded inside the same guard: one that fails to
+    # read or parse, or parses to a non-mapping, used to raise past
+    # `except SizingConfigError` as a bare 500 with no detail and no log line.
     try:
-        resolve_sizing(_load_full_scoring_cfg().get("regime_sizing"))
+        _cfg_doc = _load_full_scoring_cfg()
+    except (OSError, _yaml.YAMLError) as e:
+        logger.error("STOCK SCAN %s aborted: scoring_rules.yaml unreadable: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=f"scoring_rules.yaml unreadable: {e}")
+    if not isinstance(_cfg_doc, dict):
+        _msg = f"scoring_rules.yaml must be a mapping, got {type(_cfg_doc).__name__}"
+        logger.error("STOCK SCAN %s aborted: %s", scan_id, _msg)
+        raise HTTPException(status_code=500, detail=_msg)
+    try:
+        resolve_sizing(_cfg_doc.get("regime_sizing"))
     except SizingConfigError as e:
         logger.error("STOCK SCAN %s aborted on unusable regime_sizing: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -1355,14 +1424,19 @@ async def _execute_stock_scan_core(
         pass   # RS column shows None — non-fatal
 
     fund_gate = _resolve_fundamentals_gate(req)
-    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate)
+    # Fetched once for the whole universe; None unless the trend method is
+    # relative_strength (see _rs_benchmark_candles).
+    rs_benchmark_candles = await _rs_benchmark_candles(req)
+    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate,
+                            rs_benchmark_candles=rs_benchmark_candles)
              for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []
-    for r in results:
+    # gather keeps input order, so each raised exception is named by its symbol.
+    for sym, r in zip(symbols, results):
         if isinstance(r, Exception):
-            rejected.append({"symbol": "unknown", "reason": str(r)})
+            rejected.append({"symbol": sym, "reason": str(r)})
         elif isinstance(r, PositionCardOut):
             candidates.append(r)
         else:
@@ -1373,15 +1447,19 @@ async def _execute_stock_scan_core(
     candidates = candidates[: req.shortlist_max_candidates]
 
     _direction_banner: str | None = None
-    _side = "short-side" if req.direction == "Bearish" else "long-side"
     _dir_filtered = sum(
         1 for r in rejected
         if isinstance(r, dict) and r.get("reason", "").startswith("direction_conviction:")
     )
     if not candidates and _dir_filtered > 0:
+        # Counts, not a cause: the gate often removes a handful while other
+        # gates remove the rest, and blaming "market structure" for that told
+        # the user something the scan did not measure.
+        _floor = f" (trend below {_min_trend:g})" if _min_trend is not None else ""
         _direction_banner = (
-            f"No confirmed {req.direction.lower()} setups in this universe. "
-            f"All candidates were removed — market structure does not support {_side} entries."
+            f"No {req.direction.lower()} candidates survived. The direction-conviction gate "
+            f"removed {_dir_filtered} of {len(symbols)}{_floor}; the rest were removed by "
+            f"other gates — see the pipeline."
         )
     elif candidates and all(c.stock_status == "CAUTION" for c in candidates):
         _direction_banner = (
@@ -1400,6 +1478,9 @@ async def _execute_stock_scan_core(
         failed_backtest=sum(1 for r in rejected if _bucket(r) == "failed_backtest"),
         failed_regime=sum(1 for r in rejected if _bucket(r) == "failed_regime"),
         failed_direction=_dir_filtered,
+        failed_direction_unmeasured=sum(
+            1 for r in rejected if _bucket(r) == "failed_direction_unmeasured"),
+        direction_min_trend=_min_trend,
         failed_shortlist=original_count - len(candidates),
         other_rejected=sum(1 for r in rejected if _bucket(r) == "other_rejected"),
         candidates=len(candidates),

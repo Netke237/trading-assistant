@@ -208,7 +208,7 @@ async def test_process_stock_uses_process_pool_for_backtest():
     )
     pass_card = StockScoreCard(
         symbol="AAPL", direction="Bullish", horizon="Swing",
-        score=75, status="PASS", rules=[],
+        score=75, status="PASS", rules=[_measured_trend()],
     )
     mock_signal = MagicMock()
     mock_signal.entry_price = 185.0
@@ -389,3 +389,10 @@ def test_commission_defaults_to_zero():
     explicit_zero = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish", commission=0.0)
     assert default.total_return_pct == explicit_zero.total_return_pct
     assert default.n_trades == explicit_zero.n_trades
+
+
+def _measured_trend():
+    """A measured, passing trend rule: since P3a the direction gate removes a
+    card with no trend rule (or an unmeasured one) as "no data"."""
+    from app.scoring.stock_scorer import RuleResult
+    return RuleResult("trend", "PASS", 90, {})

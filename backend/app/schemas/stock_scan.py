@@ -31,13 +31,20 @@ class StockScanRequest(BaseModel):
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None
     max_cap_usd: Optional[float] = None
-    account_size:       float = 50_000.0
-    risk_pct:           Optional[float] = 0.01
+    account_size:       float = Field(50_000.0, gt=0)
+    # gt=0: a 0 used to be turned into 1% by `_position_size`'s `or 0.01`.
+    # None (with no risk_fixed_usd) still means the 1% default, now sized by
+    # the conviction multiplier like any other percentage.
+    risk_pct:           Optional[float] = Field(0.01, gt=0, le=1)
     risk_fixed_usd:     Optional[float] = None
     bt_min_trades:      int   = 5
     bt_min_win_rate:    float = 0.45
     shortlist_max_candidates: int = Field(10, gt=0)
     regime_filter: bool = False
+    # Step-3 "Min stock score" (decision Q5). Stocks-mode only. A name whose
+    # composite score is below it is dropped as a score-gate failure. None =
+    # no extra floor beyond the REJECT status (score < caution threshold 35).
+    min_stock_score: Optional[float] = Field(None, ge=0, le=100)
     # Per-scan fundamentals-gate overrides
     fundamentals_enabled:        Optional[bool]  = None
     fundamentals_caution_below:  Optional[float] = None
@@ -245,6 +252,13 @@ class StockPipeline(BaseModel):
     # cannot claim nothing was gated. Same reasoning as OptionsPipeline's.
     failed_direction: Optional[int] = None  # direction-conviction gate
     failed_shortlist: Optional[int] = None  # trimmed by the shortlist cap
+    # Direction gate, trend UNMEASURED ("no data", decision
+    # P3A-UNMEASURED-TREND-REMOVE-2026-09-25) -- counted apart from
+    # failed_direction, which is a measured trend below the floor.
+    failed_direction_unmeasured: Optional[int] = None
+    # The direction-conviction floor THIS scan applied; None = exempt horizon
+    # (or a result persisted before the field existed).
+    direction_min_trend: Optional[float] = None
     # Optional for the same reason, and to actually match OptionsPipeline —
     # it was required here while the comment above claimed parity with it.
     other_rejected:  Optional[int] = None   # exceptions / unclassified
