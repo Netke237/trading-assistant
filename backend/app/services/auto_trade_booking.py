@@ -21,6 +21,19 @@ the audit record, the history link, the alert -- is logged and nothing more.
 Reporting it as not booked would page "add it by hand or close it at the
 broker" about a position that is already on the books.
 
+A WRONG-SIDE STOP PAGES TOO (Q12, P1a). The write runs with gates off, so a
+user-set stop on the wrong side of the underlying is booked with a warning;
+`WriteOutcome.wrong_side_stop` carries it and this module pages it as
+AUTO_TRADE_BOOKED_WRONG_SIDE_STOP. Scope: only USER-SET stops are
+direction-checked by the writer -- a plan-derived armed stop is re-anchored,
+not checked -- and with no live price and no scan price there is no check.
+
+A FAULT AFTER THE WRITER'S OWN COMMIT (P1a). If `create_position` raises
+something other than its own decided 409/500, the row may already be
+committed. The booking looks it up by its fresh rec_id and contract; if it is
+there, the order IS booked -- it pages AUTO_TRADE_BOOKED_UNVERIFIED (the stop
+side and exposure flags were lost) instead of "not booked".
+
 EVERY REFUSAL PAGES, through `auto_trader._alert_refusal` (decision
 O4-ROUTE-AND-ALERT-2026-09-24). That helper is sync, runs its own
 `asyncio.run`, and DROPS the alert when a loop is already running in its thread
@@ -35,6 +48,7 @@ import asyncio
 import copy
 import logging
 import math
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -42,10 +56,12 @@ from datetime import date, datetime
 from typing import Optional
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.services.auto_trader as auto_trader_module
 from app.data.market import fetch_contract_quote_async, fetch_price_async
+from app.models.portfolio import PortfolioPositionModel
 from app.schemas import PortfolioPositionCreate
 from app.services.audit import log_approval
 from app.services.auto_trader import FiredOrder, _is_rejected_status
@@ -59,6 +75,15 @@ _ALERT_TYPE_NOT_BOOKED = "AUTO_TRADE_NOT_BOOKED"
 _ALERT_TYPE_OVER_EXPOSURE = "AUTO_TRADE_BOOKED_OVER_EXPOSURE"
 _REC_ID_NOT_BOOKED = "auto-trade-not-booked"
 _REC_ID_OVER_EXPOSURE = "auto-trade-over-exposure"
+_ALERT_TYPE_WRONG_SIDE_STOP = "AUTO_TRADE_BOOKED_WRONG_SIDE_STOP"
+_REC_ID_WRONG_SIDE_STOP = "auto-trade-wrong-side-stop"
+_ALERT_TYPE_UNVERIFIED = "AUTO_TRADE_BOOKED_UNVERIFIED"
+_REC_ID_UNVERIFIED = "auto-trade-booked-unverified"
+
+# A dashed ISO date only. `date.fromisoformat` alone accepts the basic format
+# `20261218` on Python 3.11. `option_symbol._PIPE_RE` is NOT reused: its
+# `[A-Z]{1,6}` symbol group would refuse `BRK.B`, which is accepted today.
+_DASHED_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 # The rejection words live in `auto_trader._REJECTED_STATUSES`, read through
 # `_is_rejected_status` -- one set for this refusal and for `fire()`'s daily-loss
@@ -77,6 +102,7 @@ class BookingOutcome:
     rec_id:        Optional[str]
     error:         Optional[str]   # human-readable; always names the order id
     over_exposure: bool
+    wrong_side_stop: bool = False   # Q12: booked with a wrong-side user stop (paged)
 
 
 class _Refused(Exception):
@@ -90,7 +116,8 @@ class _Refused(Exception):
 
 def _order_label(fired: FiredOrder) -> str:
     oid = fired.result.order_id
-    return f"order {oid}" if oid not in (None, "") else "an order with no order id"
+    # Whitespace-only counts as no id, the same as refusal 1.
+    return f"order {oid}" if oid is not None and str(oid).strip() else "an order with no order id"
 
 
 def _check_refusals(fired: FiredOrder) -> None:
@@ -129,6 +156,8 @@ def _check_refusals(fired: FiredOrder) -> None:
     if not strike_ok:
         raise _Refused(f"the contract {s.option_symbol!r} has no usable strike")
     try:
+        if not _DASHED_DATE.fullmatch(expiry):
+            raise ValueError(expiry)
         date.fromisoformat(expiry)
     except ValueError:
         raise _Refused(f"the contract {s.option_symbol!r} has no usable expiry") from None
@@ -208,9 +237,14 @@ async def _page(symbol: str, what: str, reason: str, rec_id_key: str,
                      what, symbol, exc_info=True)
 
 
-async def _alert_not_booked(fired: FiredOrder, reason: str, broker_live: bool) -> None:
+async def _alert_not_booked(fired: FiredOrder, reason: str, broker_live: bool,
+                            remedy_included: bool = False) -> None:
     s, r = fired.strategy, fired.result
-    if broker_live:
+    if remedy_included:
+        # The reason carries its own remedy; the generic "Add it by hand" would
+        # contradict it (a duplicate contract must NOT be added as a second row).
+        text = f"{_order_label(fired).capitalize()} for {s.option_symbol}: {reason}"
+    elif broker_live:
         text = (
             f"The broker ACCEPTED {_order_label(fired)} ({r.status}) for "
             f"{s.option_symbol} x{s.quantity}, but NO position was booked, so there "
@@ -244,17 +278,68 @@ async def _alert_over_exposure(fired: FiredOrder, rec_id: str) -> None:
     )
 
 
-async def _refuse(fired: FiredOrder, reason: str, broker_live: bool) -> BookingOutcome:
+async def _alert_wrong_side_stop(fired: FiredOrder, rec_id: str, detail: str) -> None:
+    s = fired.strategy
+    text = (
+        f"{_order_label(fired).capitalize()} for {s.option_symbol} was booked as "
+        f"{rec_id} with a stop on the wrong side: {detail} It will fire "
+        "STOP_REACHED on the first scan — correct the stop in Portfolio."
+    )
+    await _page(
+        s.symbol, "auto-trade booking with a wrong-side stop", text,
+        auto_trader_module._per_symbol_rec_id(_REC_ID_WRONG_SIDE_STOP, s.symbol),
+        _ALERT_TYPE_WRONG_SIDE_STOP,
+    )
+
+
+async def _alert_unverified(fired: FiredOrder, rec_id: str) -> None:
+    s = fired.strategy
+    text = (
+        f"{_order_label(fired).capitalize()} for {s.option_symbol} was booked as "
+        f"{rec_id}, but the write failed after its commit, so its stop side and "
+        "exposure were NOT checked — verify both in Portfolio."
+    )
+    await _page(
+        s.symbol, "auto-trade booking not verified", text,
+        auto_trader_module._per_symbol_rec_id(_REC_ID_UNVERIFIED, s.symbol),
+        _ALERT_TYPE_UNVERIFIED,
+    )
+
+
+def _duplicate_contract_reason(fired: FiredOrder) -> str:
+    q = fired.strategy.quantity
+    return (
+        "a position for this contract is already open, so this order was NOT booked "
+        f"as a second row. Either close the extra {q} at the broker, or raise that "
+        f"position's Contracts by {q} in Portfolio (refused if the total passes the "
+        "per-trade contract limit or an exposure cap; then close it at the broker)."
+    )
+
+
+async def _refuse(fired: FiredOrder, reason: str, broker_live: bool,
+                  remedy_included: bool = False) -> BookingOutcome:
     error = f"{_order_label(fired)} was not booked: {reason}"
     logger.error("auto-trade booking: %s (%s)", error, fired.strategy.symbol)
-    await _alert_not_booked(fired, reason, broker_live)
+    await _alert_not_booked(fired, reason, broker_live, remedy_included)
     return BookingOutcome(booked=False, rec_id=None, error=error, over_exposure=False)
+
+
+async def _committed_row_exists(db: AsyncSession, rec_id: str, contract: str) -> bool:
+    """Did the failed write commit anyway? Raises if the lookup itself fails."""
+    row = (await db.execute(
+        select(PortfolioPositionModel.id).where(
+            PortfolioPositionModel.rec_id == rec_id,
+            PortfolioPositionModel.contract == contract,
+        )
+    )).first()
+    return row is not None
 
 
 async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcome:
     """Book `fired` as a PortfolioPosition. Never raises -- see the module."""
     booked_rec_id: Optional[str] = None
     over_exposure = False
+    wrong_side_stop: Optional[str] = None
     try:
         try:
             _check_refusals(fired)
@@ -281,12 +366,42 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
             )
         except Exception as exc:
             await _rollback(db, "a refused write")
+            if isinstance(exc, HTTPException) and exc.status_code == 409:
+                return await _refuse(fired, _duplicate_contract_reason(fired), True,
+                                     remedy_included=True)
+            decided = isinstance(exc, HTTPException) and exc.status_code == 500
+            if not decided:
+                # The writer may have committed before it failed. Its own 409/500
+                # are decided outcomes (nothing of THIS rec_id was written), so
+                # only anything else is looked up.
+                try:
+                    committed = await _committed_row_exists(db, rec_id, body.contract)
+                except Exception:
+                    await _rollback(db, "a failed recovery lookup")
+                    logger.error("auto-trade booking: could not check whether %s was "
+                                 "committed", rec_id, exc_info=True)
+                    committed = False
+                if committed:
+                    logger.error(
+                        "auto-trade booking: %s is booked as %s, but the write failed "
+                        "after its commit -- the outcome flags were lost",
+                        _order_label(fired), rec_id, exc_info=exc,
+                    )
+                    try:
+                        auto_trader_module.auto_trader.record_booking(fired.attempt_id, rec_id)
+                    except Exception:
+                        logger.error("auto-trade booking: could not link %s to its "
+                                     "history row", rec_id, exc_info=True)
+                    await _alert_unverified(fired, rec_id)
+                    return BookingOutcome(booked=True, rec_id=rec_id, error=None,
+                                          over_exposure=False)
             detail = exc.detail if isinstance(exc, HTTPException) else repr(exc)
             return await _refuse(fired, f"the position write failed: {detail}", True)
 
         # COMMITTED. From here the outcome is booked=True, whatever fails.
         booked_rec_id = rec_id
         over_exposure = outcome.over_exposure
+        wrong_side_stop = outcome.wrong_side_stop
         logger.info(
             "auto-trade booking: %s booked as %s (%s x%s%s)",
             _order_label(fired), rec_id, fired.strategy.option_symbol,
@@ -309,15 +424,19 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
 
         if over_exposure:
             await _alert_over_exposure(fired, rec_id)
+        if wrong_side_stop:
+            await _alert_wrong_side_stop(fired, rec_id, wrong_side_stop)
 
         return BookingOutcome(booked=True, rec_id=rec_id, error=None,
-                              over_exposure=over_exposure)
+                              over_exposure=over_exposure,
+                              wrong_side_stop=bool(wrong_side_stop))
     except Exception as exc:
         if booked_rec_id is not None:
             logger.error("auto-trade booking: %s is booked, but a later step failed",
                          booked_rec_id, exc_info=True)
             return BookingOutcome(booked=True, rec_id=booked_rec_id, error=None,
-                                  over_exposure=over_exposure)
+                                  over_exposure=over_exposure,
+                                  wrong_side_stop=bool(wrong_side_stop))
         logger.error("auto-trade booking: unexpected failure", exc_info=True)
         try:
             return await _refuse(fired, f"unexpected failure: {exc!r}", True)
