@@ -234,3 +234,11 @@ actually evaluates the variants and shows the setup and its backtest, instead of
   window gap exists); helpers return the scan's rejection dict so the funnel producer-regex guard
   keeps seeing every reason literal (a bare-string helper would have broken its floor at build and
   hidden future reasons from it). Round 2 reviews only these amendments.
+- **Plan round 2 (2026-09-25): ZERO gate-level findings — plan stage CLEAN.** Reviewed the round-1
+  amendments only. Verified: H0's withdrawal (Tradier/yfinance capped at 55, IBKR never for 15m);
+  the funnel regex finds 13 producers on main and every moved literal keeps its captured prefix in
+  the dict form; the scan's behaviour, order and reason strings are unchanged; T4 goes red under M7
+  on the bars-identity assertion. Logged below the gate, not fixed: M10 as written would not turn
+  T7 red (13 producers, floor 10; the producer-set comparison is a manual round-record step), so
+  at build M10 is either automated as a producer-set assertion inside T7 or dropped from the
+  mutation table — decided at build, stated in the code round.
