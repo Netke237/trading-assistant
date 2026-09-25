@@ -611,6 +611,13 @@ _INTERVAL_COMPLETION_SECONDS: dict[str, int] = {
 }
 
 
+def is_intraday_interval(interval: object) -> bool:
+    """True iff `interval` is an intraday interval this module can judge bar
+    completeness for (the same table completed_bars_for_interval uses). Daily,
+    weekly, non-strings and unrecognised strings are False (A4f)."""
+    return isinstance(interval, str) and normalize_interval(interval) in _INTERVAL_COMPLETION_SECONDS
+
+
 def completed_bars_for_interval(
     bars: list[dict],
     interval: str,

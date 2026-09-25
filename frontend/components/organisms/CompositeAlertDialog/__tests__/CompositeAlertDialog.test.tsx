@@ -151,3 +151,63 @@ describe('CompositeAlertDialog — delivery mode', () => {
     expect(triggerDef.direction).toBe('Bearish');
   });
 });
+
+describe('CompositeAlertDialog — A4f interval follows the model', () => {
+  async function renderDialog() {
+    mockApi.getSymbolRegimeSnapshot.mockResolvedValue(SNAPSHOT as any);
+    mockApi.addCompositeWatch.mockResolvedValue({} as any);
+    mockApi.addCompositeAlertRule.mockResolvedValue({} as any);
+    await act(async () => {
+      render(<CompositeAlertDialog symbol="AAPL" direction="Bullish" onClose={() => {}} />);
+    });
+  }
+  const modelSelect = () => screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+  const intervalSelect = () => screen.getAllByRole('combobox')[1] as HTMLSelectElement;
+  async function pickModel(v: string) {
+    await act(async () => { fireEvent.change(modelSelect(), { target: { value: v } }); });
+  }
+  async function save() {
+    fireEvent.click(screen.getByRole('button', { name: /create alert/i }));
+    await act(async () => {});
+  }
+
+  it('FE1 watch: HMM_intraday untouched displays and saves 5m (was: displayed 5m, saved 1D)', async () => {
+    await renderDialog();
+    await pickModel('HMM_intraday');
+    expect(intervalSelect().value).toBe('5m');
+    await save();
+    expect(mockApi.addCompositeWatch.mock.calls[0][3]).toBe('5m');
+  });
+
+  it('FE1 rule: HMM_intraday untouched saves the rule at 5m', async () => {
+    await renderDialog();
+    fireEvent.click(screen.getByRole('button', { name: /Rule \(live\)/ }));
+    await pickModel('HMM_intraday');
+    await save();
+    expect(mockApi.addCompositeAlertRule.mock.calls[0][2]).toBe('5m');
+  });
+
+  it('FE2: switching HMM_intraday back to OMM saves 1D', async () => {
+    await renderDialog();
+    await pickModel('HMM_intraday');
+    fireEvent.change(intervalSelect(), { target: { value: '1h' } });
+    await pickModel('OMM');
+    await save();
+    expect(mockApi.addCompositeWatch.mock.calls[0][3]).toBe('1D');
+  });
+
+  it('FE3: the snapshot after switching to HMM_intraday is fetched at 5m', async () => {
+    await renderDialog();
+    await pickModel('HMM_intraday');
+    expect(mockApi.getSymbolRegimeSnapshot).toHaveBeenLastCalledWith('AAPL', 'HMM_intraday', 'Bullish', '5m');
+  });
+
+  it('FE4: a user-picked interval is saved as picked', async () => {
+    await renderDialog();
+    await pickModel('HMM_intraday');
+    await act(async () => { fireEvent.change(intervalSelect(), { target: { value: '1h' } }); });
+    expect(intervalSelect().value).toBe('1h');
+    await save();
+    expect(mockApi.addCompositeWatch.mock.calls[0][3]).toBe('1h');
+  });
+});
