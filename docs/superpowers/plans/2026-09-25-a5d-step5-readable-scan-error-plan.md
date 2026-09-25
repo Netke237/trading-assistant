@@ -1,7 +1,7 @@
 # A5d — a Step-5 scan that fails says why in plain English (plan)
 
 Date: 2026-09-25. Planned against main at `e2bf498` (branch `claude/peaceful-ritchie-b59i77`,
-whose tree equals main after `d241166`). Frontend only, one build commit.
+restarted from main). Frontend only, one build commit.
 
 Origin: the follow-up logged by the parallel A5b build (round-3 note 5 on this branch, superseded
 by main's A5b per decision `A5B-KEEP-MAIN-2026-09-25`). It applies unchanged to main's A5b:
