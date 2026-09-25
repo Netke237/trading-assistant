@@ -3,6 +3,14 @@
 Package: P3c in `docs/superpowers/plans/2026-09-25-work-packages.md` (decision P3C-PACKAGE-CREATED-2026-09-25).
 Branch `claude/confident-volta-mja4lz`, off main 2f67e6f. Claim `P3C-SCAN-SIZING-LEFTOVERS`.
 
+Round history: r1 audited → 15 findings (2 HIGH, 7 MEDIUM, 6 LOW), all addressed in r2 (see the round-1 log at the end).
+
+**Kenneth's decisions (2026-09-25, plan round 1):**
+- P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
+  no schema field; unmeasured drops count under the existing "Direction conviction" funnel stage.
+- P3C-OWNS-READ-BARS-FIX-IF-CONFIRMED-2026-09-25: if the item-5 script confirms mixed/stale adjustment, P3c
+  takes the `historical_store._read_bars` fix (scope widened to that file only, claimed before it is touched).
+
 Every backlog entry was re-checked against 2f67e6f before this plan. The seven items and their state:
 
 | # | Item | State on 2f67e6f | This plan |
@@ -24,7 +32,7 @@ New: `backend/scripts/p3c_data_checks.py` (read-only), `backend/tests/test_p3c_*
 
 NOT touched: `stock_scan.py` / `stock_scorer.py` (P3a — `_regime_data_drop` and `RuleResult.measured` are
 CALLED/READ, not edited), `auto_trader.py` (P3b), `schemas/__init__.py` (see Q1),
-`historical_store.py` (see item 5 — not owned by any package), `ScanFunnel`, `types/stockDomain.ts`,
+`historical_store.py` (until item 5's evidence is in — see P3C-OWNS-READ-BARS-FIX-IF-CONFIRMED), `ScanFunnel`, `types/stockDomain.ts`,
 `ArmRequest` (P6).
 
 ## 1. Options scan drops an Intraday name with no 15-min regime bars
@@ -77,58 +85,101 @@ Tests (`tests/test_p3c_options_regime_data.py`), driving `_process_symbol` with 
 - Funnel: a scan whose only rejection is this reason reports `failed_data == 1`, `other_rejected == 0`.
 - Anti-drift: `scan._regime_data_drop is stock_scan._regime_data_drop`.
 
+**Existing tests this changes (round-1 H2).** The shipped config has `regime_gate.enabled: true` and
+`regime_sizing.enabled: true`, so on shipped config an empty/failed Intraday fetch now returns BEFORE
+`score_stock`:
+- `tests/test_a4_intraday_regime_bars.py::test_options_scan_leaves_intraday_unmeasured_rather_than_falling_back_to_daily`
+  is parametrized `[RuntimeError, [], INTRADAY[:10]]` and asserts `score.call_args.kwargs["regime_signal"] is None`.
+  The `RuntimeError` and `[]` cases are split out: (a) on shipped config they assert the `RejectedCandidate`
+  and `score.assert_not_called()` (the new behaviour); (b) with `_load_scoring_cfg` patched to a copy whose
+  `regime_gate.enabled` and `regime_sizing.enabled` are both false, they keep the old assertion
+  (unmeasured, no daily fallback) so that behaviour stays pinned. `INTRADAY[:10]` (short series) is unchanged.
+- `tests/test_a4b_completed_intraday_bars.py` (:175 calls `_process_symbol` Intraday): re-checked during
+  implementation; if its fixture yields zero completed bars it gets the same split. Every other `_process_symbol`
+  test (test_scan_core, test_scan_db_first, test_scan_endpoint, test_scan_router_spreads, test_alternatives, …)
+  is run; any Intraday case with an empty/failed intraday fetch is changed the same way and listed in the commit.
+
 ## 2. Options direction gate removes an UNMEASURED trend
+
+Decision P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25.
 
 Today (`scan.py:1639-1668`): the gate runs after `gather`, on `TradeCardData`, and reads
 `stockBreakdown.trend` — an int. `_rule_score` returns 50 when the card has no trend rule, and an
 unmeasured rule carries a 0/50 placeholder, so the gate judges a placeholder.
-The stock gate removes both cases as `direction_conviction_unmeasured: ...` (stock_scan.py:280-306,
+The stock gate removes both cases as `direction_conviction_unmeasured: ...` (stock_scan.py:277-306,
 decision P3A-UNMEASURED-TREND-REMOVE-2026-09-25).
 
-Change — **inside `_process_symbol`, where the `StockScoreCard` is still in hand; no schema field**:
+**Prerequisite — the options scan must be ABLE to measure relative strength (round-1 H1).** The options scan
+never passes `benchmark_candles` to `score_stock`, so with `trend_method=relative_strength` (a Step-3 option
+that `resolveOptionsScanRequest.ts:115-117` forwards in `overrides`) every card's trend is the
+`measured=False` CAUTION 50 placeholder (stock_scorer.py:362-370). Today that placeholder passes the floor;
+with the unmeasured check it would remove EVERY Swing/Position name. So, in `_execute_scan_core`, once before
+the fan-out:
 
-- `_process_symbol` gains a keyword `direction_min_trend: float | None = None`; `_execute_scan_core`
-  passes `_direction_min_trend` (already resolved before the fan-out at :1489-1493).
-- Directly after the final score gate (`if card.status == "REJECT": ...`, ~:747), before contract work:
+```python
+_rs_bench = await _rs_benchmark_candles(SimpleNamespace(horizon=req.horizon, overrides=req.overrides or {}))
+```
+
+(`_rs_benchmark_candles` imported from `app.routers.stock_scan`, called not copied; it reads only
+`req.horizon` / `req.overrides` via `resolve_rs_benchmark`, returns None when the method is not
+relative_strength, and never raises.) `_process_symbol` gains `rs_benchmark: list[dict] | None = None` and
+passes `benchmark_candles=_aligned_benchmark(rs_benchmark, candles)` (also imported from stock_scan) to BOTH
+`score_stock` calls. The stock scan hands `bars[-120:]`; the options scan scores on its full `candles` — the
+alignment is by last date, so the slice does not matter to `_aligned_benchmark`.
+This is a behaviour change for relative_strength users of the options scan: the trend becomes a real reading
+instead of a flat CAUTION 50. That is the options scan catching up with the stock scan, not a new rule.
+A benchmark that is still missing (no ETF proxy, fetch failed, last dates differ) leaves the trend unmeasured,
+and the name is removed as "no data" — the same outcome the stock scan gives.
+
+Change — **inside `_process_symbol`, on the PRE-SCREEN card, calling the stock helper**:
+
+- `_process_symbol` gains `direction_min_trend: float | None = None`; `_execute_scan_core` passes
+  `_direction_min_trend` (already resolved before the fan-out at :1489-1493).
+- Directly after the pre-screen `if card_pre.status == "REJECT": ...` (~:657) and BEFORE the chain fetch
+  (round-1 M3 — the trend rule does not read `iv_rank`, so `card_pre`'s trend is the final card's trend, and a
+  dropped name costs no chain fetch):
 
   ```python
-  if direction_min_trend is not None:
-      _trend = next((r for r in card.rules if r.name == "trend"), None)
-      if _trend is None or not getattr(_trend, "measured", True):
-          _reason = f"direction_conviction_unmeasured: no trend measurement for {direction} {horizon}"
-          log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": _reason})
-          return RejectedCandidate(symbol=symbol, reason=_reason)
+  _dc = _direction_conviction_drop(symbol, card_pre, direction_min_trend, direction, horizon)
+  if _dc and _dc["reason"].startswith("direction_conviction_unmeasured:"):
+      log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": _dc["reason"]})
+      return RejectedCandidate(symbol=symbol, reason=_dc["reason"])
   ```
 
-  Same exemption as the stock gate (`min_trend is None` → no check, which is how Intraday is excused),
-  same reason text, same "no trend rule at all = unmeasured" rule.
-- The post-gather floor at :1641 is unchanged (a measured trend below the floor is still `direction_conviction:`).
-  Its comment block (:1650-1654, "An int: this gate cannot tell...") is rewritten to say the unmeasured case
-  is removed earlier, in `_process_symbol`.
-- Funnel: `_is_direction` matches both prefixes (`direction_conviction:` and `direction_conviction_unmeasured:`),
-  and `failed_direction = sum(1 for r in rejected if _is_direction(r))` replaces the `direction_filtered_count`
-  counter for the pipeline (the counter stays for the banner). So the residual does not absorb the new
-  reason and `scanned == candidates + buckets` still holds.
-- Banner: `not candidates and direction_filtered_count > 0` is unchanged — an unmeasured trend is "no data",
-  not "market structure does not support", so it must NOT trigger the structure banner.
-
-Why no schema field: the package allowed ONE `ScoreBreakdown` field shared with P6. Doing the check where
-the card exists needs none, touches no shared file, and removes the P6 coordination. The cost: the options
-funnel counts unmeasured drops under `failed_direction` (label "no conviction") instead of a separate
-bucket as in the stock funnel — a separate bucket would need an `OptionsPipeline` field plus a ScanFunnel
-change, neither P3c's. See Q1.
+  `_direction_conviction_drop` is imported from stock_scan (round-1 M4 — called, not copied). Only its
+  UNMEASURED verdict is acted on here; a measured-below-floor verdict is left to the existing post-gather
+  gate, so this item does not move WHERE the measured floor runs. The helper's `min_trend is None` exemption
+  is how Intraday is excused.
+- The post-gather floor at :1641 is unchanged. Its comment block (:1650-1654, "An int: this gate cannot
+  tell...") is rewritten: unmeasured trends never reach it, they are removed in `_process_symbol`.
+- Funnel: `_is_direction` matches both prefixes (`direction_conviction:` and
+  `direction_conviction_unmeasured:`), and the pipeline's `failed_direction = sum(1 for r in rejected if
+  _is_direction(r))` (the `direction_filtered_count` counter stays for the banner). The residual does not
+  absorb the new reason, and `scanned == candidates + buckets` still holds. The ScanFunnel subtracts stages in
+  sequence, so the "Direction conviction" stage carries the extra count with no frontend change.
+- Banner (round-1 L13): `not candidates and direction_filtered_count > 0` stays the "market structure" banner.
+  A new branch, checked after it: `not candidates and unmeasured_count > 0 and direction_filtered_count == 0`
+  → `"No {direction} candidates: the trend could not be measured for {n} name(s) (no trend data) — see the
+  funnel."` so an all-unmeasured empty result is explained and never blamed on market structure.
 
 Tests (`tests/test_p3c_options_direction_unmeasured.py`):
 
-- Swing Bullish, card with `trend` rule `measured=False` score 50 → rejected `direction_conviction_unmeasured:`,
-  chain/contract work not reached.
-- Same with `measured=True` score 50 and floor 40 → kept by this check.
-- Card with no trend rule → rejected unmeasured.
-- Intraday (floor None) with an unmeasured trend → kept.
-- `_execute_scan_core` funnel: one unmeasured + one measured-below-floor → `failed_direction == 2`,
-  `other_rejected == 0`, `direction_banner` None when a third candidate survives; and when BOTH are
-  unmeasured and nothing survives, the structure banner is NOT shown.
-- Reason text is byte-identical to `stock_scan._direction_conviction_drop`'s for the same inputs.
+- Swing Bullish, `score_stock` patched so `card_pre` has `trend` `measured=False` score 50 → rejected
+  `direction_conviction_unmeasured:`, `fetch_option_chain_async` NOT awaited.
+- Same with `measured=True` score 50, floor 40 → not rejected by this check (chain fetch reached).
+- `card_pre` with no trend rule → rejected unmeasured.
+- Intraday (floor None) with an unmeasured trend → not rejected.
+- relative_strength: `_execute_scan_core` with `overrides={"trend_method": "relative_strength"}` and a patched
+  benchmark fetch returning aligned bars → `score_stock` received non-None `benchmark_candles` in both calls;
+  with the benchmark fetch returning None → the name is removed unmeasured.
+- Funnel: one unmeasured + one measured-below-floor + one kept → `failed_direction == 2`, `other_rejected == 0`,
+  no banner; two unmeasured and nothing kept → the "could not be measured" banner, NOT the structure banner.
+- Anti-drift: `scan._direction_conviction_drop is stock_scan._direction_conviction_drop`, same for
+  `_rs_benchmark_candles` and `_aligned_benchmark`.
+
+Stale comments outside P3c (round-1 L12): stock_scan.py :285-287 ("The unmeasured check below is stock-scan
+only") and :300-301 ("The options gate ... cannot see this") become false. stock_scan.py is not P3c's — logged
+as an open_questions entry for its next owner, text included.
 
 ## 3. A 0% scan schedule warns that the 0% is ignored
 
@@ -136,11 +187,12 @@ Decision P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25: behaviour unchanged (the backe
 `_stored_zero_is_unset` maps `risk_pct: 0` to the 1% default); the UI says so.
 
 - `scanScheduleResolve.ts` exports `scheduleRiskIgnored(entry: { mode: string; resolved_request: unknown }): boolean`
-  — true when `mode === 'stocks'` and `resolved_request.risk_pct === 0`. The resolver itself keeps sending
+  — true when `mode === 'stocks'`, `resolved_request` is a non-null object, `'risk_pct' in resolved_request`,
+  and `resolved_request.risk_pct === 0`. The resolver itself keeps sending
   `maxLossPerTradePct` as-is (sending 0 is what the backend maps; changing the wire value would hide the
   0 from this check). Its header comment gains one line naming the decision.
 - `ScheduleEntryRow` (settings/page.tsx) renders, under the mode tag, when `scheduleRiskIgnored(entry)`:
-  `<Text size={11} tone="caution">Saved with 0% max loss per trade — ignored; this schedule runs at the 1% default. Set it in Settings → Risk, then re-save the profile.</Text>`
+  `<Text size={11} tone="caution">Saved with 0% max loss per trade — ignored; this schedule runs at the 1% default (conviction-adjusted). Set it in Settings → Risk, then re-save the profile.</Text>`
   Same placement and style as the existing `stale` caution line.
 - Options entries are never flagged: the options request carries no `risk_pct`.
 
@@ -158,8 +210,8 @@ stocks entry with `risk_pct: 0` and not for `0.02`.
   - `== 0`: the existing zero sentence + the existing "To stop trading in a headwind" advice.
   - `< 0`: "... is negative — a multiplier floor cannot be below 0; write a fraction in (0, 1], e.g. 0.3".
   All three keep the prefix `scoring_rules.yaml: regime_sizing.min_mult is {min_mult}, outside (0, 1]`.
-- (4) the `/100` hint is offered only when the value reads as a whole percent: `min_mult` is an integer
-  value in [2, 100]. `1.01` → no hint. `30` → "Did you mean 0.3?". `100` → "Did you mean 1?".
+- (4) the `/100` hint is offered only when the value reads as a whole percent: `float(min_mult).is_integer()`
+  and `2 <= min_mult <= 100` (so YAML `30.0` still gets the hint). `1.01` → no hint. `30` → "Did you mean 0.3?". `100` → "Did you mean 1?".
 - (5) the `* 100` hint on `full_conviction_pct` is offered only when `full * 100` is itself accepted,
   i.e. `MIN_FULL_CONVICTION_PCT < full * 100 <= MAX_FULL_CONVICTION_PCT`. `0.004` → no hint; `0.4` → "40".
   The "sizes every order at FULL" sentence is unchanged.
@@ -189,33 +241,59 @@ for a Postgres `DATABASE_URL` a read-only transaction `SET TRANSACTION READ ONLY
 - the bearish pullback_ema target the mixed series would produce (strategy_engine's formula, called as a
   pure function on the rows) vs the fully-adjusted one.
 
-Prints a table and a one-line verdict per symbol: `MIXED-ADJUSTMENT CONFIRMED` when the mixed ATR exceeds the
-fully-adjusted ATR by > 2× and a split row exists, else `NOT REPRODUCED`.
+Split detection does NOT rely on `split_factor` (round-1 M5: the Alpaca normaliser, the primary provider,
+hard-codes `split_factor: 1.0`, alpaca.py:117). A split is detected from consecutive rows: a one-day
+`raw_close` ratio within 3% of a common split ratio (2, 3, 4, 5, 10, 20, 1/2, 1/3 …), reported with its date.
+`get_bars` only appends `last+1 → end` and never rewrites old rows (historical_store.py:230-233), so rows
+stored before a split may keep a stale `adj_factor`. Per symbol the script prints ONE of:
 
-**The fix is not in P3c's files.** If Kenneth's run confirms it, the fix (adjust open/high/low by the same
-`adj_factor` in `_read_bars`) is logged as a new decision for Kenneth to assign: `historical_store.py`
-is owned by no package and it changes every scan's numbers. P3c does not change it.
+- `STALE ADJ_FACTOR` — the adjusted close (`raw_close × adj_factor`, what `_read_bars` returns) itself jumps
+  by a split ratio at a detected split date (adjustment never applied to old rows);
+- `MIXED ADJUSTMENT` — adjusted close is continuous across the split but `high / adjusted_close` on the
+  pre-split rows is ≈ the split ratio (raw high/low next to adjusted close);
+- `NO SPLIT IN WINDOW` / `CLEAN`.
+
+plus ATR(14) at the last bar as `_read_bars` returns the series vs a series rebuilt from raw OHLC with the
+detected split ratios applied backwards (independent of stored `adj_factor`), and the bearish target that each
+series produces.
+
+**Fix, only after Kenneth's run (P3C-OWNS-READ-BARS-FIX-IF-CONFIRMED-2026-09-25).** P3c claims
+`historical_store.py` first (`claim.py take P3C-READ-BARS-ADJUSTMENT`) and plans the fix as its own audited round:
+`MIXED ADJUSTMENT` → scale open/high/low by the same `adj_factor` in `_read_bars`; `STALE ADJ_FACTOR` → a
+re-adjustment of stored rows is a data migration, planned separately. No code in this round.
+
+Fixture test builds BOTH row shapes: Alpaca-shaped (`split_factor` 1.0, correct `adj_factor`, raw OHLC) →
+`MIXED ADJUSTMENT`; stale (pre-split `adj_factor` 1.0) → `STALE ADJ_FACTOR`; no split → `NO SPLIT IN WINDOW`.
 
 ## 6. Options regime series length by source — measure, then fix
 
 Today: the options regime measures `compute_omm` on `candles`, which is the DB window (~306 bars) or, on a
 DB miss, `fetch_candles_async` (Tradier: 252; yfinance fallback: returned whole, ~1250).
 
-Same script, second section: for each symbol, the series length from each source (DB rows over the
-`[today-441d, today]` window read-only; `fetch_candles` from Tradier and yfinance with the cache bypassed —
-GET-only provider reads, no DB writes), and `compute_omm` conviction/state on each, so Kenneth sees whether
-the length difference flips a verdict on real data.
+Same script, second section, per symbol — the three series the options scan can measure on:
+
+- **DB**: `ohlcv_daily` rows over `[today-441d, today]`, read-only, converted exactly as `_read_bars` does.
+- **Tradier path**: `await market.fetch_candles_async(client, symbol)` (default `bars=252`) with
+  `market._candles_cache.pop(symbol, None)` first, and the yfinance fallback `market._fetch_daily_yf`
+  (market.py:121, reached at :1301) patched to return `[]`, so the answer is Tradier's alone.
+- **yfinance path**: the same call with a client built on `httpx.MockTransport` that raises on every request
+  (so the Tradier try fails at market.py ~:1272 and falls through to `_fetch_daily_yf`), cache popped again.
+The script is its own process, so popping the in-memory cache touches no server. GETs only; no DB writes.
+For each: length, first/last date, and `compute_omm` state/conviction with the horizon's `regime` block —
+so Kenneth sees whether the length difference flips a verdict on real data.
 
 Conditional fix, applied only if the run shows a flip: in `_process_symbol`'s daily branch,
-`_regime_bars = [b for b in candles if _bar_start_iso <= b["time"]]` — trim the fallback series by DATE to the
-scan's own window start (passed in from `_execute_scan_core`), which is what the fire path's
-`_fetch_scan_window_bars` does. A 252-bar Tradier series stays short (can't be lengthened) — stated as the
-residual. Scoring `candles` are not trimmed (only the regime input).
+`_regime_bars = [b for b in candles if str(b["time"])[:10] >= _bar_start_iso]` — trim by DATE (compared on
+`str(time)[:10]`, as the fire path does) to the scan's own window start, passed in from `_execute_scan_core`.
+Residuals, stated: a 252-bar Tradier series stays short (cannot be lengthened); the END is not changed —
+the fire path drops today's unclosed bar (auto_trader.py ~:737-800, Option A) and the scan's DB window ends
+`today`; that end difference is a separate scan-vs-fire question, logged, not in item 6. Scoring `candles` are
+not trimmed (only the regime input).
 
 ## 7. POST /auto-trade/fire off the event loop
 
 `fire_now` (auto_trade.py:199-262) calls `auto_trader.fire(...)` synchronously. `fire()` has blocking network
-I/O (market-open check ~3s, regime fetch ≤ 8s deadline, broker order).
+I/O (market-open check ~3s, regime fetch ≤ 25s deadline since P3b — auto_trader.py:582-587, broker order).
 
 Change: `fired = await asyncio.to_thread(auto_trader.fire, portfolio_snapshot=..., portfolio_value=None, expect=_armed_state.strategy)`.
 Precedent: `run_scan` already runs `maybe_fire_on_scan` → `fire()` in a worker thread (scan.py:1832), so
@@ -228,18 +306,44 @@ The comment block at :224-233 ("NOT REACHABLE OVER HTTP TODAY ... It stops holdi
 behind `asyncio.to_thread`") becomes true now: it is rewritten to say the `expect=` identity check is now the
 live guard against a re-arm during the window, and the second concurrent `/fire` gets `ArmPreservedError` → 400.
 
+**Cancellation (round-1 M9).** Behind `await asyncio.to_thread`, a cancelled handler (client disconnect is
+NOT a cancel in Starlette, but server shutdown is) leaves the thread running: the order can be sent while
+`book_fired_order` never runs. So the call is `fut = asyncio.ensure_future(asyncio.to_thread(...))` then
+`fired = await asyncio.shield(fut)`; on `CancelledError` a done-callback on `fut` logs at ERROR
+`"POST /auto-trade/fire was cancelled while fire() ran; the order result below was NOT booked: ..."` with
+the FiredOrder's symbol/result (or the exception), then the CancelledError is re-raised. Booking from the
+callback is not attempted (the request's DB session is gone). The same gap on `run_scan`'s
+`maybe_fire_on_scan` call is logged as an open question (scan.py is P3c's but that path is not in this item;
+noted for a follow-up).
+
+Stale docstrings outside P3c (round-1 L11): auto_trader.py:1548-1550 ("reachable from the event-loop thread,
+via the /fire endpoint, where asyncio.run raises") and :2280-2283 ("a manual POST /auto-trade/fire on the event
+loop") become false. auto_trader.py is P3b's — logged as an open_questions entry with the replacement text.
+
 Tests (`tests/test_p3c_fire_off_loop.py`):
 
 - `fire` monkeypatched to `time.sleep(0.5)` then return a FiredOrder; while the request is in flight, a second
   cheap request (`GET /auto-trade/status`) completes before it — proving the loop is free.
 - `fire` called on a thread other than the loop's (record `threading.get_ident()`).
 - SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run; one new assert each via to_thread).
-- Two concurrent `/fire` calls on one armed strategy: exactly one order; the other 400.
+- Two concurrent `/fire` calls on one armed strategy (round-1 M8): the first `fire()` is held inside a patched
+  `_market_is_open` on a `threading.Event` until the second request has passed the endpoint's own armed check
+  and entered `fire()` (a second Event set from a wrapper around `fire`); then released. Assert:
+  `execute_option_order` called exactly once, one 200 and one 400 whose `detail` is the `ArmPreservedError`
+  text (not the endpoint's "AutoTrader not armed" text).
+- Cancellation: the handler task is cancelled while a held `fire()` runs; after release, the ERROR line is
+  logged with the symbol and `book_fired_order` was not called.
 
 ## State updates (PROJECT_STATE.json)
 
-On merge: open_questions [66], [67], [68], [69] closed with the commit; [15] items (3)(4)(5) fixed, (10) closed by
-P3b; [42] and [43] updated with "check script shipped, awaiting Kenneth's run" (not closed). One new decision
+On merge, entries named by their opening text (round-1 L15 — indices shift under parallel sessions):
+"LOGGED BY P3a (2026-09-25), NOT FIXED, outside P3a's files", "LOGGED BY P3a (2026-09-25), NOT FIXED: the options
+direction", "LOGGED BY P3a (2026-09-25), NOTE: frontend", "LOGGED BY P3c SETUP" closed with the commit;
+"P3a (2026-09-25) FIXED the stock_scan.py items" gets (3)(4)(5) fixed, (10) closed by P3b; "P3a (2026-09-25)
+FIXED (a) _build_target_ladder" and "P3a (2026-09-25) FIXED the comment (441" updated with "check script
+shipped, awaiting Kenneth's run" (not closed). New entries: the stale stock_scan.py and auto_trader.py
+comments (L11, L12), the scan-vs-fire END difference (item 6), `run_scan`'s cancellation gap (item 7).
+The two Kenneth decisions above go to the front of `decisions`. One new decision
 per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `direction_conviction_unmeasured` in scan.py.
 
 ## Verification
@@ -251,8 +355,24 @@ The script: `python3 backend/scripts/p3c_data_checks.py --help` and a run agains
 
 ## Open questions for Kenneth
 
-- **Q1 (item 2):** do the unmeasured check inside `_process_symbol` with no schema field, counting it under the
-  options funnel's "Direction conviction / no conviction" stage (recommended), or add the `ScoreBreakdown`
-  field + a separate funnel bucket (needs `OptionsPipeline` + ScanFunnel, outside P3c)?
-- **Q2 (item 5):** if the script confirms mixed adjustment, who fixes `historical_store._read_bars`? It is
-  owned by no package and changes every scan's ATR, stops and targets.
+None open. Q1 and Q2 of r1 were answered (decisions at the top).
+
+## Round-1 log (15 findings)
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| 1 | HIGH | relative_strength is always unmeasured in options → item 2 would drop every name | fixed: options scan fetches + aligns the benchmark via stock_scan's helpers |
+| 2 | HIGH | test_a4 Intraday-unmeasured test breaks on shipped config | fixed: named, split into drop-on-shipped + unmeasured-with-gate/sizing-off |
+| 3 | MED | unmeasured check after chain fetch; test unprovable | fixed: runs on `card_pre`, before the chain fetch |
+| 4 | MED | copied the helper's logic | fixed: calls `_direction_conviction_drop`, anti-drift `is` test |
+| 5 | MED | script verdict misses Alpaca rows / stale adj_factor | fixed: split detection from raw ratios, two verdicts, both fixture shapes |
+| 6 | MED | item-6 fix trims one end only | fixed: date compare on `[:10]`, end difference stated as residual + logged |
+| 7 | MED | "cache bypassed / each source" named nothing real | fixed: exact calls, cache pop in a separate process, provider isolation by patching |
+| 8 | MED | concurrency test passes on the wrong 400 | fixed: Event-held first fire, asserts ArmPreservedError detail + one order |
+| 9 | MED | cancelled /fire leaves an unbooked order | fixed: shield + ERROR log callback; run_scan gap logged |
+| 10 | LOW | deadline is 25s, not 8s | fixed |
+| 11 | LOW | stale auto_trader docstrings | logged for P3b's owner (not P3c's file) |
+| 12 | LOW | stale stock_scan comments | logged for its owner (not P3c's file) |
+| 13 | LOW | all-unmeasured empty result unexplained | fixed: new "could not be measured" banner branch |
+| 14 | LOW | warning text / type guard | fixed |
+| 15 | LOW | is_integer; state entries by index | fixed |
