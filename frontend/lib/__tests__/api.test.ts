@@ -90,3 +90,28 @@ describe('apiError — FastAPI/Pydantic error body formatting', () => {
     await expect(api.getStockQuote('AAPL')).rejects.toThrow('Internal Server Error');
   });
 });
+
+// MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25). The UI tests for the four manual
+// send paths reject the order call with a hand-written message; this pins that
+// the REAL parse of the backend's 502 produces that shape, question included.
+describe('manual broker order — IBKR confirmation question (502)', () => {
+  const DETAIL =
+    'IBKR did not place the order: it asked for a confirmation this app does not send. ' +
+    'IBKR said: Are you sure you want to submit this order?';
+
+  it('postStockOrder rejects with the status and the question', async () => {
+    mockFetchOnce(502, { detail: DETAIL });
+    await expect(api.postStockOrder({
+      broker: 'ibkr_paper', symbol: 'AAPL', action: 'BUY', effect: 'OPEN', quantity: 1,
+      order_type: 'LMT', limit_price: 150, tif: 'DAY',
+    })).rejects.toThrow(`API /broker/stock-order → 502: ${DETAIL}`);
+  });
+
+  it('postOptionOrder rejects with the status and the question', async () => {
+    mockFetchOnce(502, { detail: DETAIL });
+    await expect(api.postOptionOrder({
+      broker: 'ibkr_paper', symbol: 'AAPL', option_symbol: 'AAPL251017C00185000',
+      action: 'BUY', effect: 'OPEN', quantity: 1, order_type: 'LMT', limit_price: 2.5, tif: 'DAY',
+    })).rejects.toThrow(`API /broker/option-order → 502: ${DETAIL}`);
+  });
+});

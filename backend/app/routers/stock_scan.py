@@ -198,6 +198,154 @@ def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) 
     return merged
 
 
+# ── A5c: scan-drop filters shared by _process_stock and _analyze_core ────────
+# Decisions A5B-A5C-LOCKED-2026-09-24 / A5C-SCOPE-SIX-FILTERS-GO-2026-09-25:
+# every filter on which the scan DROPS a symbol is one helper here, so the
+# Analysis page (which flags it REJECT, card status unchanged) cannot drift
+# from the scan. Helpers that produce a drop return the scan's own rejection
+# dict (symbol + reason) rather than a bare string: the funnel guard
+# (tests/test_stock_scan_funnel.py::test_every_stock_reason_producer_is_classified)
+# finds reason producers by regex over this module's source and must still
+# see each reason literal where it is written.
+
+_SCAN_DROP_PREFIX = "the scan would drop this: "
+_MIN_INTRADAY_BARS = 30
+# mean_reversion_multi is backtested through the RSI variant — a deterministic
+# proxy regardless of which variants fired.
+_MULTI_BT_STRATEGY = "mean_reversion_rsi"
+
+
+def _scan_drop_flag(gate: str, drop: dict) -> dict:
+    """The Analysis gate flag for a filter the scan drops on: REJECT, the
+    scan's own reason behind a fixed prefix."""
+    return {"gate": gate, "status": "REJECT", "detail": f"{_SCAN_DROP_PREFIX}{drop['reason']}"}
+
+
+def _intraday_history_drop(symbol: str, strategy: str, intraday_bars: list[dict]) -> dict | None:
+    if strategy in _INTRADAY_STRATEGIES and len(intraday_bars) < _MIN_INTRADAY_BARS:
+        return {"symbol": symbol, "reason": "insufficient intraday history"}
+    return None
+
+
+def _direction_conviction_drop(symbol: str, card, min_trend: float | None,
+                               direction: str, horizon: str) -> dict | None:
+    # Direction conviction filter — a FLOOR in both directions, never a
+    # ceiling on the bearish side. The trend rule is direction-aware, so
+    # a high trend score on a Bearish scan means a strong DOWNtrend,
+    # which is the setup a put wants; what this gate removes is a LOW
+    # score either way. Thresholds live in scoring_rules.yaml
+    # (horizons.<horizon>.direction_conviction); `None` means exempt,
+    # which is how Intraday is excused rather than by naming it here.
+    # Must stay identical to the options gate in routers/scan.py — both
+    # now read the same resolver, which is what keeps them in step.
+    if min_trend is None:
+        return None
+    # The `, 50` fallback is KEPT, unlike the `if _c.stockBreakdown
+    # else 50` removed from the options gate. They look like twins
+    # and are not: that one guarded a REQUIRED pydantic field on a
+    # model that is always truthy, so it was provably dead code,
+    # while this one fires for any card whose `rules` carries no
+    # trend entry — which several test fixtures build deliberately
+    # (`rules=[]`) to exercise backtest and signal paths. Raising
+    # here instead breaks four tests that are not about this gate.
+    #
+    # Unreachable in production: score_stock always appends
+    # trend_result (stock_scorer.py:1089) and every _trend_* branch
+    # returns a RuleResult named "trend".
+    #
+    # The 50 DID change meaning when the gate became a floor — at
+    # Bearish/Position it went from rejected (old ceiling of 40) to
+    # passing (floor of 40). That is the bullish side's behaviour,
+    # now mirrored, and it is one instance of a wider problem the
+    # gate has: it reads a single integer and cannot tell a measured
+    # 50 from "no measurement". Tracked as an open question in
+    # PROJECT_STATE.json rather than patched here, because the fix
+    # is a scorer-contract change, not a gate change.
+    _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
+    if _trend_score < min_trend:
+        return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {min_trend:g} for {direction} {horizon}"}
+    return None
+
+
+def _regime_headwind(regime_signal: dict | None, regime_gate: dict) -> bool:
+    """True when the regime reads as a headwind. The scan drops on it only
+    when `req.regime_filter` is on; Analysis flags it either way (REJECT when
+    the scan would drop, CAUTION otherwise)."""
+    return bool(regime_signal) and \
+        regime_signal["conviction_pct"] <= regime_gate.get("headwind_caution_pct", -15)
+
+
+def _no_setup_drop(symbol: str, strategy: str) -> dict:
+    return {"symbol": symbol, "reason": f"no {strategy} setup"}
+
+
+def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict]) -> tuple[object | None, dict | None]:
+    """mean_reversion_multi's variant loop. Returns (signal, None) on a
+    confirmed setup, else (None, the scan's rejection dict)."""
+    valid_variants = [v for v in req.mean_reversion_variants if v in _SIGNAL_FNS]
+    fired: list = []
+    for variant in valid_variants:
+        fn = _SIGNAL_FNS[variant]
+        if variant == "mean_reversion_vwap_daily":
+            extra_kw = {"vwap_lookback": req.vwap_lookback, "vwap_deviation_pct": req.vwap_deviation_pct}
+        else:
+            extra_kw = {}
+        variant_kwargs = _merge_strategy_params(
+            variant, req.direction,
+            {**_SIGNAL_KWARGS.get(variant, lambda r: {})(req), **extra_kw},
+        )
+        try:
+            sig = fn(bars[-120:], direction=req.direction, **variant_kwargs)
+        except Exception:
+            sig = None
+        if sig is not None:
+            fired.append(sig)
+    if len(fired) < req.mean_reversion_min_confirmations:
+        return None, {"symbol": symbol, "reason": f"no mean_reversion_multi: {len(fired)}/{len(valid_variants)} signals fired"}
+    # Order-independent resolution: widest stop, tightest target,
+    # pooled ladder. Previously this took fired[0]'s levels verbatim,
+    # so reordering the variant checkboxes changed every level.
+    signal = resolve_multi_signal(fired, strategy="mean_reversion_multi")
+    if signal is None:
+        return None, {"symbol": symbol, "reason": "mean_reversion_multi: variants produced no valid combined levels"}
+    return signal, None
+
+
+def _multi_bt_params(req: StockScanRequest) -> dict:
+    return _merge_strategy_params(
+        _MULTI_BT_STRATEGY, req.direction,
+        _SIGNAL_KWARGS.get(_MULTI_BT_STRATEGY, lambda r: {})(req),
+    )
+
+
+def _backtest_drop(symbol: str, bt_result) -> dict | None:
+    if not bt_result.passes_gate:
+        return {"symbol": symbol, "reason": f"backtest gate: {bt_result.summary_text}"}
+    return None
+
+
+def _reject_unsupported_multi_variants(req: StockScanRequest) -> None:
+    # mean_reversion_multi's per-variant loop (_multi_signal) always calls
+    # each variant on DAILY `bars`, unlike the single-strategy path, which
+    # correctly special-cases _INTRADAY_STRATEGIES to fetch and use 15m bars.
+    # "mean_reversion_vwap" (the intraday variant, NOT "_daily") is not itself
+    # in _INTRADAY_STRATEGIES either, so nothing routes intraday bars into the
+    # multi-signal loop for it. A third independent audit round found this
+    # would silently run the intraday variant's VWAP/ATR/entry-gate math on
+    # daily candles mislabeled as 15-minute bars — no error, just quietly
+    # wrong numbers with a plausible shape. Not reachable through the shipped
+    # UI today (MeanReversionConfirmPanel only offers rsi/bb/vwap_daily), but
+    # rejected here rather than left as a live API footgun for the next
+    # caller (a future feature, a test, a script) that adds it. Called by
+    # both run_stock_scan and analyze_stock (A5c: Analysis runs the loop too).
+    if req.strategy == "mean_reversion_multi" and "mean_reversion_vwap" in req.mean_reversion_variants:
+        raise HTTPException(
+            status_code=422,
+            detail="mean_reversion_vwap (intraday) is not supported in mean_reversion_multi — "
+                   "its variant loop only evaluates daily bars. Use mean_reversion_vwap_daily instead.",
+        )
+
+
 _HISTORY_YEARS = 5
 _SCAN_SEM = asyncio.Semaphore(5)
 
@@ -367,7 +515,16 @@ class _AnalyzeCore:
 
 
 async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCore | None":
-    """Gate-free single-symbol computation for the analysis page."""
+    """Gate-free single-symbol computation for the analysis page.
+
+    A5c: every filter on which the scan (_process_stock) would DROP the
+    symbol adds a REJECT gate flag worded as a scan drop, via the helpers
+    shared with the scan; card.status is not changed by any of them.
+    """
+    # Resolved first, before any fetch, so a malformed YAML floor raises
+    # (-> HTTP 500) instead of being reported as a symbol verdict — the same
+    # contract as _process_stock.
+    _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     is_index = _is_index(symbol)
     end = date.today()
     start = end - timedelta(days=_HISTORY_YEARS * 365)
@@ -405,6 +562,8 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 80)
     except Exception:
         _intraday_bars = []
+    if (_drop := _intraday_history_drop(symbol, req.strategy, _intraday_bars)):
+        gate_flags.append(_scan_drop_flag("intraday_history", _drop))
 
     full_cfg = _load_full_scoring_cfg()
     rcfg = _load_regime_cfg(req.horizon)
@@ -459,48 +618,69 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     if card.status == "REJECT":
         gate_flags.append({"gate": "score", "status": "REJECT", "detail": f"score={card.score}"})
 
-    if regime_signal and regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
-        gate_flags.append({"gate": "regime_headwind", "status": "CAUTION",
-                           "detail": f"conviction {regime_signal['conviction_pct']}%"})
+    if (_drop := _direction_conviction_drop(symbol, card, _min_trend, req.direction, req.horizon)):
+        gate_flags.append(_scan_drop_flag("direction_conviction", _drop))
 
-    # Strategy signal (optional)
+    if _regime_headwind(regime_signal, _regime_gate):
+        _conv = regime_signal["conviction_pct"]
+        if req.regime_filter:
+            # The scan drops on this ("regime headwind") only with the filter on.
+            gate_flags.append({"gate": "regime_headwind", "status": "REJECT",
+                               "detail": f"{_SCAN_DROP_PREFIX}regime headwind (conviction {_conv}%)"})
+        else:
+            gate_flags.append({"gate": "regime_headwind", "status": "CAUTION",
+                               "detail": f"conviction {_conv}%"})
+
+    # Strategy signal — the same resolution as the scan, so the backtest below
+    # runs on the scan's (_bt_strategy, _bt_bars, _bt_params).
     signal = None
-    signal_fn = _SIGNAL_FNS.get(req.strategy)
-    if signal_fn:
-        signal_kwargs = _merge_strategy_params(
-            req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
-        _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
-                     else bars[-120:])
-        # Pass live price so signal uses current price, not yesterday's close.
-        _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
-        try:
-            signal = signal_fn(_sig_bars, direction=req.direction,
-                               current_price=_live_price, **signal_kwargs)
-        except Exception:
-            signal = None
-    if signal is None:
-        gate_flags.append({"gate": "signal", "status": "CAUTION", "detail": f"no {req.strategy} setup"})
+    _bt_strategy = _bt_bars = _bt_params = None
+    if req.strategy == "mean_reversion_multi":
+        signal, _drop = _multi_signal(symbol, req, bars)
+        if signal is not None:
+            _bt_strategy, _bt_bars, _bt_params = _MULTI_BT_STRATEGY, bars, _multi_bt_params(req)
+    else:
+        signal_fn = _SIGNAL_FNS.get(req.strategy)
+        if signal_fn:
+            signal_kwargs = _merge_strategy_params(
+                req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
+            _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
+                         else bars[-120:])
+            # Pass live price so signal uses current price, not yesterday's close.
+            _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
+            try:
+                signal = signal_fn(_sig_bars, direction=req.direction,
+                                   current_price=_live_price, **signal_kwargs)
+            except Exception:
+                # The scan drops here too (via its outer `except`, reason str(exc)).
+                signal = None
+            if signal is not None:
+                _bt_strategy = req.strategy
+                _bt_bars = _intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
+                _bt_params = signal_kwargs
+        _drop = _no_setup_drop(symbol, req.strategy) if signal is None else None
+    if _drop:
+        gate_flags.append(_scan_drop_flag("signal", _drop))
 
     # Backtest + confidence
     bt_result = None
     conf_val = conf_txt = None
     if signal is not None:
-        _bt_bars = _intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
         _bt_commission = _backtest_commission()
-        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars, signal_kwargs,
+        _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, _bt_bars, _bt_params,
                                  commission=_bt_commission, min_trades=req.bt_min_trades,
                                  min_win_rate=req.bt_min_win_rate)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
                 _BACKTEST_POOL,
-                functools.partial(run_strategy_backtest, _bt_bars, strategy=req.strategy,
+                functools.partial(run_strategy_backtest, _bt_bars, strategy=_bt_strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
-                                  min_win_rate=req.bt_min_win_rate, params=signal_kwargs,
+                                  min_win_rate=req.bt_min_win_rate, params=_bt_params,
                                   commission=_bt_commission))
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
-        if not bt_result.passes_gate:
-            gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
+        if (_drop := _backtest_drop(symbol, bt_result)):
+            gate_flags.append(_scan_drop_flag("backtest", _drop))
         # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
         _atr_target = req.confidence_atr_mult_target
         _atr_stop = req.confidence_atr_mult_stop
@@ -639,6 +819,7 @@ async def _market_backdrop() -> "MarketBackdropOut | None":
 
 @router.post("/analyze-stock")
 async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
+    _reject_unsupported_multi_variants(req)
     symbol = req.symbol.upper()
     is_index = _is_index(symbol)
 
@@ -753,8 +934,8 @@ async def _process_stock(
                     )
                 except Exception as exc:
                     logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
-                if len(intraday_bars) < 30:
-                    return {"symbol": symbol, "reason": "insufficient intraday history"}
+                if (_drop := _intraday_history_drop(symbol, req.strategy, intraday_bars)):
+                    return _drop
 
             # Price fallback chain mirrors the options scan: Tradier batch quote →
             # last stored close (history table) → yfinance. Keeps the stock track
@@ -856,80 +1037,21 @@ async def _process_stock(
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
 
-            # Direction conviction filter — a FLOOR in both directions, never a
-            # ceiling on the bearish side. The trend rule is direction-aware, so
-            # a high trend score on a Bearish scan means a strong DOWNtrend,
-            # which is the setup a put wants; what this gate removes is a LOW
-            # score either way. Thresholds live in scoring_rules.yaml
-            # (horizons.<horizon>.direction_conviction); `None` means exempt,
-            # which is how Intraday is excused rather than by naming it here.
-            # Must stay identical to the options gate in routers/scan.py — both
-            # now read the same resolver, which is what keeps them in step.
+            # Direction-conviction floor (shared with _analyze_core — A5c).
             # `_min_trend` was resolved at the top of this function.
-            if _min_trend is not None:
-                # The `, 50` fallback is KEPT, unlike the `if _c.stockBreakdown
-                # else 50` removed from the options gate. They look like twins
-                # and are not: that one guarded a REQUIRED pydantic field on a
-                # model that is always truthy, so it was provably dead code,
-                # while this one fires for any card whose `rules` carries no
-                # trend entry — which several test fixtures build deliberately
-                # (`rules=[]`) to exercise backtest and signal paths. Raising
-                # here instead breaks four tests that are not about this gate.
-                #
-                # Unreachable in production: score_stock always appends
-                # trend_result (stock_scorer.py:1089) and every _trend_* branch
-                # returns a RuleResult named "trend".
-                #
-                # The 50 DID change meaning when the gate became a floor — at
-                # Bearish/Position it went from rejected (old ceiling of 40) to
-                # passing (floor of 40). That is the bullish side's behaviour,
-                # now mirrored, and it is one instance of a wider problem the
-                # gate has: it reads a single integer and cannot tell a measured
-                # 50 from "no measurement". Tracked as an open question in
-                # PROJECT_STATE.json rather than patched here, because the fix
-                # is a scorer-contract change, not a gate change.
-                _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
-                if _trend_score < _min_trend:
-                    return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend:g} for {req.direction} {req.horizon}"}
+            if (_drop := _direction_conviction_drop(symbol, card, _min_trend, req.direction, req.horizon)):
+                return _drop
 
-            if req.regime_filter and regime_signal and \
-               regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
+            if req.regime_filter and _regime_headwind(regime_signal, _regime_gate):
                 return {"symbol": symbol, "reason": "regime headwind"}
 
             if req.strategy == "mean_reversion_multi":
-                valid_variants = [v for v in req.mean_reversion_variants if v in _SIGNAL_FNS]
-                fired: list = []
-                for variant in valid_variants:
-                    fn = _SIGNAL_FNS[variant]
-                    if variant == "mean_reversion_vwap_daily":
-                        extra_kw = {"vwap_lookback": req.vwap_lookback, "vwap_deviation_pct": req.vwap_deviation_pct}
-                    else:
-                        extra_kw = {}
-                    variant_kwargs = _merge_strategy_params(
-                        variant, req.direction,
-                        {**_SIGNAL_KWARGS.get(variant, lambda r: {})(req), **extra_kw},
-                    )
-                    try:
-                        sig = fn(bars[-120:], direction=req.direction, **variant_kwargs)
-                    except Exception:
-                        sig = None
-                    if sig is not None:
-                        fired.append(sig)
-                if len(fired) < req.mean_reversion_min_confirmations:
-                    return {"symbol": symbol, "reason": f"no mean_reversion_multi: {len(fired)}/{len(valid_variants)} signals fired"}
-                # Order-independent resolution: widest stop, tightest target,
-                # pooled ladder. Previously this took fired[0]'s levels verbatim,
-                # so reordering the variant checkboxes changed every level.
-                signal = resolve_multi_signal(fired, strategy="mean_reversion_multi")
-                if signal is None:
-                    return {"symbol": symbol, "reason": "mean_reversion_multi: variants produced no valid combined levels"}
-                # Use RSI as canonical backtest proxy for multi-signal — deterministic regardless of fired order
-                _bt_strategy = "mean_reversion_rsi"
+                signal, _drop = _multi_signal(symbol, req, bars)
+                if _drop:
+                    return _drop
+                _bt_strategy = _MULTI_BT_STRATEGY
                 bt_bars = bars
-                _bt_params = _merge_strategy_params(
-                    "mean_reversion_rsi", req.direction,
-                    _SIGNAL_KWARGS.get("mean_reversion_rsi", lambda r: {})(req),
-                )
+                _bt_params = _multi_bt_params(req)
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:
@@ -944,7 +1066,7 @@ async def _process_stock(
                 signal = signal_fn(signal_bars, direction=req.direction,
                                    current_price=_live_price, **signal_kwargs)
                 if signal is None:
-                    return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
+                    return _no_setup_drop(symbol, req.strategy)
                 _bt_strategy = req.strategy
                 bt_bars = intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
                 _bt_params = signal_kwargs
@@ -965,8 +1087,8 @@ async def _process_stock(
                     ),
                 )
                 _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
-            if not bt_result.passes_gate:
-                return {"symbol": symbol, "reason": f"backtest gate: {bt_result.summary_text}"}
+            if (_drop := _backtest_drop(symbol, bt_result)):
+                return _drop
 
             # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
             _atr_target = req.confidence_atr_mult_target
@@ -1119,24 +1241,7 @@ async def get_last_stock_scan_status() -> ScanSessionStatus:
 
 @router.post("/stock-scan")
 async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_db)) -> StockScanResult:
-    # mean_reversion_multi's per-variant loop (in _process_stock) always calls
-    # each variant on DAILY `bars`, unlike the single-strategy path, which
-    # correctly special-cases _INTRADAY_STRATEGIES to fetch and use 15m bars.
-    # "mean_reversion_vwap" (the intraday variant, NOT "_daily") is not itself
-    # in _INTRADAY_STRATEGIES either, so nothing routes intraday bars into the
-    # multi-signal loop for it. A third independent audit round found this
-    # would silently run the intraday variant's VWAP/ATR/entry-gate math on
-    # daily candles mislabeled as 15-minute bars — no error, just quietly
-    # wrong numbers with a plausible shape. Not reachable through the shipped
-    # UI today (MeanReversionConfirmPanel only offers rsi/bb/vwap_daily), but
-    # rejected here rather than left as a live API footgun for the next
-    # caller (a future feature, a test, a script) that adds it.
-    if req.strategy == "mean_reversion_multi" and "mean_reversion_vwap" in req.mean_reversion_variants:
-        raise HTTPException(
-            status_code=422,
-            detail="mean_reversion_vwap (intraday) is not supported in mean_reversion_multi — "
-                   "its variant loop only evaluates daily bars. Use mean_reversion_vwap_daily instead.",
-        )
+    _reject_unsupported_multi_variants(req)
     # NOTE: nothing serializes overlapping requests to this endpoint (unlike
     # scan.py's run_scan(), _SCAN_SEM above only throttles per-symbol work
     # inside _process_stock, not the endpoint itself) — two concurrent
