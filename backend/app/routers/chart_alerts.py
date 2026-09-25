@@ -26,6 +26,7 @@ from app.services.alert_evaluator import (
 )
 from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
+from app.services.market_structure import compute_structure
 from app.services.notifications.dispatch import dispatch as _dispatch, load_notification_config as _load_notification_config
 from app.services.notifications.alert_notifier import _format_dt, _TZ_LABEL
 
@@ -731,6 +732,29 @@ async def test_notification(body: NotificationTestRequest):
 
 # ── WS helper (called from chart.py on candle-close) ─────────────────────────
 
+def closed_candle_structure(candles: list[dict], closed_candle: dict, interval: str, symbol: str,
+                            ht_candles: list[dict] | None = None) -> list[dict]:
+    """A4e: structure signals for ALERT evaluation, computed on `candles` up to and
+    including `closed_candle` -- never on the bars after it (the forming candle).
+
+    A structure condition is met by a signal timed at or after the closed candle,
+    and a composite confirmation by any signal in the list, so signals computed on
+    the forming bar fired the closed candle's rule on a break that had not closed,
+    or on a swing only the forming bar confirmed (find_swings looks right). Filtering
+    full-list signals by time cannot undo the latter, hence the recompute.
+
+    The closed candle is matched by time, searched from the end. If it is not in
+    `candles`, returns []: fail closed rather than fall back to the forming bar.
+    Both callers take closed_candle from `candles` itself, so that is unreachable.
+    The display `structure` message (chart.py) stays on the full list.
+    """
+    closed_time = closed_candle.get('time')
+    for i in range(len(candles) - 1, -1, -1):
+        if candles[i].get('time') == closed_time:
+            return compute_structure(candles[:i + 1], interval, symbol, ht_candles)
+    return []
+
+
 async def evaluate_and_notify_for_symbol(
     symbol: str, interval: str, closed_candle: dict,
     all_candles: list[dict], signals: list[dict],
@@ -743,8 +767,14 @@ async def evaluate_and_notify_for_symbol(
     intraday `interval` -- completeness judged at `as_of`, the wall-clock time
     `all_candles` was fetched (chart_cache.get_intraday_with_fetched_at), since
     a cached candle that was forming then stays partial. None = time.time().
-    1D/1W are unchanged. Indicators, structure signals, the closed candle and the
-    VWAP confirmation keep `all_candles` (regime models only, Kenneth).
+    1D/1W are unchanged.
+
+    A4e: `signals` must come from closed_candle_structure (both callers do), i.e.
+    structure computed on the candles up to `closed_candle`, not the forming bar.
+    Indicators still read `all_candles`: every indicator is causal and a condition
+    reads the point at closed_candle['time'], so the forming bar cannot move it
+    (pinned by tests/test_a4e_closed_candle_alignment.py). The VWAP confirmation
+    keeps the forming bar by decision (A4C-FOLLOWUPS-LOCKED-2026-09-24).
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(AlertRuleModel).where(

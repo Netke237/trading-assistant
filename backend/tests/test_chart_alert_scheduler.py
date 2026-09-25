@@ -48,7 +48,7 @@ async def test_tick_evaluates_each_enabled_symbol_interval_once_per_new_candle(m
     monkeypatch.setattr(sched, 'AsyncSessionLocal', Session)
     # A4c: _tick fetches through get_intraday_with_fetched_at (rows + fetch time).
     monkeypatch.setattr(sched, 'get_intraday_with_fetched_at', AsyncMock(return_value=(_CANDLES_V1, 0.0)))
-    monkeypatch.setattr(sched, 'compute_structure', lambda *a, **kw: [])
+    monkeypatch.setattr('app.routers.chart_alerts.closed_candle_structure', lambda *a, **kw: [])  # A4e: the scheduler's structure call
     mock_evaluate = AsyncMock(return_value=[])
     monkeypatch.setattr('app.routers.chart_alerts.evaluate_and_notify_for_symbol', mock_evaluate)
     sched._last_seen_candle.clear()
