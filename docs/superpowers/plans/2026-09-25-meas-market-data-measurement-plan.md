@@ -1,4 +1,4 @@
-# MEAS — Market-data measurement: plan (v2, after plan round 1)
+# MEAS — Market-data measurement: plan (v3, after plan rounds 1 and 2)
 
 Package: **MEAS** (docs/superpowers/plans/2026-09-25-work-packages.md, section "MEAS").
 Decision implemented: BACKLOG-DECISIONS-2026-09-25, Q20 + Q28. This session prepares exact scan
@@ -50,211 +50,267 @@ it does not fix it.
 
 | Threshold (file : key) | Answered by |
 |---|---|
-| Bearish direction floors (`scoring_rules.yaml` `horizons.<h>.direction_conviction.bearish_min_trend`, 30 Swing / 40 Position) | S1–S4 `direction_gate` counts (the stock path gates before the strategy signal). Options apply the same floor after contracts; the O-scans' `failed_direction` is reported alongside it. |
-| Confidence gate `confidence_reject_below` 35 (Step-3 / settingsStore) | Counterfactual scans C1–C4, run end-to-end, so the contract floors and the direction gate are evaluated too |
-| `min_stock_score` 55 (contract_rules.yaml hard_reject) | Counterfactual C5 (override 35, the stock gate's own pass line) |
-| `min_volume` 50 / `min_open_interest` 200 (contract_rules.yaml) | Counterfactual C6 (overrides 0/0). **Report only**, see §6 |
-| `regime_sizing.min_mult` 0.3 (scoring_rules.yaml) | Per-candidate `sentiment.conviction_pct` / `stability` on **stock** results (the value `_process_stock` actually sizes with). Options candidates do not carry it; the market `/api/regime` conviction is used only to classify the day. |
-| `iv_rank_pass_max` / `iv_rank_caution_max` per horizon (scoring_rules.yaml), `preferred_iv_rank_max` 55 (contract_rules.yaml) | Rank-basis rows from O1–O4 (percentile source ON), each carrying both `detail_iv_rank` and `detail_iv_abs` |
-| `max_iv_rank` 70 (contract_rules.yaml hard ceiling) | **Not measurable from survivors** (every row already passed it). Only the `iv_rank_too_high` truncation count is reported. |
-| `iv_rank_threshold` 50 (rank-basis credit/debit line, ScanRequest) | Bearish rank rows (O1, O3) |
-| `ivAbsThreshold` / `iv_abs_threshold` 50 (absolute-basis credit/debit line) | Bearish absolute IVs pooled from `detail_iv_abs` on O1/O3 rows, plus A1/A2 (percentile source OFF), which also show the structure the picker actually builds on the absolute basis |
+| Bearish direction floors (`scoring_rules.yaml` `horizons.<h>.direction_conviction.bearish_min_trend`: 30 Swing, 40 Position) | S1–S4 `direction_gate` counts. The stock path gates before the strategy signal. Options apply the same floor after contracts; the O-scans' `failed_direction` is reported next to it. |
+| Confidence gate `confidence_reject_below` 35 (Step-3 / settingsStore; applies to **both** directions) | C1 (bearish) and C1b (bullish), each paired with its base, plus "would clear the gate" counts from S-scan reject strings |
+| `min_stock_score` 55 (contract_rules.yaml hard_reject; **both** directions) | C5 (bearish) and C5b (bullish): override to 35, the stock gate's CAUTION floor (PASS is 55, scoring_rules.yaml:9-11) |
+| `min_volume` 50 / `min_open_interest` 200 | C6: hard floors **and** the soft preferred bands at 0. **Report only** (§6). |
+| `regime_sizing.min_mult` 0.3 | Per-candidate `sentiment.conviction_pct` / `stability` on stock results (what `_process_stock` sizes with) and on options results (built around scan.py:600). Candidates with no sentiment are tabulated separately (`sizing_basis` `floor:unmeasured`). The market `/api/regime` is used only to classify the day. |
+| `iv_rank_pass_max` / `iv_rank_caution_max` per horizon, `preferred_iv_rank_max` 55 | Rank-basis **primary** rows from O1–O4 |
+| `max_iv_rank` 70 (hard ceiling) | Not measurable from survivors. Only the `iv_rank_too_high` truncation count is reported. |
+| `iv_rank_threshold` 50 (rank-basis credit/debit line) | `stock_iv` of bearish rank-basis primary rows from O1 and O3: the ATM figure `choose_primary` compares (scan.py:680-686, :1132; spread_builder.py:118-121) |
+| `ivAbsThreshold` 50 (absolute-basis credit/debit line) | `stock_iv` of **A1/A2** primary rows with `stock_basis == "absolute"` (percentile source OFF). The O-row `detail_iv_abs` is reported only as a labelled proxy (it is the picked contract's own IV, not the ATM figure). |
 
 ## 3. The scan set (per measurement day, fixed order)
 
-Position bodies are the 2026-09-18 bodies, JSON-equal (the only difference is the file name).
-**Swing bodies are rebuilt from the Swing Step-3 defaults** (`frontend/lib/executionParamDefaults.ts`
-`PARAM_DEFAULTS_PER_HORIZON.Swing`), taking the same keys the 09-18 bodies override: MA 20 SMA,
-slope 10, ADX 25/20, RS 20 against NDX (2.0 / -1.0), options `confidence_atr_mult_target` 3.0,
-hold 5–15. The 2026-09-18 Swing stock scans ran on Position parameters (their bodies carry MA 50 /
-RS 50 / SPX), so they are **not comparable** for the Swing floor and are excluded from it; this is
-recorded in the results sheet.
+**Body sources.** The Position bodies are the 2026-09-18 bodies, with one change: the shortlist
+cap is raised so no candidate is dropped silently. The cap cuts `candidates[:N]` in universe order,
+after every gate (scan.py:1680-1689, stock_scan.py:1371-1373); the dropped names are not in
+`rejected`, and 09-18's bullish results were cut 18→10, 13→10 and 12→10.
+- Options set `overrides.shortlist_max_candidates: 50`, the backend clamp.
+- Stocks set `shortlist_max_candidates: 600`.
 
-| # | id | Endpoint | Direction | Horizon | Body |
+The funnel counts other than `failed_shortlist` stay comparable with 09-18.
+
+**Swing bodies** are rebuilt from `PARAM_DEFAULTS_PER_HORIZON.Swing`
+(`frontend/lib/executionParamDefaults.ts`) for the keys the 09-18 bodies override:
+- MA 20 SMA, slope 10, ADX 25/20
+- RS 20 against NDX, 2.0 / -1.0
+- options `confidence_atr_mult_target` 3.0
+- hold 5–15
+
+09-18's Swing stock scans ran on Position parameters, so they are excluded from the Swing floor.
+
+**Counterfactuals run immediately after their base**, about 7 minutes apart, to limit market
+drift. Their bodies are derived by the runner as the base plus the named change, so they cannot
+drift from the base file.
+
+| # | id | Endpoint | Dir | Horizon | Body |
 |---|---|---|---|---|---|
-| 1 | O1 | POST /api/scan | Bearish | Position (15–45) | `options-position-bearish` (= 09-18) |
-| 2 | O2 | POST /api/scan | Bullish | Position | `options-position-bullish` (= 09-18) |
-| 3 | O3 | POST /api/scan | Bearish | Swing (5–15) | `options-swing-bearish` |
-| 4 | O4 | POST /api/scan | Bullish | Swing | `options-swing-bullish` |
-| 5 | S1 | POST /api/stock-scan | Bearish | Swing | `stocks-swing-bearish` |
-| 6 | S2 | POST /api/stock-scan | Bullish | Swing | `stocks-swing-bullish` |
-| 7 | S3 | POST /api/stock-scan | Bearish | Position | `stocks-position-bearish` (= 09-18) |
-| 8 | S4 | POST /api/stock-scan | Bullish | Position | `stocks-position-bullish` (= 09-18) |
-| 9 | C1 | POST /api/scan | Bearish | Position | O1 + `confidence_reject_below: 30` |
-| 10 | C2 | POST /api/scan | Bearish | Position | O1 + `confidence_reject_below: 25` |
-| 11 | C3 | POST /api/stock-scan | Bearish | Position | S3 + `confidence_reject_below: 30` |
-| 12 | C4 | POST /api/stock-scan | Bearish | Position | S3 + `confidence_reject_below: 25` |
-| 13 | C5 | POST /api/scan | Bearish | Position | O1 + `overrides.min_stock_score: 35` |
-| 14 | C6 | POST /api/scan | Bearish | Position | O1 + `overrides.min_volume: 0, min_open_interest: 0` |
-| — | backend restart with the percentile source OFF | | | | |
-| 15 | A1 | POST /api/scan | Bearish | Position | O1 body |
-| 16 | A2 | POST /api/scan | Bearish | Swing | O3 body |
+| 1 | O1 | /api/scan | Bearish | Position | `options-position-bearish` |
+| 2 | C1 | /api/scan | Bearish | Position | O1 + `confidence_reject_below: 30` |
+| 3 | C5 | /api/scan | Bearish | Position | O1 + `overrides.min_stock_score: 35` |
+| 4 | C6 | /api/scan | Bearish | Position | O1 + `overrides` `min_volume: 0, min_open_interest: 0, preferred_volume_min: 0, preferred_oi_min: 0` |
+| 5 | O2 | /api/scan | Bullish | Position | `options-position-bullish` |
+| 6 | C1b | /api/scan | Bullish | Position | O2 + `confidence_reject_below: 30` |
+| 7 | C5b | /api/scan | Bullish | Position | O2 + `overrides.min_stock_score: 35` |
+| 8 | O3 | /api/scan | Bearish | Swing | `options-swing-bearish` |
+| 9 | O4 | /api/scan | Bullish | Swing | `options-swing-bullish` |
+| 10 | S1 | /api/stock-scan | Bearish | Swing | `stocks-swing-bearish` |
+| 11 | S2 | /api/stock-scan | Bullish | Swing | `stocks-swing-bullish` |
+| 12 | S3 | /api/stock-scan | Bearish | Position | `stocks-position-bearish` |
+| 13 | S4 | /api/stock-scan | Bullish | Position | `stocks-position-bullish` |
+| — | restart with the percentile source OFF (optional block, §5) | | | | |
+| 14 | A1 | /api/scan | Bearish | Position | O1 body |
+| 15 | A2 | /api/scan | Bearish | Swing | O3 body |
 
-The counterfactual bodies are **derived by the runner** from their base file plus the one named
-change, so they cannot drift from the base. Expected run time is about 16 × 5 min plus the restart,
-roughly 1 h 40 min.
+**Dropped after round 2.**
+- Stock confidence counterfactuals: on 09-18 the bearish stock scans had zero confidence-gate
+  rejects; they fail at the signal (276 / 258). The S-scans' reject strings
+  `confidence gate REJECT: x% < 35%` are reported as "would clear at 30 / 25" counts instead.
+- A 25 confidence variant: only 30 is tested end-to-end, so only 30 can be proposed.
 
-Context captured by the runner: `GET /auto-trade/status` before every options scan;
-`GET /api/data-sources` at start, before A1, and at the end; `GET /api/scan-schedule` at start;
-`GET /api/regime?horizon=position&lookback=20&threshold=0.02&smoothing=0` and the same with
-`horizon=swing`, at start and at end (pinned URLs, recorded in the manifest); `git rev-parse HEAD`;
-`git status --porcelain -- backend/config`; sha256 of every `backend/config/*.yaml` (including the
-git-ignored `settings.yaml`), at start and at end; per-scan start/end UTC and ET.
+**Time budget.** Measured 2026-09-18: options scan about 7.4 min, stock scan about 5 min. 9 × 7.4 +
+4 × 5 ≈ 87 min. The optional A block adds about 15 min plus a restart.
 
-## 4. Safety and validity rules (enforced by the runner; any breach stops the run)
+**Context captured by the runner:**
+- `GET /auto-trade/status` before every options scan
+- `GET /api/data-sources` at start, before A1, and at the end
+- `GET /api/scan-schedule` at start
+- `GET /api/regime?horizon=position&lookback=20&threshold=0.02&smoothing=0` at start and end. The
+  daily OMM does not depend on `horizon`, so one call is enough.
+- `git rev-parse HEAD`
+- sha256 **and a copy** of every non-credential `backend/config/*.yaml` at start, plus sha256 at the end
+- per-scan start/end, in UTC and ET
 
-1. **Auto-trader disarmed.** `POST /api/scan` fires an armed auto-trade when a PASS candidate
-   exists (scan.py:1816-1845). The runner reads `GET /auto-trade/status` immediately before
-   **every** options scan and stops if `armed` is true. Stock scans never fire it.
-2. **No scheduled scans.** The runner stops at start if `GET /api/scan-schedule` lists any
-   `enabled` entry. The frontend stays **closed** for the whole run (its continuous scan would POST
-   /api/scan and replace the result the run is reading). The runner also warns that each POST
-   replaces the UI's "last scan" and its deltas.
-3. **Config is main's.** At start, `git status --porcelain -- backend/config` must be empty (tracked
-   YAML equals HEAD). Hashes at start and end must match, or the run is marked INVALID.
-   `risk_rules.yaml` / `strategy_params.yaml` can be rewritten by the app (Settings → Risk,
-   strategy adopt), which is why the end hash is taken.
-4. **Right IV source for each block.**
-   - Before O1: `tastytrade` must be `connected` in `/api/data-sources`, or stop.
-   - After each O/C options result: every candidate's `stockBreakdown.volDetail.iv_basis` must be
-     `rank`. Otherwise the scan is flagged `iv_source_mismatch`: kept for funnel counts, excluded
-     from the IV analysis.
-   - Before A1: `tastytrade` must be `unconfigured` and `ibkr` must not be `connected`, or stop.
-   - After A1/A2: zero `rank` candidates, and every `contractDetails.ivRank` null. Otherwise the
-     file is marked INVALID.
-5. **Percentile source OFF without touching the real credentials file.** `credential_store.py`
-   reads `BAMENDJOU_CREDS_PATH`. `run_measurement_day.py strip-creds --out <path outside the repo>`
-   copies `backend/config/local_credentials.yaml` minus the `tastytrade_paper` and
-   `tastytrade_live` slots (Tradier kept: it supplies the chains) and refuses a path inside the
-   repo. Kenneth stops the backend and the IBKR gateway, then in the **same** cmd window runs
-   `set BAMENDJOU_CREDS_PATH=<path>` and `start-backend.bat` (setlocal inherits it). After A2 he
-   stops that backend, opens a **new** cmd window (so the variable is gone), and runs
-   `start-backend.bat`. `restore-check` then confirms `tastytrade` is `connected`, and he deletes
-   the copy. **Never** `POST /settings/credentials` to blank a slot: that rewrites the real file.
-   (Side effect, harmless: backend startup chmods the file it loads.)
-6. **Timing (ET is authoritative).** Start O1 between 13:00 and 13:45 ET (2026-09-18 started 13:20
-   ET). The core block (O1–S4) must finish by 15:00 ET, or those scans are flagged
-   `late_for_comparison`. Every scan must finish by 15:55 ET, or the runner stops. It refuses to run
-   on a weekend, and Kenneth skips NYSE half-days (the runner cannot know them; this is in the
-   protocol checklist).
-7. **No overwrite.** The runner refuses an existing `scans/<date>/` unless `--run-tag` names a new
-   sub-run (`scans/<date>-<tag>/`). A same-day rerun is a new tag, never an overwrite.
-8. **Encoding.** All files are written as UTF-8 bytes exactly as received (no re-encoding), which
-   avoids the 09-18 mojibake.
-9. The runner never writes under `backend/`. Nothing in this package runs the app lifespan in a
-   test, and no test writes `backend/config/*.yaml`.
+## 4. Safety and validity rules (the runner enforces them; a breach stops the run or marks data)
 
-## 5. Day rules (Q28)
+1. **Auto-trader disarmed.** `POST /api/scan` fires an armed auto-trade on a PASS candidate
+   (scan.py:1816-1845). The runner reads `/auto-trade/status` right before **every** options scan
+   and stops if `armed` is not false. Stock scans never fire it.
+2. **No scheduled scans, frontend closed.** The runner stops if any `/api/scan-schedule` entry is
+   `enabled`. Kenneth keeps the frontend closed: its continuous scan would POST /api/scan. The runner
+   prints that each POST replaces the app's "last scan" and its deltas.
+3. **Config.**
+   - **Required equal to HEAD:** `scoring_rules.yaml` and `contract_rules.yaml`. They hold the
+     thresholds under measurement, and the app never writes them. If they differ, the runner stops
+     and tells Kenneth to show the diff to a session. It never suggests `git checkout`.
+   - **Recorded, not required:** `strategy_params.yaml`, `strategy_watches.yaml`, `risk_rules.yaml`,
+     `settings.yaml` and the schedule files. The app rewrites these at runtime (strategy adopt /
+     tuning, watch state, Settings → Risk, settings migrations), so they are recorded with a hash and
+     a copy in the day folder.
+   - **End-of-run check:** if `scoring_rules.yaml`, `contract_rules.yaml` or `strategy_params.yaml`
+     (read by the stock scans) changed during the run, the day is flagged INVALID. Changes to the
+     other files are recorded, not flagged.
+4. **One rank vendor, the right IV source per block.**
+   - **Before O1:** `tastytrade` must be `connected` and `ibkr` must not be `connected`. IBKR ranks
+     override tastytrade (market.py:1504-1511); a mixed-vendor day is not allowed.
+   - **After each options scan:** the runner records the per-candidate `volDetail.iv_basis` counts.
+     If more than 20% are not `rank`, the scan is flagged `iv_source_mismatch`. Analysis always
+     filters per row on `stock_basis`.
+   - **Before A1:** `tastytrade` must be `unconfigured`, `ibkr` must not be `connected`, and
+     `tradier` must be `connected`. This catches a mistyped `BAMENDJOU_CREDS_PATH`, which loads empty
+     defaults and would take Tradier down too.
+   - **After A1/A2:** any `rank` basis or any non-null `contractDetails.ivRank` marks the scan
+     INVALID.
+5. **Percentile source OFF without touching the real credentials file.**
+   - Run `strip-creds --out <path outside the repo>`, with the backend venv's Python (it needs
+     PyYAML). It copies `backend/config/local_credentials.yaml` minus `tastytrade_paper` and
+     `tastytrade_live`, keeping every other slot (both Tradier slots: live takes precedence,
+     market.py:40-45). It refuses a path inside the repo, and prints the slots it kept.
+   - Kenneth stops the backend and the IBKR gateway. In the **same** cmd window he runs
+     `set BAMENDJOU_CREDS_PATH=<path>` and then `start-backend.bat` (`setlocal` inherits the
+     variable).
+   - After A2 he closes that window, opens a **new** one and runs `start-backend.bat`.
+   - `restore-check` then requires `tastytrade` `connected`, and Kenneth deletes the copy.
+   - Never `POST /settings/credentials` to blank a slot: that rewrites the real file.
+6. **Timing (ET is authoritative; the runner computes US DST itself).**
+   - O1 must start between **13:00 and 13:15 ET**.
+   - Base scans (O1–O4, S1–S4) must finish by 15:00 ET, or they are flagged `late_for_comparison`.
+   - No scan may start after 15:40 ET.
+   - The runner refuses weekends. Kenneth skips NYSE half-days; that is a checklist item, because the
+     runner cannot know them.
+7. **No overwrite.** An existing `scans/<date>/` is refused unless `--run-tag` names a new sub-run.
+8. **Encoding.** Results are written as the exact bytes received.
+9. The runner never writes under `backend/`, and no test writes `backend/config/*.yaml` or runs the
+   app lifespan.
 
-- At least **two new valid days**, on different calendar days, not counting 2026-09-18. A day is
-  valid if the core block O1–S4 is complete, not INVALID, and not `late_for_comparison`.
-- Day regime is taken from the pinned position-horizon `/api/regime` snapshot at start:
-  conviction_pct, `omm.stability`, `omm` state, `hmm_state`, VIX (`metrics`), regime_direction.
-  Two days are **different regimes** if at least one of these holds:
+## 5. Days (Q28)
+
+- **Valid day:** base scans O1–O4 and S1–S4 complete, none INVALID, none `late_for_comparison`.
+  At least **two new valid days**, on different calendar days.
+- **09-18's role:** it is a valid day **for the Position direction floor and for the IV rank rows
+  already in the store**. It does not count for Swing (Position parameters), for the counterfactual
+  rules (it has no C-scans), for ivAbsThreshold (no A-scans), or towards the two new days.
+- **The A block is optional per day.** It must run on at least two days in total. If a day runs
+  late, skip it that day.
+- **Day regime,** from the position `/api/regime` at start: `conviction_pct`, `omm.state`,
+  `omm.stability`, VIX (from `metrics`), `regime_direction`. For 09-18 these come from the recorded
+  funnel regime (conviction +27, Choppy, MIXED, VIX 15.4), with stability Fragile from its candidate
+  sentiment.
+- **Two days are different regimes** if any of these holds (a missing value never counts as
+  different):
   - |Δ conviction_pct| ≥ 15
-  - `omm.stability` differs
   - |Δ VIX| ≥ 5
   - regime_direction differs
-  - `hmm_state` differs
-- min_mult is only proposable when the collected days (09-18 included) span two different regimes.
-  Otherwise the sheet says "not proposable yet: need a different regime", and Kenneth decides
-  whether to run another day.
+  - `omm.state` **and** `omm.stability` both differ
+- **min_mult** is shown only if the days span two different regimes.
 
-## 6. Reading rules, fixed before the data exists (whether to propose, and what value)
+## 6. Reading rules, fixed before the data exists
 
-A proposal cites the rows it used. Below a sample floor the answer is **"not enough data"**, never a
-number.
+A proposal cites its rows. Below a sample floor the answer is **"not enough data"**. Every proposed
+value applies to **both directions** (that is how each key is implemented today), so each proposal
+shows its effect on both directions. If the data says the two directions want different values,
+that is a **new question for Kenneth at proposal time** (a per-direction key is a code change);
+it is not decided here.
+
+**Attribution (C-scans).** A symbol is "added" by Cx only if it is a Cx candidate, it is not a base
+candidate, and its **base** rejection is the gate that was varied:
+- C1 / C1b: base reason starts `Score gate:`, `breakdown.confidence` ≥ 30 and < 35, and
+  `breakdown.fundamentals` is not below `fundamentals_reject_below`.
+- C5 / C5b: base reason contains `stock_score_below_threshold`.
+- C6: base reason contains `volume_too_low`, `open_interest_too_low` or `too_many_soft_failures`.
+- Any other new name is counted as **drift** and reported, never used.
+
+**Quality bar for an added candidate:** `finalStatus` PASS or CAUTION, `stopCostStatus` not REJECT,
+and `contractScore` ≥ the median `contractScore` of that day's base candidates in the same direction
+(45 if the base has none).
 
 - **Bearish direction floors.** The trend score takes only the values
-  L = {0, 15, 30, 40, 45, 55, 60, 70, 85, 100} (stock_scorer.py:268-292: price {0,40} + slope
-  {0,30} + ADX {0,15,30}), so a floor acts as the smallest L-value at or above it. Per valid day
-  and horizon: bearish rate = rejected / entered (from `direction_gate`), and bullish rate on the
-  same day and horizon.
-  - Keep: the bearish rate is < 50% and within 10 points of the bullish rate on every day.
-  - Propose one step **down** (the next lower L-value: Swing 30→15, Position 40→30): the bearish
-    rate is ≥ 50% on ≥ 2 valid days.
-  - Propose one step **up** (the next higher L-value: Swing 30→40, Position 40→45): the bearish
-    rate is < 2% on every valid day **and** S1/S3 produced ≥ 1 candidate on ≥ 2 valid days.
-  - Otherwise, keep.
-- **Confidence gate 35.** From C1–C4 against O1/S3 on the same day: added = candidates in Cx that
-  are not in the base.
-  - Propose **30** if C1 or C3 adds ≥ 1 candidate on ≥ 2 valid days.
-  - Otherwise, propose **25** if C2 or C4 adds ≥ 1 candidate on ≥ 2 valid days.
-  - Otherwise, keep 35.
-  - Report each added candidate's confidence, final status and backtest. The bullish pass rate is a
-    reference, not a target.
-- **min_stock_score 55.** From C5 against O1: propose if C5 adds ≥ 1 candidate on ≥ 2 valid days.
-  Value = the median `stockScore` of all added candidates across days, rounded down to a multiple
-  of 5, clamped to [35, 55]. Otherwise keep.
-- **min_volume / min_open_interest.** Report only: candidates C6 adds, with their contract volume,
-  OI and spread. No proposal from this package; liquidity protects fills and is not lowered on
-  bearish starvation. C6 also records whether the override reached the validator
-  (`volume_too_low` count must be 0).
-- **min_mult 0.3.** Report, per valid day and direction, the distribution of stock-candidate
-  `sentiment.conviction_pct`, its `stability`, and the multiplier each candidate gets under
-  min_mult ∈ {0.2, 0.3, 0.4} with `full_conviction_pct` 40 (formula in scoring_rules.yaml
-  regime_sizing). The proposal is **keep 0.3**, and the table is shown so Kenneth can choose
-  another value himself. It is shown only under the different-regime condition in §5.
-- **IV rank pass/caution per horizon, and preferred_iv_rank_max.** Floor: ≥ 30 rank rows **per
-  horizon**, over ≥ 2 valid days, from O-scans not flagged `iv_source_mismatch`. Rule, quantile
-  matching on the same rows: let q = the share of rows with `detail_iv_abs` ≤ the absolute cut
-  (`iv_abs_pass_max` / the caution cut / `preferred_iv_abs_max`). The proposed rank cut is the
-  q-quantile of `detail_iv_rank` over the same rows, rounded to the nearest 5. Propose only if it
-  differs from the seed by ≥ 5. Both columns are truncated by the same survivor filter, and the
-  report prints the truncation count next to it.
-- **max_iv_rank 70.** Not measurable from survivors. Report the `iv_rank_too_high` count; no
-  proposal.
-- **iv_rank_threshold 50 and ivAbsThreshold 50 (bearish credit/debit lines).** Floor: ≥ 20 bearish
-  values of the relevant basis over ≥ 2 valid days. For ivAbsThreshold, pool `detail_iv_abs` from
-  valid O1/O3 rows with `contract_iv` from valid A1/A2 rows. For iv_rank_threshold, use
-  `detail_iv_rank` from O1/O3.
-  - Keep 50 if each side of 50 holds ≥ 20% of the values.
-  - Otherwise, propose the pooled median rounded to the nearest 5; the line then splits the names it
-    sees.
-  - Report the structures A1/A2 actually built (spread type, net debit/credit).
-  - Expected yield: about 5–10 bearish rows per scan, so 2 days should reach 20.
+  L = {0,15,30,40,45,55,60,70,85,100} (stock_scorer.py:268-292, with the bodies' 40/30/30 maxima).
+  A floor acts as the smallest L-value at or above it. On each valid day and horizon, compute the
+  bearish reject rate (`direction_gate` rejected / entered) and the bullish rate on the same day.
+  - Keep if the bearish rate is < 50% and within 10 points of the bullish rate on every valid day.
+  - Step **down** one L-value (Swing 30→15, Position 40→30) if the bearish rate is ≥ 50% on
+    ≥ 2 valid days.
+  - Step **up** one L-value (Swing 30→40, Position 40→45) if the bearish rate is < 2% on every valid
+    day **and** S1 / S3 produced ≥ 1 candidate on ≥ 2 valid days.
+  - Otherwise keep.
+- **Confidence 35.** Propose **30** if C1 has ≥ 1 attributed, quality-bar candidate on ≥ 2 valid
+  days. Otherwise keep. Always show C1b's attributed additions (count and quality), and the S-scan
+  "would clear at 30 / 25" counts.
+- **min_stock_score 55.** Propose if C5 has ≥ 1 attributed, quality-bar candidate on ≥ 2 valid days.
+  The value is the median `stockScore` of those candidates across days, rounded down to a multiple
+  of 5 and clamped to [35, 55]. Always show C5b.
+- **Liquidity floors.** Report only: the attributed C6 additions with their volume, OI and spread. C6
+  also shows whether the overrides reached the validator: no `volume_too_low`, `open_interest_too_low`
+  or `too_many_soft_failures` may remain. This answers the rescued "Min option volume set to 0" entry
+  on the backend side.
+- **min_mult 0.3.** For each valid day and direction, and separately for options and stock
+  candidates, report:
+  - the distribution of `sentiment.conviction_pct` and `stability`;
+  - each candidate's multiplier under min_mult ∈ {0.2, 0.3, 0.4} with `full_conviction_pct` 40;
+  - the count of candidates with no sentiment, which are sized at the floor.
+
+  The proposal is **keep 0.3**, and the table is shown for Kenneth's own choice, only under the
+  different-regime condition (§5).
+- **Shared IV sample rules.** Only `row == "primary"` rows count, and only from O1–O4 and A1/A2: the
+  runner writes envelopes for these scans alone. Rows are deduplicated on (symbol, trading day,
+  horizon), keeping the first scan of the day.
+- **IV rank pass/caution per horizon, and preferred_iv_rank_max.**
+  - Floor: ≥ 30 deduplicated rank rows **per horizon**, over ≥ 2 days.
+  - Rule (quantile matching on the same rows): q = the share of rows with `detail_iv_abs` ≤ the
+    absolute cut (`iv_abs_pass_max` / the caution cut / `preferred_iv_abs_max`). The proposed rank
+    cut is the q-quantile of `stock_iv` (rank), rounded to the nearest 5.
+  - Propose only if it differs from the seed by ≥ 5.
+  - Stated bias: `detail_iv_abs` is the picked contract's own IV, not the ATM figure the absolute
+    cut judges. The (symbol, day) pairs present in both O and A rows give the true ATM absolute IV,
+    and they are reported as a cross-check.
+  - The truncation count is printed next to the result.
+- **max_iv_rank 70.** Report the `iv_rank_too_high` count only.
+- **iv_rank_threshold 50** (rank `stock_iv`, bearish O1/O3) and **ivAbsThreshold 50** (absolute
+  `stock_iv`, A1/A2):
+  - Floor: ≥ 20 deduplicated values of the relevant basis over ≥ 2 days. Expected about 5–10 per
+    day, so more A-blocks may be needed. The sheet says so rather than lowering the floor.
+  - Keep 50 if each side of 50 holds ≥ 20% of the values. Otherwise propose the median, rounded to
+    the nearest 5.
+  - Always report the structures A1/A2 built (spread type, net debit/credit).
 
 ## 7. After Kenneth runs a day
 
-A session (any machine) that has the new `scans/<date>/` folder does this:
+A session (any machine) that has the new `scans/<date>/` folder does the following.
 
-1. For each valid options result, run
-   `cd backend && .venv/bin/python scripts/iv_basis_analysis.py collect --json <envelope>`. The
-   runner already writes the `{"request", "result"}` envelope file per options scan
-   (`<id>.envelope.json`), which the script pairs thresholds from (iv_basis_analysis.py:232-238,
-   293-295).
-2. Append one row per scan to `scan-funnel.jsonl`, using the formulas pinned in PROTOCOL.md §
-   "Derived rows". Examples: stock `direction_gate.entered = scanned − failed_history −
-   failed_score`; `score_gate_causes` from each score-gate reject's breakdown (confidence <
-   `confidence_reject_below`; regime == 0; fundamentals < `fundamentals_reject_below`).
-3. Fill that day's section in RESULTS-SHEET.md.
-4. After the last day, fill the proposal table under §6 and ask Kenneth yes/no for each threshold.
-   Each yes is a separate config change with its own plan → round → build → round loop, and each
-   answer is recorded as a decision.
+1. Collect the IV rows, only for O1–O4 and A1/A2, using the runner's `*.envelope.json` files:
+   ```
+   cd backend
+   .venv/bin/python scripts/iv_basis_analysis.py collect --json ../docs/superpowers/measurements/scans/<date>/<id>.envelope.json
+   ```
+   On Windows the interpreter is `.venv\Scripts\python.exe`, and `PYTHONUTF8=1` must be set:
+   iv_basis_analysis.py reads the file with the platform encoding.
+2. Add one `scan-funnel.jsonl` row per scan, using PROTOCOL.md § "Derived rows".
+   - Stock `direction_gate.entered = scanned − failed_history − failed_score`.
+   - Score-gate causes come from each score-gate reject's breakdown:
+     - confidence below `confidence_reject_below`;
+     - fundamentals below `fundamentals_reject_below`;
+     - a None confidence counts as **unknown**;
+     - `regime` is **not** a cause, because that rule always scores 0.
+3. Fill in that day's section of RESULTS-SHEET.md.
+4. After the last day, fill in the proposal table under §6 and ask Kenneth yes or no for each row.
+   Each yes gets its own config-change loop, and each answer is recorded as a decision.
 
 ## 8. Verify probe
 
-Phase `MEAS-MARKET-DATA-MEASUREMENT`: `kind: present`, path
-`docs/superpowers/measurements/run_measurement_day.py`, pattern `def check_auto_trade_disarmed`
-(the check that keeps a measurement day from placing a real order). Status stays `in_progress`
-until the days are run and the proposals are answered.
+Phase `MEAS-MARKET-DATA-MEASUREMENT`:
+- `kind: present`
+- path `docs/superpowers/measurements/run_measurement_day.py`
+- pattern `check_auto_trade_disarmed\(ctx\)\n        body = build_body`
+
+This pins that the disarm check sits immediately before each scan body is built, not merely that
+the function exists. The phase status stays `in_progress` until the days are run and the proposals
+are answered.
 
 ## 9. Tests and mutation checks (scratchpad; nothing committed to backend/tests)
 
-- Every body parses and validates against `ScanRequest` / `StockScanRequest`. The body keys must be
-  a subset of `model_fields`, and the override keys a subset of the Step-3 keys in
-  `executionParamDefaults.ts` plus the contract-validator override keys.
-- The Position bodies are JSON-equal to their 09-18 sources. The Swing bodies' overridden values
-  equal `PARAM_DEFAULTS_PER_HORIZON.Swing`.
-- The runner is run end-to-end against a fake HTTP server (stdlib) in the scratchpad, covering:
-  - the happy path;
-  - armed auto-trader → stop;
-  - an enabled schedule → stop;
-  - tastytrade not connected → stop;
-  - a rank row in A1 → INVALID;
-  - an existing folder → refuse;
-  - dirty config → stop;
-  - a changed hash at the end → INVALID.
-  Each check is mutated (disabled) once to show a test notices.
-- `strip-creds` is run on a synthetic YAML: it removes exactly the two tastytrade slots, keeps the
-  Tradier token, and refuses an output path inside the repo.
+**Bodies**
+- Every body validates against `ScanRequest` / `StockScanRequest`.
+- Body keys must be a subset of `model_fields`.
+- Override keys must be a subset of: the Step-3 keys, the contract-validator override keys, and
+  `shortlist_max_candidates`.
+- Position bodies equal 09-18 apart from the shortlist cap.
+- Swing override values equal `PARAM_DEFAULTS_PER_HORIZON.Swing`.
+
+**Runner against a fake HTTP server.** Covers the happy path, every stop and flag in §4, the
+attribution-free recording of bases, and the ordering (each C directly after its base). Each guard
+is mutated once and a test must fail for the right reason: not a crash, and a named assertion fails.
+
+**strip-creds** on a synthetic YAML: removes both tastytrade slots, keeps both Tradier slots,
+refuses an in-repo path.
