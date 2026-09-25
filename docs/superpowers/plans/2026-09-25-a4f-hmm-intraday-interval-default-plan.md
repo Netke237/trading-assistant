@@ -183,10 +183,7 @@ Mutations to kill:
 
 ## 4. Out of scope / for Kenneth
 
-- **Existing composite RULES with HMM_intraday on '1D'/'1W'** keep running as a daily-candle
-  HMM (the PUT exemption keeps them editable). Migrating a rule's interval moves it to a
-  different chart feed and scheduler group, and the locked decision names watches only. New
-  open question: migrate them to '5m' too (with the same report), or leave them?
+- ~~Existing composite RULES stay as they are~~ -- SUPERSEDED, see §6.
 - The dialog does not offer `1min`, and the backend accepts it. That is unchanged.
 
 ## 5. Verification before merge
@@ -194,3 +191,31 @@ Mutations to kill:
 `python3 scripts/state.py` exit 0. Backend `.venv/bin/python -m pytest -q` (main: 3063+A4e's;
 record the new figure). Frontend `npx tsc --noEmit && npx jest`. Each new test is run
 against its mutation and seen to fail.
+
+## 6. Plan round 1 (2026-09-25) -- NOT CLEAN, three gate-level findings; plan to be revised
+
+Fresh subagent, bmad-review-adversarial-general. NOT YET APPLIED to §1-§5 above -- the next
+session revises the plan, then runs plan round 2.
+
+1. **§1's claim about '1D' composite RULES is false.** On a '1D' rule the HMM_intraday checker
+   gets no intraday bars: it never fires and logs a WARNING every tick (reproduced by calling
+   the checker directly). The rules are dead exactly like the watches.
+   **DECISION A4F-MIGRATE-LEGACY-RULES-TOO-2026-09-25 (Kenneth, on the corrected facts): MIGRATE
+   them to '5m' as well**, by the same mechanism as the watches: a one-shot pass at backend
+   startup sets each stored HMM_intraday composite rule on '1D'/'1W' to interval '5m', logs every
+   migrated rule, and marks the rule's name with an 'interval was 1D' note. Rejected: leave them
+   and only report.
+2. **T3 would write into the tracked backend/config/strategy_watches.yaml** (scheduler enabled,
+   so the AAPL test watch could send real Gmail/Telegram). T3 must use the temp-file + reload
+   pattern of tests/test_strategy_watch_router.py.
+3. **Wrong rules path:** the endpoint is `/alerts/rules`, not `/api/chart-alerts/rules`. T4/T5 as
+   written would 404 and "fail on old code" vacuously. Fix every path in §2-§3.
+
+Sub-gate items the reviewer raised (not blocking; take the cheap ones into the revision, log the
+rest): the M6 mutant is not killable by T6 as written; the watch-file load could crash startup on
+a hand-edited non-dict `trigger_def` / non-string `interval` (keep today's tolerance); the
+'was 1D; set to 5m' note cannot use `Text title=` (no such prop -- typecheck) and must not break
+the Alerts row layout; one T8 assertion already holds on today's code; watch rejection is 400 but
+rule rejection is 422; a long-dead watch can fire immediately after migration before Kenneth sees
+the note; a migrated watch may say 'was 1D' when the user never stored it; §5's count is stale
+(baseline now 3106 / 1); VWAP confirmations have the same '1D' shape (out of this decision -- log it).
