@@ -40,6 +40,10 @@ export interface StockPipeline {
   // Undefined means ABSENT, not zero — see the note on OptionsPipeline.
   failed_direction?: number;
   failed_shortlist?: number;
+  /** Direction gate, trend UNMEASURED ("no data"; P3A-UNMEASURED-TREND-REMOVE). */
+  failed_direction_unmeasured?: number;
+  /** The direction-conviction floor this scan applied; null/absent = exempt. */
+  direction_min_trend?: number | null;
   other_rejected?: number;
   candidates:      number;
 }

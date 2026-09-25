@@ -461,7 +461,8 @@ def test_t7_reason_producer_set_is_unchanged():
     emitted = {s.strip() for s in re.findall(r'"reason":\s*\(?\s*f?"([^"{]*)', src)} - {""}
     assert emitted == {
         "REJECT score=", "backtest gate:", "confidence gate REJECT:",
-        "direction_conviction: trend", "insufficient history", "insufficient intraday history",
+        "direction_conviction: trend", "direction_conviction_unmeasured: no trend measurement for",
+        "insufficient history", "insufficient intraday history",
         "mean_reversion_multi: variants produced no valid combined levels", "no",
         "no mean_reversion_multi:", "no price data", "price $", "regime headwind",
         "unknown strategy",

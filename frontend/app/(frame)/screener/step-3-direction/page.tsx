@@ -181,6 +181,9 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Share of score from catalyst proximity. ↑ Higher → upcoming events penalise more stocks (fewer) · ↓ Lower → events count for less (more)' },
   { key: 'weight_vol',      label: 'Vol weight',      type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%',
     hint: 'Share of score from IV conditions. ↑ Higher → only calm-IV stocks qualify (fewer) · ↓ Lower → high-IV stocks still pass (more)' },
+  // STOCKS — Score Gate (P3a, decision Q5)
+  { key: 'min_stock_score', label: 'Min stock score', type: 'number', section: 'stocks', subGroup: 'Score Gate', min: 35, max: 100, step: 1,
+    hint: 'Stocks-mode scans only (the Options scan does not read it). Drops any name whose stock score is below this. At or below 35 it adds nothing: a score under 35 is already REJECT and dropped.' },
   // STOCKS — Trend
   { key: 'trend_method', label: 'Trend method', type: 'select', section: 'stocks', subGroup: 'Trend', options: ['additive', 'crossover', 'relative_strength'],
     hint: 'Algorithm for scoring trend strength. Additive = price + slope + ADX combined; Crossover = MA crossover signal; Relative Strength = return vs. benchmark index' },
@@ -331,6 +334,7 @@ const PARAM_DEFS: ParamDef[] = [
 ];
 
 const SUBGROUP_DESCRIPTIONS: Record<string, string> = {
+  'Score Gate': 'A minimum composite stock score for Stocks-mode scans. Names below it are dropped and counted in the funnel\'s Score gate stage. The default (35) is the REJECT line the scan already applies, so it changes nothing until raised.',
   'Score Weights': 'Proportional contribution of each signal family to the composite stock score (weights sum to 100). Rebalance to emphasise what matters most for your approach.',
   'Trend': 'Measures whether the stock is in a sustained trend. Three algorithms: Additive (price position + slope + ADX combined), Crossover (MA cross signal), Relative Strength (return vs. benchmark index).',
   'Pullback': 'Checks that the stock has pulled back from its recent swing high in a healthy way — momentum cooling off without breaking the trend structure.',

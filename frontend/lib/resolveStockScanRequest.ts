@@ -84,6 +84,8 @@ export interface StockScanRequestBody {
   mean_reversion_min_confirmations?: number;
   vwap_lookback?: number;
   vwap_deviation_pct?: number;
+  /** Step-3 "Min stock score" (P3a); sent only when set. */
+  min_stock_score?: number;
 }
 
 export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockScanRequestBody {
@@ -135,6 +137,7 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
     ...regimeGateOverridesFrom(rawOverrides),
     fundamentals_caution_above: typeof rawOverrides.fundamentals_caution_above === 'number' ? rawOverrides.fundamentals_caution_above : undefined,
     fundamentals_reject_above: typeof rawOverrides.fundamentals_reject_above === 'number' ? rawOverrides.fundamentals_reject_above : undefined,
+    min_stock_score: typeof rawOverrides.min_stock_score === 'number' ? rawOverrides.min_stock_score : undefined,
     ...(ctx.strategy === 'mean_reversion_multi' ? {
       mean_reversion_variants: p.meanReversionVariants,
       mean_reversion_min_confirmations: p.meanReversionMinConfirm,

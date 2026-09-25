@@ -3,6 +3,7 @@ import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { useRiskStore } from '@/lib/riskStore';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 /**
@@ -29,6 +30,34 @@ import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 export function stockPositionCardKey(c: PositionCardData): string {
   const ladder = c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price];
   return `${c.symbol}-${c.strategy.entry_price}-${c.strategy.stop_price}-${ladder.join(',')}`;
+}
+
+/** The message every manual scan path shows when "Max loss per trade" is 0%
+ *  (decision P3A-SCAN-RISK-ZERO-STOPS-2026-09-25). */
+export const SCAN_RISK_ZERO_MESSAGE = 'Max loss per trade is 0% — set it in Settings → Risk';
+
+/** Thrown by `scanSizingFromRisk` instead of posting a scan the backend would
+ *  refuse (`risk_pct` is `gt=0`). Its message is shown as-is. */
+export class ScanSizingError extends Error {
+  constructor(message: string = SCAN_RISK_ZERO_MESSAGE) {
+    super(message);
+    this.name = 'ScanSizingError';
+  }
+}
+
+/**
+ * The sizing every MANUAL scan path sends (P3a, decision Q2): the user's
+ * account value and max loss per trade from Settings → Risk, read at call time.
+ * It used to be a hardcoded 50_000 / 1% on Steps 3/4 and Analysis, and 1% on
+ * Step 5. A 0% max loss throws `ScanSizingError`: nothing is posted, and the
+ * path shows `SCAN_RISK_ZERO_MESSAGE`.
+ */
+export function scanSizingFromRisk(): { accountSize: number; riskPct: number } {
+  const { portfolioValue, maxLossPerTradePct } = useRiskStore.getState().limits;
+  if (!Number.isFinite(maxLossPerTradePct) || maxLossPerTradePct <= 0) {
+    throw new ScanSizingError();
+  }
+  return { accountSize: portfolioValue, riskPct: maxLossPerTradePct };
 }
 
 /** Longest reason that still reads as a sentence in a toast row or the thin
@@ -304,15 +333,9 @@ export async function runStockScan(
     const { confidenceGate } = useSettingsStore.getState();
     const rawOverrides = store.scanOverrides;
 
-    // account_size/risk_pct are hardcoded here (not read from riskStore) —
-    // this is the manual-run path's existing, already-shipped behavior,
-    // unchanged by this extraction. Flagged (not silently fixed) per the
-    // scheduler-timezone-awareness plan: the profile-based schedule resolver
-    // (scanScheduleResolve.ts) explicitly reads live riskStore values instead,
-    // since a scheduled entry firing unattended for months must never
-    // silently keep a stale $50k/1% default baked in from before the user set
-    // their real position sizing — fixing this same gap for the manual path
-    // too is a separate, pre-existing concern outside this plan's scope.
+    // The user's sizing from Settings → Risk, read now (P3a). Throws
+    // ScanSizingError on a 0% max loss; the catch shows its message.
+    const sizing = scanSizingFromRisk();
     const requestBody = buildStockScanRequestBody({
       universe: context?.universe ? [context.universe] : ['SP500'],
       direction: context?.direction ?? 'Bullish',
@@ -322,8 +345,8 @@ export async function runStockScan(
       requireReversal,
       scanOverrides: rawOverrides,
       confidenceGate,
-      accountSize: 50_000,
-      riskPct: 0.01,
+      accountSize: sizing.accountSize,
+      riskPct: sizing.riskPct,
     });
 
     reachedRequest = true;

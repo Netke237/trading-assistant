@@ -20,6 +20,7 @@ Source: the verified backlog audit (228 entries against main 8d6741d) and Kennet
 | P2 | Premium stop, position editing & trade-card display | 1 | HIGH — stops that cannot fire or show the wrong value | L | 23 |
 | P3a | Scan sizing & signal correctness | 1 | HIGH — share counts and which trades are proposed | M | 8 |
 | P3b | Auto-trader hardening | 1 | HIGH — the automated path that places real orders | M | 12 |
+| P3c | Scan & sizing leftovers (orphans of P3a/P3b) | 1 (added 2026-09-25) | HIGH — options-scan picks the auto-trader would refuse; the fire path can stall the server | M | 7 |
 | P4a | Chart alert rules: sync, toggle, missed candles | 1 | MEDIUM — missed or corrupted alerts | M | 2 |
 | P4b | Strategy & composite watches | 1 | MEDIUM — watches that never fire, fire on wrong data, or go silent | M | 9 |
 | P5 | Step-5 display & end-to-end tests | 2 | LOW — wording and test coverage | S | 2 |
@@ -30,7 +31,7 @@ Source: the verified backlog audit (228 entries against main 8d6741d) and Kennet
 | W2-DOCC | Config validation (Document C / YAML-CONFIG-INTEGRITY) | 2 | MEDIUM — a bad config edit should fail loudly, not silently | L | 3 |
 | MEAS | Market-data measurement (runs on Kenneth's machine) | anytime | HIGH — thresholds decide which trades are proposed and how they are sized | S of code, days of calendar | 9 |
 
-Wave 1 runs in parallel (6 sessions: P1, P2, P3a, P3b, P4a, P4b). Wave 2 starts as wave-1 packages merge (W2-INTERVAL after P4a+P4b; W2-STRUCT after P4a; P5, P6, W2-HESTON anytime in wave 2; W2-DOCC after its decisions round). MEAS runs anytime on Kenneth's machine.
+Wave 1 runs in parallel (6 sessions: P1, P2, P3a, P3b, P4a, P4b). Wave 2 starts as wave-1 packages merge (W2-INTERVAL after P4a+P4b; W2-STRUCT after P4a; P5, P6, W2-HESTON anytime in wave 2; W2-DOCC after its decisions round). MEAS runs anytime on Kenneth's machine. P3c (added 2026-09-25) joins wave 1; it takes over the orphaned P3a/P3b deferrals.
 
 ## P1 — Order & booking safety
 
@@ -147,6 +148,34 @@ Wave 1 runs in parallel (6 sessions: P1, P2, P3a, P3b, P4a, P4b). Wave 2 starts 
 - Contract sizing still uses Python round(), which rounds halves to even (banker's rounding). — *evidence:* auto_trader.py:1392 max(1, round(strategy.quantity * mult)) — *entry begins:* "LOGGED BY SIZING-3 ROUND 1 (2026-09-24), NOT FIXED, below the gate, pre-existing: max(1, round(qty*mult)) uses…"
 - The YAML comment still says a trade below -40 survives at min_mult. It ignores regime_filter drops and Step-3 overrides. — *evidence:* config/scoring_rules.yaml:476-478 — *entry begins:* "LOGGED BY SIZING-3 ROUND 2 (2026-09-24), NOT FIXED, below the gate: the regime_sizing comment's 'survives and …"
 
+## P3c — Scan & sizing leftovers (orphans of P3a/P3b)
+
+Added 2026-09-25 (decision P3C-PACKAGE-CREATED-2026-09-25). P3a and P3b are merged; these items were deferred by them into files no package owned.
+
+- **Wave:** 1 (added late)  **Money impact:** HIGH — an options candidate the auto-trader would refuse is still proposed; the fire endpoint can block the event loop  **Size:** M
+- **Owned files:** backend/app/routers/scan.py (code, not only comments); backend/app/scoring/conviction_sizing.py; frontend/lib/scanScheduleResolve.ts; backend/app/routers/auto_trade.py (the /fire path only — ArmRequest stays P6's); their tests. Plus, for the 0% warning only: the scan-schedule list in frontend/app/(frame)/settings/page.tsx.
+- **Shared with P6:** the one new `schemas/__init__.py` field the options direction gate needs (a measured/unmeasured trend flag). P3c may add that single field; coordinate through PROJECT_STATE.json so P6 does not collide.
+- **Do not touch:** stock_scan.py, stock_scorer.py (P3a, merged — reuse `_regime_data_drop` and `RuleResult.measured` by calling them); auto_trader.py (P3b, merged — call, do not edit, unless Kenneth widens this).
+
+**Kenneth's decisions to implement:**
+
+- P3A-INTRADAY-REFUSAL-MATCHES-FIRE-2026-09-25 applies to the options scan too: drop an Intraday options name whose 15-min regime fetch failed when the fire would refuse it.
+- P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25: a 0% schedule keeps running at the 1% default (P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT stands) and the schedule UI shows a warning that the 0% is ignored.
+- P3C-DATA-CHECKS-STAY-IN-P3C-2026-09-25: items 5 and 6 stay here; P3c writes a read-only check script that Kenneth runs on his machine; fixes follow the evidence.
+- P1-P3C-RUN-IN-PARALLEL-2026-09-25: P3c runs in parallel with P1 (no shared files).
+
+**Backlog entries:**
+
+1. Options scan keeps an Intraday name whose 15-min regime fetch failed; the auto-trader fire refuses it (P3B-REGIME-BARS-MISSING-REFUSES). — *entry begins:* "LOGGED BY P3a (2026-09-25), NOT FIXED, outside P3a's files: the OPTIONS scan (routers/scan.py) has no item-12 equivalent…"
+2. Options direction-conviction gate reads stockBreakdown.trend as an int, cannot see RuleResult.measured, judges a placeholder 0/50. — *entry begins:* "LOGGED BY P3a (2026-09-25), NOT FIXED: the options direction-conviction gate (routers/scan.py)…"
+3. scanScheduleResolve.ts still sends maxLossPerTradePct as-is (0% runs at the 1% default by decision). — *entry begins:* "LOGGED BY P3a (2026-09-25), NOTE: frontend lib/scanScheduleResolve.ts…"
+4. conviction_sizing.py items (3) inverted min_mult refusal message for negatives, (4) `min_mult / 100` hint misleads just above 1, (5) `full * 100` hint can suggest a refused value, (10) the ERROR line is logged once per resolve (~501 lines per 500-symbol scan). — *entry begins:* "P3a (2026-09-25) FIXED the stock_scan.py items (6)… STILL OPEN: items (3)(4)(5)(10) in conviction_sizing.py. || *** CORRECTED 2026-09-23…"
+5. Negative bearish backtest price — the stock-split hypothesis is unverified (data-side). Investigate first; fix only what the evidence shows. — *entry begins:* "P3a (2026-09-25) FIXED (a) _build_target_ladder returns []… STILL OPEN: (b) the split hypothesis…"
+6. Options scan regime series length still depends on the data source (bar-count difference). Investigate first. — *entry begins:* "P3a (2026-09-25) FIXED the comment (441 calendar days ~ 306 trading days). STILL OPEN: the source-length residual (scan.py code)…"
+7. POST /auto-trade/fire runs `fire()` on the event loop, so a stalled regime fetch can block the server for up to ~25s (P3b deferral). — *entry begins:* "LOGGED BY P3c SETUP (2026-09-25), P3b DEFERRAL…"
+
+Items 5 and 6 are investigate-first: the plan states what is measured and how, via a read-only script Kenneth runs, before any code change.
+
 ## P4a — Chart alert rules: sync, toggle, missed candles
 
 - **Wave:** 1  **Money impact:** MEDIUM — missed or corrupted alerts  **Size:** M
@@ -206,6 +235,8 @@ Wave 1 runs in parallel (6 sessions: P1, P2, P3a, P3b, P4a, P4b). Wave 2 starts 
 - MarketSentiment still labels avg_regime_duration in days, but the value is in lookback strides. — *evidence:* frontend/components/molecules/MarketSentiment/index.tsx:32 '~{s.avg_regime_duration}d' — *entry begins:* "LOGGED BY A4 CODE ROUND (2026-09-24), pre-existing, carried not created: MarketSentiment shows `~{avg_regime_d…"
 
 ## P6 — Validation, method-pick & state-tool hygiene
+
+> Note (2026-09-25): P3c may add ONE field to schemas/__init__.py (measured/unmeasured trend flag for the options direction gate). Coordinate via PROJECT_STATE.json.
 
 - **Wave:** 2  **Money impact:** LOW-MEDIUM — bad inputs accepted; a lost Monte Carlo pick blocks a send  **Size:** M
 - **Owned files:** backend/app/schemas/__init__.py; backend/app/routers/portfolio.py (PATCH); backend/app/routers/auto_trade.py (ArmRequest); backend/app/services/picked_method.py; frontend/lib/cardEdits.ts; frontend/lib/scanStore.ts; StockPositionCard; MethodPickSelector; scripts/state.py; docs/superpowers/STATE_TRACKING.md; tests/test_alternatives.py.

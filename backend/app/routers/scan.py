@@ -1512,7 +1512,7 @@ async def _execute_scan_core(
     from app.services.historical_store import get_bars as _get_bars
     from datetime import date as _date, timedelta as _td
     _bar_end = _date.today()
-    _bar_start = _bar_end - _td(days=int(1.75 * 252))  # ~440 calendar days ≈ 252 trading days
+    _bar_start = _bar_end - _td(days=int(1.75 * 252))  # 441 calendar days ≈ 316 weekdays ≈ ~306 trading days, NOT 252
     _bars_results = await asyncio.gather(
         *[_get_bars(sym, _bar_start, _bar_end) for sym in symbols],
         return_exceptions=True,
@@ -1647,6 +1647,11 @@ async def _execute_scan_core(
             # guard this used to carry was dead, and its 50 quietly changed
             # meaning when the gate became a floor — it went from "rejected on a
             # bearish scan" to "passes". Removed rather than re-tuned.
+            # An int: this gate cannot tell an UNMEASURED trend (placeholder
+            # 0 or 50) from a reading. The stock scan's copy of this gate
+            # removes unmeasured names as "no data" (RuleResult.measured,
+            # decision P3A-UNMEASURED-TREND-REMOVE-2026-09-25); this one still
+            # judges the placeholder until stockBreakdown carries the flag.
             _t = _c.stockBreakdown.trend
             if _t < _min_trend:
                 direction_filtered_count += 1

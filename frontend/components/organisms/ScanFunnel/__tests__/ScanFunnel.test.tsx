@@ -166,3 +166,31 @@ describe('ScanFunnel — stock mode', () => {
     expect(screen.queryByText('Shortlist cap')).not.toBeInTheDocument();
   });
 });
+
+describe('ScanFunnel — P3a direction stage, measured vs no data', () => {
+  const stock = (over: Record<string, unknown> = {}) => ({
+    scanned: 10, failed_history: 0, failed_score: 0, failed_signal: 0, failed_backtest: 0,
+    failed_regime: 0, failed_direction: 0, failed_shortlist: 0, other_rejected: 0,
+    failed_direction_unmeasured: 0, direction_min_trend: 30, candidates: 6, ...over,
+  });
+
+  it('renders the stage when ONLY unmeasured names were removed', () => {
+    render(<ScanFunnel mode="stock" pipeline={stock({ failed_direction_unmeasured: 4 }) as never} />);
+    expect(screen.getByText('−4 no data')).toBeInTheDocument();
+    expect(screen.getByText('Direction')).toBeInTheDocument();
+  });
+
+  it('labels both parts, with the floor this scan applied, and subtracts both', () => {
+    render(<ScanFunnel mode="stock" pipeline={stock({ failed_direction: 2, failed_direction_unmeasured: 2 }) as never} />);
+    expect(screen.getByText('−2 no conviction (trend < 30) · −2 no data')).toBeInTheDocument();
+    // The Direction row's OWN count (Candidates also reads 6, so a page-wide
+    // search could not see a missing subtraction).
+    const row = screen.getByText('Direction').parentElement!;
+    expect(row).toHaveTextContent(/^Direction6/);   // 10 − 2 − 2
+  });
+
+  it('says plain "no conviction" when the result carries no floor', () => {
+    render(<ScanFunnel mode="stock" pipeline={stock({ failed_direction: 3, direction_min_trend: null, candidates: 7 }) as never} />);
+    expect(screen.getByText('−3 no conviction')).toBeInTheDocument();
+  });
+});
