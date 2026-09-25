@@ -19,11 +19,12 @@ skill (`K-quality-benchmark`, named after this repo's own `K-adversarial-audit-l
 convention in `docs/superpowers/plans/*.md`) exists because axes 2 and 3 are
 domain-specific to Bamendjou and no generic external tool grades them.
 
-`bmad-review-adversarial-general` is now committed in this repo's own
-`.claude/skills/bmad-review-adversarial-general/` (a standalone port — the upstream
-ID is a v6 shim forwarding into installer-dependent infrastructure this repo doesn't
-run; see that skill's own file for why). **Axis 1 must invoke it via the `Skill`
-tool** (see Axis 1 below) instead of re-deriving code-quality findings by hand.
+`bmad-review-adversarial-general` is installed at claude.ai account level (a
+standalone port — the upstream ID is a v6 shim forwarding into installer-dependent
+infrastructure this repo doesn't run; see that skill's own file for why). It lists
+as `anthropic-skills:bmad-review-adversarial-general`. **Axis 1 must invoke it via
+the `Skill` tool** (see Axis 1 below) instead of re-deriving code-quality findings by
+hand.
 
 The user has their own bespoke trader-perspective settings-audit skill, built
 locally on their machine, not (yet) committed to this repo. Axis 3 below is a
