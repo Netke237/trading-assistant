@@ -32,6 +32,12 @@ if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
   fi
 fi
 
+# Who is working on what right now. Printed BEFORE the (long) state table so
+# it lands in the visible preview. Never fails the hook.
+if [ -f scripts/claim.py ]; then
+  python3 scripts/claim.py list --quiet
+fi
+
 # Always print the state, local or remote. Non-zero exit means a declared
 # status disagrees with the code — surfaced, never swallowed.
 if [ -f scripts/state.py ]; then
