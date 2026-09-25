@@ -131,6 +131,14 @@ is true for every strategy row. `add_watches_bulk` needs no change: it calls
   notify patch; T2's `describe_match` returns a real dict; the fixture drops its fake
   `strategy_key`; the retry claim covers poll mode as well; the config check is in
   Verification.
+- Code round 1 (3f0c680): **CLEAN**. Pre-fix, 7 new tests go red with `KeyError`, and
+  the fixture fix turns 2 existing composite tests red too. M1–M5 are killed, as are
+  the reviewer's own non-equivalent mutations. T6 makes no network call (checked with
+  sockets blocked). The suite gives 3274 passed, 1 skipped. Three nits:
+  - The malformed-strategy-row `KeyError` is left unpinned on purpose, because pinning
+    it would lock in the whole-run abort.
+  - The state record was missing; it is now added.
+  - M5 is not killed by T1b, which is expected.
 - Side effect seen after round 1: the reviewer's probe seeded through
   `POST /api/composite-watches/`, whose un-reloaded store still points at the real
   `backend/config/strategy_watches.yaml`, and wrote a row there (reverted). This is
