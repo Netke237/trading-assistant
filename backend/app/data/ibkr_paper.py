@@ -87,6 +87,14 @@ class OrderResult:
     status: str
     broker: str
     message: str = ""
+    # True only when the broker answered the submission with a QUESTION instead
+    # of an order: IBKR's "order reply message" (a 2xx whose body carries an
+    # `id` and a `message` but no `order_id`). IBKR does not accept the order
+    # until POST /iserver/reply/{id} confirms it, and nothing in this codebase
+    # sends that reply, so the order never reaches the book. The auto-trader
+    # records it as not submitted (AUTOTRADE-IBKR-CONFIRM-NOT-SUBMITTED,
+    # Kenneth 2026-09-25). Other callers see the empty `order_id` as before.
+    awaiting_confirmation: bool = False
 
 
 class IbkrPaperAdapter:
@@ -139,9 +147,20 @@ class IbkrPaperAdapter:
         data = resp.json()
         if isinstance(data, list):
             data = data[0]
+        message = data.get("message", "")
+        # The confirmation question carries its text as a LIST of strings.
+        if isinstance(message, list):
+            message = " ".join(str(m) for m in message)
         return OrderResult(
             order_id=str(data.get("order_id", "")),
             status=str(data.get("order_status", "Unknown")),
             broker="ibkr_paper",
-            message=str(data.get("message", "")),
+            message=str(message),
+            # The reply-message shape, and only it: no `order_id` at all, plus
+            # the reply id to confirm against and the question itself.
+            awaiting_confirmation=(
+                "order_id" not in data
+                and bool(data.get("id"))
+                and bool(data.get("message"))
+            ),
         )

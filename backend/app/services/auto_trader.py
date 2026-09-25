@@ -76,6 +76,10 @@ class ArmPreservedError(RuntimeError):
 class OrderNotSubmittedError(RuntimeError):
     """The fire failed BEFORE the broker adapter was called: nothing was sent.
 
+    (Or, for the one subclass `OrderAwaitingConfirmationError`, the broker was
+    called and did not take the order. Either way no order is live. See the
+    paragraph on it below.)
+
     F2 OF 2A-ALERT ROUND 1. `fire()` wrapped the whole of `execute_option_order`
     in one `except Exception` that wrote `order_failed` — a status whose own
     comment says the submission MAY HAVE LANDED — and paged "the broker call was
@@ -98,10 +102,33 @@ class OrderNotSubmittedError(RuntimeError):
     mode being closed is a FALSE alert, so replacing it with the opposite false
     alert would be no better.
 
+    ONE SUBCLASS IS RAISED PAST THAT BOUNDARY: `OrderAwaitingConfirmationError`,
+    when the broker's own answer says it did not take the order. See it.
+
     A RuntimeError so `/auto-trade/fire` maps it to a 400 like every refusal
     but the two config faults (prefixed 500s) — and `fire()` re-raises it as a bare RuntimeError anyway, so
     the class is a routing signal inside this module, not part of the endpoint's
     contract.
+    """
+
+
+class OrderAwaitingConfirmationError(OrderNotSubmittedError):
+    """The broker was contacted and answered with a QUESTION, not an order.
+
+    AUTOTRADE-IBKR-CONFIRM-NOT-SUBMITTED (Kenneth, 2026-09-25, option 3(b)).
+    IBKR's Client Portal can answer an order POST with an "order reply
+    message" -- a 2xx carrying a reply id and a warning to confirm, and no
+    `order_id`. IBKR does not accept the order until POST /iserver/reply/{id}
+    confirms it. Nothing in this codebase sends that reply, so the order never
+    reaches the book, and it was booked as a live order at the full premium.
+
+    THE ONE `OrderNotSubmittedError` RAISED AFTER `adapter.place_order`. The
+    class's boundary is drawn at `place_order` because past it the auto-trader
+    cannot know whether bytes left the machine. Here it can: the broker's own
+    answer says the order is not accepted. It is still a SUBCLASS, not the
+    parent, because the not-submitted alert says "the broker was not contacted
+    at all", which is false here. The row records `broker_contacted` and the
+    alert words itself from that.
     """
 
 
@@ -1917,7 +1944,9 @@ def _alert_risk_limit_refusal(symbol: str, exc: Exception, status: str) -> None:
     the same guarantee the `order_failed` row's own comment leans on when it
     says these two "provably never reached the broker". `_alert_not_submitted`
     states it as fact on the same grounds, one phase later — it is reached only
-    from inside `execute_option_order` and only before `adapter.place_order`.
+    from inside `execute_option_order` and only before `adapter.place_order`
+    (except IBKR's confirmation question, which is past it but still took no
+    order; that case is worded separately -- `OrderAwaitingConfirmationError`).
     """
     which = ("the exposure cap" if status == "cap_blocked"
              else "the daily loss limit")
@@ -1951,7 +1980,9 @@ def _alert_order_failed(symbol: str, exc: Exception) -> None:
     was routinely asserting one that could not exist — "check the broker" on an
     expired credential, every time. Those now raise `OrderNotSubmittedError`
     and page `_alert_not_submitted` instead. What reaches here is exactly what
-    got past `adapter.place_order`, where the claim is true and conservative.
+    got past `adapter.place_order` (except IBKR's confirmation question,
+    `OrderAwaitingConfirmationError`, which goes to the not-submitted alert),
+    where the claim is true and conservative.
     """
     _alert_refusal(
         symbol,
@@ -1968,31 +1999,48 @@ def _alert_order_failed(symbol: str, exc: Exception) -> None:
     )
 
 
-def _alert_not_submitted(symbol: str, exc: Exception) -> None:
+def _alert_not_submitted(symbol: str, exc: Exception, *,
+                         broker_contacted: bool = False) -> None:
     """Alert a fire that never reached the broker. Says so as FACT.
 
     THE COUNTERPART TO `_alert_order_failed`, added by F2 of round 1, and the
     pair only works because each states what its own half provably knows.
     `fire()` reached this branch from `OrderNotSubmittedError`, which is raised
-    strictly before `adapter.place_order` — so no position can exist, and
+    strictly before `adapter.place_order` (except `OrderAwaitingConfirmationError`,
+    below) — so no position can exist, and
     hedging with "check the broker" would keep the wild goose chase F2 is about
     while merely sounding more careful.
+
+    ONE EXCEPTION, and it gets its own wording: `broker_contacted` is the row's
+    record of `OrderAwaitingConfirmationError`, IBKR's confirmation question.
+    There the broker WAS contacted, so "the broker was not contacted at all"
+    would be false; what is still true is that it did not take the order.
 
     The exception text is the remedy and is carried verbatim: it names the
     broker key and, on the common credential path, an empty `Available:` list.
     That is what tells Kenneth which credential to refresh, which is the whole
     of the fix on his side.
     """
-    _alert_refusal(
-        symbol,
-        "not-submitted refusal",
-        (
+    if broker_contacted:
+        body = (
+            f"Auto-trade could NOT place {symbol}: the broker was contacted "
+            f"but did NOT accept the order — it asked for a confirmation the "
+            f"auto-trader does not give, so the order was not placed and NO "
+            f"position was opened. The auto-trader is disarmed. Place it by "
+            f"hand if you still want it, then re-arm. {exc}"
+        )
+    else:
+        body = (
             f"Auto-trade could NOT place {symbol}: the order was never "
             f"submitted — the broker was not contacted at all, so NO position "
             f"was opened and there is nothing to check for. Nothing was sent "
             f"and the auto-trader is disarmed. Most often this is an expired "
             f"or missing broker credential; fix it and re-arm. {exc}"
-        ),
+        )
+    _alert_refusal(
+        symbol,
+        "not-submitted refusal",
+        body,
         _per_symbol_rec_id(_REC_ID_NOT_SUBMITTED, symbol),
         _ALERT_TYPE_NOT_SUBMITTED,
         discrete=True,
@@ -2092,7 +2140,8 @@ def execute_option_order(strategy: ArmedStrategy):
     builds the order object, reads the credential store, and resolves the
     adapter. Only `place_order`, deliberately OUTSIDE the `try`, can reach a
     broker, so only it may raise the error `fire()` records as "may have
-    landed". Anything moved across that line changes what Kenneth is told about
+    landed". The one check after it (`OrderAwaitingConfirmationError`) reads the
+    broker's own answer that it took no order. Anything moved across that line changes what Kenneth is told about
     a possibly-live position, in one direction or the other.
     """
     from app.services.broker_router import build_router_from_credentials
@@ -2124,7 +2173,17 @@ def execute_option_order(strategy: ArmedStrategy):
         # ValueError would send the rest back to the "may have landed" branch
         # with the same false claim F2 exists to remove.
         raise OrderNotSubmittedError(str(exc)) from exc
-    return adapter.place_order(order)
+    result = adapter.place_order(order)
+    # A QUESTION IS NOT AN ORDER -- see `OrderAwaitingConfirmationError`.
+    # getattr because Tradier's adapter has its own OrderResult without the
+    # field; only IBKR's reply shape sets it.
+    if getattr(result, "awaiting_confirmation", False):
+        raise OrderAwaitingConfirmationError(
+            f"{result.broker} did not accept the order: it answered with a "
+            f"confirmation question that the auto-trader does not answer, so "
+            f"the order was not placed. Broker message: {result.message}"
+        )
+    return result
 
 
 class AutoTradeService:
@@ -2507,10 +2566,19 @@ class AutoTradeService:
                     # it carried the verdict there.
                     "regime_gate":     strategy.regime_gate_outcome,
                     "sizing":          strategy.sizing_basis,
+                    # True only for the IBKR confirmation question: the broker
+                    # WAS contacted and refused to take the order yet. The
+                    # alert reads this so it does not claim otherwise.
+                    "broker_contacted": isinstance(
+                        exc, OrderAwaitingConfirmationError),
                 })
             logger.error(
-                "AutoTrader order NOT SUBMITTED for %s — nothing reached the "
-                "broker: %s", strategy.symbol, exc,
+                "AutoTrader order NOT SUBMITTED for %s — %s: %s",
+                strategy.symbol,
+                ("the broker was contacted but did not take the order"
+                 if isinstance(exc, OrderAwaitingConfirmationError)
+                 else "nothing reached the broker"),
+                exc,
             )
             raise RuntimeError(f"Order not submitted: {exc}") from exc
         except Exception as exc:
@@ -2577,7 +2645,16 @@ class AutoTradeService:
                 # "off" -- see `ArmedStrategy.sizing_basis`. SIZING-4.
                 "sizing":          strategy.sizing_basis,
             })
-        logger.info("AutoTrader fired: order %s status %s", result.order_id, result.status)
+        # A STATED REJECTION IS NOT "FIRED" here either (Kenneth, 2026-09-25,
+        # option A; the scan trigger's own line got the same change first).
+        if _is_rejected_status(result.status):
+            logger.warning(
+                "AutoTrader order REJECTED by the broker: order %r status %r",
+                result.order_id, result.status,
+            )
+        else:
+            logger.info("AutoTrader fired: order %s status %s",
+                        result.order_id, result.status)
         # O4 steps 4+5: the caller books the position from this. `strategy` is
         # the local `_apply_vol_sizing` reassigned above, i.e. post-sizing.
         return FiredOrder(result=result, strategy=strategy, attempt_id=attempt_id)
@@ -2724,10 +2801,26 @@ class AutoTradeService:
                               # window has the attempt fire the NEW order on
                               # the old one's age.
                               expect=strategy)
-            logger.info("AutoTrader: fired on scan completion trigger")
+            # A STATED REJECTION IS NOT "FIRED" (Kenneth, 2026-09-25). fire()
+            # returns normally when the broker answers with a rejection, so
+            # this line used to log "fired" for an order that never happened.
+            # Same set fire() books 0 on, so the log and the budget agree.
+            if _is_rejected_status(fired.result.status):
+                logger.warning(
+                    "AutoTrader: scan completion trigger's order for %s was "
+                    "REJECTED by the broker (%s, status %r, order %r, "
+                    "attempt %s)",
+                    fired.strategy.symbol, fired.result.broker,
+                    fired.result.status, fired.result.order_id,
+                    fired.attempt_id,
+                )
+            else:
+                logger.info("AutoTrader: fired on scan completion trigger")
             # The config blocks were read and applied, so any standing
-            # config-refusal alert is over — see the helper for why this lives
-            # here and not as `discrete=True` on those two alerts.
+            # config-refusal alert is over. That holds on a rejection too: the
+            # broker can only reject an order that was built from them. See
+            # the helper for why this lives here and not as `discrete=True` on
+            # those two alerts.
             _clear_config_refusal_holds()
             return fired
         except RegimeHeadwindError as exc:
@@ -2902,7 +2995,8 @@ class AutoTradeService:
         elif status == "not_submitted":
             # ABOVE `order_failed` for readability only — the two statuses
             # are disjoint, so this is reading order, not precedence.
-            _alert_not_submitted(symbol, exc)
+            _alert_not_submitted(symbol, exc,
+                                 broker_contacted=bool(row.get("broker_contacted")))
         elif status == "order_failed":
             _alert_order_failed(symbol, exc)
         else:
