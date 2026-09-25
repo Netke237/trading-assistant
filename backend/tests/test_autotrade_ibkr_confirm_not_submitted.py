@@ -78,11 +78,26 @@ def test_the_adapter_flags_ibkrs_confirmation_question():
     [{"message": ["a warning with no reply id"]}],
     # An acknowledged order that also carries a message is still an order.
     [{"order_id": "1", "order_status": "Submitted", "id": "x", "message": ["m"]}],
+    # A null order id is still an order_id key: not flagged, the safe side.
+    [{"order_id": None, "id": "x", "message": ["m"]}],
 ])
 @respx.mock
 def test_the_adapter_flags_nothing_else(reply):
     _gateway_up()
     assert _place(reply).awaiting_confirmation is False
+
+
+@pytest.mark.parametrize("reply", [
+    # A bare dict rather than a list, and a plain-string message.
+    {"id": "abc", "message": "Are you sure?"},
+    [{"id": "abc", "message": "Are you sure?"}],
+])
+@respx.mock
+def test_the_adapter_flags_the_question_in_other_shapes(reply):
+    _gateway_up()
+    result = _place(reply)
+    assert result.awaiting_confirmation is True
+    assert result.message == "Are you sure?"
 
 
 # --- the fire path, end to end through the real adapter ---------------------
@@ -95,7 +110,7 @@ def _route_to_real_ibkr_adapter(mocker):
 
 
 @respx.mock
-def test_a_confirmation_question_is_not_submitted_and_books_nothing(mocker):
+def test_a_confirmation_question_is_not_submitted_and_books_nothing(mocker, caplog):
     at_, svc = _scan_trigger_service(mocker)
     _route_to_real_ibkr_adapter(mocker)
     _gateway_up()
@@ -109,6 +124,8 @@ def test_a_confirmation_question_is_not_submitted_and_books_nothing(mocker):
     assert row["premium_at_risk"] == 0.0
     assert row["order_id"] is None
     assert row["broker_contacted"] is True
+    assert "nothing reached the broker" not in caplog.text
+    assert "the broker was contacted but did not take the order" in caplog.text
     assert "confirmation question" in row["error"]
     assert "outside regular hours" in row["error"]
     assert svc.get_state().armed is False

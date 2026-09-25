@@ -76,6 +76,10 @@ class ArmPreservedError(RuntimeError):
 class OrderNotSubmittedError(RuntimeError):
     """The fire failed BEFORE the broker adapter was called: nothing was sent.
 
+    (Or, for the one subclass `OrderAwaitingConfirmationError`, the broker was
+    called and did not take the order. Either way no order is live. See the
+    paragraph on it below.)
+
     F2 OF 2A-ALERT ROUND 1. `fire()` wrapped the whole of `execute_option_order`
     in one `except Exception` that wrote `order_failed` — a status whose own
     comment says the submission MAY HAVE LANDED — and paged "the broker call was
@@ -1940,7 +1944,9 @@ def _alert_risk_limit_refusal(symbol: str, exc: Exception, status: str) -> None:
     the same guarantee the `order_failed` row's own comment leans on when it
     says these two "provably never reached the broker". `_alert_not_submitted`
     states it as fact on the same grounds, one phase later — it is reached only
-    from inside `execute_option_order` and only before `adapter.place_order`.
+    from inside `execute_option_order` and only before `adapter.place_order`
+    (except IBKR's confirmation question, which is past it but still took no
+    order; that case is worded separately -- `OrderAwaitingConfirmationError`).
     """
     which = ("the exposure cap" if status == "cap_blocked"
              else "the daily loss limit")
@@ -2563,8 +2569,12 @@ class AutoTradeService:
                         exc, OrderAwaitingConfirmationError),
                 })
             logger.error(
-                "AutoTrader order NOT SUBMITTED for %s — nothing reached the "
-                "broker: %s", strategy.symbol, exc,
+                "AutoTrader order NOT SUBMITTED for %s — %s: %s",
+                strategy.symbol,
+                ("the broker was contacted but did not take the order"
+                 if isinstance(exc, OrderAwaitingConfirmationError)
+                 else "nothing reached the broker"),
+                exc,
             )
             raise RuntimeError(f"Order not submitted: {exc}") from exc
         except Exception as exc:

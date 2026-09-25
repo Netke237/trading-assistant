@@ -52,8 +52,12 @@ def test_a_rejected_order_logs_rejected_not_fired(mocker, caplog, status):
 
     assert fired is not None
     assert "fired on scan completion trigger" not in caplog.text
+    # The scan trigger's own line. fire() logs a second REJECTED warning of
+    # its own since AUTOTRADE-IBKR-CONFIRM-NOT-SUBMITTED, so filter on this one.
     warnings = [r for r in caplog.records
-                if r.levelno == logging.WARNING and "REJECTED" in r.getMessage()]
+                if r.levelno == logging.WARNING
+                and "scan completion trigger" in r.getMessage()
+                and "REJECTED" in r.getMessage()]
     assert len(warnings) == 1
     msg = warnings[0].getMessage()
     assert "MSFT" in msg and "ibkr_paper" in msg

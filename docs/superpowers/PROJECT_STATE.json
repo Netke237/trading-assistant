@@ -816,7 +816,7 @@
       "id": "AUTOTRADE-IBKR-CONFIRM-NOT-SUBMITTED",
       "name": "IBKR's confirmation-question reply is recorded as not submitted (0 at risk, honest alert); fire()'s 'fired' line says REJECTED on a stated rejection",
       "status": "shipped",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "AUTOTRADE-SCAN-REJECT-LOG"
@@ -827,7 +827,7 @@
         "pattern": "class OrderAwaitingConfirmationError\\(OrderNotSubmittedError\\):",
         "note": "PRESENCE ONLY. Behavioural pins: tests/test_autotrade_ibkr_confirm_not_submitted.py (15 tests; 5 mutants killed)."
       },
-      "note": "*** 2026-09-25 BUILT at 367ac6b, round 1 (the CODE) PENDING. NOT MERGED. *** Plan: docs/superpowers/plans/2026-09-25-autotrade-ibkr-confirm-not-submitted-plan.md. ibkr_paper.OrderResult.awaiting_confirmation set only for the reply-message shape (no order_id key, truthy id, truthy message); execute_option_order raises OrderAwaitingConfirmationError (an OrderNotSubmittedError, the one raised past place_order); fire()'s not_submitted row books 0 and carries broker_contacted; _alert_not_submitted words that case 'contacted but did NOT accept'. fire()'s own log line: WARNING 'REJECTED by the broker' on _is_rejected_status. Mutants killed: no check in execute_option_order, alert ignoring the row flag, fire log reverted, detection loosened (and->or), order_id presence ignored."
+      "note": "*** 2026-09-25 ROUND 1 (the CODE, 367ac6b) NOT CLEAN -- 1 blocking, 3 nits, all fixed; round 2 PENDING. *** B1: fire()'s new REJECTED warning made test_autotrade_scan_reject_log count 2 WARNINGs (3 failed) -- that test now filters on the scan trigger's own line. N2: fire()'s ERROR log said 'nothing reached the broker' for the confirmation case -- worded from the exception class now, pinned. N3: OrderNotSubmittedError / _alert_risk_limit_refusal docstrings corrected for the subclass. N4: adapter edge shapes pinned (order_id null not flagged; bare dict and string message flagged). || *** 2026-09-25 BUILT at 367ac6b, round 1 (the CODE) PENDING. NOT MERGED. *** Plan: docs/superpowers/plans/2026-09-25-autotrade-ibkr-confirm-not-submitted-plan.md. ibkr_paper.OrderResult.awaiting_confirmation set only for the reply-message shape (no order_id key, truthy id, truthy message); execute_option_order raises OrderAwaitingConfirmationError (an OrderNotSubmittedError, the one raised past place_order); fire()'s not_submitted row books 0 and carries broker_contacted; _alert_not_submitted words that case 'contacted but did NOT accept'. fire()'s own log line: WARNING 'REJECTED by the broker' on _is_rejected_status. Mutants killed: no check in execute_option_order, alert ignoring the row flag, fire log reverted, detection loosened (and->or), order_id presence ignored."
     }
   ],
   "already_shipped": [
