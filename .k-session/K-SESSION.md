@@ -16,12 +16,12 @@ Plan stage. Rounds 1–3 NOT CLEAN (cap hit); round-3 fixes (section G) written 
 - Kenneth's four answers recorded in plan section H.
 
 ## Next steps
-- [ ] Run `python3 scripts/state.py` (must exit 0).
+- [x] PROJECT_STATE.json: phase P2-PREMIUM-STOP-POSITION-EDITING (audit_rounds 3, not clean, active_phase), decisions P2-*-2026-09-25, open questions Q-P2-1 + narrowed F2.
 - [ ] Plan round 4: fresh subagent, bmad-review-adversarial-general, over the whole plan with focus on section G + H. If NOT CLEAN, stop and bring findings to Kenneth (no 5th round without asking).
 - [ ] Re-baseline tests on current main (P3b changed backend test count).
 - [ ] Build per plan (tests first, mutation checks), P2-owned files only (plan "Not touched" list: step-7 page, position_writer.py, auto_trader.py, routers/portfolio.py, schemas, ClosePositionDrawer).
 - [ ] Code adversarial rounds until clean (cap 3 per stage, then ask Kenneth).
-- [ ] Update PROJECT_STATE.json: close P2 backlog entries with evidence; add Q-P2-1 (short-stock stop) as an open question; keep F2 open, narrowed; record Q-P2-2/Q-P2-3 decisions.
+- [ ] Update PROJECT_STATE.json after each round (audit_rounds 4, ...); at the end close P2 backlog entries with evidence and set status shipped.
 - [ ] Merge into main (--no-ff, state record written before the merge), then `k_session.py finish`.
 
 ## Blockers / open questions
@@ -41,4 +41,6 @@ Plan stage. Rounds 1–3 NOT CLEAN (cap hit); round-3 fixes (section G) written 
 - Rule: nothing is done until an adversarial round comes back clean.
 
 ## Notes for the next agent
+- state.py's round probe cannot see P2 rounds 1-3 (they predate the entry's introducing commit); the count 3 is hand-recorded. Round 4's commit subject must say 'round 4' and PROJECT_STATE must declare 4 in the same commit.
+- audit_rule (2): round 4 reviews only section G fixes + section H answers and their interactions, not the whole plan.
 - P2 plan section E/F/G/H are cumulative revisions; read them all before building.
