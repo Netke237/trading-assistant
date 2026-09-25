@@ -185,3 +185,25 @@ Test: offline, then click Remove with a mocked `→ 404` → the button is still
 - A not-ok/not-offline save whose cleanup DELETE throws anything other than `→ 404` (§2.3's suffix case) pushes `{recId, label, unconfirmed:false}`.
 
 Test: the auto-delete's DELETE fails, then Next → the Remove button for that recId is still present. Mutation M27: skip the push in the auto-delete-failed branch → red.
+
+---
+
+## Plan round 3 (V0-V2 only): NOT clean. CAP REACHED, stopped for Kenneth
+
+Round 3 (a fresh subagent) confirmed several things:
+- `persistPosition` never retries, so a `duplicate rec_id` is a real collision;
+- DELETE answers 204 or 404;
+- every Remove deletes by recId;
+- Dismiss sends nothing;
+- M26 and M27 can fail.
+
+It found 2 issues. The answers below are PROPOSED and have NOT been audited:
+
+**W1 (MEDIUM, gate b): an UNKNOWN entry's Remove button loses its "check the broker first" warning after Prev/Next.** The warning lives only in `orderError`, which the `[active]` effect clears (`page.tsx:607`). The entry itself is `unconfirmed:false`, the same flag as a provably-no-order entry. So a user tidying up can click Remove and untrack a LIVE order.
+- *Proposed:* each entry carries `kind: 'order-unknown' | 'no-order' | 'save-unconfirmed'` in place of the boolean, and a per-entry line rendered from the entry, not from `orderError`.
+- For `order-unknown`: `${label}: order status unknown — check ${broker} first. Remove ONLY if no order exists there.` The click then asks for a confirm step before the DELETE.
+- Test: an UNKNOWN send, then Next, and the check-the-broker text is still beside the button. Mutation: drop that text → red.
+
+**W2 (LOW, gate c): V2's second push has no test.**
+- *Proposed test:* persist `{ok:false, detail:'HTTP 500'}`, the delete rejects `→ 500: x`, then Next, and the Remove button for that recId is present.
+- *Mutation M28:* skip that push → red.
