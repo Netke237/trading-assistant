@@ -208,7 +208,15 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
               <select
                 className={styles.select}
                 value={model}
-                onChange={(e) => { setModel(e.target.value as MarkovModel); setToState('any'); }}
+                onChange={(e) => {
+                  const next = e.target.value as MarkovModel;
+                  setModel(next);
+                  setToState('any');
+                  // A4f: the Interval select (intraday options only) is shown for
+                  // HMM_intraday; set a value it offers so what it displays is what
+                  // is saved. Every other model keeps today's '1D'.
+                  setIntervalVal(next === 'HMM_intraday' ? '5m' : '1D');
+                }}
               >
                 <option value="OMM">OMM (daily)</option>
                 <option value="HMM_daily">HMM (daily)</option>

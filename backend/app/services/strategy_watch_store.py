@@ -47,6 +47,33 @@ def _fresh_state() -> dict:
     }
 
 
+def _primary_model(trigger_def: object) -> object:
+    if not isinstance(trigger_def, dict):
+        return None
+    primary = trigger_def.get("primary")
+    return primary.get("model") if isinstance(primary, dict) else None
+
+
+def _migrate_hmm_intraday_intervals(watches: list[dict]) -> list[tuple]:
+    """A4f: a composite HMM_intraday watch stored with a non-intraday interval
+    (the dialog saved '1D' while displaying '5m') fetched ~38 daily bars, below
+    the HMM's minimum, and never fired. Move it to '5m' -- what the user saw --
+    and keep the old value in `interval_migrated_from`. Returns (id, symbol, old)
+    for each migrated entry; idempotent."""
+    from app.data.market import is_intraday_interval
+    migrated = []
+    for w in watches:
+        if w.get("watch_type") != "composite" or _primary_model(w.get("trigger_def")) != "HMM_intraday":
+            continue
+        old = w.get("interval")
+        if is_intraday_interval(old):
+            continue
+        w["interval"] = "5m"
+        w["interval_migrated_from"] = old
+        migrated.append((w.get("id"), w.get("symbol"), old))
+    return migrated
+
+
 class StrategyWatchStore:
     def __init__(self, path: Path | None = _DEFAULT_PATH) -> None:
         self._path = path
@@ -73,7 +100,25 @@ class StrategyWatchStore:
                 w.setdefault("last_state", _fresh_state())
                 w.setdefault("enabled", True)
                 w.setdefault("direction", "Bullish")
+            migrated = _migrate_hmm_intraday_intervals(self._watches)
             self._schedule = {**_DEFAULT_SCHEDULE, **(raw.get("schedule") or {})}
+        if not migrated:
+            return
+        listing = ", ".join(f"{i} {s} {old!r}" for i, s, old in migrated)
+        logger.warning(
+            "A4f: migrated %d HMM_intraday composite watch(es) from a non-intraday interval "
+            "to '5m' (on that interval they could not fire): [%s]", len(migrated), listing,
+        )
+        # load() runs at import time of the module-level store and must never
+        # raise: a failed write would stop the backend from booting (A4f plan F-1).
+        # The migration stays in memory; the next mutation's save() persists it.
+        try:
+            self.save()
+        except Exception as exc:
+            logger.error(
+                "A4f: could not persist the interval migration (%s); in memory only, "
+                "retried on the next save or reload: [%s]", exc, listing,
+            )
 
     def save(self) -> None:
         if not self._path:
@@ -139,6 +184,12 @@ class StrategyWatchStore:
         Does NOT deduplicate — multiple composite watches per symbol with different trigger
         definitions are allowed. Each call creates a new entry with a unique ID.
         """
+        if _primary_model(trigger_def) == "HMM_intraday":
+            from app.data.market import is_intraday_interval
+            if not is_intraday_interval(interval):
+                raise ValueError(
+                    f"HMM_intraday needs an intraday interval (e.g. 5m, 15m, 1h), got {interval!r}"
+                )
         symbol = symbol.strip().upper()
         with self._lock:
             entry = {

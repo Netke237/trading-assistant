@@ -70,9 +70,15 @@ After the lock is released, if any entry was migrated, call `save()` once so the
 marker are durable. Then log ONE `WARNING` naming every migrated watch:
 `A4f: migrated N HMM_intraday composite watch(es) from a daily/weekly interval to '5m' (they
 never fired before; they are now live): [id symbol old_interval, …]`. The migration is
-idempotent: a migrated entry is intraday, so it is not selected again. A `save()` failure
-propagates like any other `save()` failure. The in-memory migration still applies, so the
-evaluator uses `5m` either way.
+idempotent: a migrated entry is intraday, so it is not selected again.
+
+**Amended after plan round 1 (F-1).** `load()` runs from `__init__`, at import time of the
+module-level store, and today it cannot raise. If the post-migration `save()` raised, it would
+stop the backend from booting and silence every monitor. So the save is wrapped in
+`try/except Exception`. On failure it logs an ERROR that names the migrated ids and says the
+change is in memory only. The evaluator still uses `5m`, and the next mutation's `save()`,
+which rewrites the whole file, persists it. If the backend restarts first, the migration
+re-runs, which is idempotent. `load()` still never raises.
 
 ### Out of scope (logged for Kenneth, not changed)
 - **Chart-drawn composite RULES (`/alerts/rules`, `rule_type='composite'`) with
@@ -108,6 +114,8 @@ Backend (`backend/tests/test_a4f_hmm_intraday_interval.py`):
 - B2b: the migration is persisted. A reload from disk shows `5m` plus the marker. A second load
   migrates nothing, saves nothing and logs nothing.
 - B2c: one WARNING names every migrated id. No log and no save when nothing is migrated.
+- B2e (F-1): `save` raises `OSError`. Constructing the store does not raise,
+  `list_watches()` shows `5m`, and an ERROR names the id.
 - B2d: end to end. The evaluator fetches intraday bars at `'5m'` for a migrated watch
   (`fetch_intraday_candles` patched and its interval asserted).
 
