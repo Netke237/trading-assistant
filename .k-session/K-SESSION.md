@@ -12,7 +12,7 @@ logged, and the rule's name gets an "(interval was 1D)" note. Then pick up the o
 open A4f items, but only when the owner chooses them.
 
 ## Status
-in-progress. Reconciliation is done; waiting for the owner to pick the next item. No code changed yet.
+in-progress. The owner chose (a) A4f-rules. Plan written: `docs/superpowers/plans/2026-09-25-a4f-rules-hmm-intraday-interval-plan.md`. Plan round 1 pending.
 
 ## Done
 - A4f (the watch path) is ALREADY ON MAIN. It came from a parallel branch
@@ -28,7 +28,8 @@ in-progress. Reconciliation is done; waiting for the owner to pick the next item
   NOT BUILT) and corrects `open_questions[2]`(a).
 
 ## Next steps
-- [ ] The owner chooses the next item (see Blockers). Do not start code before that.
+- [x] The owner chose (a) A4f-rules.
+- [x] Plan written (see Status). Rule migration runs at the top of `run_chart_alert_scheduler()`, not as a lifespan line, so tests never run the real lifespan.
 - [ ] If A4f-rules is chosen: write a plan in `docs/superpowers/plans/` covering:
   (1) a one-shot migration of stored rules as an explicit `lifespan` step in
   `backend/app/main.py`, before any scheduler starts, not on import;
