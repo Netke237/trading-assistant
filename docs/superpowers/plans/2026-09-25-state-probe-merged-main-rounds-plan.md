@@ -112,3 +112,19 @@ together.
   site in the file.
 
 **Kenneth's call (2026-09-25):** accept the silent residual as documented and pinned (T5). Round 2 next.
+
+**Round 2: plan and code together, fresh subagent. CLEAN.**
+
+- 0 blocking, 6 nits.
+- Every listed mutant was killed again.
+  - Extra M8 (`^merged_ref` plus `--first-parent`) was killed.
+  - Extra M7 (drop `!= base_ref`) survived, but it is equivalent to the original.
+- Nits taken:
+  - The docstring now lists all five residuals.
+  - The state note names T1–T7.
+  - T7's `--all` line is commented as belt-and-braces.
+- Recorded, not fixed:
+  - The live `state.py` exit 0 after merging main is not evidence for this piece. The entry was introduced in the branch's first commit, so the span was never narrowed. T1 is the evidence.
+  - A `merged_ref` that vanishes mid-run degrades to "No drift". That is the helper's existing, documented degrade.
+
+Stage CLOSED. MERGED to main.

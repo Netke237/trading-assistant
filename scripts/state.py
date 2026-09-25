@@ -163,6 +163,13 @@ def _round_numbers_in_branch_subjects(
       - LOUD: this branch's own merge commit is not on main, so a subject like
         "Merge origin/main (A5c round 4 clean) into ..." still counts. Name
         rounds in merge subjects only for this branch's own piece.
+      - LOUD: a sibling branch's rounds for ANOTHER piece that have not
+        reached main still count against this one when that sibling is merged
+        in. They are not on main, so nothing marks them as someone else's.
+      - PRE-EXISTING, unchanged: a sibling cut from this branch AFTER the
+        entry's introducing commit that reaches main first puts that commit on
+        main, so no narrowing happens and its rounds are out of range.
+
     Returns (max_n, matching_subjects), or None when there is no evidence to
     read -- no git, no resolvable base, or a branch that is not ahead of it.
     Degrading to None is deliberate: this probe runs on every SessionStart, and

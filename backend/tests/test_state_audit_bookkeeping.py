@@ -1113,4 +1113,6 @@ def test_a_malformed_merged_ref_degrades_to_no_evidence(repo):
     assert _mod._round_numbers_in_branch_subjects("origin/main", "main")[0] == 2
     # A revision git WOULD accept (it yields round 2 unguarded), refused by shape.
     assert _mod._round_numbers_in_branch_subjects("origin/main", "HEAD~1") is None
+    # Belt and braces: git itself rejects `^--all`, so this line holds even
+    # without the shape guard. The HEAD~1 line above is what pins the guard.
     assert _mod._round_numbers_in_branch_subjects("origin/main", "--all") is None
