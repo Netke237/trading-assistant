@@ -1292,6 +1292,24 @@
   ],
   "decisions": [
     {
+      "id": "P3B-REGIME-BARS-MISSING-REFUSES-2026-09-25",
+      "q": "P3b: when the auto-trader cannot get the bars it needs to measure the regime at fire time (8s timeout, fetch error, or no bars), should it keep abstaining (fire, sized at the min_mult floor with regime_sizing on / full size with it off) or refuse like the scan drops a symbol with no market data? And the 8s deadline is shorter than the 10s Tradier timeout, so the yfinance fallback is never reached.",
+      "a": "Refuse (recorded + alerted) and raise the deadline to 25s so the fallback can answer. A short-but-present series and an unmeasurable compute_omm result still abstain, as the scan runs no gate there.",
+      "by": "Kenneth 2026-09-25 (P3b session)"
+    },
+    {
+      "id": "P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25",
+      "q": "P3b: auto-trade contract sizing uses Python round() (half to even: 1.5 -> 2, 2.5 -> 2). Round down, round half up, or keep?",
+      "a": "Round down (floor), minimum 1 contract -- matches the stock card's int() share count and never sizes up.",
+      "by": "Kenneth 2026-09-25 (P3b session)"
+    },
+    {
+      "id": "P3B-MAY-EDIT-MARKET-SESSION-COMMENTS-2026-09-25",
+      "q": "P3b: two stale 'fires ungated at full armed quantity' comments sit in market_session.py, a P4a-owned file. May P3b fix them?",
+      "a": "Yes, comments only.",
+      "by": "Kenneth 2026-09-25 (P3b session)"
+    },
+    {
       "id": "BACKLOG-DECISIONS-2026-09-25",
       "q": "The open decisions and the backlog dispositions from the 2026-09-25 verified audit (Q1-Q28).",
       "a": "Kenneth, 2026-09-25 (grilling rounds 1-2 on the verified backlog audit). AGREED: Q1 syncRules proposal YES; Q2 every manual scan path reads portfolioValue + maxLossPerTradePct; Q3 state-probe rename hole: option (3) accept and document; Q4 Step-5 banner matches the tooltip (missing-IV row counted under both causes); Q5 add a min_stock_score field to Step 3; Q6 'worthless' via Close, typed 0 stays refused; Q7 cap the global premium stop at 99%; Q8 relabel the card to the real time exit (3 DTE); Q9 accept a stored ratio outside 10-99% and warn; Q10 rewrite ws-g-happy-path-mocked.spec.ts; Q11 add a measured flag to the direction gate; Q12 alert on a wrong-side stop booked with gates off; Q13 keep the 900s sandbox feed lag; Q14 chart-alert check must not skip a closed candle; Q15 edit-drawer rejection cleared only by the user's own edits; Q16 DO NOT HIDE OrderBlock/FVG/Divergence rules -- keep them in the backlog to be fixed (Q16b 'not firing yet' note: UNANSWERED); Q17 isolate each watch in evaluate_all; Q18 card path refuses above the 5-contract clamp; Q19b Heston items kept as one low-priority wave-2 phase (Heston fit quality); Q20 one measurement package; Q21 close accepted-by-design items; Q22 stale comments/tests folded into the owning package; Q23 Document C kept, after the defect packages, its section-9 decisions first; Q24 AUTOTRADE-SIZING-1 label -> shipped; Q25b work in waves, 6 parallel sessions in wave 1; Q26 each session merges origin/main first, edits only its own PROJECT_STATE entries, merges itself when clean; Q27 new questions: stop, ask Kenneth, record; Q28 measurement scans run on Kenneth's machine during market hours on >= 2 days. PACKAGES: docs/superpowers/plans/2026-09-25-work-packages.md (every still-open backlog entry assigned to exactly one package)."
