@@ -333,3 +333,51 @@ Keeping a row with no order is the safer failure. It raises alerts about a posit
 - Test 13: two different symbols, each at 4% single. The seeded exposure is 18%, so each alone totals 22% (fits 25%) and both together total 26%. Expect one 201 and one `total_exposure_limit_reached`.
 
 **R14 — Q12's scope is stated in the §3a docstring.** Only USER-SET stops are direction-checked (`position_writer.py:277`). A plan-derived armed stop is re-anchored, not checked. `stop_required` still refuses a missing or non-positive one. Re-logged as one open line for the owner (P3b), if it wants the check on plan-derived stops too.
+
+---
+
+## Revisions after plan round 2 (these SUPERSEDE R1-R14 where they conflict)
+
+Round 2 (fresh subagent) found 1 HIGH, 5 MEDIUM and 5 LOW. S-n answers finding n.
+
+**S1 (HIGH) + S6 — the delete rule is narrowed to PROVABLY-PRE-SUBMIT failures. Everything else keeps the row and gives the user a button.** R1's status-code classes are dropped. A 400 can be a `JSONDecodeError` (a `ValueError`) raised while parsing a 2xx broker reply, so the order may be live. The page auto-deletes the saved row ONLY when one of these holds:
+- HTTP **422**: FastAPI request validation, raised before the handler runs;
+- HTTP **503** with detail starting `Broker credentials unavailable`: raised before `execute` (`routers/broker.py:307-314`);
+- HTTP **400** with detail starting `live trading via` or `Unknown broker`: `broker_router.resolve`, before any adapter call (`broker_router.py:37-47`). Alpaca's STK-only `ValueError` is not listed, because this page sends options only and the broker picker never offers Alpaca for options;
+- HTTP **502** with detail containing `did not place the order` (the IBKR confirmation reply, `routers/broker.py:166-171`);
+- a 2xx whose `status` is a stated rejection (R10's set).
+
+Everything else is an unknown order state: other 400s, other 502s (connection error, read timeout, broker HTTP 4xx/5xx such as an expired Tradier token, an unauthenticated IBKR gateway), a fetch TypeError, a 2xx with `order_id` `""` or `"unknown"` (the backend's no-order-id rule, `auto_trade_booking.py:67-69`). For all of these the row is KEPT. The banner reads: `Order status UNKNOWN (${why}). The tracked position ${recId} was kept — check the broker. If no order exists there, remove it:` followed by a **Remove tracked position** button. The button calls `api.deletePortfolioPosition(recId)`, then does R9's store drop, and the banner becomes `Tracked position removed.`
+
+This answers S6's phantom-row cost without string-matching four adapters' error texts, which the page does not own and which can change. The phantom row is visible and removable in one click. A missing position is not. Re-logged for the broker/adapters owner (unowned; Kenneth to assign): post-submit parse errors should raise `RuntimeError`, not `ValueError`, and a broker 4xx should be distinguishable from a transport failure in the 502 detail. Then the page could auto-delete more cases.
+
+Tests (FE): a 400 "Expecting value: line 1 column 1" keeps the row, shows the button, and does not delete. A 502 "Tradier paper order failed: HTTP 401…" does the same. A 422, the 503 credentials error, "Unknown broker", the IBKR confirm 502 and status "Rejected" each auto-delete. An `order_id: ""` 200 keeps the row. Clicking the button deletes and drops the row.
+
+**S2 — same-contract race under the lock.** Right after the lock is acquired, `create_position` re-runs `SELECT … WHERE contract == body.contract` and raises the same 409 before the risk SELECT. New test 13b: two same-contract creates under `gather` give one 201 and one 409, never a 422. Mutation M16: drop the re-check → a 422 appears.
+
+**S3 — api mocks.** `deletePortfolioPosition: jest.fn().mockResolvedValue(undefined)` is added to the `@/lib/api` mock factory in all four Step-7 test files: `edited-fields-sync`, `contracts-sync`, `direct-send-stop-gate` and `a8-rail-and-structural-cache`. The DELETE is asserted on that mock, not on `global.fetch`. The confirm-502 test's `expect(global.fetch).not.toHaveBeenCalled()` is replaced by exactly one persist POST plus `deletePortfolioPosition` called with the recId. These four files are added to §0's table as edited tests of the P1-owned page.
+
+**S4 — the 409 page text carries no number:** `…or raise that position's Contracts by {qty} in Portfolio (refused if the total passes the per-trade contract limit or an exposure cap; then close it at the broker).` `auto_trade_booking` reads no config.
+
+**S5 — rollback tests use a real DB failure.**
+- Test 19a: `create_position` is patched to `db.add` a row that collides with an existing primary key and to `await db.flush()`, which raises a genuine IntegrityError. After the call, the session answers a SELECT, and that SELECT would raise `PendingRollbackError` without the rollback.
+- Test 19b: `log_approval` is patched to add a duplicate-PK `AuditEventModel` and flush. The rollback leaves the session usable, and the booked row is still there (it was committed earlier).
+- These are mutations M14 (drop the rollback in the write `except`) and M15 (drop the rollback after `log_approval`), renamed so they do not clash with §7.
+
+**S7** — added to R8's Portfolio-page re-log line: `rejectionMessage` drops the unmapped sentence when a code in the same detail maps. The writer's "Also:" suffix keeps the raw codes, so the basket's own red banner (which prints the detail verbatim) shows everything.
+
+**S8 — persist !ok after a commit.**
+- A persist result that is `!ok`, not offline, and whose detail is none of the following gets a best-effort `deletePortfolioPosition(pos.recId)`: a 409, a 422, or one containing `duplicate rec_id` (that rec_id belongs to another row, so it must never be deleted).
+- The banner is always `No order was sent — ${detail}.` When the delete was attempted and did not succeed, it adds `If ${recId} appears in Portfolio, delete it.`
+- The offline branch always adds that line.
+- `deletePortfolioPosition` stays a plain `del`, which throws on non-2xx. The page treats a thrown `→ 404` as already removed. That is the one place 404 is interpreted, which answers S11's contradiction.
+
+**S9 — Q12 without a live price.** With gates off only, when the underlying fetch returns nothing, the wrong-side direction check falls back to `body.scanStockPrice` (the arm-time price) when it is > 0. The warning and `wrong_side_stop` then say `(against the scan price {p}; the live fetch failed)`. With gates on, nothing changes: the card path refuses only against a live price, as today. Test 7b covers this. The docstring states the remaining gap: no live price and no scanStockPrice means no check.
+
+**S10** — test 12 gets a third variant that patches `app.services.position_writer.load_exit_plan_cfg` with a Mock and asserts it was called.
+
+**S11 bookkeeping.**
+- §0's "fixed by §6" means §5 test 23.
+- §5 test 21 refers to the EXISTING `test_the_containers_are_copied_not_shared`.
+- The 404 rule is settled in S8.
+- The no-order-id 2xx is settled in S1.
