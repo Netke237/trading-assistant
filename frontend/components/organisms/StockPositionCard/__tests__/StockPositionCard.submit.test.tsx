@@ -97,4 +97,27 @@ describe('StockPositionCard — broker order submit()', () => {
     // that would fire a second broker order for shares already bought.
     expect(screen.getByRole('button', { name: /limit @/i })).toBeDisabled();
   });
+
+  // MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25). When IBKR answers with a
+  // confirmation question the backend now returns a 502 carrying it (it used
+  // to be an empty-id 200, which created a phantom Portfolio position). The
+  // message below is the exact shape lib/api.ts's apiError produces for it.
+  it('an IBKR confirmation question (502) shows as an error and creates no position', async () => {
+    (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new Error(
+      'API /broker/stock-order → 502: IBKR did not place the order: it asked for a ' +
+      'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
+    ));
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
+
+    // Awaited first, so the assertions below run after the rejection was handled.
+    expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+    expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
+    // Nothing was placed, so the user can send again.
+    await waitFor(() => expect(screen.getByRole('button', { name: /limit @/i })).toBeEnabled());
+  });
 });

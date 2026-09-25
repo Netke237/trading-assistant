@@ -173,6 +173,25 @@ describe('step-7-position-card — broker order submit()', () => {
     expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
     expect(screen.getByText(/Order placed — ID: ORD-1/)).toBeInTheDocument();
   });
+
+  // MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25): IBKR's confirmation question is
+  // now a 502 (it used to be an empty-id 200 that created a phantom position).
+  it('an IBKR confirmation question (502) shows as an error and creates no position', async () => {
+    (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new Error(
+      'API /broker/stock-order → 502: IBKR did not place the order: it asked for a ' +
+      'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
+    ));
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
+
+    expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+    expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit order/i })).toBeEnabled());
+  });
 });
 
 /* Phase G piece 5, build step 4 (§7.2, S3, spec test 9). A SEPARATE component
