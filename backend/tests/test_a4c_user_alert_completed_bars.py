@@ -273,7 +273,7 @@ async def test_scheduler_passes_the_fetch_time_of_its_candles(monkeypatch):
     monkeypatch.setattr(sched, 'AsyncSessionLocal', Session)
     candles = _bars(n=5)
     monkeypatch.setattr(sched, 'get_intraday_with_fetched_at', AsyncMock(return_value=(candles, 12345.0)))
-    monkeypatch.setattr(sched, 'compute_structure', lambda *a, **kw: [])
+    monkeypatch.setattr('app.routers.chart_alerts.closed_candle_structure', lambda *a, **kw: [])  # A4e: the scheduler's structure call
     ev = AsyncMock(return_value=[])
     monkeypatch.setattr('app.routers.chart_alerts.evaluate_and_notify_for_symbol', ev)
     sched._last_seen_candle.clear()

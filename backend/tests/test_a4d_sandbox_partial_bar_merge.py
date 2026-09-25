@@ -284,7 +284,7 @@ async def test_17_scheduler_evaluates_yfinance_closed_candle(monkeypatch):
         ))
         await db.commit()
     monkeypatch.setattr(sched, "AsyncSessionLocal", Session)
-    monkeypatch.setattr("app.services.chart_alert_scheduler.compute_structure", lambda *a, **kw: [])
+    monkeypatch.setattr("app.routers.chart_alerts.closed_candle_structure", lambda *a, **kw: [])  # A4e: the scheduler's structure call
     ev = AsyncMock(return_value=[])
     monkeypatch.setattr("app.routers.chart_alerts.evaluate_and_notify_for_symbol", ev)
     cc._INTRADAY_CACHE.clear()

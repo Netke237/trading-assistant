@@ -15,7 +15,6 @@ from sqlalchemy import select
 from app.data.chart_cache import get_intraday, get_intraday_with_fetched_at
 from app.database import AsyncSessionLocal
 from app.models.alert import AlertRuleModel
-from app.services.market_structure import compute_structure
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ async def _tick() -> None:
     if not pairs:
         return
 
-    from app.routers.chart_alerts import evaluate_and_notify_for_symbol
+    from app.routers.chart_alerts import closed_candle_structure, evaluate_and_notify_for_symbol
 
     for symbol, interval in pairs:
         try:
@@ -64,7 +63,8 @@ async def _tick() -> None:
             _last_seen_candle[key] = closed['time']
 
             ht_candles = await get_intraday(symbol, '1D') if interval == '1h' else None
-            signals = await asyncio.to_thread(compute_structure, candles, interval, symbol, ht_candles)
+            # A4e: structure for the alert decision stops at the closed candle.
+            signals = await asyncio.to_thread(closed_candle_structure, candles, closed, interval, symbol, ht_candles)
 
             await evaluate_and_notify_for_symbol(symbol, interval, closed, candles, signals, as_of=fetched_at)
         except Exception:
