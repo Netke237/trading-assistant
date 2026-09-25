@@ -93,7 +93,10 @@ class OrderResult:
     # until POST /iserver/reply/{id} confirms it, and nothing in this codebase
     # sends that reply, so the order never reaches the book. The auto-trader
     # records it as not submitted (AUTOTRADE-IBKR-CONFIRM-NOT-SUBMITTED,
-    # Kenneth 2026-09-25). Other callers see the empty `order_id` as before.
+    # Kenneth 2026-09-25); the manual /broker/stock-order and
+    # /broker/option-order routes answer it as a 502 carrying the question
+    # (MANUAL-IBKR-CONFIRM-AS-ERROR, routers/broker.py). Any other caller sees
+    # the empty `order_id` as before.
     awaiting_confirmation: bool = False
 
 
