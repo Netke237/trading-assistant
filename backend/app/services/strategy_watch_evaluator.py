@@ -485,8 +485,10 @@ def _any_channel_enabled() -> bool:
     """True when at least one notification channel is enabled (D3).
 
     Same reader notify_enabled_channels uses. A null or non-dict block counts as
-    disabled; only a genuine read error returns True -- an unreadable config
-    must not silently commit alerts that were never delivered."""
+    disabled. Note: load_notification_config swallows its own read/parse errors
+    and returns {} (dispatch.py), so a corrupt settings.yaml reads as "no
+    channel" and transitions commit. The True branch below only covers an
+    exception escaping the reader itself (P4b code round 1, finding 5)."""
     try:
         cfg = load_notification_config()
         if not isinstance(cfg, dict):
@@ -531,8 +533,8 @@ async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = N
         any_channel = _any_channel_enabled()
         for t in transitions:
             ev = t.event
-            subject, plain, html = _format_event(ev)
             try:
+                subject, plain, html = _format_event(ev)
                 delivered = await notify_enabled_channels(subject, plain, html)
             except Exception:
                 logger.error("strategy-watch: notify failed for %s", ev.symbol, exc_info=True)

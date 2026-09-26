@@ -333,3 +333,18 @@ async def test_missing_interval_is_the_stores_1d(monkeypatch, signals):
     fired, fetch = await _watch_fired(monkeypatch, _composite_watch(None), daily=rows, now=WED_MID)
     fetch.assert_not_called()
     assert fired is True
+
+
+def test_1d_vwap_never_falls_back_to_bars_daily(signals):
+    """bars_vwap_daily None -> VWAP not judged: no fallback to bars_daily, not
+    starved -> a definite False (code round 1, finding 3)."""
+    rows = _daily_rows(date(2026, 9, 22), trig_last=True, n=80)
+    assert _sched(rows, [], "1D", None) is False
+    assert signals["daily"] == []
+
+
+def test_describe_match_reports_vwap_from_bars_vwap_daily_alone(signals):
+    """The describe gate counts bars_vwap_daily ([r3#10]; code round 1, finding 4)."""
+    rows = _daily_rows(date(2026, 9, 22), trig_last=True, n=80)
+    detail = cte.describe_match(_TD, bars_daily=[], bars_intraday=[], bars_vwap_daily=rows, interval="1D")
+    assert detail["strategy_matched"] == ["mean_reversion_vwap"]

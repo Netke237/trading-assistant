@@ -224,7 +224,9 @@ def test_any_channel_enabled_reads_blocks_safely(cfg, expected):
         assert _any_channel_enabled() is expected
 
 
-def test_any_channel_enabled_is_true_when_config_unreadable():
+def test_any_channel_enabled_is_true_when_the_reader_itself_raises():
+    # load_notification_config swallows file/parse errors ({} -> no channel);
+    # this pins only the guard for an exception escaping the reader.
     with patch(f"{_EV}.load_notification_config", side_effect=OSError("disk")):
         assert _any_channel_enabled() is True
 

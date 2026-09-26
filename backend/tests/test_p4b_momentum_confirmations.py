@@ -70,3 +70,10 @@ async def test_rule_path_reads_the_closed_candle_value(monkeypatch):
 async def test_rule_path_ignores_the_forming_value(monkeypatch):
     c = _candles(closed_value=1, forming_value=80)
     assert await _fire(monkeypatch, c, c[-2]) == []
+
+
+def test_a_bool_never_counts_as_a_momentum_reading():
+    """True == 1 would clear a minimum of 1 without the bool guard (code round 1, finding 2)."""
+    td = {"confirmations": [{"type": "momentum", "signal_kind": "rsi_cross", "min_confidence": 1}]}
+    assert _matched_confirmations(td, [], {"rsi_cross": True}) == []
+    assert _matched_confirmations(td, [], {"rsi_cross": 1}) == ["rsi_cross"]
