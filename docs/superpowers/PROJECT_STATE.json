@@ -1114,7 +1114,7 @@
     {
       "id": "STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES",
       "name": "Stocks-mode send paths (step-7-position-card page, StockPositionCard, StockSendDialog) save the position BEFORE the broker order and send the approved share count; THEN check_position_risk judges stocks at their real share count instead of clamping to max_contracts_per_trade",
-      "status": "in_progress",
+      "status": "shipped_unaudited",
       "audit_rounds": 4,
       "audit_clean": false,
       "depends_on": [
@@ -1156,9 +1156,9 @@
       ],
       "verify": {
         "kind": "present",
-        "path": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+        "path": "frontend/components/molecules/DirectSendNotes/index.tsx",
         "pattern": "removeConfirmText",
-        "note": "The per-note, confirm-first Remove shipped inside P1b-i; this phase adds no code of its own."
+        "note": "The per-note, confirm-first Remove shipped inside P1b-i; this phase adds no code of its own. Moved 2026-09-26 by STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: the notes panel and its Remove now live in the DirectSendNotes molecule, shared by the options and stock pages."
       },
       "note": "Split from P1B-STEP7-SAVE-FIRST by decision P1B-SPLIT-AGAIN-2026-09-25. Start from docs/superpowers/plans/2026-09-25-p1b-step7-save-first-plan.md §3 + U/V revisions + the UNAUDITED W1-W2 proposals. Fresh plan stage, cap 3. Not a merge blocker for P1a. || 2026-09-25: the minimal per-note Remove (confirm, by rec_id, no Dismiss) moved INTO P1b-i by P1B1-MINIMAL-REMOVE-2026-09-25. P1b-ii keeps anything beyond it (Dismiss, wider orphan-row UI), if still wanted. || CLOSED BY ABSORPTION 2026-09-26 (decision P1B2-CLOSED-BY-ABSORPTION-2026-09-26): everything this phase was carved to do shipped inside P1b-i (merged to main at 106d853, P1b-i code round 1 CLEAN): kind-typed notes order-unknown / save-unconfirmed / not-removed (W1), per-note text rendered from the note so the check-the-broker warning survives Prev/Next (W1), confirm step before every Remove (W1), delete strictly by the note's rec_id (section 3), a 404 is NOT final on save-unconfirmed (V1), the delete-failed branch pushes a note (V2, not-removed), shared removeTrackedRow with forced sync + dropLocal (X1). W2 is moot: P1b-i's refused-save branch sends no cleanup DELETE, so there is no second push to test. NOT built, by Kenneth's choice: Dismiss (V1) and any Portfolio-page display of the notes. audit_rounds stays 0: no audit ran on THIS phase; audit_clean rests on P1b-i's clean code round, which covered this code."
     },
