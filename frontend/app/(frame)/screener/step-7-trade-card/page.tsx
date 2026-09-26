@@ -41,10 +41,11 @@ import {
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
-import { useDirectSendNotesStore, type DirectSendNote } from '@/lib/directSendNotesStore';
+import { DirectSendNotes } from '@/components/molecules/DirectSendNotes';
+import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import {
-  brokerLabelFor, classifyDirectFailure, contractLabelFor, directOrderBlock, directSendNoteText,
-  isNotFound, removeConfirmText, whyOf, type DirectOutcome,
+  brokerLabelFor, classifyDirectFailure, contractLabelFor, directOrderBlock,
+  dropLocal, removeTrackedRow, type DirectOutcome,
 } from './directOrder';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
@@ -73,29 +74,6 @@ function generateRecId(): string {
  *  so a `0` scan mid must fall through to the next source, not be kept by `??`. */
 function positiveOrNull(x: number | null | undefined): number | null {
   return x != null && x > 0 ? x : null;
-}
-
-/** Drop one row from the local store by rec_id. A `syncFromBackend` may have
- *  copied a saved row in between the save and the broker's answer. */
-function dropLocal(recId: string): void {
-  usePortfolioStore.setState((s) => ({ positions: s.positions.filter((p) => p.recId !== recId) }));
-}
-
-/** Hard-DELETE one tracked row by rec_id, then drop it locally. Shared by the
- *  auto-delete and a note's Remove (plan X1), so neither can skip the last
- *  step: a sync whose GET started BEFORE the DELETE resolves after it and
- *  writes the deleted row back, and a Close on that stale row then books a
- *  phantom closed trade into History. A forced sync chains after the one in
- *  flight, so its GET post-dates the DELETE; the row is dropped again after it.
- *  Throws what the DELETE threw -- except a `→ 404` when `notFoundIsFinal`. */
-async function removeTrackedRow(recId: string, notFoundIsFinal: boolean): Promise<void> {
-  try {
-    await api.deletePortfolioPosition(recId);
-  } catch (e) {
-    if (!(notFoundIsFinal && isNotFound(e))) throw e;
-  }
-  dropLocal(recId);
-  void usePortfolioStore.getState().syncFromBackend(true).then(() => dropLocal(recId));
 }
 
 function addDirectNote(n: Parameters<ReturnType<typeof useDirectSendNotesStore.getState>['addNote']>[0]): void {
@@ -514,7 +492,6 @@ export default function Step7Page() {
   const [marketPlacing,  setMarketPlacing]    = useState(false);
   // Carries the contract label: a direct send's result can land after Prev/Next.
   const [paperOrderId,   setPaperOrderId]     = useState<{ label: string; id: string } | null>(null);
-  const directNotes = useDirectSendNotesStore((s) => s.notes);
   const [orderError,     setOrderError]       = useState<string | null>(null);
   // A LIST, not one slot. Both writers below used to call `setSizeAdjustedNote`
   // on the same string state, so an order that was BOTH size-reduced and had
@@ -1233,29 +1210,6 @@ export default function Step7Page() {
   const placeLimitPaper = () => placeDirectOrder('LMT');
   const placeMarketNow  = () => placeDirectOrder('MKT');
 
-  /** A note's Remove button (P1B1-MINIMAL-REMOVE-2026-09-25): confirm, then
-   *  hard-DELETE exactly that note's rec_id -- never "the ${label} position". */
-  async function removeNoteRow(note: DirectSendNote) {
-    if (note.removing) return;
-    if (!window.confirm(removeConfirmText(note))) return;
-    const { patchNote, removeNote } = useDirectSendNotesStore.getState();
-    patchNote(note.recId, { removing: true, status: null });
-    try {
-      // A 404 is final only when the server had already answered this send's
-      // save before the note existed (ORDER-UNKNOWN, NOT-REMOVED). On
-      // SAVE-UNCONFIRMED the create may still be in flight, so it is not.
-      await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
-      removeNote(note.recId);
-    } catch (e) {
-      patchNote(note.recId, {
-        removing: false,
-        status: note.kind === 'save-unconfirmed' && isNotFound(e)
-          ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
-          : `Remove failed: ${whyOf(e)}. Try again.`,
-      });
-    }
-  }
-
   /* The keyed reads. Anything that wants "the live quote for the card on
    * screen" goes through these; the raw state is never read directly, so a
    * quote left standing for a different contract can only ever be ignored. */
@@ -1638,22 +1592,10 @@ export default function Step7Page() {
           ))}
           {basketError && <Text size={12} tone="reject">{basketError}</Text>}
           {orderError && <Text size={12} tone="reject">{orderError}</Text>}
-          {/* P1b-i -- the direct sends' persistent notes. Outside the broker
-            * gate like the lines above; each Remove acts on its own rec_id. */}
-          {directNotes.map((n) => (
-            <div key={`direct:${n.recId}`} className={paperStyles.directNote}>
-              <Text size={12} tone="reject">{directSendNoteText(n)}</Text>
-              <button
-                type="button"
-                className={paperStyles.directNoteRemove}
-                onClick={() => { void removeNoteRow(n); }}
-                disabled={n.removing}
-              >
-                {`Remove (${n.label})`}
-              </button>
-              {n.status && <Text size={11} tone="caution">{n.status}</Text>}
-            </div>
-          ))}
+          {/* P1b-i -- the direct sends' persistent notes (shared molecule).
+            * Outside the broker gate like the lines above; each Remove acts
+            * on its own rec_id. */}
+          <DirectSendNotes />
         </div>
       )}
 

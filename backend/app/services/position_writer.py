@@ -95,10 +95,10 @@ from app.models.portfolio import PortfolioPositionModel
 from app.schemas import PortfolioPositionCreate
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
-from app.services.portfolio_performance import _contract_multiplier
 from app.services.portfolio_risk import (
     EXCEEDS_MAX_CONTRACTS,
     check_position_risk,
+    position_capital_at_risk,
     PortfolioPosition as RiskPosition,
 )
 
@@ -399,7 +399,10 @@ async def create_position(
                 contracts=p.qty,
                 entry_premium=p.entry_price,
                 current_price=p.entry_price,
-                capital_at_risk=p.entry_price * p.qty * _contract_multiplier(p.contract),
+                # One measure for every cap (STOCK-RISK-AT-STOP-2026-09-26): a
+                # stock row counts its risk at its stored stop, like the new trade.
+                capital_at_risk=position_capital_at_risk(
+                    p.contract, p.entry_price, p.qty, p.stop, p.direction),
             )
             for p in db_positions
         ]
@@ -412,6 +415,10 @@ async def create_position(
             current_price=entry_price,
             portfolio=portfolio,
             portfolio_value=body.portfolioValue,
+            # The stop this row will STORE (re-anchored, floored), so the risk
+            # judged is the risk booked -- not the one the client sent.
+            stop=_floor_stop(adjusted_stop),
+            direction=body.direction,
         )
         if not risk.approved and enforce_pre_trade_gates:
             raise HTTPException(
@@ -550,6 +557,7 @@ async def create_position(
             rr_ratios=_rr_ratios,
         )
 
+        booked_qty = (risk.adjusted_size or body.qty) if enforce_pre_trade_gates else body.qty
         position = PortfolioPositionModel(
             rec_id=body.recId,
             symbol=body.symbol,
@@ -559,12 +567,15 @@ async def create_position(
             # Gates off: the quantity that was ORDERED, never the gate's resize
             # (spec section 5.2) -- booking 3 when the broker traded 5 puts every
             # downstream P&L and exposure number on a quantity that never happened.
-            qty=(risk.adjusted_size or body.qty) if enforce_pre_trade_gates else body.qty,
+            qty=booked_qty,
             entry_date=body.entryDate,
             stop=_floor_stop(adjusted_stop),
             structural_stop=_floor_stop(adjusted_structural_stop),
             exit_plan=body.exitPlan,
-            targets=adjusted_targets,
+            # A resize books fewer than ordered; the sell-to-close rungs shrink
+            # with it, or a later sync restores rungs selling more than held.
+            targets=(scale_rung_quantities(adjusted_targets, booked_qty)
+                     if booked_qty < body.qty else adjusted_targets),
             dte_total=body.dteTotal,
             entry_stock_price=entry_stock_price,
             # Feature 5 — pre-trade max-loss override, set on the Arithmetic
@@ -637,6 +648,37 @@ async def create_position(
             over_exposure=over_exposure,
             wrong_side_stop=wrong_side_stop,
         )
+
+
+def scale_rung_quantities(targets: list, new_qty: int) -> list:
+    """Shrink the targets' `contractsToSell` so they never sell more than
+    `new_qty` -- the card's own shrink rule (StockPositionCard, and the
+    frontend's `scaleRungShares`, which is identical).
+
+    Only rungs with a positive `contractsToSell` take part. If they already sum
+    to `new_qty` or less, every rung is returned unchanged (a user who left
+    shares unallocated keeps that runner). Otherwise each such rung except the
+    last becomes floor(c x new / alloc) and the last takes the remainder, so the
+    rungs sum to exactly `new_qty`. Never grows a rung.
+    """
+    def _qty(t) -> Optional[int]:
+        c = t.get("contractsToSell") if isinstance(t, dict) else None
+        if isinstance(c, bool) or not isinstance(c, (int, float)) or not c > 0:
+            return None
+        return int(c)  # share/contract counts are whole numbers
+
+    idx = [i for i, t in enumerate(targets) if _qty(t) is not None]
+    alloc = sum(_qty(targets[i]) for i in idx)
+    if not idx or alloc <= new_qty:
+        return list(targets)
+    out = [dict(t) if isinstance(t, dict) else t for t in targets]
+    taken = 0
+    for i in idx[:-1]:
+        c = _qty(targets[i]) * new_qty // alloc
+        out[i]["contractsToSell"] = c
+        taken += c
+    out[idx[-1]]["contractsToSell"] = max(0, new_qty - taken)
+    return out
 
 
 async def _raise_if_contract_exists(db: AsyncSession, contract: str) -> None:

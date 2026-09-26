@@ -231,9 +231,23 @@ async def update_position(
                     current_price=position.entry_price,
                     portfolio=orm_positions_to_risk(others),
                     portfolio_value=body.portfolioValue,
+                    # Judged against the stop this PATCH will STORE: edits within
+                    # 600ms merge into one PATCH, so a qty raise can arrive with a
+                    # stop change that is only applied further down.
+                    stop=_floor_stop(updates["stop"]) if "stop" in updates else position.stop,
+                    direction=position.direction,
                 )
                 if not risk.approved:
                     qty_error = " ".join(risk.reasons)
+                elif risk.adjusted_size is not None and risk.adjusted_size < position.qty:
+                    # A request to RAISE qty must never SHRINK the row: the
+                    # broker still holds position.qty. Possible once a stock's
+                    # risk is measured at its stop and the stop is cleared or
+                    # widened in the same PATCH.
+                    qty_error = (
+                        f"Raising qty to {qty} exceeds the exposure limit even at the "
+                        f"current size ({position.qty}); qty left unchanged."
+                    )
                 else:
                     if risk.adjusted_size is not None:
                         adjusted_qty = risk.adjusted_size

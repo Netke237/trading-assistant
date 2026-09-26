@@ -1,6 +1,7 @@
 import {
+  brokerLabelFor,
   classifyDirectFailure, directOrderBlock, directSendNoteText, isNotFound, removeConfirmText, whyOf,
-} from '../directOrder';
+} from '@/lib/directOrder';
 import type { DirectSendNote } from '@/lib/directSendNotesStore';
 
 /*
@@ -129,5 +130,17 @@ describe('note and confirm texts (plan A2, A3)', () => {
     expect(removeConfirmText({ ...base, kind: 'save-unconfirmed' })).toBe(
       'Delete the saved AAA 150C 05/15/26 row (rec_id REC-1)? No order was placed for it.',
     );
+  });
+});
+
+describe('brokerLabelFor (stock plan R1)', () => {
+  it('names each paper broker, Alpaca included', () => {
+    expect(brokerLabelFor('ibkr_paper')).toBe('IBKR Paper');
+    expect(brokerLabelFor('tradier_paper')).toBe('Tradier Paper');
+    expect(brokerLabelFor('tastytrade_paper')).toBe('Tastytrade Paper');
+    expect(brokerLabelFor('alpaca_paper')).toBe('Alpaca Paper');
+  });
+  it('shows an unknown key as itself, never as another broker', () => {
+    expect(brokerLabelFor('foo_paper')).toBe('foo_paper');
   });
 });

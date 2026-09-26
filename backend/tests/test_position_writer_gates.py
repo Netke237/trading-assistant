@@ -341,19 +341,21 @@ async def test_p1a_6_gates_off_a_six_lot_is_booked_at_six_and_flagged(Session):
 
 
 @pytest.mark.asyncio
-async def test_p1a_6b_a_stock_judged_at_the_clamp_is_flagged_only_through_judged_size(
+async def test_p1a_6b_a_stock_is_judged_at_its_real_count_so_nothing_is_flagged(
     Session, caplog,
 ):
-    """20 shares at $10 on 1M fit every cap, and the REAL check approves with no
-    resize -- so `over_exposure` can only come from judged 5 != booked 20."""
+    """REWRITTEN on purpose by STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: it pinned
+    the 5-share clamp ("the check judged 5, not the ordered 20"). 20 shares at
+    $10 with a $9 stop on 1M fit every cap and are now judged AT 20, so with
+    gates off nothing is a breach. Do not restore the clamp to turn it red."""
     with caplog.at_level(logging.WARNING, _LOGGER):
         async with Session() as db:
             outcome = await create_position(
                 _body(contract="ABT|STOCK", entryPrice=10.0, qty=20, stop=9.0), db,
                 enforce_pre_trade_gates=False, **_fetchers(quote={"price": 10.0}))
     assert outcome.adjusted_size is None, "precondition: no resize"
-    assert (outcome.position.qty, outcome.over_exposure) == (20, True)
-    assert any("the check judged 5, not the ordered 20" in m for m in caplog.messages)
+    assert (outcome.position.qty, outcome.over_exposure) == (20, False)
+    assert not any("the check judged" in m for m in caplog.messages)
 
 
 @pytest.mark.asyncio
@@ -442,3 +444,110 @@ async def test_p1a_11_the_writer_reads_no_risk_config_of_its_own(Session, mocker
             outcome = await create_position(
                 _body(qty=9), db, enforce_pre_trade_gates=False, **_fetchers())
     assert (outcome.position.qty, outcome.over_exposure) == (9, True)
+
+
+
+# ── STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES, Part A writer tests (plan A6/R2/R4/R5/Q1) ──
+
+def _stock_body(**overrides) -> PortfolioPositionCreate:
+    body = {"contract": "ABT|STOCK", "symbol": "ABT", "entryPrice": 50.0,
+            "stop": 45.0, "qty": 200, "dteTotal": 0, "portfolioValue": 100_000}
+    body.update(overrides)
+    return _body(**body)
+
+
+def _rungs(*qs):
+    return [{"price": 55.0 + i, "contractsToSell": q} for i, q in enumerate(qs)]
+
+
+@pytest.mark.asyncio
+async def test_a7_a_stock_over_5pct_risk_is_booked_resized(Session):
+    # 2000 x $5 = $10,000 at risk = 10% -> 1000 shares.
+    async with Session() as db:
+        outcome = await create_position(
+            _stock_body(qty=2000), db, **_fetchers(quote={"price": 50.0}))
+    assert (outcome.position.qty, outcome.adjusted_size) == (1000, 1000)
+    # No stop: 200 x $50 = $10,000 notional = 10% -> 100 shares.
+    async with Session() as db:
+        outcome = await create_position(
+            _stock_body(recId="REC-NS", symbol="XYZ", contract="XYZ|STOCK", stop=None),
+            db, **_fetchers(quote={"price": 50.0}))
+    assert (outcome.position.qty, outcome.adjusted_size) == (100, 100)
+
+
+@pytest.mark.asyncio
+async def test_a10_a_resize_scales_the_stored_rungs(Session):
+    async with Session() as db:
+        await create_position(
+            _stock_body(stop=None, targets=_rungs(66, 66, 68)), db,
+            **_fetchers(quote={"price": 50.0}))
+    (row,) = await _rungs_of(Session)
+    assert row.qty == 100
+    assert [t["contractsToSell"] for t in row.targets] == [33, 33, 34]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rungs, booked, expected", [
+    ((10, 33, 34), 80, [10, 33, 34]),   # rungs already fit: untouched (the runner stays)
+    ((10, 33, 34), 50, [6, 21, 23]),    # card rule: new / alloc, last takes the rest
+])
+async def test_a10b_rungs_follow_the_card_rule(Session, rungs, booked, expected):
+    # 100 shares, no stop, entry chosen so the notional cap books exactly `booked`.
+    entry = 5_000 / booked
+    async with Session() as db:
+        await create_position(
+            _stock_body(stop=None, qty=100, entryPrice=entry, targets=_rungs(*rungs)), db,
+            **_fetchers(quote={"price": entry}))
+    (row,) = await _rungs_of(Session)
+    assert row.qty == booked
+    assert [t["contractsToSell"] for t in row.targets] == expected
+
+
+@pytest.mark.asyncio
+async def test_a10c_no_resize_leaves_rungs_untouched(Session):
+    async with Session() as db:
+        await create_position(
+            _stock_body(qty=100, targets=_rungs(90, 90, 90)), db,
+            **_fetchers(quote={"price": 50.0}))
+    (row,) = await _rungs_of(Session)
+    assert (row.qty, [t["contractsToSell"] for t in row.targets]) == (100, [90, 90, 90])
+
+
+@pytest.mark.asyncio
+async def test_a11_existing_stock_rows_count_at_risk_not_notional(Session):
+    # Two rows 1000 @ $50, stop $45: $5,000 at risk each (10% total) but
+    # $50,000 notional each (100%). A new $200-at-risk stock fits only if the
+    # writer counts the rows at risk.
+    async with Session() as db:
+        for i, sym in enumerate(("AAA", "BBB")):
+            db.add(PortfolioPositionModel(
+                rec_id=f"REC-X{i}", symbol=sym, contract=f"{sym}|STOCK", direction="Bullish",
+                entry_price=50.0, qty=1000, entry_date="2026-09-26", stop=45.0, targets=[]))
+        await db.commit()
+    async with Session() as db:
+        outcome = await create_position(
+            _stock_body(qty=100, stop=48.0), db, **_fetchers(quote={"price": 50.0}))
+    assert outcome.position.qty == 100
+
+
+@pytest.mark.asyncio
+async def test_a12_the_check_reads_the_stop_the_writer_stores(Session):
+    from app.services import portfolio_risk as pr
+    seen = {}
+
+    def spy(*a, **kw):
+        seen.update(kw)
+        return pr.check_position_risk(*a, **kw)
+
+    with patch(_RISK, side_effect=spy):
+        async with Session() as db:
+            outcome = await create_position(
+                _stock_body(qty=100, scanStockPrice=50.0), db,
+                **_fetchers(quote={"price": 48.0}, price=48.0))
+    stored = outcome.position.stop
+    assert stored != 45.0, "precondition: the live price re-anchored the stop"
+    assert seen["stop"] == stored
+
+
+async def _rungs_of(Session):
+    return await _rows(Session)

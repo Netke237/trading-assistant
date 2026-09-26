@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import yaml
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -23,10 +25,10 @@ class RiskCheckResult:
     reasons: list[str] = field(default_factory=list)
     adjusted_size: Optional[int] = None
     portfolio_exposure_pct: float = 0.0
-    # P1a: the quantity the caps were judged at. Equal to the ordered quantity
-    # for an option; for a |STOCK row it is the deferred clamp's value (see the
-    # stock branch below). None only on the `portfolio_too_small` return, which
-    # comes before anything is judged.
+    # P1a: the quantity the caps were judged at -- always the ordered quantity,
+    # for options and (since STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES) stocks.
+    # None only on the `portfolio_too_small` return, which comes before
+    # anything is judged.
     judged_size: Optional[int] = None
     # P1a: the per-trade contract cap this check read, so a caller can word a
     # refusal without a config read of its own.
@@ -40,6 +42,36 @@ EXCEEDS_MAX_CONTRACTS = "exceeds_max_contracts_per_trade"
 
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
+
+
+def position_capital_at_risk(
+    contract_id: str,
+    entry: float,
+    qty: int,
+    stop: Optional[float] = None,
+    direction: Optional[str] = None,
+) -> float:
+    """What a position can lose, the one measure every exposure cap reads.
+
+    Option: entry x qty x 100 -- the premium is the most it can lose.
+    Stock (decision STOCK-RISK-AT-STOP-2026-09-26): |entry - stop| x qty when
+    the stop is usable -- finite, > 0, and on the losing side of entry for the
+    direction (Bullish below, Bearish above; the same rule as the frontend's
+    stockPositionLevels). Anything else -- no stop, a stop at or through entry,
+    an unknown direction -- falls back to full notional, entry x qty, which is
+    larger than any valid risk-at-stop for the same row, so a bad stop can
+    never loosen a cap.
+    """
+    if not str(contract_id).endswith("|STOCK"):
+        return entry * qty * 100
+    notional = entry * qty
+    if stop is None or not math.isfinite(stop) or stop <= 0:
+        return notional
+    if direction == "Bullish" and stop < entry:
+        return (entry - stop) * qty
+    if direction == "Bearish" and stop > entry:
+        return (stop - entry) * qty
+    return notional
 
 
 @lru_cache(maxsize=1)
@@ -57,6 +89,9 @@ def check_position_risk(
     portfolio: list[PortfolioPosition],
     portfolio_value: float,
     daily_recommendation_count: int = 0,
+    *,
+    stop: Optional[float] = None,
+    direction: Optional[str] = None,
 ) -> RiskCheckResult:
     cfg = _load_config()
     rules = cfg["portfolio"]
@@ -78,13 +113,12 @@ def check_position_risk(
     # was judged as 5 and then booked as 10 (card POST), set to 10 (drawer
     # PATCH) or fired as 10 (auto-trader). An option quantity above the cap is
     # now a hard reason, and every cap below is judged at the REAL quantity.
-    if contract_id.endswith("|STOCK"):
-        # DEFERRED by P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25: the stock
-        # send paths place the broker order BEFORE saving, so judging real share
-        # counts now would refuse the books after a full-size order. Phase
-        # STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES removes this clamp.
-        proposed_contracts = min(proposed_contracts, max_per_trade)
-    elif proposed_contracts > max_per_trade:
+    # A STOCK is judged at its real share count (STOCK-SENDS-SAVE-FIRST-THEN-
+    # REAL-SHARES; the 5-share clamp is gone). The contract cap is an OPTION
+    # rule: shares are bounded by the exposure caps below, measured as risk at
+    # the stop (STOCK-RISK-AT-STOP-2026-09-26).
+    is_stock = contract_id.endswith("|STOCK")
+    if not is_stock and proposed_contracts > max_per_trade:
         reasons.append(EXCEEDS_MAX_CONTRACTS)
     judged_size = proposed_contracts
 
@@ -116,18 +150,19 @@ def check_position_risk(
             max_contracts=max_per_trade,
         )
 
-    is_stock = contract_id.endswith("|STOCK")
-    multiplier = 1 if is_stock else 100
-    capital_at_risk = entry_premium * proposed_contracts * multiplier
+    capital_at_risk = position_capital_at_risk(
+        contract_id, entry_premium, proposed_contracts, stop, direction)
     single_exposure_pct = capital_at_risk / portfolio_value
     max_single = rules["max_single_position_pct"]
 
     if single_exposure_pct > max_single:
-        max_allowed_premium = portfolio_value * max_single
-        adjusted = int(max_allowed_premium / (entry_premium * multiplier))
+        # Resize by the per-unit risk actually measured: entry x 100 for an
+        # option (as before), |entry - stop| or entry for a stock.
+        per_unit = capital_at_risk / proposed_contracts
+        adjusted = int(portfolio_value * max_single / per_unit)
         if adjusted >= 1:
             adjusted_size = adjusted
-            capital_at_risk = entry_premium * adjusted_size * multiplier
+            capital_at_risk = per_unit * adjusted_size
             single_exposure_pct = capital_at_risk / portfolio_value
             reasons.append("size_reduced_to_fit_exposure_limit")
         else:
@@ -183,13 +218,13 @@ def orm_positions_to_risk(orm_positions) -> list[PortfolioPosition]:
         qty = int(getattr(p, "qty", 0) or 0)
         if qty <= 0:
             continue
-        is_stock = str(getattr(p, "contract", "")).endswith("|STOCK")
-        multiplier = 1 if is_stock else 100
+        contract = str(getattr(p, "contract", ""))
         entry = float(getattr(p, "entry_price", 0) or 0)
-        car = entry * qty * multiplier
+        car = position_capital_at_risk(
+            contract, entry, qty, getattr(p, "stop", None), getattr(p, "direction", None))
         result.append(PortfolioPosition(
             symbol=str(getattr(p, "symbol", "")),
-            contract_id=str(getattr(p, "contract", "")),
+            contract_id=contract,
             contracts=qty,
             entry_premium=entry,
             current_price=entry,

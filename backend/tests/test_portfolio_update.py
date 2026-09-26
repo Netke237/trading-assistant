@@ -308,3 +308,59 @@ async def test_patch_empty_body_is_a_noop(client):
     r = await client.patch("/api/portfolio/REC-NOOP", json={})
     assert r.status_code == 200, r.text
     assert r.json()["stop"] == 150.0
+
+
+# ── STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES (plan A6 T-A8, R3, Q3 T-A8b) ─────
+
+async def _add_stock(client, rec, qty, stop, entry=50.0):
+    body = {"recId": rec, "symbol": rec, "contract": f"{rec}|STOCK", "direction": "Bullish",
+            "entryPrice": entry, "qty": qty, "entryDate": "2026-09-26", "stop": stop,
+            "targets": [], "dteTotal": 0, "portfolioValue": 1_000_000}
+    with patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)), \
+         patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=None)):
+        r = await client.post("/api/portfolio", json=body)
+    assert r.status_code == 201, r.text
+
+
+async def _stored(client, rec):
+    with patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)), \
+         patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=None)):
+        rows = (await client.get("/api/portfolio")).json()
+    return next(p for p in rows if p["recId"] == rec)
+
+
+@pytest.mark.asyncio
+async def test_a8_a_stock_qty_raise_is_judged_at_its_stored_stop(client):
+    # 100 @ 50, stop 49. Raise to 1000: $1,000 at risk = 1% of 100k -> approved
+    # in full. At notional ($50,000 = 50%) it would have been resized to 100.
+    await _add_stock(client, "SRA", 100, 49.0)
+    r = await client.patch("/api/portfolio/SRA", json={"qty": 1000, "portfolioValue": 100_000.0})
+    assert r.status_code == 200, r.text
+    assert r.json()["qty"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_a8_same_patch_stop_clear_is_judged_at_notional(client):
+    # R3: {qty: 1000, stop: null} in ONE patch is judged against the stop it
+    # stores (none -> notional): resized to 100, the current size.
+    await _add_stock(client, "SRB", 100, 49.0)
+    r = await client.patch("/api/portfolio/SRB",
+                           json={"qty": 1000, "stop": None, "portfolioValue": 100_000.0})
+    assert r.status_code == 200, r.text
+    row = await _stored(client, "SRB")
+    assert (row["qty"], row["stop"]) == (100, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop", [None, 40.0])
+async def test_a8b_a_qty_raise_never_shrinks_the_row(client, stop):
+    # Q3: 1000 @ 50, stop 49 (1%). Raise to 1001 while clearing the stop
+    # (notional 50% -> resize 100) or widening it to 40 ($10 x 1001 = 10% ->
+    # resize 500): both resizes are BELOW the 1000 the broker holds.
+    rec = "SRC" if stop is None else "SRD"
+    await _add_stock(client, rec, 1000, 49.0)
+    r = await client.patch(f"/api/portfolio/{rec}",
+                           json={"qty": 1001, "stop": stop, "portfolioValue": 100_000.0})
+    assert r.status_code == 422, r.text
+    assert "qty left unchanged" in r.text
+    assert (await _stored(client, rec))["qty"] == 1000
