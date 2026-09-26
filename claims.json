@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/unclaimed-tasks-xb6tiz",
       "claimed_at": "2026-09-26T18:57:30Z",
-      "expires_at": "2026-09-26T22:14:00Z",
+      "expires_at": "2026-09-26T23:30:08Z",
       "note": "Store and re-send undelivered strategy-watch events (plan stage)",
       "task": "WATCH-UNDELIVERED-EVENT-RESEND"
     }
