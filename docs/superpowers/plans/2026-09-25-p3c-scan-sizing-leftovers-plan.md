@@ -12,7 +12,7 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -374,8 +374,11 @@ positive) so the signal completes and the bar is still recorded as a setup bar. 
 reported. Per setup bar (signal not None under the patch) the script records: `stop_price`; the raw rungs
 (`primary`, ext1, ext2 exactly as passed); the real `targets[0]`, or, when the real ladder is empty (r15-1, r15-3):
 `NONE — no valid rung: primary {p} {non-positive | not below entry | missing}, fallback {f} <= 0. Before P3a the
-signal emitted {f} as target_price; had this bar's order FILLED, backtesting.py would have raised (0 < price
-assertion) and failed the symbol's whole backtest.` (r16-1: the assertion runs in `Trade.tp`'s setter, i.e. on fill
+signal emitted {f} as target_price; ` + one of two endings (r17-1 — the helper empties the ladder on
+`rounded <= 0`, :345, so `{f}` can be exactly 0.00): `{f} < 0` → `had this bar's order FILLED, backtesting.py would
+have raised (0 < price assertion) and failed the symbol's whole backtest.`; `{f} == 0.00` → `had it filled, the
+short would have opened with NO take-profit (backtesting.py `_open_trade` sets tp only `if tp:`, :1105-1106), no
+raise.` (r16-1: the assertion runs in `Trade.tp`'s setter, i.e. on fill
 — backtesting.py `__set_contingent` — not when the order is placed; the signal is not called while in a trade, and
 an unfilled limit is cancelled by the next order under `exclusive_orders=True`, strategy_backtest.py:136.) — `{f}` computed from the recorded args with the module's own `_LADDER_MIN_FALLBACK_R`, the
 primary's status from the same 2dp comparison `_valid` makes. (P3a's docstring, strategy_engine.py:283-288, and
@@ -383,8 +386,8 @@ primary's status from the same 2dp comparison `_valid` makes. (P3a's docstring, 
 the raise into `_empty_result`.) Summary per series: signal-fire count — an UPPER BOUND on what the backtest
 evaluates (r15-5: the backtest calls the signal only while flat, strategy_backtest.py:125; the script calls it on
 every bar) — how many had a non-positive raw rung, how many had an empty real ladder, the minimum raw rung and the
-minimum fallback, with dates, and the FIRST empty-ladder bar — the EARLIEST bar at which the pre-P3a backtest could have raised,
-not necessarily the one that did (r16-1).
+minimum fallback, with dates, and the FIRST empty-ladder bar with `{f} < 0` — the EARLIEST bar at which the pre-P3a backtest could have
+raised, not necessarily the one that did (r16-1, r17-1) — plus the count of `{f} == 0.00` bars.
 Nothing is reimplemented except that one-line empty-ladder fallback, so there is no ordering or rounding rule to
 drift.
 
@@ -626,7 +629,9 @@ shipped, awaiting Kenneth's run" (not closed). New entries: the stale stock_scan
 comments (L11, L12), the scan-vs-fire END difference (item 6), `run_scan`'s cancellation gap (item 7),
 the relative_strength DB-miss misalignment residual (r2-M6), P3a's `_valid` keeping a positive rung below 0.005
 that rounds to 0.0 (strategy_engine.py:300-311 — the `value <= 0` test runs before rounding; practically
-unreachable, P3a's code; round-16 observation), the ScanFunnel unmeasured stage (r2-M7), the
+unreachable, P3a's code; round-16 observation; BEARISH only — a bullish 0.0 fails the entry-side test at :310 —
+and the effect is a short opened with NO take-profit, since backtesting.py skips a falsy tp (:1105-1106), not the
+raise P3a guarded against — r17-2), the ScanFunnel unmeasured stage (r2-M7), the
 stale "market structure does not support" text in the frontend fixture `step-4-ranking/__tests__/emptyStateBanner.test.tsx:21-22` (r3-L5).
 The two Kenneth decisions above go to the front of `decisions`. One new decision
 per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `direction_conviction_unmeasured` in scan.py.
@@ -872,3 +877,13 @@ ValidationError handling; the two series consistent everywhere.
 
 Observation (out of scope, P3a's code): `_valid` can keep a sub-0.005 positive rung that rounds to 0.0 — logged in
 State updates.
+
+## Round-17 log (2 findings; scope: the r17 diff)
+
+The r16 reasoning verified against backtesting 0.6.6 (`__set_contingent` on the `tp` setter, on fill; `new_order`
+does not assert; `exclusive_orders` cancels pending orders); refs :292-295 and ohlcv_daily.py:29-30 correct.
+
+| # | Sev | Finding | Resolution (r18) |
+|---|---|---|---|
+| 1 | LOW | §5 label's "would have raised" is false when `{f}` is exactly 0.00: backtesting.py skips a falsy tp, so the short opens with no TP | label split on `{f} < 0` vs `== 0.00`; summary's first bar is the first with `{f} < 0`, plus a count of 0.00 bars |
+| 2 | LOW | State-updates `_valid` entry omitted bearish-only and the no-TP (not raise) effect | added |
