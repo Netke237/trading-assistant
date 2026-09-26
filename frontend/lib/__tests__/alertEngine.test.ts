@@ -1,4 +1,4 @@
-import { scanPortfolio, type AlertPosition } from '@/lib/alertEngine';
+import { scanPortfolio, TIME_STOP_DTE, type AlertPosition } from '@/lib/alertEngine';
 import type { AlertType } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 
@@ -124,6 +124,14 @@ describe('scanPortfolio', () => {
       .find(r => r.alertType === 'PREMIUM_STOP')!;
     expect(hit.price).toBe(1.75);
     expect(hit.referenceValue).toBeCloseTo(2.00, 10);
+  });
+
+  it('stores the threshold rounded the way Python round(x, 4) does, including an exact tie (P2-22)', () => {
+    // entry 2.0625 at 50% -> threshold 1.03125 exactly, a binary tie at 4dp.
+    // Python stores round(1.03125, 4) = 1.0312 (half-to-even); Math.round gave 1.0313.
+    const tie = scanPortfolio([makePosition({ entryPrice: 2.0625, currentPrice: 1.0 })], { premiumStopPct: 0.5 })
+      .find(r => r.alertType === 'PREMIUM_STOP')!;
+    expect(tie.referenceValue).toBe(1.0312);
   });
 
   it('fires STOP_REACHED for a Bearish position when price rises above stop, not below', () => {
@@ -324,6 +332,14 @@ describe('scanPortfolio', () => {
     const position = makePosition({ dteRemaining: 1 });
     const out = scanPortfolio([position]);
     expect(out.some((a) => a.alertType === 'TIME_STOP')).toBe(true);
+  });
+
+  it('fires TIME_STOP at exactly TIME_STOP_DTE and not one day before it (P2-03)', () => {
+    expect(TIME_STOP_DTE).toBe(3);
+    const fires = (dteRemaining: number) =>
+      scanPortfolio([makePosition({ dteRemaining })]).some((a) => a.alertType === 'TIME_STOP');
+    expect(fires(TIME_STOP_DTE)).toBe(true);
+    expect(fires(TIME_STOP_DTE + 1)).toBe(false);
   });
 
   it('uses currentStockPrice, not the option premium, for STOP_REACHED on an option position', () => {

@@ -9,20 +9,27 @@ interface StageProps {
   count: number;
   rejected?: number;
   rejectedLabel?: string;
+  /** Several labelled removals on one stage (e.g. the stock Direction stage's
+   *  "no conviction" and "no data"); parts with 0 are not shown. Overrides
+   *  `rejected`/`rejectedLabel`. */
+  rejectedParts?: { count: number; label: string }[];
   total: number;
   wide?: boolean;
 }
 
-function Stage({ label, count, rejected, rejectedLabel, total, wide }: StageProps) {
+function Stage({ label, count, rejected, rejectedLabel, rejectedParts, total, wide }: StageProps) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  const parts = rejectedParts
+    ? rejectedParts.filter((p) => p.count > 0)
+    : rejected != null && rejected > 0 ? [{ count: rejected, label: rejectedLabel ?? '' }] : [];
   return (
     <>
       <div className={wide ? styles.stageWide : styles.stage}>
         <Text size={11} tone="secondary">{label}</Text>
         <Data size={12} weight={500}>{count}</Data>
-        {rejected != null && rejected > 0 ? (
+        {parts.length > 0 ? (
           <span className={styles.rejected}>
-            −{rejected}{rejectedLabel ? ` ${rejectedLabel}` : ''}
+            {parts.map((p) => `−${p.count}${p.label ? ` ${p.label}` : ''}`).join(' · ')}
           </span>
         ) : <span />}
       </div>
@@ -98,8 +105,15 @@ export function ScanFunnel({ mode, pipeline }: Props) {
     const p = pipeline as StockPipeline;
     const failedRegime    = dropped(p.failed_regime);
     const failedDirection = dropped(p.failed_direction);
+    // P3a: the same gate removing a name with NO trend measurement ("no data"),
+    // counted apart from a measured trend below the floor.
+    const failedDirectionUnmeasured = dropped(p.failed_direction_unmeasured);
     const failedShortlist = dropped(p.failed_shortlist);
     const otherRejected   = dropped(p.other_rejected);
+    // The floor THIS scan applied, read from the result (not a config fetch).
+    const noConvictionLabel = typeof p.direction_min_trend === 'number'
+      ? `no conviction (trend < ${p.direction_min_trend})`
+      : 'no conviction';
     // Stage order MIRRORS THE BACKEND'S GATE ORDER (stock_scan.py: score ->
     // direction -> regime -> signal -> backtest). Listing them in any other
     // order still reconciles at the bottom, but every intermediate count then
@@ -111,7 +125,7 @@ export function ScanFunnel({ mode, pipeline }: Props) {
     const afterErrors    = p.scanned - otherRejected;
     const afterHistory   = afterErrors - p.failed_history;
     const afterScore     = afterHistory - p.failed_score;
-    const afterDirection = afterScore - failedDirection;
+    const afterDirection = afterScore - failedDirection - failedDirectionUnmeasured;
     const afterRegime    = afterDirection - failedRegime;
     const afterSignal    = afterRegime - p.failed_signal;
     const afterBacktest  = afterSignal - p.failed_backtest;
@@ -135,8 +149,11 @@ export function ScanFunnel({ mode, pipeline }: Props) {
         <UnattributedNote count={otherRejected} />
         <Stage label="History"    count={afterHistory}  rejected={p.failed_history}  rejectedLabel="no history" total={p.scanned} />
         <Stage label="Score gate" count={afterScore}    rejected={p.failed_score}    rejectedLabel="REJECT"     total={p.scanned} />
-        {failedDirection > 0 && (
-          <Stage label="Direction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
+        {failedDirection + failedDirectionUnmeasured > 0 && (
+          <Stage label="Direction" count={afterDirection} total={p.scanned} rejectedParts={[
+            { count: failedDirection, label: noConvictionLabel },
+            { count: failedDirectionUnmeasured, label: 'no data' },
+          ]} />
         )}
         {failedRegime > 0 && (
           <Stage label="Regime"    count={afterRegime}    rejected={failedRegime}    rejectedLabel="headwind"      total={p.scanned} />

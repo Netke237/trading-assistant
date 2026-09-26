@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
-import { stockScanFailureReason, STOCK_SCAN_SETTINGS_INVALID } from '@/lib/stockScan';
+import { stockScanFailureReason, STOCK_SCAN_SETTINGS_INVALID, scanSizingFromRisk, ScanSizingError } from '@/lib/stockScan';
 import { useShallow } from 'zustand/shallow';
 import { api, getLastDataRefresh } from '@/lib/api';
 import styles from './page.module.css';
@@ -188,7 +187,6 @@ export default function Step5StrategyPage() {
     breakout_base:         `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
   };
 
-  const portfolioValue = useRiskStore((s) => s.limits.portfolioValue);
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshTs, setLastRefreshTs] = useState<string | null>(null);
@@ -226,6 +224,9 @@ export default function Step5StrategyPage() {
       // at click time, as runStockScan does.
       const scan = useScanStore.getState();
       const ctx = scan.context;
+      // The user's sizing, read at click time (P3a); throws ScanSizingError
+      // on a 0% max loss, shown below as-is.
+      const sizing = scanSizingFromRisk();
       const requestBody = buildStockScanRequestBody({
         universe: ctx?.universe ? [ctx.universe] : ['SP500'],
         direction: ctx?.direction ?? 'Bullish',
@@ -239,10 +240,8 @@ export default function Step5StrategyPage() {
           (scan.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false,
         scanOverrides: scan.scanOverrides,
         confidenceGate: useSettingsStore.getState().confidenceGate,
-        // Deliberately the user's real account value, not runStockScan's
-        // hardcoded 50_000 (a separate, pre-existing concern there).
-        accountSize: portfolioValue,
-        riskPct: 0.01,
+        accountSize: sizing.accountSize,
+        riskPct: sizing.riskPct,
       });
       reachedRequest = true;
       const result = await api.postStockScan(requestBody);
@@ -250,8 +249,9 @@ export default function Step5StrategyPage() {
       router.push('/screener/step-6-backtest');
     } catch (e) {
       // The raw error goes to the console so the detail survives for debugging.
-      if (!reachedRequest) console.error('Step 5: building the stock-scan request failed', e);
-      setError(reachedRequest ? stockScanFailureReason(e) : STOCK_SCAN_SETTINGS_INVALID);
+      if (!reachedRequest && !(e instanceof ScanSizingError)) console.error('Step 5: building the stock-scan request failed', e);
+      setError(e instanceof ScanSizingError ? e.message
+        : reachedRequest ? stockScanFailureReason(e) : STOCK_SCAN_SETTINGS_INVALID);
     } finally {
       setLoadingStrategy(null);
       // Refresh last-run status/strategy from the backend so TopBar/Settings

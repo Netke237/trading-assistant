@@ -156,6 +156,15 @@ def _unknown_key_hint(sizing: Mapping[str, Any]) -> str:
     return f" Unrecognised key(s) present: {', '.join(unknown)}."
 
 
+# Whether the `full_conviction_pct: 0` ERROR has been logged in this process.
+_ZERO_FULL_LOGGED = False
+
+
+def _mark_zero_full_logged() -> None:
+    global _ZERO_FULL_LOGGED
+    _ZERO_FULL_LOGGED = True
+
+
 def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | None:
     """Return `(min_mult, full_conviction_pct)`, or None when sizing is off.
 
@@ -217,12 +226,18 @@ def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | No
     full = _number(sizing["full_conviction_pct"], "full_conviction_pct")
     if full == 0:
         # D-A1 (b). Not silent: a zero here is still a file that needs fixing.
-        logger.error(
+        # ONCE PER PROCESS at ERROR (P3b): resolve_sizing runs twice per fire
+        # and up to N+1 times per scan, so logging every resolve printed the
+        # same line over and over. Later resolves go to DEBUG; the fallback
+        # itself is unchanged.
+        _log = logger.debug if _ZERO_FULL_LOGGED else logger.error
+        _log(
             "regime_sizing.full_conviction_pct is 0 — falling back to the default "
             "%s. Fix scoring_rules.yaml; every position is being sized off a "
             "default, not off your config.",
             DEFAULT_FULL_CONVICTION_PCT,
         )
+        _mark_zero_full_logged()
         full = DEFAULT_FULL_CONVICTION_PCT
     elif full < 0:
         raise SizingConfigError(

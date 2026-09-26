@@ -57,7 +57,8 @@ def todays_bar_is_unclosed(now: datetime | None = None) -> bool:
     path has an hours gate at all. So after 16:00 ET the unconditional trim was
     dropping a bar that had CLOSED, which the scan had seen: measured at 0.50%
     of Position fires flipping, including scan PASS -> gate ABSTAIN, and an
-    abstain fires UNGATED AT FULL ARMED QUANTITY.
+    abstain fires UNGATED (then at full armed quantity; since SIZING-4 at the
+    min_mult floor when regime_sizing is on, full quantity only with it off).
 
     THE TEST IS REAL SESSION HOURS IN `MARKET_TZ`, NOT A PRICE PROBE, and it is
     the scheduler's existing one rather than a second copy: `_market_open`
@@ -97,9 +98,10 @@ def todays_bar_is_unclosed(now: datetime | None = None) -> bool:
 
     THE RAISE'S OWN RESIDUAL, because this file's exceptions are not free: it
     is thrown inside `_fetch_scan_window_bars`, whose caller
-    `_measure_trade_regime` catches bare `Exception -> return None`, and that
-    abstain FIRES UNGATED AT FULL ARMED QUANTITY. So a naive argument would be
-    a loud failure in a test run and a SILENT fail-open in production. It is
+    `_measure_trade_regime` turns any fetch exception into a REFUSAL
+    (RegimeDataUnavailableError, P3b; it used to abstain and fire ungated). So
+    a naive argument would be a loud failure in a test run and a refused fire
+    in production -- fail-closed, but every armed trade refused. It is
     unreachable today -- the one production call site (the end-trim) passes no
     argument at all and takes the `None` branch -- and it is pinned unreachable
     by the call-site test, which drives the real helper through that call site.

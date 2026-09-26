@@ -44,10 +44,16 @@ def _save_risk(data: dict) -> None:
 
 
 class RiskConfig(BaseModel):
+    # P2-02 (decision Q7): capped at 0.99. 1.0 is not a stop but a total loss
+    # (threshold entry x 0 = $0.00, which neither alert engine fires on), and
+    # 0.99 is the same maximum the per-position editors accept
+    # (frontend/lib/premiumStop.ts PREMIUM_STOP_MAX_PCT). GET below returns a
+    # stored value UNCLAMPED, so a legacy 1.0 is visible to the Settings page,
+    # which warns about it and saves 0.99.
     premiumStopPct: float = Field(
         default=0.60,
         ge=0.10,
-        le=1.0,
+        le=0.99,
         description='Stop out when option loses this fraction of premium (0.60 = 60% loss)',
     )
     portfolioValue: Optional[float] = Field(

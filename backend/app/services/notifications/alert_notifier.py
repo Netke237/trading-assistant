@@ -66,8 +66,12 @@ _fired_lock = threading.Lock()
 _DEDUP_PATH = Path(__file__).parent.parent.parent.parent / 'alert_dedup.json'
 
 
-def _save_dedup() -> None:
+def _save_dedup() -> bool:
     """Persist dedup state. Caller must hold _fired_lock.
+
+    Returns True when the file was written, False when it was not. It still
+    never raises -- every existing caller relies on that -- but a caller that
+    must know whether the ON-DISK state matches memory (`forget_alerts`) can.
 
     ATOMIC: serialise first, write a unique temp file beside the target, fsync
     it, then os.replace() it over the target. The old bare open(path, 'w')
@@ -87,8 +91,10 @@ def _save_dedup() -> None:
             os.fsync(f.fileno())
         os.replace(tmp_name, _DEDUP_PATH)
         tmp_name = None
+        return True
     except Exception:
         logger.warning('Could not persist dedup state', exc_info=True)
+        return False
     finally:
         if tmp_name is not None:
             try:
@@ -300,13 +306,17 @@ async def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
     return True
 
 
-def forget_alerts(rec_ids: set[str]) -> None:
+def forget_alerts(rec_ids: set[str]) -> bool:
     """Drop dedup entries for the given recIds so a re-entry can alert again.
 
     Called by the monitor when positions disappear from the portfolio.
+
+    Returns False when the in-memory holds were cleared but the file could not
+    be written, so the ON-DISK hold survives a restart (P3b). The portfolio
+    monitor ignores the result; the auto-trader's callers report it.
     """
     if not rec_ids:
-        return
+        return True
     with _fired_lock:
         to_remove = {k for k in _fired if k.split('|', 1)[0] in rec_ids}
         for k in to_remove:
@@ -316,6 +326,7 @@ def forget_alerts(rec_ids: set[str]) -> None:
         stale_first = {k for k in _first_seen if k.split('|', 1)[0] in rec_ids}
         for k in stale_first:
             _first_seen.pop(k, None)
-        _save_dedup()
+        saved = _save_dedup()
     if to_remove:
         logger.info('Cleared %d dedup entries for closed positions', len(to_remove))
+    return saved

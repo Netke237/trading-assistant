@@ -213,11 +213,18 @@ def _make_bearish_bars(n: int = 130) -> list[dict]:
     return bars
 
 
+def _measured_trend():
+    """A measured, passing trend rule: since P3a the direction gate removes a
+    card with no trend rule (or an unmeasured one) as "no data"."""
+    from app.scoring.stock_scorer import RuleResult
+    return RuleResult("trend", "PASS", 90, {})
+
+
 def _pass_card(symbol: str = "TSLA"):
     from app.scoring.stock_scorer import StockScoreCard
     return StockScoreCard(
         symbol=symbol, direction="Bearish", horizon="Swing",
-        score=72, status="PASS", rules=[],
+        score=72, status="PASS", rules=[_measured_trend()],
     )
 
 
@@ -353,7 +360,7 @@ def test_stock_scan_rejects_symbol_with_non_contracting_volume_pullback(stock_cl
     def _pass_card_bullish(symbol: str = "AAPL"):
         return StockScoreCard(
             symbol=symbol, direction="Bullish", horizon="Swing",
-            score=72, status="PASS", rules=[],
+            score=72, status="PASS", rules=[_measured_trend()],
         )
 
     with (

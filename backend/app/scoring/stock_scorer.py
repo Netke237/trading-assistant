@@ -23,6 +23,13 @@ class RuleResult:
     status: Status
     score: int          # 0–100 component score before weighting
     detail: dict        # arbitrary key-value pairs for UI explainability
+    # False when the rule had nothing to measure (too few bars for its MA, no
+    # benchmark series for relative strength) and `score` is a placeholder, not
+    # a reading. The stock-scan direction gate removes such a name as "no data"
+    # rather than judging the placeholder (decision
+    # P3A-UNMEASURED-TREND-REMOVE-2026-09-25). Defaulted, so every existing
+    # construction reads as measured.
+    measured: bool = True
 
 
 @dataclass
@@ -52,6 +59,26 @@ def _load_config() -> dict:
 def _horizon_cfg(horizon: Horizon) -> dict:
     key = horizon.lower()   # "swing" | "intraday" | "position"
     return _load_config()["horizons"][key]
+
+
+def resolve_rs_benchmark(horizon: Horizon, overrides: dict | None) -> str | None:
+    """The benchmark name ("SPX", "NDX", ...) the trend rule will compare
+    against for `horizon` with these `overrides`, or None when the effective
+    trend method is not relative_strength (no benchmark series is needed).
+
+    Mirrors score_stock's own resolution exactly: the `trend_method` and
+    `rs_benchmark` override keys win over the horizon's config, and a config
+    with no `method` is additive (see _rule_trend). The scan uses this to fetch
+    the one benchmark series the scorer will read, so the two must not drift.
+    """
+    ov = overrides or {}
+    tcfg = _horizon_cfg(horizon)["trend"]
+    method = str(ov["trend_method"]) if "trend_method" in ov else tcfg.get("method", "additive")
+    if method != "relative_strength":
+        return None
+    if "rs_benchmark" in ov:
+        return str(ov["rs_benchmark"])
+    return str(tcfg["relative_strength"].get("benchmark", "NDX"))
 
 
 def _thresholds() -> dict:
@@ -189,7 +216,8 @@ def _trend_crossover(
     slow_ma = ma_func(closes, slow_p)
 
     if not fast_ma or not slow_ma:
-        return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data", "method": "crossover"})
+        return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data", "method": "crossover"},
+                          measured=False)
 
     fast_val = fast_ma[-1]
     slow_val = slow_ma[-1]
@@ -260,7 +288,8 @@ def _trend_additive(
 
     ma_series = ma_func(closes, period)
     if not ma_series:
-        return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data", "method": "additive"})
+        return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data", "method": "additive"},
+                          measured=False)
 
     current_close = closes[-1]
     current_ma = ma_series[-1]
@@ -337,6 +366,7 @@ def _trend_relative_strength(
         return RuleResult(
             "trend", "CAUTION", 50,
             {"reason": "no_benchmark_data", "method": "relative_strength", "benchmark": benchmark},
+            measured=False,
         )
 
     stock_roc = _roc(closes, period)

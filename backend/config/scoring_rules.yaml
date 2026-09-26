@@ -474,8 +474,12 @@ regime_sizing:
   # Raise min_mult to size up across the board; lower it to size down.
   #
   # The gate does NOT bound the floor: `regime_gate` REJECTs at or below -40
-  # only in a Stable regime (require_stable_for_reject). In a Fragile regime a
-  # trade below -40 survives and is sized at min_mult.
+  # only in a Stable regime (require_stable_for_reject). On the AUTO-TRADER a
+  # Fragile-regime trade below -40 survives and is sized at min_mult. On the
+  # SCAN CARD it may never get that far: with Step 3's regime filter on
+  # (req.regime_filter) anything at or below the caution threshold is dropped
+  # first. -40 is the shipped value; Step 3 can override both thresholds per
+  # run.
   min_mult: 0.3
   full_conviction_pct: 40
 

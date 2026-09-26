@@ -131,6 +131,24 @@ class RegimeHeadwindError(RuntimeError):
     """
 
 
+class RegimeDataUnavailableError(RuntimeError):
+    """The bars needed to measure this trade's regime could not be had.
+
+    P3b, decision P3B-REGIME-BARS-MISSING-REFUSES-2026-09-25 (Kenneth): the
+    fetch timed out, raised, or returned no bars. The scan DROPS a symbol whose
+    candles it cannot get ("no market data"), so the fire path refuses too,
+    rather than abstaining and firing on a regime nobody measured. A series
+    that arrived but is too short, or that `compute_omm` cannot measure, still
+    abstains: the scan runs no regime gate there either.
+
+    Its own type, history status (`regime_data_blocked`) and alert, for the
+    reason every refusal here has them: its remedy -- "the data feed is down"
+    -- is neither "the market moved" nor "fix the config". A RuntimeError, so
+    POST /auto-trade/fire answers it with a 400 exactly as the headwind
+    refusal.
+    """
+
+
 class RegimeGateConfigError(RuntimeError):
     """`regime_gate` cannot be read, or cannot be applied as written.
 
@@ -159,8 +177,11 @@ class RegimeGateConfigError(RuntimeError):
 
     So: its own type, for the same reason `RegimeHeadwindError` above has one --
     a refusal must not be filed under a bucket whose remedy is the opposite of
-    the real one. This one means "fix scoring_rules.yaml's regime_gate block";
-    the headwind one means "the market moved against this trade".
+    the real one. This one means "fix the regime configuration this trade was
+    measured with" -- scoring_rules.yaml's regime_gate block, its
+    regime.<horizon> block (P3b), or a threshold the arm request carried; the
+    message names which. The headwind one means "the market moved against this
+    trade".
 
     Still a RuntimeError subclass, so POST /auto-trade/fire must catch it ABOVE
     its `(ValueError, RuntimeError)` 400 handler: it answers a prefixed 500, a
@@ -497,8 +518,40 @@ def _load_regime_cfg(horizon: str) -> dict:
     `_scfg["regime"][horizon.lower()]` in `routers/scan.py`. Read off the SAME
     cached doc as the two blocks above, for the reason stated there: one file,
     one reader.
+
+    SHAPE-CHECKED (P3b). A missing `regime` block or a missing horizon entry
+    returns {} and the gate abstains, as before. A MALFORMED one -- `regime`
+    or the horizon entry not a mapping, or a `min_obs` that is not a positive
+    number -- used to raise AttributeError/TypeError outside every handler in
+    `fire()`, consuming the armed order with no history row. It now raises
+    RegimeGateConfigError, which fire() records as
+    `regime_gate_config_blocked` and the scan trigger alerts.
     """
-    return (_load_scoring_doc().get("regime") or {}).get(horizon.lower(), {})
+    regime = _load_scoring_doc().get("regime")
+    if regime is None:
+        return {}
+    if not isinstance(regime, dict):
+        raise RegimeGateConfigError(
+            f"scoring_rules.yaml's regime block is not a mapping (got "
+            f"{type(regime).__name__}) — the regime window cannot be read"
+        )
+    rcfg = regime.get(horizon.lower())
+    if rcfg is None:
+        return {}
+    if not isinstance(rcfg, dict):
+        raise RegimeGateConfigError(
+            f"scoring_rules.yaml's regime.{horizon.lower()} block is not a "
+            f"mapping (got {type(rcfg).__name__}) — the regime window cannot "
+            f"be read"
+        )
+    if "min_obs" in rcfg and not (_is_real_number(rcfg["min_obs"])
+                                  and rcfg["min_obs"] > 0):
+        raise RegimeGateConfigError(
+            f"scoring_rules.yaml's regime.{horizon.lower()}.min_obs is "
+            f"{rcfg['min_obs']!r} rather than a positive number — the regime "
+            f"cannot be measured"
+        )
+    return rcfg
 
 
 def _resolve_regime_gate(strategy: ArmedStrategy) -> dict:
@@ -525,7 +578,14 @@ def _resolve_regime_gate(strategy: ArmedStrategy) -> dict:
 # timeout downstream. On expiry the gate ABSTAINS (see `_measure_trade_regime`),
 # which is the opposite of `_market_is_open`'s conservatism and matches the SCAN
 # instead: a scan with no regime signal applies no regime gate.
-_REGIME_FETCH_DEADLINE_S = 8.0
+#
+# P3b (decision P3B-REGIME-BARS-MISSING-REFUSES-2026-09-25): 25s, up from 8s,
+# and expiry now REFUSES (RegimeDataUnavailableError). 8s was shorter than the
+# 10s httpx timeout inside `fetch_candles`, so a stalled Tradier call used the
+# whole budget and the yfinance fallback could never answer. The "longer than
+# the price probe, shorter than any broker timeout" sentence above predates
+# this; it must stay ABOVE the provider timeout, which a test pins.
+_REGIME_FETCH_DEADLINE_S = 25.0
 
 # The scan's regime window, mirrored from `routers/scan.py`'s `_bar_start`
 # (`_bar_end - timedelta(days=int(1.75 * 252))`). It is 441 CALENDAR days, which
@@ -681,7 +741,9 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     # round-3 finding was that the gate decided on TODAY'S UNCLOSED BAR -- a bar
     # the scan that armed the card never saw. Measured, that flipped fire/no-fire
     # in up to 1.00% of position-Bearish cases: a +0.11% intraday tick turned a
-    # scan-REJECT into an ABSTAIN, and an abstain fires UNGATED AT FULL SIZE. It
+    # scan-REJECT into an ABSTAIN, and an abstain fires UNGATED (at the time at
+    # full size; since SIZING-4 at the min_mult floor when regime_sizing is on,
+    # full armed quantity only with it off). It
     # also made the refusal message ("the scan's own regime_gate rule drops this
     # setup") false in exactly those cases, because the scan's rule was not what
     # ran.
@@ -747,11 +809,9 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
         # Every bar in hand is today's or later, so there is NO completed data
         # to measure. Returning the untrimmed series would hand the gate back
         # the unclosed bar this decision exists to remove, so it returns empty
-        # and lets `_measure_trade_regime`'s `min_obs` check abstain with a log
-        # that names the bar count. That abstain fires ungated -- stated plainly
-        # rather than glossed -- but it is the same thing the scan does with a
-        # series it cannot measure (`regime_signal = None` -> no gate), and a
-        # feed holding only today's bar is a broken feed, not a fire decision.
+        # and `_measure_trade_regime` REFUSES the fire on no bars
+        # (RegimeDataUnavailableError, P3b) -- a feed holding only today's bar
+        # is a broken feed, and the scan drops a symbol with no market data.
         return []
 
     # START. The scan's anchor, not the series'.
@@ -765,9 +825,9 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
     # STALE-FEED NET, and this is why the start cannot be anchored on today
     # UNCONDITIONALLY. A feed that has stopped updating for longer than the
     # window has EVERY bar falling before a today-anchored cutoff, and empty is
-    # not a safe default: it fails `min_obs`, which abstains, and an abstain
-    # fires ungated -- the fail-open limb reached by a dead feed rather than by
-    # any agreement with the scan. So when today-anchoring would empty the
+    # not the right answer: since P3b an empty series REFUSES the fire, so a
+    # dead feed would refuse every trade even though it holds the bars to
+    # measure with. So when today-anchoring would empty the
     # series, fall back to anchoring the same span on the series' own newest
     # COMPLETED bar. The window degrades to "the most recent 441 days this feed
     # has" instead of to nothing.
@@ -904,29 +964,42 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
             bars = future.result(timeout=_REGIME_FETCH_DEADLINE_S)
         except concurrent.futures.TimeoutError:
             ex.shutdown(wait=False)
-            logger.warning(
-                "regime_gate: %s %s NOT evaluated — bars did not arrive within "
-                "%.0fs", strategy.symbol, strategy.direction,
-                _REGIME_FETCH_DEADLINE_S,
-            )
-            return None
+            # REFUSED, not abstained (P3b) -- see RegimeDataUnavailableError.
+            raise RegimeDataUnavailableError(
+                f"regime data unavailable: {strategy.symbol}'s bars did not "
+                f"arrive within {_REGIME_FETCH_DEADLINE_S:.0f}s, so its regime "
+                f"could not be measured and the trade was refused rather than "
+                f"fired on an unmeasured regime"
+            ) from None
         ex.shutdown(wait=False)
+    except RegimeDataUnavailableError:
+        raise
     except Exception as exc:
         ex.shutdown(wait=False)
-        logger.warning(
-            "regime_gate: %s %s NOT evaluated — bars unavailable: %s",
-            strategy.symbol, strategy.direction, exc,
+        raise RegimeDataUnavailableError(
+            f"regime data unavailable: fetching {strategy.symbol}'s bars "
+            f"failed ({exc}), so its regime could not be measured and the "
+            f"trade was refused rather than fired on an unmeasured regime"
+        ) from exc
+
+    if not bars:
+        # No bars at all is the scan's "no market data" drop, not its
+        # "too short to measure" no-gate -- refused (P3b).
+        raise RegimeDataUnavailableError(
+            f"regime data unavailable: no bars came back for "
+            f"{strategy.symbol}, so its regime could not be measured and the "
+            f"trade was refused rather than fired on an unmeasured regime"
         )
-        return None
 
     # The scan's own precondition, copied rather than re-invented
-    # (stock_scan.py:405, scan.py:548).
+    # (stock_scan.py:405, scan.py:548). A SHORT series still abstains: the
+    # scan runs no regime gate on it either.
     min_obs = rcfg.get("min_obs", 10)
-    if not bars or len(bars) < min_obs:
+    if len(bars) < min_obs:
         logger.warning(
             "regime_gate: %s %s NOT evaluated — %d bars is under the %d "
             "min_obs the %s regime needs",
-            strategy.symbol, strategy.direction, len(bars or []), min_obs,
+            strategy.symbol, strategy.direction, len(bars), min_obs,
             strategy.horizon,
         )
         return None
@@ -993,9 +1066,18 @@ def _measure_once(strategy: ArmedStrategy) -> "Callable[[], tuple[int, str] | No
     taken: list = []
 
     def measure() -> "tuple[int, str] | None":
+        # A REFUSAL IS MEMOISED TOO (P3b): the gate and the sizer must see one
+        # outcome and pay one fetch, so a RegimeDataUnavailableError is stored
+        # and re-raised rather than re-fetched by whichever asks second.
         if not taken:
-            taken.append(_measure_trade_regime(strategy))
-        return taken[0]
+            try:
+                taken.append(("ok", _measure_trade_regime(strategy)))
+            except RegimeDataUnavailableError as exc:
+                taken.append(("raised", exc))
+        kind, value = taken[0]
+        if kind == "raised":
+            raise value
+        return value
 
     return measure
 
@@ -1029,9 +1111,11 @@ def _apply_regime_gate(
 ) -> str:
     """Refuse a fire the scan's `regime_gate` would have hard-dropped.
 
-    Returns what it DID -- "disabled", "abstained", "caution" or "passed" --
-    for the fired history row (`ArmedStrategy.regime_gate_outcome`). A REJECT
-    does not return; it raises.
+    Returns what it DID -- "disabled", "abstained", "caution", "passed" or
+    "passed:caution-band-disabled" (a pass with an unusable caution threshold)
+    -- for the fired history row (`ArmedStrategy.regime_gate_outcome`). A
+    REJECT does not return; it raises, as do a config fault
+    (RegimeGateConfigError) and missing bars (RegimeDataUnavailableError).
 
     THE RULE IS NOT REIMPLEMENTED -- it is the same function the scan uses.
     NOR ARE ITS INPUTS RE-DERIVED, which is the half round 1 found missing:
@@ -1188,8 +1272,16 @@ def _apply_regime_gate(
     # block still reads `enabled: true`.
     reject = gate.get("headwind_reject_pct")
     if not _is_real_number(reject):
+        # NAME THE SOURCE (P3b). `resolve_regime_gate` overlays the arm
+        # request's value whenever it is not None, so a bad value can be the
+        # Step-3 threshold this trade was armed with, and the YAML is fine.
+        source = ("the Step-3 headwind reject threshold this trade was armed "
+                  "with (not scoring_rules.yaml)"
+                  if strategy.regime_headwind_reject_pct is not None
+                  else "scoring_rules.yaml's regime_gate.headwind_reject_pct")
         raise RegimeGateConfigError(
-            f"regime_gate is enabled but its headwind_reject_pct is "
+            f"regime_gate is enabled but its headwind_reject_pct, from "
+            f"{source}, is "
             f"{reject if 'headwind_reject_pct' in gate else '<missing>'!r} "
             f"rather than a finite number — the rule that decides refusals "
             f"cannot be evaluated, so {strategy.symbol} is refused rather than "
@@ -1240,6 +1332,8 @@ def _apply_regime_gate(
     # is a different audit target's function and is deliberately not reached
     # into from here; what is recorded is that the boundary is drawn by WHICH
     # FUNCTION OWNS THE INPUT, not by a judgement that one fault is safer.
+    # Missing bars RAISE out of here (RegimeDataUnavailableError, P3b); only a
+    # series that arrived but cannot be measured returns None and abstains.
     measured = measure() if measure is not None else _measure_trade_regime(strategy)
     if measured is None:
         # Every abstaining branch inside `_measure_trade_regime` has already
@@ -1284,6 +1378,18 @@ def _apply_regime_gate(
     if caution_band_disabled:
         return "passed:caution-band-disabled"
     return "passed"
+
+
+def _sized_quantity(quantity: int, mult: float) -> int:
+    """`quantity * mult` in whole contracts, ROUNDED DOWN, never below 1.
+
+    Decision P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25 (Kenneth). It was
+    `round()`, which rounds halves to EVEN (5 x 0.3 = 1.5 -> 2, but 2.5 -> 2).
+    Down matches the stock card's `int()` share count and never sizes up. The
+    1e-9 keeps a float product such as 10 x 0.7 = 6.999... from losing a
+    contract.
+    """
+    return max(1, math.floor(quantity * mult + 1e-9))
 
 
 def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
@@ -1373,7 +1479,7 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         # Re-resolved rather than held: resolve_sizing is pure and cheap, and
         # it already validated above, so this cannot raise here.
         min_mult = resolve_sizing(cfg)[0]
-        adjusted_qty = max(1, round(strategy.quantity * min_mult))
+        adjusted_qty = _sized_quantity(strategy.quantity, min_mult)
         logger.warning(
             "vol_sizing: %s %s qty %d → %d at the min_mult floor (%.2f) — its "
             "own regime could not be measured, so it is sized at the smallest "
@@ -1384,12 +1490,14 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         return _dc_replace(strategy, quantity=adjusted_qty,
                            sizing_basis="floor:unmeasured")
 
-    # CLOSED, AND THIS IS ONLY THE RECORD OF IT. Piece 2 round 1 finding 4 was
-    # that a trade at -80 in its own frame WAS sized to min_mult and STILL FIRED
-    # (`max(1, ...)` guarantees a contract) where the scan would have dropped
-    # it. The `_apply_regime_gate` call above refuses it.
+    # Piece 2 round 1 finding 4 was that a trade at -80 in its own frame WAS
+    # sized to min_mult and STILL FIRED (`max(1, ...)` guarantees a contract)
+    # where the scan would have dropped it. The `_apply_regime_gate` call above
+    # refuses it ONLY IN A STABLE REGIME (`require_stable_for_reject`, shipped
+    # true) -- which is also all the scan's rule drops. In a Fragile regime a
+    # -80 trade survives the gate and is sized here at min_mult.
     mult = conviction_mult(conviction, cfg)
-    adjusted_qty = max(1, round(strategy.quantity * mult))
+    adjusted_qty = _sized_quantity(strategy.quantity, mult)
     strategy = _dc_replace(strategy, sizing_basis="measured")
 
     if adjusted_qty == strategy.quantity:
@@ -1521,7 +1629,16 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
         # the NEXT refusal of this key is the one that goes unheard.
         try:
             from app.services.notifications.alert_notifier import forget_alerts
-            forget_alerts({rec_id})
+            if forget_alerts({rec_id}) is False:
+                # P3b: the in-memory hold is gone but the FILE still holds
+                # it, so a restart restores the hold.
+                logger.error(
+                    "AutoTrader: the %s for %s WAS delivered and its dedup "
+                    "hold cleared in memory, but the dedup file could not be "
+                    "written — after a restart the next refusal of this key "
+                    "will be suppressed for the rest of the window",
+                    what, symbol,
+                )
         except Exception as clear_exc:
             logger.error(
                 "AutoTrader: the %s for %s WAS delivered, but clearing its "
@@ -1597,11 +1714,12 @@ def _alert_regime_gate_config_refusal(symbol: str, exc: Exception) -> None:
         symbol,
         "regime-gate config refusal",
         (
-            f"Auto-trade REFUSED to fire {symbol}: scoring_rules.yaml's "
-            f"regime_gate block cannot be read or cannot be applied, so the "
-            f"headwind rule could not be evaluated and the trade was refused "
-            f"rather than fired ungated. Nothing was sent and the auto-trader "
-            f"is disarmed. {exc}"
+            f"Auto-trade REFUSED to fire {symbol}: the regime configuration "
+            f"this trade is measured with could not be read or applied, so "
+            f"the regime_gate headwind rule could not be evaluated and the trade was "
+            f"refused rather than fired ungated. Nothing was sent and the "
+            f"auto-trader is disarmed. The detail below names which setting "
+            f"is at fault. {exc}"
         ),
         _REC_ID_GATE_CONFIG,
         # ITS OWN TYPE, not the sizing alert's CONFIG_ERROR. Round 2: the
@@ -1656,6 +1774,33 @@ def _alert_regime_headwind_refusal(symbol: str, exc: Exception) -> None:
         # anyway: a refusal DISARMS the auto-trader, so a second refusal of the
         # same symbol requires a deliberate re-arm — and suppressing the answer
         # to a human's re-arm is the opposite of what the window is for.
+        discrete=True,
+    )
+
+
+_REC_ID_REGIME_DATA = "auto-trade-regime-data-unavailable"
+
+
+def _alert_regime_data_refusal(symbol: str, exc: Exception) -> None:
+    """Alert a refusal for missing regime bars (P3b, RegimeDataUnavailableError).
+
+    PER SYMBOL AND DISCRETE, for the headwind alert's reasons: a feed outage
+    can refuse several symbols inside one dedup window, and each refusal is an
+    event. Its own type because its remedy -- check the data feed, then re-arm
+    -- is neither the headwind's nor the config alerts'.
+    """
+    _alert_refusal(
+        symbol,
+        "regime-data refusal",
+        (
+            f"Auto-trade REFUSED to fire {symbol}: the price bars needed to "
+            f"measure its regime could not be fetched, so the trade was "
+            f"refused rather than fired on an unmeasured regime. Nothing was "
+            f"sent and the auto-trader is disarmed — check the market-data "
+            f"feed, then re-arm. {exc}"
+        ),
+        _per_symbol_rec_id(_REC_ID_REGIME_DATA, symbol),
+        "AUTO_TRADE_REGIME_DATA_UNAVAILABLE",
         discrete=True,
     )
 
@@ -1751,6 +1896,8 @@ _STATUS_STALE_BLOCKED = "stale_blocked"
 # routes to the unclassified alert, which is what it is. A consumed order
 # always leaves a row.
 _STATUS_RISK_CHECK_FAILED = "risk_check_failed"
+# P3b: the bars to measure the regime could not be had (RegimeDataUnavailableError).
+_STATUS_REGIME_DATA_BLOCKED = "regime_data_blocked"
 
 
 def _clear_config_refusal_holds() -> None:
@@ -1786,7 +1933,14 @@ def _clear_config_refusal_holds() -> None:
     """
     try:
         from app.services.notifications.alert_notifier import forget_alerts
-        forget_alerts({_REC_ID_SIZING, _REC_ID_GATE_CONFIG})
+        if forget_alerts({_REC_ID_SIZING, _REC_ID_GATE_CONFIG}) is False:
+            # P3b: cleared in memory, not on disk -- a restart restores it.
+            logger.error(
+                "AutoTrader: the fire succeeded and the config-refusal alert "
+                "holds were cleared in memory, but the dedup file could not be "
+                "written — after a restart the next config refusal may arrive "
+                "stamped as a reminder of an older one",
+            )
     except Exception as exc:
         logger.error(
             "AutoTrader: the fire succeeded, but clearing the config-refusal "
@@ -2214,6 +2368,27 @@ class AutoTradeService:
                 strategy.symbol, strategy.direction, exc,
             )
             raise
+        except RegimeDataUnavailableError as exc:
+            # P3b: the bars to measure the regime could not be had, so the
+            # fire is refused (decision P3B-REGIME-BARS-MISSING-REFUSES-
+            # 2026-09-25). Its own status: the remedy is the data feed.
+            with self._lock:
+                self._state.history.append({
+                    "attempt_id":      attempt_id,
+                    "order_id":        None,
+                    "status":          _STATUS_REGIME_DATA_BLOCKED,
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
+                })
+            logger.error(
+                "AutoTrader fire REFUSED for %s %s — %s",
+                strategy.symbol, strategy.direction, exc,
+            )
+            raise
         except RegimeGateConfigError as exc:
             # ITS OWN BRANCH FOR THE SAME REASON THE ONE ABOVE HAS ONE, and
             # target 2a round 1 measured what its absence cost. A regime_gate
@@ -2491,8 +2666,9 @@ class AutoTradeService:
                 # an unknown word included, books the full premium.
                 "premium_at_risk": (0.0 if _is_rejected_status(result.status)
                                     else this_risk),
-                # WHAT THE HEADWIND GATE DID: "passed", "caution", "abstained"
-                # or "disabled". Target 2a round 1: a trade the gate never
+                # WHAT THE HEADWIND GATE DID: "passed",
+                # "passed:caution-band-disabled", "caution", "abstained" or
+                # "disabled". Target 2a round 1: a trade the gate never
                 # evaluated (fail-open, and the dominant outcome on this repo's
                 # fixtures) produced a row indistinguishable from one it passed,
                 # so a degraded data feed and a clean week looked identical
@@ -2692,6 +2868,8 @@ class AutoTradeService:
             # these classes are disjoint, so this is about reading order, not
             # precedence.
             _alert_regime_headwind_refusal(strategy.symbol, exc)
+        except RegimeDataUnavailableError as exc:
+            _alert_regime_data_refusal(strategy.symbol, exc)
         except RegimeGateConfigError as exc:
             _alert_regime_gate_config_refusal(strategy.symbol, exc)
         except SizingConfigError as exc:
@@ -2851,6 +3029,8 @@ class AutoTradeService:
             _alert_sizing_config_refusal(symbol, exc)
         elif status in _RISK_BLOCKED_STATUSES:
             _alert_risk_limit_refusal(symbol, exc, status)
+        elif status == _STATUS_REGIME_DATA_BLOCKED:
+            _alert_regime_data_refusal(symbol, exc)
         elif status == "not_submitted":
             # ABOVE `order_failed` for readability only — the two statuses
             # are disjoint, so this is reading order, not precedence.

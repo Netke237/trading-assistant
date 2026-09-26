@@ -112,6 +112,34 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
   };
 }
 
+export type PremiumStopDropNotice = {
+  symbol: string; contract: string; requestedDollar: number; at: number;
+};
+
+/** P2-09 (R1-7) -- adopt the server's entry price on a row, and reset the
+ *  row's mark to it.
+ *
+ *  The three sites that fold the server's `entryPrice` onto a row used to keep
+ *  the client's `currentPrice`/`pnlDollar`/`pnlPct`, which were computed
+ *  against the CARD'S mid: a $5.20 mid filled at $4.00 showed a +30% P&L on a
+ *  position that had not moved. The row has no quote newer than the booking,
+ *  so its mark is the entry and its P&L is 0 until the next sync brings the
+ *  live mark. A stock row's `currentStockPrice` mirrors `currentPrice`
+ *  (see AlertPosition), so it moves with it. No entry reported -> the row is
+ *  returned unchanged. */
+export function withServerEntry<T extends PortfolioPosition>(row: T, entry: number | null | undefined): T {
+  if (entry == null) return row;
+  const isStock = row.contract.endsWith('|STOCK');
+  return {
+    ...row,
+    entryPrice: entry,
+    currentPrice: entry,
+    pnlDollar: 0,
+    pnlPct: 0,
+    ...(isStock ? { currentStockPrice: entry } : {}),
+  };
+}
+
 interface PortfolioStoreState {
   positions: PortfolioPosition[];
   /** Last backend rejection of a save, for the UI to surface. Null when clean. */
@@ -122,7 +150,13 @@ interface PortfolioStoreState {
    *  do, and folded `premiumStopPct ?? null` onto the row saying nothing. The
    *  row inherits the global, which is a TIGHTER stop than the one asked for.
    *  The portfolio page renders this the same way it renders lastSyncError. */
-  lastPremiumStopDropped: { symbol: string; contract: string; requestedDollar: number; at: number } | null;
+  lastPremiumStopDropped: PremiumStopDropNotice | null;
+  /** P2-08 -- every undismissed drop, oldest first. `lastPremiumStopDropped`
+   *  is always this queue's head, so the page renders one notice at a time
+   *  and a second drop is shown after the first is dismissed instead of being
+   *  lost. Not persisted (partialize keeps only `positions`). */
+  premiumStopDropQueue: PremiumStopDropNotice[];
+  /** Dismisses the notice on screen (the queue head); the next one shows. */
   clearPremiumStopDropped: () => void;
   clearSyncError: () => void;
   hydrate:        (positions: PortfolioPosition[]) => void;
@@ -253,14 +287,24 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,
-    scanStockPrice: p.scanStockPrice ?? null,
+    // P2-10 (R2-2) -- a row the server has ACCEPTED ('synced') carries stop,
+    // structuralStop and targets the server already re-anchored to the live
+    // price (position_writer.create_position). Re-sending its scan price would
+    // shift them a second time on any re-POST (syncToBackend, the close-after-
+    // 404 re-send), and `stopIsUserSet: true` would switch on the wrong-side
+    // 422 there. So a synced row sends neither: the writer stores the levels
+    // as they stand. A row the server has never accepted (pending) still
+    // sends both, as the create needs them. Residual, logged: a promoted row
+    // not yet reconciled by a GET that is re-POSTed after a backend loss
+    // stores its levels unshifted.
+    scanStockPrice: p.syncStatus === 'synced' ? null : (p.scanStockPrice ?? null),
     // Round 9 — tells the router NOT to re-anchor `stop` by
     // (live price - scanStockPrice). A stop the user typed on the trade card
     // is an absolute price against today's quote; the plan-derived levels
     // beside it still scale with the underlying. Without this a $180 stop
     // typed on a $200 stock scanned at $145 was stored as $235 -- above spot,
     // firing a Critical STOP_REACHED on the first backend scan.
-    stopIsUserSet: p.stopIsUserSet ?? false,
+    stopIsUserSet: p.syncStatus === 'synced' ? false : (p.stopIsUserSet ?? false),
     tradeCardSnapshot: p.tradeCardSnapshot ?? null,
     // Phase G (piece 5) — sent explicitly null rather than omitted when no
     // pick exists (the S5 auto-executor's shape, spec §7.3), matching every
@@ -502,11 +546,10 @@ export function applyPersistedPosition(
   // cover this case. That argument -- entry x (1 - dollar/entry) = entry -
   // dollar, so the dollar loss survives any entry -- holds only when ONE entry
   // is used for both the derivation and the threshold. Here they differed.
-  void addPosition({
+  void addPosition(withServerEntry({
     ...pos,
     premiumStopPct: saved.premiumStopPct ?? null,
-    ...(saved.entryPrice != null ? { entryPrice: saved.entryPrice } : {}),
-  }, { skipPost: true });
+  }, saved.entryPrice), { skipPost: true });
   return { rejected: false };
 }
 
@@ -764,8 +807,11 @@ export function migratePortfolioPersist(state: unknown, version: number): unknow
       // divides it by the persisted entry price and stores the fraction, so
       // keeping it on a synced row persists a number that no longer describes
       // the position and that nothing reads back.
-      if (floored.premiumStopPct === undefined) floored.premiumStopPct = null;
-      if (floored.syncStatus === 'synced') delete floored.premiumStopDollar;
+      //
+      // P2-07 -- each version step is gated by the version it upgrades from.
+      // The synced-row `premiumStopDollar` clean-up moved to the v5 -> v6 step
+      // below, which covers every older version too.
+      if (version < 3 && floored.premiumStopPct === undefined) floored.premiumStopPct = null;
       // v3 -> v4, ROUND 10 finding 16. `stopIsUserSet` was added to
       // PortfolioPosition (a persisted shape) with no version bump, which is
       // the same omission PROJECT_STATE records round 3 catching on this very
@@ -776,7 +822,7 @@ export function migratePortfolioPersist(state: unknown, version: number): unknow
       // what an existing row means -- its stop came from a plan, so the server
       // SHOULD keep re-anchoring it. Normalising here rather than relying on
       // the `??` keeps the persisted shape honest about itself.
-      if (floored.stopIsUserSet === undefined) floored.stopIsUserSet = false;
+      if (version < 4 && floored.stopIsUserSet === undefined) floored.stopIsUserSet = false;
       // v4 -> v5, ROUND 1 finding (b). Phase A split `ivRank` (a true
       // percentile) from `iv` (the absolute level); a row persisted before
       // that carries ONE number of unknown basis under the percentile's name,
@@ -792,7 +838,12 @@ export function migratePortfolioPersist(state: unknown, version: number): unknow
       // fields only on rows the reconcile confirms against the backend, so on
       // a row it keeps as pending/offline the stale figure would never be
       // replaced and the mislabel would be permanent.
-      return version < 5 ? (stripLegacyIvFields(floored) as Record<string, unknown>) : floored;
+      const ivClean = version < 5 ? (stripLegacyIvFields(floored) as Record<string, unknown>) : floored;
+      // v5 -> v6, P2-06/P2-07. Two promotions to 'synced' (skipPost and the
+      // ok path) kept `premiumStopDollar` on the row, and a v5 store never ran
+      // the old unconditional clean-up again. Idempotent.
+      if (version < 6 && ivClean.syncStatus === 'synced') delete ivClean.premiumStopDollar;
+      return ivClean;
     }),
   };
 }
@@ -815,11 +866,15 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
       positions: [],
       lastSyncError: null,
       lastPremiumStopDropped: null,
+      premiumStopDropQueue: [],
       // ROUND 10 finding 14 -- these clear SEPARATELY. One action wiping both
       // meant dismissing the (informational) premium-stop notice also silently
       // dropped the (rejection) sync error the user may not have read yet.
       clearSyncError: () => set({ lastSyncError: null }),
-      clearPremiumStopDropped: () => set({ lastPremiumStopDropped: null }),
+      clearPremiumStopDropped: () => set((s) => {
+        const queue = s.premiumStopDropQueue.slice(1);
+        return { premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };
+      }),
       hydrate: (positions) =>
         set({
           positions: positions.map((p) => ({
@@ -890,12 +945,15 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           // from its own persistPosition call (never the offline-optimistic
           // fallback — see persistPosition's `offline` field) — just promote
           // the optimistic row to synced without a second POST.
+          // P2-06 -- `premiumStopDollar` is create-only transport and is
+          // dropped on the way to 'synced', as on every other promotion.
           set((s) => ({
-            positions: s.positions.map((x) =>
-              x.recId === promoteRecId
-                ? { ...x, syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined }
-                : x
-            ),
+            positions: s.positions.map((x) => {
+              if (x.recId !== promoteRecId) return x;
+              const { premiumStopDollar: _createOnly, ...rest } = x;
+              void _createOnly;
+              return { ...rest, syncStatus: 'synced' as const, syncedAt: Date.now(), syncPendingSince: undefined };
+            }),
           }));
           return { ok: true, status: 'ok' as const };
         }
@@ -911,10 +969,14 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         if ((outcome.kind === 'ok' || outcome.kind === 'duplicate') && !scaleInRefused) {
           const adjustedQty = outcome.kind === 'ok' ? outcome.adjustedQty : undefined;
           set((s) => ({
-            positions: s.positions.map((x) =>
-              x.recId === promoteRecId
-                ? {
-                    ...x,
+            positions: s.positions.map((x) => {
+              if (x.recId !== promoteRecId) return x;
+              // P2-06 -- drop the create-only `premiumStopDollar` on the way
+              // to 'synced', matching the other promotions.
+              const { premiumStopDollar: _createOnly, ...rest } = x;
+              void _createOnly;
+              const promoted: PortfolioPosition = {
+                    ...rest,
                     syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined,
                     // The backend's risk check auto-reduced the size to fit exposure
                     // limits — reflect the persisted quantity locally, don't keep
@@ -935,22 +997,18 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     // the POST described the incoming increment, not the row
                     // that already existed.
                     ...(!didMerge && outcome.kind === 'ok'
-                      ? {
-                          premiumStopPct: outcome.premiumStopPct ?? null,
-                          // The entry that fraction is relative to. Adopting
-                          // one without the other is what makes the two
-                          // engines fire at different prices -- see
-                          // applyPersistedPosition, and round 10's note there
-                          // on why this is "when reported" rather than
-                          // "or neither".
-                          ...(outcome.entryPrice != null
-                            ? { entryPrice: outcome.entryPrice }
-                            : {}),
-                        }
+                      ? { premiumStopPct: outcome.premiumStopPct ?? null }
                       : {}),
-                  }
-                : x,
-            ),
+              };
+              // The entry that fraction is relative to. Adopting one without
+              // the other is what makes the two engines fire at different
+              // prices -- see applyPersistedPosition, and round 10's note
+              // there on why this is "when reported" rather than "or
+              // neither". withServerEntry also resets the mark (P2-09).
+              return !didMerge && outcome.kind === 'ok'
+                ? withServerEntry(promoted, outcome.entryPrice)
+                : promoted;
+            }),
           }));
           // ROUND 9 -- report a premium stop the server could not apply, the
           // same signal applyPersistedPosition gives its two callers. The
@@ -1197,40 +1255,34 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     && outcome.kind === 'ok'
                     && outcome.premiumStopPct == null
                   ) {
-                    // FIRST wins, not last. This runs inside a for-loop over
-                    // every queued row, and an unconditional set() meant that
-                    // when two rows both dropped their stop only the last was
-                    // ever shown -- the earlier one was overwritten before it
-                    // reached a render. One banner can only name one position,
-                    // so keeping the first at least reports a real one
-                    // consistently rather than whichever the loop ended on.
-                    if (usePortfolioStore.getState().lastPremiumStopDropped == null) {
-                      set({
-                        lastPremiumStopDropped: {
-                          symbol: p.symbol, contract: p.contract,
-                          requestedDollar: _createOnly, at: Date.now(),
-                        },
-                      });
-                    }
+                    // QUEUED, not first-wins (P2-08). This runs inside a
+                    // for-loop over every queued row and on every 30s cycle;
+                    // one banner names one position, so each later drop waits
+                    // in the queue and shows when the one before it is
+                    // dismissed -- a second drop is never silent.
+                    set((s) => {
+                      const queue = [...s.premiumStopDropQueue, {
+                        symbol: p.symbol, contract: p.contract,
+                        requestedDollar: _createOnly, at: Date.now(),
+                      }];
+                      return { premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };
+                    });
                   }
-                  keep.push({
+                  // ...and the entry it was derived against, the third and
+                  // last site that adopts the server's fraction.
+                  // `premiumStopPct` alone, over the client's own mid, is a
+                  // DIFFERENT dollar stop from the one the user typed -- so
+                  // all three sites take the entry whenever the response
+                  // reports one (withServerEntry, which also resets the mark,
+                  // P2-09), and keep the row's existing entry when it does not.
+                  keep.push(withServerEntry({
                     ...rest,
                     premiumStopPct:
                       outcome.kind === 'ok' ? outcome.premiumStopPct ?? null : p.premiumStopPct,
-                    // ...and the entry it was derived against, the third and
-                    // last site that adopts the server's fraction.
-                    // `premiumStopPct` alone, over the client's own mid, is a
-                    // DIFFERENT dollar stop from the one the user typed -- so
-                    // all three sites take the entry whenever the response
-                    // reports one, and keep the row's existing entry when it
-                    // does not.
-                    ...(outcome.kind === 'ok' && outcome.entryPrice != null
-                      ? { entryPrice: outcome.entryPrice }
-                      : {}),
                     syncStatus: 'synced',
                     syncedAt: Date.now(),
                     syncPendingSince: undefined,
-                  });
+                  }, outcome.kind === 'ok' ? outcome.entryPrice : null));
                 } else if (outcome.kind === 'rejected') {
                   set({ lastSyncError: { symbol: p.symbol, contract: p.contract, detail: outcome.detail, at: Date.now() } });
                   // dropped — do not push
@@ -1260,7 +1312,12 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
               const addedDuringSync = s.positions.filter(
                 (x) => x.recId && !snapshotRecIds.has(x.recId) && !accountedRecIds.has(x.recId),
               );
-              return { positions: dedupePositions([...remotePositions, ...keep, ...addedDuringSync]) };
+              const positions = dedupePositions([...remotePositions, ...keep, ...addedDuringSync]);
+              // P2-08 -- a notice whose contract is no longer held (closed)
+              // names nothing; drop it so the next one can show.
+              const held = new Set(positions.map((x) => x.contract));
+              const queue = s.premiumStopDropQueue.filter((n) => held.has(n.contract));
+              return { positions, premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };
             });
             return true;
           } catch {
@@ -1294,7 +1351,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 5,
+      version: 6,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),
