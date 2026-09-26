@@ -18,7 +18,7 @@ import asyncio
 import html as html_lib
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import date, datetime, timedelta, timezone
 
 from app.services.historical_store import get_bars
@@ -75,16 +75,28 @@ class WatchEvent:
     rr_ratio:     float | None
     close:        float
     reason:       str
+    # WATCH-UNDELIVERED-EVENT-RESEND: when the event fired (UTC ISO) and the bar
+    # it was derived from, so a queued alert sent later can say so; `delayed`
+    # marks a resend of a queued event (the message is prefixed "Delayed: ").
+    fired_at:     str | None = None
+    bar_time:     str | None = None
+    delayed:      bool = False
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _bar_time(bars: list[dict]) -> str | None:
+    t = bars[-1].get("time")
+    return None if t is None else str(t)
+
+
 @dataclass
 class _Transition:
     """A fired event plus the watch state it moves to. The state is written only
-    by _commit -- after delivery on the notify path (P4b, D3)."""
+    by _commit, which also carries the watch's queue of undelivered alerts
+    (WATCH-UNDELIVERED-EVENT-RESEND)."""
     event:     WatchEvent
     watch_id:  str
     new_state: dict
@@ -109,6 +121,7 @@ async def _eval_strategy_watch(
         return None
 
     close = float(bars[-1]["close"])
+    bar_time = _bar_time(bars)
     wdir = w.get("direction", "Bullish")
     try:
         adopted = {**get_exit(key), **get_active(key, wdir)}
@@ -155,7 +168,7 @@ async def _eval_strategy_watch(
                 event_type="entry", direction=signal.direction,
                 entry=signal.entry_price, stop=signal.stop_price,
                 target=signal.target_price, rr_ratio=round(signal.rr_ratio, 2),
-                close=close,
+                close=close, fired_at=_now_iso(), bar_time=bar_time,
                 reason=(f"{symbol}: {_strategy_label(key)} "
                         f"{'short' if signal.direction == 'Bearish' else 'long'} setup — "
                         f"entry {signal.entry_price}, "
@@ -187,6 +200,7 @@ async def _eval_strategy_watch(
                 event_type="exit_stop", direction=state.get("direction"),
                 entry=state.get("entry_price"), stop=stop_price,
                 target=target_price, rr_ratio=None, close=close,
+                fired_at=_now_iso(), bar_time=bar_time,
                 reason=f"{symbol}: {_strategy_label(key)} stop hit at {close} (stop {stop_price})",
             )
             state = {"phase": "idle", "last_event": "exit_stop", "last_event_at": _now_iso()}
@@ -196,6 +210,7 @@ async def _eval_strategy_watch(
                 event_type="exit_target", direction=state.get("direction"),
                 entry=state.get("entry_price"), stop=stop_price,
                 target=target_price, rr_ratio=None, close=close,
+                fired_at=_now_iso(), bar_time=bar_time,
                 reason=f"{symbol}: {_strategy_label(key)} target hit at {close} (target {target_price})",
             )
             state = {"phase": "idle", "last_event": "exit_target", "last_event_at": _now_iso()}
@@ -221,7 +236,7 @@ async def _eval_strategy_watch(
                     event_type="reversal", direction=opposite_dir,
                     entry=opp_signal.entry_price, stop=opp_signal.stop_price,
                     target=opp_signal.target_price, rr_ratio=round(opp_signal.rr_ratio, 2),
-                    close=close,
+                    close=close, fired_at=_now_iso(), bar_time=bar_time,
                     reason=f"{symbol}: {_strategy_label(key)} reversal to {opposite_dir} at {close}",
                 )
                 state = {"phase": "armed", "direction": opposite_dir,
@@ -352,7 +367,7 @@ async def _eval_composite_watch(
         watch_id=w["id"], symbol=symbol, strategy_key="composite",
         event_type="entry", direction=wdir,
         entry=None, stop=None, target=None, rr_ratio=None,
-        close=close,
+        close=close, fired_at=_now_iso(), bar_time=_bar_time(bars),
         reason=_reason,
     )
     return _Transition(
@@ -412,13 +427,129 @@ async def _collect(sustain_minutes: int = 0, now_ts: float | None = None) -> lis
     return transitions
 
 
-def _commit(t: _Transition) -> None:
-    """Write one transition's state. A failed write is logged and does not stop
-    the remaining commits (which would re-send already-delivered alerts)."""
+# ── Undelivered-alert queue (WATCH-UNDELIVERED-EVENT-RESEND) ──────────────────
+# Decision WATCH-RESEND-QUEUE-2026-09-26 (Kenneth): a fired event moves its watch
+# to the new state straight away; an alert that could not be sent waits in
+# last_state["pending_events"] (oldest first) and is re-sent, labelled
+# "Delayed", before the next run evaluates anything -- even if the condition no
+# longer holds. Each entry is {"event": <plain WatchEvent dict>, "attempts": n},
+# n = failed resends (the first send is not counted).
+
+_MAX_PENDING = 50   # per watch; beyond it the OLDEST entry is dropped
+_EVENT_FIELDS = tuple(f.name for f in fields(WatchEvent))
+_NUMERIC_FIELDS = frozenset({"entry", "stop", "target", "rr_ratio", "close"})
+_REQUIRED_STR_FIELDS = ("symbol", "strategy_key", "event_type", "reason")
+
+
+def _plain_event(ev: WatchEvent) -> dict:
+    """asdict(ev) with only plain float/str/bool/None values: the store writes
+    with yaml.dump, so e.g. a numpy.float64 would become a !!python tag that the
+    next safe_load rejects -- losing every watch in the file."""
+    out = asdict(ev)
+    for k, v in out.items():
+        if v is None:
+            continue
+        if k == "delayed":
+            out[k] = bool(v)
+        elif k in _NUMERIC_FIELDS:
+            out[k] = float(v)
+        else:
+            out[k] = str(v)
+    return out
+
+
+def _valid_entry(item: object) -> dict | None:
+    """A new, normalised copy of one queue entry, or None when it is unusable."""
+    if not isinstance(item, dict) or not isinstance(item.get("event"), dict):
+        return None
+    raw = item["event"]
+    if not all(isinstance(raw.get(k), str) for k in _REQUIRED_STR_FIELDS):
+        return None
     try:
-        strategy_watch_store.update_state(t.watch_id, t.new_state)
+        ev = WatchEvent(**{k: raw[k] for k in _EVENT_FIELDS if k in raw})
+        event = _plain_event(ev)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    try:
+        attempts = max(0, int(item.get("attempts", 0)))
+    except (TypeError, ValueError, OverflowError):
+        attempts = 0
+    return {"event": event, "attempts": attempts}
+
+
+def _pending(last_state: object, log: bool = True) -> tuple[list[dict], bool]:
+    """The one reader of a watch's queue: (valid entries as new dicts, changed).
+    changed = something malformed was dropped, so the stored value should be
+    rewritten. Never raises."""
+    if not isinstance(last_state, dict):
+        return [], False
+    raw = last_state.get("pending_events")
+    if raw is None or (isinstance(raw, list) and not raw):
+        return [], False
+    if not isinstance(raw, list):
+        if log:
+            logger.error("strategy-watch: malformed pending_events dropped: %r", raw)
+        return [], True
+    out: list[dict] = []
+    changed = False
+    for item in raw:
+        entry = _valid_entry(item)
+        if entry is None:
+            changed = True
+            if log:
+                logger.error("strategy-watch: malformed pending_events entry dropped: %r", item)
+            continue
+        out.append(entry)
+    return out, changed
+
+
+def _current_queue(watch_id: str, log: bool = True) -> list[dict]:
+    """The queue as stored now (not a stale snapshot). Raises if the store
+    cannot be read -- callers must never treat that as an empty queue."""
+    for w in strategy_watch_store.list_watches():
+        if w.get("id") == watch_id:
+            return _pending(w.get("last_state"), log=log)[0]
+    return []
+
+
+def _write_state(watch_id: str, new_state: dict, queue: list[dict]) -> bool:
+    """Every state write of an event or a flush: new_state with exactly `queue`
+    (the stale key in new_state is always stripped). False on failure."""
+    try:
+        state = {k: v for k, v in new_state.items() if k != "pending_events"}
+        if queue:
+            state["pending_events"] = [
+                {"event": dict(e["event"]), "attempts": e["attempts"]} for e in queue
+            ]
+        strategy_watch_store.update_state(watch_id, state)
+        return True
     except Exception:
-        logger.error("strategy-watch: state write failed for %s", t.watch_id, exc_info=True)
+        logger.error("strategy-watch: state write failed for %s", watch_id, exc_info=True)
+        return False
+
+
+def _commit(t: _Transition, append: WatchEvent | None = None) -> None:
+    """Write one transition's state, carrying the watch's stored queue, plus
+    `append` at its end when the event's alert is not sent now. A failure is
+    logged and does not stop the remaining commits (which would re-send
+    already-delivered alerts). A failed queue read skips the write: the
+    transition is re-derived next run (a duplicate at worst, never a wiped queue)."""
+    try:
+        queue = _current_queue(t.watch_id)
+        if append is not None:
+            queue = queue + [{"event": _plain_event(append), "attempts": 0}]
+            while len(queue) > _MAX_PENDING:
+                dropped = queue.pop(0)
+                logger.error(
+                    "strategy-watch: %s queue over %d; oldest undelivered alert dropped: %s %s at %s",
+                    t.watch_id, _MAX_PENDING, dropped["event"].get("event_type"),
+                    dropped["event"].get("symbol"), dropped["event"].get("fired_at"),
+                )
+    except Exception:
+        logger.error("strategy-watch: queue read failed for %s; state not written; queue preserved",
+                     t.watch_id, exc_info=True)
+        return
+    _write_state(t.watch_id, t.new_state, queue)
 
 
 async def evaluate_all(sustain_minutes: int = 0, now_ts: float | None = None) -> list[WatchEvent]:
@@ -445,6 +576,17 @@ _SUBJECT_PREFIX = {
 }
 
 
+def _delayed_line(ev: WatchEvent, label: str) -> str:
+    bar = f" (bar {ev.bar_time})" if ev.bar_time else ""
+    try:
+        detected = (datetime.fromisoformat(ev.fired_at).astimezone(MARKET_TZ)
+                    .strftime("%Y-%m-%d %H:%M %Z"))
+    except (TypeError, ValueError):
+        detected = ev.fired_at or "unknown time"
+    return (f"Delayed: {label} — close {ev.close}{bar}, detected {detected}. "
+            f"Not delivered at the time; the condition may no longer hold.")
+
+
 def _format_event(ev: WatchEvent) -> tuple[str, str, str]:
     """Return (subject, plain_body, html_body) for a watch event."""
     if ev.event_type == "entry":
@@ -453,7 +595,12 @@ def _format_event(ev: WatchEvent) -> tuple[str, str, str]:
         label = _SUBJECT_PREFIX.get(ev.event_type, ev.event_type)
     strat = _strategy_label(ev.strategy_key)
     subject = f"{label}: {ev.symbol} — {strat}"
+    delayed_line = _delayed_line(ev, label) if ev.delayed else None
+    if delayed_line is not None:
+        subject = f"Delayed: {subject}"
     lines = [ev.reason, "", f"Strategy: {strat}", f"Last close: {ev.close}"]
+    if delayed_line is not None:
+        lines.insert(0, delayed_line)
     if ev.entry is not None:
         lines.append(f"Entry {ev.entry} · Stop {ev.stop} · Target {ev.target}")
     if ev.rr_ratio is not None:
@@ -472,7 +619,8 @@ def _format_event(ev: WatchEvent) -> tuple[str, str, str]:
     # theirs -- a stray '<' or '&' would trigger the identical failure mode.
     html = (
         f"<b>{html_lib.escape(subject)}</b>\n"
-        f"{html_lib.escape(ev.reason)}\n\n"
+        + (f"{html_lib.escape(delayed_line)}\n" if delayed_line is not None else "")
+        + f"{html_lib.escape(ev.reason)}\n\n"
         f"Strategy: {html_lib.escape(strat)}\n"
         f"Last close: {ev.close}\n"
         + (f"Entry {ev.entry} · Stop {ev.stop} · Target {ev.target}\n" if ev.entry is not None else "")
@@ -520,30 +668,102 @@ def _run_lock() -> asyncio.Lock:
     return _lock
 
 
-async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = None) -> list[WatchEvent]:
-    """Evaluate all watches, send one notification per fired event, and commit
-    each event's state only once it was delivered (open_questions[3], D3).
+async def _flush_pending(any_channel: bool) -> list[WatchEvent]:
+    """Send every enabled watch's queued alerts, oldest first, labelled Delayed.
 
-    Undelivered with a channel enabled: the state is kept, so the next run
-    fires (and sends) the same transition again. No channel enabled at all:
-    nothing could ever deliver, so the state is committed as before.
-    Returns every fired event, delivered or not."""
+    Stops at a watch's first failure (that entry's attempts + 1; it and every
+    later entry stay, in order). No channel enabled: the queue is kept untouched
+    -- switching both channels off briefly must not delete a queued exit. There
+    is no give-up: delivery reports only a bool, so a rejected message cannot be
+    told from an outage. Returns every attempted resend (delayed=True)."""
+    attempted: list[WatchEvent] = []
+    try:
+        watches = strategy_watch_store.list_watches()
+    except Exception:
+        logger.error("strategy-watch: watch list unreadable; queued alerts not sent this run", exc_info=True)
+        return attempted
+    for w in watches:
+        try:
+            if not w.get("enabled"):
+                continue
+            state = w.get("last_state")
+            queue, changed = _pending(state)
+            if not queue or not any_channel:
+                if changed:
+                    _write_state(w["id"], state, queue)
+                continue
+            remaining = list(queue)
+            while remaining:
+                entry = remaining[0]
+                ev = WatchEvent(**entry["event"])
+                ev.delayed = True
+                attempted.append(ev)
+                try:
+                    subject, plain, html = _format_event(ev)
+                    delivered = await notify_enabled_channels(subject, plain, html)
+                except Exception:
+                    logger.error("strategy-watch: delayed notify failed for %s", ev.symbol, exc_info=True)
+                    delivered = False
+                if delivered:
+                    remaining.pop(0)
+                    continue
+                attempts = entry["attempts"] + 1
+                remaining[0] = {"event": entry["event"], "attempts": attempts}
+                logger.log(
+                    logging.ERROR if attempts >= 3 else logging.WARNING,
+                    "strategy-watch: %s %s for %s still undelivered after %d attempt(s); "
+                    "queued, resent next run",
+                    ev.strategy_key, ev.event_type, ev.symbol, attempts,
+                )
+                break
+            if not _write_state(w["id"], state, remaining):
+                logger.error("strategy-watch: queue of %s not written; delivered alerts may be re-sent",
+                             w["id"])
+        except Exception:
+            logger.error("strategy-watch: queue flush failed for watch %s", w.get("id"), exc_info=True)
+    return attempted
+
+
+async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = None) -> list[WatchEvent]:
+    """Send queued alerts, evaluate all watches, send one notification per fired
+    event (WATCH-UNDELIVERED-EVENT-RESEND, decision WATCH-RESEND-QUEUE-2026-09-26).
+
+    A fired event always commits its new state. Its alert is sent now only when
+    the watch has nothing queued; otherwise -- or when the send fails with a
+    channel enabled -- the alert joins the watch's queue and goes out, labelled
+    Delayed, at the start of a later run. No channel enabled and nothing queued:
+    committed without queueing (D3). Returns the delayed resends attempted this
+    run (delayed=True) followed by every newly fired event."""
     async with _run_lock():
-        transitions = await _collect(sustain_minutes, now_ts)
         any_channel = _any_channel_enabled()
+        returned = await _flush_pending(any_channel)
+        transitions = await _collect(sustain_minutes, now_ts)
         for t in transitions:
             ev = t.event
+            returned.append(ev)
             try:
-                subject, plain, html = _format_event(ev)
-                delivered = await notify_enabled_channels(subject, plain, html)
+                # The queue check comes first, whatever the channel state: a new
+                # alert never overtakes an older queued one.
+                if _current_queue(t.watch_id, log=False):
+                    _commit(t, append=ev)
+                    continue
+                try:
+                    subject, plain, html = _format_event(ev)
+                    delivered = await notify_enabled_channels(subject, plain, html)
+                except Exception:
+                    logger.error("strategy-watch: notify failed for %s", ev.symbol, exc_info=True)
+                    delivered = False
+                if delivered or not any_channel:
+                    # No channel enabled: nothing could ever deliver it, so it
+                    # commits without queueing (D3).
+                    _commit(t)
+                else:
+                    logger.warning(
+                        "strategy-watch: %s %s for %s not delivered; queued, resent next run",
+                        ev.strategy_key, ev.event_type, ev.symbol,
+                    )
+                    _commit(t, append=ev)
             except Exception:
-                logger.error("strategy-watch: notify failed for %s", ev.symbol, exc_info=True)
-                delivered = False
-            if delivered or not any_channel:
-                _commit(t)
-            else:
-                logger.warning(
-                    "strategy-watch: %s %s for %s not delivered; state kept, retries next run",
-                    ev.strategy_key, ev.event_type, ev.symbol,
-                )
-        return [t.event for t in transitions]
+                logger.error("strategy-watch: send/commit failed for %s; state not written",
+                             t.watch_id, exc_info=True)
+        return returned
