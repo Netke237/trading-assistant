@@ -6,7 +6,8 @@ and re-taken 2026-09-26, no new commits on the old branch), off main 2f67e6f. Cl
 
 Round history: r1 → 15 findings (2 HIGH, 7 MED, 6 LOW), addressed in r2. r2 → 13 findings (3 HIGH, 4 MED, 6 LOW),
 addressed in r3. r3 → 7 findings (0 HIGH, 3 MED, 4 LOW), addressed in r4. r4 → 6 findings (0 HIGH, 1 MED, 5 LOW),
-addressed in r5. Logs at the end.
+addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. Logs at
+the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
 - P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
@@ -30,7 +31,9 @@ Every backlog entry was re-checked against 2f67e6f before this plan. The seven i
 
 Owned by P3c: `backend/app/routers/scan.py`, `backend/app/scoring/conviction_sizing.py`,
 `backend/app/routers/auto_trade.py` (`fire_now` only), `frontend/lib/scanScheduleResolve.ts`,
-`frontend/app/(frame)/settings/page.tsx` (`ScheduleEntryRow` only, for the 0% warning), their tests.
+`frontend/app/(frame)/settings/page.tsx` (`ScheduleEntryRow` only, for the 0% warning), their tests —
+including the `_FakeDb` classes in `backend/tests/test_auto_trader.py` (:3491), `test_autotrade_a6_a7.py` (:194)
+and `test_autotrade_a9.py` (:139), which gain `async def rollback(self): pass` for §7 (r5-M1).
 New: `backend/scripts/p3c_data_checks.py` (read-only), `backend/tests/test_p3c_*.py`.
 
 NOT touched: `stock_scan.py` / `stock_scorer.py` (P3a — `_regime_data_drop` and `RuleResult.measured` are
@@ -405,7 +408,12 @@ call; `book_fired_order(fired, db)` stays on the loop after it (the session neve
 (the read opened a transaction and holds a pool connection; nothing is written), so a `/fire` queued behind the
 single worker — up to ~3s market check + 25s regime deadline + broker call — does not pin a connection;
 `book_fired_order`'s first statement checks one out again. Test: after the await begins, the session reports no
-active transaction (`db.in_transaction()` is False). Exceptions
+active transaction (`db.in_transaction()` is False) — this one test uses a REAL `AsyncSession` from an in-memory
+aiosqlite engine built by a fixture defined in `test_p3c_fire_off_loop.py` itself (tests/conftest.py has no
+DB-session fixture; `engine_and_session` is local to test_o4_step4_booking.py). Existing callers of `fire_now`
+with a `_FakeDb` that has only `execute()` (test_auto_trader.py:3491, test_autotrade_a6_a7.py:194,
+test_autotrade_a9.py:139) would now raise AttributeError on `rollback`, so each `_FakeDb` gains
+`async def rollback(self): pass` (r5-M1). Exceptions
 propagate from the executor with their type, so the handlers are unchanged. The executor's worker is a normal
 non-daemon thread, joined at interpreter exit like the default executor's.
 
@@ -450,28 +458,43 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
 - `fire` monkeypatched to `time.sleep(0.5)` then return a FiredOrder; while the request is in flight, a second
   request (`GET /auto-trade/status`) completes first — the loop is free.
 - `fire` runs on a thread named `auto-trade-fire*`, not the loop's thread.
-- SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run, plus one each here).
+- SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run after their `_FakeDb` gains
+  `rollback` — r5-M1 — plus one each here).
 - Two concurrent `/fire` on one armed strategy (r2-H3 — the two 400 texts are identical, so the test does not
   compare detail text): a wrapper around the real `fire` records (enter, exit, raised-type) per call. Assert:
   `execute_option_order` called exactly once; one 200 and one 400; the recorded calls did not overlap (the
   second's enter ≥ the first's exit — serialisation); and EITHER the wrapper recorded two calls with exactly one
   `ArmPreservedError` raised from inside `fire()`, OR it recorded one call (the loser stopped at the endpoint's
   own armed check) — both are correct refusals, and the test says which it saw.
-- Cancellation (r3-M1, r4-M1/L1): `fire` held on a `threading.Event`. The handler is driven as a task on the
-  test's loop (`fire_now(...)` called directly with the DB-session fixture, not through the HTTP client, so the
-  test can cancel it). The test gets `cf` by monkeypatching `auto_trade._FIRE_EXECUTOR.submit` with a wrapper that
-  calls the real `submit` and records the returned future. Every held test releases in `try/finally: ev.set()`,
-  and the patched `fire` waits with `ev.wait(timeout=5)` (raising on timeout), so a failed assertion can never
-  leave the one worker blocked and hang later `/fire` tests; a module fixture additionally asserts the worker is
-  idle (`_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)`) after each test. Case A — the task is cancelled,
-  then the Event is released → the ERROR line (written from the worker thread) names the symbol and the
-  FiredOrder repr. Case B, the race — the Event is released and the test waits `cf.result(timeout=5)` BEFORE
-  calling `task.cancel()`, with no yield between the wait and the cancel, so `cf` is done when the handler's
-  `add_done_callback` runs → the line is logged once, at once, on the loop thread. Case C — `fire` raises
-  `ValueError("boom")` after the cancel → the ERROR line contains `boom`. Case D — a second `/fire` still queued
-  behind a held first one when cancelled → the WARNING "cancelled before fire() ran", `fire` called once only (by
-  the first). Every case: exactly one line from `_log_unbooked`, NO record containing "exception calling
-  callback" on the `concurrent.futures` logger (caplog at DEBUG on that logger), `book_fired_order` not called.
+- Cancellation (r3-M1, r4-M1/L1, r5-M2..L5): the patched `fire` first sets `started = threading.Event()`, then
+  waits on a release `threading.Event` with `ev.wait(timeout=5)` (raising on timeout). The handler is driven as a
+  task on the test's loop (`fire_now(db=...)` called directly, not through the HTTP client, so the test can cancel
+  it) with a `_FakeDb` that has `execute` and `rollback`. `auto_trade.book_fired_order` is patched with an
+  `AsyncMock`. The test gets `cf` by monkeypatching `auto_trade._FIRE_EXECUTOR.submit` with a wrapper that calls
+  the real `submit` and records the returned future. Every held test releases in `try/finally: ev.set()`, so a
+  failed assertion can never leave the one worker blocked. An AUTOUSE, FUNCTION-scoped fixture (default scope —
+  r5-L5; not module scope, whose teardown runs once per module) asserts in its teardown that the worker is idle:
+  `_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)`.
+  Callback barrier (r5-L4): `Future.set_result`/`set_exception` notify waiters BEFORE `_invoke_callbacks`, so
+  `cf.result()` can return while `_log_unbooked` has not yet run. Before any caplog assertion in Cases A and C,
+  the test waits `_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)` — the single worker finishes the previous
+  work item, callbacks included, before it takes the next one.
+  Case A — the test waits `await asyncio.to_thread(started.wait, 5)` and asserts `cf.running()` BEFORE
+  `task.cancel()` (r5-M2: without it the cancel lands while `cf` is still QUEUED in ~all runs and the case
+  silently becomes Case D); awaits the task (CancelledError); releases the Event; callback barrier → the ERROR
+  line (written from the worker thread) names the symbol and the FiredOrder repr. Case B, the race — the Event is
+  released and the test waits `cf.result(timeout=5)` BEFORE calling `task.cancel()`, with no yield between the wait
+  and the cancel, so `cf` is done when the handler's `add_done_callback` runs → the line is logged once, at once,
+  on the loop thread (no barrier needed). Case C — as Case A (`started` waited, `cf.running()` asserted), but
+  `fire` raises `ValueError("boom")` after the release → callback barrier → the ERROR line contains `boom`.
+  Case D (r5-M3) — the one worker is occupied DIRECTLY by `_FIRE_EXECUTOR.submit(held_blocker)` (a plain function
+  that waits on the same Event; not a first `fire_now` task, which would itself book or log); the test starts the
+  `fire_now` task, waits until the `submit` wrapper has recorded its `cf` (so the cancel does not land during
+  `db.execute`/`rollback`, where nothing is submitted and nothing is logged), asserts `not cf.running()`, then
+  `task.cancel()` → `cf.cancel()` succeeds on the queued future and `_log_unbooked` runs on the loop thread → the
+  WARNING "cancelled before fire() ran"; the Event is released; the patched `fire` was never called.
+  Every case: exactly one line from `_log_unbooked`, NO record containing "exception calling callback" on the
+  `concurrent.futures` logger (caplog at DEBUG on that logger), the `book_fired_order` mock not awaited.
 
 ## State updates (PROJECT_STATE.json)
 
@@ -567,3 +590,17 @@ All 7 round-3 resolutions verified present in the body and correct against the c
 | L3 | LOW | §2 contradicts itself on which count drives the banner | `direction_filtered_count` deleted; banner and `failed_direction` read `_dir_removed` |
 | L4 | LOW | §5 reported the minimum rung, not the backtest's `targets[0]`; setup filter missed the volume gate; only stop pinned; params ambiguous | reports `targets[0]` (primary if profitable-side else ext1), min rung secondary; volume gate added; target and setup-bar set pinned; bearish active block named, tuned params stated |
 | L5 | LOW | §4 left stale fall-through text (test name, comments, docstrings, conviction_sizing.py:286-307); "every headwind" is wrong | all listed and corrected, test renamed; message says "at or beyond -full_conviction_pct" |
+
+## Round-5 log (5 findings; scope §7 only)
+
+Verified: the M1 read order cannot raise in a done-callback; the `add_done_callback` hand-off is atomic; the
+`wrap_future` cancel propagation; `asyncio_mode = auto`; `FiredOrder` is a frozen dataclass (safe repr); the
+existing `except` clauses on a `try` holding only the await are correct (`CancelledError` is a BaseException).
+
+| # | Sev | Finding | Resolution (r6) |
+|---|---|---|---|
+| M1 | MEDIUM | §7 `await db.rollback()` breaks three existing tests whose `_FakeDb` has only `execute`; the "DB-session fixture" does not exist | the three `_FakeDb` classes gain `rollback` (files listed); the `in_transaction()` test builds its own aiosqlite `AsyncSession` fixture in the new module |
+| M2 | MEDIUM | §7 Cases A/C: the cancel lands while `cf` is still queued (498/500 trials), turning them into Case D | patched `fire` sets a `started` Event first; A/C wait on it and assert `cf.running()` before cancelling |
+| M3 | MEDIUM | §7 Case D's held first `/fire` books (or logs) too, contradicting "exactly one line / book not called" | the worker is occupied directly by `_FIRE_EXECUTOR.submit(held_blocker)`; test waits for the second `cf` to be recorded before cancelling |
+| L4 | LOW | §7 A/C caplog assertions race the worker-thread callback (`set_result` notifies before callbacks run) | barrier `_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)` before any caplog assertion |
+| L5 | LOW | §7 idle-worker check called a "module fixture", whose teardown runs once per module | autouse function-scoped fixture |
