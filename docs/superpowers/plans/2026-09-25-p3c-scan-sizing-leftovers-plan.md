@@ -8,7 +8,7 @@ Round history: r1 → 15 findings (2 HIGH, 7 MED, 6 LOW), addressed in r2. r2 �
 addressed in r3. r3 → 7 findings (0 HIGH, 3 MED, 4 LOW), addressed in r4. r4 → 6 findings (0 HIGH, 1 MED, 5 LOW),
 addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. r7 → round 7 (§7): 2 LOW, addressed in r8. r8 → round 8 (§7): 3 LOW,
 addressed in r9. r9 → round 9 (§7): 1 LOW, addressed in
-r10. Logs at the end.
+r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
 - P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
@@ -468,9 +468,11 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   `auto_trade.router`, driven by `httpx.AsyncClient(transport=ASGITransport(app))` on the test's loop with
   `asyncio.gather(post, get)`; `get_db` overridden with a `_FakeDb` (`execute` + `rollback`);
   `auto_trade.book_fired_order` patched with `AsyncMock(return_value=BookingOutcome(booked=True, rec_id="r1",
-  error=None, over_exposure=False))` (r9-L1 — a bare `AsyncMock` returns a MagicMock, whose fields crash FastAPI's
-  response serialisation; `BookingOutcome` is at app/services/auto_trade_booking.py:73-79); completion order
-  recorded, asserting GET finished while POST was still pending AND the POST returned 200. Armed/disarmed per the Arming rule below.
+  error=None, over_exposure=False))` (r9-L1, reason corrected by r10-L3 — a bare `AsyncMock` does NOT crash: `fire_now` returns a plain
+  `dict` with no response model, so the MagicMock fields serialise as junk such as `[]` and POST still returns 200;
+  a real `BookingOutcome` is needed so the body is meaningful; `BookingOutcome` is at
+  app/services/auto_trade_booking.py:74-79); completion order recorded, asserting GET finished while POST was
+  still pending, the POST returned 200, and its body has `rec_id == "r1"`. Armed/disarmed per the Arming rule below.
 - `fire` runs on a thread named `auto-trade-fire*`, not the loop's thread.
 - SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run after their `_FakeDb` gains
   `rollback` — r5-M1 — plus one each here). Both new tests are ARMED (r8-L2 — unarmed, the endpoint's own
@@ -478,11 +480,24 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   executor) and disarm in `finally`; each asserts the raising stub was called exactly once, and the detail:
   `str(raised_exc)` for the 400, the `SIZING_CONFIG_REFUSED_PREFIX` detail for the 500.
 - Two concurrent `/fire` on one armed strategy (r2-H3 — the two 400 texts are identical, so the test does not
-  compare detail text): a wrapper around the real `fire` records (enter, exit, raised-type) per call. Assert:
-  `execute_option_order` called exactly once; one 200 and one 400; the recorded calls did not overlap (the
-  second's enter ≥ the first's exit — serialisation); and EITHER the wrapper recorded two calls with exactly one
-  `ArmPreservedError` raised from inside `fire()`, OR it recorded one call (the loser stopped at the endpoint's
-  own armed check) — both are correct refusals, and the test says which it saw.
+  compare detail text; r10-F1 — the old "either two calls or one" allowance let a multi-worker pool pass ~98% of
+  runs, since in the one-call branch there is nothing to overlap). `auto_trade.auto_trader.fire` (instance-level
+  patch) is replaced by a wrapper that records `enter` and then, on the FIRST call only, waits on a test-created
+  `hold = threading.Event()` (`hold.wait(timeout=5)`, raising on timeout) BEFORE calling the real `fire`, then
+  records (exit, raised-type). The `submit` wrapper (as in the Cancellation tests) records each submission of the
+  patched `fire`. The two POSTs are started with `asyncio.gather` on an `httpx.AsyncClient(ASGITransport)` over the
+  loop-free test's local app; the test waits, TIME-bounded (`await asyncio.sleep(0.01)` up to 5s, then `assert` — the
+  requests cross the whole ASGI stack, so the 100-yield bound below does not apply), until the `submit` wrapper has recorded
+  TWO submissions — both requests passed the endpoint's armed check, because the first is held inside `fire()`
+  before it disarms — and only then sets `hold`. `hold.set()` is also in the `finally`. Assert: the wrapper
+  recorded exactly two calls; exactly one raised `ArmPreservedError` from inside `fire()`; the calls did not
+  overlap (the second's enter ≥ the first's exit — with one worker the second cannot enter while the first is
+  held; a multi-worker pool enters it at once and fails every run); `execute_option_order` called exactly once;
+  one 200 and one 400. Isolation (r10-F2 — this test runs the REAL `fire()`, which appends a "filled" row to the
+  process-wide `_state.history` and counts toward `_check_daily_loss` in later fires): before arming,
+  `monkeypatch.setattr(auto_trade.auto_trader._state, "history", [])`, the precedent at
+  test_o4_step4_booking.py:142. `_market_is_open`, `_apply_vol_sizing` and `execute_option_order` are patched;
+  `book_fired_order` as in the loop-free test.
 - Cancellation (r3-M1, r4-M1/L1, r5-M2..L5, r6-L1..L4): the TEST BODY creates `started` and `ev`, both new
   `threading.Event()` objects per test (r6-L3 — never module-level, or Case C would start with `started` already
   set from Case A); the patched `fire` calls `started.set()` and then `ev.wait(timeout=5)` (raising on timeout). The handler is driven as a
@@ -685,3 +700,16 @@ GET 300/300; with the planned handler GET completes first. The local-app wiring 
 | # | Sev | Finding | Resolution (r10) |
 |---|---|---|---|
 | L1 | LOW | §7 loop-free test: a bare `AsyncMock` booking returns a MagicMock that crashes response serialisation | `AsyncMock(return_value=BookingOutcome(...))`; POST 200 asserted |
+
+## Round-10 log (3 findings; scope §7 only)
+
+The round-9 fix verified in the body (the line ref corrected 73-79 → 74-79). Verified by simulation on a scratch
+copy of the planned handler: the loop-free test discriminates; on the planned code two concurrent `/fire` always
+give one 200 / one 400 / one order; the three `_FakeDb` callers are the only direct callers of `fire_now`; Case D
+is safe in either callback order.
+
+| # | Sev | Finding | Resolution (r11) |
+|---|---|---|---|
+| F1 | MEDIUM | §7 two-concurrent test does not pin serialisation: a 4-worker pool passed 98/100 runs (the one-call branch has nothing to overlap) | the first call is held inside the wrapper until both submissions are recorded; exactly two calls, one `ArmPreservedError`, no overlap — the "either" branch dropped |
+| F2 | LOW | §7 the concurrent test's real `fire()` leaks "filled" rows into the singleton's history → later daily-loss refusals | `_state.history` monkeypatched to `[]` before arming (test_o4_step4_booking.py:142 precedent) |
+| F3 | LOW | §7 r9's stated reason (MagicMock crashes serialisation) is false — `fire_now` returns a plain dict, POST is 200 | reason corrected; `rec_id == "r1"` asserted |
