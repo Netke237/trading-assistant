@@ -18,6 +18,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getBrokerStatus: jest.fn().mockResolvedValue({}),
     postStockOrder: jest.fn(),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
   },
 }));
 jest.mock('@/components/organisms/StockAutoTradeArm', () => ({ StockAutoTradeArm: () => null }));
@@ -51,6 +52,20 @@ function makeCard(): PositionCardData {
 }
 
 const originalFetch = global.fetch;
+
+/** STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: the save now runs FIRST and its
+ *  201 must carry a positive `entryPrice` (else it is an unreadable reply and
+ *  no order is sent). This mock echoes the POST body back, as the router
+ *  does; every other request keeps the old `{}`/`[]` reply. */
+function echoFetch(): typeof fetch {
+  return jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith('/api/portfolio')) {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => body } as Response;
+    }
+    return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
 
 describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
   beforeEach(() => {
@@ -100,7 +115,7 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
 
   it('unblocks both S1 and S2 once the trader picks a method', async () => {
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     useScanStore.setState({
       stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
@@ -130,7 +145,7 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
   });
 
   it('S2 — Add to Portfolio also carries the pick onto the created position', async () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
     useScanStore.setState({
       stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
       stocksCardEdits: {

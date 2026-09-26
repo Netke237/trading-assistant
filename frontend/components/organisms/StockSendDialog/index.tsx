@@ -8,6 +8,8 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
+import { placeStockOrderSaveFirst } from '@/lib/stockSaveFirst';
+import { brokerLabelFor } from '@/lib/directOrder';
 import { api } from '@/lib/api';
 import { checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
 import type { PositionCardData } from '@/types/stockDomain';
@@ -150,46 +152,38 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       } else if (broker !== 'recommendation') {
-        // Auto-send → broker, then mirror the fill into the local portfolio
-        // (same pattern as the manual branch just above) so this position
-        // carries a tradeCardSnapshot and real stop/target too — without
-        // this, a broker-executed stock position has no local record at all
-        // and the Portfolio EditDrawer's Monte Carlo estimate has nothing to
-        // work from.
-        try {
-          const res = await api.postStockOrder({
-            broker,
-            symbol: c.symbol,
-            action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
-            effect: 'OPEN',
-            quantity: r.shares,
-            order_type: 'LMT',
-            limit_price: c.strategy.entry_price,
-            tif: 'DAY',
-          });
-          // The broker order has ALREADY succeeded at this point — a failure
-          // below must never be written to `errs`/`q` (those drive the retry
-          // set; retrying here would resubmit an already-filled order). It's
-          // tracked in `warn` instead, purely informational.
-          try {
-            const addRes = await addPosition({
-              ...buildPaperStockPosition(
-                c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
-                stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
-              ),
-              source: 'broker',
-              sourceLabel: `${broker} — Limit (ID: ${res.order_id})`,
-              orderedAt: new Date().toISOString(),
-              ...pickedFieldsFrom(pick),
-            });
-            if (addRes.status === 'rejected' || addRes.status === 'pending') {
-              warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
-            }
-          } catch {
-            warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
-          }
-        } catch (e) {
-          errs[c.symbol] = String(e);
+        // Auto-send → broker, SAVE FIRST (STOCK-SENDS-SAVE-FIRST-THEN-REAL-
+        // SHARES): the save can resize a stock since Part A, and the order goes
+        // out at the size the books hold. Outcome → the retry sets:
+        //  - no order live (blocked / refused / unconfirmed / removed) → `errs`,
+        //    so a retry resends. After `unconfirmed` a retry is refused by the
+        //    local duplicate check or the backend's duplicate-symbol rule, so it
+        //    can never double-book.
+        //  - an order that MAY be live (unknown / not-removed) → `warn`, NEVER
+        //    `errs`: a retry could double-place it. The note is the record.
+        //  - placed → success; a resize is reported in `warn` (informational).
+        const out = await placeStockOrderSaveFirst({
+          pos: {
+            ...buildPaperStockPosition(
+              c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
+              stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
+            ),
+            source: 'broker',
+            sourceLabel: `${brokerLabelFor(broker)} — Limit (ID: pending)`,
+            orderedAt: new Date().toISOString(),
+            ...pickedFieldsFrom(pick),
+          },
+          broker,
+          orderType: 'LMT',
+          limitPrice: c.strategy.entry_price,
+          action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
+        });
+        if (out.kind === 'placed') {
+          if (out.message) warn[c.symbol] = out.message;
+        } else if (out.kind === 'unknown' || out.kind === 'not-removed') {
+          warn[c.symbol] = out.message;
+        } else {
+          errs[c.symbol] = out.message;
         }
       } else {
         // Auto-send but broker = recommendation → fall back to paper

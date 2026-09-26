@@ -25,9 +25,28 @@ const pick = (): MethodPick => ({
 jest.mock('@/lib/api', () => ({
   api: {
     postStockOrder: jest.fn(),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     getBrokerStatus: jest.fn().mockResolvedValue({ alpaca_paper: { configured: false } }),
   },
 }));
+
+/** STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: an auto-send now SAVES first, and
+ *  the 201 must carry a positive `entryPrice`. This mock echoes the POST body
+ *  back, as the router does; every other request answers `[]`. */
+function echoFetch(): typeof fetch {
+  return jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith('/api/portfolio')) {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => body } as Response;
+    }
+    return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
+
+/** A broker failure that PROVABLY happened before the order was submitted, so
+ *  the saved row is deleted and the symbol stays retryable. (A plain Error is
+ *  "status unknown" under save-first and is deliberately NOT retryable.) */
+const PRE_SUBMIT = () => new Error('API /broker/stock-order → 503: Broker credentials unavailable: broker rejected');
 
 function makeCard(symbol: string): PositionCardData {
   return {
@@ -55,13 +74,16 @@ function makeCard(symbol: string): PositionCardData {
 
 describe('StockSendDialog — partial basket failure retry', () => {
   const realAddPosition = usePortfolioStore.getState().addPosition;
+  const suiteFetch = global.fetch;
 
   afterEach(() => {
     usePortfolioStore.setState({ addPosition: realAddPosition });
+    global.fetch = suiteFetch;
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch = echoFetch();
     act(() => {
       usePortfolioStore.setState({ positions: [] });
       useSettingsStore.setState((s) => ({
@@ -83,7 +105,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
     const onSubmit = jest.fn();
 
     (api.postStockOrder as jest.Mock).mockImplementation(({ symbol }: { symbol: string }) => {
-      if (symbol === 'MSFT') return Promise.reject(new Error('broker rejected'));
+      if (symbol === 'MSFT') return Promise.reject(PRE_SUBMIT());
       return Promise.resolve({ order_id: `${symbol}-1` });
     });
 
@@ -123,13 +145,12 @@ describe('StockSendDialog — partial basket failure retry', () => {
 
   it('does not permanently disable Submit when one row is queued and another hard-failed', async () => {
     // AAPL stays Manual (routes through addPosition -> queued when the
-    // backend is unreachable). MSFT stays Auto-send (routes through
-    // postStockOrder -> hard error). Regression for a bug where any queued
-    // row disabled the Submit button unconditionally, forever, even when a
-    // different row had a real error the user should be able to retry.
-    const originalFetch = global.fetch;
+    // backend is unreachable). MSFT stays Auto-send. UPDATED for save-first:
+    // with the backend unreachable MSFT's SAVE is unconfirmed, so NO order is
+    // sent and MSFT lands in the retryable error set (it used to reach the
+    // broker and fail there). Regression kept: a queued row must never disable
+    // retrying a different row's real error.
     global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
-    (api.postStockOrder as jest.Mock).mockRejectedValue(new Error('broker rejected'));
 
     const cards = [makeCard('AAPL'), makeCard('MSFT')];
     const onSubmit = jest.fn();
@@ -142,18 +163,19 @@ describe('StockSendDialog — partial basket failure retry', () => {
     const submitBtn = screen.getByRole('button', { name: /submit 2 orders/i });
     await act(async () => {
       fireEvent.click(submitBtn);
-      await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1));
     });
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(await screen.findByText(/queued — backend unreachable, will sync/i)).toBeInTheDocument();
-    expect(screen.getByText(/broker rejected/i)).toBeInTheDocument();
+    expect(screen.getByText(/could not be confirmed, so NO order was sent/i)).toBeInTheDocument();
+    expect(api.postStockOrder).not.toHaveBeenCalled();
 
     // MSFT's error must still be retryable — the button must not be stuck
     // disabled just because AAPL is queued.
     const retryBtn = screen.getByRole('button', { name: /retry 1 failed order/i });
     expect(retryBtn).not.toBeDisabled();
 
+    global.fetch = echoFetch();
     (api.postStockOrder as jest.Mock).mockResolvedValue({ order_id: 'retry-1' });
     await act(async () => {
       fireEvent.click(retryBtn);
@@ -161,24 +183,16 @@ describe('StockSendDialog — partial basket failure retry', () => {
 
     // Only MSFT (the errored symbol) gets retried — AAPL's already-queued
     // attempt must not be resubmitted (would mint a fresh recId and double it).
-    expect(api.postStockOrder).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1));
     const retrySymbols = (api.postStockOrder as jest.Mock).mock.calls
-      .slice(1)
       .map(([arg]: [{ symbol: string }]) => arg.symbol);
     expect(retrySymbols).toEqual(['MSFT']);
 
     // Regression (round 5): MSFT's retry succeeding must NOT make the dialog
-    // report the full basket as placed — AAPL is still only queued, never
-    // actually confirmed, since it was correctly never resubmitted. A bug in
-    // an earlier fix cleared the queued-state tracking on every retry pass
-    // (even for symbols the pass didn't touch), so a successful MSFT retry
-    // made the "stay open on any unconfirmed row" gate see nothing
-    // unconfirmed and fire onSubmit for the whole basket, AAPL included.
+    // report the full basket as placed — AAPL is still only queued.
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText(/queued — backend unreachable, will sync/i)).toBeInTheDocument();
-    expect(screen.queryByText(/broker rejected/i)).not.toBeInTheDocument();
-
-    global.fetch = originalFetch;
+    expect(screen.queryByText(/could not be confirmed, so NO order was sent/i)).not.toBeInTheDocument();
   });
 
   it('creates a local position with a snapshot after a successful auto-send broker order', async () => {
@@ -198,9 +212,14 @@ describe('StockSendDialog — partial basket failure retry', () => {
     expect(created.stop).toBe(95);
   });
 
-  it('does NOT re-submit the broker order on retry when the order succeeded but local tracking failed', async () => {
-    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-2', status: 'filled', broker: 'ibkr_paper' });
-    const addPosition = jest.fn().mockResolvedValueOnce({ status: 'rejected', detail: 'exposure limit' });
+  it('does NOT re-submit the broker order on retry when the order MAY be live (status unknown)', async () => {
+    // UPDATED for save-first: the old "order succeeded but local tracking
+    // failed" case cannot happen any more (the row is saved first). Its
+    // save-first equivalent is an order whose fate is unknown: the row is
+    // kept, an ORDER-UNKNOWN note is pushed, and the symbol goes to `warn`,
+    // never to the retry set — a retry could double-place a live order.
+    (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const addPosition = jest.fn().mockResolvedValue({ ok: true, status: 'ok' as const });
     usePortfolioStore.setState({ addPosition } as any);
 
     render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
@@ -208,21 +227,13 @@ describe('StockSendDialog — partial basket failure retry', () => {
     fireEvent.click(screen.getByText(/Submit 1 order/));
     await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1));
 
-    // A local-tracking failure must not put the symbol back in the retryable
-    // error set — `errors`/`queued` are both still empty, only `warnings` is
-    // set. The button reflects this: it relabels to "Placed — close to
-    // continue" and becomes disabled (the same treatment `hasQueued` already
-    // gets), so there is nothing left to click that could re-fire the broker
-    // order — a stronger guarantee than relying solely on the retry-target
-    // filter (`errors`-only) to make a stray click safe.
     const btn = await screen.findByRole('button', { name: /Placed — close to continue/ });
     expect(btn).toBeDisabled();
     expect(api.postStockOrder).toHaveBeenCalledTimes(1);
-
-    // The failure must still be VISIBLE — silently swallowing it (computing
-    // `warn` and never rendering it) would mean a real broker order succeeds
-    // with zero local record and zero indication anything needs attention.
-    expect(await screen.findByText(/not yet tracked in Portfolio/)).toBeInTheDocument();
+    // Visible, and the row is kept (the order may exist at the broker).
+    expect(await screen.findByText(/Order status UNKNOWN/)).toBeInTheDocument();
+    expect(addPosition).toHaveBeenCalledTimes(1);
+    expect(api.deletePortfolioPosition).not.toHaveBeenCalled();
   });
 
   // MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25): IBKR's confirmation question is

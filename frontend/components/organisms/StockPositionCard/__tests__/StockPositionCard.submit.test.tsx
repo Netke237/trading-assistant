@@ -23,6 +23,7 @@ const pick = (): MethodPick => ({
 jest.mock('@/lib/api', () => ({
   api: {
     postStockOrder: jest.fn(),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     getBrokerStatus: jest.fn().mockResolvedValue({}),
   },
 }));
@@ -50,6 +51,20 @@ function makeCard(): PositionCardData {
 
 const originalFetch = global.fetch;
 
+/** STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: the save now runs FIRST and its
+ *  201 must carry a positive `entryPrice` (else it is an unreadable reply and
+ *  no order is sent). This mock echoes the POST body back, as the router
+ *  does; every other request keeps the old `{}`/`[]` reply. */
+function echoFetch(): typeof fetch {
+  return jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith('/api/portfolio')) {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => body } as Response;
+    }
+    return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
+
 describe('StockPositionCard — broker order submit()', () => {
   beforeEach(() => {
     usePortfolioStore.setState({ positions: [], lastSyncError: null });
@@ -71,7 +86,7 @@ describe('StockPositionCard — broker order submit()', () => {
 
   it('creates a local position with a snapshot after a successful broker order', async () => {
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
@@ -84,18 +99,19 @@ describe('StockPositionCard — broker order submit()', () => {
     expect(pos.stop).toBe(145);
   });
 
-  it('shows a non-blocking warning (not an error) and permanently disables the order buttons when the order succeeds but local tracking fails', async () => {
-    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-2' });
+  it('UPDATED for save-first: an unreachable Portfolio sends NO order and leaves the buttons usable', async () => {
+    // Was: "order succeeds but local tracking fails" -> warning + buttons
+    // disabled. Since STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES the save runs
+    // first, so an offline save means no order was ever sent.
     global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
 
     render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
 
-    expect(await screen.findByText(/not yet tracked in Portfolio/)).toBeInTheDocument();
-    // The order genuinely succeeded — clicking again must not be possible, since
-    // that would fire a second broker order for shares already bought.
-    expect(screen.getByRole('button', { name: /limit @/i })).toBeDisabled();
+    expect(await screen.findByText(/could not be confirmed, so NO order was sent/)).toBeInTheDocument();
+    expect(api.postStockOrder).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /limit @/i })).toBeEnabled());
   });
 
   // MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25). When IBKR answers with a
@@ -107,7 +123,7 @@ describe('StockPositionCard — broker order submit()', () => {
       'API /broker/stock-order → 502: IBKR did not place the order: it asked for a ' +
       'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
     ));
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
@@ -115,9 +131,84 @@ describe('StockPositionCard — broker order submit()', () => {
 
     // Awaited first, so the assertions below run after the rejection was handled.
     expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
+    // Save-first: the saved row is deleted -- IBKR provably never got the order.
+    await waitFor(() => expect(api.deletePortfolioPosition).toHaveBeenCalledTimes(1));
     expect(usePortfolioStore.getState().positions).toHaveLength(0);
     expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
     // Nothing was placed, so the user can send again.
     await waitFor(() => expect(screen.getByRole('button', { name: /limit @/i })).toBeEnabled());
+  });
+});
+
+/* STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES — plan B5 test 11 and Z1 test 15.
+ * makeCard() has 30 shares, so the default rungs are 10/10/10; the server
+ * resizes to 15, and the rungs must follow to 5/5/5 in the LOCAL row. */
+describe('StockPositionCard — a resized save', () => {
+  function resizingFetch(qty: number): typeof fetch {
+    return jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST' && String(url).endsWith('/api/portfolio')) {
+        const body = JSON.parse(String(init.body));
+        return { ok: true, status: 201, json: async () => ({ ...body, adjustedQty: qty }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+    }) as unknown as typeof fetch;
+  }
+  const rungSum = () =>
+    (usePortfolioStore.getState().positions[0]?.targets ?? [])
+      .map((t) => t.contractsToSell ?? 0);
+
+  beforeEach(() => {
+    usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useSettingsStore.setState({
+      ibkrPaper: { baseUrl: 'https://localhost:7499/v1/api', accountId: 'ACC' },
+    } as any);
+    useScanStore.setState({
+      stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
+      stocksCardEdits: {
+        scanId: 'stk-1', picks: { AAPL: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    });
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('11. a broker send booked smaller carries rungs that fit the booked shares', async () => {
+    global.fetch = resizingFetch(15);
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-R' });
+
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
+
+    expect(await screen.findByText(/sized it to 15 shares/)).toBeInTheDocument();
+    expect(api.postStockOrder).toHaveBeenCalledWith(expect.objectContaining({ quantity: 15 }));
+    expect(usePortfolioStore.getState().positions[0]?.contracts).toBe(15);
+    expect(rungSum()).toEqual([5, 5, 5]);
+  });
+
+  it('15 (Z1). a save-only Add to Portfolio booked smaller scales the local rungs and says so', async () => {
+    global.fetch = resizingFetch(15);
+
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    fireEvent.click(screen.getByRole('button', { name: /add to portfolio/i }));
+
+    expect(await screen.findByText(/sized it to 15 shares/)).toBeInTheDocument();
+    await waitFor(() => expect(usePortfolioStore.getState().positions[0]?.contracts).toBe(15));
+    expect(rungSum()).toEqual([5, 5, 5]);
+    expect(api.postStockOrder).not.toHaveBeenCalled();
+  });
+
+  it('Tastytrade: the Market button is disabled and says why', async () => {
+    (api.getBrokerStatus as jest.Mock).mockResolvedValueOnce({ tastytrade_paper: { configured: true } });
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    const tt = await screen.findByRole('button', { name: /tastytrade paper/i });
+    await waitFor(() => expect(tt).toBeEnabled());
+    fireEvent.click(tt);
+    const mkt = screen.getByRole('button', { name: /market order/i });
+    expect(mkt).toBeDisabled();
+    expect(mkt).toHaveAttribute('title', expect.stringMatching(/limit orders only/));
   });
 });

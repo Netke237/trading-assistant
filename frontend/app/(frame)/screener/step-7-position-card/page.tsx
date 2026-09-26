@@ -7,8 +7,10 @@ import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { usePortfolioStore } from '@/lib/portfolioStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
+import { placeStockOrderSaveFirst } from '@/lib/stockSaveFirst';
+import { brokerLabelFor, directOrderBlock } from '@/lib/directOrder';
+import { DirectSendNotes } from '@/components/molecules/DirectSendNotes';
 import { api } from '@/lib/api';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
@@ -62,7 +64,6 @@ export default function Step7PositionCardPage() {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const settings = useSettingsStore();
-  const addPosition = usePortfolioStore((s) => s.addPosition);
   const scanHorizon = useScanStore((s) => s.context?.horizon ?? 'Swing');
 
   const ibkrConfigured = !!settings.ibkrPaper.accountId && !!settings.ibkrPaper.baseUrl;
@@ -86,9 +87,10 @@ export default function Step7PositionCardPage() {
   // per-candidate state like orderId/orderedIdx above — if the user switches
   // candidates while a submit() is still in flight, a stale response landing
   // after the switch must not stamp an error/warning onto whatever candidate
-  // is now on screen. addPosition() still always runs for the
-  // originally-submitted card — a real order was placed and must be tracked
-  // regardless of what the user looks at next.
+  // is now on screen. The save and its bookkeeping still always complete for
+  // the originally-submitted card (placeStockOrderSaveFirst never reads UI
+  // state) — a real order must be tracked regardless of what the user looks at
+  // next.
   const selectedIdxRef = useRef(selectedIdx);
   useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
 
@@ -127,24 +129,10 @@ export default function Step7PositionCardPage() {
     setError(null);
     setWarning(null);
     try {
-      const res = await api.postStockOrder({
-        broker: execMode,
-        symbol: card.symbol,
-        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
-        effect: 'OPEN',
-        quantity: card.shares,
-        order_type: orderType,
-        limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,
-        tif: 'DAY',
-      });
-      // Recorded regardless of `stillViewing()` — unlike error/warning below
-      // (transient feedback about a submit the user watched happen), this is
-      // durable "does candidate X have an order" state that must stay correct
-      // even after the user has navigated away, per `hasOrderForCurrent` above.
-      setOrderId(res.order_id);
-      setOrderedIdx(submittedIdx);
-      try {
-        const addRes = await addPosition({
+      // STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: save FIRST, then send the
+      // share count the save approved (it can resize a stock since Part A).
+      const out = await placeStockOrderSaveFirst({
+        pos: {
           ...buildPaperStockPosition(
             card.symbol, card.strategy.entry_price, card.shares, card.direction as 'Bullish' | 'Bearish',
             stockCardSnapshotOf(card, scanHorizon),
@@ -155,25 +143,36 @@ export default function Step7PositionCardPage() {
             },
           ),
           source: 'broker',
-          sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
+          sourceLabel: `${brokerLabelFor(execMode)} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: pending)`,
           orderedAt: new Date().toISOString(),
-          // Phase G (piece 5) — confirmed gap as of build step 4: the send
-          // gate blocked an unpicked send but nothing carried a made pick's
-          // VALUE into the created position.
+          // Phase G (piece 5) — carry a made pick's VALUE into the position.
           ...pickedFieldsFrom(stocksPicks[card.symbol] ?? null),
-        });
-        if (stillViewing() && (addRes.status === 'rejected' || addRes.status === 'pending')) {
-          setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
-        }
-      } catch {
-        if (stillViewing()) setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+        },
+        broker: execMode,
+        orderType,
+        limitPrice: orderType === 'LMT' ? card.strategy.entry_price : null,
+        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+      });
+      if (out.kind === 'placed') {
+        // Recorded regardless of `stillViewing()` — durable "does candidate X
+        // have an order" state, per `hasOrderForCurrent` above.
+        setOrderId(out.orderId);
+        setOrderedIdx(submittedIdx);
+        if (out.message && stillViewing()) setWarning(out.message);
+      } else if (stillViewing()) {
+        // Every other outcome: the banner explains the moment; a note (in
+        // <DirectSendNotes />) is the durable record wherever one is needed.
+        setError(out.message);
       }
     } catch (e) {
-      if (stillViewing()) setError(String(e));
+      // Only pre-save work reaches here: nothing was written, no order sent.
+      if (stillViewing()) setError(`No order was sent — ${String(e)}`);
     } finally {
       setPlacingType(null);
     }
   }
+
+  const marketBlocked = directOrderBlock('MKT', execMode);
 
   return (
     <div className={styles.main}>
@@ -250,8 +249,9 @@ export default function Step7PositionCardPage() {
             {placingType === 'LMT' ? 'Placing…' : `Place Limit Order @ $${card.strategy.entry_price}`}
           </button>
           <button type="button" className={`${styles.btn} ${styles.btnMarket}`}
-            onClick={() => submit('MKT')} disabled={placingType !== null || hasOrderForCurrent || pickMissing}
-            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}>
+            onClick={() => submit('MKT')}
+            disabled={placingType !== null || hasOrderForCurrent || pickMissing || marketBlocked !== null}
+            title={marketBlocked ?? (pickMissing ? MISSING_METHOD_PICK_TITLE : undefined)}>
             {placingType === 'MKT' ? 'Placing…' : 'Right Now — Market Order'}
           </button>
         </div>
@@ -263,6 +263,7 @@ export default function Step7PositionCardPage() {
       )}
       {error && <Text size={12} tone="reject">{error}</Text>}
       {warning && <Text size={12} tone="caution">{warning}</Text>}
+      <DirectSendNotes />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverri
 import { useRiskStore } from '@/lib/riskStore';
 import { stripLegacyIvFields } from '@/lib/ivBasis';
 import { validationMessages } from '@/lib/pydanticError';
+import { scaleRungShares } from '@/lib/paperTrade';
 
 type BackendPosition = {
   id: string;
@@ -988,7 +989,12 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     // returned adjustedQty below; only the merged local total is left
                     // untouched, same as before this fix, to be corrected by the next
                     // authoritative sync.
-                    ...(adjustedQty != null && !didMerge ? { contracts: adjustedQty } : {}),
+                    // The writer scales the STORED rungs on a resize (stock plan
+                    // Z1); the local row takes the same rule, or a drawer rung edit
+                    // before the next sync PATCHes rungs selling more than held.
+                    ...(adjustedQty != null && !didMerge
+                      ? { contracts: adjustedQty, targets: scaleRungShares(rest.targets, adjustedQty) }
+                      : {}),
                     // Piece 4 — adopt the server's derived fraction now rather
                     // than waiting for the next syncFromBackend, so the local
                     // alert engine and the backend generator resolve this

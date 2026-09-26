@@ -10,7 +10,9 @@ import type { MethodPick } from '@/types/domain';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
+import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs, scaleRungShares } from '@/lib/paperTrade';
+import { placeStockOrderSaveFirst } from '@/lib/stockSaveFirst';
+import { brokerLabelFor, directOrderBlock } from '@/lib/directOrder';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { _horizonEnum } from '@/lib/analysisStore';
@@ -271,10 +273,13 @@ export function StockPositionCard({
         } else if (allocated > 0) {
           // Total `shares` shrank below the existing allocation — scale every
           // rung down proportionally rather than favoring one arbitrarily.
-          const scale = next.shares / allocated;
-          next.sharesT1 = Math.floor(next.sharesT1 * scale);
-          next.sharesT2 = Math.floor(next.sharesT2 * scale);
-          next.sharesT3 = Math.max(0, next.shares - next.sharesT1 - next.sharesT2);
+          // The ONE shrink rule, shared with the backend writer (stock plan Q1).
+          const [r1, r2, r3] = scaleRungShares([
+            { contractsToSell: next.sharesT1 }, { contractsToSell: next.sharesT2 }, { contractsToSell: next.sharesT3 },
+          ], next.shares)!;
+          next.sharesT1 = r1!.contractsToSell ?? 0;
+          next.sharesT2 = r2!.contractsToSell ?? 0;
+          next.sharesT3 = r3!.contractsToSell ?? 0;
         }
       } else if ('shares' in partial && allocated > 0 && allocated < next.shares) {
         // A fifth independent audit round found the mirror gap: growing total
@@ -530,19 +535,10 @@ export function StockPositionCard({
     setErr(null);
     setWarning(null);
     try {
-      const res = await api.postStockOrder({
-        broker: execMode,
-        symbol: card.symbol,
-        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
-        effect: 'OPEN',
-        quantity: overlay.shares,
-        order_type: orderType,
-        limit_price: orderType === 'LMT' ? overlay.entry : null,
-        tif: 'DAY',
-      });
-      setOrderId(res.order_id);
-      try {
-        const addRes = await addPosition({
+      // STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: save FIRST, then send the
+      // share count the save approved (it can resize a stock since Part A).
+      const out = await placeStockOrderSaveFirst({
+        pos: {
           ...buildPaperStockPosition(
             card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
             stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
@@ -562,22 +558,27 @@ export function StockPositionCard({
             },
           ),
           source: 'broker',
-          sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
+          sourceLabel: `${brokerLabelFor(execMode)} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: pending)`,
           orderedAt: new Date().toISOString(),
-          // Phase G (piece 5) — confirmed gap as of build step 4: the send
-          // gate blocked an unpicked send but nothing carried a made pick's
-          // VALUE into the created position. `methodPick` is this card's own
-          // local pick state (synced from stocksCardEdits.picks).
+          // Phase G (piece 5) — `methodPick` is this card's own local pick state.
           ...pickedFieldsFrom(methodPick),
-        });
-        if (addRes.status === 'rejected' || addRes.status === 'pending') {
-          setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
-        }
-      } catch {
-        setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+        },
+        broker: execMode,
+        orderType,
+        limitPrice: orderType === 'LMT' ? overlay.entry : null,
+        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+      });
+      if (out.kind === 'placed') {
+        setOrderId(out.orderId);
+        if (out.message) setWarning(out.message);
+      } else {
+        // The banner explains the moment; a note (rendered by the host page's
+        // <DirectSendNotes />) is the durable record wherever one is needed.
+        setErr(out.message);
       }
     } catch (e) {
-      setErr(String(e));
+      // Only pre-save work reaches here: nothing was written, no order sent.
+      setErr(`No order was sent — ${String(e)}`);
     } finally {
       setPlacingType(null);
     }
@@ -762,10 +763,17 @@ export function StockPositionCard({
         return;
       }
       setAdded(true);
+      // Z1: since Part A a stock save can be resized; say so rather than leave
+      // the typed share count on screen beside "Added".
+      if (res.adjustedQty != null) {
+        setWarning(`Portfolio sized it to ${res.adjustedQty} shares to fit your exposure limit.`);
+      }
     } finally {
       setAdding(false);
     }
   }
+
+  const marketBlocked = directOrderBlock('MKT', execMode);
 
   const rrT1 = rrAt(overlay.t1);
   const rrT2 = rrAt(overlay.t2);
@@ -1287,8 +1295,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('MKT')}
-            disabled={placingType !== null || orderId !== null || pickMissing}
-            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
+            disabled={placingType !== null || orderId !== null || pickMissing || marketBlocked !== null}
+            title={marketBlocked ?? (pickMissing ? MISSING_METHOD_PICK_TITLE : undefined)}
           >
             <Text size={12}>{placingType === 'MKT' ? 'Placing…' : 'Market Order'}</Text>
           </button>

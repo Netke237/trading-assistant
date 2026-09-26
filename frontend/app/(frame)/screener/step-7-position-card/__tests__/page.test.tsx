@@ -4,6 +4,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
+import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import type { StockScanResult } from '@/types/stockDomain';
 import type { MethodPick } from '@/types/domain';
 
@@ -22,6 +23,7 @@ const pick = (): MethodPick => ({
 jest.mock('@/lib/api', () => ({
   api: {
     postStockOrder: jest.fn(),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     getBrokerStatus: jest.fn().mockResolvedValue({}),
     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
   },
@@ -51,6 +53,20 @@ function makeScanResult(): StockScanResult {
 
 const originalFetch = global.fetch;
 
+/** STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: the save now runs FIRST and its
+ *  201 must carry a positive `entryPrice` (else it is an unreadable reply and
+ *  no order is sent). This mock echoes the POST body back, as the router
+ *  does; every other request keeps the old `{}`/`[]` reply. */
+function echoFetch(): typeof fetch {
+  return jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith('/api/portfolio')) {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => body } as Response;
+    }
+    return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
+
 describe('step-7-position-card — broker order submit()', () => {
   beforeEach(() => {
     useScanStore.setState({
@@ -72,7 +88,7 @@ describe('step-7-position-card — broker order submit()', () => {
 
   it('creates a local position with a snapshot after a successful broker order', async () => {
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<Step7PositionCardPage />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
@@ -92,16 +108,19 @@ describe('step-7-position-card — broker order submit()', () => {
     expect(pos.pickedStopBasis).toBe('stock');
   });
 
-  it('shows a non-blocking warning and permanently disables the order buttons when the order succeeds but local tracking fails', async () => {
-    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-2' });
+  it('UPDATED for save-first: an unreachable Portfolio sends NO order and leaves the buttons usable', async () => {
+    // Was: "order succeeds but local tracking fails" -> warning + buttons
+    // disabled. Since STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES the save runs
+    // first, so an offline save means no order was ever sent.
     global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
 
     render(<Step7PositionCardPage />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
 
-    expect(await screen.findByText(/not yet tracked in Portfolio/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
+    expect(await screen.findByText(/could not be confirmed, so NO order was sent/)).toBeInTheDocument();
+    expect(api.postStockOrder).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit order/i })).toBeEnabled());
   });
 
   it('does not let a stale order response from a previous candidate disable the newly-selected one', async () => {
@@ -111,7 +130,7 @@ describe('step-7-position-card — broker order submit()', () => {
     // buttons via orderId !== null) onto MSFT, which was never submitted.
     let resolveOrder!: (v: { order_id: string }) => void;
     (api.postStockOrder as jest.Mock).mockReturnValueOnce(new Promise((res) => { resolveOrder = res; }));
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<Step7PositionCardPage />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
@@ -137,7 +156,7 @@ describe('step-7-position-card — broker order submit()', () => {
     // silently re-enable the Buy buttons for a candidate that already has
     // a live (paper) order placed, which would permit a duplicate submission.
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<Step7PositionCardPage />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
@@ -157,7 +176,7 @@ describe('step-7-position-card — broker order submit()', () => {
     // stay correctly attributed to AAPL regardless of what got viewed in
     // between — nothing about navigating away should un-order it.
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<Step7PositionCardPage />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
@@ -181,13 +200,16 @@ describe('step-7-position-card — broker order submit()', () => {
       'API /broker/stock-order → 502: IBKR did not place the order: it asked for a ' +
       'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
     ));
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<Step7PositionCardPage />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
 
     expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
+    // Save-first: the row WAS saved, and is deleted because IBKR provably
+    // never received the order.
+    await waitFor(() => expect(api.deletePortfolioPosition).toHaveBeenCalledTimes(1));
     expect(usePortfolioStore.getState().positions).toHaveLength(0);
     expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: /place limit order/i })).toBeEnabled());
@@ -239,7 +261,7 @@ describe('step-7-position-card — refuses to order a candidate with no method p
 
   it('unblocks once the candidate has a pick', async () => {
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-3' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     useScanStore.setState((s) => ({
       stocksCardEdits: { ...s.stocksCardEdits, picks: { AAPL: pick() } },
@@ -253,5 +275,73 @@ describe('step-7-position-card — refuses to order a candidate with no method p
 
     fireEvent.click(limitBtn);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+  });
+});
+
+/* STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES — plan B5 test 10. */
+describe('step-7-position-card — save-first outcomes', () => {
+  beforeEach(() => {
+    useScanStore.setState({
+      stockScanResult: makeScanResult(), selectedSymbol: 'AAPL',
+      stocksCardEdits: {
+        scanId: 'S1', picks: { AAPL: pick(), MSFT: pick() },
+        invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {},
+      },
+    } as any);
+    usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useDirectSendNotesStore.setState({ notes: [] });
+    useSettingsStore.setState({
+      ibkrPaper: { baseUrl: 'https://localhost:7499/v1/api', accountId: 'ACC' },
+    } as any);
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('a resize sends the approved shares, says so, and records the order', async () => {
+    global.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST' && String(url).endsWith('/api/portfolio')) {
+        const body = JSON.parse(String(init.body));
+        return { ok: true, status: 201, json: async () => ({ ...body, adjustedQty: 15 }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+    }) as unknown as typeof fetch;
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-R' });
+
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
+
+    expect(await screen.findByText(/sized it to 15 shares/)).toBeInTheDocument();
+    expect(api.postStockOrder).toHaveBeenCalledWith(expect.objectContaining({ quantity: 15 }));
+    expect(screen.getByText(/Order placed — ID: ORD-R/)).toBeInTheDocument();
+    expect(usePortfolioStore.getState().positions[0]?.contracts).toBe(15);
+  });
+
+  it('an unknown outcome shows the banner and a note with Remove that survives navigation', async () => {
+    global.fetch = echoFetch();
+    (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
+
+    expect(await screen.findByText(/AAPL stock: Order status UNKNOWN/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove (AAPL stock)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'MSFT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'AAPL' }));
+    expect(screen.getByRole('button', { name: 'Remove (AAPL stock)' })).toBeInTheDocument();
+  });
+
+  it('Tastytrade: the Market button is disabled and says why', async () => {
+    (api.getBrokerStatus as jest.Mock).mockResolvedValueOnce({ tastytrade_paper: { configured: true } });
+    render(<Step7PositionCardPage />);
+    const tt = await screen.findByRole('button', { name: /tastytrade paper/i });
+    await waitFor(() => expect(tt).toBeEnabled());
+    fireEvent.click(tt);
+    const mkt = screen.getByRole('button', { name: /right now — market order/i });
+    expect(mkt).toBeDisabled();
+    expect(mkt).toHaveAttribute('title', expect.stringMatching(/limit orders only/));
   });
 });

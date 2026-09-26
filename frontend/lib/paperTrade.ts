@@ -178,3 +178,38 @@ export function buildPaperStockPosition(
     tradeCardSnapshot: snapshot,
   };
 }
+
+/**
+ * Shrink the sell-to-close rungs so they never sell more than `newQty` — the
+ * card's own shrink rule, and IDENTICAL to the backend's
+ * `position_writer.scale_rung_quantities`, so a resized row's local rungs agree
+ * with the stored ones before the first sync (stock plan Q1/Q2/Z1).
+ *
+ * Only rungs with a positive `contractsToSell` take part. If they already sum
+ * to `newQty` or less, the rungs are returned unchanged (a runner the user left
+ * unallocated stays unallocated). Otherwise each such rung except the last
+ * becomes floor(c × newQty / alloc) and the last takes the remainder, so they
+ * sum to exactly `newQty`. Never grows a rung.
+ */
+export function scaleRungShares<T extends { contractsToSell?: number }>(
+  targets: T[] | undefined,
+  newQty: number,
+): T[] | undefined {
+  if (!targets) return targets;
+  const qtyOf = (t: T): number | null =>
+    typeof t.contractsToSell === 'number' && Number.isFinite(t.contractsToSell) && t.contractsToSell > 0
+      ? Math.trunc(t.contractsToSell)
+      : null;
+  const idx = targets.flatMap((t, i) => (qtyOf(t) != null ? [i] : []));
+  const alloc = idx.reduce((sum, i) => sum + (qtyOf(targets[i]!) ?? 0), 0);
+  if (idx.length === 0 || alloc <= newQty) return targets;
+  const out = targets.map((t) => ({ ...t }));
+  let taken = 0;
+  for (const i of idx.slice(0, -1)) {
+    const c = Math.floor((qtyOf(targets[i]!)! * newQty) / alloc);
+    out[i]!.contractsToSell = c;
+    taken += c;
+  }
+  out[idx[idx.length - 1]!]!.contractsToSell = Math.max(0, newQty - taken);
+  return out;
+}

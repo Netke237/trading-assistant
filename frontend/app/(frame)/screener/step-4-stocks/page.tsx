@@ -18,6 +18,7 @@ import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
+import { DirectSendNotes } from '@/components/molecules/DirectSendNotes';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
@@ -480,6 +481,9 @@ export default function Step4StocksPage() {
           )}
         </div>
       )}
+      {/* Notes from any save-first broker send (this page's card and dialog,
+        * or Step 7) whose Portfolio row may have no order behind it. */}
+      <DirectSendNotes />
       {showSendDialog && (
         <StockSendDialog
           cards={stockBasket}
