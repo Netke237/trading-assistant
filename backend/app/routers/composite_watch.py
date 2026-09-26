@@ -76,9 +76,15 @@ async def get_regime_snapshot(
         from app.services.regime_hmm import compute_intraday_hmm
         if model == "HMM_intraday":
             from app.data.market import completed_bars_for_interval, fetch_intraday_candles
+            from app.services.composite_trigger_evaluator import (
+                intraday_history_days, watch_fetch_interval,
+            )
             # A4c: the value the watch will compare against -- completed bars only.
+            # P4b (D4): the same series (D5 spelling) and history (4h: 180 days)
+            # the composite watch evaluator fetches.
+            iv = watch_fetch_interval(interval)
             hmm_bars = completed_bars_for_interval(
-                fetch_intraday_candles(symbol, interval=interval, days=55), interval,
+                fetch_intraday_candles(symbol, interval=iv, days=intraday_history_days(iv)), iv,
             )
         else:
             hmm_bars = bars

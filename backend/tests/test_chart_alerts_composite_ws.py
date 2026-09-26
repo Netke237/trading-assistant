@@ -201,6 +201,16 @@ async def test_ws_composite_path_does_not_treat_daily_interval_candles_as_intrad
         return None
 
     monkeypatch.setattr(strategy_engine, 'mean_reversion_vwap_signal', _fake_vwap_signal)
+    # P4b (VWAP-CONFIRMATION-LIKE-REGIME-MODELS, D7): on 1D the daily variant runs on
+    # the completed get_bars rows (_FLAT_BARS, no "time" key) -- never the chart
+    # candles (_FLAT_CANDLES, which carry "time").
+    seen_daily = []
+
+    def _fake_vwap_daily_signal(bars, direction='Bullish'):
+        seen_daily.append(bars)
+        return None
+
+    monkeypatch.setattr(strategy_engine, 'mean_reversion_vwap_daily_signal', _fake_vwap_daily_signal)
 
     daily_trigger_def = {**_TRIGGER_DEF, "strategy_confirmations": ["mean_reversion_vwap"]}
     async with Session() as db:
@@ -214,6 +224,9 @@ async def test_ws_composite_path_does_not_treat_daily_interval_candles_as_intrad
     # The VWAP signal fn must never have been called — proving bars_intraday was []
     # (not the mislabeled daily all_candles) for a '1D' rule.
     assert seen_bars_lengths == []
+    # FLIPPED by P4b: the daily variant now runs, on the get_bars rows only.
+    assert seen_daily, "the VWAP daily variant must run on a 1D rule"
+    assert all("time" not in b for sl in seen_daily for b in sl)
 
 
 @pytest.mark.asyncio

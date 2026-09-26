@@ -265,10 +265,12 @@ async def test_a_genuine_false_still_re_arms(store):
     assert await _run_real(store, [_OMM_BULL, bear, _OMM_BULL]) == 2
 
 
-def _call(td, *, bars_daily=None, bars_intraday=None, flag):
+def _call(td, *, bars_daily=None, bars_intraday=None, flag, interval="15m"):
+    # P4b: interval decides which VWAP variant runs; '15m' keeps these pins'
+    # meaning (VWAP reads bars_intraday, starved when it is short).
     return cte.evaluate_scheduled(
         "AAPL", td, _bars() if bars_daily is None else bars_daily,
-        bars_intraday or [], unknown_as_none=flag,
+        bars_intraday or [], unknown_as_none=flag, interval=interval,
     )
 
 
@@ -359,17 +361,25 @@ async def test_a_genuine_exit_during_an_intraday_outage_re_arms_and_the_next_ent
     entry) -- two alerts, not one."""
     td = {"primary": {"model": "any"}, "min_confirmations": 0,
           "strategy_confirmations": _THREE, "min_strategy_confirmations": 2}
-    store.add_composite_watch("AAPL", td)
+    # P4b: an intraday watch (VWAP reads intraday bars only on an intraday
+    # interval); the healthy fetch returns int unix times in the past, so
+    # completed_bars_for_interval keeps them (string times are all dropped).
+    store.add_composite_watch("AAPL", td, interval="15m")
     sent = AsyncMock(return_value=True)
+    _now = int(__import__("time").time())
+    healthy = [{"time": _now - 900 * (300 - i + 2), "open": 100.0, "high": 101.0, "low": 99.0,
+                "close": 100.0, "volume": 1_000} for i in range(300)]
+    fetch = MagicMock(side_effect=[healthy, [], []])
     with patch.object(ev, "strategy_watch_store", store), \
          patch.object(ev, "get_bars", new=AsyncMock(return_value=_bars(n=300))), \
          patch.object(ev, "notify_enabled_channels", sent), \
-         patch("app.data.market.fetch_intraday_candles",
-               side_effect=[_bars(n=300), [], []]), \
+         patch("app.data.market.fetch_intraday_candles", fetch), \
+         patch("app.data.market.intraday_feed_lag_seconds", return_value=0), \
          patch("app.services.composite_trigger_evaluator.describe_match", return_value={}), \
          patch.object(cte, "_check_strategy_signals", side_effect=[2, 0, 2]):
         for _ in range(3):
             await ev.evaluate_and_notify()
+    assert fetch.call_count == 3
     assert sent.await_count == 2
 
 
