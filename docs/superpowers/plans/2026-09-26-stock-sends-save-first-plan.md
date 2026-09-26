@@ -220,7 +220,7 @@ type StockSendOutcome =
 | S3 | Accept a wrong-side stop as usable | T-A1 |
 | S4 | Resize with `entry × multiplier` instead of per-unit risk | T-A3 |
 | S5 | Leave `orm_positions_to_risk` at notional for stocks | T-A5, T-A9 |
-| S6 | Leave `position_writer`'s builder at notional | T-A5 (via writer) |
+| S6 | Leave `position_writer`'s builder at notional | T-A11 (R4) |
 | S7 | Drop `stop=` in the PATCH call | T-A8 |
 | S8 | Apply the contract cap to stocks | T-A2 |
 | S9 | Send the order before persisting | 1 |
