@@ -15,6 +15,14 @@
       "expires_at": "2026-09-26T08:51:28Z",
       "note": "P4a chart alert rules (sync local-only composites, PATCH toggle, missed candles): plan -> rounds -> build",
       "task": "P4A-CHART-ALERT-RULES"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/clever-planck-rpz8yh",
+      "claimed_at": "2026-09-26T05:51:47Z",
+      "expires_at": "2026-09-26T08:51:47Z",
+      "note": "P3c plan r5 (round-4 fixes) + implementation",
+      "task": "P3C-SCAN-SIZING-LEFTOVERS"
     }
   ]
 }
