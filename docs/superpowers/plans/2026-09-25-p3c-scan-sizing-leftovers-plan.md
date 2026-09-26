@@ -12,7 +12,7 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -363,8 +363,8 @@ rungs, and with every rung dropped the signal returns None (strategy_engine.py:5
 never shows. When the ladder is empty (r15-1, verified against :295-351): the primary (the 20-bar `_swing_low`,
 today included) was dropped — in MIXED data typically because raw pre-split lows sit ABOVE the adjusted entry, not
 because it is non-positive — AND the fallback `entry - risk × max(fallback_mult, _LADDER_MIN_FALLBACK_R)` rounded
-to ≤ 0. The degenerate guard (:295-298, `entry <= 0` / non-finite risk) cannot be reached from the DB (`high`/`low`
-NOT NULL, models/ohlcv_daily.py:29; a close ≤ 0 fails the setup earlier), so there is no second cause to label. The script therefore wraps the ladder helper for the duration of its own calls
+to ≤ 0. The degenerate guard (:292-295, `entry <= 0` / non-finite risk) cannot be reached from the DB (`high`/`low`
+NOT NULL, models/ohlcv_daily.py:29-30; a close ≤ 0 fails the setup earlier), so there is no second cause to label. The script therefore wraps the ladder helper for the duration of its own calls
 (`unittest.mock.patch.object(strategy_engine, "_build_target_ladder", wrapper)` — `pullback_ema_signal` looks the
 name up in module globals at call time, :493; the script is single-threaded and nothing else runs in its
 process). The wrapper calls the ORIGINAL helper with the same arguments, records the arguments (`entry`, `stop`,
@@ -374,15 +374,17 @@ positive) so the signal completes and the bar is still recorded as a setup bar. 
 reported. Per setup bar (signal not None under the patch) the script records: `stop_price`; the raw rungs
 (`primary`, ext1, ext2 exactly as passed); the real `targets[0]`, or, when the real ladder is empty (r15-1, r15-3):
 `NONE — no valid rung: primary {p} {non-positive | not below entry | missing}, fallback {f} <= 0. Before P3a the
-signal emitted {f} as target_price and backtesting.py raised on it (0 < price assertion), failing the symbol's
-whole backtest.` — `{f}` computed from the recorded args with the module's own `_LADDER_MIN_FALLBACK_R`, the
+signal emitted {f} as target_price; had this bar's order FILLED, backtesting.py would have raised (0 < price
+assertion) and failed the symbol's whole backtest.` (r16-1: the assertion runs in `Trade.tp`'s setter, i.e. on fill
+— backtesting.py `__set_contingent` — not when the order is placed; the signal is not called while in a trade, and
+an unfilled limit is cancelled by the next order under `exclusive_orders=True`, strategy_backtest.py:136.) — `{f}` computed from the recorded args with the module's own `_LADDER_MIN_FALLBACK_R`, the
 primary's status from the same 2dp comparison `_valid` makes. (P3a's docstring, strategy_engine.py:283-288, and
 `git show a2365a3` confirm the old path: the fallback was emitted, not traded; strategy_backtest.py:138-140 turns
 the raise into `_empty_result`.) Summary per series: signal-fire count — an UPPER BOUND on what the backtest
 evaluates (r15-5: the backtest calls the signal only while flat, strategy_backtest.py:125; the script calls it on
 every bar) — how many had a non-positive raw rung, how many had an empty real ladder, the minimum raw rung and the
-minimum fallback, with dates, and the FIRST empty-ladder bar (pre-P3a, the one that would have failed the
-backtest).
+minimum fallback, with dates, and the FIRST empty-ladder bar — the EARLIEST bar at which the pre-P3a backtest could have raised,
+not necessarily the one that did (r16-1).
 Nothing is reimplemented except that one-line empty-ladder fallback, so there is no ordering or rounding rule to
 drift.
 
@@ -622,7 +624,9 @@ direction", "LOGGED BY P3a (2026-09-25), NOTE: frontend", "LOGGED BY P3c SETUP" 
 FIXED (a) _build_target_ladder" and "P3a (2026-09-25) FIXED the comment (441" updated with "check script
 shipped, awaiting Kenneth's run" (not closed). New entries: the stale stock_scan.py and auto_trader.py
 comments (L11, L12), the scan-vs-fire END difference (item 6), `run_scan`'s cancellation gap (item 7),
-the relative_strength DB-miss misalignment residual (r2-M6), the ScanFunnel unmeasured stage (r2-M7), the
+the relative_strength DB-miss misalignment residual (r2-M6), P3a's `_valid` keeping a positive rung below 0.005
+that rounds to 0.0 (strategy_engine.py:300-311 — the `value <= 0` test runs before rounding; practically
+unreachable, P3a's code; round-16 observation), the ScanFunnel unmeasured stage (r2-M7), the
 stale "market structure does not support" text in the frontend fixture `step-4-ranking/__tests__/emptyStateBanner.test.tsx:21-22` (r3-L5).
 The two Kenneth decisions above go to the front of `decisions`. One new decision
 per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `direction_conviction_unmeasured` in scan.py.
@@ -851,3 +855,20 @@ bars ≥ 350) and a MIXED-shaped pin 2 (unpatched 0 / patched 94) are constructi
 | 5 | LOW | §5 the backtest evaluates only while flat; the script's count overstates | count labelled an upper bound; first empty-ladder bar reported |
 | 6 | LOW | §5 which series the signal runs on was inconsistent | exactly two: `_read_bars` mixed and split-rebuilt |
 | 7 | LOW | line ref :501-502 | :502-503 |
+
+## Round-16 log (3 findings; scope: the round-15 resolutions)
+
+All seven round-15 resolutions verified, by execution where possible: the three primary statuses are exhaustive
+(`min_rung_r` is never passed, so the floor branch never applies; "missing" is unreachable but harmless); the
+fallback equals ext1 at `rr_target_mult` 2.0; the pre-P3a raise reproduced ("Make sure 0 < price < inf! price:
+-426.65"); pin 2 built (unpatched 0 / patched 133, all primaries not below entry, fallbacks < 0); whitelist and
+ValidationError handling; the two series consistent everywhere.
+
+| # | Sev | Finding | Resolution (r17) |
+|---|---|---|---|
+| 1 | LOW | §5 label/summary said the first empty-ladder bar failed the pre-P3a backtest; the assertion runs on FILL, and that bar may be in a trade or unfilled | reworded: "had this bar's order filled"; summary says "earliest bar at which it could have raised" |
+| 2 | LOW | degenerate-guard ref :295-298 | :292-295 |
+| 3 | LOW | `low` NOT NULL ref :29 | :29-30 |
+
+Observation (out of scope, P3a's code): `_valid` can keep a sub-0.005 positive rung that rounds to 0.0 — logged in
+State updates.
