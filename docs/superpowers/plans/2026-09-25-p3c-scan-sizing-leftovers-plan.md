@@ -12,7 +12,7 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20. r20 → round 20: 4 LOW, addressed in r21.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -328,17 +328,22 @@ symbols and would ALSO inflate bullish ATR, stops and targets silently — for e
 both scans included.
 
 `backend/scripts/p3c_data_checks.py`, read-only (r19-L8: a sqlite `DATABASE_URL` or none → stdlib
-sqlite3 with a `mode=ro` URI, like `iv_basis_analysis.py`; a `postgresql` URL → `create_async_engine(DATABASE_URL)`
-(asyncpg, in requirements.txt), each connection's first statement `SET TRANSACTION READ ONLY`; any other scheme →
-exit non-zero naming it — `iv_basis_analysis.py:251-252` refuses non-sqlite outright, which would leave a
-Postgres install unable to run the check). It never calls `get_bars`
+sqlite3 with a `mode=ro` URI, like `iv_basis_analysis.py`; a `postgresql+asyncpg://`, `postgresql://` or `postgres://` URL →
+the last two rewritten to `postgresql+asyncpg://` first (r20-L2: only the asyncpg form builds an engine here —
+psycopg2 is not installed; the app's own URL is already that form, app/database.py:8), then
+`create_async_engine(url)` (asyncpg, in requirements.txt; imported at the script's module level — r20-L4), each
+connection's first statement `SET TRANSACTION READ ONLY`; any other scheme → exit non-zero naming it. Not
+`iv_basis_analysis.py`'s approach (r20-L1): for non-sqlite it falls back to the HTTP API (:251-254), and no API
+serves raw `ohlcv_daily` rows (`adj_factor`, raw OHLC), so that fallback is useless here).
+Everywhere in this script a NULL `adj_factor` is read as 1.0, as `_read_bars` does (historical_store.py:154-155 —
+r19-L7, r20-L3: every product with `adj_factor` below, not only the first). It never calls `get_bars`
 (which writes on a stale DB). Window (r2-H2): `[today - 5×365d, today]` — `_HISTORY_YEARS = 5` (stock_scan.py:450), the span `get_bars` serves the
 backtest where the negative price happens. The splits (WMT 3:1 Feb 2024, TSCO 5:1 Dec 2024, CPRT and SRE 2023) are
 outside the 441-day regime window, so that window cannot see them.
 For each symbol (default WMT CPRT TSCO SRE LYB, overridable):
 
 - rows in `ohlcv_daily` over the scan window: count, date span, `source` mix, `adj_factor` / `split_factor` changes;
-- max of `high / (raw_close × adj_factor)` (NULL `adj_factor` read as 1.0, as `_read_bars` does, historical_store.py:154-155 — r19-L7) and the largest one-day `|Δclose|` %, with dates;
+- max of `high / (raw_close × adj_factor)` and the largest one-day `|Δclose|` %, with dates;
 - ATR(14) at the last bar computed three ways: as `_read_bars` returns it (mixed), fully raw, fully adjusted
   (OHLC all × adj_factor);
 - the bearish pullback_ema target on the two series named below (r15-6: the `_read_bars` MIXED series and the
@@ -658,7 +663,7 @@ after the run, and that no socket was opened (socket.socket patched to raise). V
 four in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN` (r2-L9). The same module holds
 §5's two target pins (r14-4): the >350-bar all-positive fixture (patched = unpatched on setup bars, stop and
 target; a setup bar at index ≥ 350 asserted to exist) and the MIXED-shaped empty-ladder fixture (unpatched None,
-patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8): a `mysql://` URL exits non-zero naming the scheme; a `postgresql+asyncpg://` URL with `create_async_engine` patched to a recording fake asserts `SET TRANSACTION READ ONLY` is the first statement on every connection and no write statement follows.
+patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8): a `mysql://` URL exits non-zero naming the scheme; `postgresql+asyncpg://`, `postgresql://` and `postgres://` URLs, with `create_async_engine` patched ON THE LOADED SCRIPT MODULE (r20-L4: the test loads it via `importlib.util` like tests/test_iv_basis_analysis.py; patching `sqlalchemy.ext.asyncio.create_async_engine` has no effect on the script's module-level import) to a recording fake whose queries return no rows, assert the fake received a `postgresql+asyncpg://` URL each time, `SET TRANSACTION READ ONLY` is the first statement on every connection, no write statement follows, and the script prints its no-rows line per symbol.
 
 ## Open questions for Kenneth
 
@@ -927,4 +932,18 @@ seven State-update openings present once in PROJECT_STATE.json.
 | 6 | LOW | §2 relative_strength test names no patch target | `app.routers.scan._rs_benchmark_candles` AsyncMock, with why |
 | 7 | LOW | §5 formulas silent on NULL `adj_factor` | NULL read as 1.0 like `_read_bars`; a NULL row in the STALE fixture |
 | 8 | LOW | §5 Postgres read-only path names no driver | sqlite → sqlite3 `mode=ro`; postgresql → `create_async_engine` + `SET TRANSACTION READ ONLY`; other → exit non-zero |
+
+## Round-20 log (4 findings, all LOW; scope: the r20 diff)
+
+Verified: every r20 line ref; the §2 Intraday stub reaches the direction check (`scan.py:585-587` calls the
+module-global name via `asyncio.to_thread`; all 400 `INTRADAY` bars are completed; §1 drops only on empty);
+`_rs_benchmark_candles` is `async def (req)`, so an AsyncMock fits; NULL-as-1.0 matches `_read_bars`.
+Nit rejected: the auditor put `BookingOutcome`'s `@dataclass` at :99; it is at :98, so :98-105 stands.
+
+| # | Sev | Finding | Resolution (r21) |
+|---|---|---|---|
+| 1 | LOW | §5 said `iv_basis_analysis.py:251-252` refuses non-sqlite; it falls back to the HTTP API (:251-254) | reworded, with why that fallback can't serve raw rows |
+| 2 | LOW | §5 plain `postgresql://` / `postgres://` fail in `create_async_engine` (no psycopg2) | rewritten to `postgresql+asyncpg://` first; routing test covers all three |
+| 3 | LOW | §5 NULL-as-1.0 stated only for the first `adj_factor` product; the fully-adjusted ATR and STALE verdict would hit None × float | stated once for the whole script |
+| 4 | LOW | Verification: no patch target for `create_async_engine` | module-level import; patched on the importlib-loaded script module; fake returns no rows |
 
