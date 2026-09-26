@@ -370,3 +370,26 @@ Round 2 confirmed several things:
   - The rest of the same PATCH (the stop, the targets) still applies, as a `qty_error` does today. Check the router's existing handling of `qty_error` in the build and keep it.
 - **T-A8b** (`test_portfolio_update.py`): row 1000 @ 50, stop 49, portfolioValue 100k. PATCH `{qty: 1001, stop: null}` → the response carries the qty error and the stored qty is still 1000. PATCH `{qty: 1001, stop: 40}` ($10 per share × 1001 = 10%, resize 500) → the same.
 - **Mutation S22:** drop the guard → T-A8b red.
+
+---
+
+## Plan round 3: NOT clean. 1 gate-level finding (MEDIUM). CAP REACHED, stopped for Kenneth
+
+Round 3 confirmed several things against the code:
+- **Q1 matches the card.** T3 is never 0 in the card, and a 0 rung floors to 0 under both rules. Q1's `floor(c·new/alloc)` only removes a floating-point off-by-one.
+- **The writer's "books fewer than body.qty" is the right condition.** With gates off it books `body.qty`, and the rungs are untouched.
+- **Q2 agrees on every send path.** Every send path's rungs already sum to no more than its qty, so `scaleRungShares` is a no-op when nothing was resized. No stock sender sends `scanStockPrice`.
+- **Q3 is correct.** `update_position` applies the other fields, then answers 422 on `qty_error`, and `_flushOne`'s forced sync reverts the optimistic qty. The resulting stopless row is the decided §9 case.
+- **The new tests can fail.** T-A8b (both cases), T-A10b under S21, the extended T-A8 under S19, and T-A3 each go red under their mutation. T-A3 also pins the post-resize recompute of capital at risk.
+
+**Z1 (MEDIUM, gate b): the card's save-only "Add to Portfolio" (`StockPositionCard` `onAdd`) is now resized, and its local rungs are not.**
+- `addPosition`'s success promotion sets only `contracts: adjustedQty` (`portfolioStore.ts` ~968-991).
+- The card ignores `res.adjustedQty`.
+- **Failure:** 200 shares with rungs 66/66/68 and no stop, resized to 100. The writer stores 33/33/34, but the local row keeps 66/66/68 until the next sync. An EditDrawer rung edit in that window PATCHes the unscaled array, and the stored row then plans to sell 200 of 100. The card also says "Added" with 200 on screen.
+
+PROPOSED, and NOT reviewed:
+- In `addPosition`'s non-merge promotion, set `targets: scaleRungShares(x.targets, adjustedQty)` beside `contracts: adjustedQty`. That one spot covers every save-only path. `portfolioStore.ts` moves into §7's touched files for that one line.
+- The card's `onAdd` shows a size note when `res.adjustedQty != null`, as Step-4 auto-execute already does.
+- **Test 15:** Add to Portfolio at 200 with 66/66/68, and the POST replies `adjustedQty: 100` → the local rungs are 33/33/34 and the size note is shown.
+- **Mutation S23:** drop the promotion's `targets` scaling → test 15 red.
+- **Clarified in A2, not new:** after a resize, `capital_at_risk = per_unit × adjusted_size`, never `entry × adjusted × multiplier`.
