@@ -140,13 +140,13 @@ async def test_b1_the_cache_refetches_only_for_a_refresh_on_close_caller(monkeyp
 
 # ── B2: every unseen closed candle, oldest first ──────────────────────────────
 
-async def _run_tick(monkeypatch, candles, *, last_seen=None, fail_on=None):
+async def _run_tick(monkeypatch, candles, *, last_seen=None, fail_on=None, pairs=(('AAPL', '15min'),), keep_markers=False):
     import app.services.chart_alert_scheduler as sched
     import app.routers.chart_alerts as chart_alerts
 
     class _Result:
         def all(self):
-            return [('AAPL', '15min')]
+            return list(pairs)
 
     class _Session:
         async def __aenter__(self):
@@ -170,7 +170,8 @@ async def _run_tick(monkeypatch, candles, *, last_seen=None, fail_on=None):
     monkeypatch.setattr(sched, 'get_intraday_with_fetched_at', AsyncMock(return_value=(candles, candles[-1]['time'] + 60)))
     monkeypatch.setattr(chart_alerts, 'evaluate_and_notify_for_symbol', _evaluate)
     monkeypatch.setattr(chart_alerts, 'closed_candle_structure', lambda *a, **k: [])
-    sched._last_seen_candle.clear()
+    if not keep_markers:
+        sched._last_seen_candle.clear()
     if last_seen is not None:
         sched._last_seen_candle[('AAPL', '15min')] = last_seen
     await sched._tick()
@@ -195,6 +196,29 @@ async def test_b2_two_candles_closing_between_ticks_are_both_evaluated_oldest_fi
 async def test_b2_first_sighting_evaluates_only_the_newest(monkeypatch):
     calls, _ = await _run_tick(monkeypatch, _c([100, 200, 300, 400]))
     assert [t for t, _ in calls] == [300]
+
+
+@pytest.mark.asyncio
+async def test_b2_pair_that_left_and_returned_is_a_first_sighting(monkeypatch):
+    # Code round 1: the pair's only rule was disabled (pair left `pairs`) with the
+    # marker at 100; a rule re-enabled later must not catch up 200..400, which
+    # closed before it existed -- only the newest closed candle is evaluated.
+    import app.services.chart_alert_scheduler as sched
+    await _run_tick(monkeypatch, _c([100, 200]), last_seen=100, pairs=())
+    assert ('AAPL', '15min') not in sched._last_seen_candle
+    calls, seen = await _run_tick(monkeypatch, _c([100, 200, 300, 400, 500]), keep_markers=True)
+    assert [t for t, _ in calls] == [400]
+    assert seen == 400
+
+
+@pytest.mark.asyncio
+async def test_b2_markers_of_other_active_pairs_are_kept(monkeypatch):
+    import app.services.chart_alert_scheduler as sched
+    sched._last_seen_candle.clear()
+    sched._last_seen_candle[('MSFT', '1h')] = 100
+    await _run_tick(monkeypatch, _c([100, 200, 300]), pairs=(('AAPL', '15min'), ('MSFT', '1h')), keep_markers=True)
+    assert sched._last_seen_candle.get(('MSFT', '1h')) is not None
+    sched._last_seen_candle.clear()
 
 
 @pytest.mark.asyncio

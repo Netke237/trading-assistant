@@ -80,6 +80,11 @@ async def _tick() -> None:
         )
         pairs = result.all()
 
+    # P4a code round 1: a pair with no enabled rule drops its markers, so when a
+    # rule for it is created or re-enabled later it is a first sighting (newest
+    # closed candle only) -- not a catch-up over candles from before the rule.
+    _prune_markers({(s, i) for s, i in pairs})
+
     if not pairs:
         return
 
@@ -121,6 +126,12 @@ async def _tick() -> None:
                                    symbol, interval, closed.get('time'), exc_info=True)
         except Exception:
             logger.warning('chart alert background check failed for %s [%s]', symbol, interval, exc_info=True)
+
+
+def _prune_markers(active: set[tuple[str, str]]) -> None:
+    for markers in (_last_seen_candle, _last_newest_bar):
+        for key in [k for k in markers if k not in active]:
+            del markers[key]
 
 
 def _candles_to_evaluate(key: tuple[str, str], candles: list[dict]) -> list[int]:
