@@ -8,6 +8,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
+import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
 // Phase G piece 5, build step 4 — this suite is about the edited-field sync
@@ -56,6 +57,7 @@ jest.mock('@/lib/api', () => ({
       price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     recomputePlan: jest.fn(),
     getAutoTradeStatus: jest.fn().mockResolvedValue({ armed: false }),
     armAutoTrade: jest.fn().mockResolvedValue({ armed: true }),
@@ -63,6 +65,20 @@ jest.mock('@/lib/api', () => ({
     fireAutoTrade: jest.fn().mockResolvedValue({ order_id: 'ORD-AUTO' }),
   },
 }));
+
+/* P1b-i -- the direct sends now SAVE FIRST, and a 2xx whose body carries no
+ * positive `entryPrice` is treated as unconfirmed (no order is sent). So the
+ * persist POST ECHOES its request body back, which carries the `entryPrice`
+ * and `recId` the page sent; every other request keeps the old `{}` reply. */
+function echoFetch(): typeof fetch {
+  return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => body };
+    }
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
 
 const CARD_INVALIDATION = 140;
 const CARD_LIMIT = 2.5;
@@ -151,7 +167,8 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
     (api.armAutoTrade as jest.Mock).mockResolvedValue({ armed: true });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
+    act(() => { useDirectSendNotesStore.setState({ notes: [] }); });
   });
   afterEach(() => {
     global.fetch = originalFetch;
@@ -608,7 +625,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     });
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
+    act(() => { useDirectSendNotesStore.setState({ notes: [] }); });
   });
   afterEach(() => { global.fetch = originalFetch2; });
 
@@ -955,7 +973,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     }) as unknown as typeof fetch;
   };
   const acceptAll = () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
   };
   async function sendBasket() {
     fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
@@ -1045,12 +1063,18 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
-    // Rendered as `String(e)`, i.e. "Error: broker down".
-    expect(await screen.findByText(/broker down/)).toBeInTheDocument();
+    // P1b-i: the position is saved FIRST, so a plain Error from the broker
+    // call leaves the order's fate UNKNOWN -- the row is kept and a
+    // persistent ORDER-UNKNOWN note is pushed. The banner is `String(e)`.
+    expect(await screen.findByText(/Order status UNKNOWN \(Error: broker down\)/)).toBeInTheDocument();
+    expect(usePortfolioStore.getState().positions).toHaveLength(1);
+    expect(screen.getByText(/order status UNKNOWN \(rec_id REC-/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
     await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+    // The per-card banner goes; the note does not.
     expect(screen.queryByText(/broker down/)).not.toBeInTheDocument();
+    expect(screen.getByText(/order status UNKNOWN \(rec_id REC-/)).toBeInTheDocument();
   });
 
   it('a BASKET send clears a direct-path error (A8b)', async () => {
@@ -1066,10 +1090,21 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       await waitFor(() => expect(limitBtn).toBeEnabled());
       fireEvent.click(limitBtn);
       expect(await screen.findByText(/broker down/)).toBeInTheDocument();
+      // P1b-i: that send KEPT its AAA row (order status unknown). Left in the
+      // store, the basket dialog flags it as a duplicate and waits for an
+      // override, and a `toHaveLength(1)` would hold either way. The banner is
+      // page state, so dropping the row leaves it standing; then wait on the
+      // basket's OWN persist POST before reading the banner.
+      act(() => { usePortfolioStore.setState({ positions: [] }); });
+      expect(screen.getByText(/broker down/)).toBeInTheDocument();
+      const portfolioPosts = () => (global.fetch as jest.Mock).mock.calls.filter(
+        ([u, init]) => String(u).endsWith('/api/portfolio') && init?.method === 'POST',
+      ).length;
+      const postsBefore = portfolioPosts();
 
       await sendBasket();
-      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
-      expect(screen.queryByText(/broker down/)).not.toBeInTheDocument();
+      await waitFor(() => expect(portfolioPosts()).toBeGreaterThan(postsBefore));
+      await waitFor(() => expect(screen.queryByText(/broker down/)).not.toBeInTheDocument());
     } finally {
       act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
     }
@@ -1077,9 +1112,10 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
   /* MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25). IBKR's confirmation question is
    * now a 502 carrying it (it used to be an empty-id 200, and both direct
-   * handlers then persisted a phantom position). Pinned for BOTH handlers:
-   * the error shows, nothing is persisted (no request reaches the backend
-   * save, which `acceptAll` would otherwise accept), no position exists. */
+   * handlers then persisted a phantom position). Pinned for BOTH handlers.
+   * P1b-i: the position is now saved BEFORE the order, and this 502 is
+   * provably pre-submit, so the saved row is DELETED by its rec_id: one
+   * persist POST, one delete of that recId, no position left, the error shows. */
   const CONFIRM_502 = () => new Error(
     'API /broker/option-order → 502: IBKR did not place the order: it asked for a ' +
     'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
@@ -1099,7 +1135,13 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
       expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
       expect(api.postOptionOrder).toHaveBeenCalledTimes(1);
-      expect(global.fetch).not.toHaveBeenCalled();
+      const posts = (global.fetch as jest.Mock).mock.calls.filter(
+        ([u, init]) => String(u).endsWith('/api/portfolio') && init?.method === 'POST',
+      );
+      expect(posts).toHaveLength(1);
+      const recId = JSON.parse(String(posts[0][1].body)).recId;
+      expect(api.deletePortfolioPosition).toHaveBeenCalledWith(recId);
+      expect(screen.getByText(/The tracked position was removed/)).toBeInTheDocument();
       expect(usePortfolioStore.getState().positions).toHaveLength(0);
       expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
       // Nothing was placed, so the user can send again.
