@@ -188,3 +188,35 @@ describe('Alerts page — rules are refreshed from the backend on mount (A4f-rul
     expect(ruleGets).toHaveLength(1);
   });
 });
+
+describe('Alerts page — P4a rule rows', () => {
+  const r = {
+    id: 'c1', name: 'Bull flip', symbol: 'AAPL', interval: '15min', enabled: true,
+    group: { logic: 'AND', conditions: [] }, rule_type: 'composite',
+    composite_def: { primary: { model: 'OMM', to_state: 'Bull' }, confirmations: [] },
+    cooldown_minutes: 60, expiry_date: null, created_at: '2026-09-01T00:00:00', last_triggered_at: null,
+  };
+  const openRules = () => {
+    const tab = screen.queryByRole('button', { name: /^rules/i }) ?? screen.queryByText(/^Rules/);
+    if (tab) fireEvent.click(tab);
+  };
+
+  it('shows "Not saved to server" with the reason for a refused rule', () => {
+    useChartAlertStore.setState({ rules: [r], unsavedRules: { c1: 'HMM_intraday needs an intraday interval' } } as any);
+    useChartAlertStore.setState({ syncRules: async () => {} } as any);
+    render(<AlertsPage />);
+    openRules();
+    expect(screen.getByText('Not saved to server: HMM_intraday needs an intraday interval')).toBeInTheDocument();
+  });
+
+  it('the toggle calls setRuleEnabled, not updateRule', () => {
+    const setRuleEnabled = jest.fn();
+    const updateRule = jest.fn();
+    useChartAlertStore.setState({ rules: [r], unsavedRules: {}, setRuleEnabled, updateRule, syncRules: async () => {} } as any);
+    render(<AlertsPage />);
+    openRules();
+    fireEvent.click(screen.getByRole('switch'));
+    expect(setRuleEnabled).toHaveBeenCalledWith('c1', false);
+    expect(updateRule).not.toHaveBeenCalled();
+  });
+});

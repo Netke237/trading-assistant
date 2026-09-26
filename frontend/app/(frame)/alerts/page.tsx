@@ -186,7 +186,7 @@ function conditionsSummary(rule: AlertRule): string {
 
 export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert, testSound } = useAlertStore();
-  const { rules, updateRule, deleteRule } = useChartAlertStore();
+  const { rules, setRuleEnabled, deleteRule, unsavedRules } = useChartAlertStore();
   const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
 
   const [tab, setTab] = useState<'alerts' | 'rules' | 'watches'>('alerts');
@@ -256,11 +256,10 @@ export default function AlertsPage() {
       .catch(() => setWatchesLoaded(true));
   }, []);
 
-  // A4f-rules: this table reads the persisted (localStorage) rules, and a toggle
-  // re-PUTs the local interval + composite_def. Refresh from the backend on mount so,
-  // once the sync returns, a rule the backend migrated (e.g. '1D' -> '5m') is not shown
-  // -- or re-sent -- stale. (A toggle before it returns still sends the old pair; the
-  // backend refuses that PUT with 422, which putRuleToAPI ignores.)
+  // A4f-rules: this table reads the persisted (localStorage) rules. Refresh from the
+  // backend on mount so a rule the backend migrated (e.g. '1D' -> '5m') is not shown
+  // stale. (P4a A3: a toggle PATCHes {enabled} only, so a toggle made before the sync
+  // returns no longer re-sends the old interval and is no longer refused.)
   useEffect(() => {
     useChartAlertStore.getState().syncRules();
   }, []);
@@ -566,13 +565,23 @@ export default function AlertsPage() {
               </div>
               {rules.map((rule) => (
                 <div key={rule.id} className={styles.rulesTableRow}>
-                  <Text size={13}>{rule.name}</Text>
+                  <div>
+                    <Text size={13}>{rule.name}</Text>
+                    {/* P4a A2 (decision Q1): the server refused this rule's
+                        last POST, so it exists only in this browser. */}
+                    {unsavedRules[rule.id] && (
+                      <div>
+                        <Text size={11} tone="caution">{`Not saved to server: ${unsavedRules[rule.id]}`}</Text>
+                      </div>
+                    )}
+                  </div>
                   <Data size={12} weight={500}>{rule.symbol}</Data>
                   <Text size={12}>{rule.interval}</Text>
                   <Text size={12}>{conditionsSummary(rule)}</Text>
                   <Toggle
                     on={rule.enabled}
-                    onChange={(on) => updateRule(rule.id, { enabled: on })}
+                    // P4a A3: PATCH {enabled} only -- never re-PUT the local rule.
+                    onChange={(on) => setRuleEnabled(rule.id, on)}
                   />
                   <Text size={12} tone="dim">
                     {rule.last_triggered_at ? timeAgo(rule.last_triggered_at) : 'never'}
