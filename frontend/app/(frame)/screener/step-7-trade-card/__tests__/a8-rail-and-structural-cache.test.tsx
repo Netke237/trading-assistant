@@ -30,6 +30,7 @@ jest.mock('@/lib/api', () => ({
       price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     recomputePlan: jest.fn(),
     getStructuralStop: jest.fn(),
     getAutoTradeStatus: jest.fn().mockResolvedValue({ armed: false }),
@@ -38,6 +39,20 @@ jest.mock('@/lib/api', () => ({
     fireAutoTrade: jest.fn().mockResolvedValue({ order_id: 'ORD-AUTO' }),
   },
 }));
+
+/* P1b-i -- the direct sends now SAVE FIRST, and a 2xx whose body carries no
+ * positive `entryPrice` is treated as unconfirmed (no order is sent). So the
+ * persist POST ECHOES its request body back, which carries the `entryPrice`
+ * and `recId` the page sent; every other request keeps the old `{}` reply. */
+function echoFetch(): typeof fetch {
+  return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => body };
+    }
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
 
 function makeCard(symbol: string): TradeCardData {
   return {
@@ -105,7 +120,7 @@ describe('step-7-trade-card -- publishes the shown card for the context rail (A8
       price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
     });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
   });
   afterEach(() => { global.fetch = originalFetch; });
 
@@ -183,7 +198,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
     // assertion below is about the cache, not about an unrendered card.
     { const b = makeCard('AAA');
       (api.recomputePlan as jest.Mock).mockResolvedValue({ entry: b.entry, exit: b.exit, rrRatio: 1.2, rrModel: 'Heston repriced' }); }
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
   });
   afterEach(() => { global.fetch = originalFetch; });
 

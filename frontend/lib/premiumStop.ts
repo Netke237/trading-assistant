@@ -30,8 +30,13 @@ export const PREMIUM_STOP_PCT_FALLBACK = 0.60;
  *  0.01–99.99 — so the number the card refuses to create could still be typed
  *  onto the position ten seconds later.
  *
+ *  STORED VALUES OUTSIDE THE BAND FIRE AS STORED (decision Q9, BACKLOG-
+ *  DECISIONS-2026-09-25): the dollar stop is the truth, so a server-derived
+ *  ratio outside 10-99% is neither clamped nor rewritten. The drawer shows a
+ *  caution under such a value instead.
+ *
  *  10% because that is the floor the app already applies to the GLOBAL premium
- *  stop (`routers/risk_settings.py`, `ge=0.10, le=1.0`); 99% because the
+ *  stop (`routers/risk_settings.py`, `ge=0.10, le=0.99` since P2-02); 99% because the
  *  backend rejects a per-position ratio at or above 1 and 100% is not a stop
  *  but a total loss. Deriving both editors from these two numbers is what
  *  keeps them from drifting again.
@@ -91,9 +96,9 @@ export const PREMIUM_STOP_MAX_PCT = 0.99;
  *  the backend refuses to store (`0 < ratio < 1`) and which
  *  `barrierRace.premiumStopPctFromDollars` returns undefined for, so at a
  *  $0.01 mid the field offers exactly one dollar and that dollar produces no
- *  stop. Logged rather than fixed -- no caller disables the field there yet,
- *  and the send path does disclose the drop. See round_2_batch_followups
- *  R2-6. */
+ *  stop. TradeCard therefore renders the row READ-ONLY there (P2-24): the
+ *  global applies, or a stop the user already typed is kept and shown as
+ *  pinned (decision Q-P2-2). See round_2_batch_followups R2-6. */
 export function premiumStopDollarBounds(mid: number): { min: number; max: number } {
   const cents = Math.round(mid * 100);
   const min = Math.max(0.01, Math.ceil(cents * PREMIUM_STOP_MIN_PCT) / 100);
@@ -261,4 +266,36 @@ export function formatPremiumStopPct(
  *  this function's own comment documents as fixed. */
 export function premiumStopPctLabel(resolved: number): string {
   return `${Number((resolved * 100).toFixed(2))}%`;
+}
+
+/** Python's `round(x, 4)`, reproduced exactly.
+ *
+ *  `alert_generator.py` stores `reference_value=round(threshold_price, 4)` and
+ *  `alertEngine` writes the same field for the same alert, so the two must
+ *  agree to the last digit. `Math.round(x * 1e4) / 1e4` does not: `x * 1e4` is
+ *  a second rounding step and lands on the wrong side of .5 for values such as
+ *  0.00035 (exact binary value just BELOW the half), giving 0.0004 where Python
+ *  gives 0.0003.
+ *
+ *  `toFixed(4)` rounds the EXACT binary value of `x` to 4 decimals, which is
+ *  what Python does -- except on an exact tie, where `toFixed` picks the larger
+ *  magnitude and Python picks the even digit (1.03125 -> 1.0312 in Python,
+ *  1.0313 from toFixed).
+ *
+ *  An exact 4-decimal tie means `x = (2n + 1) / 20000`. A finite double is a
+ *  dyadic rational, so that is only representable when 625 divides `2n + 1`,
+ *  i.e. `x` is an odd multiple of 1/32. `x * 32` is exact (a power-of-two
+ *  scale), so an odd integer there identifies every tie and nothing else; at a
+ *  tie `x * 1e4` is an exact half-integer and the even neighbour is taken.
+ *  Pinned against a table produced by Python itself
+ *  (`__tests__/fixtures/python_round4.json`). */
+export function pythonRound4(x: number): number {
+  if (!Number.isFinite(x)) return x;
+  const scaled32 = x * 32;
+  if (Number.isInteger(scaled32) && Math.abs(scaled32) % 2 === 1) {
+    const n = Math.floor(x * 1e4);
+    const even = n % 2 === 0 ? n : n + 1;
+    return even / 1e4;
+  }
+  return Number(x.toFixed(4));
 }

@@ -347,7 +347,9 @@ async def test_a_duplicate_contract_is_refused_and_leaves_the_session_usable(
         second = await atb.book_fired_order(
             _fired(OrderResult("778", "Submitted", "ibkr_paper")), s)
         assert second.booked is False
-        assert "778" in second.error and "already exists" in second.error
+        # P1a: the duplicate-contract refusal names its own remedy.
+        assert "778" in second.error and "already open" in second.error
+        assert "Close the extra 1 at the broker" in second.error
         # The rollback left the session usable.
         n = (await s.execute(select(func.count(PortfolioPositionModel.id)))).scalar_one()
     assert n == 1
@@ -443,6 +445,12 @@ def test_the_containers_are_copied_not_shared():
     assert body.targets == s.targets and body.targets[0] is not s.targets[0]
     assert body.maxLossOverride == s.max_loss_override
     assert body.maxLossOverride is not s.max_loss_override
+    # P1a (O4 residual item 4): the list itself and the nested snapshot too.
+    assert body.targets is not s.targets
+    nested = _fired(trade_card_snapshot={"card": {"score": 81}})
+    nb = atb._build_body(nested, "REC-AT-1")
+    snap = nested.strategy.trade_card_snapshot
+    assert nb.tradeCardSnapshot == snap and nb.tradeCardSnapshot["card"] is not snap["card"]
 
 
 @pytest.mark.asyncio
@@ -575,3 +583,193 @@ async def test_stop_required_refuses_a_stopless_body_and_is_off_by_default(
         out = await create_position(body, s, **kw)
     assert out.position.stop is None
     assert len(await _rows(Session)) == 1
+
+
+
+# ── P1a: Q12 page, post-commit recovery, 409 text, residual pins ──────────
+
+import logging  # noqa: E402
+
+
+
+def _fired_with(fired: FiredOrder, **strategy_changes) -> FiredOrder:
+    return dataclasses.replace(
+        fired, strategy=dataclasses.replace(fired.strategy, **strategy_changes))
+
+
+@pytest.mark.asyncio
+async def test_p1a_14_a_gates_off_wrong_side_user_stop_pages_and_stays_booked(
+    engine_and_session, env,
+):
+    """Q12: a user stop of 190 on a bullish trade with the underlying at 185."""
+    env.price.return_value = 185.0
+    _, Session = engine_and_session
+    async with Session() as s:
+        out = await atb.book_fired_order(_fired(stop=190.0, stop_is_user_set=True), s)
+    assert out.booked is True and out.wrong_side_stop is True
+    [row] = await _rows(Session)
+    assert row.stop == 190.0
+    assert "AUTO_TRADE_BOOKED_WRONG_SIDE_STOP" in _alert_types(env.notify)
+    call = next(c for c in env.notify.await_args_list
+                if c.kwargs["alert_type"] == "AUTO_TRADE_BOOKED_WRONG_SIDE_STOP")
+    assert call.kwargs["rec_id"] == "auto-trade-wrong-side-stop:AAPL"
+    assert out.rec_id in call.kwargs["reason"] and "wrong side" in call.kwargs["reason"]
+
+
+async def _commit_then_fail(body, db, **kw):
+    await create_position(body, db, **kw)
+    raise RuntimeError("post-commit failure")
+
+
+@pytest.mark.asyncio
+async def test_p1a_15_a_fault_after_the_writers_commit_is_booked_and_pages_unverified(
+    engine_and_session, env, mocker,
+):
+    """15 + 15b. A NON-HTTP exception after the commit: the row is found by its
+    rec_id, so the order is booked, and the lost flags are paged."""
+    mocker.patch.object(atb, "create_position", _commit_then_fail)
+    _, Session = engine_and_session
+    async with Session() as s:
+        out = await atb.book_fired_order(_fired(), s)
+    [row] = await _rows(Session)
+    assert out.booked is True and out.rec_id == row.rec_id and out.error is None
+    assert _alert_types(env.notify) == ["AUTO_TRADE_BOOKED_UNVERIFIED"]
+    kw = env.notify.await_args.kwargs
+    assert kw["rec_id"] == "auto-trade-booked-unverified:AAPL"
+    assert row.rec_id in kw["reason"] and "NOT checked" in kw["reason"]
+
+
+@pytest.mark.asyncio
+async def test_p1a_16_the_duplicate_contract_page_names_its_own_remedy(
+    engine_and_session, env,
+):
+    _, Session = engine_and_session
+    async with Session() as s:
+        assert (await atb.book_fired_order(_fired(), s)).booked is True
+        env.notify.reset_mock()
+        second = await atb.book_fired_order(
+            _fired(OrderResult("778", "Submitted", "ibkr_paper"), quantity=3), s)
+    assert second.booked is False
+    assert _alert_types(env.notify) == ["AUTO_TRADE_NOT_BOOKED"]
+    text = env.notify.await_args.kwargs["reason"]
+    assert text.startswith(f"Order 778 for {CONTRACT}: ")
+    assert "NOT booked as a second row" in text
+    assert "Close the extra 3 at the broker" in text
+    # Code round 1: raising the existing row's Contracts would store the added
+    # lot at that row's entry price, so it must never be offered as a remedy.
+    assert "raise that position's Contracts by" not in text
+    assert "Do not raise that position's Contracts" in text
+    assert "Add it by hand" not in text
+    rest = text.replace(CONTRACT, "").replace("Order 778", "")
+    assert [ch for ch in rest if ch.isdigit()] == ["3", "3"], "no number but {qty}"
+
+
+@pytest.mark.parametrize("option_symbol", ["AAPL|185|20261218|C", "AAPL|185|2026-13-40|C"])
+def test_p1a_17_an_unusable_expiry_is_refused(option_symbol):
+    with pytest.raises(atb._Refused) as exc:
+        atb._check_refusals(_fired_with(_fired(), option_symbol=option_symbol))
+    assert "no usable expiry" in exc.value.reason
+
+
+@pytest.mark.parametrize("strike", ["0", "abc", "inf"])
+def test_p1a_17_an_unusable_strike_is_refused(strike):
+    with pytest.raises(atb._Refused) as exc:
+        atb._check_refusals(_fired_with(_fired(), option_symbol=f"AAPL|{strike}|2026-12-18|C"))
+    assert "no usable strike" in exc.value.reason
+
+
+def test_p1a_17_a_dotted_symbol_still_passes_the_expiry_check():
+    fired = _fired_with(_fired(), symbol="BRK.B", option_symbol="BRK.B|185|2026-12-18|C")
+    atb._check_refusals(fired)  # does not raise
+
+
+def test_p1a_17_refusal_5_no_entry_premium():
+    with pytest.raises(atb._Refused) as exc:
+        atb._check_refusals(_fired_with(_fired(), entry_premium=0.0))
+    assert "no entry premium" in exc.value.reason
+
+
+def test_p1a_18_a_whitespace_order_id_reads_as_no_order_id():
+    fired = _fired(OrderResult("  ", "Submitted", "ibkr_paper"))
+    assert atb._order_label(fired) == "an order with no order id"
+    with pytest.raises(atb._Refused):
+        atb._check_refusals(fired)
+
+
+@pytest.mark.asyncio
+async def test_p1a_19a_a_failed_write_is_rolled_back_before_anything_else(
+    engine_and_session, env, mocker, caplog,
+):
+    """A real IntegrityError (a duplicate rec_id) leaves the session in
+    pending-rollback. The write `except` rolls it back FIRST, so the recovery
+    lookup runs on a usable session and the caller can SELECT afterwards."""
+    _, Session = engine_and_session
+    async with Session() as s:
+        first = await atb.book_fired_order(_fired(), s)
+    assert first.booked is True
+
+    async def collide(body, db, **kw):
+        db.add(PortfolioPositionModel(
+            rec_id=first.rec_id, symbol="AAPL", contract="AAPL|999|2026-12-18|C",
+            direction="Bullish", entry_price=1.0, qty=1, entry_date="2026-09-15"))
+        await db.flush()
+
+    mocker.patch.object(atb, "create_position", collide)
+    with caplog.at_level(logging.ERROR, "app.services.auto_trade_booking"):
+        async with Session() as s:
+            out = await atb.book_fired_order(
+                _fired(OrderResult("779", "Submitted", "ibkr_paper")), s)
+            n = (await s.execute(select(func.count(PortfolioPositionModel.id)))).scalar_one()
+    assert out.booked is False and n == 1
+    assert not any("could not check whether" in m for m in caplog.messages), (
+        "the recovery lookup ran on a session that was not rolled back")
+
+
+@pytest.mark.asyncio
+async def test_p1a_19b_a_failed_audit_record_is_rolled_back_and_the_row_stays(
+    engine_and_session, env, mocker,
+):
+    _, Session = engine_and_session
+    snap = {"card": "AAPL 185C"}
+    async with Session() as s:
+        first = await atb.book_fired_order(_fired(trade_card_snapshot=snap), s)
+        event_id = (await s.execute(select(AuditEventModel.id))).scalar_one()
+    assert first.booked is True
+
+    async def dup_audit(rec_id, payload, db):
+        db.add(AuditEventModel(id=event_id, event_type="approval", rec_id=rec_id,
+                               recommendation_id=rec_id, payload=payload))
+        await db.flush()
+
+    mocker.patch.object(atb, "log_approval", dup_audit)
+    async with Session() as s:
+        out = await atb.book_fired_order(
+            _fired(OrderResult("779", "Submitted", "ibkr_paper"),
+                   option_symbol="AAPL|190|2026-12-18|C", trade_card_snapshot=snap), s)
+        rows = (await s.execute(select(PortfolioPositionModel.rec_id))).scalars().all()
+    assert out.booked is True
+    assert sorted(rows) == sorted([first.rec_id, out.rec_id])
+
+
+def test_p1a_20_the_entry_date_is_the_market_date_not_utc(mocker):
+    real = datetime
+
+    class _Frozen(real):
+        @classmethod
+        def now(cls, tz=None):
+            t = real(2026, 9, 16, 1, 30, tzinfo=timezone.utc)   # 21:30 ET on the 15th
+            return t.astimezone(tz) if tz else t
+
+    mocker.patch.object(atb, "datetime", _Frozen)
+    assert atb._build_body(_fired(), "REC-AT-0").entryDate == "2026-09-15"
+
+
+@pytest.mark.asyncio
+async def test_p1a_22_every_booking_page_is_discrete(engine_and_session, env, mocker):
+    import app.services.auto_trader as at
+    spy = mocker.patch.object(at, "_alert_refusal")
+    _, Session = engine_and_session
+    async with Session() as s:
+        await atb.book_fired_order(_fired(stop=None), s)
+    assert spy.call_count == 1
+    assert spy.call_args.kwargs == {"discrete": True}

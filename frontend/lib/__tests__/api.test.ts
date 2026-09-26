@@ -115,3 +115,20 @@ describe('manual broker order — IBKR confirmation question (502)', () => {
     })).rejects.toThrow(`API /broker/option-order → 502: ${DETAIL}`);
   });
 });
+
+// P1b-i -- the rec_id is client-generated and goes into the PATH, so it is
+// URL-encoded, and the call is a DELETE whose non-2xx throws `→ NNN` (Step 7
+// reads a `→ 404` as "already gone" on some notes).
+describe('deletePortfolioPosition', () => {
+  it('DELETEs the URL-encoded rec_id', async () => {
+    const f = jest.fn().mockResolvedValue({ ok: true, status: 204 });
+    global.fetch = f as unknown as typeof fetch;
+    await api.deletePortfolioPosition('REC-1/a b');
+    expect(f).toHaveBeenCalledWith('http://localhost:8000/api/portfolio/REC-1%2Fa%20b', { method: 'DELETE' });
+  });
+
+  it('throws `→ 404` when the row does not exist', async () => {
+    mockFetchOnce(404, { detail: 'Position not found' });
+    await expect(api.deletePortfolioPosition('REC-1')).rejects.toThrow('API /api/portfolio/REC-1 → 404: Position not found');
+  });
+});

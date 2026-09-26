@@ -104,7 +104,9 @@ function expandLadder() {
   // state persists to localStorage, so a bare click is only "expand" if you
   // know what every earlier call in the file did. Round 7 finding 17 is the
   // same hazard in the page-level suite.
-  if (screen.queryByLabelText('Edit Invalidation')) return;
+  // P2-21 (R1-1): the Exit Plan is always visible now, so the sentinel is a
+  // heading that still lives INSIDE the collapsible group.
+  if (screen.queryByText('Sell-to-Close Plan')) return;
   fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
 }
 
@@ -729,18 +731,19 @@ describe('TradeCard', () => {
       .toBe(0.5);
   });
 
-  it('renders exit plan section (inside the collapsed Fixed % Ladder Plan group)', () => {
+  it('renders the exit plan section ALWAYS VISIBLE, above the collapsed ladder group (P2-21)', () => {
     render(<TradeCard data={mockTradeCard} />);
-    expandLadder();
+    // No expandLadder(): the ladder stays collapsed and the Exit Plan is on screen.
+    expect(screen.queryByText('Sell-to-Close Plan')).not.toBeInTheDocument();
     expect(screen.getByText('Exit Plan')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
-    // READ-ONLY, same reason as Max fill — and Time stop additionally
-    // disagrees with the alert that bears its name (TIME_STOP fires on a
-    // hardcoded `dteRemaining <= 3`), so offering to edit it promised twice
-    // over.
-    expect(screen.queryByLabelText('Edit Time stop')).not.toBeInTheDocument();
-    expect(screen.getByText('Time stop')).toBeInTheDocument();
+    // P2-03 (decision Q8): the exit the alert actually makes, read-only.
+    expect(screen.queryByLabelText('Edit Time exit')).not.toBeInTheDocument();
+    expect(screen.getByText('Time exit')).toBeInTheDocument();
+    expect(screen.getByText('3 DTE')).toBeInTheDocument();
+    expect(screen.queryByText('Time stop')).not.toBeInTheDocument();
+    expect(screen.queryByText(`${mockTradeCard.exit.timeStopDays}d`)).not.toBeInTheDocument();
   });
 
   beforeEach(() => {
@@ -2238,10 +2241,12 @@ describe('TradeCard', () => {
         render(<TradeCard data={withStop} />);
         expect(screen.queryByText(/Bottom \(final stop\) — not/)).not.toBeInTheDocument();
         expect(screen.getByText('Bottom (final stop)')).toBeInTheDocument();
-        // TWICE: once as "Price" and once as "ATR-floor price". They are the
-        // same number here precisely because the floor is what decided the
-        // stop, which is the case this fixture exists to render.
-        expect(screen.getAllByText('$169.00')).toHaveLength(2);
+        // THREE TIMES: "Price" and "ATR-floor price" in this row -- the same
+        // number here precisely because the floor is what decided the stop,
+        // which is the case this fixture exists to render -- plus the Exit
+        // Plan's Invalidation (169.00 in this fixture), which is always
+        // visible since P2-21 moved it out of the collapsed ladder group.
+        expect(screen.getAllByText('$169.00')).toHaveLength(3);
         // The LOSING candidate rides along: the row prints both levels and the
         // gap, so a reader can see the floor was what widened the stop.
         expect(screen.getByText('Structural stop — Swing Low')).toBeInTheDocument();

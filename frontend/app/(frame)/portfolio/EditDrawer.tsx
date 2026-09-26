@@ -27,6 +27,7 @@ import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod, PickedMethod, PickedStopBasis } from '@/types/domain';
 import styles from './page.module.css';
 import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopFiringPrice, formatPremiumStopPct, premiumStopPctLabel, PREMIUM_STOP_MIN_PCT, PREMIUM_STOP_MAX_PCT } from '@/lib/premiumStop';
+import { TIME_STOP_DTE } from '@/lib/alertEngine';
 
 /** `position.contract` for an option position is a backend-generated,
  *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
@@ -214,6 +215,23 @@ export function EditDrawer({
   // re-stamps the snapshot if, and only if, 'monte_carlo' is the active TP
   // method. Without this the position would keep alerting on the target price
   // from an estimate the user has just visibly replaced.
+  const mcActive = (position.activeTpMethod ?? 'ladder') === 'monte_carlo';
+  /** P2-12 (R1-4, R2-5) -- WHICH Monte Carlo target is "the" MC price.
+   *
+   *  It used to be `targets[0]` unconditionally, so a re-run silently moved a
+   *  position the user had pointed at T2 back to T1. Now, only while Monte
+   *  Carlo is the ACTIVE method: the rung with the stamped label from the
+   *  previous result in this drawer, else the target nearest the current
+   *  stamp, else `targets[0]`. With another method active this is `targets[0]`
+   *  as before. One function feeds both the re-stamp and the selector's
+   *  `mcTargetPrice`, so the selector shows the rung that is stamped. */
+  const mcRung = <T extends { label: string; price: number }>(targets: T[], label: string | null): T | undefined => {
+    if (!mcActive) return targets[0];
+    const byLabel = label != null ? targets.find((t) => t.label === label && t.price > 0) : undefined;
+    return byLabel ?? nearestTarget(targets, position.resolvedTpPrice) ?? targets[0];
+  };
+  const mcRungPrice = mcResult ? mcRung(mcResult.targets, null)?.price ?? null : null;
+
   const restampIfActive = (method: TpMethod, price: number | null) => {
     if ((position.activeTpMethod ?? 'ladder') !== method) return;
     // `> 0`, not just non-null — the option-side estimate maps a target with no
@@ -225,6 +243,13 @@ export function EditDrawer({
   };
 
   const runEstimate = async () => {
+    // P2-12 -- the rung the current Monte Carlo stamp belongs to, captured
+    // BEFORE the previous result is cleared (R3-9). Only when this drawer
+    // still holds that result; after a reopen the new run falls back to the
+    // target nearest the stamp.
+    const stampedLabel = mcActive && mcResult
+      ? nearestTarget(mcResult.targets, position.resolvedTpPrice)?.label ?? null
+      : null;
     estimateReq.current?.abort();
     const ctrl = new AbortController();
     estimateReq.current = ctrl;
@@ -264,7 +289,7 @@ export function EditDrawer({
           horizonNote: `${res.horizonDays} trading days`,
           modelCaveat: res.modelCaveat,
         });
-        restampIfActive('monte_carlo', targets[0]?.price ?? null);
+        restampIfActive('monte_carlo', mcRung(targets, stampedLabel)?.price ?? null);
       } else {
         if (optionStrike == null || !(position.currentStockPrice != null && position.currentStockPrice > 0) || !position.stop || !(position.currentPrice > 0)) {
           throw new Error('missing option context');
@@ -289,7 +314,7 @@ export function EditDrawer({
           targets,
           invalidation: res.invalidation,
         });
-        restampIfActive('monte_carlo', targets[0]?.price ?? null);
+        restampIfActive('monte_carlo', mcRung(targets, stampedLabel)?.price ?? null);
       }
     } catch (e) {
       if (ctrl.signal.aborted) return;
@@ -327,11 +352,26 @@ export function EditDrawer({
    * far a stop should sit from the price. `null` when the position carries
    * neither anchor, which leaves those fields exactly as unbounded as they
    * were rather than inventing a reference. */
-  const stockAnchor =
-    (position.currentStockPrice && position.currentStockPrice > 0 ? position.currentStockPrice : null)
-    ?? (position.scanStockPrice && position.scanStockPrice > 0 ? position.scanStockPrice : null);
-  const stockLevelRange =
-    stockAnchor != null ? { min: stockAnchor * 0.2, max: stockAnchor * 3 } : null;
+  /* P2-11 (R1-5) -- without a live underlying, the scan price alone can be
+   * months old, so a stop legitimately moved far from it was refused. The
+   * range is then the HULL of the range around the position's own current
+   * stop (a level already accepted against a recent price) and the range
+   * around the scan price, so a mis-stored stop can still be corrected back
+   * toward the scan price. With a live underlying: live only, as before. */
+  const rangeAround = (anchor: number) => ({ min: anchor * 0.2, max: anchor * 3 });
+  const liveAnchor = position.currentStockPrice && position.currentStockPrice > 0 ? position.currentStockPrice : null;
+  const fallbackRanges = [
+    position.stop != null && position.stop > 0 ? rangeAround(position.stop) : null,
+    position.scanStockPrice && position.scanStockPrice > 0 ? rangeAround(position.scanStockPrice) : null,
+  ].filter((r): r is { min: number; max: number } => r != null);
+  const stockLevelRange = liveAnchor != null
+    ? rangeAround(liveAnchor)
+    : fallbackRanges.length > 0
+      ? {
+          min: Math.min(...fallbackRanges.map((r) => r.min)),
+          max: Math.max(...fallbackRanges.map((r) => r.max)),
+        }
+      : null;
 
   return (
     <div className={styles.editDrawer}>
@@ -384,7 +424,7 @@ export function EditDrawer({
         <PickedMethodRecord position={position} />
         <TpMethodSelector
           position={position}
-          mcTargetPrice={mcResult?.targets[0]?.price ?? null}
+          mcTargetPrice={mcRungPrice}
           onChange={onChange}
         />
         <AlertOverridesEditor position={position} onChange={onChange} />
@@ -402,18 +442,17 @@ export function EditDrawer({
           label="Current price"
           hint="Manual override — will refresh from broker in live mode."
           value={position.currentPrice}
-          // 0 is a price, not a clear: it writes `currentPrice: 0` and a -100%
-          // P&L onto the row, on a gesture the field's own message invited.
+          // 0 is refused here (decision Q6): it would write `currentPrice: 0`
+          // and a -100% P&L onto the row. The way to mark a position worthless
+          // is to CLOSE it at $0, which the close path supports end to end.
           //
-          // How long that survives: this field is LOCAL-ONLY --
-          // `toUpdatePayload` deliberately omits currentPrice/pnlDollar/pnlPct
-          // (portfolioStore.ts) because the backend recomputes all three from a
-          // broker quote on every GET, and `fromBackend` rewrites them on the
-          // 30s sync. So a typed 0 is a transient, not a persisted corruption.
-          // The copy is wrong either way: 0 is not the clear this field
-          // advertised, and a -100% P&L on the row is a wrong number for as
-          // long as it is up.
+          // How long a typed value survives (P2-14, corrected): it is not sent
+          // to the backend -- `toUpdatePayload` omits currentPrice/pnlDollar/
+          // pnlPct -- but it IS persisted to localStorage (partialize keeps
+          // `positions`), so it survives a reload for as long as syncs fail.
+          // A successful sync's `fromBackend` rewrites all three.
           zeroClears={false}
+          zeroMessage="Must be greater than 0 — to mark it worthless, close the position at $0 (Close button). Kept the previous value."
           onChange={(n) => {
             const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
             const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
@@ -820,6 +859,18 @@ function MaxLossBanner({
   );
 }
 
+/** The target whose price is nearest `stamp` (P2-12). Undefined when there is
+ *  no positive stamp or no positive-priced target. */
+function nearestTarget<T extends { price: number }>(targets: T[], stamp: number | null | undefined): T | undefined {
+  if (stamp == null || !(stamp > 0)) return undefined;
+  let best: T | undefined;
+  for (const t of targets) {
+    if (!(t.price > 0)) continue;
+    if (best == null || Math.abs(t.price - stamp) < Math.abs(best.price - stamp)) best = t;
+  }
+  return best;
+}
+
 function EditField({
   label,
   hint,
@@ -861,6 +912,9 @@ function EditField({
    *  is REVERTED rather than written — the same honest answer the range check
    *  gives, and it puts `stored` back in the box. */
   zeroClears = true,
+  /** P2-01 -- the message a refused 0 shows when `zeroClears` is off. Current
+   *  price uses it to point at the real gesture (close the position at $0). */
+  zeroMessage = 'Must be greater than 0 — kept the previous value.',
 }: {
   label: string;
   hint?: string;
@@ -868,6 +922,7 @@ function EditField({
   onChange: (n: number) => void;
   range?: { min: number; max: number } | null;
   zeroClears?: boolean;
+  zeroMessage?: string;
 }) {
   // DRAFT-THEN-COMMIT, and TEXT rather than number. Round 11 findings 1 and 2.
   //
@@ -920,11 +975,10 @@ function EditField({
   if (lastStoredRef.current !== stored) {
     lastStoredRef.current = stored;
     if (!dirtyRef.current && draft !== stored) setDraft(stored);
-    // The message describes the value that was on screen when it was refused.
-    // Once an external change (the 30s sync, a different position, a second
-    // client) replaces that value, the caution is attached to a number nobody
-    // can see -- under a live risk setting.
-    setRejected(null);
+    // NOT cleared here (decision Q15): a rejection message is retired only by
+    // the user's own edits -- a keystroke (onChange below) or a commit. An
+    // external change (the 30s sync, a second client) used to wipe it, so a
+    // refusal could vanish before it was read.
   }
 
   const revert = (msg: string | null) => {
@@ -989,7 +1043,7 @@ function EditField({
     // `zeroClears`. Refused BEFORE the range exemption below, which would
     // otherwise wave it through.
     if (n === 0 && !zeroClears) {
-      revert('Must be greater than 0 — kept the previous value.');
+      revert(zeroMessage);
       return;
     }
     // 0 is the documented "none" for these fields and always passes; the range
@@ -1016,7 +1070,7 @@ function EditField({
         inputMode="decimal"
         className={styles.editInput}
         value={draft}
-        onChange={(e) => { dirtyRef.current = true; setDraft(e.target.value); }}
+        onChange={(e) => { dirtyRef.current = true; setRejected(null); setDraft(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
       />
@@ -1053,6 +1107,10 @@ function PremiumStopEditor({
   const isStock = position.contract.endsWith('|STOCK');
   const own = position.premiumStopPct;
   const inherited = !hasOwnPremiumStopPct(own);
+  const outsideBand = own != null && (own < PREMIUM_STOP_MIN_PCT || own > PREMIUM_STOP_MAX_PCT);
+  const globalNeverFires = inherited && globalPremiumStopPct >= 1;
+  const subCent = position.entryPrice > 0
+    && premiumStopFiringPrice(position.entryPrice, resolvePremiumStopPct(own, globalPremiumStopPct)) <= 0;
   // TWO DECIMALS OF PERCENT, not a whole number. `Math.round(own * 100)` was
   // lossy in both directions and the loss was silent:
   //
@@ -1114,9 +1172,8 @@ function PremiumStopEditor({
   if (lastStoredRef.current !== stored) {
     lastStoredRef.current = stored;
     if (!dirtyRef.current && draft !== stored) setDraft(stored);
-    // Same reason as the EditField siblings above: a caution outlives the
-    // value it was about otherwise.
-    setRejected(null);
+    // NOT cleared here -- decision Q15, same as the EditField siblings above:
+    // only the user's own keystroke or commit retires a rejection.
   }
 
   // Every REJECTING exit goes through here, so none of them can forget to
@@ -1258,7 +1315,13 @@ function PremiumStopEditor({
   return (
     <label className={styles.editField}>
       <Text size={11} tone="secondary">
-        Premium stop — {formatPremiumStopPct(own, globalPremiumStopPct)}
+        {/* P2-13 -- a stock position's percent stop is a STOCK price level
+            (entry x (1 - pct)), not a premium. The label names the mechanism
+            alertEngine actually runs, for either direction; the direction-
+            blind comparison on a SHORT stock is an open question (Q-P2-1). */}
+        {isStock
+          ? `Stock stop — fires ${formatPremiumStopPct(own, globalPremiumStopPct)} below entry`
+          : `Premium stop — ${formatPremiumStopPct(own, globalPremiumStopPct)}`}
       </Text>
       <input
         // TEXT, not number. `<input type="number">` sanitizes its value, so
@@ -1281,7 +1344,7 @@ function PremiumStopEditor({
         placeholder={`${premiumStopPctLabel(globalPremiumStopPct)} (global)`}
         aria-label="Premium stop percent"
         value={draft}
-        onChange={(e) => { dirtyRef.current = true; setDraft(e.target.value); }}
+        onChange={(e) => { dirtyRef.current = true; setRejected(null); setDraft(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
       />
@@ -1294,6 +1357,26 @@ function PremiumStopEditor({
           // the rejection.
           : `Set for this position only (${premiumStopPctLabel(PREMIUM_STOP_MIN_PCT)}–${premiumStopPctLabel(PREMIUM_STOP_MAX_PCT)}). Clear the field to go back to inheriting the global (${premiumStopPctLabel(globalPremiumStopPct)}).`}
       </Text>
+      {outsideBand && (
+        // P2-04 (decision Q9) -- a stored ratio outside the band fires as
+        // stored; the dollar stop is the truth. Said, not changed.
+        <Text size={10} tone="caution">
+          {`Stored at ${premiumStopPctLabel(own as number)} of the fill — outside the ${premiumStopPctLabel(PREMIUM_STOP_MIN_PCT)}–${premiumStopPctLabel(PREMIUM_STOP_MAX_PCT)} the editors accept, because it was set in dollars against the mid. It fires as stored.`}
+        </Text>
+      )}
+      {globalNeverFires ? (
+        // R2-7 / R4-1 -- only a global of 100% or more can never fire. A
+        // stored 99.5% does fire (at entry x 0.005) and gets no claim here.
+        <Text size={10} tone="caution">
+          The global stop is 100% and can never fire — lower it in Settings.
+        </Text>
+      ) : subCent && (
+        // R2-3 (decision Q-P2-3: warn only) -- at this entry the threshold is
+        // below one cent.
+        <Text size={10} tone="caution">
+          At this entry the stop threshold is below $0.01, so it can never fire.
+        </Text>
+      )}
       <span aria-live="polite">
         {rejected && <Text size={10} tone="caution">{rejected}</Text>}
       </span>
@@ -1597,7 +1680,7 @@ function alertFiresAgainst(
       // Stock positions carry no expiry and (per alertEngine.ts's isStock
       // guard) can never fire this type — "not set" rather than a threshold
       // that looks armed but isn't.
-      return isStock ? null : '3 DTE or less';
+      return isStock ? null : `${TIME_STOP_DTE} DTE or less`;
     case 'EVENT_RISK':
       return 'event within 3 days';
   }

@@ -1116,10 +1116,11 @@ describe('PremiumStopEditor', () => {
     expect(screen.queryByText(/Must be between/i)).not.toBeInTheDocument();
   });
 
-  it('retires a rejection message when the value changes from OUTSIDE', () => {
-    // The message describes what was on screen when it was refused. The 30s
-    // sync (or a second client) replaces that value; the caution used to stay,
-    // attached to a number nobody can see, under a live risk setting.
+  it('KEEPS a rejection message when the value changes from OUTSIDE, until the user types (Q15)', () => {
+    // Decision Q15 (BACKLOG-DECISIONS-2026-09-25) inverts the old rule: a
+    // rejection is retired only by the user's own edit. The 30s sync (or a
+    // second client) replacing the value used to wipe the message, so a
+    // refusal could vanish before it was read.
     const onChange = jest.fn();
     const { rerender } = render(
       <EditDrawer position={makeOptionPosition({ premiumStopPct: 0.45 })}
@@ -1135,7 +1136,29 @@ describe('PremiumStopEditor', () => {
                   onClose={noop} onChange={onChange} onRemove={noop} />,
     );
     expect(input.value).toBe('55');
+    expect(screen.getByText(/Must be between 10% and 99%/i)).toBeInTheDocument();
+    // The user's own keystroke retires it.
+    fireEvent.change(input, { target: { value: '5' } });
     expect(screen.queryByText(/Must be between 10% and 99%/i)).not.toBeInTheDocument();
+  });
+
+  it('EditField twin: a Stop rejection survives an outside change and clears on a keystroke (Q15)', () => {
+    const { rerender } = render(
+      <EditDrawer position={makeOptionPosition({ stop: 185 })}
+                  onClose={noop} onChange={jest.fn()} onRemove={noop} />,
+    );
+    const stop = screen.getByDisplayValue('185') as HTMLInputElement;
+    fireEvent.change(stop, { target: { value: '1850' } });
+    fireEvent.blur(stop);
+    expect(screen.getByText(/Must be between/i)).toBeInTheDocument();
+    rerender(
+      <EditDrawer position={makeOptionPosition({ stop: 186 })}
+                  onClose={noop} onChange={jest.fn()} onRemove={noop} />,
+    );
+    expect(stop.value).toBe('186');
+    expect(screen.getByText(/Must be between/i)).toBeInTheDocument();
+    fireEvent.change(stop, { target: { value: '18' } });
+    expect(screen.queryByText(/Must be between/i)).not.toBeInTheDocument();
   });
 
   it('tells a position that ALREADY has its own stop what the band is', () => {
@@ -1437,8 +1460,10 @@ describe('a field where 0 is not the clear gesture', () => {
     expect(screen.queryByText(/Enter 0 to clear this level/i)).not.toBeInTheDocument();
   });
 
-  it('leaves a real edit alone on both fields', () => {
-    // The bound is on 0, not on editing: the two fields still commit.
+  it('documentation of intent: leaves a real edit alone on both fields', () => {
+    // DOCUMENTATION OF INTENT, like the boundary pair above: no mutation of the
+    // zero bound is expected to fail this; it records that the bound is on 0,
+    // not on editing -- the two fields still commit.
     const onPatch = jest.fn();
     render(<LiveDrawer initial={makeOptionPosition({ contracts: 1 })} onPatch={onPatch} />);
 

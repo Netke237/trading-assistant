@@ -39,6 +39,7 @@ jest.mock('@/lib/api', () => ({
       price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     recomputePlan: jest.fn(),
     getAutoTradeStatus: jest.fn().mockResolvedValue({ armed: false }),
     armAutoTrade: jest.fn().mockResolvedValue({ armed: true }),
@@ -46,6 +47,20 @@ jest.mock('@/lib/api', () => ({
     fireAutoTrade: jest.fn().mockResolvedValue({ order_id: 'ORD-AUTO' }),
   },
 }));
+
+/* P1b-i -- the direct sends now SAVE FIRST, and a 2xx whose body carries no
+ * positive `entryPrice` is treated as unconfirmed (no order is sent). So the
+ * persist POST ECHOES its request body back, which carries the `entryPrice`
+ * and `recId` the page sent; every other request keeps the old `{}` reply. */
+function echoFetch(): typeof fetch {
+  return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => body };
+    }
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
 
 function makeCard(symbol: string): TradeCardData {
   return {
@@ -106,7 +121,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
     (api.armAutoTrade as jest.Mock).mockResolvedValue({ armed: true });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
   });
   afterEach(() => {
     global.fetch = originalFetch;
@@ -190,6 +205,11 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     await waitFor(() => expect(marketBtn).toBeEnabled());
 
     (api.postOptionOrder as jest.Mock).mockClear();
+    // P1b-i: a direct send refuses a contract this browser already tracks
+    // (the local duplicate check), and the Limit send above just saved one.
+    // This test is about the quantity, so start the Market send from an empty
+    // portfolio.
+    act(() => { usePortfolioStore.setState({ positions: [] }); });
     fireEvent.click(marketBtn);
 
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
