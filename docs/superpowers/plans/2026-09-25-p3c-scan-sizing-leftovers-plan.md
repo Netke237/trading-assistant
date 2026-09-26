@@ -12,7 +12,7 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -28,7 +28,7 @@ Every backlog entry was re-checked against 2f67e6f before this plan. The seven i
 | 1 | Options scan keeps an Intraday name whose 15-min regime fetch failed | open | code (scan.py) |
 | 2 | Options direction gate judges an unmeasured trend placeholder | open | code (scan.py), **no schema field** (decision P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25) |
 | 3 | A 0% scan schedule silently runs at the 1% default | open | UI warning (settings page + resolver helper) |
-| 4 | conviction_sizing messages (3)(4)(5) + (10) | (10) FIXED by P3b (ERROR once per process, `_ZERO_FULL_LOGGED`, conviction_sizing.py:158-229); (3)(4)(5) open | code (conviction_sizing.py) |
+| 4 | conviction_sizing messages (3)(4)(5) + (10) | (10) FIXED by P3b (ERROR once per process, `_ZERO_FULL_LOGGED`, conviction_sizing.py:160-166 flag, :226-239 ERROR-then-DEBUG); (3)(4)(5) open | code (conviction_sizing.py) |
 | 5 | Negative bearish backtest price — split hypothesis | open, data-side | read-only check script; fix follows evidence |
 | 6 | Options regime series length depends on the data source | open | read-only check script + one conditional fix |
 | 7 | POST /auto-trade/fire blocks the event loop | open | code (auto_trade.py, /fire only) |
@@ -216,9 +216,13 @@ Tests (`tests/test_p3c_options_direction_unmeasured.py`):
   `direction_conviction_unmeasured:`, `fetch_option_chain_async` NOT awaited.
 - Same with `measured=True` score 50, floor 40 → not rejected by this check (chain fetch reached).
 - `card_pre` with no trend rule → rejected unmeasured.
-- Intraday (floor None) with an unmeasured trend → not rejected.
-- relative_strength: `_execute_scan_core` with `overrides={"trend_method": "relative_strength"}` and a patched
-  benchmark fetch returning aligned bars → `score_stock` received non-None `benchmark_candles` in both calls;
+- Intraday (floor None) with an unmeasured trend → not rejected. The 15-min fetch is stubbed (r19-L5): on shipped
+  config (gate + sizing on) a failed or empty `fetch_intraday_candles` hits §1's drop first, and unpatched it is a
+  live call — patch `app.routers.scan.fetch_intraday_candles` to return completed bars (`test_a4_intraday_regime_bars.INTRADAY`).
+- relative_strength: `_execute_scan_core` with `overrides={"trend_method": "relative_strength"}` and
+  `app.routers.scan._rs_benchmark_candles` patched with an `AsyncMock` (r19-L6: scan.py imports it by name, so
+  patching `stock_scan._rs_benchmark_candles` has no effect, and the real helper calls the unstubbed
+  `stock_scan.get_historical_bars`) returning aligned bars → `score_stock` received non-None `benchmark_candles` in both calls;
   with the benchmark fetch returning None → the name is removed unmeasured.
 - Funnel: one unmeasured + one measured-below-floor + one kept → `failed_direction == 2`, `other_rejected == 0`,
   no banner; both removed and nothing kept → banner equals the stock form ("removed 2 of 2"), and contains no
@@ -239,7 +243,7 @@ changed file is listed in the commit.
   `_rs_benchmark_candles` and `_aligned_benchmark`.
 
 Stale comments outside P3c (round-1 L12): stock_scan.py :285-287 ("The unmeasured check below is stock-scan
-only") and :300-301 ("The options gate ... cannot see this") become false. stock_scan.py is not P3c's — logged
+only") and :297-298 ("The options gate ... cannot see this") become false. stock_scan.py is not P3c's — logged
 as an open_questions entry for its next owner, text included.
 
 ## 3. A 0% scan schedule warns that the 0% is ignored
@@ -323,15 +327,18 @@ then hugely inflated, and a bearish target `current - risk × mult` goes negativ
 symbols and would ALSO inflate bullish ATR, stops and targets silently — for every consumer of `get_bars`,
 both scans included.
 
-`backend/scripts/p3c_data_checks.py`, read-only (sqlite `mode=ro` like `iv_basis_analysis.py`;
-for a Postgres `DATABASE_URL` a read-only transaction `SET TRANSACTION READ ONLY`). It never calls `get_bars`
+`backend/scripts/p3c_data_checks.py`, read-only (r19-L8: a sqlite `DATABASE_URL` or none → stdlib
+sqlite3 with a `mode=ro` URI, like `iv_basis_analysis.py`; a `postgresql` URL → `create_async_engine(DATABASE_URL)`
+(asyncpg, in requirements.txt), each connection's first statement `SET TRANSACTION READ ONLY`; any other scheme →
+exit non-zero naming it — `iv_basis_analysis.py:251-252` refuses non-sqlite outright, which would leave a
+Postgres install unable to run the check). It never calls `get_bars`
 (which writes on a stale DB). Window (r2-H2): `[today - 5×365d, today]` — `_HISTORY_YEARS = 5` (stock_scan.py:450), the span `get_bars` serves the
 backtest where the negative price happens. The splits (WMT 3:1 Feb 2024, TSCO 5:1 Dec 2024, CPRT and SRE 2023) are
 outside the 441-day regime window, so that window cannot see them.
 For each symbol (default WMT CPRT TSCO SRE LYB, overridable):
 
 - rows in `ohlcv_daily` over the scan window: count, date span, `source` mix, `adj_factor` / `split_factor` changes;
-- max of `high / (raw_close × adj_factor)` and the largest one-day `|Δclose|` %, with dates;
+- max of `high / (raw_close × adj_factor)` (NULL `adj_factor` read as 1.0, as `_read_bars` does, historical_store.py:154-155 — r19-L7) and the largest one-day `|Δclose|` %, with dates;
 - ATR(14) at the last bar computed three ways: as `_read_bars` returns it (mixed), fully raw, fully adjusted
   (OHLC all × adj_factor);
 - the bearish pullback_ema target on the two series named below (r15-6: the `_read_bars` MIXED series and the
@@ -441,7 +448,7 @@ Same script, second section, per symbol — the three series the options scan ca
 - **DB**: `ohlcv_daily` rows over `[today-441d, today]`, read-only, converted exactly as `_read_bars` does.
 - **Tradier path**: `await market.fetch_candles_async(client, symbol)` (default `bars=252`) with
   `market._candles_cache.pop(symbol, None)` first, and the yfinance fallback `market._fetch_daily_yf`
-  (market.py:121, reached at :1301) patched to return `[]`, so the answer is Tradier's alone.
+  (market.py:121, reached at :1302) patched to return `[]`, so the answer is Tradier's alone.
 - **yfinance path**: the same call with a client built on `httpx.MockTransport` that raises on every request
   (so the Tradier try fails at market.py ~:1272 and falls through to `_fetch_daily_yf`), cache popped again.
 The script is its own process, so popping the in-memory cache touches no server. GETs only; no DB writes.
@@ -458,7 +465,7 @@ not trimmed (only the regime input).
 
 ## 7. POST /auto-trade/fire off the event loop
 
-`fire_now` (auto_trade.py:199-262) calls `auto_trader.fire(...)` synchronously. `fire()` has blocking network
+`fire_now` (auto_trade.py:199-275) calls `auto_trader.fire(...)` synchronously. `fire()` has blocking network
 I/O (market-open check ~3s, regime fetch ≤ 25s deadline since P3b — auto_trader.py:582-587, broker order).
 
 Change: `fire()` runs on a DEDICATED single-worker executor, `_FIRE_EXECUTOR =
@@ -537,12 +544,12 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   error=None, over_exposure=False))` (r9-L1, reason corrected by r10-L3 — a bare `AsyncMock` does NOT crash: `fire_now` returns a plain
   `dict` with no response model, so the MagicMock fields serialise as junk such as `[]` and POST still returns 200;
   a real `BookingOutcome` is needed so the body is meaningful; `BookingOutcome` is at
-  app/services/auto_trade_booking.py:98-104 after the main merge; its new `wrong_side_stop` field defaults to False, so the four-field constructor above is still valid); completion order recorded, asserting GET finished while POST was
+  app/services/auto_trade_booking.py:98-105 after the main merge; its new `wrong_side_stop` field defaults to False, so the four-field constructor above is still valid); completion order recorded, asserting GET finished while POST was
   still pending, the POST returned 200, and its body has `rec_id == "r1"`. Armed/disarmed per the Arming rule below.
 - `fire` runs on a thread named `auto-trade-fire*`, not the loop's thread.
 - SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run after their `_FakeDb` gains
   `rollback` — r5-M1 — plus one each here). Both new tests are ARMED (r8-L2 — unarmed, the endpoint's own
-  "AutoTrader not armed" 400 at auto_trade.py:203-205 would pass the RuntimeError test without reaching the
+  "AutoTrader not armed" 400 at auto_trade.py:205-206 would pass the RuntimeError test without reaching the
   executor) and disarm in `finally`; each asserts the raising stub was called exactly once, and the detail:
   `str(raised_exc)` for the 400, the `SIZING_CONFIG_REFUSED_PREFIX` detail for the 500.
 - Two concurrent `/fire` on one armed strategy (r2-H3 — the two 400 texts are identical, so the test does not
@@ -645,13 +652,13 @@ per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `dir
 The script: `python3 backend/scripts/p3c_data_checks.py --help`; sections chosen by `--sections db,sources`
 (default both; `sources` is the only one that touches the network — r2-L10). `tests/test_p3c_data_checks.py` runs
 `--sections db` only, against a fixture sqlite `ohlcv_daily` with three symbols — Alpaca-shaped 3:1 split
-(`split_factor` 1.0, correct `adj_factor`, raw OHLC) → `MIXED ADJUSTMENT`; stale pre-split `adj_factor` 1.0 →
+(`split_factor` 1.0, correct `adj_factor`, raw OHLC) → `MIXED ADJUSTMENT`; stale pre-split `adj_factor` 1.0 (one of its rows NULL, r19-L7) →
 `STALE ADJ_FACTOR`; no split → `NO SPLIT IN WINDOW` — and asserts the DB file's bytes and mtime are unchanged
 after the run, and that no socket was opened (socket.socket patched to raise). Verdict strings are exactly the
 four in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN` (r2-L9). The same module holds
 §5's two target pins (r14-4): the >350-bar all-positive fixture (patched = unpatched on setup bars, stop and
 target; a setup bar at index ≥ 350 asserted to exist) and the MIXED-shaped empty-ladder fixture (unpatched None,
-patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it.
+patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8): a `mysql://` URL exits non-zero naming the scheme; a `postgresql+asyncpg://` URL with `create_async_engine` patched to a recording fake asserts `SET TRANSACTION READ ONLY` is the first statement on every connection and no write statement follows.
 
 ## Open questions for Kenneth
 
@@ -901,3 +908,23 @@ skips a falsy tp; a negative tp asserts only on fill); "bearish only" holds.
 | 1 | LOW | §5 the 0.00 ending's citation sat inside the printed span (nested backticks) | citation moved outside the span; ref :345 → :346 |
 | 2 | LOW | §5 a rounded `-0.0` would print `-0.00` beside "no raise" | split stated as numeric; `{f}` normalised before formatting |
 | 3 | LOW | State-updates `_valid` entry: no-TP effect only when the 0.0 rung is `targets[0]` | reworded: otherwise only a 0.00 rung in `targets` |
+
+## Round-19 log (8 findings, all LOW; scope: the WHOLE plan against HEAD 9cbdce9, after the origin/main merge)
+
+Verified by running: §1+§2 applied to a scratch copy breaks exactly the named tests (8 `test_scan_endpoint.py`
+via `_force_passing_stock_score`, two `test_a4` fetch cases; the rest 3392 passed); no import cycle; §5 merged
+params as stated; each new §4 test fails today; `resolved_request` is a raw dict; §3 mount-call list complete
+after the merge; `scan.py`/`stock_scan.py`/`conviction_sizing.py`/`auto_trade.py` unchanged since 2f67e6f; all
+seven State-update openings present once in PROJECT_STATE.json.
+
+| # | Sev | Finding | Resolution (r20) |
+|---|---|---|---|
+| 1 | LOW | §2 stale-comment ref stock_scan.py :300-301 | :297-298 |
+| 2 | LOW | §7 refs: `fire_now` :199-262, not-armed 400 :203-205, `BookingOutcome` :98-104 | :199-275, :205-206, :98-105 |
+| 3 | LOW | table row 4 ref conviction_sizing.py:158-229 | :160-166 flag, :226-239 ERROR-then-DEBUG |
+| 4 | LOW | §6 `_fetch_daily_yf` reached at market.py:1301 | :1302 |
+| 5 | LOW | §2 Intraday test doesn't stub the 15-min fetch (§1's drop fires first; live call) | patch `app.routers.scan.fetch_intraday_candles` with `INTRADAY` |
+| 6 | LOW | §2 relative_strength test names no patch target | `app.routers.scan._rs_benchmark_candles` AsyncMock, with why |
+| 7 | LOW | §5 formulas silent on NULL `adj_factor` | NULL read as 1.0 like `_read_bars`; a NULL row in the STALE fixture |
+| 8 | LOW | §5 Postgres read-only path names no driver | sqlite → sqlite3 `mode=ro`; postgresql → `create_async_engine` + `SET TRANSACTION READ ONLY`; other → exit non-zero |
+
