@@ -258,14 +258,14 @@ Decision P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25: behaviour unchanged (the backe
 - Options entries are never flagged: the options request carries no `risk_pct`.
 
 Tests (jest): `scheduleRiskIgnored` true for stocks/0, false for stocks/0.02, stocks/undefined, options;
-a render test of `SettingsPage` (r3-L6: `ScheduleEntryRow` is private, page.tsx:706, and a Next 15 `page.tsx`
+a render test of `SettingsPage` (r3-L6: `ScheduleEntryRow` is private, page.tsx:742, and a Next 15 `page.tsx`
 may not add named exports), navigated to the Scan section — the pattern `__tests__/RiskForm.hydration.test.tsx`
 already uses — shows the text for a stocks entry with `risk_pct: 0` and not for `0.02`. The `@/lib/api` mock
 (r4-L2 — the RiskForm mock holds only `postCredentials`, and no existing test renders the Scan section) returns a
 resolved value for EVERY `api.*` call made while that section mounts, not only the two under test: the Scan
-section mounts `OperatorTimezoneSection` (`getSchedulingTimezone`, page.tsx:461), `ScheduledScanRetentionSection`
-(`getScheduledScanRunRetention`, :514) and `ScheduledScansSection` (`getScanSchedule`, `getScanScheduleEntryRuns`,
-:587/:591), page.tsx:446-448. The implementer lists every call reached from the section's mount (grep of
+section mounts `OperatorTimezoneSection` (`getSchedulingTimezone`, page.tsx:497), `ScheduledScanRetentionSection`
+(`getScheduledScanRunRetention`, :550) and `ScheduledScansSection` (`getScanSchedule`, `getScanScheduleEntryRuns`,
+:623/:627), page.tsx:483-485. The implementer lists every call reached from the section's mount (grep of
 `api\.` and of any store `fetch*` in the components it renders) in the test's header comment, and each is mocked;
 a missing one throws `undefined is not a function` in an effect and fails the render.
 
@@ -537,7 +537,7 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   error=None, over_exposure=False))` (r9-L1, reason corrected by r10-L3 — a bare `AsyncMock` does NOT crash: `fire_now` returns a plain
   `dict` with no response model, so the MagicMock fields serialise as junk such as `[]` and POST still returns 200;
   a real `BookingOutcome` is needed so the body is meaningful; `BookingOutcome` is at
-  app/services/auto_trade_booking.py:74-79); completion order recorded, asserting GET finished while POST was
+  app/services/auto_trade_booking.py:98-104 after the main merge; its new `wrong_side_stop` field defaults to False, so the four-field constructor above is still valid); completion order recorded, asserting GET finished while POST was
   still pending, the POST returned 200, and its body has `rec_id == "r1"`. Armed/disarmed per the Arming rule below.
 - `fire` runs on a thread named `auto-trade-fire*`, not the loop's thread.
 - SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run after their `_FakeDb` gains
