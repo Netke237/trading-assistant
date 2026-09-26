@@ -333,3 +333,40 @@ Round 1 confirmed several things:
   - `test_portfolio_risk_contract_cap.py::test_3_stock_shares_keep_the_deferred_clamp` becomes "stock shares are judged at the real count": `judged_size == 100`.
   - `test_position_writer_gates.py::test_p1a_6b_...` no longer reports "the check judged 5, not the ordered 20". With gates off and 20 shares that fit every cap, `over_exposure` is now False.
 - The B4 clause "`onSubmit` reports the booked qty", and mutation S12, are withdrawn (edited in place above): a resized basket keeps the dialog open, so `onSubmit` never runs for it.
+
+---
+
+## Plan round 2: 3 gate-level findings (1 HIGH, 2 MEDIUM). All fixed below; these SUPERSEDE R2, B3 and A4 where they conflict
+
+Round 2 confirmed several things:
+- R1 leaves the options page's labels unchanged (`OptionsBroker` has only the three brokers), and test 14 can fail under S17;
+- R3's arithmetic holds, and the extended T-A8 fails under S19;
+- T-A11 gives 201 against 422 once its three symbols are distinct;
+- T-A12 can fail;
+- scaling option rungs breaks nothing, since no backend code reads `contractsToSell`.
+
+**Q1 (MEDIUM): ONE rung rule, the card's own, used in both places.** R2's "always scale by new ÷ old" disagreed with the card whenever the rungs summed to less than the quantity. Rungs can do that: a rung dropped by `stockPositionLevels`, or edited down. Example: 10/33/34 on 100 resized to 80 would store 8/26/46, and T3 would sell the runner the user had left unallocated.
+- **The rule** (`scale_rung_quantities(targets, new_qty)` in `position_writer.py`, `scaleRungShares(targets, newQty)` in `lib/paperTrade.ts`, identical):
+  - `alloc` = the sum of the positive `contractsToSell`;
+  - if `alloc <= new_qty`, the rungs are returned unchanged;
+  - otherwise each positive rung except the last becomes `floor(c × new_qty / alloc)`, and the last positive rung becomes `max(0, new_qty − sum(others))`.
+  - This is the card's shrink branch (`StockPositionCard/index.tsx:268-277`) generalised to "the last positive rung". The card's own branch calls `scaleRungShares`, so there is one implementation per language.
+  - The writer applies it only when it books fewer than `body.qty` (gates on, a resize applied). The rule never grows rungs.
+- **Tests:**
+  - T-A10 (66/66/68 on 200 → 100 gives 33/33/34) stays.
+  - **T-A10b:** 10/33/34 on 100 → 80 is stored unchanged. 10/33/34 on 100 → 50 gives floor(10×50/77)=6, floor(33×50/77)=21, and the last 50−27=23, which sums to 50.
+  - **The frontend `paperTrade` test** runs the same two cases through `scaleRungShares`.
+- **Mutation S21:** scale by new ÷ old instead of new ÷ alloc → T-A10b red.
+
+**Q2 (MEDIUM): the local row gets the scaled rungs BEFORE it enters the store.** `placeStockOrderSaveFirst` itself calls `applyPersistedPosition` (P1b-i's shape), so B3's "scale after `placed`" came too late. It also never ran on `unknown`, and an EditDrawer targets PATCH in that window could overwrite the correctly scaled stored rungs.
+- Inside `placeStockOrderSaveFirst`, every `applyPersistedPosition` receives `{...pos, contracts: orderQty, targets: scaleRungShares(pos.targets, orderQty)}`, in the success branch and the keep branch alike.
+- B3's separate post-`placed` scaling is withdrawn. The card only maps the outcome.
+- **Tests:** tests 4 and 6 assert that the local row's rung sum is `<=` its `contracts` (for 66/66/68 resized to 100: 33/33/34). S13 now points at tests 4 and 6.
+
+**Q3 (HIGH): a PATCH that RAISES qty must never SHRINK the row.** `routers/portfolio.py:236-241` sets `qty = risk.adjusted_size` unchecked. After Part A, a stock booked at risk that then has its stop cleared or widened is judged at notional, and the resize can fall BELOW the current qty.
+- Example: 1000 @ 50, stop 49; the PATCH `{qty: 1001, stop: null}` is resized to 100. The books would say 100 while the broker holds 1000.
+- **The fix, in the PATCH qty-increase branch:** if `risk.adjusted_size is not None and risk.adjusted_size < position.qty`, set `qty_error` = `Raising qty to {qty} exceeds the exposure limit even at the current size ({position.qty}); qty left unchanged.` and leave `position.qty` untouched.
+  - A resize that lands between the current and the requested qty is applied as today.
+  - The rest of the same PATCH (the stop, the targets) still applies, as a `qty_error` does today. Check the router's existing handling of `qty_error` in the build and keep it.
+- **T-A8b** (`test_portfolio_update.py`): row 1000 @ 50, stop 49, portfolioValue 100k. PATCH `{qty: 1001, stop: null}` → the response carries the qty error and the stored qty is still 1000. PATCH `{qty: 1001, stop: 40}` ($10 per share × 1001 = 10%, resize 500) → the same.
+- **Mutation S22:** drop the guard → T-A8b red.
