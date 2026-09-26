@@ -12,7 +12,7 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -375,10 +375,11 @@ reported. Per setup bar (signal not None under the patch) the script records: `s
 (`primary`, ext1, ext2 exactly as passed); the real `targets[0]`, or, when the real ladder is empty (r15-1, r15-3):
 `NONE — no valid rung: primary {p} {non-positive | not below entry | missing}, fallback {f} <= 0. Before P3a the
 signal emitted {f} as target_price; ` + one of two endings (r17-1 — the helper empties the ladder on
-`rounded <= 0`, :345, so `{f}` can be exactly 0.00): `{f} < 0` → `had this bar's order FILLED, backtesting.py would
+`rounded <= 0`, :346, so `{f}` can be exactly 0.00): `{f} < 0` → `had this bar's order FILLED, backtesting.py would
 have raised (0 < price assertion) and failed the symbol's whole backtest.`; `{f} == 0.00` → `had it filled, the
-short would have opened with NO take-profit (backtesting.py `_open_trade` sets tp only `if tp:`, :1105-1106), no
-raise.` (r16-1: the assertion runs in `Trade.tp`'s setter, i.e. on fill
+short would have opened with NO take-profit, no raise.` (backtesting.py `_open_trade` sets tp only `if tp:`,
+:1105-1106.) The split is NUMERIC on the float (r18-2), and `{f}` is normalised before formatting (`f = 0.0 if f ==
+0 else f`) so a rounded `-0.0` prints `0.00`, not `-0.00`. (r16-1: the assertion runs in `Trade.tp`'s setter, i.e. on fill
 — backtesting.py `__set_contingent` — not when the order is placed; the signal is not called while in a trade, and
 an unfilled limit is cancelled by the next order under `exclusive_orders=True`, strategy_backtest.py:136.) — `{f}` computed from the recorded args with the module's own `_LADDER_MIN_FALLBACK_R`, the
 primary's status from the same 2dp comparison `_valid` makes. (P3a's docstring, strategy_engine.py:283-288, and
@@ -630,8 +631,10 @@ comments (L11, L12), the scan-vs-fire END difference (item 6), `run_scan`'s canc
 the relative_strength DB-miss misalignment residual (r2-M6), P3a's `_valid` keeping a positive rung below 0.005
 that rounds to 0.0 (strategy_engine.py:300-311 — the `value <= 0` test runs before rounding; practically
 unreachable, P3a's code; round-16 observation; BEARISH only — a bullish 0.0 fails the entry-side test at :310 —
-and the effect is a short opened with NO take-profit, since backtesting.py skips a falsy tp (:1105-1106), not the
-raise P3a guarded against — r17-2), the ScanFunnel unmeasured stage (r2-M7), the
+and the effect, when the 0.0 rung is `targets[0]` (`target_price`), is a short opened with NO take-profit, since
+backtesting.py skips a falsy tp (:1105-1106), not the raise P3a guarded against; when a valid primary or nearer
+extension leads (rungs sort nearest-first, :318-321, so a bearish 0.0 is always last), it is only a 0.00 rung in
+`targets` (the UI ladder) — r17-2, r18-3), the ScanFunnel unmeasured stage (r2-M7), the
 stale "market structure does not support" text in the frontend fixture `step-4-ranking/__tests__/emptyStateBanner.test.tsx:21-22` (r3-L5).
 The two Kenneth decisions above go to the front of `decisions`. One new decision
 per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `direction_conviction_unmeasured` in scan.py.
@@ -887,3 +890,14 @@ does not assert; `exclusive_orders` cancels pending orders); refs :292-295 and o
 |---|---|---|---|
 | 1 | LOW | §5 label's "would have raised" is false when `{f}` is exactly 0.00: backtesting.py skips a falsy tp, so the short opens with no TP | label split on `{f} < 0` vs `== 0.00`; summary's first bar is the first with `{f} < 0`, plus a count of 0.00 bars |
 | 2 | LOW | State-updates `_valid` entry omitted bearish-only and the no-TP (not raise) effect | added |
+
+## Round-18 log (3 findings; scope: the r18 diff)
+
+The r18 claims verified against the code and backtesting 0.6.6 (`new_order` passes tp=0 and negative; `_open_trade`
+skips a falsy tp; a negative tp asserts only on fill); "bearish only" holds.
+
+| # | Sev | Finding | Resolution (r19) |
+|---|---|---|---|
+| 1 | LOW | §5 the 0.00 ending's citation sat inside the printed span (nested backticks) | citation moved outside the span; ref :345 → :346 |
+| 2 | LOW | §5 a rounded `-0.0` would print `-0.00` beside "no raise" | split stated as numeric; `{f}` normalised before formatting |
+| 3 | LOW | State-updates `_valid` entry: no-TP effect only when the 0.0 rung is `targets[0]` | reworded: otherwise only a 0.00 rung in `targets` |
