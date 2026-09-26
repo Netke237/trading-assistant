@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/order-booking-safety-7evlql",
+      "claimed_at": "2026-09-26T18:12:08Z",
+      "expires_at": "2026-09-26T21:12:08Z",
+      "note": "Stocks sends save first, then judge real share count (plan stage)",
+      "task": "STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES"
+    }
+  ]
 }
