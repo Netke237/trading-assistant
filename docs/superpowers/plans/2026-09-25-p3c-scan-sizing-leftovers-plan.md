@@ -7,7 +7,8 @@ and re-taken 2026-09-26, no new commits on the old branch), off main 2f67e6f. Cl
 Round history: r1 → 15 findings (2 HIGH, 7 MED, 6 LOW), addressed in r2. r2 → 13 findings (3 HIGH, 4 MED, 6 LOW),
 addressed in r3. r3 → 7 findings (0 HIGH, 3 MED, 4 LOW), addressed in r4. r4 → 6 findings (0 HIGH, 1 MED, 5 LOW),
 addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. r7 → round 7 (§7): 2 LOW, addressed in r8. r8 → round 8 (§7): 3 LOW,
-addressed in r9. Logs at the end.
+addressed in r9. r9 → round 9 (§7): 1 LOW, addressed in
+r10. Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
 - P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
@@ -466,8 +467,10 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   today's blocking code, and conftest's `client` app has no auto_trade router). A local FastAPI app containing only
   `auto_trade.router`, driven by `httpx.AsyncClient(transport=ASGITransport(app))` on the test's loop with
   `asyncio.gather(post, get)`; `get_db` overridden with a `_FakeDb` (`execute` + `rollback`);
-  `auto_trade.book_fired_order` patched with an `AsyncMock`; completion order recorded, asserting GET finished
-  while POST was still pending. Armed/disarmed per the Arming rule below.
+  `auto_trade.book_fired_order` patched with `AsyncMock(return_value=BookingOutcome(booked=True, rec_id="r1",
+  error=None, over_exposure=False))` (r9-L1 — a bare `AsyncMock` returns a MagicMock, whose fields crash FastAPI's
+  response serialisation; `BookingOutcome` is at app/services/auto_trade_booking.py:73-79); completion order
+  recorded, asserting GET finished while POST was still pending AND the POST returned 200. Armed/disarmed per the Arming rule below.
 - `fire` runs on a thread named `auto-trade-fire*`, not the loop's thread.
 - SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run after their `_FakeDb` gains
   `rollback` — r5-M1 — plus one each here). Both new tests are ARMED (r8-L2 — unarmed, the endpoint's own
@@ -672,3 +675,13 @@ after the `fire` patch is undone; no HIGH/MED in §7's design.
 | L1 | LOW | §7 the 100-yield `cf` wait fails ~90% with the real aiosqlite session | yield bound limited to `_FakeDb` tests; `in_transaction()` test waits on `started` via `to_thread`; real-session waits time-bounded |
 | L2 | LOW | §7 RuntimeError → 400 test passes vacuously unarmed; armed, it leaks the singleton | both mapping tests armed + disarm in `finally`; stub called once; detail asserted |
 | L3 | LOW | §7 loop-free test's client unspecified; a sync `TestClient` passes on today's blocking code | local app with `auto_trade.router`, `httpx.AsyncClient(ASGITransport)` + `gather`, `get_db` override, `book_fired_order` mocked, completion order asserted |
+
+## Round-9 log (1 finding; scope §7 only)
+
+All three round-8 fixes verified. The loop-free test discriminates: on today's blocking code POST completes before
+GET 300/300; with the planned handler GET completes first. The local-app wiring (router prefix, no auth,
+`app.database.get_db` override key) and the mapping-test details confirmed.
+
+| # | Sev | Finding | Resolution (r10) |
+|---|---|---|---|
+| L1 | LOW | §7 loop-free test: a bare `AsyncMock` booking returns a MagicMock that crashes response serialisation | `AsyncMock(return_value=BookingOutcome(...))`; POST 200 asserted |
