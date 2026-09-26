@@ -414,7 +414,8 @@ describe('portfolioStore', () => {
         }
         if (url.endsWith('/api/portfolio') && method === 'POST') {
           const body = JSON.parse(String(init?.body));
-          return Promise.resolve(jsonResponse({ ...body, adjustedQty: 33 }, true, 201));
+          // The re-save re-anchors the entry to its save-time quote (C1).
+          return Promise.resolve(jsonResponse({ ...body, adjustedQty: 33, entryPrice: 151.25 }, true, 201));
         }
         return Promise.resolve(jsonResponse([], true, 200));
       }) as unknown as typeof fetch;
@@ -429,6 +430,7 @@ describe('portfolioStore', () => {
       const row = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-RS')!;
       expect(row.contracts).toBe(33);
       expect(row.targets.map((t) => t.contractsToSell)).toEqual([16, 17]);
+      expect(row.entryPrice).toBe(151.25);   // C1: the server's entry, not the local one
     });
 
     it('drops a genuinely-gone position and reports why, without touching other positions', async () => {
@@ -1755,6 +1757,33 @@ describe('portfolioStore', () => {
       const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-ADJ');
       expect(updated?.contracts).toBe(2);
       expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('2 contracts');
+    });
+
+    it('C2: a soft-reduced qty raise scales the local rungs to the booked size (stock code round 3)', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-PATCH-RUNG', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100,
+        targets: [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }],
+      });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({ adjustedQty: 150 }));
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          contracts: 200,
+          targets: [{ stockPrice: 55, contractsToSell: 100 }, { stockPrice: 60, contractsToSell: 100 }],
+        });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-RUNG')!;
+      expect(updated.contracts).toBe(150);
+      expect(updated.targets.map((t) => t.contractsToSell)).toEqual([75, 75]);
     });
 
     it('reverts the optimistic update via a forced resync when the backend rejects the PATCH', async () => {

@@ -10,7 +10,7 @@
  *   the Step 7 Send-basket-to-broker feature that is wired but not yet live.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import type { PortfolioPosition } from '@/types/domain';
 import { positionMultiplier } from '@/lib/risk';
@@ -31,6 +31,12 @@ export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
   const [qty, setQty] = useState<number>(held);
   const [exitPrice, setExitPrice] = useState<number>(position.currentPrice || position.entryPrice);
   const [exitDate, setExitDate] = useState<string>(todayIso());
+  // The row can change under an open dialog: a close that hit 'not found'
+  // re-saves the position, and since STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES
+  // that re-save can be booked SMALLER (stock code round 3, C1). Re-seed the
+  // quantity from the row, or the preview and the next confirm keep the old
+  // size -- a close the user did not approve.
+  useEffect(() => { setQty(held); }, [held, position.entryPrice]);
 
   // Short *stock* positions profit when price falls — flip the delta's sign for
   // those. Options are never flipped: 'Bearish' on an option position just labels

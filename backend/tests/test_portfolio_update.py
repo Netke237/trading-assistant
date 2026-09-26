@@ -364,3 +364,25 @@ async def test_a8b_a_qty_raise_never_shrinks_the_row(client, stop):
     assert r.status_code == 422, r.text
     assert "qty left unchanged" in r.text
     assert (await _stored(client, rec))["qty"] == 1000
+
+
+
+@pytest.mark.asyncio
+async def test_c2_a_resized_qty_raise_scales_the_stored_rungs(client):
+    # Stock code round 3 (C2): 100 shares, no stop (notional). Raise to 200 with
+    # rungs 100/100 on a 150k portfolio: 200 x $50 = $10,000 = 6.7% -> resized
+    # to 150 (5%). The rungs must shrink to 75/75, not stay selling 200 of 150.
+    body = {"recId": "SRE", "symbol": "SRE", "contract": "SRE|STOCK", "direction": "Bullish",
+            "entryPrice": 50.0, "qty": 100, "entryDate": "2026-09-26", "stop": None,
+            "targets": [], "dteTotal": 0, "portfolioValue": 1_000_000}
+    with patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)), \
+         patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=None)):
+        assert (await client.post("/api/portfolio", json=body)).status_code == 201
+    rungs = [{"stockPrice": 55.0, "contractsToSell": 100}, {"stockPrice": 60.0, "contractsToSell": 100}]
+    r = await client.patch("/api/portfolio/SRE",
+                           json={"qty": 200, "targets": rungs, "portfolioValue": 150_000.0})
+    assert r.status_code == 200, r.text
+    assert r.json()["adjustedQty"] == 150
+    row = await _stored(client, "SRE")
+    assert row["qty"] == 150
+    assert [t["contractsToSell"] for t in row["targets"]] == [75, 75]

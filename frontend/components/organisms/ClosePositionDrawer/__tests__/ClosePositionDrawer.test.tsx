@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import type { PortfolioPosition } from '@/types/domain';
 
@@ -79,5 +79,24 @@ describe('ClosePositionDrawer realized P&L', () => {
     // tag: (1 - 2) * 100 * 2 = -$200, -50%. Rendered as "$-200", sign after the "$".
     expect(screen.getByText(/\$-200\b/)).toBeInTheDocument();
     expect(screen.getByText(/-50\.0%/)).toBeInTheDocument();
+  });
+});
+
+/* Stock code round 3, C1: a close that hit 'not found' re-saves the row, and
+ * the re-save can be booked SMALLER while this dialog stays open. The drawer
+ * must re-seed its quantity from the row, so the preview and the next confirm
+ * describe the size actually held. */
+describe('ClosePositionDrawer — the row shrinks under an open dialog', () => {
+  it('re-seeds the quantity and sends the booked size on the next confirm', () => {
+    const onConfirm = jest.fn();
+    const big = makePosition({ contract: 'AAA|STOCK', entryPrice: 100, currentPrice: 110, contracts: 100 });
+    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByText(/\+\$1000\b/)).toBeInTheDocument();
+
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByText(/of 33/)).toBeInTheDocument();
+    expect(screen.getByText(/\+\$330\b/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /close position/i }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 33 }));
   });
 });

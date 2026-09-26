@@ -27,7 +27,7 @@ from app.data.market import fetch_contract_quote_async
 from app.services.audit import log_approval
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
-from app.services.position_writer import create_position
+from app.services.position_writer import create_position, scale_rung_quantities
 from app.models.audit_event import AuditEventModel
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -261,6 +261,12 @@ async def update_position(
         position.structural_stop = _floor_stop(updates["structuralStop"])
     if "targets" in updates:
         position.targets = updates["targets"]
+    if adjusted_qty is not None:
+        # The gate booked FEWER than requested: shrink the sell-to-close rungs
+        # with it, by the create path's rule (stock code round 3, C2) -- or the
+        # row plans to sell more than it holds. Covers rungs sent in this PATCH
+        # and rungs already stored.
+        position.targets = scale_rung_quantities(list(position.targets or []), position.qty)
     # Exit-plan pipeline scaffolding (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
     # — later phases compute these values; this endpoint just persists
     # whatever they send, same exclude_unset/explicit-null-clears pattern as

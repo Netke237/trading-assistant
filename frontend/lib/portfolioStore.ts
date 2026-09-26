@@ -682,7 +682,12 @@ async function _flushOne(recId: string): Promise<void> {
       // still be free to overwrite without warning.
       usePortfolioStore.setState((s) => ({
         positions: s.positions.map((p) =>
-          p.recId === recId ? { ...p, contracts: result.adjustedQty } : p
+          // Scale the rungs by the writer's rule too (stock code round 3, C2):
+          // the backend stores them scaled, and rungs left at the requested
+          // size would sell more than the booked quantity.
+          p.recId === recId
+            ? { ...p, contracts: result.adjustedQty, targets: scaleRungShares(p.targets, result.adjustedQty!) ?? p.targets }
+            : p
         ),
         lastSyncError: {
           symbol: entry.symbol,
@@ -1145,10 +1150,16 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                 // user decide; nothing is closed.
                 const booked = persisted.adjustedQty;
                 const detail = `Portfolio re-saved this position at ${booked} shares to fit your exposure limit (you had ${requested}); the close was NOT sent. Review the position and close again.`;
+                // The re-save also re-anchored the entry to its save-time quote:
+                // adopt it (and the premium-stop fraction derived against it), as
+                // the other save paths do, so a close preview and History agree.
                 set((s) => ({
                   positions: s.positions.map((p) => (p.recId === recId
-                    ? { ...p, contracts: booked, targets: scaleRungShares(p.targets, booked) ?? p.targets,
-                        syncStatus: 'synced' as const, syncedAt: Date.now(), syncPendingSince: undefined }
+                    ? withServerEntry({
+                        ...p, contracts: booked, targets: scaleRungShares(p.targets, booked) ?? p.targets,
+                        premiumStopPct: persisted.premiumStopPct ?? null,
+                        syncStatus: 'synced' as const, syncedAt: Date.now(), syncPendingSince: undefined,
+                      }, persisted.entryPrice)
                     : p)),
                   lastSyncError: { symbol: local.symbol, contract: local.contract, detail, at: Date.now() },
                 }));
