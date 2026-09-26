@@ -8,7 +8,8 @@ Round history: r1 → 15 findings (2 HIGH, 7 MED, 6 LOW), addressed in r2. r2 �
 addressed in r3. r3 → 7 findings (0 HIGH, 3 MED, 4 LOW), addressed in r4. r4 → 6 findings (0 HIGH, 1 MED, 5 LOW),
 addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. r7 → round 7 (§7): 2 LOW, addressed in r8. r8 → round 8 (§7): 3 LOW,
 addressed in r9. r9 → round 9 (§7): 1 LOW, addressed in
-r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. Logs at the end.
+r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 → round 11 (§7): 1 LOW, addressed in r12.
+Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
 - P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
@@ -489,10 +490,16 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   loop-free test's local app; the test waits, TIME-bounded (`await asyncio.sleep(0.01)` up to 5s, then `assert` — the
   requests cross the whole ASGI stack, so the 100-yield bound below does not apply), until the `submit` wrapper has recorded
   TWO submissions — both requests passed the endpoint's armed check, because the first is held inside `fire()`
-  before it disarms — and only then sets `hold`. `hold.set()` is also in the `finally`. Assert: the wrapper
+  before it disarms. Then (r11-F1 — setting `hold` at once let a multi-worker pool pass ~0.2% of runs idle and
+  ~20% under CPU load, because the second pool thread had not yet entered the wrapper) it waits, time-bounded
+  (`await asyncio.sleep(0.01)` up to 0.5s), until `len(calls) >= 2 or subs[1].running()`, and asserts
+  `len(calls) == 1 and not subs[1].running()` — the second call is still QUEUED while the first is held (`subs`
+  = the `submit` wrapper's recorded futures; `calls` = the fire wrapper's `enter` records). Only then does it set
+  `hold`. `hold.set()` is also in the `finally`. (Simulated by the round-11 auditor: one worker 300/300 pass; a
+  4-worker pool under load 500/500 fail, all on this assertion; ~0.5s per run.) Assert: the wrapper
   recorded exactly two calls; exactly one raised `ArmPreservedError` from inside `fire()`; the calls did not
-  overlap (the second's enter ≥ the first's exit — with one worker the second cannot enter while the first is
-  held; a multi-worker pool enters it at once and fails every run); `execute_option_order` called exactly once;
+  overlap (the second's enter ≥ the first's exit — serialisation after release; the queued-while-held assertion
+  above is what makes a multi-worker pool fail); `execute_option_order` called exactly once;
   one 200 and one 400. Isolation (r10-F2 — this test runs the REAL `fire()`, which appends a "filled" row to the
   process-wide `_state.history` and counts toward `_check_daily_loss` in later fires): before arming,
   `monkeypatch.setattr(auto_trade.auto_trader._state, "history", [])`, the precedent at
@@ -713,3 +720,12 @@ is safe in either callback order.
 | F1 | MEDIUM | §7 two-concurrent test does not pin serialisation: a 4-worker pool passed 98/100 runs (the one-call branch has nothing to overlap) | the first call is held inside the wrapper until both submissions are recorded; exactly two calls, one `ArmPreservedError`, no overlap — the "either" branch dropped |
 | F2 | LOW | §7 the concurrent test's real `fire()` leaks "filled" rows into the singleton's history → later daily-loss refusals | `_state.history` monkeypatched to `[]` before arming (test_o4_step4_booking.py:142 precedent) |
 | F3 | LOW | §7 r9's stated reason (MagicMock crashes serialisation) is false — `fire_now` returns a plain dict, POST is 200 | reason corrected; `rec_id == "r1"` asserted |
+
+## Round-11 log (1 finding; scope §7 only)
+
+All three round-10 fixes verified; the rewritten test cannot deadlock (the second request reaches `submit` while
+the first is held) and passes on one worker under CPU load; exception-handler order unchanged. No HIGH/MED in §7.
+
+| # | Sev | Finding | Resolution (r12) |
+|---|---|---|---|
+| F1 | LOW | §7 two-concurrent test: a multi-worker pool still passed ~0.2% idle / ~20% loaded (second thread not yet in the wrapper when `hold` is set) | before `hold.set()`, a 0.5s time-bounded wait then `assert len(calls) == 1 and not subs[1].running()` |
