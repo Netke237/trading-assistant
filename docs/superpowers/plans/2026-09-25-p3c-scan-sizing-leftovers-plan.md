@@ -10,6 +10,7 @@ addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW
 addressed in r9. r9 → round 9 (§7): 1 LOW, addressed in
 r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 → round 11 (§7): 1 LOW, addressed in r12.
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
+r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -284,14 +285,14 @@ a missing one throws `undefined is not a function` in an effect and fails the re
     min_mult)` — e.g. an Intraday name whose 15-min fetch failed.) + the existing "To stop trading in a headwind"
     advice.
   - Stale text corrected in the same commit (r3-M3 + r4-L5), every place that restates the fall-through to 1% or
-    the doubling (line refs re-checked in r12-F6): conviction_sizing.py:285-307 (the "ZERO IS REFUSED TOO" block —
+    the doubling (line refs re-checked in r12-F6): conviction_sizing.py:285-308 (the "ZERO IS REFUSED TOO" block —
     the `stock_scan.py:685` / FALSY / "doubled" sentences); test_conviction_sizing.py:387-394 (the "CORRECTED
     2026-09-17" comment), :438-463 (the zero test — renamed
     `test_a_zero_min_mult_is_refused_because_it_still_sizes_the_minimum`, docstring and asserts rewritten), and
     :466-470 (docstring of `test_the_multiplier_can_no_longer_reach_a_falsy_zero`; the test's own assert is
     unchanged). NOT everything there is stale (r12-F5): P3a removed only `risk_pct or 0.01`; `risk_fixed if
     risk_fixed` is still at stock_scan.py:1015 and `risk_fixed_usd` has no `gt=0` (schemas/stock_scan.py:52), so a
-    fixed $0 still falls through to pct sizing. Both the :304-307 "THE FALSY READ ... IS STILL THERE" sentence and
+    fixed $0 still falls through to pct sizing. Both the :304-308 "THE FALSY READ ... IS STILL THERE" sentence and
     the :466-470 docstring are therefore reworded, not deleted, to: "`risk_pct or 0.01` was removed by P3a;
     `risk_fixed if risk_fixed` (stock_scan.py:1015) remains, and is harmless here because the pct branch is
     multiplied by the same `mult`". The history ("admitted until 2026-09-17") stays.
@@ -351,7 +352,7 @@ the maximum ratio of ATR(14) as `_read_bars` returns the series to ATR(14) on a 
 the detected split ratios applied backwards (independent of stored `adj_factor`), and the MINIMUM bearish
 pullback_ema target (`current - risk × rr_target_mult`, strategy_engine's formula as a pure function) on each
 series, with dates; and the same values on the 5 bars either side of each detected split.
-**Target formula, exact (r3-L4, corrected by r4-L4, r12-F1/F2)** — reimplemented from strategy_engine.py:418-503.
+**Target formula, exact (r3-L4, corrected by r4-L4, r12-F1/F2)** — reimplemented from strategy_engine.py:418-504.
 Params (r12-F1 — `active.bearish` alone is NOT what the stock-scan backtest ran): the script builds the same merged
 set the backtest uses, `_merge_strategy_params` (stock_scan.py:198-212, precedence exit < active < request) —
 `get_exit("pullback_ema")`, then `get_active("pullback_ema", "Bearish")`, then the five `_SIGNAL_KWARGS["pullback_ema"]`
@@ -359,14 +360,18 @@ fields (stock_scan.py:181) at their `StockScanRequest` defaults (schemas/stock_s
 non-None and so always win. Shipped result: `ema_period 50` (active's 35 is overridden), `trend_ema 100`,
 `tolerance 0.08`, `ma_type EMA`, `require_reversal False`, `atr_stop_mult 1.5`, `rr_target_mult 2.0`,
 `exit_swing_lookback 20`. The script calls `_merge_strategy_params` itself (a pure read of the YAML), prints the
-merged set and which layer set each key, and accepts `--params-json` (applied as the request layer) for a Step-3
+merged set and which layer set each key, and accepts `--params-json` — OVERLAID on the `StockScanRequest` defaults, the result then passed as the request layer
+(r13-3: every real request carries all five fields non-None, so a partial JSON must not let active's `ema_period 35`
+back in; `StockScanRequest` needs dummy `universe`/`direction`/`horizon`/`strategy` to build) — for a Step-3
 set that is not the default. Bar windowing (r12-F2): like the backtest (strategy_backtest.py:113-127), each bar `i`
-is evaluated on the trailing slice `bars[max(0, i+1-350) : i+1]` and skipped when fewer than 60 bars exist, so the
+is evaluated on the trailing slice `bars[max(0, i+1-350) : i+1]` and skipped when fewer than 60 bars exist; within a slice the signal's own guards also apply (r13-1): a slice
+with fewer than `trend_ema + 10` bars (strategy_engine.py:418) or with an empty MA list (:436-437) is not a setup
+bar, so the
 EMAs are seeded exactly as the backtest seeds them.
 `risk = (fast_ema + atr × atr_stop_mult) - current`; rungs: primary `prior_extreme` (`_swing_low` over
 `exit_swing_lookback`), ext1 `current - risk × rr_target_mult`, ext2 `current - risk × rr_target_mult × 1.5`.
 The REPORTED value is what the backtest trades — `targets[0]`, since `strategy_backtest` issues
-`tp=sig.target_price` (strategy_backtest.py:129-133) and `target = targets[0]` (strategy_engine.py:503) — using the
+`tp=sig.target_price` (strategy_backtest.py:129-133) and `target = targets[0]` (strategy_engine.py:504) — using the
 ladder's ordering WITHOUT P3a's positivity drop: the primary if it is on the profitable side of entry (below
 `current`), else ext1. The minimum rung (ext2) is a secondary column. It is reported twice: on bars where the full
 bearish setup passes — price below the EMA, MAs stacked, within tolerance, reversal bar if enabled, AND the
@@ -375,9 +380,9 @@ where `pullback_ema_signal` would return a signal — the number comparable to a
 all bars. `pullback_ema_signal` is not called for the report (P3a's ladder drops non-positive rungs, which would
 hide the effect). The reimplementation is pinned by one fixture check on a split-free fixture LONGER than 350 bars
 (so the slice differs from the full prefix) where every rung is positive (so the positivity drop does not apply),
-with `pullback_ema_signal` called on the same 350-bar slice and the same merged params: on a bar where it fires
-bearish, the
-script's stop equals the signal's `stop_price` AND its reported target equals `target_price`; and the script's
+with `pullback_ema_signal` called on the same 350-bar slice and the same merged params: on at least one bar at
+index ≥ 350 where it fires bearish (r13-2 — before index 350 slice and full prefix are identical, so only such a
+bar tells them apart; the test asserts one exists), the script's stop equals the signal's `stop_price` AND its reported target equals `target_price`; and the script's
 setup-bar set equals the bars where the signal is not None.
 LYB had no split: for it the script prints `NO SPLIT IN WINDOW` and the line "the split hypothesis does not
 explain LYB's negative target" with its minimum target, so the evidence is not over-read.
@@ -769,3 +774,18 @@ equivalence to the pre-P3a target verified.
 | F4 | LOW | §4 zero-floor wording missed the unmeasured-regime case (floor used on both paths) | message names it; test asserts it |
 | F5 | LOW | §4 planned rewrites would say the falsy read is gone; `risk_fixed if risk_fixed` remains | both texts reworded, not deleted |
 | F6 | LOW | §4 line refs off | corrected (stock_scan.py:1016; conviction_sizing.py:285-307; tests :387-394, :438-463, :466-470) |
+
+## Round-13 log (4 findings; scope: the round-12 resolutions)
+
+All six round-12 resolutions verified, several by execution: the merged param set printed exactly as stated;
+importing `app.routers.stock_scan` from a script starts no scheduler/thread, writes no file and opens no DB
+connection (the only socket is urllib3's import-time `::1` bind probe, inside its own `try/except`, so the
+test's raising socket patch is swallowed there); a >350-bar fixture with bearish fires past index 350 and all
+rungs positive is buildable; nothing appends to `rejected` between the gate and the banner.
+
+| # | Sev | Finding | Resolution (r14) |
+|---|---|---|---|
+| 1 | LOW | §5 setup-bar rule missed the signal's `len < trend_ema + 10` and empty-MA guards (flagged bars 106-108; signal first fires at 109) | both guards added to the setup definition |
+| 2 | LOW | §5 pin could be satisfied on a bar < 350, where slice = prefix | pin requires a firing bar at index ≥ 350 and asserts one exists |
+| 3 | LOW | §5 `--params-json` replace-vs-overlay unstated; replace lets `ema_period 35` back in | overlaid on `StockScanRequest` defaults, then used as the request layer |
+| 4 | LOW | line refs one short (conviction_sizing.py :308; strategy_engine.py :504) | corrected |
