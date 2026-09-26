@@ -11,7 +11,8 @@ addressed in r9. r9 → round 9 (§7): 1 LOW, addressed in
 r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 → round 11 (§7): 1 LOW, addressed in r12.
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
-setup rules drift from the code), addressed in r15 by calling the real signal instead.
+setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
+6 LOW), addressed in r16.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -333,8 +334,8 @@ For each symbol (default WMT CPRT TSCO SRE LYB, overridable):
 - max of `high / (raw_close × adj_factor)` and the largest one-day `|Δclose|` %, with dates;
 - ATR(14) at the last bar computed three ways: as `_read_bars` returns it (mixed), fully raw, fully adjusted
   (OHLC all × adj_factor);
-- the bearish pullback_ema target the mixed series would produce vs the fully-adjusted one (computed by the
-  real signal, as below).
+- the bearish pullback_ema target on the two series named below (r15-6: the `_read_bars` MIXED series and the
+  SPLIT-REBUILT series; the "fully adjusted" series of the ATR bullet above is for ATR only).
 
 Split detection does NOT rely on `split_factor` (round-1 M5: the Alpaca normaliser, the primary provider,
 hard-codes `split_factor: 1.0`, alpaca.py:117). A split is detected from consecutive rows: a one-day
@@ -351,24 +352,37 @@ stored before a split may keep a stale `adj_factor`. Per symbol the script print
 plus, over EVERY bar of the window (r2-H2 — the last bar is post-split and clean, so it cannot show this):
 the maximum ratio of ATR(14) as `_read_bars` returns the series to ATR(14) on a series rebuilt from raw OHLC with
 the detected split ratios applied backwards (independent of stored `adj_factor`), and the bearish pullback_ema
-target figures below on each series, with dates; and the same values on the 5 bars either side of each detected split.
+target figures below on each of exactly two series — (a) the series as `_read_bars` returns it and (b) that
+split-rebuilt series — with dates (r15-6); and the same values on the 5 bars either side of each detected split.
 **Target measurement — the REAL signal, not a copy (r15; replaces the hand reimplementation of r4-r14, whose
 setup rules drifted from the code in every round: the `trend_ema + 10` and empty-MA guards (r13-1), the volume gate
 with a zero 20-bar average (r14-1), 2dp rounding of the primary (r14-2)).** The script calls
 `strategy_engine.pullback_ema_signal` itself, so the setup bars and the stop are the code's by construction.
 The one thing the real signal hides is the case being measured — P3a's `_build_target_ladder` drops non-positive
-rungs, and with every rung dropped the signal returns None (strategy_engine.py:501-502), so a negative target
-never shows. The script therefore wraps the ladder helper for the duration of its own calls
+rungs, and with every rung dropped the signal returns None (strategy_engine.py:502-503), so a negative target
+never shows. When the ladder is empty (r15-1, verified against :295-351): the primary (the 20-bar `_swing_low`,
+today included) was dropped — in MIXED data typically because raw pre-split lows sit ABOVE the adjusted entry, not
+because it is non-positive — AND the fallback `entry - risk × max(fallback_mult, _LADDER_MIN_FALLBACK_R)` rounded
+to ≤ 0. The degenerate guard (:295-298, `entry <= 0` / non-finite risk) cannot be reached from the DB (`high`/`low`
+NOT NULL, models/ohlcv_daily.py:29; a close ≤ 0 fails the setup earlier), so there is no second cause to label. The script therefore wraps the ladder helper for the duration of its own calls
 (`unittest.mock.patch.object(strategy_engine, "_build_target_ladder", wrapper)` — `pullback_ema_signal` looks the
 name up in module globals at call time, :493; the script is single-threaded and nothing else runs in its
 process). The wrapper calls the ORIGINAL helper with the same arguments, records the arguments (`entry`, `stop`,
-`primary`, `extensions`) and the real result, and returns the real result unchanged — unless it is EMPTY, in which
+`primary`, `extensions`, `fallback_mult`) and the real result, and returns the real result unchanged — unless it is EMPTY, in which
 case it returns a placeholder one-rung ladder `[round(entry * 0.5, 2)]` (bearish; strictly below entry and
 positive) so the signal completes and the bar is still recorded as a setup bar. The placeholder is never
 reported. Per setup bar (signal not None under the patch) the script records: `stop_price`; the raw rungs
-(`primary`, ext1, ext2 exactly as passed); the real `targets[0]` or `NONE — no positive rung (the signal returns
-None; before P3a the backtest traded ext1 = {value})`. Summary per series: setup-bar count, how many had a
-non-positive raw rung, how many had an empty real ladder, the minimum raw rung and the minimum ext1, with dates.
+(`primary`, ext1, ext2 exactly as passed); the real `targets[0]`, or, when the real ladder is empty (r15-1, r15-3):
+`NONE — no valid rung: primary {p} {non-positive | not below entry | missing}, fallback {f} <= 0. Before P3a the
+signal emitted {f} as target_price and backtesting.py raised on it (0 < price assertion), failing the symbol's
+whole backtest.` — `{f}` computed from the recorded args with the module's own `_LADDER_MIN_FALLBACK_R`, the
+primary's status from the same 2dp comparison `_valid` makes. (P3a's docstring, strategy_engine.py:283-288, and
+`git show a2365a3` confirm the old path: the fallback was emitted, not traded; strategy_backtest.py:138-140 turns
+the raise into `_empty_result`.) Summary per series: signal-fire count — an UPPER BOUND on what the backtest
+evaluates (r15-5: the backtest calls the signal only while flat, strategy_backtest.py:125; the script calls it on
+every bar) — how many had a non-positive raw rung, how many had an empty real ladder, the minimum raw rung and the
+minimum fallback, with dates, and the FIRST empty-ladder bar (pre-P3a, the one that would have failed the
+backtest).
 Nothing is reimplemented except that one-line empty-ladder fallback, so there is no ordering or rounding rule to
 drift.
 
@@ -380,11 +394,12 @@ set the backtest uses, `_merge_strategy_params` (stock_scan.py:198-212, preceden
 non-None and so always win. Shipped result: `ema_period 50` (active's 35 is overridden), `trend_ema 100`,
 `tolerance 0.08`, `ma_type EMA`, `require_reversal False`, `atr_stop_mult 1.5`, `rr_target_mult 2.0`,
 `exit_swing_lookback 20`. The script prints the merged set and which layer set each key. `--params-json` (r13-3,
-r14-3) takes `StockScanRequest` FIELD NAMES (`pullback_ema_period`, `pullback_tolerance_pct`, …) passed as extra
-kwargs when building `req` — overlaid on the defaults, so a partial JSON cannot let active's `ema_period 35` back in.
-Any key not in `StockScanRequest.model_fields` (e.g. the signal's own `ema_period`, or `atr_stop_mult`, which no
-request carries) is REFUSED with an error naming the valid keys — `StockScanRequest` would otherwise drop it
-silently.
+r14-3, r15-4) accepts ONLY the five request fields `_SIGNAL_KWARGS["pullback_ema"]` reads (stock_scan.py:181):
+`pullback_tolerance_pct`, `pullback_ema_period`, `pullback_trend_ema`, `pullback_ma_type`,
+`pullback_require_reversal`, passed as extra kwargs when building `req` — overlaid on the defaults, so a partial
+JSON cannot let active's `ema_period 35` back in. Any other key (the signal's own `ema_period`; `atr_stop_mult`;
+another strategy's `rsi_period`; the dummy `direction`, which would raise a raw TypeError) is REFUSED by name,
+listing the five; a pydantic `ValidationError` (e.g. `pullback_ema_period: 0`) exits non-zero with its message.
 
 Bar windowing (r12-F2): like the backtest (strategy_backtest.py:113-127), bar `i` is evaluated on the trailing slice
 `bars[max(0, i+1-350) : i+1]` and skipped when it has fewer than 60 bars; the signal is called as the backtest calls
@@ -394,8 +409,11 @@ Pin (`tests/test_p3c_data_checks.py`): on a split-free fixture LONGER than 350 b
 the patched run's setup-bar set equals the set where the UNPATCHED `pullback_ema_signal` (same slices, same params)
 is not None, and on every such bar its recorded `targets[0]` and `stop_price` equal the unpatched signal's
 `target_price` and `stop_price`; the test asserts at least one such bar has index ≥ 350 (r13-2). A second fixture
-whose rungs go non-positive on some setup bar: the unpatched signal returns None there, the patched run records the
-bar with `NONE — no positive rung` and the negative raw ext1 — the case the script exists to show.
+(r15-2 — negative extensions alone do not empty the ladder while the swing low is valid): MIXED-shaped rows
+(pre-split high/low ≈ 3× the adjusted close) so the swing low sits above entry, with an ATR large enough that the
+fallback is ≤ 0. The unpatched signal returns None on those bars; the patched run records them with `NONE — no
+valid rung`, asserts the recorded primary is `not below entry` and the fallback < 0 — the case the script exists
+to show.
 LYB had no split: for it the script prints `NO SPLIT IN WINDOW` and the line "the split hypothesis does not
 explain LYB's negative target" with its minimum raw ext1, so the evidence is not over-read.
 
@@ -620,8 +638,8 @@ The script: `python3 backend/scripts/p3c_data_checks.py --help`; sections chosen
 after the run, and that no socket was opened (socket.socket patched to raise). Verdict strings are exactly the
 four in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN` (r2-L9). The same module holds
 §5's two target pins (r14-4): the >350-bar all-positive fixture (patched = unpatched on setup bars, stop and
-target; a setup bar at index ≥ 350 asserted to exist) and the non-positive-rung fixture (unpatched None, patched
-`NONE — no positive rung` with the negative ext1); `--params-json` with an unknown key exits non-zero naming it.
+target; a setup bar at index ≥ 350 asserted to exist) and the MIXED-shaped empty-ladder fixture (unpatched None,
+patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it.
 
 ## Open questions for Kenneth
 
@@ -817,3 +835,19 @@ edge cases below, the fourth round running in which the copy had drifted.
 | 2 | LOW | §5 primary compared unrounded; `_valid` rounds to 2dp → wrong `targets[0]` | class removed: `targets[0]` is the real helper's output, recorded by a pass-through wrapper |
 | 3 | LOW | §5 `--params-json` key names unstated; unknown keys dropped silently by `StockScanRequest` | keys are `StockScanRequest` field names; unknown keys refused |
 | 4 | LOW | Verification omitted the §5 pin test | both pins (all-positive >350-bar; non-positive-rung) and the unknown-key refusal listed |
+
+## Round-15 log (7 findings; scope §5 as redesigned in r15)
+
+The redesign verified by execution: `patch.object` intercepts the call at :493 (module-global lookup); the
+placeholder passes through `StrategySignal` unvalidated; pin 1 (420 bars, 94 setup bars, identical stop/target,
+bars ≥ 350) and a MIXED-shaped pin 2 (unpatched 0 / patched 94) are constructible; merged params as stated.
+
+| # | Sev | Finding | Resolution (r16) |
+|---|---|---|---|
+| 1 | MEDIUM | §5 label "no positive rung" false: in MIXED data the primary is dropped for being ABOVE entry, and the ladder empties only when the fallback is ≤ 0 | label names the primary's actual status and the fallback; the only reachable cause stated |
+| 2 | LOW | §5 pin 2 fixture ("rungs go non-positive") does not empty the ladder while the swing low is valid | fixture is MIXED-shaped with fallback ≤ 0; primary status and fallback asserted |
+| 3 | LOW | §5 "before P3a the backtest traded ext1" wrong: the fallback was emitted and backtesting.py raised, failing the whole backtest | label corrected, with the P3a docstring / a2365a3 / strategy_backtest.py:138-140 evidence |
+| 4 | LOW | §5 `--params-json` let through keys that do nothing or crash | whitelist of the five `_SIGNAL_KWARGS` fields; ValidationError exits non-zero |
+| 5 | LOW | §5 the backtest evaluates only while flat; the script's count overstates | count labelled an upper bound; first empty-ladder bar reported |
+| 6 | LOW | §5 which series the signal runs on was inconsistent | exactly two: `_read_bars` mixed and split-rebuilt |
+| 7 | LOW | line ref :501-502 | :502-503 |
