@@ -217,4 +217,6 @@ async def test_b2d_evaluator_fetches_migrated_watch_at_5m(tmp_path):
          patch("app.services.composite_trigger_evaluator.evaluate_scheduled", return_value=False):
         await evaluate_all()
     fetch.assert_called_once()
-    assert fetch.call_args.kwargs["interval"] == "5m"
+    # FLIPPED by P4b (decision D5): a watch stored '5m' reads with the chart
+    # spelling '5min', so it fetches the series a 5min rule reads.
+    assert fetch.call_args.kwargs["interval"] == "5min"

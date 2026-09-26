@@ -1,0 +1,215 @@
+# P1b — Step-7 direct sends save first and send the approved quantity: plan
+
+Split from P1 on 2026-09-25 by Kenneth's decision `P1-SPLIT-P1A-P1B-2026-09-25`.
+This is the Step-7 page half of the P1 plan (`2026-09-25-p1-order-booking-safety-plan.md`).
+The backend half is P1a (`2026-09-25-p1a-backend-contract-cap-plan.md`).
+The round count restarts at 0.
+
+This file is self-contained. It folds the P1 plan's §4, §6 and §7 with the
+frontend answers from its R, S and T sections. Where this file and the P1 plan
+disagree, this file wins for P1b.
+
+Phase `P1B-STEP7-SAVE-FIRST`. Branch `claude/order-booking-safety-7evlql`.
+Decision implemented: **P1-CARD-SAVE-FIRST-SEND-TRIMMED-2026-09-25**. Step-7
+Place Limit / Place Market save the position first, send the broker order at
+the approved quantity, and delete the saved row when the broker refuses.
+
+**Merge order:** P1a (the backend refuses above 5 contracts) must not reach
+main before this phase. Today the page sends first, so a 422 on the save would
+leave a live order untracked. See P1a §0.
+
+## 1. Files
+
+| File | Owner |
+|---|---|
+| `frontend/app/(frame)/screener/step-7-trade-card/page.tsx` | P1 |
+| `frontend/lib/api.ts` | no package lists it. One line is added: `deletePortfolioPosition`. |
+| `step-7-trade-card/__tests__/`: `edited-fields-sync`, `contracts-sync`, `direct-send-stop-gate`, `a8-rail-and-structural-cache` (edited), plus a new `direct-send-save-first.test.tsx` | P1 (tests of the owned page) |
+
+NOT touched: TradeCard and portfolioStore.ts (P2), backend (P1a).
+
+## 2. `placeDirectOrder(orderType)`: one helper replaces the two duplicated bodies
+
+The guards (`checkInvalidation`, `checkMethodPick`) and the per-type spinner
+flags stay. The steps are:
+
+1. **Guard.** For `'MKT'` with `selectedBroker === 'tastytrade_paper'`, set this `orderError` and return before any save: `Tastytrade paper accepts limit orders only — use Place Limit.` (`TastytradePaperAdapter` refuses non-limit orders: `tastytrade_paper.py:106-111`.) The "Right Now — Market" button is also `disabled` for that broker, with the same text as its title.
+2. **Build the position.** `setOrderError(null)` and `setPaperOrderId(null)`. `contracts = Math.max(1, orderContractsBySymbol[sym] ?? 1)`. Then `pos = buildPaperPosition(card, type, broker, 'pending', livePrice, contracts)`, with the sourceLabel `… (ID: pending)`. `pos.recId` is new for each send.
+3. **Save.** `saved = await persistPosition(pos)`. That returns `{ok, offline?, detail?, adjustedQty?, …}`, and the page never sees the HTTP status.
+   - **Not ok, not offline:** make a best-effort `api.deletePortfolioPosition(pos.recId)`, UNLESS the detail contains `duplicate rec_id`. That rec_id belongs to another row. The delete does no harm when nothing was written (a 404) and is needed after a 500 that came after the commit.
+     - The banner is `No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.` when the detail contains `already exists`.
+     - Otherwise it is `No order was sent — ${detail}.`
+     - Either banner gets ` If ${recId} appears in Portfolio, delete it.` appended when the delete threw anything other than `→ 404`.
+     - Return.
+   - **Offline:** make a best-effort delete of `pos.recId` too. The banner is `Portfolio tracking could not be confirmed, so NO order was sent.`, with the same "If … delete it." suffix when the delete threw anything other than `→ 404`. Return.
+4. **Send.** `orderQty = saved.adjustedQty ?? contracts`. Send `api.postOptionOrder` at `orderQty`. The auto-delete and keep logic wraps ONLY this call and the status check below.
+5. **Classify a failure.** The row is deleted automatically ONLY when the failure is provably from before the order was submitted:
+   - a thrown `→ 422:` (FastAPI request validation);
+   - a thrown `→ 503:` whose detail starts with `Broker credentials unavailable`;
+   - a thrown `→ 400:` whose detail starts with `live trading via` or `Unknown broker`;
+   - a thrown `→ 502:` whose detail STARTS WITH `IBKR did not place the order:` (`routers/broker.py:166-171`). This is a prefix match on the text after `→ 502: `, because other adapters echo broker text into their 502s;
+   - a 2xx whose `String(status ?? '').trim().toLowerCase()` is one of rejected, inactive, error, canceled, cancelled, expired.
+
+   On an auto-delete: `await api.deletePortfolioPosition(recId)`. A thrown `→ 404` counts as success. On success, drop the row from the store: `usePortfolioStore.setState(s => ({ positions: s.positions.filter(r => r.recId !== recId) }))`. The banner reads `Order NOT placed: ${why}. The tracked position was removed.`, or, when the delete fails, `Order NOT placed: ${why}. Its tracked position ${recId} could not be removed — delete it in Portfolio.`
+
+   **Everything else keeps the row.** That covers other 400s and 502s, a fetch TypeError, an unparseable error, and a 2xx whose `order_id` is `""` or `"unknown"`. The banner reads `Order status UNKNOWN (${why}). The tracked position ${recId} was kept — check the broker. If no order exists there, remove it:`, and the recId is pushed onto `unknownRecIds`.
+6. **Success.** `applyPersistedPosition(saved, {...pos, contracts: orderQty, sourceLabel: …ID: res.order_id}, addPosition, onAdjusted → addSaveNote(sizeNote(q)), onDropped)`, then `setPaperOrderId(res.order_id)`.
+   - `sizeNote` gains ` The order was sent for N.`
+   - If `applyPersistedPosition` fails, the banner reads `Order placed (ID …) but the local view failed to update: …`. The row is not touched.
+
+## 3. The Remove buttons
+
+- `const [unknownRecIds, setUnknownRecIds] = useState<string[]>([])` is separate from `orderError`.
+- There is one button per recId, labelled `Remove tracked position ${recId}`. It shows under whatever banner is up.
+- A click deletes by recId (never by reading the active card), applies the store drop from §2.5, and removes that recId from the list. A thrown `→ 404` counts as success. The banner becomes `Tracked position removed.`
+- The list is NOT cleared by Prev/Next, a basket submit, or a new direct send. It is cleared only by unmount.
+
+## 4. The rest
+
+- **paperOrderId:** `handleSubmit` (basket) no longer calls `setPaperOrderId(null)`, and its misleading comment is corrected.
+- **Positive mid:** add `positiveOrNull(x)` at module level.
+  - `positionFromOrder`: `positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid) ?? positiveOrNull(entryLimit) ?? c.entry.limit`.
+  - `buildPaperPosition`: `positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid) ?? entryLimitFor(card)`.
+- **`api.ts`:** `deletePortfolioPosition: (recId: string) => del(\`/api/portfolio/${encodeURIComponent(recId)}\`)`. It is a plain `del`, which throws on a non-2xx. The page is the one place that reads a `→ 404` as already removed.
+
+## 5. Tests
+
+**Mocks:** `deletePortfolioPosition: jest.fn().mockResolvedValue(undefined)` is added to the `@/lib/api` mock factory in the four existing Step-7 test files.
+
+**Existing tests, updated and never deleted.** The build commit lists each one.
+- In `edited-fields-sync`, "broker down" (a plain Error) now expects the UNKNOWN banner, with the row kept.
+- The IBKR confirm-502 test expects one persist POST, `deletePortfolioPosition` called with the recId, no "Order placed" line, and IBKR's text in the banner.
+- Any other test that assumed the broker is called before the save.
+
+**New tests** in `direct-send-save-first.test.tsx`:
+1. The persist POST happens before `postOptionOrder` (a shared call-order log).
+2. A 422 persist detail → no `postOptionOrder`, the banner says "No order was sent", and the delete is called (a mocked 404 shows no "delete it" line).
+3. Offline → no `postOptionOrder`, the "could not be confirmed" banner, the delete attempted.
+4. A `duplicate rec_id` detail → the delete is NOT called. An `HTTP 500` detail → the delete is called with the recId.
+5. `adjustedQty: 2` on a 4-lot → `postOptionOrder` with quantity 2, the local row has contracts 2, and the note says "sent for 2".
+6. Auto-delete, one case each: a 422, the 503 credentials error, "Unknown broker", the IBKR confirm 502, and status "Rejected" → the delete is called, the "removed" banner shows, and no local row is added.
+7. Kept, one case each: a 400 "Expecting value: line 1 column 1", a 502 "Tradier paper order failed: HTTP 401…", a 502 "Tradier paper order failed: … did not place the order …" (the text appears but not as the prefix), a TypeError, and a 200 with `order_id: ""` → no delete, the UNKNOWN banner, and the Remove button.
+8. Remove button: an UNKNOWN send, then Next, then Prev → the button is still there, and a click deletes that recId and drops the store row. Two UNKNOWN sends → two buttons.
+9. An auto-delete whose delete fails → the banner names the recId and "delete it in Portfolio".
+10. paperOrderId: a successful Limit, then a failed Market → no green "Order placed" line. A basket submit after a direct success keeps the green line.
+11. `contractDetails.mid: 0` with no live quote → the persisted `entryPrice` is the entry limit (both builders).
+12. Tastytrade: the Market button is disabled, and calling the handler anyway sends neither a persist POST nor `postOptionOrder`.
+
+## 6. Mutation checks
+
+| # | Mutation | Test that turns red |
+|---|---|---|
+| M9 | Send the order before persisting | 1 |
+| M10 | Send `contracts` instead of `orderQty` | 5 |
+| M11 | Skip the auto-delete | 6 |
+| M12 | Revert to `??` | 11 |
+| M13 | Restore `setPaperOrderId(null)` in handleSubmit | 10 |
+| M19 | Drop the Tastytrade guard | 12 |
+| M20 | Clear `unknownRecIds` in the `[active]` effect | 8 |
+| M21 | Skip the delete on an `HTTP 500` persist detail | 4 |
+| M22 | Match the IBKR text as a substring instead of a prefix | 7 |
+
+## 7. Gate reminder for the reviewer
+
+Per `audit_rule`, a finding blocks only if it can put a wrong number in front of
+a user or on a broker order, or corrupt persisted data.
+
+## 8. PROJECT_STATE at close
+
+- The phase becomes shipped when its code round is clean.
+- Closes: round_11_followups items 5 and 7, round_13_followups item 7 (the TradeCard `max` stays with P2), and round_2_batch_followups item 3.
+- Re-logged, for the broker/adapters owner (unassigned): post-submit parse errors should raise `RuntimeError` rather than `ValueError`, and a broker 4xx should be told apart from a transport failure in the 502 detail.
+
+---
+
+## Revisions after plan round 1 (these SUPERSEDE §2-§6 where they conflict)
+
+Round 1 (a fresh subagent) found 2 MEDIUM and 2 LOW gate-level findings. It confirmed several things against the code:
+- the save-first order;
+- every class on the auto-delete list;
+- the double-click guard (`page.tsx:1398-1411`);
+- that no 30s sync runs on Step 7;
+- that `adjustedQty` matches the saved qty.
+
+U-n answers finding n.
+
+**U1 (MEDIUM): offline, a `→ 404` on the cleanup delete proves nothing.** After an offline save, the create may still be in flight on the server: its live fetches take up to 8s before it commits. A DELETE that lands during them answers 404, and the row commits afterwards. So in the OFFLINE branch only:
+- the best-effort delete still runs;
+- whatever it answers (ok, 404, a throw), the banner always carries ` If ${recId} appears in Portfolio, delete it.`;
+- `recId` is always pushed onto `unknownRecIds`, so the Remove button shows.
+
+The not-ok/not-offline branch keeps §2 step 3's rule. There the server has answered, so its write is over and a 404 is final.
+
+Test: offline plus a mocked delete that resolves (and, separately, one that throws `→ 404`) → the suffix and the Remove button are both present. Mutation M23: treat a 404 as final in the offline branch → red.
+
+**U2 (MEDIUM): a result must never land on a different candidate.** Prev/Next stay enabled during a send (`CandidateNav/index.tsx:48,65`), and CandidateNav is not P1's file. So every message `placeDirectOrder` writes names its own contract:
+- `label = contractLabel(card's contract)` is captured when the send starts, and is never re-read.
+- Every `orderError` text, every save note (`sizeNote`) and every `unknownRecIds` entry is prefixed `${label}: `. So is the green line: `paperOrderId` becomes `{ label, id } | null`, rendered `${label}: Order placed — ID: ${id}`. `unknownRecIds` becomes `{ recId, label }[]`, and each button reads `Remove tracked position ${recId} (${label})`.
+- Each message is then true on whichever card is showing. The `[active]` effect's clears (`page.tsx:607`) are unchanged, except that `unknownRecIds` stays uncleared, per §3.
+- `applyPersistedPosition`/`addPosition` act on the saved row, which carries its own contract, so the local store is right whatever card is active.
+
+Test: Place Limit on AAA, then Next to BBB, then resolve the broker → BBB shows `AAA … Order placed — ID` (the AAA label), and no text without a label. With a resize, the note names AAA and "sent for 2". Mutation M24: drop the label from the green line → red.
+
+**U3 (LOW, gate c): pin M22 properly.** In §5 test 7, the kept "substring, not prefix" case uses a detail that contains the exact full marker after the start: `Tradier paper order failed: HTTP 400 — IBKR did not place the order: x` (after `→ 502: `). M22 (`.includes(...)`) then auto-deletes it and turns red.
+
+**U4 (LOW, gate c): a 2xx save whose body did not parse is NOT confirmed.** `persistPosition` swallows a body parse failure into `{ok:true, entryPrice:null}` with no `adjustedQty` (`portfolioStore.ts:400-417`). So the page cannot know whether the server resized. The router's 201 body always carries a positive `entryPrice` (schema `gt=0`, and the writer replaces the entry only with a positive live quote). So:
+- `saved.ok && saved.entryPrice == null` is treated as unconfirmed.
+- No order is sent. The page runs U1's offline handling: a best-effort delete, the "If … delete it." suffix, and a Remove button.
+- The banner is `${label}: Portfolio saved it but its reply could not be read, so NO order was sent.`
+
+Test: persist resolves `{ok:true, entryPrice:null}` → `postOptionOrder` is not called, and the delete and the button are present. Mutation M25: drop the check → red.
+
+---
+
+## Revisions after plan round 2 (these SUPERSEDE §3 and U1-U4 where they conflict)
+
+Round 2 (a fresh subagent, U1-U4 only) found 2 MEDIUM. It confirmed:
+- U4's premise: a parsed 201 always carries a positive `entryPrice` (`schemas/__init__.py:944,1119`, `position_writer.py:375-377`, `portfolioStore.ts:413-418`);
+- U3 and M24 can fail;
+- U2's store writes land on the right row.
+
+It noted one test-hygiene point: success mocks that return `{}` must include `entryPrice`, or U4 blocks them. That is applied in the build.
+
+**V0 — ONE INVARIANT replaces the scattered rules.** Every branch of `placeDirectOrder` whose banner tells the user a row may exist without an order pushes `{ recId, label, unconfirmed }` onto `unknownRecIds`. Such a banner is "If … delete it", "could not be removed", "status UNKNOWN", offline, or U4. The banner is the explanation. The Remove button is the durable record, and it survives Prev/Next, a basket submit and new sends (§3). No orphan is ever recorded only in `orderError`.
+
+**V1 (MEDIUM) — on an unconfirmed entry, a 404 from the Remove button is not final.** `unconfirmed: true` is set for the offline branch and for U4, the cases where the server may still be creating the row.
+- On such an entry, a click answered `→ 404` does NOT remove it. The entry stays. Its line reads `${label}: ${recId} not found in Portfolio yet — its save may still be finishing. Try Remove again in a few seconds, or dismiss once you have checked Portfolio.`, and a **Dismiss** button appears beside Remove.
+- Dismiss drops the entry without any request. It is the user's explicit "I checked", so the page never decides alone that an unconfirmed row does not exist.
+- A successful DELETE (2xx) removes the entry, as §3 says.
+- On an entry with `unconfirmed: false`, where the server answered and its write is over, a 404 still counts as removed, as §3 says.
+
+Test: offline, then click Remove with a mocked `→ 404` → the button is still there, the "not found yet" line shows, and Dismiss appears. Click Dismiss → the entry is gone and no further DELETE is sent. Mutation M26: treat a 404 as final on an unconfirmed entry → red.
+
+**V2 (MEDIUM) — the two delete-failed banners now push too.** Per V0:
+- An auto-delete whose DELETE fails (§2.5 "could not be removed") pushes `{recId, label, unconfirmed:false}`.
+- A not-ok/not-offline save whose cleanup DELETE throws anything other than `→ 404` (§2.3's suffix case) pushes `{recId, label, unconfirmed:false}`.
+
+Test: the auto-delete's DELETE fails, then Next → the Remove button for that recId is still present. Mutation M27: skip the push in the auto-delete-failed branch → red.
+
+---
+
+## Plan round 3 (V0-V2 only): NOT clean. CAP REACHED, stopped for Kenneth
+
+Round 3 (a fresh subagent) confirmed several things:
+- `persistPosition` never retries, so a `duplicate rec_id` is a real collision;
+- DELETE answers 204 or 404;
+- every Remove deletes by recId;
+- Dismiss sends nothing;
+- M26 and M27 can fail.
+
+It found 2 issues. The answers below are PROPOSED and have NOT been audited:
+
+**W1 (MEDIUM, gate b): an UNKNOWN entry's Remove button loses its "check the broker first" warning after Prev/Next.** The warning lives only in `orderError`, which the `[active]` effect clears (`page.tsx:607`). The entry itself is `unconfirmed:false`, the same flag as a provably-no-order entry. So a user tidying up can click Remove and untrack a LIVE order.
+- *Proposed:* each entry carries `kind: 'order-unknown' | 'no-order' | 'save-unconfirmed'` in place of the boolean, and a per-entry line rendered from the entry, not from `orderError`.
+- For `order-unknown`: `${label}: order status unknown — check ${broker} first. Remove ONLY if no order exists there.` The click then asks for a confirm step before the DELETE.
+- Test: an UNKNOWN send, then Next, and the check-the-broker text is still beside the button. Mutation: drop that text → red.
+
+**W2 (LOW, gate c): V2's second push has no test.**
+- *Proposed test:* persist `{ok:false, detail:'HTTP 500'}`, the delete rejects `→ 500: x`, then Next, and the Remove button for that recId is present.
+- *Mutation M28:* skip that push → red.
+
+## Kenneth's call at the cap (2026-09-25): SPLIT AGAIN
+
+Decision P1B-SPLIT-AGAIN-2026-09-25. This plan is superseded, but it stays as the source for two new phases:
+- **P1b-i, `P1B1-STEP7-SAVE-FIRST-CORE`**. Takes: §2 (save first, send the approved qty), the provably-pre-submit auto-delete list, and results labelled with their contract. A row that may have no order behind it gets a plain persistent note naming the contract and rec_id: "check the broker, then delete it in Portfolio". It has no Remove or Dismiss buttons. It needs its own short plan, with a fresh plan stage (cap 3). P1a's merge waits on this phase.
+- **P1b-ii, `P1B2-STEP7-ORPHAN-ROW-UI`**. Takes: §3, the U/V revisions, and W1-W2, which are still unaudited: the per-recId Remove/Dismiss UI. Fresh plan stage. It does not block the merge.

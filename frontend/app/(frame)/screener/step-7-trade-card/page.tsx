@@ -41,6 +41,11 @@ import {
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
+import { useDirectSendNotesStore, type DirectSendNote } from '@/lib/directSendNotesStore';
+import {
+  brokerLabelFor, classifyDirectFailure, contractLabelFor, directOrderBlock, directSendNoteText,
+  isNotFound, removeConfirmText, whyOf, type DirectOutcome,
+} from './directOrder';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
@@ -62,6 +67,39 @@ function todayISO(): string {
 
 function generateRecId(): string {
   return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+/** A positive number, else null. The router refuses `entryPrice` 0 (`gt=0`),
+ *  so a `0` scan mid must fall through to the next source, not be kept by `??`. */
+function positiveOrNull(x: number | null | undefined): number | null {
+  return x != null && x > 0 ? x : null;
+}
+
+/** Drop one row from the local store by rec_id. A `syncFromBackend` may have
+ *  copied a saved row in between the save and the broker's answer. */
+function dropLocal(recId: string): void {
+  usePortfolioStore.setState((s) => ({ positions: s.positions.filter((p) => p.recId !== recId) }));
+}
+
+/** Hard-DELETE one tracked row by rec_id, then drop it locally. Shared by the
+ *  auto-delete and a note's Remove (plan X1), so neither can skip the last
+ *  step: a sync whose GET started BEFORE the DELETE resolves after it and
+ *  writes the deleted row back, and a Close on that stale row then books a
+ *  phantom closed trade into History. A forced sync chains after the one in
+ *  flight, so its GET post-dates the DELETE; the row is dropped again after it.
+ *  Throws what the DELETE threw -- except a `→ 404` when `notFoundIsFinal`. */
+async function removeTrackedRow(recId: string, notFoundIsFinal: boolean): Promise<void> {
+  try {
+    await api.deletePortfolioPosition(recId);
+  } catch (e) {
+    if (!(notFoundIsFinal && isNotFound(e))) throw e;
+  }
+  dropLocal(recId);
+  void usePortfolioStore.getState().syncFromBackend(true).then(() => dropLocal(recId));
+}
+
+function addDirectNote(n: Parameters<ReturnType<typeof useDirectSendNotesStore.getState>['addNote']>[0]): void {
+  useDirectSendNotesStore.getState().addNote(n);
 }
 
 function positionFromOrder(
@@ -111,8 +149,8 @@ function positionFromOrder(
 ): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
-  const mid = (livePrice != null && livePrice > 0 ? livePrice : null)
-    ?? cd?.mid ?? entryLimit ?? c.entry.limit;
+  const mid = positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid)
+    ?? positiveOrNull(entryLimit) ?? c.entry.limit;
   const dte = cd?.dte ?? 24;
   return {
     symbol:        c.symbol,
@@ -474,7 +512,9 @@ export default function Step7Page() {
   const { selectedBroker, setSelectedBroker } = useAutoTradeStore();
   const [limitPlacing,   setLimitPlacing]     = useState(false);
   const [marketPlacing,  setMarketPlacing]    = useState(false);
-  const [paperOrderId,   setPaperOrderId]     = useState<string | null>(null);
+  // Carries the contract label: a direct send's result can land after Prev/Next.
+  const [paperOrderId,   setPaperOrderId]     = useState<{ label: string; id: string } | null>(null);
+  const directNotes = useDirectSendNotesStore((s) => s.notes);
   const [orderError,     setOrderError]       = useState<string | null>(null);
   // A LIST, not one slot. Both writers below used to call `setSizeAdjustedNote`
   // on the same string state, so an order that was BOTH size-reduced and had
@@ -503,7 +543,7 @@ export default function Step7Page() {
   // effect clears it).
   const [basketError, setBasketError] = useState<string | null>(null);
   const sizeNote = (adjustedQty: number) =>
-    `Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`;
+    `Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits. The order was sent for ${adjustedQty}.`;
   // The one place the card can tell the user their premium stop did not survive
   // the save-time re-anchor. The router logs it server-side and the position
   // quietly inherits the global -- a TIGHTER stop than the one asked for.
@@ -975,12 +1015,9 @@ export default function Step7Page() {
    *  until the next portfolio sync. */
   function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string, livePrice?: number, contracts = 1): PortfolioPosition {
     const cd  = card.contractDetails;
-    const mid = livePrice ?? cd?.mid ?? entryLimitFor(card);
+    const mid = positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid) ?? entryLimitFor(card);
     const dte = cd?.dte ?? 24;
-    const brokerLabel =
-      broker === 'tradier_paper' ? 'Tradier Paper' :
-      broker === 'tastytrade_paper' ? 'Tastytrade Paper' :
-      'IBKR Paper';
+    const brokerLabel = brokerLabelFor(broker);
     const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
     return {
       symbol:        card.symbol,
@@ -1031,116 +1068,191 @@ export default function Step7Page() {
     };
   }
 
-  async function placeLimitPaper() {
+  /* P1b-i (P1-CARD-SAVE-FIRST-SEND-TRIMMED-2026-09-25). Place Limit and Right
+   * Now — Market are ONE function. It SAVES the position first and only then
+   * sends the order, at the quantity the save approved. The old order (send,
+   * then save) left a live broker order untracked whenever the save was
+   * refused -- P1a's 5-contract cap made that refusal routine.
+   *
+   * Every branch that may leave a Portfolio row with no order behind it, or an
+   * order whose status is unknown, pushes a persistent note
+   * (`directSendNotesStore`) that outlives this card, and every message names
+   * the contract: Prev/Next stay enabled during a send, so a result can land on
+   * another candidate's screen. */
+  async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
-    // this handler closes over the same render's `invalidationFor` that
-    // `stopMissing` was derived from, so it cannot currently disagree with the
-    // `disabled` on the button -- it is an INVARIANT on the function that
-    // builds the position, not a second chance at a race. It is here because
-    // `disabled` protects the button and this protects the ORDER: anything that
-    // reaches this function by another route (a keyboard shortcut, a
-    // programmatic retry, a future caller) inherits the refusal instead of
-    // having to remember it. Exactly the shape SendToBrokerDialog.submit()
-    // already uses beside its own `disabled`, and for the same reason.
+    // `disabled` protects the button and this protects the ORDER -- anything
+    // that reaches this function by another route inherits the refusal.
+    // Exactly the shape SendToBrokerDialog.submit() uses beside its `disabled`.
     if (!checkInvalidation(invalidationFor(card))) return;
-    // Phase G piece 5, build step 4 (§7.1). Same belt-and-braces shape as the
-    // invalidation check immediately above, on the same reading `pickMissing`
-    // was derived from.
+    // Phase G piece 5, build step 4 (§7.1). Same belt-and-braces shape.
     if (!checkMethodPick(methodPickFor(card))) return;
-    // ROUND 10 finding 11 -- CLEAR THE NOTES PER ORDER. They are facts about
-    // ONE save, and were only reset when the active candidate changed, so a
-    // "Size reduced to 1 contract" from a previous fill sat under the next,
-    // un-reduced order. Round 9's accumulate-don't-overwrite change made that
-    // strictly worse: the stale note now sits BESIDE any new one instead of
-    // being replaced by it.
-    setLimitPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
+    // ROUND 10 finding 11 -- the notes are facts about ONE save, so clear them
+    // per order.
+    setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
+    const broker = selectedBroker;
+    const blocked = directOrderBlock(orderType, broker);
+    if (blocked) { setOrderError(blocked); return; }
+    const setPlacing = orderType === 'LMT' ? setLimitPlacing : setMarketPlacing;
+    setPlacing(true);
+    setPaperOrderId(null);
+    let label = card.contract;
     try {
-      // Floored defensively: the shared map is a plausible target for a
-      // future write path to drop a sub-1 value into (e.g. Feature 3's Apply
-      // button before its own clamp/disable) — `?? 1` alone only catches
-      // null/undefined, not 0, and the backend rejects quantity:0 with an
-      // opaque 422 that gives no clue this map is where it came from.
+      // Captured ONCE; never re-read from `effectiveCard`, which may be another
+      // candidate by the time the broker answers.
+      label = contractLabelFor(card);
+      const brokerLabel = brokerLabelFor(broker);
+      // Floored defensively: `?? 1` alone only catches null/undefined, not 0,
+      // and the backend rejects quantity:0 with an opaque 422.
       const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
-      const res = await api.postOptionOrder({
-        broker:        selectedBroker,
-        symbol:        card.symbol,
-        option_symbol: toOptionSymbol(card),
-        action:        'BUY',
-        effect:        'OPEN',
-        quantity:      contracts,
-        order_type:    'LMT',
-        limit_price:   entryLimitFor(card),
-        tif:           'DAY',
-      });
-      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuoteForCard?.price, contracts);
-      const saved = await persistPosition(pos);
-      const { rejected, detail } = applyPersistedPosition(
-        saved, pos, addPosition,
-        (adjustedQty) => addSaveNote(sizeNote(adjustedQty)),
-        (requested) => addSaveNote(droppedStopNote(requested)),
-      );
-      if (rejected) {
-        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
+      // Every card-derived order argument is computed BEFORE the save, so a
+      // throw here happens before anything is written.
+      const optionSymbol = toOptionSymbol(card);
+      const limitPrice = orderType === 'LMT' ? entryLimitFor(card) : null;
+      const pos = buildPaperPosition(card, orderType, broker, 'pending', liveQuoteForCard?.price, contracts);
+      const recId = pos.recId;
+
+      // The backend would 409 anyway; refusing locally means a SAVE-UNCONFIRMED
+      // note can only ever point at a row THIS send created.
+      if (usePortfolioStore.getState().positions.some((p) => p.contract === pos.contract)) {
+        setOrderError(`${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`);
         return;
       }
-      setPaperOrderId(res.order_id);
+
+      const saved = await persistPosition(pos);
+      // Unconfirmed: offline; a bare gateway 5xx (no JSON detail, so the create
+      // may still be running); or a 2xx whose body did not parse (the page
+      // cannot know whether the server resized). No order is sent. The create
+      // may still commit AFTER a delete lands, so the note is pushed whatever
+      // the delete answers, and `applyPersistedPosition` is never called here
+      // (its offline branch would re-POST).
+      const bare5xx = !saved.ok && !saved.offline && /^HTTP 5\d\d$/.test(saved.detail ?? '');
+      const unparsed2xx = saved.ok && saved.entryPrice == null;
+      if (saved.offline || bare5xx || unparsed2xx) {
+        setOrderError(unparsed2xx
+          ? `${label}: Portfolio saved it but its reply could not be read, so NO order was sent.`
+          : `${label}: Portfolio tracking could not be confirmed, so NO order was sent.`);
+        addDirectNote({ recId, kind: 'save-unconfirmed', label, brokerLabel, orderId: null });
+        dropLocal(recId);
+        try { await removeTrackedRow(recId, false); } catch { /* best effort; the note stays */ }
+        return;
+      }
+      if (!saved.ok) {
+        // The server answered no. Every refusal is raised before the commit or
+        // after a rollback, so nothing was written: no delete (on a 409 the
+        // only matching row is the user's real one), no note.
+        const detail = saved.detail ?? 'not saved';
+        setOrderError(/already exists/.test(detail)
+          ? `${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`
+          : `${label}: No order was sent — ${detail.replace(/\.$/, '')}.`);
+        return;
+      }
+
+      // Confirmed save. EVERYTHING from here sits in this try/catch: nothing
+      // after the save may reach the outer catch, which would leave a saved row
+      // with no note.
+      const orderQty = saved.adjustedQty ?? contracts;
+      const keepRow = (why: string, orderId: string | null) => {
+        // Note FIRST, row second: a throw can never leave a row without its note.
+        addDirectNote({ recId, kind: 'order-unknown', label, brokerLabel, orderId });
+        const banner = `${label}: Order status UNKNOWN (${why}).`;
+        setOrderError(banner);
+        try {
+          applyPersistedPosition(
+            saved, { ...pos, contracts: orderQty }, addPosition,
+            (q) => addSaveNote(`${label}: Portfolio sized it to ${q}; the order was requested for ${q}, status unknown.`),
+            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+          );
+        } catch (e) {
+          setOrderError(`${banner} The local view failed to update: ${String(e)}`);
+        }
+      };
+      try {
+        let outcome: DirectOutcome;
+        try {
+          const res = await api.postOptionOrder({
+            broker,
+            symbol:        card.symbol,
+            option_symbol: optionSymbol,
+            action:        'BUY',
+            effect:        'OPEN',
+            quantity:      orderQty,
+            order_type:    orderType,
+            limit_price:   limitPrice,
+            tif:           'DAY',
+          });
+          outcome = classifyDirectFailure({ response: res });
+        } catch (e) {
+          outcome = classifyDirectFailure({ thrown: e });
+        }
+
+        if (outcome.verdict === 'delete') {
+          // Provably never received by the broker: remove the saved row.
+          try {
+            await removeTrackedRow(recId, true);
+            setOrderError(`${label}: Order NOT placed: ${outcome.why}. The tracked position was removed.`);
+          } catch {
+            setOrderError(`${label}: Order NOT placed: ${outcome.why}.`);
+            addDirectNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null });
+          }
+          return;
+        }
+        if (outcome.verdict === 'keep') {
+          keepRow(outcome.why, outcome.orderId);
+          return;
+        }
+
+        const orderId = outcome.orderId;
+        try {
+          applyPersistedPosition(
+            saved,
+            { ...pos, contracts: orderQty, sourceLabel: `${brokerLabel} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: ${orderId})` },
+            addPosition,
+            (q) => addSaveNote(`${label}: ${sizeNote(q)}`),
+            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+          );
+        } catch (e) {
+          setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
+        }
+        setPaperOrderId({ label, id: orderId });
+      } catch (e) {
+        // Unreachable by design (every call above is guarded); if it is ever
+        // reached, the order's fate is unknown and the row stays with a note.
+        keepRow(String(e), null);
+      }
     } catch (e) {
-      setOrderError(String(e));
+      // Only pre-save work reaches here: nothing was written, no order sent.
+      setOrderError(`${label}: No order was sent — ${String(e)}`);
     } finally {
-      setLimitPlacing(false);
+      setPlacing(false);
     }
   }
 
-  async function placeMarketNow() {
-    const card = effectiveCard;
-    if (!card || !selectedBroker) return;
-    // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
-    // this handler closes over the same render's `invalidationFor` that
-    // `stopMissing` was derived from, so it cannot currently disagree with the
-    // `disabled` on the button -- it is an INVARIANT on the function that
-    // builds the position, not a second chance at a race. It is here because
-    // `disabled` protects the button and this protects the ORDER: anything that
-    // reaches this function by another route (a keyboard shortcut, a
-    // programmatic retry, a future caller) inherits the refusal instead of
-    // having to remember it. Exactly the shape SendToBrokerDialog.submit()
-    // already uses beside its own `disabled`, and for the same reason.
-    if (!checkInvalidation(invalidationFor(card))) return;
-    // Phase G piece 5, build step 4 (§7.1) — see placeLimitPaper's identical guard.
-    if (!checkMethodPick(methodPickFor(card))) return;
-    // See placeLimitPaper — notes describe this save only.
-    setMarketPlacing(true); setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
+  const placeLimitPaper = () => placeDirectOrder('LMT');
+  const placeMarketNow  = () => placeDirectOrder('MKT');
+
+  /** A note's Remove button (P1B1-MINIMAL-REMOVE-2026-09-25): confirm, then
+   *  hard-DELETE exactly that note's rec_id -- never "the ${label} position". */
+  async function removeNoteRow(note: DirectSendNote) {
+    if (note.removing) return;
+    if (!window.confirm(removeConfirmText(note))) return;
+    const { patchNote, removeNote } = useDirectSendNotesStore.getState();
+    patchNote(note.recId, { removing: true, status: null });
     try {
-      // Floored defensively — see placeLimitPaper's identical comment above.
-      const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
-      const res = await api.postOptionOrder({
-        broker:        selectedBroker,
-        symbol:        card.symbol,
-        option_symbol: toOptionSymbol(card),
-        action:        'BUY',
-        effect:        'OPEN',
-        quantity:      contracts,
-        order_type:    'MKT',
-        limit_price:   null,
-        tif:           'DAY',
-      });
-      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuoteForCard?.price, contracts);
-      const saved = await persistPosition(pos);
-      const { rejected, detail } = applyPersistedPosition(
-        saved, pos, addPosition,
-        (adjustedQty) => addSaveNote(sizeNote(adjustedQty)),
-        (requested) => addSaveNote(droppedStopNote(requested)),
-      );
-      if (rejected) {
-        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
-        return;
-      }
-      setPaperOrderId(res.order_id);
+      // A 404 is final only when the server had already answered this send's
+      // save before the note existed (ORDER-UNKNOWN, NOT-REMOVED). On
+      // SAVE-UNCONFIRMED the create may still be in flight, so it is not.
+      await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
+      removeNote(note.recId);
     } catch (e) {
-      setOrderError(String(e));
-    } finally {
-      setMarketPlacing(false);
+      patchNote(note.recId, {
+        removing: false,
+        status: note.kind === 'save-unconfirmed' && isNotFound(e)
+          ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
+          : `Remove failed: ${whyOf(e)}. Try again.`,
+      });
     }
   }
 
@@ -1152,6 +1264,8 @@ export default function Step7Page() {
     liveStockPrice && liveStockPrice.symbol === effectiveCard?.symbol
       ? liveStockPrice.price
       : null;
+
+  const marketBlocked = directOrderBlock('MKT', selectedBroker);
 
   const idx = symbols.indexOf(active);
 
@@ -1167,17 +1281,19 @@ export default function Step7Page() {
     // Same reason as the two order paths: this submit's outcome, not the last
     // one's. Basket notes are symbol-qualified because several land at once.
     //
-    // ALL of them, matching placeLimitPaper and placeMarketNow. Clearing only
+    // ALL of them, matching placeDirectOrder. Clearing only
     // the notes left the red banner standing: a basket that partly failed
     // set its banner, and a second basket that fully succeeded then rendered
     // "Some orders were not saved" over a submit in which everything was.
     // `orderError` too: a direct path's error is about an earlier send, not
     // this one (A8b split the basket's banner into `basketError`).
+    // NOT `paperOrderId` (P1b-i): the basket never sets it, so clearing it here
+    // only erased a direct send's still-true confirmation. NOT the direct-send
+    // notes either: they outlive every send until their row is removed.
     setSaveNotes([]);
     setBasketNotes([]);
     setBasketError(null);
     setOrderError(null);
-    setPaperOrderId(null);
     let auto = 0, manual = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];
@@ -1409,9 +1525,11 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || marketBlocked != null}
                   title={
-                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    // The broker refusal wins: filling a field cannot cure it.
+                    marketBlocked != null ? marketBlocked
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
                   }
@@ -1447,7 +1565,7 @@ export default function Step7Page() {
                   {MISSING_METHOD_PICK_MESSAGE}
                 </Text>
               )}
-              {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
+              {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
               {planReady && (
                 <AutoTradeArm
                   // The same live quote TradeCard gets as `liveMid` and the
@@ -1520,6 +1638,22 @@ export default function Step7Page() {
           ))}
           {basketError && <Text size={12} tone="reject">{basketError}</Text>}
           {orderError && <Text size={12} tone="reject">{orderError}</Text>}
+          {/* P1b-i -- the direct sends' persistent notes. Outside the broker
+            * gate like the lines above; each Remove acts on its own rec_id. */}
+          {directNotes.map((n) => (
+            <div key={`direct:${n.recId}`} className={paperStyles.directNote}>
+              <Text size={12} tone="reject">{directSendNoteText(n)}</Text>
+              <button
+                type="button"
+                className={paperStyles.directNoteRemove}
+                onClick={() => { void removeNoteRow(n); }}
+                disabled={n.removing}
+              >
+                {`Remove (${n.label})`}
+              </button>
+              {n.status && <Text size={11} tone="caution">{n.status}</Text>}
+            </div>
+          ))}
         </div>
       )}
 

@@ -85,6 +85,17 @@ os.environ.setdefault("BAMENDJOU_CREDS_PATH", _TEST_CREDS_PATH)
 _TEST_SCAN_SCHEDULE_PATH = Path(_TEST_DB_DIR, "test_scan_schedule.yaml").as_posix()
 os.environ.setdefault("BAMENDJOU_SCAN_SCHEDULE_PATH", _TEST_SCAN_SCHEDULE_PATH)
 
+# ── strategy_watch_store safety pin (MUST run before any app import) ──────────
+# Same class again (P4b, TESTS-PIN-STRATEGY-WATCHES-PATH): strategy_watch_store.py
+# builds a module-level store at import time on BAMENDJOU_STRATEGY_WATCHES_PATH,
+# defaulting to the TRACKED backend/config/strategy_watches.yaml, and its load()
+# can rewrite that file (the A4f HMM_intraday interval migration) -- so the first
+# test run to import it (usually via app.main) could edit the repo's config.
+# Only two tests set the variable themselves, and only for their own reload.
+# setdefault lets their monkeypatch.setenv still win.
+_TEST_STRATEGY_WATCHES_PATH = Path(_TEST_DB_DIR, "test_strategy_watches.yaml").as_posix()
+os.environ.setdefault("BAMENDJOU_STRATEGY_WATCHES_PATH", _TEST_STRATEGY_WATCHES_PATH)
+
 import asyncio
 from typing import AsyncGenerator
 from unittest.mock import patch, AsyncMock
@@ -188,8 +199,12 @@ def _isolate_alert_dedup_state(tmp_path, monkeypatch):
     file the running backend loads at import. Any test that reaches a code path
     calling `notify_alert` or `forget_alerts` without stubbing them therefore
     rewrites that file with whatever the test left in the globals. Measured on
-    this suite: one run replaced the file's entire contents with two auto-trade
-    refusal keys and armed both of their FOUR-HOUR suppression windows, so a
+    this suite: one run replaced the file's entire contents with auto-trade
+    refusal keys and armed their FOUR-HOUR suppression windows -- target 2a's
+    round 3 counted TWO keys, its round 4 counted FOUR on a later tree
+    (headwind:AAPL, headwind:NVDA, sizing-config, regime-gate-config). The
+    count depends on which alert-reaching tests exist, so none is pinned here
+    (reconciled by P4b, open_questions "MEASURED DISCREPANCY"). Either way a
     backend restarted from the same tree had lost every genuine portfolio-alert
     record AND would silently not alert the next config refusal inside the
     window -- §9.1's "and alert" half failing from a test run.
@@ -212,6 +227,25 @@ def _isolate_alert_dedup_state(tmp_path, monkeypatch):
     yield
     an._fired.clear()
     an._first_seen.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_notification_settings(tmp_path, monkeypatch):
+    """No test reads the real notification settings or sends real mail (P4b, D6).
+
+    notifications.dispatch.load_notification_config() reads the module global
+    _SETTINGS_PATH -- the real, gitignored backend/config/settings.yaml, which
+    holds the developer's live Gmail/Telegram channels -- at call time. Rule-path
+    firing tests (e.g. test_chart_alerts_composite_ws.py) reach it through
+    chart_alerts.py's own `_load_notification_config` alias and then the real
+    `_dispatch`, so on a machine with a channel enabled a test run sent real
+    alerts. Pointing the path at a file that never exists makes every reader
+    (whatever name it imported the function under) see `{}` -- no channel
+    enabled. A test that needs channels enabled patches the reader it calls.
+    """
+    import app.services.notifications.dispatch as dispatch
+    monkeypatch.setattr(dispatch, "_SETTINGS_PATH", tmp_path / "no-settings.yaml")
+    yield
 
 
 @pytest.fixture(autouse=True)

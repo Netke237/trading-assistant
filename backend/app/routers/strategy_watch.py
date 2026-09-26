@@ -41,7 +41,10 @@ class ScheduleIn(BaseModel):
 
 @router.get("/")
 async def list_watches() -> list[dict]:
-    return strategy_watch_store.list_watches()
+    # Strategy watches only (P4b T7, open_questions[65]): composites are listed by
+    # /api/composite-watches/; the strategy-watch page showed them with an empty
+    # Strategy cell. PATCH/DELETE by id still accept either kind.
+    return [w for w in strategy_watch_store.list_watches() if w.get("watch_type") != "composite"]
 
 
 @router.post("/", status_code=201)

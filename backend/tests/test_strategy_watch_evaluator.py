@@ -331,7 +331,9 @@ async def test_composite_watch_fetches_intraday_for_vwap_confirmation_even_when_
     bars_intraday=[]), while the WS path potentially can, breaking parity between
     the two paths."""
     store = MagicMock()
-    watch = _composite_watch(trigger_def={
+    # P4b: an intraday watch -- on 1D the VWAP daily variant reads the daily bars
+    # and nothing intraday is fetched (the 1D mirror test below).
+    watch = _composite_watch(interval="15m", trigger_def={
         "primary": {"model": "any"},
         "strategy_confirmations": ["mean_reversion_vwap"],
         "min_strategy_confirmations": 1,
@@ -351,18 +353,50 @@ async def test_composite_watch_fetches_intraday_for_vwap_confirmation_even_when_
 
 
 @pytest.mark.asyncio
+async def test_1d_composite_watch_with_vwap_fetches_no_intraday_bars():
+    """P4b mirror: on a 1D watch the VWAP confirmation runs the daily variant on
+    the completed daily bars (VWAP-CONFIRMATION-LIKE-REGIME-MODELS)."""
+    store = MagicMock()
+    store.list_watches.return_value = [_composite_watch(interval="1D", trigger_def={
+        "primary": {"model": "any"},
+        "strategy_confirmations": ["mean_reversion_vwap"],
+        "min_strategy_confirmations": 1,
+    })]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch("app.data.market.fetch_intraday_candles", return_value=[]) as fetch_intraday, \
+         patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
+               return_value=True) as sched, \
+         patch("app.services.composite_trigger_evaluator.describe_match",
+               return_value={"structure_matched": [], "strategy_matched": []}):
+        await evaluate_all()
+    fetch_intraday.assert_not_called()
+    assert sched.call_args.kwargs["interval"] == "1D"
+    assert sched.call_args.kwargs["bars_vwap_daily"] == _bars(100.0)
+
+
+@pytest.mark.asyncio
 async def test_evaluate_and_notify_dispatches_per_event():
     ev = WatchEvent(
         watch_id="wch_1", symbol="AAPL", strategy_key="pullback_ema",
         event_type="entry", direction="Bullish", entry=100.0, stop=95.0,
         target=110.0, rr_ratio=2.0, close=100.0, reason="x",
     )
-    with _patch("app.services.strategy_watch_evaluator.evaluate_all",
-                new_callable=AsyncMock, return_value=[ev]), \
-         _patch("app.services.strategy_watch_evaluator.notify_enabled_channels") as notify:
+    # P4b T3: evaluate_and_notify collects transitions (_collect) and commits
+    # each one's state after delivery, so it no longer goes through evaluate_all.
+    from app.services.strategy_watch_evaluator import _Transition
+    store = MagicMock()
+    with _patch("app.services.strategy_watch_evaluator._collect",
+                new_callable=AsyncMock,
+                return_value=[_Transition(event=ev, watch_id="wch_1", new_state={"phase": "armed"})]), \
+         _patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         _patch("app.services.strategy_watch_evaluator.notify_enabled_channels",
+                new_callable=AsyncMock, return_value=True) as notify:
         result = await evaluate_and_notify()
     assert result == [ev]
     notify.assert_called_once()
+    store.update_state.assert_called_once_with("wch_1", {"phase": "armed"})
 
 
 @pytest.mark.asyncio

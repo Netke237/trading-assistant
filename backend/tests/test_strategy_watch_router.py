@@ -180,3 +180,19 @@ async def test_evaluate_now_with_enabled_composite_watch_is_200(app):
     assert r.status_code == 200
     assert r.json()["fired"] == 0
     notify.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_returns_strategy_watches_only(app):
+    """P4b T7 (open_questions[65]): composites are /api/composite-watches/' to
+    list; the strategy-watch page showed them with an empty Strategy cell."""
+    import app.services.strategy_watch_store as sws
+    sws.strategy_watch_store.add_composite_watch(
+        "MSFT", {"primary": {"model": "OMM", "to_state": "bull_trend"}})
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        add = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "aapl", "strategy_key": "pullback_ema"})
+        assert add.status_code == 201
+        lst = await ac.get("/api/strategy-watch/")
+    assert [w["id"] for w in lst.json()] == [add.json()["id"]]
+    assert len(sws.strategy_watch_store.list_watches()) == 2
