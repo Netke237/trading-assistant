@@ -331,7 +331,9 @@ async def test_composite_watch_fetches_intraday_for_vwap_confirmation_even_when_
     bars_intraday=[]), while the WS path potentially can, breaking parity between
     the two paths."""
     store = MagicMock()
-    watch = _composite_watch(trigger_def={
+    # P4b: an intraday watch -- on 1D the VWAP daily variant reads the daily bars
+    # and nothing intraday is fetched (the 1D mirror test below).
+    watch = _composite_watch(interval="15m", trigger_def={
         "primary": {"model": "any"},
         "strategy_confirmations": ["mean_reversion_vwap"],
         "min_strategy_confirmations": 1,
@@ -348,6 +350,30 @@ async def test_composite_watch_fetches_intraday_for_vwap_confirmation_even_when_
                return_value={"structure_matched": [], "strategy_matched": []}):
         await evaluate_all()
     fetch_intraday.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_1d_composite_watch_with_vwap_fetches_no_intraday_bars():
+    """P4b mirror: on a 1D watch the VWAP confirmation runs the daily variant on
+    the completed daily bars (VWAP-CONFIRMATION-LIKE-REGIME-MODELS)."""
+    store = MagicMock()
+    store.list_watches.return_value = [_composite_watch(interval="1D", trigger_def={
+        "primary": {"model": "any"},
+        "strategy_confirmations": ["mean_reversion_vwap"],
+        "min_strategy_confirmations": 1,
+    })]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch("app.data.market.fetch_intraday_candles", return_value=[]) as fetch_intraday, \
+         patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
+               return_value=True) as sched, \
+         patch("app.services.composite_trigger_evaluator.describe_match",
+               return_value={"structure_matched": [], "strategy_matched": []}):
+        await evaluate_all()
+    fetch_intraday.assert_not_called()
+    assert sched.call_args.kwargs["interval"] == "1D"
+    assert sched.call_args.kwargs["bars_vwap_daily"] == _bars(100.0)
 
 
 @pytest.mark.asyncio

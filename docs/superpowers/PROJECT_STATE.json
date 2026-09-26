@@ -947,7 +947,7 @@
     {
       "id": "VWAP-CONFIRMATION-LIKE-REGIME-MODELS",
       "name": "Composite mean_reversion_vwap confirmation behaves like the regime models: completed bars of the rule/watch's own interval, same bars and answer on the watch and rule paths, defined behaviour on 1D/1W (recommended: mean_reversion_vwap_daily_signal on completed daily bars)",
-      "status": "not_started",
+      "status": "shipped_unaudited",
       "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [],
@@ -957,7 +957,7 @@
         "pattern": "if fn\\(slice_bars, direction=direction\\) is not None:",
         "note": "DEFECT MARKER: the strategy signal is called with no interval, so the VWAP intraday gate always sees the default '15m'. Gone = the interval is threaded (design in the plan). Findings in the open question 'DECIDED IN PRINCIPLE 2026-09-25 ... mean_reversion_vwap'."
       },
-      "note": "QUEUED 2026-09-25 from decision FOLLOWUPS-QUEUE-2026-09-25 (Kenneth); verified still open against main 8d6741d by the backlog audit. Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean."
+      "note": "QUEUED 2026-09-25 from decision FOLLOWUPS-QUEUE-2026-09-25 (Kenneth); verified still open against main 8d6741d by the backlog audit. Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean. BUILT by P4b T5 (branch claude/cool-heisenberg-6lsa3a): interval threaded through the composite evaluator; intraday VWAP reads completed bars of the own interval on both paths (watch: completed_bars_for_interval with the D5 spelling; rule: _regime_candles); 1D/1W run mean_reversion_vwap_daily_signal on completed get_bars rows (completed_daily_rows) on both paths (D7); '4h' added to the signal allow-list (D2). tests/test_p4b_vwap_like_regime_models.py (27 tests incl. watch==rule parity, feed-lag parity); 13 mutations each fail it. Full suite 3455 passed / 1 skipped. Unaudited until P4b's code round."
     },
     {
       "id": "ALERTS-RULE-TOGGLE-PATCH",

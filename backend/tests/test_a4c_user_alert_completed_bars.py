@@ -73,7 +73,7 @@ def test_sandbox_lag_applies_only_to_the_intervals_tradier_serves(monkeypatch):
 # ── U1: composite watch, scheduled path ──────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_u1_composite_watch_hmm_fits_on_completed_bars_vwap_keeps_the_whole_series(monkeypatch):
+async def test_u1_composite_watch_hmm_and_vwap_read_completed_bars(monkeypatch):
     import app.services.strategy_watch_evaluator as swe
     import app.services.composite_trigger_evaluator as cte
     import app.services.regime_hmm as regime_hmm
@@ -95,11 +95,13 @@ async def test_u1_composite_watch_hmm_fits_on_completed_bars_vwap_keeps_the_whol
                         lambda b: seen_hmm.append(list(b)) or MagicMock())
     monkeypatch.setattr(cte, "_check_primary_hmm", lambda td, r: True)
     monkeypatch.setattr(cte, "_check_strategy_signals",
-                        lambda names, d, i, direction="Bullish": seen_strat.append(list(i)) or 0)
+                        lambda names, d, i, direction="Bullish", **kw: seen_strat.append(list(i)) or 0)
 
     await swe.evaluate_all()
     assert seen_hmm == [intraday[:-1]]
-    assert seen_strat == [intraday]
+    # FLIPPED by P4b (VWAP-CONFIRMATION-LIKE-REGIME-MODELS, 2026-09-25): the VWAP
+    # confirmation now reads the completed bars too, like the HMM.
+    assert seen_strat == [intraday[:-1]]
 
 
 def test_u1_evaluate_scheduled_regime_series_and_strategy_series_are_separate(monkeypatch):
@@ -184,7 +186,7 @@ async def _run(monkeypatch, interval, rows, candles, as_of=None):
     monkeypatch.setattr(regime_hmm, "compute_intraday_hmm",
                         lambda b: seen["hmm"].append(list(b)) or None)
     monkeypatch.setattr(cte, "_check_strategy_signals",
-                        lambda names, d, i, direction="Bullish": seen["strat"].append(list(i)) or 0)
+                        lambda names, d, i, direction="Bullish", **kw: seen["strat"].append(list(i)) or 0)
     monkeypatch.setattr(chart_alerts, "build_regime_snapshot",
                         lambda c: seen["snap"].append(list(c)) or {})
     await chart_alerts.evaluate_and_notify_for_symbol('AAPL', interval, candles[-2], candles, [], as_of=as_of)
@@ -201,7 +203,9 @@ async def test_u3_chart_composite_omm_and_hmm_fit_on_completed_candles(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_u3_vwap_confirmation_keeps_the_forming_candle(monkeypatch):
+async def test_u3_vwap_confirmation_reads_completed_bars(monkeypatch):
+    # FLIPPED by P4b (VWAP-CONFIRMATION-LIKE-REGIME-MODELS): was
+    # ..._keeps_the_forming_candle, pinning the superseded A4C-FOLLOWUPS-LOCKED choice.
     import app.services.regime_hmm as regime_hmm
     candles = _bars(span=900)
     from app.routers import chart_alerts
@@ -216,9 +220,9 @@ async def test_u3_vwap_confirmation_keeps_the_forming_candle(monkeypatch):
     monkeypatch.setattr(regime_hmm, "compute_intraday_hmm", lambda b: res)
     monkeypatch.setattr(cte, "_check_primary_hmm", lambda td, r: True)
     monkeypatch.setattr(cte, "_check_strategy_signals",
-                        lambda names, d, i, direction="Bullish": seen.append(list(i)) or 0)
+                        lambda names, d, i, direction="Bullish", **kw: seen.append(list(i)) or 0)
     await chart_alerts.evaluate_and_notify_for_symbol('AAPL', '15min', candles[-2], candles, [])
-    assert seen == [candles]
+    assert seen == [candles[:-1]]
 
 
 @pytest.mark.asyncio

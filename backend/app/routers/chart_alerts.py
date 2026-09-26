@@ -861,7 +861,7 @@ async def evaluate_and_notify_for_symbol(
     Indicators still read `all_candles`: every indicator is causal and a condition
     reads the point at closed_candle['time'], so the forming bar cannot move it
     (pinned by tests/test_a4e_closed_candle_alignment.py). The VWAP confirmation
-    keeps the forming bar by decision (A4C-FOLLOWUPS-LOCKED-2026-09-24).
+    reads completed bars too (VWAP-CONFIRMATION-LIKE-REGIME-MODELS, 2026-09-25).
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(AlertRuleModel).where(
@@ -951,9 +951,10 @@ async def evaluate_and_notify_for_symbol(
 
         # ── Composite rule evaluation ─────────────────────────────────────────
         if composite_rows:
-            from app.services.composite_trigger_evaluator import evaluate_from_context_detailed, format_composite_reason
+            from app.services.composite_trigger_evaluator import (
+                completed_daily_rows, evaluate_from_context_detailed, format_composite_reason,
+            )
             from app.services.regime_omm import compute_omm
-            _model_candles = all_candles[-MAX_LIVE_MODEL_CANDLES:] if all_candles else []
             _closes = [c["close"] for c in _regime_candles]
             _omm = compute_omm(_closes) if len(_closes) >= 100 else None
 
@@ -977,7 +978,8 @@ async def evaluate_and_notify_for_symbol(
                     try:
                         _end = date.today()
                         _start = _end - timedelta(days=730)
-                        _bars_daily = await get_bars(symbol, _start, _end)
+                        # P4b: completed sessions only, as a composite watch reads.
+                        _bars_daily = completed_daily_rows(await get_bars(symbol, _start, _end), _as_of_dt)
                     except Exception as _exc:
                         logger.warning("composite rule strategy-confirmation bars fetch failed for %s: %s", symbol, _exc)
                         _bars_daily = []
@@ -986,7 +988,26 @@ async def evaluate_and_notify_for_symbol(
             # intraday — chart.py's get_intraday(symbol, interval) returns daily candles
             # for '1D'/'1W' rules, so passing them as bars_intraday would mislabel daily
             # data as intraday to the VWAP mean-reversion check.
-            _bars_intraday = _model_candles if interval not in ("1D", "1W") else []
+            # VWAP-CONFIRMATION-LIKE-REGIME-MODELS: the VWAP confirmation reads the
+            # COMPLETED bars of the rule's interval (_regime_candles), like the HMM.
+            _bars_intraday = _regime_candles if interval not in ("1D", "1W") else []
+
+            # D7 (Kenneth, 2026-09-26): on 1D/1W the VWAP daily variant reads the
+            # completed get_bars rows a 1D/1W composite watch reads -- never the
+            # chart's daily candles or weekly bars. Fetched once per tick, and only
+            # when some composite rule lists VWAP; a failed fetch fails closed ([]).
+            _bars_vwap_daily: list[dict] | None = None
+            if interval in ("1D", "1W") and any(
+                "mean_reversion_vwap" in (_rj.get("strategy_confirmations") or [])
+                for _, _rj in composite_rows
+            ):
+                try:
+                    _end = date.today()
+                    _start = _end - timedelta(days=730)
+                    _bars_vwap_daily = completed_daily_rows(await get_bars(symbol, _start, _end), _as_of_dt)
+                except Exception as _exc:
+                    logger.warning("composite rule VWAP daily bars fetch failed for %s: %s", symbol, _exc)
+                    _bars_vwap_daily = []
 
             for _row, _rj in composite_rows:
                 _td = {k: v for k, v in _rj.items() if k != "__type"}
@@ -999,6 +1020,7 @@ async def evaluate_and_notify_for_symbol(
                         bars_daily=_rule_daily, bars_intraday=_bars_intraday,
                         direction=_direction, symbol=symbol,
                         regime_bars_intraday=_regime_candles if interval not in ("1D", "1W") else None,
+                        interval=interval, bars_vwap_daily=_bars_vwap_daily,
                     )
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)

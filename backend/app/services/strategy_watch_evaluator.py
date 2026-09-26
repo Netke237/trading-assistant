@@ -17,10 +17,12 @@ from __future__ import annotations
 import asyncio
 import html as html_lib
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from app.services.historical_store import get_bars
+from app.services.scheduling_tz import MARKET_TZ
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
@@ -232,7 +234,9 @@ async def _eval_strategy_watch(
     return _Transition(event=event, watch_id=w["id"], new_state=state)
 
 
-async def _eval_composite_watch(w: dict, start: date, end: date) -> _Transition | None:
+async def _eval_composite_watch(
+    w: dict, start: date, end: date, now_ts: float, now_dt: datetime,
+) -> _Transition | None:
     """One composite watch. Non-event state writes (sustain clock, armed -> idle
     re-arm) happen here; the entry's armed state is returned, not written."""
     symbol = w["symbol"]
@@ -244,31 +248,42 @@ async def _eval_composite_watch(w: dict, start: date, end: date) -> _Transition 
     except Exception as exc:
         logger.warning("composite-watch: get_bars failed for %s — %s", symbol, exc)
         return None
+    # Lazy imports: tests patch these at their source modules.
+    from app.data.market import completed_bars_for_interval, fetch_intraday_candles, normalize_interval
+    from app.services.composite_trigger_evaluator import (
+        _strategy_bar_type, completed_daily_rows, intraday_history_days, watch_fetch_interval,
+    )
+    # Every consumer of the daily bars (OMM/HMM_daily, rsi/bb, VWAP daily)
+    # reads completed sessions only: get_bars can hold today's forming bar.
+    bars = completed_daily_rows(bars, now_dt)
     if not bars:
         return None
+    interval = w.get("interval") or "1D"          # the store's default
+    fetch_iv = watch_fetch_interval(interval)     # D5: the chart spelling a rule reads
+    confirmations = trigger_def.get("strategy_confirmations") or []
+    vwap_intraday = (
+        "mean_reversion_vwap" in confirmations
+        and _strategy_bar_type("mean_reversion_vwap", fetch_iv) == "intraday"
+    )
     bars_intraday: list[dict] = []
-    needs_intraday = model == "HMM_intraday" or "mean_reversion_vwap" in (trigger_def.get("strategy_confirmations") or [])
-    if needs_intraday:
-        interval = w.get("interval", "15m")
+    if model == "HMM_intraday" or vwap_intraday:
         try:
-            from app.data.market import fetch_intraday_candles
-            from app.services.composite_trigger_evaluator import intraday_history_days
-            bars_intraday = fetch_intraday_candles(
-                symbol, interval=interval, days=intraday_history_days(interval),
+            raw = fetch_intraday_candles(
+                symbol, interval=fetch_iv, days=intraday_history_days(fetch_iv),
             )
+            # A4c + VWAP-CONFIRMATION-LIKE-REGIME-MODELS: the HMM fit AND the
+            # VWAP confirmation read COMPLETED bars of the watch's interval.
+            bars_intraday = completed_bars_for_interval(raw, fetch_iv, now=now_ts)
         except Exception as exc:
             logger.warning("composite-watch: intraday fetch failed for %s — %s", symbol, exc)
+    # 1D/1W (D7): VWAP runs the daily variant on the completed daily bars.
+    vwap_daily = bars if normalize_interval(fetch_iv) in ("daily", "weekly") else None
     try:
         from app.services.composite_trigger_evaluator import evaluate_scheduled, describe_match, format_composite_reason
-        # A4c: the HMM_intraday regime fits on COMPLETED bars of the watch's
-        # interval; bars_intraday (whole) still feeds the VWAP confirmation.
-        _regime_intraday = None
-        if model == "HMM_intraday":
-            from app.data.market import completed_bars_for_interval
-            _regime_intraday = completed_bars_for_interval(bars_intraday, w.get("interval", "15m"))
         fired = evaluate_scheduled(
-            symbol, trigger_def, bars, bars_intraday, regime_bars_intraday=_regime_intraday,
-            unknown_as_none=True,
+            symbol, trigger_def, bars, bars_intraday,
+            regime_bars_intraday=bars_intraday if model == "HMM_intraday" else None,
+            unknown_as_none=True, interval=fetch_iv, bars_vwap_daily=vwap_daily,
         )
     except Exception as exc:
         logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
@@ -327,6 +342,7 @@ async def _eval_composite_watch(w: dict, start: date, end: date) -> _Transition 
     try:
         _detail = describe_match(
             trigger_def, bars_daily=bars, bars_intraday=bars_intraday, symbol=symbol, direction=wdir,
+            interval=fetch_iv, bars_vwap_daily=vwap_daily,
         )
         _reason = format_composite_reason((trigger_def.get("primary") or {}).get("to_state"), _detail)
     except Exception as exc:
@@ -347,13 +363,18 @@ async def _eval_composite_watch(w: dict, start: date, end: date) -> _Transition 
     )
 
 
-async def _collect(sustain_minutes: int = 0) -> list[_Transition]:
+async def _collect(sustain_minutes: int = 0, now_ts: float | None = None) -> list[_Transition]:
     """Evaluate every enabled watch; one _Transition per fired event.
 
     Q17 (Kenneth, 2026-09-25): each watch is isolated -- an exception from one
     watch is logged and skips only that watch, never the rest of the run.
     """
     transitions: list[_Transition] = []
+    # One instant for the run's completed-bar judgements (tests inject it; the
+    # sustain clock keeps datetime.now, unchanged).
+    if now_ts is None:
+        now_ts = time.time()
+    now_dt = datetime.fromtimestamp(now_ts, MARKET_TZ)
     end = date.today()
     start = end - timedelta(days=_HISTORY_DAYS)
 
@@ -381,7 +402,7 @@ async def _collect(sustain_minutes: int = 0) -> list[_Transition]:
         if w.get("watch_type") != "composite":
             continue
         try:
-            t = await _eval_composite_watch(w, start, end)
+            t = await _eval_composite_watch(w, start, end, now_ts, now_dt)
         except Exception:
             logger.error("composite-watch: watch %s failed, skipped this run", w.get("id"), exc_info=True)
             continue
@@ -400,7 +421,7 @@ def _commit(t: _Transition) -> None:
         logger.error("strategy-watch: state write failed for %s", t.watch_id, exc_info=True)
 
 
-async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
+async def evaluate_all(sustain_minutes: int = 0, now_ts: float | None = None) -> list[WatchEvent]:
     """Evaluate every enabled watch; return one WatchEvent per fired transition.
 
     sustain_minutes: if > 0, a newly-appeared entry signal must remain present
@@ -410,7 +431,7 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
     schedule-level setting (not per-watch) — contrast with the standard
     chart-alert rule builder's per-condition sustain_minutes.
     """
-    transitions = await _collect(sustain_minutes)
+    transitions = await _collect(sustain_minutes, now_ts)
     for t in transitions:
         _commit(t)
     return [t.event for t in transitions]
@@ -497,7 +518,7 @@ def _run_lock() -> asyncio.Lock:
     return _lock
 
 
-async def evaluate_and_notify(sustain_minutes: int = 0) -> list[WatchEvent]:
+async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = None) -> list[WatchEvent]:
     """Evaluate all watches, send one notification per fired event, and commit
     each event's state only once it was delivered (open_questions[3], D3).
 
@@ -506,7 +527,7 @@ async def evaluate_and_notify(sustain_minutes: int = 0) -> list[WatchEvent]:
     nothing could ever deliver, so the state is committed as before.
     Returns every fired event, delivered or not."""
     async with _run_lock():
-        transitions = await _collect(sustain_minutes)
+        transitions = await _collect(sustain_minutes, now_ts)
         any_channel = _any_channel_enabled()
         for t in transitions:
             ev = t.event

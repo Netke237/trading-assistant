@@ -6,6 +6,8 @@ evaluate_scheduled:    Watch/scheduler path — receives raw bars, runs models i
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
+from functools import partial
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -147,14 +149,95 @@ def _count_confirmations(trigger_def: dict, structure_signals: list[dict], indic
 
 
 _MR_STRATEGY_LOOKBACK = 3   # bars scanned to detect a recent signal
+_MIN_STRATEGY_BARS = 60     # fewer bars of a strategy's kind -> not judged ("starved")
 
-# The bar set each confirmable strategy reads (mirrors _matched_strategy_signals'
-# _FNS); evaluate_scheduled uses it to tell a starved strategy from a miss.
-_KNOWN_STRATEGY_BAR_TYPE = {
-    "mean_reversion_rsi":  "daily",
-    "mean_reversion_bb":   "daily",
-    "mean_reversion_vwap": "intraday",
+# VWAP-CONFIRMATION-LIKE-REGIME-MODELS (Kenneth, 2026-09-25): the composite
+# mean_reversion_vwap confirmation reads COMPLETED bars of the rule/watch's own
+# interval, gives the same answer on the watch and the rule path, and on 1D/1W
+# runs mean_reversion_vwap_daily_signal on completed daily bars. Intraday
+# intervals -> the spelling mean_reversion_vwap_signal's allow-list accepts
+# ('4h' added there by decision D2). Before this the signal was called with no
+# interval, so its intraday gate always saw its '15m' default and passed
+# whatever bars it was handed -- daily bars on a 1D watch included.
+_VWAP_SIGNAL_INTERVAL = {
+    "1m": "1m", "1min": "1m", "5m": "5m", "5min": "5m", "15m": "15m", "15min": "15m",
+    "30m": "30m", "30min": "30m", "1h": "1h", "60m": "1h", "4h": "4h",
 }
+
+
+def _strategy_bar_type(key: str, interval: str | None) -> str | None:
+    """Which bars a confirmable strategy reads: "daily", "intraday", or None
+    (cannot be judged -- VWAP on a missing/unknown interval never matches)."""
+    if key in ("mean_reversion_rsi", "mean_reversion_bb"):
+        return "daily"
+    if key != "mean_reversion_vwap" or not isinstance(interval, str):
+        return None
+    if interval in _VWAP_SIGNAL_INTERVAL:
+        return "intraday"
+    from app.data.market import normalize_interval
+    if normalize_interval(interval) in ("daily", "weekly"):
+        return "daily"
+    return None
+
+
+def _strategy_bars(
+    key: str,
+    interval: str | None,
+    bars_daily: list[dict],
+    bars_intraday: list[dict],
+    bars_vwap_daily: list[dict] | None,
+) -> list[dict] | None:
+    """The one bar list a strategy reads -- shared by the matcher and the
+    starved count so they cannot disagree. None = not judged (not starved).
+
+    rsi/bb read bars_daily. VWAP reads bars_intraday on an intraday interval and
+    ONLY bars_vwap_daily on 1D/1W (D7): every 1D/1W caller passes completed
+    get_bars rows there, never chart-cache or weekly candles."""
+    bar_type = _strategy_bar_type(key, interval)
+    if bar_type is None:
+        return None
+    if key == "mean_reversion_vwap":
+        return bars_intraday if bar_type == "intraday" else bars_vwap_daily
+    return bars_daily
+
+
+def completed_daily_rows(bars: list[dict], now: datetime) -> list[dict]:
+    """``bars`` (historical_store.get_bars rows) without trailing daily bars that
+    are still forming at ``now`` (an aware datetime).
+
+    get_bars rows carry ``time`` as an ISO date string, which
+    market_session.completed_session_bars treats as undatable and pops -- it
+    would drop the last COMPLETED bar every run. Here a str time compares by
+    date against the last completed session close, an int (non-bool) time by
+    timestamp. Any other last ``time``, or a str that is not an ISO date,
+    drops that bar only and stops (fail closed, as A4g). Order is preserved and
+    ``bars`` is not mutated. Limit: get_bars never re-fetches a stored bar, so
+    a forming bar stored mid-session stays a snapshot after the close (A4g open
+    question (a)); this cannot tell.
+    """
+    from app.services.market_session import last_session_close
+
+    close = last_session_close(now)
+    cutoff_date = close.date()
+    cutoff_ts = close.timestamp()
+    out = list(bars)
+    while out:
+        t = out[-1].get("time")
+        if isinstance(t, str):
+            try:
+                forming = date.fromisoformat(t[:10]) > cutoff_date
+            except ValueError:
+                out.pop()
+                break
+        elif isinstance(t, int) and not isinstance(t, bool):
+            forming = t > cutoff_ts
+        else:
+            out.pop()
+            break
+        if not forming:
+            break
+        out.pop()
+    return out
 
 
 def _matched_strategy_signals(
@@ -162,34 +245,39 @@ def _matched_strategy_signals(
     bars_daily: list[dict],
     bars_intraday: list[dict],
     direction: str = "Bullish",
+    interval: str | None = None,
+    bars_vwap_daily: list[dict] | None = None,
 ) -> list[str]:
     """Return which of the given mean-reversion strategies fired within the last few bars."""
     from app.services.strategy_engine import (
         mean_reversion_rsi_signal,
         mean_reversion_bb_signal,
         mean_reversion_vwap_signal,
+        mean_reversion_vwap_daily_signal,
     )
-
-    _FNS: dict[str, tuple] = {
-        "mean_reversion_rsi":  (mean_reversion_rsi_signal,  "daily"),
-        "mean_reversion_bb":   (mean_reversion_bb_signal,   "daily"),
-        "mean_reversion_vwap": (mean_reversion_vwap_signal, "intraday"),
-    }
 
     matched: list[str] = []
     for key in strategy_keys:
-        entry = _FNS.get(key)
-        if entry is None:
+        bars = _strategy_bars(key, interval, bars_daily, bars_intraday, bars_vwap_daily)
+        if bars is None:
+            logger.debug("_matched_strategy_signals: %s not judged on interval %r", key, interval)
             continue
-        fn, bar_type = entry
-        bars = bars_intraday if bar_type == "intraday" else bars_daily
-        if len(bars) < 60:
+        if key == "mean_reversion_rsi":
+            call = partial(mean_reversion_rsi_signal, direction=direction)
+        elif key == "mean_reversion_bb":
+            call = partial(mean_reversion_bb_signal, direction=direction)
+        elif _strategy_bar_type(key, interval) == "intraday":
+            call = partial(mean_reversion_vwap_signal, direction=direction,
+                           interval=_VWAP_SIGNAL_INTERVAL[interval])
+        else:
+            call = partial(mean_reversion_vwap_daily_signal, direction=direction)
+        if len(bars) < _MIN_STRATEGY_BARS:
             logger.debug("_matched_strategy_signals: skipping %s — insufficient bars (%d)", key, len(bars))
             continue
         for i in range(len(bars) - _MR_STRATEGY_LOOKBACK, len(bars)):
             slice_bars = bars[max(0, i - 119): i + 1]
             try:
-                if fn(slice_bars, direction=direction) is not None:
+                if call(slice_bars) is not None:
                     matched.append(key)
                     break
             except Exception:
@@ -202,9 +290,14 @@ def _check_strategy_signals(
     bars_daily: list[dict],
     bars_intraday: list[dict],
     direction: str = "Bullish",
+    interval: str | None = None,
+    bars_vwap_daily: list[dict] | None = None,
 ) -> int:
     """Return how many of the given mean-reversion strategies fired within the last few bars."""
-    return len(_matched_strategy_signals(strategy_keys, bars_daily, bars_intraday, direction))
+    return len(_matched_strategy_signals(
+        strategy_keys, bars_daily, bars_intraday, direction,
+        interval=interval, bars_vwap_daily=bars_vwap_daily,
+    ))
 
 
 def evaluate_from_context(
@@ -215,6 +308,8 @@ def evaluate_from_context(
     bars_daily: list[dict] | None = None,
     bars_intraday: list[dict] | None = None,
     regime_bars_intraday: list[dict] | None = None,
+    interval: str | None = None,
+    bars_vwap_daily: list[dict] | None = None,
 ) -> bool:
     """Alert/WebSocket path. Receives pre-computed model outputs — no I/O for the
     primary/confirmations checks. bars_daily/bars_intraday are optional and,
@@ -233,8 +328,11 @@ def evaluate_from_context(
     bars_intraday: OHLCV intraday bars — needed if trigger_def sets strategy_confirmations,
         OR if primary.model == "HMM_intraday" (used to fit the HMM directly)
     regime_bars_intraday: A4c -- when not None, the HMM_intraday fit uses THIS
-        series (the caller's completed bars) instead of bars_intraday; the
-        strategy confirmations keep bars_intraday (regime models only, Kenneth).
+        series (the caller's completed bars) instead of bars_intraday.
+    interval: the rule's interval -- decides which VWAP variant runs and on which
+        bars (VWAP-CONFIRMATION-LIKE-REGIME-MODELS). None: VWAP never matches.
+    bars_vwap_daily: completed daily bars for the VWAP daily variant on 1D/1W.
+    bars_intraday must be COMPLETED bars of ``interval`` (the caller trims).
     """
     if isinstance(trigger_def, dict):
         td = trigger_def
@@ -304,6 +402,7 @@ def evaluate_from_context(
         direction: str = td.get("direction") or "Bullish"
         strategy_fired = _check_strategy_signals(
             strategy_conf_list, bars_daily or [], bars_intraday or [], direction=direction,
+            interval=interval, bars_vwap_daily=bars_vwap_daily,
         )
         if strategy_fired < min_strategy_conf:
             return False
@@ -321,6 +420,8 @@ def evaluate_from_context_detailed(
     direction: str = "Bullish",
     symbol: str = "",
     regime_bars_intraday: list[dict] | None = None,
+    interval: str | None = None,
+    bars_vwap_daily: list[dict] | None = None,
 ) -> tuple[bool, dict | None]:
     """Fire-gate + match detail in one pass. Returns (fired, detail) where detail is
     the describe_match() dict when fired, else None. Equivalent to calling
@@ -333,12 +434,14 @@ def evaluate_from_context_detailed(
         trigger_def, omm_result, structure_signals, indicator_values,
         bars_daily=bars_daily, bars_intraday=bars_intraday,
         regime_bars_intraday=regime_bars_intraday,
+        interval=interval, bars_vwap_daily=bars_vwap_daily,
     )
     if not fired:
         return False, None
     detail = describe_match(
         trigger_def, structure_signals=structure_signals, indicator_values=indicator_values,
         bars_daily=bars_daily, bars_intraday=bars_intraday, symbol=symbol, direction=direction,
+        interval=interval, bars_vwap_daily=bars_vwap_daily,
     )
     return True, detail
 
@@ -351,13 +454,17 @@ def evaluate_scheduled(
     regime_bars_intraday: list[dict] | None = None,
     *,
     unknown_as_none: bool = False,
+    interval: str | None = None,
+    bars_vwap_daily: list[dict] | None = None,
 ) -> bool | None:
     """Watch/scheduler path. Receives raw bars — runs models internally.
 
     bars_daily: OHLCV daily bars for OMM and daily HMM
     bars_intraday: OHLCV intraday bars for HMM_intraday (may be empty if not needed)
     regime_bars_intraday: A4c -- as evaluate_from_context: when not None the
-        HMM_intraday fit uses it; strategy confirmations keep bars_intraday.
+        HMM_intraday fit uses it.
+    interval / bars_vwap_daily: as evaluate_from_context (the VWAP variant and
+        its bars). bars_intraday must be COMPLETED bars of ``interval``.
 
     unknown_as_none: when True, a reading that could not be TAKEN -- no bars,
         a model that errored or returned nothing, structure detection that
@@ -466,18 +573,20 @@ def evaluate_scheduled(
     min_strategy_conf: int = td.get("min_strategy_confirmations", 1)
     if strategy_conf_list:
         direction: str = td.get("direction") or "Bullish"
-        strategy_fired = _check_strategy_signals(strategy_conf_list, bars_daily, bars_intraday, direction=direction)
+        strategy_fired = _check_strategy_signals(
+            strategy_conf_list, bars_daily, bars_intraday, direction=direction,
+            interval=interval, bars_vwap_daily=bars_vwap_daily,
+        )
         if strategy_fired < min_strategy_conf:
             # _matched_strategy_signals silently skips a known strategy with
             # < 60 bars of its kind. It is no reading only if those skipped
             # strategies could still have reached the minimum; otherwise the
-            # gate is definitely False.
-            starved = sum(
-                1 for key in strategy_conf_list
-                if key in _KNOWN_STRATEGY_BAR_TYPE
-                and len((bars_intraday if _KNOWN_STRATEGY_BAR_TYPE[key] == "intraday"
-                         else bars_daily) or []) < 60
-            )
+            # gate is definitely False. Same bar list as the matcher reads.
+            starved = 0
+            for key in strategy_conf_list:
+                _b = _strategy_bars(key, interval, bars_daily, bars_intraday, bars_vwap_daily)
+                if _b is not None and len(_b) < _MIN_STRATEGY_BARS:
+                    starved += 1
             if strategy_fired + starved < min_strategy_conf or no_reading():
                 return False
 
@@ -493,6 +602,8 @@ def describe_match(
     bars_intraday: list[dict] | None = None,
     symbol: str = "",
     direction: str = "Bullish",
+    interval: str | None = None,
+    bars_vwap_daily: list[dict] | None = None,
 ) -> dict:
     """Build a human-readable breakdown of which confirmations/strategies matched.
 
@@ -514,8 +625,11 @@ def describe_match(
 
     strategy_keys: list[str] = td.get("strategy_confirmations", [])
     strategy_matched: list[str] = []
-    if strategy_keys and (bars_daily or bars_intraday):
-        strategy_matched = _matched_strategy_signals(strategy_keys, bars_daily or [], bars_intraday or [], direction)
+    if strategy_keys and (bars_daily or bars_intraday or bars_vwap_daily):
+        strategy_matched = _matched_strategy_signals(
+            strategy_keys, bars_daily or [], bars_intraday or [], direction,
+            interval=interval, bars_vwap_daily=bars_vwap_daily,
+        )
 
     return {
         "structure_matched": structure_matched,
