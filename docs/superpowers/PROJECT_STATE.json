@@ -1115,7 +1115,7 @@
       "id": "STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES",
       "name": "Stocks-mode send paths (step-7-position-card page, StockPositionCard, StockSendDialog) save the position BEFORE the broker order and send the approved share count; THEN check_position_risk judges stocks at their real share count instead of clamping to max_contracts_per_trade",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "P1A-BACKEND-CONTRACT-CAP"
@@ -1126,7 +1126,7 @@
         "pattern": "= min\\(proposed_contracts, ",
         "note": "DEFECT MARKER: check_position_risk still clamps a quantity with min(proposed_contracts, max_contracts_per_trade) -- after P1 only on the |STOCK branch."
       },
-      "note": "QUEUED 2026-09-25 by decision P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25 (Kenneth). Order matters: the save-first reorder must land before real-share judging, or a full-size stock order is trimmed/refused in the books after it is at the broker. || PLAN written 2026-09-26: docs/superpowers/plans/2026-09-26-stock-sends-save-first-plan.md. Part A (backend): the stock clamp goes; a stock is judged by risk at the stop, notional fallback (decision STOCK-RISK-AT-STOP-2026-09-26), via one helper position_capital_at_risk used by the new trade, orm_positions_to_risk, position_writer's builder and the PATCH path. Part B (frontend): step-7-position-card, StockPositionCard and StockSendDialog's auto-send save first through one lib/stockSaveFirst.ts, reusing P1b-i's classifier, notes and Remove (helpers moved to lib/directOrder.ts, notes panel to a DirectSendNotes molecule). Part B merges with or before Part A. Plan round 1 of 3 next."
+      "note": "QUEUED 2026-09-25 by decision P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25 (Kenneth). Order matters: the save-first reorder must land before real-share judging, or a full-size stock order is trimmed/refused in the books after it is at the broker. || PLAN written 2026-09-26: docs/superpowers/plans/2026-09-26-stock-sends-save-first-plan.md. Part A (backend): the stock clamp goes; a stock is judged by risk at the stop, notional fallback (decision STOCK-RISK-AT-STOP-2026-09-26), via one helper position_capital_at_risk used by the new trade, orm_positions_to_risk, position_writer's builder and the PATCH path. Part B (frontend): step-7-position-card, StockPositionCard and StockSendDialog's auto-send save first through one lib/stockSaveFirst.ts, reusing P1b-i's classifier, notes and Remove (helpers moved to lib/directOrder.ts, notes panel to a DirectSendNotes molecule). Part B merges with or before Part A. Plan round 1 of 3 next. || Plan round 1 (2026-09-26): NOT clean -- 3 gate-level (R1 HIGH: brokerLabelFor names IBKR for Alpaca stock orders; R2 MEDIUM: resize scaled only local rungs, writer stores unscaled; R3 MEDIUM: PATCH judged qty against the old stop when the same PATCH changes it) + 3 LOW (R4 S6 unpinned, R5 check must read the stored re-anchored stop, R6 test-file names + two clamp-pinning tests to rewrite). All fixed in the plan. Round 2 next."
     },
     {
       "id": "P1B1-STEP7-SAVE-FIRST-CORE",

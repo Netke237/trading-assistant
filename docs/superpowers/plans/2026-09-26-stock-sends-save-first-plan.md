@@ -97,7 +97,7 @@ def position_capital_at_risk(contract_id: str, entry: float, qty: int,
 - **PATCHing a stop wider is not re-gated.** That is today's behaviour for options as well, and it is out of scope; it is logged in §9.
 - **The gates-off `over_exposure` breach list** (`position_writer.py`) no longer reports "the check judged 5, not the ordered N" for stocks, because `judged_size == qty` now. This closes the open question "gates-off clamp applies a CONTRACT cap to STOCK share counts".
 
-### A6. Backend tests (`backend/tests/test_portfolio_risk.py`, `test_position_writer.py`, `test_portfolio_router.py` — extend the existing files)
+### A6. Backend tests (file names corrected in the round-1 section R6)
 
 - **T-A1 `position_capital_at_risk`:**
   - option `(2.00, 3)` gives 600;
@@ -179,7 +179,7 @@ type StockSendOutcome =
   - **`placed`** → success. A size note goes into `warn` (informational; not retryable, since the order is live).
   - **`refused` / `blocked` / `unconfirmed` / `removed`** → `errs[symbol] = message`. No order is live, so a retry is safe. On `unconfirmed`, a retry is refused by the local duplicate check if the row synced, and otherwise by the backend's `duplicate_symbol_already_open`, so it can never double-book.
   - **`unknown` / `not-removed`** → `warn[symbol] = message`. **Never `errs`:** a retry could double-place a live order. This is the dialog's existing rule for "the order may be live".
-- **`onSubmit(orders)`** reports each symbol's booked `qty` (from `placed`) and not the typed shares. `StockDraftOrder.shares` is what the caller shows as sent.
+- **`onSubmit(orders)`** is unchanged. A resize puts a note into `warn`, and a non-empty `warn` keeps the dialog open (`index.tsx:216`), so `onSubmit` never runs for a resized basket. `step-4-stocks` ignores the orders passed to it anyway.
 
 ### B5. Frontend tests
 
@@ -208,7 +208,7 @@ type StockSendOutcome =
 **Surface tests** (one file per surface, extending the existing tests):
 10. **step-7-position-card:** a resize shows the size warning and `orderId` is set. An `unknown` outcome shows the banner, and the panel renders the note with its Remove button. Navigating to another candidate and back leaves the note present.
 11. **StockPositionCard:** on a resize to 100 from 200, the saved row's rungs sum to 100. Tastytrade + Market is disabled with the title.
-12. **StockSendDialog:** `unknown` lands in `warn`, not `errs`, and a retry does NOT resend that symbol. `removed` lands in `errs`, and a retry resends. On a resize, `onSubmit` reports the booked qty.
+12. **StockSendDialog:** `unknown` lands in `warn`, not `errs`, and a retry does NOT resend that symbol. `removed` lands in `errs`, and a retry resends.
 13. **Panel on stock pages:** a note pushed by an options send is visible on `step-4-stocks`, and Remove works there (the confirm and the DELETE by rec_id).
 
 ## 6. Mutation checks
@@ -226,7 +226,6 @@ type StockSendOutcome =
 | S9 | Send the order before persisting | 1 |
 | S10 | Send `pos.contracts` instead of `orderQty` | 4 |
 | S11 | Put `unknown` into the dialog's `errs` | 12 |
-| S12 | Report typed shares in `onSubmit` | 12 |
 | S13 | Skip the rung scaling on a resize | 11 |
 | S14 | Drop the local duplicate check | 7 |
 | S15 | Push the ORDER-UNKNOWN note after `applyPersistedPosition` | 6 |
@@ -239,7 +238,7 @@ type StockSendOutcome =
 | `backend/app/services/portfolio_risk.py` | A1-A3 |
 | `backend/app/services/position_writer.py` | A3 builder, A4 |
 | `backend/app/routers/portfolio.py` | A4 (PATCH) |
-| `backend/tests/test_portfolio_risk.py`, `test_position_writer.py`, `test_portfolio_router.py` | A6 |
+| `backend/tests/test_portfolio_risk_contract_cap.py`, `test_position_writer.py`, `test_position_writer_gates.py`, `test_portfolio_update.py` | A6 + R1 (see the round-1 section) |
 | `frontend/lib/directOrder.ts` (new, moved), `frontend/app/(frame)/screener/step-7-trade-card/directOrder.ts` (re-export + `contractLabelFor`) | B1 |
 | `frontend/lib/stockSaveFirst.ts` (new) | B1 |
 | `frontend/components/molecules/DirectSendNotes/` (new) | B1 |
@@ -274,3 +273,63 @@ Per `audit_rule`, a finding blocks only if it can:
 
 - **PATCHing a stop wider is not re-gated.** A position whose stop moves away from entry grows its risk at the stop without a check. This is the same for options today. Owner: whoever next touches the PATCH gate.
 - **Stock-scan sizing.** `recommendedShares` sizes from the risk budget. Under risk-at-stop, a trade sized at 1-3.75% risk passes the 5% single cap. The concentration question from Phase E (the open question on `max_single_position_pct` vs notional) is now answered by decision: the cap measures risk, not concentration. There is no notional concentration cap, and that is deliberate.
+
+---
+
+## Plan round 1: 3 gate-level findings (1 HIGH, 2 MEDIUM) and 3 LOW. All fixed below; these SUPERSEDE the sections above where they conflict
+
+Round 1 confirmed several things:
+- §0 is accurate;
+- the resize can never divide by zero or grow a quantity;
+- `unconfirmed` → retry is stopped by the local duplicate check or the backend 409;
+- `unknown` and `not-removed` in `warn` are never retried;
+- the B1 move is behaviour-neutral for the P1b-i tests;
+- mutations S1, S4, S7 and S8 can fail.
+
+**R1 (HIGH): a note must name the broker the order actually went to.** `brokerLabelFor` knows only Tradier and Tastytrade, and labels everything else `IBKR Paper`. The stock paths offer `alpaca_paper`, so an Alpaca ORDER-UNKNOWN note would say "Check IBKR Paper first", and a Remove could leave a live Alpaca order untracked.
+- In the moved `lib/directOrder.ts`, `brokerLabelFor` maps `ibkr_paper → 'IBKR Paper'`, `tradier_paper → 'Tradier Paper'`, `tastytrade_paper → 'Tastytrade Paper'` and `alpaca_paper → 'Alpaca Paper'`. Any other key returns the raw key, never another broker's name.
+- The options page's labels are unchanged for its three brokers.
+- **Test 14** (`stockSaveFirst.test.ts`): an `alpaca_paper` send, then a 502 `Alpaca paper order failed: connection error` → the ORDER-UNKNOWN note and its Remove confirm text contain `Alpaca Paper` and not `IBKR`.
+  - A `directOrder.test.ts` case: an unknown key `foo_paper` → `foo_paper`.
+- **Mutation S17:** drop the Alpaca branch → test 14 red.
+
+**R2 (MEDIUM): a resize must scale the STORED rungs, not only the local row.** The writer applies `adjusted_size` to `qty` and stores `targets` as sent. The next `syncFromBackend` would then restore rungs that sum above the booked shares.
+- **Backend.** In `position_writer.create_position`, when the booked qty differs from `body.qty` (gates on, `risk.adjusted_size` applied), the targets' `contractsToSell` are scaled before storing, by the rule below.
+  - It covers every resize path: the card POST, auto-trade booking, and all three stock sends.
+  - It covers options too, whose rungs are contract counts. That is correct for them: an option resize already books fewer contracts than the rungs claim.
+- **The rule** (`scale_rung_quantities(targets, old_qty, new_qty)`, in `position_writer.py`):
+  - only rungs whose `contractsToSell` is a positive number take part;
+  - each such rung except the LAST becomes `floor(c × new / old)`;
+  - the last becomes `max(0, new − sum(others))`.
+  - It is the same rule as the card's existing shrink branch (`StockPositionCard/index.tsx:272-277`), and the frontend `scaleRungShares` (B3) implements the identical rule, so the local row and the stored row agree before the first sync.
+- **Tests:**
+  - **T-A10** (writer): a Bullish stock POST of 200 with rungs 66/66/68 is resized to 100 → the stored targets are 33/33/34 and sum to 100.
+  - A rung set with no `contractsToSell` is stored unchanged.
+  - **Test 11** now also asserts the captured `POST /api/portfolio` body's echo. The mock's reply carries the scaled rungs, as the writer returns them.
+- **Mutation S18:** skip the writer scaling → T-A10 red.
+
+**R3 (MEDIUM): PATCH judges a qty increase against the stop that the SAME PATCH stores.** The qty gate runs before `position.stop` is updated (`routers/portfolio.py:211-242`), and edits made within 600ms merge into one PATCH.
+- A4's PATCH call passes `stop = _floor_stop(updates["stop"]) if "stop" in updates else position.stop`.
+- **T-A8 is extended:** row 100 @ 50, stop 49. One PATCH `{qty: 1000, stop: null, portfolioValue: 100000}` → judged at notional: 50,000 is 50%, resized to 100. The row is stored at 100 shares with no stop.
+- **Mutation S19:** read `position.stop` regardless → T-A8 (extended) red.
+
+**R4 (MEDIUM): mutation S6 had no test that could fail.** T-A5 refuses under both measures, and the writer's 422 carries only reason codes.
+- **T-A11** (writer): the portfolio is $100k with two existing stock rows, each 1000 shares @ $50 with a usable stop at $45. That is $5,000 at risk each ($10,000 total, 10%), but $50,000 each at notional ($100,000, 100%).
+- A new stock POST of 100 @ $50, stop $48 ($200 at risk) → 201.
+- Under S6 (the writer's builder at notional) the total is over 25% → 422 `total_exposure_limit_reached`.
+- S6 now points at T-A11.
+
+**R5 (LOW, closed as a fix): the check reads the stop the writer STORES.** A4's writer call passes `stop=_floor_stop(adjusted_stop)`, the re-anchored and floored stop stored at `position_writer.py:564`, and not `body.stop`.
+- Latent today: the stock builders send no `scanStockPrice`, so no re-anchor happens.
+- **T-A12:** a stock POST with `scanStockPrice` set and a live quote that moves the price toward a non-user-set stop → the check's capital at risk equals the stored row's `|entry − stored stop| × qty`.
+- **Mutation S20:** pass `body.stop` → T-A12 red.
+
+**R6 (LOW): corrections to the test inventory.**
+- The backend test files are these; `test_portfolio_risk.py` and `test_portfolio_router.py` do not exist:
+  - `backend/tests/test_portfolio_risk_contract_cap.py` — T-A1 to T-A6, T-A9;
+  - `backend/tests/test_position_writer.py` — T-A7, T-A10 to T-A12;
+  - `backend/tests/test_portfolio_update.py` — T-A8.
+- **Two existing tests pin the clamp and are REWRITTEN deliberately, never "fixed" by restoring the clamp.** The build commit names both:
+  - `test_portfolio_risk_contract_cap.py::test_3_stock_shares_keep_the_deferred_clamp` becomes "stock shares are judged at the real count": `judged_size == 100`.
+  - `test_position_writer_gates.py::test_p1a_6b_...` no longer reports "the check judged 5, not the ordered 20". With gates off and 20 shares that fit every cap, `over_exposure` is now False.
+- The B4 clause "`onSubmit` reports the booked qty", and mutation S12, are withdrawn (edited in place above): a resized basket keeps the dialog open, so `onSubmit` never runs for it.
