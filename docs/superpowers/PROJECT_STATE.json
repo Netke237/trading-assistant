@@ -2398,6 +2398,11 @@
       "id": "P1B2-CLOSED-BY-ABSORPTION-2026-09-26",
       "q": "P1b-i shipped almost all of P1b-ii's scope (per-rec_id Remove, kind-typed notes, confirm, 404 rules). Close P1b-ii, build only V1's Dismiss, or widen it to show the notes in Portfolio?",
       "a": "Kenneth, 2026-09-26: CLOSE IT. No new code. The one leftover is logged in open_questions, not built."
+    },
+    {
+      "id": "STOCK-RISK-AT-STOP-2026-09-26",
+      "q": "STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES removes the 5-share stock clamp in check_position_risk. What should the 5% single / 25% total caps measure for a stock: risk at the stop ((entry - stop) x shares), full notional with the same caps, or full notional with new stock-only caps?",
+      "a": "Kenneth, 2026-09-26: RISK AT THE STOP. A stock is judged by (entry - stop) x shares against max_single_position_pct and max_total_exposure_pct; options stay on premium x 100 x qty (premium is their max loss). A stock with no usable stop falls back to full notional (entry x shares). The stop is passed into check_position_risk; its existing callers without a stop keep today's behaviour for options."
     }
   ],
   "pending_kenneth": [
