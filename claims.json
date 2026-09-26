@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "claude/exciting-wozniak-dqdqy8",
       "claimed_at": "2026-09-26T20:42:25Z",
-      "expires_at": "2026-09-26T23:42:25Z",
+      "expires_at": "2026-09-26T23:48:19Z",
       "note": "P4a chart alert rules: built + suites green; merging main, then code rounds",
       "task": "P4A-CHART-ALERT-RULES"
     },
