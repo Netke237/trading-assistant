@@ -1,4 +1,4 @@
-# WATCH-UNDELIVERED-EVENT-RESEND — plan r3
+# WATCH-UNDELIVERED-EVENT-RESEND — plan r4
 
 Package: `docs/superpowers/plans/2026-09-25-work-packages.md` § "P4b follow-ups" → WATCH-UNDELIVERED-EVENT-RESEND
 (item 3 of decision `P4B-FOLLOWUPS-2026-09-26`). Branch `claude/unclaimed-tasks-xb6tiz`. Claim
@@ -7,6 +7,8 @@ Package: `docs/superpowers/plans/2026-09-25-work-packages.md` § "P4b follow-ups
 r2 = r1 + plan round 1's 17 findings (3 HIGH, 7 MEDIUM, 7 LOW) + Kenneth's decision D1 below, which replaces r1's
 "freeze until delivered" design (round 1 finding 5). Findings are tagged `[r1#n]` where fixed.
 r3 = r2 + plan round 2's 12 findings (0 CRITICAL/HIGH, 3 MEDIUM, 9 LOW), tagged `[r2#n]`.
+r4 = r3 + plan round 3's 8 findings (2 HIGH, 3 MEDIUM, 3 LOW), tagged `[r3#n]`. Round 3 reached the per-stage cap of
+three plan rounds (AUDIT-CAP-PER-STAGE-2026-09-25) — Kenneth decides whether to build from r4.
 
 ## The defect
 
@@ -67,10 +69,14 @@ last_state["pending_events"] = [          # oldest first; absent or [] = nothing
 - key absent, `None`, `[]` → `([], False)`; any other non-list (`{}`, `""`, `"x"`, a dict) → `([], True)`, logged
   ERROR ("malformed pending_events dropped").
 - each item kept only if it is a dict with a dict `event` from which `WatchEvent(**{k: v for k in fields})`
-  constructs (unknown keys ignored, a missing required field → invalid) and `attempts` coerces with `int()` to
+  constructs (unknown keys ignored, a missing required field → invalid) **and** whose `symbol`, `strategy_key`,
+  `event_type`, `reason` are `str` and `close` converts with `float()` (a dataclass checks no types; a
+  `strategy_key: null` would make `_strategy_label` raise at format time) [r3#3] and `attempts` coerces with `int()` to
   ≥ 0, catching `(TypeError, ValueError, OverflowError)` (`.inf`/`nan` from `safe_load`) → 0 — coerced, not
   dropped [r2#9]; each invalid item is dropped with an ERROR log and sets
   `changed`.
+- `_pending(state, log=True)`: malformed items are logged only by the callers that write the cleaned queue back
+  (flush, `_commit`); the send phase's read-only decision passes `log=False` [r3#8].
 - returns **new** dicts (never the snapshot's objects — `list_watches()` is a shallow copy, so the snapshot's nested
   dicts are the store's live objects) [r1#9].
 
@@ -79,7 +85,10 @@ Every read of the queue in the evaluator goes through `_pending`.
 ## 3. Writes keep the queue
 
 Every `update_state` the evaluator makes goes through one helper, `_write_state(watch_id, new_state, queue)`:
-writes `{**new_state, "pending_events": queue}` when `queue` is non-empty, else `new_state` without the key; logs
+writes `{**base, "pending_events": queue}` when `queue` is non-empty, else `base`, where
+`base = {k: v for k, v in new_state.items() if k != "pending_events"}` — the key is always **stripped** first,
+because composite new states and the flush's `state` carry the snapshot's (possibly malformed or stale) value
+[r3#6]; logs
 ERROR and returns False on any exception (never raises) [r1#2].
 
 The queue a write must carry is **read from the store at write time** (`_current_queue(watch_id)` =
@@ -115,11 +124,15 @@ This applies to:
      every later entry stay, in order. Then one `_write_state(id, state_without_queue, remaining)`.
    - Undelivered log: WARNING `"<watch> <event_type> for <symbol> still undelivered after N attempt(s); queued,
      resent next run"`; at N ≥ 3 the same line at ERROR [r1#14].
-   - **Give-up** [r2#11]: an entry whose `attempts` reaches `_MAX_ATTEMPTS = 10` is removed from the queue with an
-     ERROR log that carries its full formatted subject and body (so the alert text is still in the log), and the
-     run carries on with the next entry. Without this, one message a channel always rejects (e.g. a Telegram 400
-     on that text) would hold back every later alert of that watch. With the `eod` schedule that is ~10 trading
-     days of failed resends.
+   - **No give-up** [r3#2, replaces r2#11]: `notify_enabled_channels` returns only a bool, so "this text is
+     rejected" cannot be told apart from "the channel is down"; a give-up after N attempts would drop queued exits
+     during an ordinary outage (hourly polling or repeated "Evaluate now" clicks reach 10 in hours). Entries stay
+     until delivered or evicted by the cap (step 5). A poison message is made unlikely instead: `_pending`
+     validates types [r3#3], `_format_event` sits inside the per-entry send `try` so a format exception counts as
+     a failed attempt (not a silent per-watch skip), and every free-text value is already html-escaped.
+     Head-of-line blocking by a message a channel always rejects is accepted and logged in §8.
+   - Channel state unknown (`_any_channel_enabled` hit its "reader raised → True" branch): the flush runs as
+     normal; the attempts it counts are only a log number now that nothing gives up, so no special case [r3#5].
    - If a delivered entry's removal cannot be written (`_write_state` False), it is sent again next run — a
      duplicate, never a loss. The ERROR log says "may be re-sent" [r1#13].
 3. **Evaluate phase.** `_collect(...)` unchanged in what it evaluates: it re-reads `list_watches()`, so it sees the
@@ -129,8 +142,10 @@ This applies to:
    - Queue non-empty (phase 2 could not empty it this run) → **do not send now**: append
      `{"event": _plain_event(ev), "attempts": 0}` and commit `t.new_state` with the longer queue. Oldest first is
      kept; the new event goes out after the older ones on the next run. Returned (not delayed).
-   - No channel enabled → `_commit(t)` without queueing the new event (D3 unchanged: with no channel configured
-     nothing is queued; only events that were queued while a channel was on are kept, per step 2).
+   - **Rule order** [r3#1]: the queue check comes **first and wins regardless of channel state**. Queue non-empty →
+     append (above), even with no channel enabled — otherwise an exit firing while channels are briefly off
+     would be committed but never told, behind an older queued entry.
+   - Queue empty and no channel enabled → `_commit(t)` without queueing (D3 unchanged).
    - Queue empty → send normally. Delivered → `_commit(t)` (queue stays empty).
      Undelivered with a channel enabled → commit `t.new_state` **with** `queue = [that event]`.
    - The state machine therefore always advances when an event fires (D1); only the message waits.
@@ -193,8 +208,9 @@ armed watch's opposite-direction (reversal) evaluation does not fire by accident
 7. Composite undelivered entry → phase armed + queue [entry]. Next run `evaluate_scheduled` False → delayed entry
    sent, **and** phase already idle in the same run (re-arm), queue gone [r1#4].
 8. No channel enabled with a queue → nothing sent (notify not awaited), queue **kept** (attempts unchanged), not
-   returned; a new transition in the same run commits and is **not** queued. Then a channel is enabled → next run
-   sends the kept entry as `Delayed:` [r2#1].
+   returned; a new `exit_stop` in the same run commits **and is appended behind it** (queue [entry, exit_stop])
+   [r3#1]. Then a channel is enabled → next run sends both, in order, as `Delayed:` [r2#1]. Separately: queue
+   empty + no channel + a new transition → committed, not queued (D3).
 9. Non-event writes keep the queue: strategy sustain-clock start, strategy corrupted-`pending_entry_since`
    restart, strategy sustain reset, composite sustain start, composite sustain reset (`fired` False), composite
    armed→idle [r2#7] — each with a non-empty queue in the snapshot and flush failing → queue still present
@@ -213,15 +229,19 @@ armed watch's opposite-direction (reversal) evaluation does not fire by accident
 14. Disabled watch with a queue → not sent, kept; re-enabled → sent.
 15. `evaluate_all` with a queue and a firing transition → queue kept after the commit, nothing sent.
 16. Cap: queue of 50 + one more undelivered → 50, oldest dropped, ERROR logged.
-17. ERROR escalation at attempts ≥ 3 (caplog); give-up at attempts 10: entry removed, ERROR log contains its
-    subject, the next queued entry is sent in the same run [r2#11].
-18. Aliasing [r2#3]: flush fails and a new event is appended → between the evaluator's writes, the store's own
-    objects are never mutated (the shallow `_Store` records its queue after each `update_state`; the recorded
-    queues equal what was written, and the snapshot handed out before the run is unchanged).
+17. ERROR escalation at attempts ≥ 3 (caplog); channel down for 15 runs → nothing removed, attempts 15 [r3#2].
+18. Aliasing [r2#3, r3#7]: run against the **real** `StrategyWatchStore(tmp_path/"w.yaml")` (keeps references,
+    shallow `list_watches`). Flush fails and a new event is appended; a spy on `update_state` deep-copies each
+    written state at write time; at the end every written object still equals its copy (never mutated after the
+    write), and the in-memory queue equals the reloaded-from-disk queue.
 19. Order [r2#4]: a shared recorder patched onto `notify_enabled_channels` and `get_bars` → the delayed send is
     recorded before the first `get_bars` call of the run.
 20. Failed queue read [r2#2]: `list_watches` raises inside `_commit` for one transition → the stored queue is
     unchanged, ERROR logged, and the next transition still commits.
+22. Poison entry [r3#3]: queue `[{event with strategy_key None}, valid]` → first dropped by `_pending` (ERROR),
+    valid one sent. `_format_event` patched to raise → counted as a failed attempt (attempts +1), written.
+23. Key stripping [r3#6]: composite with a queue delivered in the flush, then a new composite entry delivered in the
+    same run → stored state has no `pending_events` key.
 21. `_plain_event` with `direction=None`, `bar_time=None` → stays None; the delayed line omits `(bar …)` [r2#8].
 
 Updated in `test_p4b_watch_isolation_and_delivery.py` (direction-aware stubs):
@@ -238,13 +258,15 @@ non-empty; `attempts` not incremented; "Delayed: " prefix removed; `delayed` fla
 no-channel branch sends or drops the queue; malformed value not dropped; `_pending` without the `isinstance(dict)`
 guard; `_pending` returns the snapshot's own list/dicts [r2#3]; `_plain_event` without `float()`; cap drops newest
 instead of oldest; per-watch `try/except` in the flush removed [r2#5]; `_current_queue` failure treated as `[]`
-[r2#2]; give-up threshold removed [r2#11].
+[r2#2]; queue check placed after the no-channel check [r3#1]; `_write_state` does not strip the key [r3#6];
+`_format_event` outside the send `try` [r3#3].
 
 ## 7. State file
 
-- Phase `WATCH-UNDELIVERED-EVENT-RESEND`: the defect marker disappears with the build; its `verify` then switches
-  to a `present` probe on `def _pending\(` in `strategy_watch_evaluator.py` (a string's absence alone proves
-  nothing) [r2#12]; status → shipped only after a clean code round. Name updated to the queue wording.
+- Phase `WATCH-UNDELIVERED-EVENT-RESEND`: in the build commit, `verify` switches to a `present` probe on
+  `def _pending\(` in `strategy_watch_evaluator.py` [r2#12] and status → `shipped_unaudited` with
+  `audit_clean: false` (so `state.py` reports it UNAUDITED, not drift) [r3#4]; → `shipped` after a clean code
+  round. `audit_rounds` records the plan rounds. Name updated to the queue wording.
 - Decision `WATCH-RESEND-QUEUE-2026-09-26` (D1) added.
 
 ## 8. Out of scope / follow-ups to log (open_questions)
@@ -254,6 +276,8 @@ instead of oldest; per-watch `try/except` in the flush removed [r2#5]; `_current
   Accepted per "resend even if price recovered".
 - `/evaluate` `fired` now counts resend attempts, and the page says "N alert(s) fired"
   (`strategy-watch/page.tsx:72`) even when they were queued, not sent — needs "sent / queued" wording (frontend).
-- A message that a channel always rejects is given up after 10 attempts (ERROR log with its text) [r2#11].
+- A message that a channel always rejects blocks its watch's later alerts (head of line) until evicted by the
+  50-entry cap; accepted, since a give-up cannot tell rejection from an outage [r3#2]. Revisit with P6 if
+  `dispatch.py` ever returns a per-channel reason.
 - Partial delivery (one channel up, one down) counts as delivered — per-channel retry needs `dispatch.py` (P6).
 - `dispatch.py` corrupt-settings behaviour stays P6.
