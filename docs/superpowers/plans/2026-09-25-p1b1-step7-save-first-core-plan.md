@@ -280,3 +280,14 @@ PROPOSED, and NOT reviewed:
 - One shared helper, `removeTrackedRow(recId)`, doing `delete`, then `dropLocal`, then `void syncFromBackend(true).then(() => dropLocal(recId))`. It is used by both the auto-delete and Remove.
 - **A4 test 23:** a GET `/api/portfolio` started before the Remove's DELETE resolves after it, with the row inside → once everything settles the row is not in the store.
 - **A5 M45:** drop the chained sync from the Remove path → test 23 red.
+
+## Kenneth's decision and the build (2026-09-26)
+
+Decision `P1B1-BUILD-WITH-X1-2026-09-26`: build with X1; the code rounds (cap 3) check it.
+
+Built as planned, with these notes for the reviewer:
+- `removeTrackedRow(recId, notFoundIsFinal)` (page module level) is the X1 helper. The auto-delete calls it with `true`; Remove passes `kind !== 'save-unconfirmed'`. The offline/bare-5xx/unparsed-2xx branch also uses it for its best-effort delete (`false`), after pushing the SAVE-UNCONFIRMED note and `dropLocal`.
+- `classifyDirectFailure({thrown} | {response})` returns `placed | delete | keep`. Keeping the 2xx id check in the same function means a `res` whose fields throw is caught by the call's own try (test 16).
+- `brokerLabelFor`, `contractLabelFor`, the note texts and the confirm texts live in `directOrder.ts` beside it.
+- Test 2 follows §2.3 (no delete, no note); its "and the delete is called" clause contradicts §2.3 and M28, so it was read as a slip.
+- Mutations: M12, M19 and M22 were run per builder/marker (M12a/b, M19a/b, M22a-c), 34 in all. Every one turns its test red.

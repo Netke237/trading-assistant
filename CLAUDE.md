@@ -128,6 +128,7 @@ frontend/
 | `portfolioUiStore.ts` | Ephemeral `selectedSymbol` for the Portfolio page, shared with its `@contextRail` sidebar — a separate parallel-route component that cannot read the page's local state. Not persisted |
 | `watchlistUiStore.ts` | Ephemeral `selectedSymbol` for the Watchlist page, same `@contextRail` reason as `portfolioUiStore`. Deliberately **not** `chartStore.symbol`, which defaults to `'AAPL'` and is persisted and so can never represent "nothing selected" |
 | `tradeCardUiStore.ts` | Ephemeral `activeCard` — the card Step 7 is showing (Step-6 pick applied, recomputed plan merged) plus `rrPending`, published by the page for its `@contextRail` pre-trade checklist, same parallel-route reason as `portfolioUiStore`. The rail must read this, never the raw scan candidate (that is the auto-pick). Not persisted; cleared on unmount |
+| `directSendNotesStore.ts` | Step 7's direct-send notes (P1b-i): one note per rec_id when a Place Limit/Market send may have left a Portfolio row with no order, or an order whose status is unknown. Each note has a Remove button that hard-DELETEs exactly its rec_id after a confirm. **No `persist()`**, deliberately (decision `P1B1-NOTE-IN-MEMORY-2026-09-25`): module-level, so a note survives Prev/Next, other sends and leaving Step 7, and goes only on a full reload or a successful Remove |
 
 `scanStore.regime` (raw market-overall status) and `scanStore.combinedRegime`
 (`alignmentVerdict(direction, descriptor)` — direction-aligned verdict) are kept in sync across
