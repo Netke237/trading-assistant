@@ -6,6 +6,7 @@ evaluate_scheduled:    Watch/scheduler path — receives raw bars, runs models i
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime
 from functools import partial
 from typing import TYPE_CHECKING
@@ -137,10 +138,33 @@ def _matched_confirmations(trigger_def: dict, structure_signals: list[dict], ind
                     matched.append(signal_kind)
                     break
         elif conf_type == "momentum":
+            # A real number only (P4b T6, open_questions[61]): the rule path once
+            # passed indicator SERIES here and `list >= int` raised TypeError,
+            # which skipped the whole rule. Anything else is simply not matched.
             val = indicator_values.get(signal_kind)
-            if val is not None and val >= min_conf:
+            if (isinstance(val, (int, float)) and not isinstance(val, bool)
+                    and math.isfinite(val) and val >= min_conf):
                 matched.append(signal_kind)
+            elif val is not None and not isinstance(val, (int, float)):
+                logger.debug("momentum confirmation %s: non-numeric value ignored", signal_kind)
     return matched
+
+
+def indicator_values_at(indicators: dict, t: object) -> dict[str, float]:
+    """``{name: value}`` at time ``t`` from ``{name: [{time, value}, ...]}``
+    (compute_indicators_for_conditions' shape) -- the closed candle's reading,
+    as A4e reads standard-rule indicators. A series with no point at ``t``, or a
+    None value there, is omitted."""
+    out: dict[str, float] = {}
+    for name, series in (indicators or {}).items():
+        if not isinstance(series, list):
+            continue
+        for point in reversed(series):
+            if isinstance(point, dict) and point.get("time") == t:
+                if point.get("value") is not None:
+                    out[name] = point["value"]
+                break
+    return out
 
 
 def _count_confirmations(trigger_def: dict, structure_signals: list[dict], indicator_values: dict) -> int:

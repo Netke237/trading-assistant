@@ -953,7 +953,11 @@ async def evaluate_and_notify_for_symbol(
         if composite_rows:
             from app.services.composite_trigger_evaluator import (
                 completed_daily_rows, evaluate_from_context_detailed, format_composite_reason,
+                indicator_values_at,
             )
+            # P4b T6: momentum confirmations compare a number -- the closed
+            # candle's value of each series, not the series itself.
+            _composite_indicators = indicator_values_at(indicators, closed_candle.get("time"))
             from app.services.regime_omm import compute_omm
             _closes = [c["close"] for c in _regime_candles]
             _omm = compute_omm(_closes) if len(_closes) >= 100 else None
@@ -1016,7 +1020,7 @@ async def evaluate_and_notify_for_symbol(
                 _rule_daily = _bars_daily if _rule_needs_daily else []
                 try:
                     _fired, _detail = evaluate_from_context_detailed(
-                        _td, _omm, signals, indicators,
+                        _td, _omm, signals, _composite_indicators,
                         bars_daily=_rule_daily, bars_intraday=_bars_intraday,
                         direction=_direction, symbol=symbol,
                         regime_bars_intraday=_regime_candles if interval not in ("1D", "1W") else None,
