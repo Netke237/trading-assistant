@@ -357,12 +357,20 @@ async def test_evaluate_and_notify_dispatches_per_event():
         event_type="entry", direction="Bullish", entry=100.0, stop=95.0,
         target=110.0, rr_ratio=2.0, close=100.0, reason="x",
     )
-    with _patch("app.services.strategy_watch_evaluator.evaluate_all",
-                new_callable=AsyncMock, return_value=[ev]), \
-         _patch("app.services.strategy_watch_evaluator.notify_enabled_channels") as notify:
+    # P4b T3: evaluate_and_notify collects transitions (_collect) and commits
+    # each one's state after delivery, so it no longer goes through evaluate_all.
+    from app.services.strategy_watch_evaluator import _Transition
+    store = MagicMock()
+    with _patch("app.services.strategy_watch_evaluator._collect",
+                new_callable=AsyncMock,
+                return_value=[_Transition(event=ev, watch_id="wch_1", new_state={"phase": "armed"})]), \
+         _patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         _patch("app.services.strategy_watch_evaluator.notify_enabled_channels",
+                new_callable=AsyncMock, return_value=True) as notify:
         result = await evaluate_and_notify()
     assert result == [ev]
     notify.assert_called_once()
+    store.update_state.assert_called_once_with("wch_1", {"phase": "armed"})
 
 
 @pytest.mark.asyncio
