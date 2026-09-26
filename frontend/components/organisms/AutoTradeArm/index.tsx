@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
 import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import { regimeGateFromCard, MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
@@ -173,6 +174,12 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    *  outcome is unknown. Local, not persisted; the backend's Gmail/Telegram
    *  page is the durable channel. */
   const [fireNote, setFireNote] = useState<string | null>(null);
+  /** P2-18(b) -- whether the last Fire now was booked. `false` recolours the
+   *  order-id line as a caution; null/true keep the old line. Local, like
+   *  `fireNote`. */
+  const [lastFireBooked, setLastFireBooked] = useState<boolean | null>(null);
+  // R3-7 -- the browser's copy of the GLOBAL premium stop.
+  const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
   /** The held position a pending Arm would duplicate (yaml plan §9.10: warn,
    *  do not block). Non-null renders the confirmation dialog. */
   const [dupWarning, setDupWarning] = useState<{ contracts: number; entryPrice: number } | null>(null);
@@ -223,6 +230,13 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
   const entryPremium =
     (liveMid != null && liveMid > 0 ? liveMid : null)
     ?? card.contractDetails?.mid ?? entryLimit ?? card.entry.limit;
+
+  /* P2-18(a) (R1-18, R2-4) -- a typed dollar stop at or above today's premium
+   * is not sent as a fraction (premiumStopPctFromDollars refuses >= 1), so the
+   * arm carries only the dollar, and the booking derives it against the FILL.
+   * Say what that means before arming. */
+  const premiumStopAtOrAbovePremium = premiumStopDollar != null
+    && entryPremium > 0 && premiumStopDollar >= entryPremium;
 
   /* DIRECT-SEND-STOP-GATE-2026-09-09 -- see the `resolvedInvalidation` prop
    * doc. `??` and not `!== undefined`, so this reads the card by the same rule
@@ -424,6 +438,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     try {
       const res = await api.fireAutoTrade();
       setLastOrderId(res.order_id);
+      setLastFireBooked(res.booked === false ? false : res.booked === true ? true : null);
       statusSeq.current += 1;
       applyArmedStatus(false, null, null);
       // O4 steps 4+5: the server books the position, so its answer is read
@@ -536,6 +551,16 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         </div>
       )}
 
+      {autoMode === 'armed' && !armed && premiumStopAtOrAbovePremium && (
+        <Text size={11} tone="caution">
+          {`Your $${(premiumStopDollar as number).toFixed(2)} premium stop is at or above today's `
+            + `$${entryPremium.toFixed(2)} premium. If the fill is at or below `
+            + `$${(premiumStopDollar as number).toFixed(2)}, the booked position inherits the global stop `
+            + `(${Number((globalPremiumStopPct * 100).toFixed(2))}%); above it, your `
+            + `$${(premiumStopDollar as number).toFixed(2)} stop applies.`}
+        </Text>
+      )}
+
       {autoMode === 'armed' && !armed && gateSnapshotMissing && (
         <Text size={11} tone="caution">{MISSING_REGIME_GATE_SNAPSHOT_TITLE}</Text>
       )}
@@ -549,9 +574,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // card's AT ARM (a later edit does not reach an armed trade), and a
         // booking can be refused after the order is live.
         <Text size={11} tone="caution">
-          When an auto-trade fires, it is booked as a position with the invalidation, premium stop and exit
-          plan this card had when you armed it — later edits do not change an armed trade. If the booking
-          is refused you will see it here (Fire now) and get an alert (Gmail/Telegram, if set up).
+          When an auto-trade fires, it is booked as a position with the invalidation you typed, or the
+          plan&apos;s invalidation moved with the stock price at booking, and the premium stop and exit plan
+          this card had when you armed it — later edits do not change an armed trade. If the booking is
+          refused you will see it here (Fire now) and get an alert (Gmail/Telegram, if set up).
         </Text>
       )}
 
@@ -562,8 +588,11 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         </Text>
       )}
 
-      {lastOrderId && (
-        <Text size={12} tone="pass">Auto-trade fired — Order ID: {lastOrderId}</Text>
+      {lastOrderId && (lastFireBooked === false
+        // P2-18(b) -- never the green "fired" line for an order no position
+        // records; the fireNote below says why.
+        ? <Text size={12} tone="caution">Order sent — ID: {lastOrderId} (not booked)</Text>
+        : <Text size={12} tone="pass">Auto-trade fired — Order ID: {lastOrderId}</Text>
       )}
       {error && <Text size={12} tone="reject">{error}</Text>}
       {fireNote && <Text size={12} tone="caution">{fireNote}</Text>}

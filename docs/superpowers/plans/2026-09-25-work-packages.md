@@ -268,6 +268,8 @@ Items 5 and 6 are investigate-first: the plan states what is measured and how, v
 - StockPositionCard still holds estimate/plan only in local useState, and the row unmounts when collapsed, so a Monte Carlo pick is lost with a generic 'Method pick required' refusal. — *evidence:* StockPositionCard/index.tsx:358,364 useState(null); step-4-stocks/page.tsx:453 {open && <StockPositionCard .../>}; lib/risk.ts:329-331 gener — *entry begins:* "G4-1 frontend/components/organisms/StockPositionCard/index.tsx -- StockPositionCard has no page-level cache fo…"
 - G5-1 is open: ArmRequest has no extra='forbid', so misspelled picked_* keys are still silently dropped. G5-2 is obsolete because the tripwire test was replaced. — *evidence:* routers/auto_trade.py:27 class ArmRequest (no model_config); test_phase_g_arm_pick.py:14-22 tripwire replaced — *entry begins:* "["G5-1 backend/app/routers/auto_trade.py — ArmRequest inherits pydantic's default `extra='ignore'`, so a camel…"
 
+> Added 2026-09-26 (decision P4B-FOLLOWUPS-2026-09-26, item 7): **dispatch.py** (unowned until now, P6 takes it) -- a `null` gmail/telegram block counts as disabled and the other channel is still tried; a corrupt settings.yaml is logged at ERROR; `strategy_watch_evaluator._any_channel_enabled` treats an unreadable settings file as channels-enabled (so undelivered watch alerts retry, never commit silently). Owned for this item: backend/app/services/notifications/dispatch.py; `_any_channel_enabled` in strategy_watch_evaluator.py.
+
 ## W2-INTERVAL — One interval vocabulary (5m -> 5min)
 
 - **Wave:** 2  **Money impact:** MEDIUM — rules invisible on the chart, wrong labels  **Size:** M
@@ -281,6 +283,8 @@ Items 5 and 6 are investigate-first: the plan states what is measured and how, v
 **Backlog entries (verified still open at 8d6741d):**
 
 - Decided (use chart spellings + migrate) but not built: dialog still offers 5m/15m and no alias exists. — *evidence:* decision FOLLOWUPS-QUEUE-2026-09-25 (1); CompositeAlertDialog/index.tsx:232; market.py:247 aliases lack 5m — *entry begins:* "LOGGED BY A4f-rules (2026-09-25), KENNETH'S CALL: '5m' vs '5min'. CompositeAlertDialog offers 5m/15m/30m/1h/4h…"
+
+> Added 2026-09-26 (decision P4B-FOLLOWUPS-2026-09-26, item 2): composite rules created from CompositeAlertDialog store '5m'/'15m'/'30m' and fetch the yfinance-only series, while composite watches (P4b D5) read '5min'/'15min'/'30min'. This package makes the dialog save the chart spellings, migrates stored rules AND watches once, and then deletes P4b's read-side map (`composite_trigger_evaluator.watch_fetch_interval` / `_WATCH_TO_FETCH_INTERVAL` and its uses in strategy_watch_evaluator.py and routers/composite_watch.py).
 
 ## W2-STRUCT — OrderBlock / FVG / Divergence rules can fire
 
@@ -335,6 +339,32 @@ Items 5 and 6 are investigate-first: the plan states what is measured and how, v
 - Doc A (regime sizing) shipped and Doc B (atomic YAML writes) built, but Doc C (config validation/surface) never started. — *evidence:* phase YAML-CONFIG-INTEGRITY not_started (probe: config_health absent in main.py); app/services/atomic_yaml.py exists — *entry begins:* "AGREED BY KENNETH 2026-09-17 AND THIS IS THE ORDER OF WORK: build DOCUMENT A (docs/superpowers/plans/2026-09-1…"
 - No RecursionError catch for deep alias chains, and a non-mapping YAML root still crashes on cfg.get with AttributeError. — *evidence:* backend/app/services/config_loader.py:108-165 (unbounded recursion), :168-215 (no RecursionError handler), :198 cfg.get with no dict check — *entry begins:* "LOGGED BY Q3B ROUND 3 (2026-09-24), below the gate (fails loudly, no wrong number, needs a hand-crafted file):…"
 - Atomic writes shipped separately (ATOMIC-CONFIG-WRITES, not audit-clean). Document C's validation/config_health is unbuilt, and its section 9 decisions still await Kenneth. — *evidence:* config_health absent from backend/app; services/atomic_yaml.py:77 exists; phase status not_started; s9.1/9.2b/9.3b/9.4/9.5/9.6/9.8/9.9 open — *entry begins:* "{"id": "YAML-CONFIG-INTEGRITY", "name": "YAML config integrity -- an edit either takes effect, or fails loudly…"
+
+## P4b follow-ups -- three claimable tasks (decision P4B-FOLLOWUPS-2026-09-26)
+
+Kenneth accepted all proposals for P4b's open topics on 2026-09-26. Each task below is a PROJECT_STATE.json phase (status not_started, defect-marker probe). Claim it by its id; same loop and rules as every package above. Items 2 (-> W2-INTERVAL) and 7 (-> P6) are folded into those packages; item 6 (early-close sessions) is closed as accepted.
+
+### COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (item 1)
+
+- **Money impact:** MEDIUM -- the dialog offers confirmations that can never fire. **Size:** M.
+- **Goal:** composite `momentum` confirmations (`volume_spike`, `rsi_cross`, `macd_cross`; schemas/composite_trigger.py) match on BOTH paths: the rule path computes them for composite rules on completed bars (today only standard-rule indicators are computed, chart_alerts.py `compute_indicators_for_conditions`), and the watch path supplies them to `evaluate_scheduled` (today `{}`). Same bars, same answer on both paths (parity test).
+- **First step, before any code:** the plan proposes what each kind means (e.g. is `rsi_cross >= 60` "RSI crossed above 60 on the closed bar" or "RSI value >= 60"? what does `min_confidence` mean for `volume_spike` / `macd_cross`?) and asks Kenneth. Record the answer as a decision.
+- **Owned files:** composite_trigger_evaluator.py (momentum paths); strategy_watch_evaluator.py (`_eval_composite_watch` inputs); chart_alerts.py composite block only; indicator_compute.py (add what is needed; standard-rule behaviour unchanged); their tests.
+- **Do not touch:** the rest of chart_alerts.py (P4a); CompositeAlertDialog (W2-INTERVAL) unless the decided meaning needs a label change -- then ask.
+
+### WATCH-RULE-BAR-PARITY (items 4, 5, 8)
+
+- **Money impact:** MEDIUM -- the same symbol/interval can alert differently on a watch and a rule. **Size:** M.
+- **Goal:** (4) one HMM_intraday history window used by the watch, the rule and `/regime-snapshot`: 180 days on 1h/4h, 55 days below 1h (the rule's model candles trimmed to that window; chart display history unchanged). (5) the rule path trims `get_bars` rows with `completed_daily_rows(..., datetime.now(MARKET_TZ))`, not the chart-cache fetch time. (8) 1W composite rules read completed daily `get_bars` rows for rsi/bb/HMM_daily like 1W watches (reverses the A4g choice for 1W -- confirmed by Kenneth); the plan decides 1D the same way or justifies keeping chart candles, and parity tests pin both.
+- **Owned files:** chart_alerts.py composite block only; composite_trigger_evaluator.py (`intraday_history_days`); routers/composite_watch.py `/regime-snapshot` fetch; their tests.
+- **Do not touch:** chart_cache.py display windows; the rest of chart_alerts.py (P4a).
+
+### WATCH-UNDELIVERED-EVENT-RESEND (item 3)
+
+- **Money impact:** HIGH for exits -- a stop-hit alert can be lost and the watch stays armed. **Size:** S-M.
+- **Goal:** an undelivered watch event (strategy entry/exit/reversal, composite entry) is persisted with the watch (e.g. `last_state.pending_event`) and re-sent on the next run BEFORE re-evaluation, even if the condition no longer holds, labelled "Delayed: <event> at <price> on <time>"; its state transition commits once the resend is delivered. No channel enabled = unchanged D3 behaviour (commit). A new transition while an event is pending: the plan decides (likely send both, oldest first) and asks Kenneth if unclear.
+- **Owned files:** strategy_watch_evaluator.py (T3 delivery path, `_format_event`); strategy_watch_store.py (state shape, if needed); their tests.
+- **Do not touch:** dispatch.py (P6, item 7).
 
 ## MEAS — Market-data measurement (runs on Kenneth's machine)
 

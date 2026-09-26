@@ -125,7 +125,9 @@ async def test_each_bound_refuses_at_arm_and_only_the_bound(client, name, bad):
     body[name] = bad
     resp = await client.post("/auto-trade/arm", json=body)
     assert resp.status_code == 422, resp.text
-    assert name in resp.text
+    # The refused FIELD, not a substring anywhere in the body ("stop" is also
+    # inside "structural_stop" and "premium_stop_dollar").
+    assert [e["loc"][-1] for e in resp.json()["detail"]] == [name]
     assert auto_trader.get_state().strategy is None, "a 422 must arm nothing"
 
     # The same body without the field arms, so the 422 was the bound and not

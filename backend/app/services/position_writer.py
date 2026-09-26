@@ -19,7 +19,21 @@ THE THREE INJECTED CALLABLES exist for that same proof. The router suite patches
 `load_exit_plan_cfg`; a plain move would bind this module's own imports, the
 patches would miss, and the unedited suite would reach the network. The router
 passes its module-level names, looked up at call time, so its patches still
-land; any other caller gets the real functions by default.
+land. Any other caller that passes nothing gets THIS module's globals, also
+looked up at call time (P1a): the defaults are None and resolve inside the
+call, so a patch on `app.services.position_writer.fetch_contract_quote_async`
+(or `fetch_price_async` / `load_exit_plan_cfg`) lands too. A default bound at
+import time would have kept the real function and silently reached the network.
+
+CREATE IS SERIALISED AGAINST CREATE (P1a). `_booking_lock()` is held from the
+in-lock duplicate re-check through the portfolio SELECT, the risk check, the
+commit, the IntegrityError handling and `refresh`, so two concurrent creates
+judge the exposure caps in turn and the second sees the first's committed row.
+The live fetches (up to 8s) stay OUTSIDE the lock. SCOPE: one process -- the
+backend runs a single uvicorn process, and the auto-trader singleton already
+assumes one -- and `create_position` against `create_position` only (card
+POST, basket POST, auto-trade booking). The drawer PATCH qty race and the
+/fire pre-broker snapshot race are NOT covered by it.
 
 THIS FUNCTION COMMITS. It calls `db.commit()`, `db.rollback()` on a unique
 collision, and `db.refresh()`, so its caller must own the transaction or expect
@@ -28,7 +42,9 @@ it to end -- on the scan path that matters (spec section 5.3).
 IT RAISES HTTPException exactly as the router did (409 duplicate, 422 wrong-side
 stop, 422 exposure, 500 rec_id collision), because those raises are part of the
 moved body. A non-HTTP caller must catch them. With `enforce_pre_trade_gates=False`
-the two 422s become warnings; the 409 and the 500 still raise.
+the two 422s become warnings; the 409 and the 500 still raise. The exposure 422
+now also covers an OPTION quantity above `max_contracts_per_trade`, which the
+risk check refuses instead of clamping (Q18, P1-CLAMP-AT-SOURCE-2026-09-25).
 
 `enforce_pre_trade_gates` (O4 step 2, spec section 5.2). Default True, which is
 the card path, byte-for-byte. False is for a caller whose order is ALREADY AT
@@ -42,7 +58,12 @@ exactly three things:
     than the one booked (see `WriteOutcome`);
   - the exposure RESIZE: `qty` is `body.qty`, the quantity that was ordered.
     The books match the broker, not the gate;
-  - the wrong-side-stop 422: warned instead of raised.
+  - the wrong-side-stop 422: warned instead of raised, and reported in
+    `WriteOutcome.wrong_side_stop` so the caller can page it (Q12). With gates
+    off only, when the live underlying fetch returned nothing, the direction is
+    checked against `scanStockPrice` instead (when > 0). GAPS, stated: no live
+    price and no scanStockPrice means no check; and only USER-SET stops are
+    checked at all -- a plan-derived stop is re-anchored, not direction-checked.
 It does NOT turn off the duplicate-contract 409, the live refetch, the
 re-anchor, the entryPrice replacement, the premium-stop derivation or
 `seed_tp_from_pick`. The risk check itself still RUNS in both modes -- it is
@@ -58,6 +79,7 @@ with no stop there has no invalidation and no STOP_REACHED alert at all.
 from __future__ import annotations
 
 import asyncio
+import weakref
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional
@@ -74,8 +96,11 @@ from app.schemas import PortfolioPositionCreate
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
 from app.services.portfolio_performance import _contract_multiplier
-from app.services import portfolio_risk
-from app.services.portfolio_risk import check_position_risk, PortfolioPosition as RiskPosition
+from app.services.portfolio_risk import (
+    EXCEEDS_MAX_CONTRACTS,
+    check_position_risk,
+    PortfolioPosition as RiskPosition,
+)
 
 import logging as _logging
 _log = _logging.getLogger(__name__)
@@ -87,6 +112,23 @@ def _floor_stop(value: Optional[float]) -> Optional[float]:
     return value if value is not None and value > 0 else None
 
 
+# One lock per running event loop. A module-level `asyncio.Lock()` would bind to
+# the first loop that awaits it, and the test suite runs many loops -- a lock
+# bound to a dead loop raises. Weak keys, so a finished loop takes its lock with it.
+_BOOKING_LOCKS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _booking_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _BOOKING_LOCKS.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _BOOKING_LOCKS[loop] = lock
+    return lock
+
+
 @dataclass
 class WriteOutcome:
     """What `create_position` did, beyond the row itself (spec section 5.1).
@@ -96,49 +138,59 @@ class WriteOutcome:
     the check approved; a refusal can carry one too. With gates off the row's
     `qty` is `body.qty` whatever this says.
 
-    `over_exposure` means the booked position went past a cap. With gates
-    enforced it is always False: an unapproved position raises 422 before any
-    row exists, and an approved resize is applied. With gates off it is True
-    when ANY of these holds, because each means the booked quantity was never
-    judged within the caps:
+    `over_exposure` means the booked position went past a cap. It is
+    computed only with gates off; with gates on it is False by construction --
+    an unapproved result (which now includes a qty above the per-trade cap)
+    raises 422, and an approved soft resize is applied to qty. With gates off
+    it is True when ANY of these holds, because each means the booked quantity
+    was never judged within the caps:
       - `not risk.approved` -- read from `approved`, never inferred from
         `adjusted_size`: the two are set independently (max-concurrent refuses
-        with no resize);
+        with no resize). An option qty above `max_contracts_per_trade` lands
+        here: the check refuses it with `exceeds_max_contracts_per_trade`;
       - `risk.adjusted_size is not None` -- an APPROVED soft resize. The check
         judged the total-exposure cap on the RESIZED capital, so booking the
         ordered quantity is over the single-position cap and can be over the
         total cap with `approved` still True;
-      - `body.qty > max_contracts_per_trade` -- the check clamps the quantity
-        to that cap before judging anything, so it never saw what was booked.
+      - `risk.judged_size != body.qty` -- the check judged a different quantity
+        from the one booked (today only the deferred |STOCK share clamp).
     This is wider than spec section 5.1's comment "risk.approved was False";
     it is that comment's own gloss, "the booking went past a cap", made true
     (O4 step 2, round 1).
+
+    `wrong_side_stop` (Q12) is the wrong-side detail when a user-set stop on
+    the wrong side of the underlying was booked with gates off (None
+    otherwise). With gates on that stop raises 422 instead. The caller must
+    put it in front of a human; a log line alone hides it.
     """
     position:      PortfolioPositionModel
     adjusted_size: Optional[int]
     over_exposure: bool
+    wrong_side_stop: Optional[str] = None
 
 
 async def create_position(
     body: PortfolioPositionCreate,
     db: AsyncSession,
     *,
-    quote_fetcher: Callable[..., Awaitable[object]] = fetch_contract_quote_async,
-    price_fetcher: Callable[..., Awaitable[object]] = fetch_price_async,
-    exit_plan_cfg_loader: Callable[[], dict] = load_exit_plan_cfg,
+    quote_fetcher: Optional[Callable[..., Awaitable[object]]] = None,
+    price_fetcher: Optional[Callable[..., Awaitable[object]]] = None,
+    exit_plan_cfg_loader: Optional[Callable[[], dict]] = None,
     enforce_pre_trade_gates: bool = True,
     stop_required: bool = False,
 ) -> WriteOutcome:
     """Persist a position from a create request. See the module docstring."""
+    # Call-time defaults (P1a): the module globals, looked up NOW, so a patch
+    # on this module's names lands. See the module docstring.
+    if quote_fetcher is None:
+        quote_fetcher = fetch_contract_quote_async
+    if price_fetcher is None:
+        price_fetcher = fetch_price_async
+    if exit_plan_cfg_loader is None:
+        exit_plan_cfg_loader = load_exit_plan_cfg
+
     # Duplicate contract check → 409
-    existing = await db.execute(
-        select(PortfolioPositionModel).where(PortfolioPositionModel.contract == body.contract)
-    )
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Position with contract '{body.contract}' already exists.",
-        )
+    await _raise_if_contract_exists(db, body.contract)
 
     # Two live fetches at save time, run CONCURRENTLY (one save = one round-trip
     # latency, not two sequential ones):
@@ -196,7 +248,7 @@ async def create_position(
     except Exception:
         live_quote, live_price = None, None
         _log.warning(
-            "add_position: live save-time refetch failed for %s; keeping frontend values",
+            "create_position: live save-time refetch failed for %s; keeping frontend values",
             body.contract, exc_info=True,
         )
 
@@ -222,7 +274,7 @@ async def create_position(
                 # stop) -- log it so a user-specified stop being dropped is
                 # traceable instead of just vanishing.
                 _log.warning(
-                    "add_position: live-price reanchor pushed stop non-positive for %s "
+                    "create_position: live-price reanchor pushed stop non-positive for %s "
                     "(requested %.2f, reanchored %.2f, delta %.2f) -- stored as unset",
                     body.contract, body.stop, adjusted_stop, delta,
                 )
@@ -230,7 +282,7 @@ async def create_position(
             adjusted_structural_stop = round(adjusted_structural_stop + delta, 2)
             if body.structuralStop and body.structuralStop > 0 and adjusted_structural_stop <= 0:
                 _log.warning(
-                    "add_position: live-price reanchor pushed structuralStop non-positive for %s "
+                    "create_position: live-price reanchor pushed structuralStop non-positive for %s "
                     "(requested %.2f, reanchored %.2f, delta %.2f) -- stored as unset",
                     body.contract, body.structuralStop, adjusted_structural_stop, delta,
                 )
@@ -274,15 +326,28 @@ async def create_position(
     # should be is the caller's judgement, and only the caller knows what it is
     # trading around. Only user-set stops are checked, because a plan-derived
     # one is re-anchored above and is the plan's business, not this guard's.
-    if body.stopIsUserSet and adjusted_stop is not None and live_price and live_price > 0:
+    #
+    # Q12 (P1a), GATES OFF ONLY: when the live fetch returned nothing, check
+    # against the scan-time underlying price instead, so a wrong-side stop on
+    # an order already at the broker is still reported. With gates on nothing
+    # changes: the card path refuses only against a live price.
+    wrong_side_stop: Optional[str] = None
+    check_price, check_suffix = None, ""
+    if live_price and live_price > 0:
+        check_price = live_price
+    elif not enforce_pre_trade_gates and body.scanStockPrice and body.scanStockPrice > 0:
+        check_price = body.scanStockPrice
+        check_suffix = f" (against the scan price {body.scanStockPrice:.2f}; the live fetch failed)"
+    if body.stopIsUserSet and adjusted_stop is not None and check_price is not None:
         wrong_side = (
-            adjusted_stop >= live_price if body.direction == "Bullish"
-            else adjusted_stop <= live_price
+            adjusted_stop >= check_price if body.direction == "Bullish"
+            else adjusted_stop <= check_price
         )
         if wrong_side:
             wrong_side_detail = (
                 f"A {body.direction.lower()} stop of {adjusted_stop:.2f} is on the wrong "
-                f"side of the underlying at {live_price:.2f}; it would fire immediately."
+                f"side of the underlying at {check_price:.2f}; it would fire immediately."
+                f"{check_suffix}"
             )
             if enforce_pre_trade_gates:
                 raise HTTPException(
@@ -296,6 +361,7 @@ async def create_position(
                 "create_position: %s -- booking %s anyway, pre-trade gates are off",
                 wrong_side_detail, body.contract,
             )
+            wrong_side_stop = wrong_side_detail
 
     live_entry = (live_quote or {}).get("price") if isinstance(live_quote, dict) else None
     # ROUND FIRST, THEN TEST. `float(live_entry) > 0` on the raw quote let a
@@ -313,254 +379,295 @@ async def create_position(
         # %s (not %.2f) — entryPrice is a required float, but keep %s here
         # since this just logs whatever the frontend sent verbatim.
         _log.info(
-            "add_position: no live quote for %s; storing frontend entryPrice %s",
+            "create_position: no live quote for %s; storing frontend entryPrice %s",
             body.contract, body.entryPrice,
         )
 
-    # Fetch existing portfolio for risk check
-    result = await db.execute(select(PortfolioPositionModel))
-    db_positions = result.scalars().all()
-    portfolio = [
-        RiskPosition(
-            symbol=p.symbol,
-            contract_id=p.contract,
-            contracts=p.qty,
-            entry_premium=p.entry_price,
-            current_price=p.entry_price,
-            capital_at_risk=p.entry_price * p.qty * _contract_multiplier(p.contract),
-        )
-        for p in db_positions
-    ]
+    # CREATE vs CREATE (P1a): everything from here to `refresh` runs under the
+    # booking lock -- see the module docstring. The duplicate check is re-run
+    # FIRST under the lock, so a same-contract race answers 409, never 422.
+    async with _booking_lock():
+        await _raise_if_contract_exists(db, body.contract)
 
-    risk = check_position_risk(
-        symbol=body.symbol,
-        contract_id=body.contract,
-        proposed_contracts=body.qty,
-        entry_premium=entry_price,
-        current_price=entry_price,
-        portfolio=portfolio,
-        portfolio_value=body.portfolioValue,
-    )
-    if not risk.approved and enforce_pre_trade_gates:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=" ".join(risk.reasons),
-        )
-    # O4 step 2 (spec section 5.2). With gates on this stays False: a refusal
-    # raised above, and an approved resize is applied to `qty` below. With
-    # gates off `qty` is `body.qty`, and every way the check can have judged a
-    # quantity other than that one is a breach -- see `WriteOutcome`.
-    over_exposure = False
-    if not enforce_pre_trade_gates:
-        breaches = []
-        if not risk.approved:
-            breaches.append(" ".join(risk.reasons))
-        if risk.adjusted_size is not None:
-            breaches.append(f"the check would have resized to {risk.adjusted_size}")
-        max_per_trade = portfolio_risk._load_config()["sizing"]["max_contracts_per_trade"]
-        if body.qty > max_per_trade:
-            breaches.append(f"qty exceeds max_contracts_per_trade {max_per_trade}")
-        over_exposure = bool(breaches)
-        if over_exposure:
-            # This log is not the record of the breach -- `over_exposure` is,
-            # and the caller must surface it.
-            _log.warning(
-                "create_position: booking %s OVER the exposure gate (%s) at the ordered "
-                "qty %s -- pre-trade gates are off",
-                body.contract, "; ".join(breaches), body.qty,
+        # Fetch existing portfolio for risk check
+        result = await db.execute(select(PortfolioPositionModel))
+        db_positions = result.scalars().all()
+        portfolio = [
+            RiskPosition(
+                symbol=p.symbol,
+                contract_id=p.contract,
+                contracts=p.qty,
+                entry_premium=p.entry_price,
+                current_price=p.entry_price,
+                capital_at_risk=p.entry_price * p.qty * _contract_multiplier(p.contract),
             )
+            for p in db_positions
+        ]
 
-    # Piece 4 — derive the premium-stop FRACTION here, not on the client.
-    # `entry_price` above may have just been replaced with the live quote, and
-    # the alert compares `opt_price <= entry_price * (1 - pct)` against exactly
-    # that stored value. A fraction computed against the card's mid would mean
-    # a $3.12 stop on a $5.20 premium quietly becoming a $2.40 stop after a
-    # fill at $4.00. Deriving here is the only place both numbers are known.
-    #
-    # The dollar amount wins when both are sent: it is what the user typed on
-    # the card, while a client-sent fraction is at best a stale estimate of it.
-    resolved_premium_stop_pct = body.premiumStopPct
-    if body.premiumStopDollar is not None and entry_price <= 0:
-        # DEFENCE IN DEPTH, not a live path. `entryPrice` is gt=0 on the create
-        # schema and the live re-anchor above now rounds BEFORE testing, so
-        # `entry_price` is positive by here on every route currently known. The
-        # branch stays because it is the last thing between a future
-        # non-positive entry and a division, and because falling back silently
-        # is the failure this endpoint is least able to explain: the user typed
-        # a dollar stop and the position would inherit the global instead, a
-        # different threshold from the one they asked for with nothing on
-        # screen to say so. Do not read its presence as evidence that a
-        # zero-entry path exists.
-        _log.warning(
-            "add_position: cannot derive a premium stop from premiumStopDollar %.2f for %s "
-            "-- the persisted entry price is %.2f; this position inherits the global",
-            body.premiumStopDollar, body.contract, entry_price,
+        risk = check_position_risk(
+            symbol=body.symbol,
+            contract_id=body.contract,
+            proposed_contracts=body.qty,
+            entry_premium=entry_price,
+            current_price=entry_price,
+            portfolio=portfolio,
+            portfolio_value=body.portfolioValue,
         )
-    if body.premiumStopDollar is not None and entry_price > 0:
-        ratio = body.premiumStopDollar / entry_price
-        if 0 < ratio < 1:
-            resolved_premium_stop_pct = ratio
-        else:
-            # A stop at or above the whole premium is a total loss, which is
-            # unreachable-by-definition rather than a stop, and there is no
-            # representation for it: the column's contract is (0, 1).
-            # `entry_price` may have just been replaced with a live quote a few
-            # lines up, so this stays reachable through the FILL: typing $4.50
-            # and filling at $4.20. (Typing $6.00 on a $5.20 mid no longer
-            # reaches it -- round 6 bounded the card's field to 10-99% of the
-            # mid -- but the card is not this endpoint's only client, and the
-            # fill path does not go through that field at all.)
-            #
-            # LOGGED, like the sibling stop paths above (which warn when a
-            # live-price re-anchor pushes a structural stop non-positive).
-            # Falling back silently is worse here than there: the position
-            # inherits the 60% global, which is a TIGHTER stop than the one
-            # asked for, so PREMIUM_STOP fires earlier than intended and
-            # nothing on screen says why.
-            _log.warning(
-                "add_position: premiumStopDollar %.2f is %.0f%% of the persisted entry %.2f for %s "
-                "-- at or beyond a total loss, so no per-position stop is stored; "
-                "this position inherits the global",
-                body.premiumStopDollar, ratio * 100, entry_price, body.contract,
-            )
-            # Falls back to whatever fraction the client sent, not to None: the
-            # dollar amount winning is about PREFERENCE between two ways of
-            # saying the same thing, and an unusable dollar is no reason to
-            # discard a fraction that is independently valid.
-            resolved_premium_stop_pct = body.premiumStopPct
-
-    # Phase G (piece 5) — seed the post-trade alert basis from the trader's
-    # pre-trade pick, so TP_HIT starts life agreeing with the card the trade was
-    # sent from instead of defaulting to the ladder.
-    #
-    # THE PAIR IS RETURNED AS ONE VALUE and assigned as one, because a non-ladder
-    # `active_tp_method` with a NULL `resolved_tp_price` is a state the drawer's
-    # own writer cannot produce and is gate-level when it happens: the drawer
-    # renders that method as selected with a null price while TP_HIT silently
-    # fires on the ladder (spec §2.7). Do not split this into two assignments.
-    #
-    # `body.exitPlan` is passed UNCHANGED and the picked price is stored
-    # UNCHANGED — neither is re-anchored by the live-price `delta` above, and
-    # that is deliberate rather than an oversight. The exit plan is persisted
-    # verbatim and never recomputed, so the picked row and the plan row it came
-    # from must stay in the SAME frame: shifting one and not the other would put
-    # a price on screen in the drawer that differs from the one that actually
-    # fires, which is the very disagreement §2.7 forbids. The ladder `targets`
-    # ARE re-anchored, and are allowed to differ — they are a different method.
-    #
-    # A body with no pick (a pre-G client, or the exempt after-scan
-    # auto-executor) yields ('ladder', None), which is today's default and
-    # exactly what those positions got before G.
-    #
-    # The config read is GUARDED, and for the reason §4.4 gives about this
-    # endpoint specifically: every send path places the broker order FIRST and
-    # persists second, so an exception raised here does not prevent a trade —
-    # it loses the RECORD of a trade that already happened, leaving a real
-    # filled position with no stop and no TP alert. A malformed or unreadable
-    # risk_rules.yaml must therefore degrade the arithmetic mapping (to the
-    # ladder, which is where the alert fired before G) and never 500 the create.
-    try:
-        _rr_ratios = exit_plan_cfg_loader().get("target", {}).get("rr_ratios")
-    except Exception:
-        _rr_ratios = None
-        _log.warning(
-            "add_position: could not load exit_plan.target.rr_ratios for %s; "
-            "an arithmetic method pick degrades to the ladder for this position",
-            body.contract, exc_info=True,
-        )
-    active_tp_method, resolved_tp_price = seed_tp_from_pick(
-        body.pickedMethod,
-        body.pickedRowStockPrice,
-        exit_plan=body.exitPlan,
-        # From config, never a literal. `rr_ratios` is configurable, so a 1.5R
-        # first row must map to `exit_plan_2r` and a 2.0R pick must fall through
-        # when 2.0 is not configured.
-        rr_ratios=_rr_ratios,
-    )
-
-    position = PortfolioPositionModel(
-        rec_id=body.recId,
-        symbol=body.symbol,
-        contract=body.contract,
-        direction=body.direction,
-        entry_price=entry_price,
-        # Gates off: the quantity that was ORDERED, never the gate's resize
-        # (spec section 5.2) -- booking 3 when the broker traded 5 puts every
-        # downstream P&L and exposure number on a quantity that never happened.
-        qty=(risk.adjusted_size or body.qty) if enforce_pre_trade_gates else body.qty,
-        entry_date=body.entryDate,
-        stop=_floor_stop(adjusted_stop),
-        structural_stop=_floor_stop(adjusted_structural_stop),
-        exit_plan=body.exitPlan,
-        targets=adjusted_targets,
-        dte_total=body.dteTotal,
-        entry_stock_price=entry_stock_price,
-        # Feature 5 — pre-trade max-loss override, set on the Arithmetic
-        # Profit Target card and carried through here at creation time.
-        max_loss_override=body.maxLossOverride,
-        # Piece 4 — per-position premium stop, set at creation so a trade sent
-        # from the card carries the stop the user chose on it. None persists as
-        # NULL, meaning "inherit the global".
-        premium_stop_pct=resolved_premium_stop_pct,
-        # Phase G — the RECORD of the human decision, stored as sent. NULL is a
-        # real state ("nobody picked"), and `picked_method` is what the
-        # portfolio displays; `active_tp_method` below is the alert driver
-        # seeded from it, and the two are allowed to disagree (a barrier-race
-        # pick records 'barrier_race' here and seeds 'ladder' there).
-        picked_method=body.pickedMethod,
-        picked_row_stock_price=body.pickedRowStockPrice,
-        # RECORD ONLY. This is a PREMIUM and must never reach
-        # `resolved_tp_price`, which is compared against the stock quote.
-        picked_row_option_price=body.pickedRowOptionPrice,
-        picked_stop_basis=body.pickedStopBasis,
-        picked_at=body.pickedAt,
-        active_tp_method=active_tp_method,
-        resolved_tp_price=resolved_tp_price,
-        # Stamped ONLY when a price was actually seeded. The drawer's writer
-        # stamps it on both branches, but doing that here would give every
-        # pre-G and every no-pick create a timestamp where it gets NULL today,
-        # for a field that exists to show "as of" staleness on a resolved price
-        # that in those cases does not exist. No pick -> byte-identical to
-        # today's behaviour; a seeded pick -> carries its vintage.
-        resolved_tp_updated_at=(
-            datetime.now(timezone.utc) if resolved_tp_price is not None else None
-        ),
-    )
-    db.add(position)
-    try:
-        await db.commit()
-    except IntegrityError:
-        # Concurrent duplicate: two POSTs for the same contract (e.g. addPosition's
-        # own POST racing syncFromBackend's pending-retry) both pass the SELECT
-        # existence pre-check above, then the loser trips a unique constraint.
-        # `contract` and `rec_id` are BOTH unique — re-check which one actually
-        # collided before answering, so a rec_id collision (this row genuinely
-        # never persisted) is never reported the same way as a contract collision
-        # (the row IS safely saved under the other request). The client treats
-        # any 409 here as "already saved" and promotes its local row to synced —
-        # doing that for an unpersisted rec_id collision would silently lose data.
-        await db.rollback()
-        contract_exists = (await db.execute(
-            select(PortfolioPositionModel.id).where(
-                PortfolioPositionModel.contract == body.contract
-            )
-        )).first()
-        if contract_exists is not None:
+        if not risk.approved and enforce_pre_trade_gates:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Position with contract '{body.contract}' already exists.",
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=_refusal_detail(risk, body.qty),
             )
-        # The contract collision above didn't happen — this was a rec_id
-        # collision instead, and the position was NOT persisted. A 500 correctly
-        # tells the client this is a hard failure to retry, not a safe duplicate.
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not save position: duplicate rec_id '{body.recId}'.",
-        )
-    await db.refresh(position)
+        # O4 step 2 (spec section 5.2). With gates on this stays False: a refusal
+        # raised above, and an approved resize is applied to `qty` below. With
+        # gates off `qty` is `body.qty`, and every way the check can have judged a
+        # quantity other than that one is a breach -- see `WriteOutcome`.
+        over_exposure = False
+        if not enforce_pre_trade_gates:
+            # The resize is listed ONCE: as its own sentence below, never also as
+            # the `size_reduced_to_fit_exposure_limit` code. No config read here --
+            # every number comes from the check's own result.
+            breaches = [r for r in risk.reasons if r != "size_reduced_to_fit_exposure_limit"]
+            if risk.adjusted_size is not None:
+                breaches.append(f"the check would have resized to {risk.adjusted_size}")
+            if risk.judged_size is not None and risk.judged_size != body.qty:
+                breaches.append(f"the check judged {risk.judged_size}, not the ordered {body.qty}")
+            over_exposure = (not risk.approved) or bool(breaches)
+            if over_exposure:
+                # This log is not the record of the breach -- `over_exposure` is,
+                # and the caller must surface it.
+                _log.warning(
+                    "create_position: booking %s OVER the exposure gate (%s) at the ordered "
+                    "qty %s -- pre-trade gates are off",
+                    body.contract, "; ".join(breaches), body.qty,
+                )
 
-    return WriteOutcome(
-        position=position,
-        adjusted_size=risk.adjusted_size,
-        over_exposure=over_exposure,
+        # Piece 4 — derive the premium-stop FRACTION here, not on the client.
+        # `entry_price` above may have just been replaced with the live quote, and
+        # the alert compares `opt_price <= entry_price * (1 - pct)` against exactly
+        # that stored value. A fraction computed against the card's mid would mean
+        # a $3.12 stop on a $5.20 premium quietly becoming a $2.40 stop after a
+        # fill at $4.00. Deriving here is the only place both numbers are known.
+        #
+        # The dollar amount wins when both are sent: it is what the user typed on
+        # the card, while a client-sent fraction is at best a stale estimate of it.
+        resolved_premium_stop_pct = body.premiumStopPct
+        if body.premiumStopDollar is not None and entry_price <= 0:
+            # DEFENCE IN DEPTH, not a live path. `entryPrice` is gt=0 on the create
+            # schema and the live re-anchor above now rounds BEFORE testing, so
+            # `entry_price` is positive by here on every route currently known. The
+            # branch stays because it is the last thing between a future
+            # non-positive entry and a division, and because falling back silently
+            # is the failure this endpoint is least able to explain: the user typed
+            # a dollar stop and the position would inherit the global instead, a
+            # different threshold from the one they asked for with nothing on
+            # screen to say so. Do not read its presence as evidence that a
+            # zero-entry path exists.
+            _log.warning(
+                "create_position: cannot derive a premium stop from premiumStopDollar %.2f for %s "
+                "-- the persisted entry price is %.2f; this position inherits the global",
+                body.premiumStopDollar, body.contract, entry_price,
+            )
+        if body.premiumStopDollar is not None and entry_price > 0:
+            ratio = body.premiumStopDollar / entry_price
+            if 0 < ratio < 1:
+                resolved_premium_stop_pct = ratio
+            else:
+                # A stop at or above the whole premium is a total loss, which is
+                # unreachable-by-definition rather than a stop, and there is no
+                # representation for it: the column's contract is (0, 1).
+                # `entry_price` may have just been replaced with a live quote a few
+                # lines up, so this stays reachable through the FILL: typing $4.50
+                # and filling at $4.20. (Typing $6.00 on a $5.20 mid no longer
+                # reaches it -- round 6 bounded the card's field to 10-99% of the
+                # mid -- but the card is not this endpoint's only client, and the
+                # fill path does not go through that field at all.)
+                #
+                # LOGGED, like the sibling stop paths above (which warn when a
+                # live-price re-anchor pushes a structural stop non-positive).
+                # Falling back silently is worse here than there: the position
+                # inherits the 60% global, which is a TIGHTER stop than the one
+                # asked for, so PREMIUM_STOP fires earlier than intended and
+                # nothing on screen says why.
+                _log.warning(
+                    "create_position: premiumStopDollar %.2f is %.0f%% of the persisted entry %.2f for %s "
+                    "-- at or beyond a total loss, so no per-position stop is stored; "
+                    "this position inherits the global",
+                    body.premiumStopDollar, ratio * 100, entry_price, body.contract,
+                )
+                # Falls back to whatever fraction the client sent, not to None: the
+                # dollar amount winning is about PREFERENCE between two ways of
+                # saying the same thing, and an unusable dollar is no reason to
+                # discard a fraction that is independently valid.
+                resolved_premium_stop_pct = body.premiumStopPct
+
+        # Phase G (piece 5) — seed the post-trade alert basis from the trader's
+        # pre-trade pick, so TP_HIT starts life agreeing with the card the trade was
+        # sent from instead of defaulting to the ladder.
+        #
+        # THE PAIR IS RETURNED AS ONE VALUE and assigned as one, because a non-ladder
+        # `active_tp_method` with a NULL `resolved_tp_price` is a state the drawer's
+        # own writer cannot produce and is gate-level when it happens: the drawer
+        # renders that method as selected with a null price while TP_HIT silently
+        # fires on the ladder (spec §2.7). Do not split this into two assignments.
+        #
+        # `body.exitPlan` is passed UNCHANGED and the picked price is stored
+        # UNCHANGED — neither is re-anchored by the live-price `delta` above, and
+        # that is deliberate rather than an oversight. The exit plan is persisted
+        # verbatim and never recomputed, so the picked row and the plan row it came
+        # from must stay in the SAME frame: shifting one and not the other would put
+        # a price on screen in the drawer that differs from the one that actually
+        # fires, which is the very disagreement §2.7 forbids. The ladder `targets`
+        # ARE re-anchored, and are allowed to differ — they are a different method.
+        #
+        # A body with no pick (a pre-G client, or the exempt after-scan
+        # auto-executor) yields ('ladder', None), which is today's default and
+        # exactly what those positions got before G.
+        #
+        # The config read is GUARDED, and for the reason §4.4 gives about this
+        # endpoint specifically: every send path places the broker order FIRST and
+        # persists second, so an exception raised here does not prevent a trade —
+        # it loses the RECORD of a trade that already happened, leaving a real
+        # filled position with no stop and no TP alert. A malformed or unreadable
+        # risk_rules.yaml must therefore degrade the arithmetic mapping (to the
+        # ladder, which is where the alert fired before G) and never 500 the create.
+        try:
+            _rr_ratios = exit_plan_cfg_loader().get("target", {}).get("rr_ratios")
+        except Exception:
+            _rr_ratios = None
+            _log.warning(
+                "create_position: could not load exit_plan.target.rr_ratios for %s; "
+                "an arithmetic method pick degrades to the ladder for this position",
+                body.contract, exc_info=True,
+            )
+        active_tp_method, resolved_tp_price = seed_tp_from_pick(
+            body.pickedMethod,
+            body.pickedRowStockPrice,
+            exit_plan=body.exitPlan,
+            # From config, never a literal. `rr_ratios` is configurable, so a 1.5R
+            # first row must map to `exit_plan_2r` and a 2.0R pick must fall through
+            # when 2.0 is not configured.
+            rr_ratios=_rr_ratios,
+        )
+
+        position = PortfolioPositionModel(
+            rec_id=body.recId,
+            symbol=body.symbol,
+            contract=body.contract,
+            direction=body.direction,
+            entry_price=entry_price,
+            # Gates off: the quantity that was ORDERED, never the gate's resize
+            # (spec section 5.2) -- booking 3 when the broker traded 5 puts every
+            # downstream P&L and exposure number on a quantity that never happened.
+            qty=(risk.adjusted_size or body.qty) if enforce_pre_trade_gates else body.qty,
+            entry_date=body.entryDate,
+            stop=_floor_stop(adjusted_stop),
+            structural_stop=_floor_stop(adjusted_structural_stop),
+            exit_plan=body.exitPlan,
+            targets=adjusted_targets,
+            dte_total=body.dteTotal,
+            entry_stock_price=entry_stock_price,
+            # Feature 5 — pre-trade max-loss override, set on the Arithmetic
+            # Profit Target card and carried through here at creation time.
+            max_loss_override=body.maxLossOverride,
+            # Piece 4 — per-position premium stop, set at creation so a trade sent
+            # from the card carries the stop the user chose on it. None persists as
+            # NULL, meaning "inherit the global".
+            premium_stop_pct=resolved_premium_stop_pct,
+            # Phase G — the RECORD of the human decision, stored as sent. NULL is a
+            # real state ("nobody picked"), and `picked_method` is what the
+            # portfolio displays; `active_tp_method` below is the alert driver
+            # seeded from it, and the two are allowed to disagree (a barrier-race
+            # pick records 'barrier_race' here and seeds 'ladder' there).
+            picked_method=body.pickedMethod,
+            picked_row_stock_price=body.pickedRowStockPrice,
+            # RECORD ONLY. This is a PREMIUM and must never reach
+            # `resolved_tp_price`, which is compared against the stock quote.
+            picked_row_option_price=body.pickedRowOptionPrice,
+            picked_stop_basis=body.pickedStopBasis,
+            picked_at=body.pickedAt,
+            active_tp_method=active_tp_method,
+            resolved_tp_price=resolved_tp_price,
+            # Stamped ONLY when a price was actually seeded. The drawer's writer
+            # stamps it on both branches, but doing that here would give every
+            # pre-G and every no-pick create a timestamp where it gets NULL today,
+            # for a field that exists to show "as of" staleness on a resolved price
+            # that in those cases does not exist. No pick -> byte-identical to
+            # today's behaviour; a seeded pick -> carries its vintage.
+            resolved_tp_updated_at=(
+                datetime.now(timezone.utc) if resolved_tp_price is not None else None
+            ),
+        )
+        db.add(position)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Concurrent duplicate: two POSTs for the same contract (e.g. addPosition's
+            # own POST racing syncFromBackend's pending-retry) both pass the SELECT
+            # existence pre-check above, then the loser trips a unique constraint.
+            # `contract` and `rec_id` are BOTH unique — re-check which one actually
+            # collided before answering, so a rec_id collision (this row genuinely
+            # never persisted) is never reported the same way as a contract collision
+            # (the row IS safely saved under the other request). The client treats
+            # any 409 here as "already saved" and promotes its local row to synced —
+            # doing that for an unpersisted rec_id collision would silently lose data.
+            await db.rollback()
+            contract_exists = (await db.execute(
+                select(PortfolioPositionModel.id).where(
+                    PortfolioPositionModel.contract == body.contract
+                )
+            )).first()
+            if contract_exists is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Position with contract '{body.contract}' already exists.",
+                )
+            # The contract collision above didn't happen — this was a rec_id
+            # collision instead, and the position was NOT persisted. A 500 correctly
+            # tells the client this is a hard failure to retry, not a safe duplicate.
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not save position: duplicate rec_id '{body.recId}'.",
+            )
+        await db.refresh(position)
+
+        return WriteOutcome(
+            position=position,
+            adjusted_size=risk.adjusted_size,
+            over_exposure=over_exposure,
+            wrong_side_stop=wrong_side_stop,
+        )
+
+
+async def _raise_if_contract_exists(db: AsyncSession, contract: str) -> None:
+    """The duplicate-contract 409. Run once before the live fetches and once
+    again under the booking lock (P1a)."""
+    existing = await db.execute(
+        select(PortfolioPositionModel).where(PortfolioPositionModel.contract == contract)
     )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Position with contract '{contract}' already exists.",
+        )
+
+
+def _refusal_detail(risk, qty: int) -> str:
+    """The gates-on 422 detail. A qty above the per-trade cap (Q18) gets a
+    sentence the user can act on, followed by any other hard reason's code;
+    every other refusal keeps the raw codes, which the Portfolio page and
+    SendToBrokerDialog map."""
+    if EXCEEDS_MAX_CONTRACTS not in risk.reasons:
+        return " ".join(risk.reasons)
+    cap = risk.max_contracts
+    detail = (
+        f"{qty} contracts is above the {cap}-contract limit per trade "
+        f"(max_contracts_per_trade). Lower Contracts to {cap} or fewer and send again."
+    )
+    others = [
+        r for r in risk.reasons
+        if r not in (EXCEEDS_MAX_CONTRACTS, "size_reduced_to_fit_exposure_limit")
+    ]
+    if others:
+        detail += " Also: " + " ".join(others)
+    return detail

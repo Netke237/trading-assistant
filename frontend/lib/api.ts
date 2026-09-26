@@ -379,6 +379,9 @@ export interface LastStockScanRequest {
 export const api = {
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
+  /** Hard DELETE of one tracked row by rec_id (204; 404 when absent). A plain
+   *  `del`, so a non-2xx throws; only Step 7 reads a `→ 404` as already gone. */
+  deletePortfolioPosition: (recId: string) => del(`/api/portfolio/${encodeURIComponent(recId)}`),
   getAlerts:     () => get<AlertItem[]>('/api/alerts'),
   getRegime: (
     horizon?: string,

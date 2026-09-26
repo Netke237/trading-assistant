@@ -255,7 +255,7 @@ async def _run(monkeypatch, interval, candles, as_of):
     monkeypatch.setattr(regime_hmm, "compute_intraday_hmm",
                         lambda b: seen["hmm"].append(list(b)) or None)
 
-    def _strat(names, d, i, direction="Bullish"):
+    def _strat(names, d, i, direction="Bullish", **kw):
         seen["strat_daily"].append(list(d))
         seen["strat_intraday"].append(list(i))
         return 0

@@ -1013,7 +1013,7 @@ def mean_reversion_vwap_signal(
     Bullish: price deviated vwap_dev_pct% below VWAP AND last bar reversed reversal_pct% back toward VWAP.
     Bearish: mirror logic above VWAP.
     """
-    if interval not in ("1m", "5m", "15m", "30m", "1h"):
+    if interval not in ("1m", "5m", "15m", "30m", "1h", "4h"):  # "4h": decision P4B D2
         return None
     if len(bars) < 30:
         return None

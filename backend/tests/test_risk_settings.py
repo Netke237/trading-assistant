@@ -196,3 +196,46 @@ async def test_post_risk_settings_rejects_out_of_order_targets():
             'premiumStopPct': 0.60, 'targetT1Pct': 0.50, 'targetT2Pct': 0.35, 'targetT3Pct': 0.20,
         })
     assert resp.status_code == 422
+
+
+# ── P2-02 (decision Q7): the global premium stop is capped at 99% ─────────────
+
+def _tmp_risk(tmp_path, monkeypatch, pct: float):
+    import app.routers.risk_settings as rs
+    fake_yaml = tmp_path / 'risk_rules.yaml'
+    fake_yaml.write_text(
+        'portfolio:\n  max_concurrent_positions: 10\n'
+        f'reward_risk:\n  premium_stop_pct: {pct}\n'
+    )
+    monkeypatch.setattr(rs, '_RISK_PATH', fake_yaml)
+    return fake_yaml
+
+
+@pytest.mark.asyncio
+async def test_post_premium_stop_1_0_is_refused(tmp_path, monkeypatch):
+    fake_yaml = _tmp_risk(tmp_path, monkeypatch, 0.60)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
+        resp = await ac.post('/settings/risk', json={'premiumStopPct': 1.0})
+    assert resp.status_code == 422
+    import yaml
+    assert yaml.safe_load(fake_yaml.read_text())['reward_risk']['premium_stop_pct'] == 0.60
+
+
+@pytest.mark.asyncio
+async def test_post_premium_stop_0_99_is_accepted(tmp_path, monkeypatch):
+    _tmp_risk(tmp_path, monkeypatch, 0.60)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
+        resp = await ac.post('/settings/risk', json={'premiumStopPct': 0.99})
+    assert resp.status_code == 200
+    assert resp.json()['premiumStopPct'] == 0.99
+
+
+@pytest.mark.asyncio
+async def test_get_returns_a_stored_legacy_1_0_unclamped(tmp_path, monkeypatch):
+    # R1-3 / R3-5: GET does not clamp, so the Settings page can see and warn
+    # about a stored 100% that neither alert engine fires on.
+    _tmp_risk(tmp_path, monkeypatch, 1.0)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
+        resp = await ac.get('/settings/risk')
+    assert resp.status_code == 200
+    assert resp.json()['premiumStopPct'] == 1.0

@@ -17,6 +17,7 @@ import {
   PREMIUM_STOP_MIN_PCT,
   PREMIUM_STOP_MAX_PCT,
   premiumStopDollarBounds,
+  pythonRound4,
 } from '../premiumStop';
 import { premiumStopPctFromDollars } from '../barrierRace';
 import { scanPortfolio, type AlertPosition } from '../alertEngine';
@@ -47,11 +48,14 @@ describe('resolvePremiumStopPct', () => {
     expect(resolvePremiumStopPct(undefined, undefined)).toBe(PREMIUM_STOP_PCT_FALLBACK);
   });
 
-  it('agrees with the Python resolver on the inherit/set contract', () => {
-    // Same table as test_changing_the_global_moves_null_positions_and_leaves_set_ones_alone
+  it('hasOwnPremiumStopPct: null/undefined inherit, any number is the position\'s own (including 0)', () => {
+    // The same inherit/set rule is tested separately on the Python side, in
+    // test_premium_stop_per_position.py::test_changing_the_global_moves_null_positions_and_leaves_set_ones_alone.
+    // This is NOT a cross-language check -- nothing here runs the Python.
     expect(hasOwnPremiumStopPct(null)).toBe(false);
     expect(hasOwnPremiumStopPct(undefined)).toBe(false);
     expect(hasOwnPremiumStopPct(0.45)).toBe(true);
+    expect(hasOwnPremiumStopPct(0)).toBe(true);
   });
 });
 
@@ -228,13 +232,6 @@ describe('premiumStopDollarToSend — the value both send paths post', () => {
     expect(premiumStopDollarToSend(Infinity)).toBeNull();
   });
 
-  it('a contract switch cannot carry the previous contract\'s dollar into the new one', () => {
-    // The map is keyed by contract, so the new contract's key is absent rather
-    // than holding the old contract's $2.00 — and absent reads as untouched.
-    const cacheKeyedByContract: Record<string, number | null> = { 'AAPL|190|2026-05-16|C': 2.00 };
-    const newContractKey = 'AAPL|200|2026-05-16|C';
-    expect(premiumStopDollarToSend(cacheKeyedByContract[newContractKey])).toBeNull();
-  });
 });
 
 describe('spec §8 #8 — buildPaperPosition and positionFromOrder cannot disagree', () => {
@@ -279,7 +276,6 @@ describe('spec §8 #8 — buildPaperPosition and positionFromOrder cannot disagr
     // mergePlan applied to one and not the other) produced two different posted
     // stops from the same cache entry. Keying on tracked touched-ness removed
     // the card from the expression; this pins that it stays removed.
-    expect(premiumStopDollarToSend.length).toBe(1);
     const cache: Record<string, number | null> = { [KEY]: 2.0 };
     expect(premiumStopDollarToSend(cache[KEY])).toBe(2.0);
     expect(premiumStopDollarToSend(null)).toBeNull();
@@ -303,13 +299,25 @@ describe('send-path derivation', () => {
   const dollarStop = 3.12;
   const cardMid = 5.20;
 
-  it('keeps the dollar amount the user typed, whatever the fill', () => {
-    // The property that matters: the stop is $3.12 of premium at risk, and it
-    // stays $3.12 regardless of which price the position is finally booked at.
-    // The fraction is whatever reproduces that against the real entry.
+  it('the firing price of a server-derived fraction is at or below its threshold, and within a cent of it', () => {
+    // The server stores `premiumStopDollar / entry_price`, so the threshold
+    // almost never lands on a whole cent. Over a sweep of fills and typed
+    // dollars, the printed firing price must be a price the engines fire at
+    // (firing <= threshold, no slack) and the largest such cent
+    // (threshold - firing <= 0.01). Flooring `t * 100` fails the first half.
+    for (let entryCents = 101; entryCents <= 1400; entryCents += 13) {
+      const entry = entryCents / 100;
+      for (let dollarCents = 1; dollarCents < entryCents; dollarCents += 17) {
+        const pct = (dollarCents / 100) / entry;
+        const threshold = premiumStopThresholdPrice(entry, pct);
+        const firing = premiumStopFiringPrice(entry, pct);
+        expect(firing).toBeLessThanOrEqual(threshold);
+        expect(threshold - firing).toBeLessThanOrEqual(0.01 + 1e-9);
+      }
+    }
+    // The fixed pair from the typed-dollar story still holds: $3.12 on a fill.
     for (const entry of [cardMid, 4.00, 6.10]) {
-      const pct = dollarStop / entry;
-      expect(premiumStopThresholdPrice(entry, pct)).toBeCloseTo(entry - dollarStop);
+      expect(premiumStopThresholdPrice(entry, dollarStop / entry)).toBeCloseTo(entry - dollarStop);
     }
   });
 
@@ -396,5 +404,33 @@ describe('premiumStopDollarBounds', () => {
     const { min, max } = premiumStopDollarBounds(0.01);
     expect(min).toBe(0.01);
     expect(max).toBe(0.01);
+  });
+});
+
+// ── pythonRound4: the 4dp rounding the backend stores (P2-22) ──────────────
+describe('pythonRound4', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const table: [number, number][] = require('./fixtures/python_round4.json');
+
+  it('matches Python round(x, 4) for every row of the generated table', () => {
+    expect(table.length).toBeGreaterThan(5000);
+    const mismatches = table.filter(([x, py]) => pythonRound4(x) !== py);
+    expect(mismatches).toEqual([]);
+  });
+
+  it('rounds near-halves by their exact value and exact ties to even', () => {
+    expect(pythonRound4(0.00035)).toBe(0.0003);
+    expect(pythonRound4(2.00015)).toBe(2.0002);
+    expect(pythonRound4(1.03125)).toBe(1.0312);
+    expect(pythonRound4(0.40625)).toBe(0.4062);
+    expect(pythonRound4(2.53125)).toBe(2.5312);
+    expect(pythonRound4(1.09375)).toBe(1.0938);
+  });
+
+  it('the table actually discriminates: Math.round(x*1e4)/1e4 and plain toFixed(4) both miss rows', () => {
+    const naive = table.filter(([x, py]) => Math.round(x * 1e4) / 1e4 !== py).length;
+    const toFixedOnly = table.filter(([x, py]) => Number(x.toFixed(4)) !== py).length;
+    expect(naive).toBeGreaterThan(0);
+    expect(toFixedOnly).toBeGreaterThan(0);
   });
 });

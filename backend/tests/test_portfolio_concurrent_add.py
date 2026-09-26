@@ -89,26 +89,45 @@ async def test_contract_collision_race_returns_409_already_exists(client, engine
     }
 
     real_execute = AsyncSession.execute
-    call_count = {"n": 0}
+    real_rollback = AsyncSession.rollback
+    seen = {"rolled_back": False, "emptied": 0}
 
-    async def _bypass_first_precheck(self, *args, **kwargs):
-        call_count["n"] += 1
-        if call_count["n"] == 1:
-            # Simulate the race: at the moment of THIS request's pre-check, the
+    # P1a: the writer now checks for the contract TWICE before the commit (once
+    # before the live fetches, once again under the booking lock), so emptying
+    # only the first SELECT by call count would let the in-lock re-check answer
+    # the 409 itself and this test would never reach the IntegrityError branch
+    # it exists to pin. So EVERY contract-existence SELECT is emptied -- matched
+    # on the statement, not the call count -- until the IntegrityError branch's
+    # rollback; after it, the branch's own re-check must see the row.
+    async def _bypass_contract_prechecks(self, statement, *args, **kwargs):
+        sql = str(statement)
+        if (not seen["rolled_back"] and "WHERE" in sql
+                and "portfolio_positions.contract =" in sql):
+            # Simulate the race: at the moment of THIS request's pre-checks, the
             # concurrent winner hadn't committed yet.
+            seen["emptied"] += 1
             class _Empty:
                 def scalar_one_or_none(self):
                     return None
+                def first(self):
+                    return None
             return _Empty()
-        return await real_execute(self, *args, **kwargs)
+        return await real_execute(self, statement, *args, **kwargs)
+
+    async def _rollback_spy(self, *args, **kwargs):
+        seen["rolled_back"] = True
+        return await real_rollback(self, *args, **kwargs)
 
     with (
         patch("app.routers.portfolio.fetch_contract_quote_async",
               new=AsyncMock(return_value=None)),
-        patch.object(AsyncSession, "execute", new=_bypass_first_precheck),
+        patch.object(AsyncSession, "execute", new=_bypass_contract_prechecks),
+        patch.object(AsyncSession, "rollback", new=_rollback_spy),
     ):
         r = await client.post("/api/portfolio", json=body)
 
+    assert seen["emptied"] == 2, "both pre-commit contract checks were bypassed"
+    assert seen["rolled_back"], "the 409 came from the IntegrityError branch"
     assert r.status_code == 409, r.text
     assert "already exists" in r.text
 
