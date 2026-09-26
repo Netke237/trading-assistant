@@ -1281,8 +1281,25 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                   // all three sites take the entry whenever the response
                   // reports one (withServerEntry, which also resets the mark,
                   // P2-09), and keep the row's existing entry when it does not.
+                  // Stock code round 1: since STOCK-SENDS-SAVE-FIRST-THEN-REAL-
+                  // SHARES a stock save can be RESIZED, and this retry is a save
+                  // path too. Book the size the server did, scale the rungs by
+                  // the writer's rule (or a drawer rung edit PATCHes rungs that
+                  // sell more than held), and say so, as _flushOne does.
+                  const retryAdjusted = outcome.kind === 'ok' ? outcome.adjustedQty : undefined;
+                  if (retryAdjusted != null) {
+                    set({
+                      lastSyncError: {
+                        symbol: p.symbol, contract: p.contract, at: Date.now(),
+                        detail: `Size reduced to ${retryAdjusted} to fit your exposure limit.`,
+                      },
+                    });
+                  }
                   keep.push(withServerEntry({
                     ...rest,
+                    ...(retryAdjusted != null
+                      ? { contracts: retryAdjusted, targets: scaleRungShares(rest.targets, retryAdjusted) ?? rest.targets }
+                      : {}),
                     premiumStopPct:
                       outcome.kind === 'ok' ? outcome.premiumStopPct ?? null : p.premiumStopPct,
                     syncStatus: 'synced',

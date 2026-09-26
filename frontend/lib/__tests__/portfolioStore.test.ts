@@ -268,6 +268,43 @@ describe('portfolioStore', () => {
     expect(recIds).toEqual(['REC-BACKEND', 'REC-INFLIGHT']);
   });
 
+  it('a pending stock row the retry books SMALLER takes the booked size and scaled rungs (stock code round 1)', async () => {
+    // STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: a stock save can be resized, and
+    // this 30s retry is a save path. The writer books 100 and stores 33/33/34,
+    // so the local row must too -- a drawer rung edit before the next GET would
+    // otherwise PATCH rungs selling 200 of 100 held.
+    global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        return { ok: true, status: 201, json: async () => ({ ...body, adjustedQty: 100 }) };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    }) as unknown as typeof fetch;
+
+    act(() => {
+      usePortfolioStore.setState({
+        positions: [makePosition({
+          symbol: 'AAA', contract: 'AAA|STOCK', recId: 'REC-STOCK', contracts: 200,
+          targets: [
+            { stockPrice: 55, contractsToSell: 66 }, { stockPrice: 56, contractsToSell: 66 }, { stockPrice: 57, contractsToSell: 68 },
+          ],
+          syncStatus: 'pending', syncPendingSince: Date.now(),
+        })],
+        lastSyncError: null,
+      });
+    });
+
+    await act(async () => {
+      await usePortfolioStore.getState().syncFromBackend();
+    });
+
+    const row = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-STOCK')!;
+    expect(row.syncStatus).toBe('synced');
+    expect(row.contracts).toBe(100);
+    expect(row.targets.map((t) => t.contractsToSell)).toEqual([33, 33, 34]);
+    expect(usePortfolioStore.getState().lastSyncError?.detail).toMatch(/Size reduced to 100/);
+  });
+
   it('collapses same-contract duplicates already in localStorage on rehydrate', async () => {
     localStorage.setItem(
       'bamendjou-portfolio-v1',
