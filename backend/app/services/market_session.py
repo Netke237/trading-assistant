@@ -102,9 +102,12 @@ def todays_bar_is_unclosed(now: datetime | None = None) -> bool:
     (RegimeDataUnavailableError, P3b; it used to abstain and fire ungated). So
     a naive argument would be a loud failure in a test run and a refused fire
     in production -- fail-closed, but every armed trade refused. It is
-    unreachable today -- the one production call site (the end-trim) passes no
-    argument at all and takes the `None` branch -- and it is pinned unreachable
-    by the call-site test, which drives the real helper through that call site.
+    unreachable today: the auto-trader's end-trim passes no argument and takes
+    the `None` branch, and the A4g chart path (``completed_session_bars`` ->
+    ``last_session_close`` / ``week_is_unclosed``) passes an AWARE instant
+    (``datetime.fromtimestamp(as_of, MARKET_TZ)`` in chart_alerts.py). Both are
+    pinned: the end-trim by the call-site test, the chart path by the A4g
+    tests.
     A caller that ever wants to pass an instant must pass an aware one; the
     contract is enforced where enforcing it is cheap.
 

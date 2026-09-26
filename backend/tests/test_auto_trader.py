@@ -4046,8 +4046,11 @@ def test_guard_i_is_not_consulted_when_the_feed_has_no_todays_bar(mocker):
 def _clock_at(instant):
     """A `datetime` stand-in whose `.now(tz)` is a fixed REAL instant.
 
-    Patched over `auto_trader.datetime` so what the test controls is the
-    PRODUCTION call site's own clock read, not a stubbed return value. It
+    Installed over `market_session.datetime` (where the moved helper reads the
+    wall clock since A4g) AND `auto_trader.datetime` (P4a B4: so no clock read
+    left in the auto-trader's own path escapes the frozen instant), so what the
+    test controls is the PRODUCTION call sites' own clock reads, not a stubbed
+    return value. It
     subclasses `datetime` so `isinstance` and every other classmethod keep
     working, and it honours `tz` so a mutant reading the clock in some other
     zone gets that zone's real answer rather than a rigged one.
@@ -4104,6 +4107,7 @@ def test_guard_i_call_site_consults_the_real_clock(mocker, ny_now,
     # A4g: the helper moved to market_session (moved, not copied) and reads the
     # wall clock there, so the frozen clock is installed where the helper runs.
     mocker.patch.object(ms, "datetime", _clock_at(ny_now))
+    mocker.patch.object(at, "datetime", _clock_at(ny_now))
     mocker.patch("app.data.market.fetch_candles",
                  return_value=_dated_bars(400, end=today))
 

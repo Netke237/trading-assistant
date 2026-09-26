@@ -85,7 +85,22 @@ def is_cooldown_passed(rule: AlertRuleInput, now: datetime) -> bool:
         last_ms = datetime.fromisoformat(rule.last_triggered_at.replace('Z', '+00:00'))
     except (ValueError, AttributeError):
         return True
-    return (now - last_ms).total_seconds() >= rule.cooldown_minutes * 60
+    # P4a R1-2: every caller passes a NAIVE server-local `now` (datetime.now()),
+    # and the server writes its own stamps naive-local too -- but the browser's
+    # stamp (PATCH /alerts/rules/{id}, toISOString()) is AWARE ("...Z").
+    # Subtracting the two raised TypeError, which nothing on the path caught,
+    # so every later trigger aborted the whole symbol/interval batch. An aware
+    # stamp is converted to naive SERVER-local, the zone `now` is in; a naive
+    # one is left as it is. A mismatch that still raises fails open, as an
+    # unparsable stamp already does.
+    if last_ms.tzinfo is not None:
+        last_ms = last_ms.astimezone().replace(tzinfo=None)
+    if now.tzinfo is not None:
+        now = now.astimezone().replace(tzinfo=None)
+    try:
+        return (now - last_ms).total_seconds() >= rule.cooldown_minutes * 60
+    except TypeError:
+        return True
 
 
 def _is_expired(rule: AlertRuleInput, now: datetime) -> bool:
@@ -225,11 +240,17 @@ def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
             if idx <= 0:
                 return False, trigger_values
             prev_value = series[idx - 1]['value']
+            # P4a B3: the first bar after warm-up has a None previous value;
+            # comparing it raised TypeError and skipped the whole batch.
+            if prev_value is None:
+                return False, trigger_values
             return current_value > condition.value and prev_value <= condition.value, trigger_values
         if condition.operator == 'crosses_below':
             if idx <= 0:
                 return False, trigger_values
             prev_value = series[idx - 1]['value']
+            if prev_value is None:
+                return False, trigger_values
             return current_value < condition.value and prev_value >= condition.value, trigger_values
         return _compare(condition.operator, current_value, condition.value), trigger_values
 
