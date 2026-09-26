@@ -23,6 +23,14 @@
       "expires_at": "2026-09-26T23:42:25Z",
       "note": "P4a chart alert rules: built + suites green; merging main, then code rounds",
       "task": "P4A-CHART-ALERT-RULES"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/clever-planck-rpz8yh",
+      "claimed_at": "2026-09-26T20:47:59Z",
+      "expires_at": "2026-09-26T23:47:59Z",
+      "note": "P3c plan audit rounds (r19+), plan only",
+      "task": "P3C-SCAN-SIZING-LEFTOVERS"
     }
   ]
 }
