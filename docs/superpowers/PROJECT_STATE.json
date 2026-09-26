@@ -992,7 +992,7 @@
     {
       "id": "TESTS-PIN-STRATEGY-WATCHES-PATH",
       "name": "backend/tests/conftest.py pins BAMENDJOU_STRATEGY_WATCHES_PATH to a tmp path, so no test run builds the module-level store on (and can rewrite) the tracked config/strategy_watches.yaml",
-      "status": "not_started",
+      "status": "shipped_unaudited",
       "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [],
@@ -1002,7 +1002,7 @@
         "pattern": "BAMENDJOU_STRATEGY_WATCHES_PATH",
         "note": "ABSENT until the pin exists."
       },
-      "note": "QUEUED 2026-09-25 from decision FOLLOWUPS-QUEUE-2026-09-25 (Kenneth); verified still open against main 8d6741d by the backlog audit. Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean."
+      "note": "QUEUED 2026-09-25 from decision FOLLOWUPS-QUEUE-2026-09-25 (Kenneth); verified still open against main 8d6741d by the backlog audit. Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean. BUILT by P4b T1 (branch claude/cool-heisenberg-6lsa3a): conftest pins BAMENDJOU_STRATEGY_WATCHES_PATH to the per-run tmp dir; tests/test_p4b_conftest_pins.py (mutation: remove the pin -> fails). Unaudited until P4b's code round."
     },
     {
       "id": "HMM-INTRADAY-4H-HISTORY",
