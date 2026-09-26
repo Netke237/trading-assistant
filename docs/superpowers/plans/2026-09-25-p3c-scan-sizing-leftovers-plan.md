@@ -12,7 +12,7 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20. r20 → round 20: 4 LOW, addressed in r21. r21 → round 21: 4 findings (1 HIGH, 1 MED, 2 LOW), addressed in r22.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20. r20 → round 20: 4 LOW, addressed in r21. r21 → round 21: 4 findings (1 HIGH, 1 MED, 2 LOW), addressed in r22. r22 → round 22: 7 findings (2 MED, 5 LOW), addressed in r23.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -330,21 +330,32 @@ both scans included.
 `backend/scripts/p3c_data_checks.py`, read-only. URL resolution comes FIRST, before any other `app.*` import
 (r21-1, HIGH: `app/database.py:8` calls `create_async_engine(settings.DATABASE_URL)` at import, and
 `app.routers.stock_scan` imports it at :25, so a `postgres://` / `postgresql://` / `mysql://` URL crashed the
-script at import, before its own routing ran). The script, run from `backend/` like the app, reads the URL with
-`app.config.Settings().DATABASE_URL` — `app.config` imports only pydantic_settings and builds no engine; a fresh
-`Settings()`, not the `@lru_cache`d `get_settings`, so it sees `DATABASE_URL` from the environment AND
-`backend/.env`, as the app does (reading `os.environ` alone would miss a `.env` URL and silently open `dev.db`).
+script at import, before its own routing ran). The script is cwd-independent (r22-1, r22-2): at module level
+`BACKEND = Path(__file__).resolve().parent.parent` and `sys.path.insert(0, str(BACKEND))` (as
+`scripts/pin_fixtures.py:16` does — run by path, `sys.path[0]` is `backend/scripts`, so `import app` fails
+without it). It reads the URL with `app.config.Settings(_env_file=BACKEND / ".env").DATABASE_URL` —
+`app.config` imports only pydantic_settings and builds no engine; a fresh `Settings`, not the `@lru_cache`d
+`get_settings`, and with an explicit `_env_file` because `Settings`' own `env_file=".env"` is cwd-relative — so it
+sees `DATABASE_URL` from the environment AND `backend/.env` from any cwd (reading `os.environ` alone would miss a
+`.env` URL and silently open `dev.db`).
 It validates and, for postgres, rewrites that URL (rules below), exits non-zero naming the scheme for any other,
-then sets `os.environ["DATABASE_URL"]` to the rewritten URL (env beats `.env` in pydantic-settings) and only then
+then sets `os.environ["DATABASE_URL"]` to the rewritten URL (env beats `.env` in pydantic-settings; tests that
+call `main()` in-process set the variable with `monkeypatch.setenv` so teardown restores it — r22-4) and only then
 imports `app.routers.stock_scan` (for `_merge_strategy_params`, `_SIGNAL_KWARGS`, `_HISTORY_YEARS`) and
 `app.services.strategy_engine`, lazily inside `main()`. Routing (r19-L8: a sqlite `DATABASE_URL` or none → stdlib
-sqlite3 with a `mode=ro` URI, like `iv_basis_analysis.py`; a `postgresql+asyncpg://`, `postgresql://` or `postgres://` URL →
+sqlite3 with a `mode=ro` URI — the path is `sqlalchemy.engine.make_url(url).database` (r22-7: not iv_basis's
+split on `///`, which keeps a `?query` and yields `file:…?x=y?mode=ro`), resolved against `BACKEND` when relative
+(as `iv_basis_analysis.py:146-147` does), opened as `f"file:{path.as_posix()}?mode=ro"`; a missing file → exit
+non-zero naming the resolved path; a `postgresql+asyncpg://`, `postgresql://` or `postgres://` URL →
 the last two rewritten to `postgresql+asyncpg://` first (r20-L2: only the asyncpg form builds an engine here —
 psycopg2 is not installed; the app's own URL is already that form, app/database.py:8), then
 `create_async_engine(url)` (asyncpg, in requirements.txt; imported at the script's module level — r20-L4), all reads
-on one connection in ONE transaction whose first statement is `SET TRANSACTION READ ONLY`, never committed
+on ONE connection (`engine.connect()` once, never `engine.begin()`, which commits on exit) in ONE transaction whose first statement is `SET TRANSACTION READ ONLY`, never committed
 (r21-3: the SET covers one transaction only, so a commit would let later reads run read-write; verified on
-Postgres 16 + asyncpg — under autobegin the SET is inside the transaction and `SHOW transaction_read_only` is on); any other scheme → exit non-zero naming it. Not
+Postgres 16 + asyncpg — under autobegin the SET is inside the transaction and `SHOW transaction_read_only` is on); the lazy `app.*` imports sit OUTSIDE the connect `try`, which catches only
+`OSError` and `sqlalchemy.exc.DBAPIError` and prints
+`cannot connect to {make_url(url).render_as_string(hide_password=True)}: {type(e).__name__}: {e}` to stderr, exit
+non-zero (r22-3: so an import error can never be reported as a connect error); any other scheme → exit non-zero naming it. Not
 `iv_basis_analysis.py`'s approach (r20-L1): for non-sqlite it falls back to the HTTP API (:251-254), and no API
 serves raw `ohlcv_daily` rows (`adj_factor`, raw OHLC), so that fallback is useless here).
 Everywhere in this script a NULL `adj_factor` is read as 1.0, as `_read_bars` does (historical_store.py:154-155 —
@@ -374,7 +385,11 @@ stored before a split may keep a stale `adj_factor`. Per symbol the script print
 - `NO SPLIT IN WINDOW` / `CLEAN`;
 - `NO ROWS` (r21-2) — zero `ohlcv_daily` rows for the symbol in the window: printed as
   `NO ROWS in ohlcv_daily for {sym} over {start}..{end}` INSTEAD of the per-symbol stats, ATR and target blocks
-  below (which are undefined on no bars), and the script moves to the next symbol. A fifth verdict.
+  below (which are undefined on no bars), and the script moves to the next symbol. A fifth verdict;
+- `TOO FEW ROWS` (r22-6) — 1 to 14 rows (ATR(14) at the last bar needs 15; the largest one-day move needs 2):
+  printed as `TOO FEW ROWS ({n}) in ohlcv_daily for {sym} over {start}..{end}` with the row count and date span
+  only, INSTEAD of the stats, ATR and target blocks. A sixth verdict. (15-59 rows reach the target pass, which
+  already skips slices under 60 bars and so reports no setup bar.)
 
 plus, over EVERY bar of the window (r2-H2 — the last bar is post-split and clean, so it cannot show this):
 the maximum ratio of ATR(14) as `_read_bars` returns the series to ATR(14) on a series rebuilt from raw OHLC with
@@ -669,16 +684,16 @@ per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `dir
 ## Verification
 
 `cd backend && pytest` (all), `cd frontend && npm run typecheck && npm run test`, `python3 scripts/state.py`.
-The script: `python3 backend/scripts/p3c_data_checks.py --help`; sections chosen by `--sections db,sources`
+The script: `cd backend && python3 scripts/p3c_data_checks.py --help` (r22-2), and the same `--help` from the repo root to show cwd-independence; sections chosen by `--sections db,sources`
 (default both; `sources` is the only one that touches the network — r2-L10). `tests/test_p3c_data_checks.py` runs
 `--sections db` only, against a fixture sqlite `ohlcv_daily` with three symbols — Alpaca-shaped 3:1 split
 (`split_factor` 1.0, correct `adj_factor`, raw OHLC) → `MIXED ADJUSTMENT`; stale pre-split `adj_factor` 1.0 (one of its rows NULL, r19-L7) →
 `STALE ADJ_FACTOR`; no split → `NO SPLIT IN WINDOW` — and asserts the DB file's bytes and mtime are unchanged
 after the run, and that no socket was opened (socket.socket patched to raise). Verdict strings are exactly the
-five in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN`, `NO ROWS` (r2-L9, r21-2). The same module holds
+six in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN`, `NO ROWS`, `TOO FEW ROWS` (r2-L9, r21-2, r22-6); the fixture adds a symbol with 5 rows → `TOO FEW ROWS (5)`. The same module holds
 §5's two target pins (r14-4): the >350-bar all-positive fixture (patched = unpatched on setup bars, stop and
 target; a setup bar at index ≥ 350 asserted to exist) and the MIXED-shaped empty-ladder fixture (unpatched None,
-patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8, r21-1): each URL case runs the script in a SUBPROCESS (`sys.executable scripts/p3c_data_checks.py --sections db`, cwd `backend/`, `DATABASE_URL` set in its env) — an in-process importlib load imports `app.database` once under the test's sqlite URL and so can never see the import-time crash r21-1 found. `mysql://u@h/db` → exit non-zero, stderr names the scheme, no `Traceback`. For `postgresql+asyncpg://`, `postgresql://` and `postgres://` (host `127.0.0.1`, an unused port): the script gets PAST import and fails only at connect — exit non-zero with a connection error naming the rewritten `postgresql+asyncpg://` URL (password masked), no `ModuleNotFoundError` / `NoSuchModuleError` — which proves the rewrite ran before `app.database` built its engine. The read-only contract is pinned in-process: the importlib-loaded module (like tests/test_iv_basis_analysis.py) with its module-level `create_async_engine` patched ON THE LOADED MODULE to a recording fake whose queries return no rows; assert `SET TRANSACTION READ ONLY` is the first statement of the one transaction, no `commit()` was called, no write statement ran, and each symbol printed `NO ROWS in ohlcv_daily for …`.
+patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8, r21-1): each URL case runs the script in a SUBPROCESS (`sys.executable <abs path>/scripts/p3c_data_checks.py --sections db`, run once with cwd `backend/` and once with cwd the repo root, `DATABASE_URL` set in its env) — an in-process importlib load imports `app.database` once under the test's sqlite URL and so can never see the import-time crash r21-1 found, and pytest's own `sys.path` hides r22-1's missing path insert. `mysql://u@h/db` → exit non-zero, stderr names the scheme, no `Traceback`. For `postgresql+asyncpg://`, `postgresql://` and `postgres://`, each as `…://u:s3cret@127.0.0.1:1/db` (r22-3): exit non-zero; stderr contains `cannot connect to postgresql+asyncpg://`, `***` and `ConnectionRefusedError` (or `Connect call failed`), and NOT `s3cret`, `Traceback`, `ModuleNotFoundError` or `NoSuchModuleError` — which proves the rewrite ran before `app.database` built its engine. A sqlite URL naming a missing file → exit non-zero naming the resolved path. The read-only contract is pinned in-process (`DATABASE_URL` via `monkeypatch.setenv` — r22-4): the importlib-loaded module (like tests/test_iv_basis_analysis.py) with its module-level `create_async_engine` patched ON THE LOADED MODULE to a hand-written recording fake — NOT a `MagicMock` (r22-5: it would silently accept `engine.begin()` / `conn.begin()`, which commit without a recorded `commit()`) — exposing only `engine.connect()` and, on the connection, `execute` / `close` (anything else, `begin` included, raises `AttributeError`), whose queries return no rows; assert `connect()` was called exactly once and the recorded sequence is exactly `connect, SET TRANSACTION READ ONLY, SELECT…, close` (no `commit`, no other statement), and each symbol printed `NO ROWS in ohlcv_daily for …`.
 
 ## Open questions for Kenneth
 
@@ -975,4 +990,21 @@ with every §5 `adj_factor` product.
 | 2 | MED | Verification asserted a "no-rows line" §5 never defined; zero rows made §5's stats undefined | `NO ROWS …` defined as a fifth verdict that skips the stats; "four" → "five" |
 | 3 | LOW | `SET TRANSACTION READ ONLY` is per transaction, not per connection | one never-committed transaction; test asserts no `commit()` |
 | 4 | LOW | round-20 nit wrongly rejected: `BookingOutcome` is :99-105 | ref corrected; log sentence corrected |
+
+## Round-22 log (7 findings: 2 MED, 5 LOW; scope: the r22 diff)
+
+Checked by running (backend venv): `Settings()` reads env and `.env`, env wins; `import app.config` loads no
+sqlalchemy/asyncpg/fastapi; rewrite-then-lazy-import succeeds for the three postgres forms and `app.database.engine`
+shows the rewritten URL; a subprocess against 127.0.0.1:1 fails at connect in ~1.7s; `mysql://` exits with no
+Traceback; importing with the default sqlite URL creates no `dev.db`; `BookingOutcome` :99-105 correct.
+
+| # | Sev | Finding | Resolution (r23) |
+|---|---|---|---|
+| 1 | MED | run by path, `sys.path[0]` is `backend/scripts`, so `import app.config` fails in every case | `BACKEND` + `sys.path.insert` at module level (pin_fixtures.py:16); subprocess test uses the absolute script path |
+| 2 | MED | `Settings`' `env_file=".env"` and the sqlite `./dev.db` are cwd-relative; Verification ran from repo root | `Settings(_env_file=BACKEND/".env")`; relative sqlite path resolved against `BACKEND`; missing file exits naming it; `--help` from both cwds; subprocess cases run from both |
+| 3 | LOW | connect-failure message asserted but never specified; negative-only assertions can't tell connect from import error | imports outside the connect `try`; catch only `OSError`/`DBAPIError`; exact masked message; test asserts `***`, `ConnectionRefusedError`, no password |
+| 4 | LOW | in-process `main()` leaves the rewritten URL in pytest's env | in-process tests use `monkeypatch.setenv` |
+| 5 | LOW | a `MagicMock` fake misses `engine.begin()` commits and a second connection | hand-written fake exposing only `connect`/`execute`/`close`; exactly one connect; exact recorded sequence |
+| 6 | LOW | 1-14 rows also make ATR/move stats undefined | `TOO FEW ROWS ({n})` sixth verdict; fixture symbol with 5 rows; "five" → "six" |
+| 7 | LOW | sqlite URL with `?query` breaks the `mode=ro` URI | path from `make_url(url).database` |
 
