@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "claude/order-booking-safety-7evlql",
-      "claimed_at": "2026-09-26T17:59:57Z",
-      "expires_at": "2026-09-26T20:59:57Z",
-      "note": "P1b-ii plan: orphan-row UI beyond P1b-i's per-note Remove",
-      "task": "P1B2-STEP7-ORPHAN-ROW-UI"
-    }
-  ]
+  "claims": []
 }
