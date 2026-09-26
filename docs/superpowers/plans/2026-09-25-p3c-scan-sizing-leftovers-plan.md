@@ -9,6 +9,7 @@ addressed in r3. r3 → 7 findings (0 HIGH, 3 MED, 4 LOW), addressed in r4. r4 �
 addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. r7 → round 7 (§7): 2 LOW, addressed in r8. r8 → round 8 (§7): 3 LOW,
 addressed in r9. r9 → round 9 (§7): 1 LOW, addressed in
 r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 → round 11 (§7): 1 LOW, addressed in r12.
+r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -187,7 +188,11 @@ Change — **inside `_process_symbol`, on the PRE-SCREEN card, calling the stock
   `direction_conviction_unmeasured:`), and the pipeline's `failed_direction = sum(1 for r in rejected if
   _is_direction(r))`. (r4-L3) The `direction_filtered_count` counter (scan.py:1640, :1657) is DELETED: both its
   readers — the banner at :1673 and `failed_direction=` at :1732 — read `_dir_removed = sum(1 for r in rejected if
-  _is_direction(r))` instead, so an all-unmeasured scan shows the banner. The residual does not
+  _is_direction(r))` instead, so an all-unmeasured scan shows the banner. Placement (r12-F3 — `_is_direction` is
+  today a nested def at :1721, inside the funnel block, AFTER the banner at :1673; reading it at the banner would
+  raise UnboundLocalError): `_is_direction` (both prefixes) and `_dir_removed` are defined ONCE, right after the
+  post-gather gate and before the banner; the funnel block drops its own `_is_direction` def, keeps the name in
+  `_buckets`, and passes `failed_direction=_dir_removed`. The residual does not
   absorb the new reason, and `scanned == candidates + buckets` still holds. The ScanFunnel subtracts stages in
   sequence, so the "Direction conviction" stage carries the extra count with no frontend change.
 - Banner (r1-L13, corrected by r2-M5): the options banner is replaced by the STOCK banner's P3a-(c) form,
@@ -269,19 +274,27 @@ a missing one throws `undefined is not a function` in an effect and fails the re
   "above 1" and "0":
   - `> 1`: "... is a FRACTION of full size, so a floor above 1 is not a floor at all" (+ hint, below).
   - `== 0` (r3-M3 — the existing zero sentence is FALSE since P3a removed `or 0.01`: a 0 multiplier no longer
-    falls through to 1%): "... a floor of 0 does not remove the position: at or beyond -full_conviction_pct the
-    multiplier is 0 and the order is still the MINIMUM — 1 share on the stock card (`max(1, …)`,
-    stock_scan.py:1014) and 1 contract on the fire path (`_sized_quantity`'s `max(1, …)`, auto_trader.py:1392) —
-    never zero." (r4-L5: on the two-sided ramp `lo=0` gives `mult = frac`, which is 0 only at conviction
-    ≤ -full; a milder headwind sizes a nonzero fraction, so "in every headwind" was wrong.) + the existing
-    "To stop trading in a headwind" advice.
+    falls through to 1%): "... a floor of 0 does not remove the position: at or beyond -full_conviction_pct, and
+    whenever the regime is unmeasured (the floor itself is used), the multiplier is 0 and the order is still the
+    MINIMUM — 1 share on the stock card (`max(1, …)`, stock_scan.py:1016) and 1 contract on the fire path
+    (`_sized_quantity`'s `max(1, …)`, auto_trader.py:1392) — never zero." (r4-L5: on the two-sided ramp `lo=0`
+    gives `mult = frac`, which is 0 only at conviction ≤ -full; a milder headwind sizes a nonzero fraction, so "in
+    every headwind" was wrong. r12-F4: an unmeasured regime also uses the floor — stock_scan.py:1264-1271
+    `mult = _sizing[0]` / `floor:unmeasured`, auto_trader.py:1476-1488 `_sized_quantity(strategy.quantity,
+    min_mult)` — e.g. an Intraday name whose 15-min fetch failed.) + the existing "To stop trading in a headwind"
+    advice.
   - Stale text corrected in the same commit (r3-M3 + r4-L5), every place that restates the fall-through to 1% or
-    the doubling: conviction_sizing.py:286-307 (the whole "ZERO IS REFUSED TOO" block — `stock_scan.py:685` /
-    FALSY / "doubled" / "THE FALSY READ ... IS STILL THERE" sentences); test_conviction_sizing.py:386-393 (the
-    "CORRECTED 2026-09-17" comment), :437-460 (the zero test — renamed
+    the doubling (line refs re-checked in r12-F6): conviction_sizing.py:285-307 (the "ZERO IS REFUSED TOO" block —
+    the `stock_scan.py:685` / FALSY / "doubled" sentences); test_conviction_sizing.py:387-394 (the "CORRECTED
+    2026-09-17" comment), :438-463 (the zero test — renamed
     `test_a_zero_min_mult_is_refused_because_it_still_sizes_the_minimum`, docstring and asserts rewritten), and
-    :462-466 (docstring of `test_the_multiplier_can_no_longer_reach_a_falsy_zero`, rewritten to say the falsy read
-    was removed by P3a; the test's own assert is unchanged). The history ("admitted until 2026-09-17") stays.
+    :466-470 (docstring of `test_the_multiplier_can_no_longer_reach_a_falsy_zero`; the test's own assert is
+    unchanged). NOT everything there is stale (r12-F5): P3a removed only `risk_pct or 0.01`; `risk_fixed if
+    risk_fixed` is still at stock_scan.py:1015 and `risk_fixed_usd` has no `gt=0` (schemas/stock_scan.py:52), so a
+    fixed $0 still falls through to pct sizing. Both the :304-307 "THE FALSY READ ... IS STILL THERE" sentence and
+    the :466-470 docstring are therefore reworded, not deleted, to: "`risk_pct or 0.01` was removed by P3a;
+    `risk_fixed if risk_fixed` (stock_scan.py:1015) remains, and is harmless here because the pct branch is
+    multiplied by the same `mult`". The history ("admitted until 2026-09-17") stays.
   - `< 0`: "... is negative — a multiplier floor cannot be below 0; write a fraction in (0, 1], e.g. 0.3".
   All three keep the prefix `scoring_rules.yaml: regime_sizing.min_mult is {min_mult}, outside (0, 1]`.
 - (4) the `/100` hint is offered only when the value reads as a whole percent: `float(min_mult).is_integer()`
@@ -292,8 +305,9 @@ a missing one throws `undefined is not a function` in an effect and fails the re
 
 Tests (extend `tests/test_conviction_sizing.py`): message for -0.1 contains "negative" and does NOT
 contain "above 1" or "FALSY"; 1.01 has no "Did you mean"; 30 → "0.3"; 0 → contains "1 share" and "do not set
-the floor to zero" and NOT "1%" / "FALSY" — the existing zero test (test_conviction_sizing.py ~:420-458, asserts
-`"1%" in msg`) and its docstring are rewritten to the current behaviour in the same commit (r3-M3);
+the floor to zero" and NOT "1%" / "FALSY" — the existing zero test (test_conviction_sizing.py:438-463, asserts
+`"1%" in msg`) and its docstring are rewritten to the current behaviour in the same commit (r3-M3), and also
+asserts the message names the unmeasured case ("unmeasured", r12-F4);
 full 0.004 no "Did you mean"; full 0.4 → "40". All still raise `SizingConfigError`.
 
 ## 5. Negative bearish backtest price — measure, then fix
@@ -337,10 +351,18 @@ the maximum ratio of ATR(14) as `_read_bars` returns the series to ATR(14) on a 
 the detected split ratios applied backwards (independent of stored `adj_factor`), and the MINIMUM bearish
 pullback_ema target (`current - risk × rr_target_mult`, strategy_engine's formula as a pure function) on each
 series, with dates; and the same values on the 5 bars either side of each detected split.
-**Target formula, exact (r3-L4, corrected by r4-L4)** — reimplemented from strategy_engine.py:418-503 with the
-params of `strategy_params.yaml` `strategies.pullback_ema.active.bearish` (:52-58 — `ema_period: 35`, not the
-bullish 50), printed in the header; the script states that a backtest reads the TUNED `get_active` params
-(stock_scan.py:63), which can differ, and accepts `--params-json` to reproduce a tuned set.
+**Target formula, exact (r3-L4, corrected by r4-L4, r12-F1/F2)** — reimplemented from strategy_engine.py:418-503.
+Params (r12-F1 — `active.bearish` alone is NOT what the stock-scan backtest ran): the script builds the same merged
+set the backtest uses, `_merge_strategy_params` (stock_scan.py:198-212, precedence exit < active < request) —
+`get_exit("pullback_ema")`, then `get_active("pullback_ema", "Bearish")`, then the five `_SIGNAL_KWARGS["pullback_ema"]`
+fields (stock_scan.py:181) at their `StockScanRequest` defaults (schemas/stock_scan.py:16-20), which are always
+non-None and so always win. Shipped result: `ema_period 50` (active's 35 is overridden), `trend_ema 100`,
+`tolerance 0.08`, `ma_type EMA`, `require_reversal False`, `atr_stop_mult 1.5`, `rr_target_mult 2.0`,
+`exit_swing_lookback 20`. The script calls `_merge_strategy_params` itself (a pure read of the YAML), prints the
+merged set and which layer set each key, and accepts `--params-json` (applied as the request layer) for a Step-3
+set that is not the default. Bar windowing (r12-F2): like the backtest (strategy_backtest.py:113-127), each bar `i`
+is evaluated on the trailing slice `bars[max(0, i+1-350) : i+1]` and skipped when fewer than 60 bars exist, so the
+EMAs are seeded exactly as the backtest seeds them.
 `risk = (fast_ema + atr × atr_stop_mult) - current`; rungs: primary `prior_extreme` (`_swing_low` over
 `exit_swing_lookback`), ext1 `current - risk × rr_target_mult`, ext2 `current - risk × rr_target_mult × 1.5`.
 The REPORTED value is what the backtest trades — `targets[0]`, since `strategy_backtest` issues
@@ -351,8 +373,10 @@ bearish setup passes — price below the EMA, MAs stacked, within tolerance, rev
 volume-contraction gate (strategy_engine.py:423-428: 3-bar avg volume < 0.9 × 20-bar avg), i.e. exactly the bars
 where `pullback_ema_signal` would return a signal — the number comparable to a backtest; and, separately, on
 all bars. `pullback_ema_signal` is not called for the report (P3a's ladder drops non-positive rungs, which would
-hide the effect). The reimplementation is pinned by one fixture check on a split-free fixture where every rung
-is positive (so the positivity drop does not apply): on a bar where `pullback_ema_signal` fires bearish, the
+hide the effect). The reimplementation is pinned by one fixture check on a split-free fixture LONGER than 350 bars
+(so the slice differs from the full prefix) where every rung is positive (so the positivity drop does not apply),
+with `pullback_ema_signal` called on the same 350-bar slice and the same merged params: on a bar where it fires
+bearish, the
 script's stop equals the signal's `stop_price` AND its reported target equals `target_price`; and the script's
 setup-bar set equals the bars where the signal is not None.
 LYB had no split: for it the script prints `NO SPLIT IN WINDOW` and the line "the split hypothesis does not
@@ -729,3 +753,19 @@ the first is held) and passes on one worker under CPU load; exception-handler or
 | # | Sev | Finding | Resolution (r12) |
 |---|---|---|---|
 | F1 | LOW | §7 two-concurrent test: a multi-worker pool still passed ~0.2% idle / ~20% loaded (second thread not yet in the wrapper when `hold` is set) | before `hold.set()`, a 0.5s time-bounded wait then `assert len(calls) == 1 and not subs[1].running()` |
+
+## Round-12 log (6 findings; scope: the r5 edits to §2-§5, unaudited since, + §7's r12 fix)
+
+§7's r12 fix verified (re-simulated: one worker 30/30 pass, 4 workers 30/30 fail on the queued-while-held
+assertion). §3's mock list verified complete (nothing else fetches on mount; default section is Brokers). §2's
+counter has no other reader. §4's stock/fire minimum-size claims and §5's formula, volume gate and `targets[0]`
+equivalence to the pre-P3a target verified.
+
+| # | Sev | Finding | Resolution (r13) |
+|---|---|---|---|
+| F1 | MEDIUM | §5 script params were `active.bearish` (ema 35, tol 0.04); the backtest runs the merged set, where the request's always-non-None fields win (ema 50, tol 0.08) | script calls `_merge_strategy_params` with `StockScanRequest` defaults; prints the merged set and each key's layer; `--params-json` is the request layer |
+| F2 | LOW | §5 backtest evaluates a trailing 350-bar slice, n ≥ 60; the reimplementation used the full prefix | same slicing; pin fixture > 350 bars, signal called on the same slice |
+| F3 | LOW | §2 `_is_direction` is defined after the banner (scan.py:1721 vs :1673) | `_is_direction` + `_dir_removed` defined once before the banner; funnel reuses them |
+| F4 | LOW | §4 zero-floor wording missed the unmeasured-regime case (floor used on both paths) | message names it; test asserts it |
+| F5 | LOW | §4 planned rewrites would say the falsy read is gone; `risk_fixed if risk_fixed` remains | both texts reworded, not deleted |
+| F6 | LOW | §4 line refs off | corrected (stock_scan.py:1016; conviction_sizing.py:285-307; tests :387-394, :438-463, :466-470) |
