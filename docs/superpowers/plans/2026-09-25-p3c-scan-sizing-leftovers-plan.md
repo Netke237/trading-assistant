@@ -12,7 +12,7 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20. r20 → round 20: 4 LOW, addressed in r21.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20. r20 → round 20: 4 LOW, addressed in r21. r21 → round 21: 4 findings (1 HIGH, 1 MED, 2 LOW), addressed in r22.
 Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
@@ -327,12 +327,24 @@ then hugely inflated, and a bearish target `current - risk × mult` goes negativ
 symbols and would ALSO inflate bullish ATR, stops and targets silently — for every consumer of `get_bars`,
 both scans included.
 
-`backend/scripts/p3c_data_checks.py`, read-only (r19-L8: a sqlite `DATABASE_URL` or none → stdlib
+`backend/scripts/p3c_data_checks.py`, read-only. URL resolution comes FIRST, before any other `app.*` import
+(r21-1, HIGH: `app/database.py:8` calls `create_async_engine(settings.DATABASE_URL)` at import, and
+`app.routers.stock_scan` imports it at :25, so a `postgres://` / `postgresql://` / `mysql://` URL crashed the
+script at import, before its own routing ran). The script, run from `backend/` like the app, reads the URL with
+`app.config.Settings().DATABASE_URL` — `app.config` imports only pydantic_settings and builds no engine; a fresh
+`Settings()`, not the `@lru_cache`d `get_settings`, so it sees `DATABASE_URL` from the environment AND
+`backend/.env`, as the app does (reading `os.environ` alone would miss a `.env` URL and silently open `dev.db`).
+It validates and, for postgres, rewrites that URL (rules below), exits non-zero naming the scheme for any other,
+then sets `os.environ["DATABASE_URL"]` to the rewritten URL (env beats `.env` in pydantic-settings) and only then
+imports `app.routers.stock_scan` (for `_merge_strategy_params`, `_SIGNAL_KWARGS`, `_HISTORY_YEARS`) and
+`app.services.strategy_engine`, lazily inside `main()`. Routing (r19-L8: a sqlite `DATABASE_URL` or none → stdlib
 sqlite3 with a `mode=ro` URI, like `iv_basis_analysis.py`; a `postgresql+asyncpg://`, `postgresql://` or `postgres://` URL →
 the last two rewritten to `postgresql+asyncpg://` first (r20-L2: only the asyncpg form builds an engine here —
 psycopg2 is not installed; the app's own URL is already that form, app/database.py:8), then
-`create_async_engine(url)` (asyncpg, in requirements.txt; imported at the script's module level — r20-L4), each
-connection's first statement `SET TRANSACTION READ ONLY`; any other scheme → exit non-zero naming it. Not
+`create_async_engine(url)` (asyncpg, in requirements.txt; imported at the script's module level — r20-L4), all reads
+on one connection in ONE transaction whose first statement is `SET TRANSACTION READ ONLY`, never committed
+(r21-3: the SET covers one transaction only, so a commit would let later reads run read-write; verified on
+Postgres 16 + asyncpg — under autobegin the SET is inside the transaction and `SHOW transaction_read_only` is on); any other scheme → exit non-zero naming it. Not
 `iv_basis_analysis.py`'s approach (r20-L1): for non-sqlite it falls back to the HTTP API (:251-254), and no API
 serves raw `ohlcv_daily` rows (`adj_factor`, raw OHLC), so that fallback is useless here).
 Everywhere in this script a NULL `adj_factor` is read as 1.0, as `_read_bars` does (historical_store.py:154-155 —
@@ -359,7 +371,10 @@ stored before a split may keep a stale `adj_factor`. Per symbol the script print
   by a split ratio at a detected split date (adjustment never applied to old rows);
 - `MIXED ADJUSTMENT` — adjusted close is continuous across the split but `high / adjusted_close` on the
   pre-split rows is ≈ the split ratio (raw high/low next to adjusted close);
-- `NO SPLIT IN WINDOW` / `CLEAN`.
+- `NO SPLIT IN WINDOW` / `CLEAN`;
+- `NO ROWS` (r21-2) — zero `ohlcv_daily` rows for the symbol in the window: printed as
+  `NO ROWS in ohlcv_daily for {sym} over {start}..{end}` INSTEAD of the per-symbol stats, ATR and target blocks
+  below (which are undefined on no bars), and the script moves to the next symbol. A fifth verdict.
 
 plus, over EVERY bar of the window (r2-H2 — the last bar is post-split and clean, so it cannot show this):
 the maximum ratio of ATR(14) as `_read_bars` returns the series to ATR(14) on a series rebuilt from raw OHLC with
@@ -549,7 +564,7 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   error=None, over_exposure=False))` (r9-L1, reason corrected by r10-L3 — a bare `AsyncMock` does NOT crash: `fire_now` returns a plain
   `dict` with no response model, so the MagicMock fields serialise as junk such as `[]` and POST still returns 200;
   a real `BookingOutcome` is needed so the body is meaningful; `BookingOutcome` is at
-  app/services/auto_trade_booking.py:98-105 after the main merge; its new `wrong_side_stop` field defaults to False, so the four-field constructor above is still valid); completion order recorded, asserting GET finished while POST was
+  app/services/auto_trade_booking.py:99-105 after the main merge; its new `wrong_side_stop` field defaults to False, so the four-field constructor above is still valid); completion order recorded, asserting GET finished while POST was
   still pending, the POST returned 200, and its body has `rec_id == "r1"`. Armed/disarmed per the Arming rule below.
 - `fire` runs on a thread named `auto-trade-fire*`, not the loop's thread.
 - SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run after their `_FakeDb` gains
@@ -660,10 +675,10 @@ The script: `python3 backend/scripts/p3c_data_checks.py --help`; sections chosen
 (`split_factor` 1.0, correct `adj_factor`, raw OHLC) → `MIXED ADJUSTMENT`; stale pre-split `adj_factor` 1.0 (one of its rows NULL, r19-L7) →
 `STALE ADJ_FACTOR`; no split → `NO SPLIT IN WINDOW` — and asserts the DB file's bytes and mtime are unchanged
 after the run, and that no socket was opened (socket.socket patched to raise). Verdict strings are exactly the
-four in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN` (r2-L9). The same module holds
+five in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN`, `NO ROWS` (r2-L9, r21-2). The same module holds
 §5's two target pins (r14-4): the >350-bar all-positive fixture (patched = unpatched on setup bars, stop and
 target; a setup bar at index ≥ 350 asserted to exist) and the MIXED-shaped empty-ladder fixture (unpatched None,
-patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8): a `mysql://` URL exits non-zero naming the scheme; `postgresql+asyncpg://`, `postgresql://` and `postgres://` URLs, with `create_async_engine` patched ON THE LOADED SCRIPT MODULE (r20-L4: the test loads it via `importlib.util` like tests/test_iv_basis_analysis.py; patching `sqlalchemy.ext.asyncio.create_async_engine` has no effect on the script's module-level import) to a recording fake whose queries return no rows, assert the fake received a `postgresql+asyncpg://` URL each time, `SET TRANSACTION READ ONLY` is the first statement on every connection, no write statement follows, and the script prints its no-rows line per symbol.
+patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8, r21-1): each URL case runs the script in a SUBPROCESS (`sys.executable scripts/p3c_data_checks.py --sections db`, cwd `backend/`, `DATABASE_URL` set in its env) — an in-process importlib load imports `app.database` once under the test's sqlite URL and so can never see the import-time crash r21-1 found. `mysql://u@h/db` → exit non-zero, stderr names the scheme, no `Traceback`. For `postgresql+asyncpg://`, `postgresql://` and `postgres://` (host `127.0.0.1`, an unused port): the script gets PAST import and fails only at connect — exit non-zero with a connection error naming the rewritten `postgresql+asyncpg://` URL (password masked), no `ModuleNotFoundError` / `NoSuchModuleError` — which proves the rewrite ran before `app.database` built its engine. The read-only contract is pinned in-process: the importlib-loaded module (like tests/test_iv_basis_analysis.py) with its module-level `create_async_engine` patched ON THE LOADED MODULE to a recording fake whose queries return no rows; assert `SET TRANSACTION READ ONLY` is the first statement of the one transaction, no `commit()` was called, no write statement ran, and each symbol printed `NO ROWS in ohlcv_daily for …`.
 
 ## Open questions for Kenneth
 
@@ -938,7 +953,7 @@ seven State-update openings present once in PROJECT_STATE.json.
 Verified: every r20 line ref; the §2 Intraday stub reaches the direction check (`scan.py:585-587` calls the
 module-global name via `asyncio.to_thread`; all 400 `INTRADAY` bars are completed; §1 drops only on empty);
 `_rs_benchmark_candles` is `async def (req)`, so an AsyncMock fits; NULL-as-1.0 matches `_read_bars`.
-Nit rejected: the auditor put `BookingOutcome`'s `@dataclass` at :99; it is at :98, so :98-105 stands.
+Nit: the auditor put `BookingOutcome`'s `@dataclass` at :99. Rejected in r21, wrongly (:97-98 are blank); r21-4 corrected the ref to :99-105.
 
 | # | Sev | Finding | Resolution (r21) |
 |---|---|---|---|
@@ -946,4 +961,18 @@ Nit rejected: the auditor put `BookingOutcome`'s `@dataclass` at :99; it is at :
 | 2 | LOW | §5 plain `postgresql://` / `postgres://` fail in `create_async_engine` (no psycopg2) | rewritten to `postgresql+asyncpg://` first; routing test covers all three |
 | 3 | LOW | §5 NULL-as-1.0 stated only for the first `adj_factor` product; the fully-adjusted ATR and STALE verdict would hit None × float | stated once for the whole script |
 | 4 | LOW | Verification: no patch target for `create_async_engine` | module-level import; patched on the importlib-loaded script module; fake returns no rows |
+
+## Round-21 log (4 findings: 1 HIGH, 1 MED, 2 LOW; scope: the r21 diff)
+
+Checked by running (backend venv; a throwaway Postgres 16): `create_async_engine` accepts `postgresql+asyncpg://`
+with or without a query string; `?sslmode=` fails in asyncpg but equally in `app/database.py`, so a working app
+URL never carries it; a module-level import on the importlib-loaded module is patchable; NULL-as-1.0 is consistent
+with every §5 `adj_factor` product.
+
+| # | Sev | Finding | Resolution (r22) |
+|---|---|---|---|
+| 1 | HIGH | §5 the postgres rewrite never runs: importing `stock_scan` builds `app.database`'s engine from the raw URL and crashes (`psycopg2` / `NoSuchModuleError`); the in-process test can't see it | URL resolved via a fresh `app.config.Settings()` (env + `.env`, not `os.environ` alone) and rewritten before any other `app.*` import, written back to the env, `app.*` imported lazily; URL cases run in a subprocess |
+| 2 | MED | Verification asserted a "no-rows line" §5 never defined; zero rows made §5's stats undefined | `NO ROWS …` defined as a fifth verdict that skips the stats; "four" → "five" |
+| 3 | LOW | `SET TRANSACTION READ ONLY` is per transaction, not per connection | one never-committed transaction; test asserts no `commit()` |
+| 4 | LOW | round-20 nit wrongly rejected: `BookingOutcome` is :99-105 | ref corrected; log sentence corrected |
 
