@@ -395,6 +395,42 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().positions).toHaveLength(0);
     });
 
+    it('a 404 re-save booked SMALLER does not close; the row takes the booked size (stock code round 2)', async () => {
+      // STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: the re-POST after a close 404
+      // can now be resized. Closing then would close the smaller booked row and
+      // drop the full local one -- a wrong close in History.
+      const pos = makePosition({
+        recId: 'REC-RS', symbol: 'AAA', contract: 'AAA|STOCK', contracts: 100,
+        targets: [{ stockPrice: 160, contractsToSell: 50 }, { stockPrice: 170, contractsToSell: 50 }],
+      });
+      act(() => { usePortfolioStore.setState({ positions: [pos], lastSyncError: null }); });
+
+      const closes: string[] = [];
+      global.fetch = jest.fn((url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (url.includes('/close') && method === 'POST') {
+          closes.push(url);
+          return Promise.resolve(jsonResponse({ detail: 'not found' }, false, 404));
+        }
+        if (url.endsWith('/api/portfolio') && method === 'POST') {
+          const body = JSON.parse(String(init?.body));
+          return Promise.resolve(jsonResponse({ ...body, adjustedQty: 33 }, true, 201));
+        }
+        return Promise.resolve(jsonResponse([], true, 200));
+      }) as unknown as typeof fetch;
+
+      const res = await usePortfolioStore.getState().closePositionRemote(
+        'REC-RS', { qtyToClose: null, exitPrice: 150, exitDate: '2026-09-26' },
+      );
+
+      expect(res.ok).toBe(false);
+      expect(res.detail).toMatch(/re-saved this position at 33 shares.*close was NOT sent/);
+      expect(closes).toHaveLength(1);   // only the first (404) close; no second close
+      const row = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-RS')!;
+      expect(row.contracts).toBe(33);
+      expect(row.targets.map((t) => t.contractsToSell)).toEqual([16, 17]);
+    });
+
     it('drops a genuinely-gone position and reports why, without touching other positions', async () => {
       const gone = makePosition({ recId: 'REC-GONE', contract: 'GONE|1|2026-01-01|C', contracts: 1 });
       const other = makePosition({ recId: 'REC-OTHER', symbol: 'MSFT', contract: 'MSFT|1|2026-01-01|C', contracts: 1 });

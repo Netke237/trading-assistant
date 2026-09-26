@@ -1134,6 +1134,26 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             // local row when the backend POSITIVELY confirms the contract is gone.
             if (res.status === 404 && local) {
               const persisted = await persistPosition(local);
+              const requested = local.contracts ?? 1;
+              if (persisted.ok && persisted.adjustedQty != null && persisted.adjustedQty < requested) {
+                // Stock code round 2: since STOCK-SENDS-SAVE-FIRST-THEN-REAL-
+                // SHARES this re-save can be RESIZED. Closing now would close
+                // the smaller booked size (the backend clamps qty_to_close to
+                // the row) and drop the full local row -- History would record
+                // a close of shares that is not what the user holds. Adopt the
+                // booked size (rungs by the writer's rule), say so, and let the
+                // user decide; nothing is closed.
+                const booked = persisted.adjustedQty;
+                const detail = `Portfolio re-saved this position at ${booked} shares to fit your exposure limit (you had ${requested}); the close was NOT sent. Review the position and close again.`;
+                set((s) => ({
+                  positions: s.positions.map((p) => (p.recId === recId
+                    ? { ...p, contracts: booked, targets: scaleRungShares(p.targets, booked) ?? p.targets,
+                        syncStatus: 'synced' as const, syncedAt: Date.now(), syncPendingSince: undefined }
+                    : p)),
+                  lastSyncError: { symbol: local.symbol, contract: local.contract, detail, at: Date.now() },
+                }));
+                return { ok: false, detail };
+              }
               if (persisted.ok) {
                 res = await doClose(recId);
               } else {
