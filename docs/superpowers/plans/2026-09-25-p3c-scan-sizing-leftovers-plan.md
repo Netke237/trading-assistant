@@ -6,8 +6,8 @@ and re-taken 2026-09-26, no new commits on the old branch), off main 2f67e6f. Cl
 
 Round history: r1 → 15 findings (2 HIGH, 7 MED, 6 LOW), addressed in r2. r2 → 13 findings (3 HIGH, 4 MED, 6 LOW),
 addressed in r3. r3 → 7 findings (0 HIGH, 3 MED, 4 LOW), addressed in r4. r4 → 6 findings (0 HIGH, 1 MED, 5 LOW),
-addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. r7 → round 7 (§7): 2 LOW, addressed in r8.
-Logs at the end.
+addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. r7 → round 7 (§7): 2 LOW, addressed in r8. r8 → round 8 (§7): 3 LOW,
+addressed in r9. Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
 - P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
@@ -461,10 +461,19 @@ loop") become false. auto_trader.py is P3b's — logged as an open_questions ent
 Tests (`tests/test_p3c_fire_off_loop.py`):
 
 - `fire` monkeypatched to `time.sleep(0.5)` then return a FiredOrder; while the request is in flight, a second
-  request (`GET /auto-trade/status`) completes first — the loop is free.
+  request (`GET /auto-trade/status`) completes first — the loop is free. Transport (r8-L3): NOT a sync
+  `TestClient` (Starlette's portal gives each threaded request its own loop, so GET would finish first even on
+  today's blocking code, and conftest's `client` app has no auto_trade router). A local FastAPI app containing only
+  `auto_trade.router`, driven by `httpx.AsyncClient(transport=ASGITransport(app))` on the test's loop with
+  `asyncio.gather(post, get)`; `get_db` overridden with a `_FakeDb` (`execute` + `rollback`);
+  `auto_trade.book_fired_order` patched with an `AsyncMock`; completion order recorded, asserting GET finished
+  while POST was still pending. Armed/disarmed per the Arming rule below.
 - `fire` runs on a thread named `auto-trade-fire*`, not the loop's thread.
 - SizingConfigError → 500 and RuntimeError → 400 still mapped (existing tests re-run after their `_FakeDb` gains
-  `rollback` — r5-M1 — plus one each here).
+  `rollback` — r5-M1 — plus one each here). Both new tests are ARMED (r8-L2 — unarmed, the endpoint's own
+  "AutoTrader not armed" 400 at auto_trade.py:203-205 would pass the RuntimeError test without reaching the
+  executor) and disarm in `finally`; each asserts the raising stub was called exactly once, and the detail:
+  `str(raised_exc)` for the 400, the `SIZING_CONFIG_REFUSED_PREFIX` detail for the 500.
 - Two concurrent `/fire` on one armed strategy (r2-H3 — the two 400 texts are identical, so the test does not
   compare detail text): a wrapper around the real `fire` records (enter, exit, raised-type) per call. Assert:
   `execute_option_order` called exactly once; one 200 and one 400; the recorded calls did not overlap (the
@@ -482,7 +491,8 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   failed assertion can never leave the one worker blocked. An AUTOUSE, FUNCTION-scoped fixture (default scope —
   r5-L5; not module scope, whose teardown runs once per module) asserts in its teardown that the worker is idle:
   `_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)`.
-  Arming (r7-L2): every test that patches `fire` (Cases A–D, the thread-name and loop-free tests) arms
+  Arming (r7-L2, r8-L2): every test that patches `fire` (Cases A–D, the thread-name, loop-free and both mapping
+  tests, and the `in_transaction()` test) arms
   `auto_trader` with `_make_armed(...)` before creating the task and calls `auto_trader.disarm()` in the same
   `try/finally` that sets `ev` — the stub never runs the real disarm, and `auto_trader` is a process-wide singleton.
   Patch target (r7-L1): `fire` is patched ON THE INSTANCE, `mocker.patch.object(auto_trade.auto_trader, "fire",
@@ -491,7 +501,10 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   and never matches). Every "wait until the wrapper has recorded `cf`" is BOUNDED:
   `for _ in range(100): if recorded or task.done(): break; await asyncio.sleep(0)`, then `assert recorded`
   (surfacing `task.exception()` if the task ended first) — there is no pytest-timeout, so an unbounded wait would
-  hang the suite instead of failing it.
+  hang the suite instead of failing it. The 100-yield bound is for `_FakeDb` tests ONLY (r8-L1): with the real
+  aiosqlite session each call resolves from aiosqlite's own thread (measured 58 / 680 / 2895 yields min / median /
+  max), so the `in_transaction()` test waits with `assert await asyncio.to_thread(started.wait, 5)` and never uses
+  the yield loop; any `cf` wait on a real session is bounded by time (`await asyncio.sleep(0.01)` up to 5s).
   Callback barrier (r5-L4): `Future.set_result`/`set_exception` notify waiters BEFORE `_invoke_callbacks`, so
   `cf.result()` can return while `_log_unbooked` has not yet run. Before any caplog assertion in Cases A and C,
   the test waits `_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)` — the single worker finishes the previous
@@ -647,3 +660,15 @@ into dataclasses before it).
 |---|---|---|---|
 | L1 | LOW | §7 the wrapper filter matches only an instance-level patch, and the wait for `cf` is unbounded — a miss hangs the suite | patch target stated (`auto_trade.auto_trader` instance); bounded 100-yield wait, then `assert recorded` |
 | L2 | LOW | §7 Cases A–D never arm/disarm `auto_trader`; the stub never disarms, leaving the singleton armed | every `fire`-patching test arms first and disarms in the same `try/finally` as `ev.set()` |
+
+## Round-8 log (3 findings; scope §7 only)
+
+Both round-7 fixes verified; `_make_armed` importable from tests.test_auto_trader (precedent
+test_autotrade_ibkr_confirm_not_submitted.py:30); arming needs no setup; fixture teardown order puts the idle check
+after the `fire` patch is undone; no HIGH/MED in §7's design.
+
+| # | Sev | Finding | Resolution (r9) |
+|---|---|---|---|
+| L1 | LOW | §7 the 100-yield `cf` wait fails ~90% with the real aiosqlite session | yield bound limited to `_FakeDb` tests; `in_transaction()` test waits on `started` via `to_thread`; real-session waits time-bounded |
+| L2 | LOW | §7 RuntimeError → 400 test passes vacuously unarmed; armed, it leaks the singleton | both mapping tests armed + disarm in `finally`; stub called once; detail asserted |
+| L3 | LOW | §7 loop-free test's client unspecified; a sync `TestClient` passes on today's blocking code | local app with `auto_trade.router`, `httpx.AsyncClient(ASGITransport)` + `gather`, `get_db` override, `book_fired_order` mocked, completion order asserted |
