@@ -1,4 +1,4 @@
-# P4b — Strategy & composite watches (plan r3)
+# P4b — Strategy & composite watches (plan r4)
 
 Package: `docs/superpowers/plans/2026-09-25-work-packages.md` § P4b. Branch `claude/cool-heisenberg-6lsa3a`,
 off `origin/main` 2f67e6f. Claim `P4B-STRATEGY-COMPOSITE-WATCHES`.
@@ -6,6 +6,8 @@ off `origin/main` 2f67e6f. Claim `P4B-STRATEGY-COMPOSITE-WATCHES`.
 r2 = r1 + plan round 1's 16 findings (2 HIGH, 5 MEDIUM, 9 LOW) + Kenneth's D4/D5. Each r1 finding is tagged
 `[r1#n]` where it is fixed.
 r3 = r2 + plan round 2's 13 findings (1 CRITICAL, 3 HIGH, 5 MEDIUM, 4 LOW) + D4 extended. Tagged `[r2#n]`.
+r4 = r3 + plan round 3's 11 findings (1 HIGH, 3 MEDIUM, 7 LOW) + D6/D7/D8. Tagged `[r3#n]`. Round 3 hit the
+3-round cap; Kenneth chose (D8) to build from r4 without a plan round 4 — the code rounds are the check.
 
 ## Decisions this plan implements
 
@@ -34,6 +36,13 @@ New, asked this session (recorded as decision `P4B-DECISIONS-2026-09-25`):
   interval reads. Accepted side effect: HMM_intraday watches on 1m/5m/15m move from yfinance regular-hours bars to
   the Tradier-merged series (extended hours included, sandbox feed lag applied) — the rule path's series.
   The stored value is **not** migrated (that is W2-INTERVAL's job); the translation is read-side only.
+- **D6** (after plan round 3, [r3#1]) P4b fixes the pre-existing test leak in conftest: an autouse fixture points
+  `app.services.notifications.dispatch._SETTINGS_PATH` at a missing tmp file for **every** test, so no test reads
+  the real `settings.yaml` or sends real Gmail/Telegram — whichever alias of `load_notification_config` it reaches.
+- **D7** (after plan round 3, [r3#3]) **Same bars on 1D too:** a 1D (and 1W) composite **rule** listing
+  `mean_reversion_vwap` fetches `completed_daily_rows(get_bars(...))` for VWAP, like the 1D/1W watch — never the
+  chart-cache daily candles. rsi/bb/HMM_daily on 1D rules keep `_regime_candles` (unchanged).
+- **D8** (after plan round 3) Build from r4 without a plan round 4.
 
 ## Files
 
@@ -42,8 +51,11 @@ Owned: `services/strategy_watch_evaluator.py`, `services/composite_trigger_evalu
 Granted: `routers/chart_alerts.py` (D1: composite block ~:953-1005 + the A4e docstring sentence about VWAP),
 `services/strategy_engine.py` (D2: the allow-list tuple only), `routers/composite_watch.py` (D4: the
 `/regime-snapshot` HMM_intraday fetch call, :80-82).
-Imports of `app.data.market` functions in the evaluator **stay lazy (inside the function)** — existing tests patch
-`app.data.market.fetch_intraday_candles` / `completed_bars_for_interval` at the source module.
+Imports of `app.data.market` functions **and of `app.services.composite_trigger_evaluator` functions** in
+`strategy_watch_evaluator` **stay lazy (inside the function)** [r3#8] — existing tests patch
+`app.data.market.fetch_intraday_candles` / `completed_bars_for_interval` and
+`app.services.composite_trigger_evaluator.evaluate_scheduled` / `describe_match` at the source module
+(test_composite_sustain.py:117,145; test_strategy_watch_evaluator.py:314-317; test_composite_watch_keyerror.py:48-49).
 **Called, not edited:** `data/market.py` (`fetch_intraday_candles`, `completed_bars_for_interval`,
 `normalize_interval`), `services/market_session.py` (`completed_session_bars`), `notifications/dispatch.py`
 (`load_notification_config`). `strategy_watch_store.py`, `strategy_watch_scheduler.py`, the frontend: **no change**.
@@ -89,8 +101,14 @@ The build runs the full backend suite after T3 and after T5 and adds any breakag
    measured **two** refusal keys, round 4 measured **four** on a later tree (headwind:AAPL, headwind:NVDA,
    sizing-config, regime-gate-config); the count depends on which alert-reaching tests exist, so no number is pinned.
    No code change.
-(The notification-config fixture moved to T3 [r2#5]: the evaluator gains the `load_notification_config` import
-only in T3, and `monkeypatch.setattr` on a missing attribute raises.)
+3. **D6 [r3#1]** autouse fixture `_no_real_notification_settings(tmp_path, monkeypatch)`:
+   `monkeypatch.setattr(dispatch, "_SETTINGS_PATH", tmp_path / "no-settings.yaml")` (the file never exists →
+   `load_notification_config()` returns `{}`, dispatch.py:52-58). `load_notification_config` reads the module global
+   at call time, so this covers the evaluator's import, `notify_enabled_channels` and chart_alerts.py:33's alias.
+   Tests that need channels enabled patch the **evaluator's** `load_notification_config` name (T3).
+   Test: `load_notification_config() == {}` inside a test, and `chart_alerts._load_notification_config() == {}`.
+   The test also asserts `dispatch._SETTINGS_PATH` is under the test's `tmp_path`. Mutation: remove the fixture →
+   that assertion fails.
 
 Test: `test_conftest_pins_strategy_watches_path` — `os.environ["BAMENDJOU_STRATEGY_WATCHES_PATH"]` is not the
 tracked `config/strategy_watches.yaml` and `strategy_watch_store._path` resolves outside `backend/config`.
@@ -99,7 +117,7 @@ Mutation: delete the pin → fails.
 ## T2 — per-watch isolation (Q17, open_questions [64])
 
 Refactor the two loop bodies of `evaluate_all` into `async def _eval_strategy_watch(w, start, end, sustain_minutes)`
-and `async def _eval_composite_watch(w, start, end)`, each returning `_Transition | None`
+and `async def _eval_composite_watch(w, start, end, now_ts, now_dt)` (the clock of T5 [r3#7]), each returning `_Transition | None`
 (see T3). Each loop becomes:
 
 ```python
@@ -154,17 +172,15 @@ Mutation: remove the try → test fails with the exception.
    `_any_channel_enabled()` [r1#5]: imports `load_notification_config` **into the evaluator module** (so T1's fixture
    patches it) and returns `_enabled(cfg.get("gmail")) or _enabled(cfg.get("telegram"))`, where `_enabled(b)` is
    `isinstance(b, dict) and bool(b.get("enabled"))` — a `gmail: null` or non-dict block is "disabled", never a raise.
-   Wrapped in try/except → on any error, `True` (fail toward "gate on delivery": an unreadable config must not
+   A non-dict `cfg` (e.g. `notifications: null` → None, dispatch.py:55) is treated as `{}` → False [r3#5].
+   Only a genuine exception from the reader → `True` (fail toward "gate on delivery": an unreadable config must not
    silently commit undelivered alerts). Read once, before sending.
    - Returned events are **all** fired events (delivered or not) — `/evaluate` reports what fired.
    - Retry semantics: an undelivered strategy-watch entry stays `idle` (with `pending_entry_since` if sustain is on,
      so the retry is not re-delayed); an undelivered exit stays `armed`; a composite stays un-armed and re-fires
      while its condition holds.
-6. **Notification config pin [r1#5, r2#5, r2#12]** (in T3's commit, alongside the import): autouse fixture
-   `_no_real_notification_config` in conftest patching **both** `app.services.strategy_watch_evaluator.load_notification_config`
-   and `app.services.notifications.dispatch.load_notification_config` (the one `notify_enabled_channels` reads,
-   dispatch.py:71) to return `{}` unless a test overrides it. Default `raising=True`. `backend/config/settings.yaml` is
-   gitignored (.gitignore:59) and machine-specific, so no test reads it and none can send real mail through it.
+6. **Notification config pin** — superseded by T1.3 (D6, [r3#1]): the r3 fixture patched two function names and
+   missed chart_alerts.py:33's alias; pinning `dispatch._SETTINGS_PATH` covers all of them.
 7. `_run_lock()`: a module-level `asyncio.Lock`, created lazily **per running loop**
    (`_lock_loop`, `_lock` globals; recreate when `asyncio.get_running_loop()` differs) so pytest's per-test event
    loops never meet a lock bound to a dead loop. Both `run_now()` and the scheduler go through
@@ -175,7 +191,8 @@ Tests:
   next call → True: state armed. (strategy entry, strategy exit_stop, composite entry.)
 - `notify_enabled_channels` raises: same as False.
 - no channel enabled (T1 fixture default `{}`), notify → False: state **armed** (D3).
-- `_any_channel_enabled` with `{"gmail": None, "telegram": "x"}` → False, no raise; config reader raises → True.
+- `_any_channel_enabled` with `{"gmail": None, "telegram": "x"}` → False, no raise; reader returns None → False
+  [r3#5]; reader raises → True.
 - delivered → True: state armed (regression of today's behaviour).
 - `_commit`: `update_state` raises for the first of two transitions → the second is still committed.
 - `evaluate_all` still writes state with no notify call (contract kept).
@@ -241,10 +258,10 @@ Mutation: map 4h → 55 → test fails.
    - rsi/bb: unchanged.
    - vwap intraday: `mean_reversion_vwap_signal(slice, direction=direction, interval=_VWAP_SIGNAL_INTERVAL[iv])`
      over `bars_intraday`. **The defect marker line `fn(slice_bars, direction=direction)` is gone.**
-   - vwap daily: `mean_reversion_vwap_daily_signal(slice, direction=direction)` over
-     `bars_vwap_daily if bars_vwap_daily is not None else bars_daily` — the fallback to `bars_daily` is taken
-     **only when `normalize_interval(interval) == "daily"`** [r1#6]; on weekly with `bars_vwap_daily is None` VWAP
-     is not matched (never the daily variant on weekly bars).
+   - vwap daily: `mean_reversion_vwap_daily_signal(slice, direction=direction)` over **`bars_vwap_daily` only**
+     (D7, [r3#3]) — no fallback to `bars_daily`. `bars_vwap_daily is None` → VWAP not matched and not starved
+     (fail closed). Every 1D/1W caller (watch and rule) passes completed `get_bars` rows there, so the daily variant
+     never reads chart-cache candles or weekly bars [r1#6].
    - vwap with bar type None: skipped.
    - The ≥60-bar floor, the 3-bar lookback and the 120-bar slice stay as they are for both variants.
    - [r2#11] The loop calls one local `call = partial(fn, direction=direction, **extra)` built per key
@@ -256,16 +273,17 @@ Mutation: map 4h → 55 → test fails.
    `completed_session_bars` treats as undatable and pops (market_session.py:264-271) — it would drop the last
    **completed** bar every run. The helper: `close = market_session.last_session_close(now)`; walk trailing bars and
    drop a bar while it is after `close` — a `str` time compared as `date.fromisoformat(t[:10]) > close.date()`, an
-   `int` (non-bool) time as `t > close.timestamp()`; any other `time` on the last bar → drop that bar only (fail
-   closed, same as A4g). Order preserved, input not mutated. `completed_session_bars` itself is not touched.
+   `int` (non-bool) time as `t > close.timestamp()`; any other `time` on the last bar, **or a `str` that
+   `fromisoformat` rejects (ValueError) [r3#6]**, → drop that bar only and stop (fail closed, same as A4g). Order preserved, input not mutated. `completed_session_bars` itself is not touched.
 3. `interval` (and `bars_vwap_daily`) keyword params are added to `_check_strategy_signals`,
    `evaluate_from_context`, `evaluate_from_context_detailed`, `evaluate_scheduled`, `describe_match` and threaded
    straight through. Default `None` = VWAP never matches (fail closed, like today's 1D rule path) — every in-repo
    caller passes it after this change.
 4. `evaluate_scheduled`'s starved count uses `_strategy_bar_type(key, interval)` and **the same bar list the matcher
-   would read** — one private `_vwap_bars(interval, bars_daily, bars_intraday, bars_vwap_daily)` used by both
-   (so a 1D watch with < 60 daily bars is "no reading", not "False"; on weekly with `bars_vwap_daily` None or short →
-   starved, i.e. "no reading" under `unknown_as_none`) [r2#2].
+   would read** — one private `_vwap_bars(interval, bars_intraday, bars_vwap_daily)` used by both
+   (so a 1D watch with < 60 daily bars is "no reading", not "False"; `bars_vwap_daily` short → starved,
+   i.e. "no reading" under `unknown_as_none`; `bars_vwap_daily` None → not starved) [r2#2, r3#3].
+   `describe_match`'s gate becomes `if strategy_keys and (bars_daily or bars_intraday or bars_vwap_daily)` [r3#10].
 5. The **caller supplies completed bars**; the evaluator does not trim. Docstrings of `evaluate_from_context` /
    `evaluate_scheduled` drop "strategy confirmations keep bars_intraday (regime models only)" and say: bars_intraday
    must be completed bars of `interval`.
@@ -281,7 +299,7 @@ needs_intraday = model == "HMM_intraday" or vwap_intraday
 if needs_intraday:
     raw = fetch_intraday_candles(symbol, interval=fetch_iv, days=intraday_history_days(fetch_iv))
     bars_intraday = completed_bars_for_interval(raw, fetch_iv, now=now_ts)          # [r2#6]
-vwap_daily = bars if normalize_interval(fetch_iv) == "weekly" else None             # [r2#2]
+vwap_daily = bars if normalize_interval(fetch_iv) in ("daily", "weekly") else None   # [r2#2, r3#3] D7
 evaluate_scheduled(symbol, trigger_def, bars, bars_intraday,
                    regime_bars_intraday=bars_intraday if model == "HMM_intraday" else None,
                    interval=fetch_iv, bars_vwap_daily=vwap_daily, unknown_as_none=True)
@@ -293,10 +311,12 @@ describe_match(..., bars_intraday=bars_intraday, interval=fetch_iv, bars_vwap_da
   to `completed_daily_rows`. `evaluate_all`/`evaluate_and_notify` pass through an optional `now_ts` (tests inject it;
   the scheduler and `run_now` pass nothing). The sustain clock keeps `datetime.now(timezone.utc)` (unchanged).
 - [r1#3, r2#1] `get_bars(..., end=today)` can persist today's forming daily bar (Alpaca date-only end, per the A4g
-  record); `completed_daily_rows` drops it and **keeps** a completed last bar. This applies to **all** consumers of
+  record); `completed_daily_rows` drops it while the session is open. **Limit [r3#9]:** `get_bars` never re-fetches a
+  stored bar (historical_store.py:229), so a forming bar stored mid-session is kept after the close as "completed"
+  though it is a snapshot — the A4g open question (a) on the Alpaca date-only `end`; not fixed here, cited. This applies to **all** consumers of
   the composite watch's daily bars (OMM/HMM_daily, rsi/bb, VWAP daily). Strategy (non-composite) watches are
   unchanged.
-- 1W watch [r2#2]: VWAP runs the daily variant on the completed daily `bars` (passed as `bars_vwap_daily`).
+- 1D/1W watch [r2#2, r3#3]: VWAP runs the daily variant on the completed daily `bars` (passed as `bars_vwap_daily`).
 - A **1D/1W** watch no longer fetches "intraday" bars at its daily interval; VWAP reads `bars` through the daily
   variant.
 - The HMM fit already read completed bars; only the VWAP read moves from raw to completed, and (D5) the source
@@ -306,11 +326,13 @@ describe_match(..., bars_intraday=bars_intraday, interval=fetch_iv, bars_vwap_da
 
 - Intraday rules: `bars_intraday=_regime_candles` (completed bars of the rule's interval, as the HMM already uses)
   instead of `_model_candles` (forming bar included). `_model_candles` is then unused → removed.
-- 1D rules: `_bars_daily` is already `_regime_candles` (completed daily) → the daily variant reads it. No change.
+- 1D rules: rsi/bb/HMM_daily keep `_bars_daily = _regime_candles` (no change). **VWAP (D7, [r3#3])** reads
+  `bars_vwap_daily`, fetched as for 1W below.
 - Intraday rules' daily bars [r2#9]: the existing `_bars_daily = await get_bars(...)` branch (chart_alerts.py:973-976,
   inside D1) becomes `completed_daily_rows(await get_bars(...), _as_of_dt)`, so an intraday rule's rsi/bb read the same
   completed daily bars as an intraday watch.
-- 1W rules: `_regime_candles` are **weekly** bars, so for a rule listing `mean_reversion_vwap` fetch
+- 1D and 1W rules (D7): `_regime_candles` are chart-cache daily (1D) or **weekly** (1W) bars, so for a rule listing
+  `mean_reversion_vwap` fetch
   `get_bars(symbol, today-730d, today)` once per tick (only if some composite row lists VWAP), pass it through
   `completed_daily_rows(..., _as_of_dt)` [r1#3, r2#1, r2#7] (the block's existing aware datetime,
   chart_alerts.py:892 — never the float `as_of`), and pass it as `bars_vwap_daily`. On a `get_bars` failure
@@ -327,6 +349,9 @@ Existing `test_strategy_engine` 1D/weekly → None tests still hold; stock_scan 
 
 ### Tests (new file `tests/test_p4b_vwap_like_regime_models.py`)
 
+Every test here that reaches `completed_bars_for_interval` pins `monkeypatch.setattr(app.data.market,
+"intraday_feed_lag_seconds", lambda: 0)` [r3#4] (the lag reads `TRADIER_BASE_URL` from a developer `.env`), plus one
+test with the lag at 900 on '15min' asserting the extra bar is dropped on **both** paths (parity holds).
 Fixture bars built so the intraday VWAP signal fires on bar[-1] only when the forming bar is **included** (and a
 mirror set that fires only on completed bars), plus a daily set that fires the daily variant.
 1. Watch, stored '15m', forming bar present: stub `fetch_intraday_candles` (int unix times) + injected `now_ts`
@@ -345,7 +370,8 @@ mirror set that fires only on completed bars), plus a daily set that fires the d
    (b) `now_ts` after 16:00 ET, last bar dated today → that bar **is** read (the completed bar is kept);
    (c) `now_ts` on a Saturday, last bar dated Friday → kept.
    Mutation: swap `completed_daily_rows` for `completed_session_bars` → (b) and (c) fail.
-6. 1D rule: daily variant on `_regime_candles`; same answer as (5) on the same daily bars.
+6. 1D rule [r3#3]: `get_bars` stub called; the daily variant reads its completed rows, **not** `_regime_candles`
+   (the chart candles are given a different, non-firing series); same answer as (5) on the same `get_bars` rows.
 7. 1W rule, called with a **real float `as_of`** [r2#7]: `get_bars` stub called; daily variant reads it (not the
    weekly candles). 1W **watch** on the same daily bars → same answer (daily variant on `bars_vwap_daily=bars`)
    [r2#2]. `get_bars` raising on the rule path → VWAP not matched, no exception, and the daily variant is **not**
@@ -353,15 +379,17 @@ mirror set that fires only on completed bars), plus a daily set that fires the d
 7b. Intraday rule (15min) listing rsi: the `get_bars` rows reach the matcher through `completed_daily_rows`
    (forming daily bar dropped at a mid-session `as_of`) [r2#9].
 7c. `completed_daily_rows` unit tests: string times, int times, mixed, a non-str/non-int last `time` (dropped,
-   earlier bars kept), empty list, input not mutated.
+   earlier bars kept), a non-ISO string last `time` ("t5") dropped without raising [r3#6], empty list, input not mutated.
 8. 4h: the intraday signal no longer returns None on `interval="4h"` for a firing fixture.
-9. Starved: 1D watch with 30 daily bars and VWAP required → `evaluate_scheduled(..., unknown_as_none=True)` is
-   None; unknown interval ('2h') → VWAP never matches, result False (not None).
+9. Starved [r3#2]: trigger `primary {"model": "any"}`, `min_confirmations 0`, VWAP required. (a) 1D watch, 30
+   completed daily bars → `evaluate_scheduled(..., unknown_as_none=True)` is None. (b) 1D, ≥ 60 completed daily bars,
+   `bars_intraday=[]`, daily variant stubbed to None → **False** (the mutation "`_vwap_bars` reads bars_intraday" gives
+   None here). (c) unknown interval ('2h') → False (not None).
 10. Missing `interval` key on a composite watch → treated as '1D' (store default), no intraday fetch [r1#15].
 Plus the existing-test flips in the table above.
 Mutations: pass raw instead of completed bars (watch) → test 1 fails; revert rule path to `_model_candles` → test 2
 fails; drop the D5 map → test 3 fails; drop `interval=` in the matcher → test 4 fails; route 1D VWAP to intraday →
-test 5 fails; drop `completed_session_bars` on the watch → test 5's forming-bar check fails; remove the 1W
+test 5 fails; drop `completed_daily_rows` on the watch → test 5(a) fails [r3#7]; remove the 1W
 `bars_vwap_daily` or set it to None on failure → test 7 fails; remove "4h" from the allow-list → test 8 fails.
 
 ## T6 — momentum confirmations read a number, no crash (open_questions [61])
@@ -406,6 +434,7 @@ Test: store holding one strategy + one composite → GET returns only the strate
   730 days on 1h/4h (chart_cache.py:38, :83-84), capped at 1500 bars. The same symbol/interval can fit a different
   HMM on the watch and the rule, and `/regime-snapshot` matches the watch, not a rule. Logged as an open question.
 - `open_questions[9]` counts are recorded, not re-measured (T1).
+- Stale mid-session daily bar kept after the close by `get_bars` [r3#9] — A4g open question (a), cited, not fixed.
 - **dispatch null block [r2#12]:** with `gmail: null` and telegram enabled, `notify_enabled_channels` raises at
   `gmail.get` before telegram is tried (dispatch.py, not P4b's file); `_any_channel_enabled` returns True, so the
   transition is never committed and retries every run. T3 logs the raise; a new open question records the dispatch
@@ -417,7 +446,7 @@ Test: store holding one strategy + one composite → GET returns only the strate
 `absent`/`present` = shipped when the pattern is **found**; drift = declared status ≠ probe. So statuses must move
 **in the same commit** that changes the probe's answer:
 
-- Decision `P4B-DECISIONS-2026-09-25` gains D4 and D5 (this revision).
+- Decision `P4B-DECISIONS-2026-09-25` gains D4 and D5 (r2), D6-D8 (r4).
 - T1's commit: TESTS-PIN-STRATEGY-WATCHES-PATH (`absent` of `BAMENDJOU_STRATEGY_WATCHES_PATH` in conftest) →
   `shipped_unaudited` (the pattern is now found). Its `kind` stays `absent`.
 - T4's commit: HMM-INTRADAY-4H-HISTORY (defect_marker `fetch_intraday_candles\(symbol, interval=interval, days=55\)`)
