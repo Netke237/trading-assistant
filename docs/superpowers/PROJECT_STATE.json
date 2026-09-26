@@ -1148,19 +1148,19 @@
     {
       "id": "P1B2-STEP7-ORPHAN-ROW-UI",
       "name": "P1b-ii: Step-7 per-recId Remove/Dismiss UI for rows that may have no order behind them (kind-typed entries order-unknown / no-order / save-unconfirmed, check-the-broker text that survives Prev/Next, confirm step before a Remove on order-unknown)",
-      "status": "not_started",
+      "status": "shipped",
       "audit_rounds": 0,
-      "audit_clean": false,
+      "audit_clean": true,
       "depends_on": [
         "P1B1-STEP7-SAVE-FIRST-CORE"
       ],
       "verify": {
-        "kind": "absent",
+        "kind": "present",
         "path": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
-        "pattern": "Remove tracked position",
-        "note": "ABSENT until the Step-7 page renders the Remove tracked position button."
+        "pattern": "removeConfirmText",
+        "note": "The per-note, confirm-first Remove shipped inside P1b-i; this phase adds no code of its own."
       },
-      "note": "Split from P1B-STEP7-SAVE-FIRST by decision P1B-SPLIT-AGAIN-2026-09-25. Start from docs/superpowers/plans/2026-09-25-p1b-step7-save-first-plan.md §3 + U/V revisions + the UNAUDITED W1-W2 proposals. Fresh plan stage, cap 3. Not a merge blocker for P1a. || 2026-09-25: the minimal per-note Remove (confirm, by rec_id, no Dismiss) moved INTO P1b-i by P1B1-MINIMAL-REMOVE-2026-09-25. P1b-ii keeps anything beyond it (Dismiss, wider orphan-row UI), if still wanted."
+      "note": "Split from P1B-STEP7-SAVE-FIRST by decision P1B-SPLIT-AGAIN-2026-09-25. Start from docs/superpowers/plans/2026-09-25-p1b-step7-save-first-plan.md §3 + U/V revisions + the UNAUDITED W1-W2 proposals. Fresh plan stage, cap 3. Not a merge blocker for P1a. || 2026-09-25: the minimal per-note Remove (confirm, by rec_id, no Dismiss) moved INTO P1b-i by P1B1-MINIMAL-REMOVE-2026-09-25. P1b-ii keeps anything beyond it (Dismiss, wider orphan-row UI), if still wanted. || CLOSED BY ABSORPTION 2026-09-26 (decision P1B2-CLOSED-BY-ABSORPTION-2026-09-26): everything this phase was carved to do shipped inside P1b-i (merged to main at 106d853, P1b-i code round 1 CLEAN): kind-typed notes order-unknown / save-unconfirmed / not-removed (W1), per-note text rendered from the note so the check-the-broker warning survives Prev/Next (W1), confirm step before every Remove (W1), delete strictly by the note's rec_id (section 3), a 404 is NOT final on save-unconfirmed (V1), the delete-failed branch pushes a note (V2, not-removed), shared removeTrackedRow with forced sync + dropLocal (X1). W2 is moot: P1b-i's refused-save branch sends no cleanup DELETE, so there is no second push to test. NOT built, by Kenneth's choice: Dismiss (V1) and any Portfolio-page display of the notes. audit_rounds stays 0: no audit ran on THIS phase; audit_clean rests on P1b-i's clean code round, which covered this code."
     },
     {
       "id": "P4B-STRATEGY-COMPOSITE-WATCHES",
@@ -2393,6 +2393,11 @@
       "q": "Proposals for the 8 open/deferred topics left by P4b (composite momentum never matches; dialog rules vs watches interval series; undelivered EOD exit lost; HMM_intraday history differs by path; rule path trims daily rows at fetch time; early-close sessions; dispatch.py null block / corrupt settings; 1W rules weekly vs watches daily).",
       "a": "Kenneth, 2026-09-26: ACCEPTED ALL, with two upgrades. (1) Composite momentum confirmations: BUILD the missing functionality (not just hide it) -- task COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD. (2) Fold into W2-INTERVAL (dialog saves 5min/15min/30min, stored rules+watches migrate once, D5 read-side map deleted). (3) Store the undelivered event and resend it next run even if price recovered, labelled delayed -- task WATCH-UNDELIVERED-EVENT-RESEND. (4)+(5)+(8) One parity package: shared HMM_intraday history window (180d on 1h/4h, 55d below 1h) on watch, rule and /regime-snapshot; rule path trims get_bars rows at datetime.now(MARKET_TZ); 1W composite rules read completed daily get_bars rows for rsi/bb/HMM_daily like 1W watches (reverses the A4g choice for 1W, confirmed) -- task WATCH-RULE-BAR-PARITY. (6) Early-close sessions: accepted and documented, no calendar unless MEAS shows it matters. (7) dispatch.py: null block = disabled and Telegram still tried; corrupt settings.yaml logged at ERROR; the watch evaluator treats an unreadable settings file as channels-enabled -- assigned to P6.",
       "by": "Kenneth 2026-09-26"
+    },
+    {
+      "id": "P1B2-CLOSED-BY-ABSORPTION-2026-09-26",
+      "q": "P1b-i shipped almost all of P1b-ii's scope (per-rec_id Remove, kind-typed notes, confirm, 404 rules). Close P1b-ii, build only V1's Dismiss, or widen it to show the notes in Portfolio?",
+      "a": "Kenneth, 2026-09-26: CLOSE IT. No new code. The one leftover is logged in open_questions, not built."
     }
   ],
   "pending_kenneth": [
@@ -2466,7 +2471,8 @@
     "LOGGED BY P3a (2026-09-25), NOTE: frontend lib/scanScheduleResolve.ts still sends riskStore.maxLossPerTradePct as-is; a 0% schedule now runs at the 1% default by decision P3A-STORED-ZERO-RISK-RUNS-AT-DEFAULT-2026-09-25 rather than stopping like the manual paths. Not P3a's file.",
     "LOGGED BY P3c SETUP (2026-09-25), P3b DEFERRAL, NOT FIXED: POST /auto-trade/fire (routers/auto_trade.py fire_now) runs fire() on the event loop, so a stalled regime fetch (8s deadline, provider timeouts) can block the whole server for up to ~25s. Owner: P3c (decision P3C-PACKAGE-CREATED-2026-09-25). Still open: whether to move fire() behind asyncio.to_thread as /broker/stock-order does.",
     "RE-LOGGED 2026-09-26 from the P1b-i plan section 8 (it lived ONLY in the plan file, not here). OWNER: broker adapters, unassigned. (a) Adapter parse errors AFTER the order is submitted raise ValueError; they should raise RuntimeError so the 502 path can tell them apart. (b) The /broker/*-order 502 detail should say whether the broker answered 4xx or the transport failed. Until both land, the Step-7 direct send treats these as ORDER-UNKNOWN and keeps the Portfolio row, which is the safe side. Not money-losing today; noise in the notes.",
-    "RE-LOGGED 2026-09-26 from the P1b-i plan section 8 (round 1 finding 12; it lived ONLY in the plan file). OWNER: backend (routers/portfolio.py). When an offline save's DELETE lands after the create commits but before log_approval's own commit (routers/portfolio.py ~163-168), an APPROVE audit event is written for a rec_id that no longer exists. log_approval should skip a missing position. Audit-log noise only; no History or money effect."
+    "RE-LOGGED 2026-09-26 from the P1b-i plan section 8 (round 1 finding 12; it lived ONLY in the plan file). OWNER: backend (routers/portfolio.py). When an offline save's DELETE lands after the create commits but before log_approval's own commit (routers/portfolio.py ~163-168), an APPROVE audit event is written for a rec_id that no longer exists. log_approval should skip a missing position. Audit-log noise only; no History or money effect.",
+    "LOGGED 2026-09-26 at P1B2-CLOSED-BY-ABSORPTION-2026-09-26, NOT FIXED BY CHOICE: a SAVE-UNCONFIRMED note whose save never reached the server (the create never committed) answers every Remove with 'Not found yet' forever; only a full reload clears it. Harmless: no Portfolio row and no order exist. If it bites, the fix is V1's Dismiss (old P1b plan, 2026-09-25-p1b-step7-save-first-plan.md) limited to save-unconfirmed notes after at least one 404."
   ],
   "authoritative_documents": [
     {
