@@ -377,9 +377,9 @@ export default function ChartWorkspace() {
         // email/telegram notifications. Re-posting would create a duplicate
         // DB row and fire double notifications.
         useChartAlertStore.getState().addHistory(msg.entry, true);
-        useChartAlertStore.getState().updateRule(msg.entry.rule_id, {
-          last_triggered_at: msg.entry.triggered_at,
-        });
+        // P4a A4: the backend already wrote last_triggered_at for this fire;
+        // record it locally only (the old full PUT could overwrite a server edit).
+        useChartAlertStore.getState().stampRuleTriggered(msg.entry.rule_id, msg.entry.triggered_at, { persist: false });
         useChartAlertStore.getState().pushToast({
           id: msg.entry.id,
           message: `${msg.entry.symbol} \u00b7 ${msg.entry.reason}`,
@@ -426,9 +426,9 @@ export default function ChartWorkspace() {
         );
         for (const history of triggered) {
           useChartAlertStore.getState().addHistory(history);
-          useChartAlertStore.getState().updateRule(history.rule_id, {
-            last_triggered_at: history.triggered_at,
-          });
+          // P4a A4: a browser-side fire -- nothing else writes this stamp to
+          // the server, so PATCH it (only the stamp, never the whole rule).
+          useChartAlertStore.getState().stampRuleTriggered(history.rule_id, history.triggered_at, { persist: true });
           useChartAlertStore.getState().pushToast({
             id: history.id,
             message: `${history.symbol} · ${history.reason}`,
