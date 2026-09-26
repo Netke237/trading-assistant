@@ -252,7 +252,10 @@ async def _eval_composite_watch(w: dict, start: date, end: date) -> _Transition 
         interval = w.get("interval", "15m")
         try:
             from app.data.market import fetch_intraday_candles
-            bars_intraday = fetch_intraday_candles(symbol, interval=interval, days=55)
+            from app.services.composite_trigger_evaluator import intraday_history_days
+            bars_intraday = fetch_intraday_candles(
+                symbol, interval=interval, days=intraday_history_days(interval),
+            )
         except Exception as exc:
             logger.warning("composite-watch: intraday fetch failed for %s — %s", symbol, exc)
     try:

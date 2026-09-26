@@ -34,6 +34,30 @@ def hmm_intraday_interval_error(trigger_def: object, interval: object) -> str | 
     return f"HMM_intraday needs an intraday interval (e.g. 5m, 15m, 1h), got {interval!r}"
 
 
+# HMM-INTRADAY-4H-HISTORY (Kenneth, 2026-09-25): history a composite WATCH
+# fetches per interval. 4h is yfinance 1h resampled, so 55 days gave ~110
+# completed 4h bars < regime_hmm.MIN_BARS (200) and the HMM never fitted;
+# 180 days ("6mo") gives ~250. Every other interval keeps 55.
+_INTRADAY_HISTORY_DAYS = {"4h": 180}
+
+
+def intraday_history_days(interval: str) -> int:
+    from app.data.market import normalize_interval
+    return _INTRADAY_HISTORY_DAYS.get(normalize_interval(interval), 55)
+
+
+# D5 (P4b): composite watches store the dialog's '1m'/'5m'/'15m'/'30m', rules
+# store the chart's '1min'/'5min'/'15min'/'30min', and the two spellings fetch
+# different series (yfinance regular hours vs the Tradier-merged series). A
+# watch reads with the chart spelling so it sees the bars a rule sees. Read-side
+# only -- the stored value is W2-INTERVAL's to migrate.
+_WATCH_TO_FETCH_INTERVAL = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min"}
+
+
+def watch_fetch_interval(interval: str) -> str:
+    return _WATCH_TO_FETCH_INTERVAL.get(interval, interval)
+
+
 def _check_primary_omm(trigger_def: dict, omm_result) -> bool:
     """Check OMM primary condition. omm_result is OmmResult dataclass or None."""
     if omm_result is None:

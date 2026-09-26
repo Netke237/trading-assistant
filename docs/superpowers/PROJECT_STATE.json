@@ -1007,7 +1007,7 @@
     {
       "id": "HMM-INTRADAY-4H-HISTORY",
       "name": "HMM_intraday composite watches on '4h' fetch enough history (~180 days) for >= regime_hmm.MIN_BARS completed 4h bars (today days=55 -> ~110 bars -> never fires). Kenneth confirmed the recommendation 2026-09-25",
-      "status": "not_started",
+      "status": "shipped_unaudited",
       "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [],
@@ -1017,7 +1017,7 @@
         "pattern": "fetch_intraday_candles\\(symbol, interval=interval, days=55\\)",
         "note": "DEFECT MARKER: one fixed 55-day window for every interval."
       },
-      "note": "QUEUED 2026-09-25 from decision FOLLOWUPS-QUEUE-2026-09-25 (Kenneth); verified still open against main 8d6741d by the backlog audit. Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean."
+      "note": "QUEUED 2026-09-25 from decision FOLLOWUPS-QUEUE-2026-09-25 (Kenneth); verified still open against main 8d6741d by the backlog audit. Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean. BUILT by P4b T4 (branch claude/cool-heisenberg-6lsa3a): composite_trigger_evaluator.intraday_history_days ('4h' -> 180, else 55) used by the composite watch fetch and /regime-snapshot (D4, which also applies the D5 spelling map). tests/test_p4b_4h_history.py; mutations (4h->55, drop the snapshot map, fixed 55 in the watch) each fail it. Unaudited until P4b's code round."
     },
     {
       "id": "INTERVAL-SPELLING-CHART-VOCABULARY",
