@@ -6,8 +6,8 @@ and re-taken 2026-09-26, no new commits on the old branch), off main 2f67e6f. Cl
 
 Round history: r1 → 15 findings (2 HIGH, 7 MED, 6 LOW), addressed in r2. r2 → 13 findings (3 HIGH, 4 MED, 6 LOW),
 addressed in r3. r3 → 7 findings (0 HIGH, 3 MED, 4 LOW), addressed in r4. r4 → 6 findings (0 HIGH, 1 MED, 5 LOW),
-addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. Logs at
-the end.
+addressed in r5. r5 → round 5 limited to §7: 5 findings (0 HIGH, 3 MED, 2 LOW), addressed in r6. r6 → round 6 (§7): 4 LOW, addressed in r7. r7 → round 7 (§7): 2 LOW, addressed in r8.
+Logs at the end.
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
 - P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
@@ -482,6 +482,16 @@ Tests (`tests/test_p3c_fire_off_loop.py`):
   failed assertion can never leave the one worker blocked. An AUTOUSE, FUNCTION-scoped fixture (default scope —
   r5-L5; not module scope, whose teardown runs once per module) asserts in its teardown that the worker is idle:
   `_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)`.
+  Arming (r7-L2): every test that patches `fire` (Cases A–D, the thread-name and loop-free tests) arms
+  `auto_trader` with `_make_armed(...)` before creating the task and calls `auto_trader.disarm()` in the same
+  `try/finally` that sets `ev` — the stub never runs the real disarm, and `auto_trader` is a process-wide singleton.
+  Patch target (r7-L1): `fire` is patched ON THE INSTANCE, `mocker.patch.object(auto_trade.auto_trader, "fire",
+  stub)` (as test_auto_trader.py:3497 does), so the handler's `submit(auto_trader.fire, ...)` receives exactly
+  `stub` and the wrapper's `fn is stub` filter matches (a class-level patch yields a fresh bound method per lookup
+  and never matches). Every "wait until the wrapper has recorded `cf`" is BOUNDED:
+  `for _ in range(100): if recorded or task.done(): break; await asyncio.sleep(0)`, then `assert recorded`
+  (surfacing `task.exception()` if the task ended first) — there is no pytest-timeout, so an unbounded wait would
+  hang the suite instead of failing it.
   Callback barrier (r5-L4): `Future.set_result`/`set_exception` notify waiters BEFORE `_invoke_callbacks`, so
   `cf.result()` can return while `_log_unbooked` has not yet run. Before any caplog assertion in Cases A and C,
   the test waits `_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)` — the single worker finishes the previous
@@ -626,3 +636,14 @@ shape, no failure, no "exception calling callback" record.
 | L2 | LOW | §7 `in_transaction()` fixture has no tables; `fire`/`book_fired_order` unspecified for that test | fixture runs `Base.metadata.create_all`; test patches `fire` (held stub) and `book_fired_order` (`AsyncMock`), asserts after `started` |
 | L3 | LOW | §7 `started` Event could be read as created inside `fire` or module-level | test body creates `started` and `ev` per test; `fire` sets / waits on them |
 | L4 | LOW | §7 Case B has no handle on `cf` before releasing | yield until the wrapper has recorded the fire `cf` |
+
+## Round-7 log (2 findings; scope §7 only)
+
+All four round-6 fixes verified present and correct; the wrapper identity filter confirmed for an instance-level
+patch (plain function and MagicMock); the rollback cannot expire the snapshot (`orm_positions_to_risk` copies rows
+into dataclasses before it).
+
+| # | Sev | Finding | Resolution (r8) |
+|---|---|---|---|
+| L1 | LOW | §7 the wrapper filter matches only an instance-level patch, and the wait for `cf` is unbounded — a miss hangs the suite | patch target stated (`auto_trade.auto_trader` instance); bounded 100-yield wait, then `assert recorded` |
+| L2 | LOW | §7 Cases A–D never arm/disarm `auto_trader`; the stub never disarms, leaving the singleton armed | every `fire`-patching test arms first and disarms in the same `try/finally` as `ev.set()` |
