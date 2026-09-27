@@ -264,8 +264,14 @@ def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
                 conf = s.get('confidence', 0) or 0
                 if conf < condition.min_confidence:
                     continue
-            signal_time = s.get('time') or s.get('time_start', '')
-            if signal_time >= candle_time:
+            # W2-STRUCT (Q16): match on the bar that CONFIRMED the signal. FVG,
+            # OrderBlock and Divergence start before it (time_start), so the old
+            # `time or time_start >= candle_time` never matched them on the live
+            # path, which recomputes structure up to the closed candle (A4e).
+            # `==`, not `>=`: identical there (every signal is <= closed), and on
+            # the dry-run's full-history list `>=` matched every earlier bar.
+            signal_time = s.get('confirmed_at') or s.get('time') or s.get('time_start', '')
+            if signal_time == candle_time:
                 trigger_values[condition.signal_kind] = 1
                 return True, trigger_values
         return False, trigger_values

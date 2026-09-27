@@ -90,6 +90,7 @@ def detect_fvg(candles: list[dict]) -> list[dict]:
             signals.append({
                 "kind": "FVG", "direction": "bullish",
                 "time_start": c0["time"], "time_end": None,
+                "confirmed_at": c2["time"],
                 "price_low": c0["high"], "price_high": c2["low"],
                 "mitigated": False, "confidence": confidence,
                 "mtf_aligned": False,
@@ -102,6 +103,7 @@ def detect_fvg(candles: list[dict]) -> list[dict]:
             signals.append({
                 "kind": "FVG", "direction": "bearish",
                 "time_start": c0["time"], "time_end": None,
+                "confirmed_at": c2["time"],
                 "price_low": c2["high"], "price_high": c0["low"],
                 "mitigated": False, "confidence": confidence,
                 "mtf_aligned": False,
@@ -159,7 +161,7 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
                 _end_idx = min(i + 30, len(candles) - 1)
                 signals.append({
                     "kind": kind, "direction": "bullish",
-                    "time": c["time"], "price": recent_high["price"],
+                    "time": c["time"], "confirmed_at": c["time"], "price": recent_high["price"],
                     "confidence": confidence, "mtf_aligned": False,
                     "time_end": candles[_end_idx]["time"],
                 })
@@ -178,7 +180,7 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
                 _end_idx = min(i + 30, len(candles) - 1)
                 signals.append({
                     "kind": kind, "direction": "bearish",
-                    "time": c["time"], "price": recent_low["price"],
+                    "time": c["time"], "confirmed_at": c["time"], "price": recent_low["price"],
                     "confidence": confidence, "mtf_aligned": False,
                     "time_end": candles[_end_idx]["time"],
                 })
@@ -233,6 +235,7 @@ def detect_order_blocks(candles: list[dict], bos_signals: list[dict] | None = No
                 signals.append({
                     "kind": "OrderBlock", "direction": "bullish",
                     "time_start": prev["time"], "time_end": None,
+                    "confirmed_at": bs["time"],
                     "price_high": prev["high"], "price_low": prev["low"],
                     "mitigated": False, "confidence": confidence,
                     "mtf_aligned": False,
@@ -242,6 +245,7 @@ def detect_order_blocks(candles: list[dict], bos_signals: list[dict] | None = No
                 signals.append({
                     "kind": "OrderBlock", "direction": "bearish",
                     "time_start": prev["time"], "time_end": None,
+                    "confirmed_at": bs["time"],
                     "price_high": prev["high"], "price_low": prev["low"],
                     "mitigated": False, "confidence": confidence,
                     "mtf_aligned": False,
@@ -363,7 +367,10 @@ def _detect_divergence(candles: list[dict], indicator_vals: list[Union[float, No
     if len(candles) < 30:
         return signals
 
-    price_swing_highs, price_swing_lows = find_swings(candles, lookback=5)
+    # W2-STRUCT: a swing at index i exists only once `lookback` bars to its right
+    # have closed, so a divergence is confirmed at candles[second_swing + lookback].
+    lookback = 5
+    price_swing_highs, price_swing_lows = find_swings(candles, lookback=lookback)
     ind_swing_highs = _find_indicator_swings(candles, indicator_vals, price_swing_highs, "high")
     ind_swing_lows = _find_indicator_swings(candles, indicator_vals, price_swing_lows, "low")
 
@@ -379,6 +386,7 @@ def _detect_divergence(candles: list[dict], indicator_vals: list[Union[float, No
                     "kind": "Divergence", "direction": "bearish",
                     "indicator": indicator, "divergence_type": "regular",
                     "time_start": ph0["time"], "time_end": ph1["time"],
+                    "confirmed_at": candles[ph1["index"] + lookback]["time"],
                     "price_start": ph0["price"], "price_end": ph1["price"],
                     "confidence": _divergence_confidence(True, bar_count),
                     "mtf_aligned": False,
@@ -396,6 +404,7 @@ def _detect_divergence(candles: list[dict], indicator_vals: list[Union[float, No
                     "kind": "Divergence", "direction": "bullish",
                     "indicator": indicator, "divergence_type": "regular",
                     "time_start": pl0["time"], "time_end": pl1["time"],
+                    "confirmed_at": candles[pl1["index"] + lookback]["time"],
                     "price_start": pl0["price"], "price_end": pl1["price"],
                     "confidence": _divergence_confidence(True, bar_count),
                     "mtf_aligned": False,
@@ -413,6 +422,7 @@ def _detect_divergence(candles: list[dict], indicator_vals: list[Union[float, No
                     "kind": "Divergence", "direction": "bullish",
                     "indicator": indicator, "divergence_type": "hidden",
                     "time_start": pl0["time"], "time_end": pl1["time"],
+                    "confirmed_at": candles[pl1["index"] + lookback]["time"],
                     "price_start": pl0["price"], "price_end": pl1["price"],
                     "confidence": _divergence_confidence(False, bar_count),
                     "mtf_aligned": False,
@@ -430,6 +440,7 @@ def _detect_divergence(candles: list[dict], indicator_vals: list[Union[float, No
                     "kind": "Divergence", "direction": "bearish",
                     "indicator": indicator, "divergence_type": "hidden",
                     "time_start": ph0["time"], "time_end": ph1["time"],
+                    "confirmed_at": candles[ph1["index"] + lookback]["time"],
                     "price_start": ph0["price"], "price_end": ph1["price"],
                     "confidence": _divergence_confidence(False, bar_count),
                     "mtf_aligned": False,
