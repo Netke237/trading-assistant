@@ -1111,3 +1111,19 @@ Below the gate — logged against main, NOT fixed in-branch:
   the display can confuse).
 - The render test's `resolved_request` fixture is cast `as unknown as`, so it would not catch a type change.
 - A hand-edited `scan_schedule.yaml` with `risk_pct: "0"` makes the GET list 500. Pre-existing, manual edit only.
+
+## Code round 1 log — item 4, conviction_sizing refusal messages (0 gate-level findings; CLEAN)
+
+Scope: commit c532186, whole change. Brief quoted `audit_rule` clause (1) and the comment-truth exception
+verbatim, applied to the error messages too. Result: ZERO GATE-LEVEL FINDINGS — item 4's code stage is closed.
+Checked: accept/refuse behaviour and the returned tuple are unchanged — a parity script ran the pre-change and
+new `resolve_sizing` over 13 × 23 `full_conviction_pct` × `min_mult` inputs (bools, strings, nan/inf, ±0.0, 1e-300,
+1.0, 100.0, …) with 0 differences; the zero message's mechanism (1 share via `_position_size`'s `max(1, …)`, also
+on the fixed-risk path; 1 contract via `_sized_quantity`; unmeasured regime uses the floor on both paths) is
+accurate; both hints fire only where the spec says.
+
+Below the gate — logged against main, NOT fixed in-branch:
+- The zero message says "1 share" without noting `_position_size` returns 0 shares when entry == stop (an
+  unrelated pre-existing guard).
+- `min_mult: 100` → "Did you mean 1?", which is full size; valid, of doubtful use.
+- The comment's line refs (stock_scan.py:1016, auto_trader.py:1392) will drift.
