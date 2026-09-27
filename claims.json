@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/clever-planck-rpz8yh",
+      "claimed_at": "2026-09-27T10:54:29Z",
+      "expires_at": "2026-09-27T13:54:29Z",
+      "note": "W2-INTERVAL: dialog saves chart spellings, migrate stored 5m/15m rules+watches, drop P4b read-side map",
+      "task": "INTERVAL-SPELLING-CHART-VOCABULARY"
+    }
+  ]
 }
