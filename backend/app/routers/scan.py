@@ -71,6 +71,9 @@ from app.scoring.stop_cost import compute_stop_cost
 from app.services.config_loader import load_exit_plan_cfg
 from app.models.heston import calibrate_heston, HestonParams
 from types import SimpleNamespace
+# P3c: stock_scan imports only the regime and contracts routers, neither of
+# which imports this module, so there is no cycle.
+from app.routers.stock_scan import _regime_data_drop
 from app.services.audit import new_rec_id, log_event
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
@@ -116,6 +119,11 @@ _state_lock = asyncio.Lock()
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 _ORDER = {"REJECT": 0, "CAUTION": 1, "PASS": 2}
+
+# P3c item 1: the options request has no `regime_filter` field; handing the
+# stock helper this stand-in makes its drop condition exactly the fire's
+# (regime gate enabled OR regime sizing on).
+_NO_REGIME_FILTER = SimpleNamespace(regime_filter=False)
 
 
 def _rule_score(card: StockScoreCard, name: str) -> int:
@@ -566,6 +574,11 @@ async def _process_symbol(
 
     # ── Regime sentiment ──────────────────────────────────────────────────────
     _regime_signal = None
+    # P3c item 1: all three exist even when the config read below raises, so
+    # the Intraday data-drop check after `_regime_gate` can read them.
+    _regime_bars: list[dict] = []
+    _regime_fetch_exc: Exception | None = None
+    _rcfg: dict | None = None
     try:
         _scfg = _load_scoring_cfg()
         _rcfg = _scfg["regime"][horizon.lower()]
@@ -588,6 +601,7 @@ async def _process_symbol(
             except Exception as exc:
                 _log.warning("Intraday regime bars unavailable for %s: %s", symbol, exc)
                 _regime_bars = []
+                _regime_fetch_exc = exc
         else:
             _regime_bars = candles
         if _regime_bars and len(_regime_bars) >= _rcfg.get("min_obs", 10):
@@ -636,6 +650,21 @@ async def _process_symbol(
         regime_headwind_caution_pct,
         regime_headwind_reject_pct,
     )
+
+    # P3c item 1 (decision P3A-INTRADAY-REFUSAL-MATCHES-FIRE-2026-09-25): an
+    # Intraday name with NO completed 15-min regime bars (fetch raised or came
+    # back empty) is dropped whenever the auto-trader's fire would refuse it --
+    # regime gate enabled or regime sizing on. The helper is the stock scan's,
+    # called not copied; the options request has no `regime_filter`, so
+    # `_NO_REGIME_FILTER` reduces its condition to exactly the fire's. A short
+    # but non-empty series still abstains (unmeasured), as on the fire. `_rcfg`
+    # is None only when the regime config read raised; that name continues
+    # unmeasured, as before.
+    if _rcfg is not None and (_drop := _regime_data_drop(
+            symbol, _NO_REGIME_FILTER, _load_scoring_cfg(), _regime_gate, _rcfg,
+            _regime_bars, _regime_fetch_exc)):
+        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": _drop["reason"]})
+        return RejectedCandidate(symbol=symbol, reason=_drop["reason"])
 
     # ── Pre-screen: score without IV rank ─────────────────────────────────────
     # iv_rank is unknown until the chain is fetched (pass 2). Score with None to gate
@@ -1713,7 +1742,10 @@ async def _execute_scan_core(
     # `scanned == candidates + every bucket` true on a PARTIAL/FAILED run and on
     # any future reason nobody remembered to classify.
     _data_kw = ("no market data", "price filter", "cap filter")
-    def _is_data(r):       return any(k in r.reason for k in _data_kw)
+    # "regime data unavailable:" (P3c item 1) is a data drop, as the stock scan
+    # counts it under failed_history (no 15-min regime bars is like no price).
+    def _is_data(r):       return (any(k in r.reason for k in _data_kw)
+                                   or r.reason.startswith("regime data unavailable:"))
     def _is_pre_screen(r): return r.reason.startswith("Pre-screen:")
     def _is_no_chain(r):   return r.reason == "no option chain"
     def _is_score(r):      return r.reason.startswith("Score gate:")
