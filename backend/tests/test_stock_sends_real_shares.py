@@ -253,6 +253,28 @@ async def test_drawer_stock_qty_raise_is_judged_at_real_shares(client):
     assert r.json()["adjustedQty"] == 100
 
 
+@pytest.mark.asyncio
+async def test_drawer_increase_never_saves_a_smaller_stock_position(client):
+    # Code round 1 on Part B: 100 sh x $200 = $20k booked at $100k (20%). At a
+    # $90k portfolio the cap allows 90 sh, so "increase to 101" must be REFUSED
+    # and leave 100 -- never soft-resize to 90 below what is held.
+    body = {"recId": "REC-C", "symbol": "AAPL", "contract": STOCK, "direction": "Bullish",
+            "entryPrice": 200.0, "qty": 100, "entryDate": "2026-09-27", "stop": 190.0,
+            "targets": [], "dteTotal": 0, "portfolioValue": 100_000}
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               new=AsyncMock(return_value=None)):
+        r = await client.post("/api/portfolio", json=body)
+    assert r.status_code == 201, r.text
+    r = await client.patch("/api/portfolio/REC-C",
+                           json={"qty": 101, "stop": 185.0, "portfolioValue": 90_000})
+    assert r.status_code == 422, r.text
+    assert "Quantity not increased" in r.text
+    rows = (await client.get("/api/portfolio")).json()
+    [row] = [p for p in rows if p["recId"] == "REC-C"]
+    assert row["qty"] == 100
+    assert row["stop"] == 185.0, "the other fields in the same PATCH still save"
+
+
 # ── /settings/risk ───────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

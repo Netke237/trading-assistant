@@ -234,6 +234,18 @@ async def update_position(
                 )
                 if not risk.approved:
                     qty_error = " ".join(risk.reasons)
+                elif risk.adjusted_size is not None and risk.adjusted_size <= position.qty:
+                    # STOCK-SENDS: an INCREASE must never save a smaller position.
+                    # The soft resize fits the cap below what is already held
+                    # (the cap or portfolio value moved since the row was
+                    # booked -- reachable for stocks now that they are judged at
+                    # their real share count), so the increase is refused and
+                    # the held qty stays.
+                    qty_error = (
+                        f"size_reduced_to_fit_exposure_limit: the position is already at or over "
+                        f"its exposure cap ({position.qty} held; the cap allows {risk.adjusted_size}). "
+                        f"Quantity not increased."
+                    )
                 else:
                     if risk.adjusted_size is not None:
                         adjusted_qty = risk.adjusted_size
