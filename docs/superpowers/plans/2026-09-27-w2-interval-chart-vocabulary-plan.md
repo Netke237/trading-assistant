@@ -103,3 +103,11 @@ Per P4B-FOLLOWUPS-2026-09-26 (2): delete `_WATCH_TO_FETCH_INTERVAL` and `watch_f
 - Frontend: `npm run typecheck`, `npm run test`.
 - Mutations (each must fail at least one test): `_CHART_SPELLING['5m']` → `'5m'`; drop `chart_interval` from `create_rule`; drop it from `replace_rule`'s `_stored_pair` comparison only; drop the 3a call from the scheduler; drop 3b from `load()`; revert the dialog default to `'5m'`; revert the regime-snapshot default to `'15m'`.
 - `python3 scripts/state.py`: the phase's defect marker (the dialog's `['5m', '15m', '30m', '1h', '4h']`) is gone.
+
+## 11. Round log
+
+- **Plan round 1 — CLEAN** (zero gate-level findings; the brief quoted `audit_rule`'s severity filter). Below the gate, logged not fixed: after a failed migration ticks run first, so a `'5m'`→`'5min'` key change can re-evaluate the newest closed candle once (cooldown suppresses a duplicate); a stale browser bundle could request `/regime-snapshot?interval=5m`.
+- **Build** `33c9c39`. Build note: the existing R6 scheduler tests stubbed only the A4f migration, so the new one ran against the real session factory; `_drive_scheduler` now stubs both and pins the order (`migrate`, `respell`, `tick`).
+- **Mutations (§10):** 8 of 9 killed. Survivor: `replace_rule`'s `_stored_pair` comparison using `body.interval` instead of the mapped value. EQUIVALENT: `_err` is non-None only for non-intraday intervals, which `chart_interval` returns unchanged.
+- **Code round 1 (= round 2) — CLEAN** on `33c9c39` (zero gate-level findings).
+- Suites: backend 3649 passed, 1 skipped; frontend 3862/3862; typecheck clean.
