@@ -186,3 +186,8 @@ On merge: phase `verify` becomes a presence probe on `pending_events` in `strate
   widened the duplicate window to N events (cancellation mid-walk) → write after every entry, test 16, M9. Reviewer note
   (not a finding, applied): state how evaluators reach the committed/pending snapshot (`_committed`/`_pending` on `w_eff`),
   M8.
+- **Plan round 2 (2026-09-27): ZERO gate-level findings — plan stage CLEAN.** Reviewed the round-1 diff only (83c13c1..538263f)
+  against the code: guarded `_write` keeps the in-memory state on a failed `save()` (update_state mutates before saving);
+  write-after-each-entry leaves at most one sent-but-unwritten event; `_committed`/`_pending` never reach a persisted state.
+  Below the gate, applied in the build at no cost: `w_eff` is built inside `_collect`'s per-watch `try`, so a hand-edited
+  malformed tail `new_state` skips only that watch.
