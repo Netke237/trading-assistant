@@ -63,8 +63,12 @@ for t in transitions: _deliver_or_queue(t, any_channel)
   - else send `_format_event(ev, delayed_since=fired_at)` via `notify_enabled_channels`; an exception counts as not
     delivered (as today). Delivered → `committed = entry.new_state`, next entry. Not delivered → stop the walk (order is
     kept: nothing newer is sent before an older one).
-- ONE write per watch at the end: `committed` alone if the list is used up, else `{**committed, "pending_events": rest}`.
-  Skipped when nothing changed (a failed first resend writes nothing).
+- **A write after EVERY entry that leaves the queue** (delivered, no-channel commit, or malformed drop):
+  `committed` alone if the list is used up, else `{**committed, "pending_events": rest}` — so at most one event is ever
+  sent-but-unwritten, exactly today's commit-after-send window (round 1, F2). A failed first resend writes nothing.
+- **Per-watch isolation (Q17, round 1 F1):** each watch's whole resend walk is inside its own `try/except Exception`,
+  logged at ERROR and skipped, like `_collect`'s loops — one watch's failure never stops another's resend or the
+  evaluation that follows.
 
 **`_collect`** — unchanged except each watch is evaluated as `w_eff = {**w, "last_state": effective}`, and the evaluators'
 non-event writes (strategy sustain clock at `:131/:147/:171`, composite re-arm `:309` and sustain clock `:324/:333`) go
@@ -76,6 +80,11 @@ through `_write_effective(w, state)` instead of `strategy_watch_store.update_sta
   `new_state`; when the entry is finally delivered the watch commits straight to idle, and a later re-entry queues a
   second entry — both alerts are true events.
 `_Transition` gains `committed: dict` and `pending: list` (the snapshot the watch was evaluated with).
+**How the evaluators reach the snapshot:** `_collect` builds `w_eff = {**w, "last_state": effective, "_committed":
+committed, "_pending": pending}` (both private keys taken from the ORIGINAL `w` before the swap) and `_write_effective`
+reads `w_eff["_committed"]` / `w_eff["_pending"]` — never `w_eff["last_state"]`, which holds the effective state and no
+`pending_events` (reading it would take the "no pending" branch and wipe the queue). The private keys are never written:
+new states are built from `last_state` only.
 
 **`_deliver_or_queue(t, any_channel)`**:
 - `t.pending` non-empty (its resend just failed or the watch is disabled — disabled watches are not evaluated, so this is
@@ -89,8 +98,12 @@ through `_write_effective(w, state)` instead of `strategy_watch_store.update_sta
 logged at ERROR with its subject ("undelivered alert dropped, queue full"). Growth is at most one entry per run per watch,
 so 20 is ~5 weeks of EOD runs of continuous failures with an event every run; the cap only bounds the YAML file.
 
-**Writes are all through `update_state` under `_run_lock`.** A crash after a delivered resend and before its write re-sends
-that event next run (a duplicate, never a loss) — the same window today's commit-after-send has.
+**Every write goes through one guarded helper `_write(watch_id, state)`** (round 1, F1): `update_state` inside
+`try/except Exception`, logged at ERROR, never raised — `_commit` becomes a call to it. So a failed `save()` for watch A
+(queue write, resend write, cap write) never aborts the `for t in transitions` loop or the resend loop: watch B is still
+sent. All writes run under `_run_lock`. A crash or cancellation (`CancelledError` from `scheduler.stop()` during a slow
+send) after a delivered send and before its write re-sends that ONE event next run (a duplicate, never a loss) — the same
+window today's commit-after-send has, because §1.2 writes after every entry.
 
 ### 1.3 Message text
 
@@ -136,6 +149,10 @@ that event next run (a duplicate, never a loss) — the same window today's comm
 13. YAML round-trip with the real `StrategyWatchStore` on a tmp path: numpy-float signal prices → stored pending entry
     reloads (`safe_load`) with every watch present.
 14. A delivered first-time send commits as today and stores nothing (no `pending_events` key).
+15. Round 1 F1: `update_state` raises for watch A's queue write → watch B's event is still sent and committed; same
+    for a raise in A's resend write (B's resend and the evaluation still run).
+16. Round 1 F2: two queued events, the first delivered, the second's send raises `CancelledError` → the store already
+    holds committed = first's new_state and one pending (the first is not re-sent next run).
 
 **Existing tests that pin the replaced behaviour** (changed, not deleted, each noted in the commit):
 `test_p4b_watch_isolation_and_delivery.py` — `test_undelivered_strategy_entry_keeps_state_and_retries` (2nd run now
@@ -147,7 +164,8 @@ equality. Every other watch test must pass unchanged.
 **Mutations the suite must kill** (run and recorded in the phase note): (M1) evaluate from committed instead of effective
 state; (M2) send a new event while pending exists; (M3) break on delivered instead of not-delivered in the walk;
 (M4) resend disabled watches; (M5) drop the `float()` coercion; (M6) commit an undelivered first send (old D3 bug);
-(M7) newest-first order.
+(M7) newest-first order; (M8) `_write_effective` reads `last_state` instead of `_pending` (wipes the queue);
+(M9) resend writes once at the end of the walk instead of after each entry; (M10) the queue write unguarded.
 
 ## 3. Out of scope / logged
 
@@ -159,3 +177,12 @@ state; (M2) send a new event while pending exists; (M3) break on delivered inste
 
 On merge: phase `verify` becomes a presence probe on `pending_events` in `strategy_watch_evaluator.py`; the defect marker
 "state kept, retries next run" must be gone (it is, per §1.2).
+
+## 5. Audit log
+
+- **Plan round 1 (2026-09-27): 2 gate-level findings, both fixed.** F1 — the new writes (queue, resend, cap) were unguarded
+  and the resend loop had no per-watch isolation, so one failed `save()` could stop other watches' alerts → one guarded
+  `_write` helper, per-watch try/except in `_resend_pending`, tests 15, M10. F2 — one write at the end of the resend walk
+  widened the duplicate window to N events (cancellation mid-walk) → write after every entry, test 16, M9. Reviewer note
+  (not a finding, applied): state how evaluators reach the committed/pending snapshot (`_committed`/`_pending` on `w_eff`),
+  M8.
