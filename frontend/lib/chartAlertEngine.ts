@@ -225,6 +225,19 @@ export function evaluateRules(
     if (rule.group.conditions.length === 0) continue;
     if (isExpired(rule, now)) continue;
     if (!isCooldownPassed(rule, now)) continue;
+    // W2-STRUCT (R1-1/R2-1): on intraday charts a rule with ANY structure
+    // condition is left to the backend. The browser's structure list was
+    // computed while the just-closed bar was still forming (the history load,
+    // and chart.py sends the tick before re-sending structure), so a browser
+    // match reads partial-bar data -- and a browser fire persists history and
+    // stamps last_triggered_at, starting the SERVER cooldown. The backend
+    // judges the whole rule on closed bars (A4e) and pushes `alert_triggered`
+    // to the open chart. Rule level, not condition level: an OR / N_OF_M rule
+    // firing here on its other conditions would record the structure line as
+    // unmet. 1D/1W are untouched: the chart WS does not evaluate those rules
+    // ('daily' vs stored '1D'), only the scheduler does, with no chart push.
+    if (rule.interval !== '1D' && rule.interval !== '1W'
+      && rule.group.conditions.some((c) => c.kind === 'structure')) continue;
 
     const accumulatedTriggerValues: Record<string, number> = {};
     const evaluations = rule.group.conditions.map((c) => {

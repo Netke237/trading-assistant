@@ -153,6 +153,43 @@ describe('evaluateRules', () => {
     expect(result).toHaveLength(0);
   });
 
+  describe('W2-STRUCT: intraday rules with a structure condition are left to the backend', () => {
+    const INTRA: Interval = '5min';
+    const intraSignals: StructureSignal[] = [
+      { kind: 'BOS', direction: 'bullish', time: '2024-01-05', price: 189, confidence: 80, mtf_aligned: false },
+      { kind: 'FVG', direction: 'bullish', time_start: '2024-01-03', time_end: null, price_high: 187, price_low: 186,
+        mitigated: false, confidence: 80, mtf_aligned: false },
+    ];
+    const withConfirmed = intraSignals.map((s) => ({ ...s, confirmed_at: '2024-01-05' })) as StructureSignal[];
+    const mk = (logic: 'AND' | 'OR' | 'N_OF_M', conditions: AlertRule['group']['conditions'], interval: Interval = INTRA): AlertRule => ({
+      id: `w2-${logic}`, name: 'w2', symbol: SYM, interval, enabled: true,
+      group: { logic, conditions, ...(logic === 'N_OF_M' ? { n_of_m_threshold: 1 } : {}) },
+      cooldown_minutes: 0, expiry_date: null, created_at: '2024-01-01T00:00:00Z', last_triggered_at: null,
+    });
+    const priceMet = { kind: 'price', operator: '>', value: 100 } as const;
+
+    it.each(['BOS', 'CHoCH', 'FVG', 'OrderBlock', 'Divergence'] as const)('%s alone does not fire in the browser', (kind) => {
+      const rule = mk('AND', [{ kind: 'structure', signal_kind: kind }]);
+      expect(evaluateRules([rule], closedCandle, candles(), indicators, intraSignals, now, SYM, INTRA)).toHaveLength(0);
+      expect(evaluateRules([rule], closedCandle, candles(), indicators, withConfirmed, now, SYM, INTRA)).toHaveLength(0);
+    });
+
+    it.each(['AND', 'OR', 'N_OF_M'] as const)('%s with a met price condition does not fire in the browser', (logic) => {
+      const rule = mk(logic, [priceMet, { kind: 'structure', signal_kind: 'BOS', direction: 'bullish' }]);
+      expect(evaluateRules([rule], closedCandle, candles(), indicators, intraSignals, now, SYM, INTRA)).toHaveLength(0);
+    });
+
+    it('a price-only intraday rule still fires', () => {
+      const rule = mk('AND', [priceMet]);
+      expect(evaluateRules([rule], closedCandle, candles(), indicators, intraSignals, now, SYM, INTRA)).toHaveLength(1);
+    });
+
+    it.each(['1D', '1W'] as const)('%s is unchanged: a BOS on the closed bar still fires in the browser', (iv) => {
+      const rule = mk('AND', [{ kind: 'structure', signal_kind: 'BOS', direction: 'bullish' }], iv);
+      expect(evaluateRules([rule], closedCandle, candles(), indicators, intraSignals, now, SYM, iv)).toHaveLength(1);
+    });
+  });
+
   it('test_and_logic_requires_all — AND: both conditions must pass', () => {
     const rule: AlertRule = {
       id: 'r4', name: 'AND', symbol: SYM, interval: INT, enabled: true,
