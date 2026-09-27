@@ -50,9 +50,14 @@ def _sem():
     return sem
 
 
-async def _scan(horizon: str, *, intraday):
+async def _scan(horizon: str, *, intraday, scoring_cfg=None, out=None):
     """Run the options scan's `_process_symbol` far enough to measure the
-    regime, and report what the measurement ran on and what the card got."""
+    regime, and report what the measurement ran on and what the card got.
+    `scoring_cfg` replaces `_load_scoring_cfg()`; `out["result"]` receives what
+    `_process_symbol` returned."""
+    import contextlib
+    cfg_patch = (patch("app.routers.scan._load_scoring_cfg", return_value=scoring_cfg)
+                 if scoring_cfg is not None else contextlib.nullcontext())
     omm = MagicMock(return_value=None)
     dhmm = MagicMock(return_value=None)
     intraday_fetch = MagicMock(
@@ -68,12 +73,15 @@ async def _scan(horizon: str, *, intraday):
          patch("app.routers.scan._compute_omm", omm), \
          patch("app.routers.scan._compute_dhmm", dhmm), \
          patch("app.routers.scan.score_stock") as score, \
-         patch("app.routers.scan.log_event"):
+         patch("app.routers.scan.log_event"), \
+         cfg_patch:
         score.return_value = MagicMock(status="REJECT", score=20, rules=[], components={})
-        await _process_symbol(
+        result = await _process_symbol(
             symbol="AAPL", direction="Bullish", horizon=horizon, client=AsyncMock(),
             sem=_sem(), scan_id="a4", bars_map={"AAPL": DAILY},
         )
+    if out is not None:
+        out["result"] = result
     return omm, dhmm, intraday_fetch, score
 
 
@@ -123,10 +131,46 @@ async def test_options_scan_swing_stays_on_daily_bars_and_fetches_nothing_new():
     assert set(omm.call_args.args[0]) == {181.0}
 
 
+def _cfg_gate_and_sizing_off() -> dict:
+    """A copy of the shipped scoring config with regime gate AND regime sizing
+    off -- the only configuration in which P3c item 1 lets an Intraday name
+    with no 15-min bars continue."""
+    import copy
+    from app.services.config_loader import load_scoring_cfg
+    cfg = copy.deepcopy(load_scoring_cfg())
+    cfg["regime_gate"]["enabled"] = False
+    cfg["regime_sizing"]["enabled"] = False
+    return cfg
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("intraday", [RuntimeError("tradier down"), [], INTRADAY[:10]])
+@pytest.mark.parametrize("intraday", [RuntimeError("tradier down"), []])
 async def test_options_scan_leaves_intraday_unmeasured_rather_than_falling_back_to_daily(intraday):
-    omm, dhmm, _, score = await _scan("Intraday", intraday=intraday)
+    # P3c item 1: on shipped config (gate + sizing on) a failed/empty 15-min
+    # fetch is now a drop, so the old "unmeasured, no daily fallback" behaviour
+    # is pinned with both off.
+    omm, dhmm, _, score = await _scan("Intraday", intraday=intraday,
+                                      scoring_cfg=_cfg_gate_and_sizing_off())
+    omm.assert_not_called()
+    dhmm.assert_not_called()
+    assert score.call_args.kwargs["regime_signal"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("intraday", [RuntimeError("tradier down"), []])
+async def test_options_scan_drops_intraday_with_no_15_minute_bars_on_shipped_config(intraday):
+    from app.schemas import RejectedCandidate
+    out: dict = {}
+    omm, dhmm, _, score = await _scan("Intraday", intraday=intraday, out=out)
+    assert isinstance(out["result"], RejectedCandidate)
+    assert out["result"].reason.startswith("regime data unavailable:")
+    score.assert_not_called()
+    omm.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_options_scan_leaves_a_short_intraday_series_unmeasured():
+    omm, dhmm, _, score = await _scan("Intraday", intraday=INTRADAY[:10])
     omm.assert_not_called()
     dhmm.assert_not_called()
     assert score.call_args.kwargs["regime_signal"] is None

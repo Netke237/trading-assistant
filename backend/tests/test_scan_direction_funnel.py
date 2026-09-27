@@ -236,6 +236,12 @@ _REAL_REASONS = [
     ("Score gate: score 58 rejected",               "failed_score"),
     ("contracts rejected: spread_too_wide",         "failed_contracts"),
     ("all contracts rejected",                      "failed_contracts"),
+    # P3c item 1: the producer's literal lives in stock_scan._regime_data_drop,
+    # which the regex above cannot see, so the guard relies on this entry.
+    ("regime data unavailable: no completed 15-min bars for X", "failed_data"),
+    ("regime data unavailable: no completed 15-min bars for X (fetch failed: boom)", "failed_data"),
+    # P3c item 2: literal lives in stock_scan._direction_conviction_drop.
+    ("direction_conviction_unmeasured: no trend measurement for Bullish Swing", "failed_direction"),
 ]
 
 

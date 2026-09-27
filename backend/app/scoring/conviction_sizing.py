@@ -250,8 +250,14 @@ def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | No
             f"which is in the fraction range (0, {MIN_FULL_CONVICTION_PCT:g}] — "
             f"but it is a point on the 0-100 conviction scale, not a fraction "
             f"like its neighbour min_mult. Any value at or below the current "
-            f"conviction sizes every order at FULL. Did you mean "
-            f"{full * 100:g}?"
+            f"conviction sizes every order at FULL."
+            # P3c (5): the "* 100" hint only when that value would itself be
+            # accepted — 0.004 * 100 = 0.4 is refused too, so no hint.
+            + (
+                f" Did you mean {full * 100:g}?"
+                if MIN_FULL_CONVICTION_PCT < full * 100 <= MAX_FULL_CONVICTION_PCT
+                else ""
+            )
         )
     elif full > MAX_FULL_CONVICTION_PCT:
         # A separate message on purpose: this half of the bound sizes DOWN
@@ -286,36 +292,60 @@ def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | No
     # `0.0 <= min_mult`, so `min_mult: 0` passed — a natural way to write "cut
     # the position to nothing in a hostile regime". It does not cut it to
     # nothing. conviction_mult returns lo + (1-lo)*frac, which is exactly 0.0 at
-    # conviction <= 0, and stock_scan.py:685 reads
-    # `risk_fixed if risk_fixed else (account * (risk_pct or 0.01))` — 0.0 is
-    # FALSY, so the sized risk falls through to a hardcoded 1%. A 0.5% config
-    # came out at 1%: the setting meant to remove the position DOUBLED it.
+    # conviction <= -full_conviction_pct, and an unmeasured regime is sized at
+    # the floor itself (stock_scan.py `floor:unmeasured`; auto_trader.py
+    # `_sized_quantity(strategy.quantity, min_mult)`). Until P3a that 0.0 was
+    # FALSY at stock_scan.py's `account * (risk_pct or 0.01)` and fell through
+    # to a hardcoded 1%, doubling a 0.5% config. P3a removed `or 0.01`, so today
+    # a 0.0 multiplier sizes to the MINIMUM order instead: 1 share on the stock
+    # card (`max(1, …)`, stock_scan.py:1016) and 1 contract on the fire path
+    # (`_sized_quantity`'s `max(1, …)`, auto_trader.py:1392) — still never
+    # zero.
     #
     # Found by cross-checking this implementation against the rival one built in
     # another container, whose test named the case outright; no single audit
-    # round on either side caught it. Reproduced against this code before the
-    # fix: resolve_sizing accepted (0.0, 40.0) and conviction_mult(0) returned
-    # 0.0.
+    # round on either side caught it.
     #
     # Refusing is the fail-closed answer Kenneth's section 9.1 asks for, and a
     # zero multiplier has no honest meaning here anyway: "do not trade" is not a
     # position size, and this path always ends in an order.
     #
-    # THE FALSY READ AT stock_scan.py:685 IS STILL THERE and is logged, not
-    # fixed — `risk_fixed if risk_fixed` has the same hole for a fixed risk of
-    # 0, and a user-supplied risk_pct of 0 still becomes 1%. Neither is
-    # reachable from THIS path once zero is refused, and widening the change to
-    # chase them is what audit_rule says not to do.
+    # `risk_pct or 0.01` was removed by P3a; `risk_fixed if risk_fixed`
+    # (stock_scan.py:1015) remains, and is harmless here because the pct branch
+    # is multiplied by the same `mult`.
     if not 0.0 < min_mult <= 1.0:
-        raise SizingConfigError(
+        # P3c (3): one message per case — the old single sentence named "above
+        # 1" and "0" together, and its zero clause described the pre-P3a 1%
+        # fall-through.
+        prefix = (
             f"scoring_rules.yaml: regime_sizing.min_mult is {min_mult}, outside "
-            f"(0, 1] — it is a FRACTION of full size, so a floor above 1 is not "
-            f"a floor at all, and a floor of 0 does not remove the position: it "
-            f"sizes to 0.0, which reads as FALSY downstream and falls through to "
-            f"a hardcoded 1% — doubling a 0.5% config instead of zeroing it."
-            + (f" Did you mean {min_mult / 100:g}?" if min_mult > 1 else "")
-            + (" To stop trading in a headwind, disable regime_sizing or raise "
-               "the gate — do not set the floor to zero." if min_mult == 0 else "")
+            f"(0, 1]"
+        )
+        if min_mult > 1.0:
+            # P3c (4): the "/100" hint only when the value reads as a whole
+            # percent — 1.01 is not one.
+            hint = (
+                f" Did you mean {min_mult / 100:g}?"
+                if float(min_mult).is_integer() and 2.0 <= min_mult <= 100.0
+                else ""
+            )
+            raise SizingConfigError(
+                f"{prefix} — it is a FRACTION of full size, so a floor above 1 "
+                f"is not a floor at all.{hint}"
+            )
+        if min_mult == 0.0:
+            raise SizingConfigError(
+                f"{prefix} — a floor of 0 does not remove the position: at or "
+                f"beyond -full_conviction_pct, and whenever the regime is "
+                f"unmeasured (the floor itself is used), the multiplier is 0 "
+                f"and the order is still the MINIMUM — 1 share on the stock "
+                f"card and 1 contract on the fire path — never zero. To stop "
+                f"trading in a headwind, disable regime_sizing or raise the "
+                f"gate — do not set the floor to zero."
+            )
+        raise SizingConfigError(
+            f"{prefix} — it is negative; a multiplier floor cannot be below 0. "
+            f"Write a fraction in (0, 1], e.g. 0.3."
         )
 
     return min_mult, full

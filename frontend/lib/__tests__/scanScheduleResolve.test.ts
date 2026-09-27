@@ -2,7 +2,7 @@ import { SCAN_PARAM_DEFAULTS } from '@/lib/scanParamsStore';
 import { DEFAULT_CONFIDENCE_GATE, DEFAULT_FUNDAMENTALS_GATE, DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
+import { resolveProfileToScanRequest, scheduleRiskIgnored } from '@/lib/scanScheduleResolve';
 import type { SearchProfile } from '@/types/searchProfile';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
 
@@ -125,5 +125,24 @@ describe('resolveProfileToScanRequest — error cases', () => {
     expect(() => resolveProfileToScanRequest(baseProfile({
       scanSettings: { confidenceGate: { ...DEFAULT_CONFIDENCE_GATE } },
     }))).toThrow(/fundamentalsGate\/spreads/);
+  });
+});
+
+// P3c item 3 — decision P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25.
+describe('scheduleRiskIgnored', () => {
+  it('is true for a stocks entry saved with risk_pct 0', () => {
+    expect(scheduleRiskIgnored({ mode: 'stocks', resolved_request: { risk_pct: 0 } })).toBe(true);
+  });
+  it('is false for a stocks entry with a non-zero risk_pct', () => {
+    expect(scheduleRiskIgnored({ mode: 'stocks', resolved_request: { risk_pct: 0.02 } })).toBe(false);
+  });
+  it('is false for a stocks entry with no risk_pct', () => {
+    expect(scheduleRiskIgnored({ mode: 'stocks', resolved_request: { risk_pct: undefined } })).toBe(false);
+    expect(scheduleRiskIgnored({ mode: 'stocks', resolved_request: {} })).toBe(false);
+    expect(scheduleRiskIgnored({ mode: 'stocks', resolved_request: null })).toBe(false);
+  });
+  it('is false for an options entry', () => {
+    expect(scheduleRiskIgnored({ mode: 'options', resolved_request: { risk_pct: 0 } })).toBe(false);
+    expect(scheduleRiskIgnored({ mode: 'options', resolved_request: { universe: ['SP500'] } })).toBe(false);
   });
 });

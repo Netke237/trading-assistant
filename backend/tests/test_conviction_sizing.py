@@ -386,12 +386,12 @@ def test_an_out_of_range_min_mult_refuses_rather_than_clamping_to_full_size():
 
     # CORRECTED 2026-09-17. This block used to assert that BOTH boundary values
     # were "honourable", and pinned `min_mult: 0.0` as yielding 0.0. That claim
-    # was false and this assertion was holding the bug in place: a 0.0
-    # multiplier is FALSY, and stock_scan.py:685's
-    # `risk_fixed if risk_fixed else (account * (risk_pct or 0.01))` falls
-    # through to a hardcoded 1% -- so the value that reads as "remove the
-    # position" DOUBLED a 0.5% config. Zero is now refused; the upper boundary
-    # is genuinely honourable and still passes.
+    # was false: at the time a 0.0 multiplier was FALSY at stock_scan.py's
+    # `account * (risk_pct or 0.01)` and fell through to a hardcoded 1%, so
+    # "remove the position" DOUBLED a 0.5% config. P3a removed `or 0.01`; a 0.0
+    # multiplier now sizes to the minimum order (1 share / 1 contract), still
+    # never zero. Zero stays refused; the upper boundary is genuinely
+    # honourable and still passes.
     with pytest.raises(SizingConfigError):
         conviction_mult(0, _cfg(min_mult=0.0))
     assert conviction_mult(0, _cfg(min_mult=1.0)) == pytest.approx(1.0)
@@ -435,16 +435,16 @@ def test_mixed_type_yaml_keys_cannot_escape_as_a_typeerror():
             resolve_sizing(cfg)
 
 
-def test_a_zero_min_mult_is_refused_because_it_doubles_rather_than_zeroes():
-    """`min_mult: 0` was admitted until 2026-09-17 and is the worst value in the
-    range: it is the natural way to write "cut the position to nothing in a
-    hostile regime", and it does the opposite.
+def test_a_zero_min_mult_is_refused_because_it_still_sizes_the_minimum():
+    """`min_mult: 0` was admitted until 2026-09-17. It is the natural way to
+    write "cut the position to nothing in a hostile regime", and it does not.
 
     conviction_mult returns lo + (1-lo)*frac, which is exactly 0.0 at conviction
-    <= 0. stock_scan.py:685 reads
-    `risk_fixed if risk_fixed else (account * (risk_pct or 0.01))`, and 0.0 is
-    falsy, so the sized risk falls through to a hardcoded 1%. A 0.5% config came
-    out at 1% -- doubled, not zeroed.
+    <= -full_conviction_pct, and an unmeasured regime is sized at the floor
+    itself. Until P3a that 0.0 fell through a falsy `risk_pct or 0.01` to a
+    hardcoded 1%; P3a removed the `or 0.01`, so today it sizes to the MINIMUM
+    order — 1 share on the stock card (`max(1, …)`) and 1 contract on the fire
+    path (`_sized_quantity`'s `max(1, …)`). Still never zero, so still refused.
 
     Found by cross-checking this module against the rival implementation built in
     another container; no audit round on either side caught it.
@@ -454,9 +454,12 @@ def test_a_zero_min_mult_is_refused_because_it_doubles_rather_than_zeroes():
         resolve_sizing(cfg)
     msg = str(exc.value)
     assert "min_mult" in msg
-    # The message must explain the doubling, not just cite a range: a bare
-    # "outside (0, 1]" reads as pedantry against a value that looks reasonable.
-    assert "1%" in msg and "do not set the floor to zero" in msg
+    # The message must explain what a 0 actually does, not just cite a range:
+    # a bare "outside (0, 1]" reads as pedantry against a value that looks
+    # reasonable. P3c (3): the pre-P3a 1%-fall-through story is gone.
+    assert "1 share" in msg and "do not set the floor to zero" in msg
+    assert "unmeasured" in msg
+    assert "1%" not in msg and "FALSY" not in msg
 
     # The bound is exclusive at zero only -- a genuinely tiny floor still works,
     # so this refuses the trap without removing the ability to size down hard.
@@ -464,9 +467,10 @@ def test_a_zero_min_mult_is_refused_because_it_doubles_rather_than_zeroes():
 
 
 def test_the_multiplier_can_no_longer_reach_a_falsy_zero():
-    """The downstream falsy read at stock_scan.py:685 is still there and is
-    logged rather than fixed. This pins the reason that is safe: no admitted
-    config can produce a 0.0 multiplier for it to swallow.
+    """`risk_pct or 0.01` was removed by P3a; `risk_fixed if risk_fixed`
+    (stock_scan.py:1015) remains, and is harmless here because the pct branch
+    is multiplied by the same `mult`. This pins that no admitted config can
+    produce a 0.0 multiplier at all.
     """
     for min_mult in (0.0001, 0.05, 0.3, 0.5, 1.0):
         cfg = {"enabled": True, "min_mult": min_mult, "full_conviction_pct": 40}
@@ -474,3 +478,64 @@ def test_the_multiplier_can_no_longer_reach_a_falsy_zero():
             mult = conviction_mult(conviction, cfg)
             assert mult > 0.0, (min_mult, conviction, mult)
             assert bool(mult) is True, "a falsy multiplier is the whole bug"
+
+
+# ── P3c item 4: per-case refusal messages and hints ─────────────────────────
+
+def _min_mult_msg(value):
+    with pytest.raises(SizingConfigError) as exc:
+        resolve_sizing({"enabled": True, "min_mult": value, "full_conviction_pct": 40})
+    msg = str(exc.value)
+    assert f"regime_sizing.min_mult is {float(value)}, outside (0, 1]" in msg
+    return msg
+
+
+def _full_msg(value):
+    with pytest.raises(SizingConfigError) as exc:
+        resolve_sizing({"enabled": True, "min_mult": 0.3, "full_conviction_pct": value})
+    return str(exc.value)
+
+
+def test_a_negative_min_mult_says_negative_not_above_1_or_falsy():
+    msg = _min_mult_msg(-0.1)
+    assert "negative" in msg
+    assert "above 1" not in msg and "FALSY" not in msg and "Did you mean" not in msg
+
+
+def test_min_mult_just_above_1_gets_no_percent_hint():
+    msg = _min_mult_msg(1.01)
+    assert "above 1" in msg
+    assert "Did you mean" not in msg
+
+
+@pytest.mark.parametrize("value, hint", [
+    (30, "Did you mean 0.3?"),
+    (30.0, "Did you mean 0.3?"),   # YAML `30.0` still reads as a whole percent
+    (2, "Did you mean 0.02?"),
+    (100, "Did you mean 1?"),
+])
+def test_min_mult_written_as_a_whole_percent_gets_the_hint(value, hint):
+    msg = _min_mult_msg(value)
+    assert hint in msg
+    assert "above 1" in msg and "0 does not remove" not in msg
+
+
+@pytest.mark.parametrize("value", [1.5, 30.5, 101, 250])
+def test_min_mult_not_a_whole_percent_gets_no_hint(value):
+    assert "Did you mean" not in _min_mult_msg(value)
+
+
+def test_full_conviction_fraction_hint_only_when_the_times_100_value_is_accepted():
+    msg = _full_msg(0.4)
+    assert "Did you mean 40?" in msg
+    assert "sizes every order at FULL" in msg
+
+    # 0.004 * 100 = 0.4 is itself in the refused fraction range — no hint.
+    msg = _full_msg(0.004)
+    assert "Did you mean" not in msg
+    assert "sizes every order at FULL" in msg
+
+    # 0.01 * 100 = 1.0 is the exclusive lower bound — refused too, no hint.
+    assert "Did you mean" not in _full_msg(0.01)
+    # 1.0 * 100 = 100 is the inclusive upper bound — accepted, hint offered.
+    assert "Did you mean 100?" in _full_msg(1.0)

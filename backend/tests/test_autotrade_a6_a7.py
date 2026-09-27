@@ -195,6 +195,11 @@ class _FakeDb:
     async def execute(self, *a, **k):
         return _FakeResult()
 
+    # P3c item 7: fire_now releases the snapshot read's transaction
+    # before it waits on the fire executor.
+    async def rollback(self):
+        pass
+
 
 @pytest.mark.asyncio
 async def test_fire_endpoint_maps_a_sizing_config_error_to_500(mocker):

@@ -11,6 +11,10 @@
  * reimplemented here — they're the same parseSymbols()/presetByKey()/
  * resolveParamsHorizon() helpers applySearchProfile() already uses, just
  * reading from `profile` instead of a live Zustand store.
+ *
+ * Decision P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25: a stocks entry saved with
+ * risk_pct 0 keeps sending 0 (the backend runs it at the 1% default); the
+ * Settings row warns via scheduleRiskIgnored() below.
  */
 import type { SearchProfile } from '@/types/searchProfile';
 import { presetByKey, resolveParamsHorizon } from '@/lib/horizonPresets';
@@ -124,4 +128,22 @@ export function resolveProfileToScanRequest(
     accountSize: risk.portfolioValue,
     riskPct: risk.maxLossPerTradePct,
   });
+}
+
+/**
+ * True when a schedule entry's saved request carries `risk_pct: 0` — which the
+ * backend's StockScanRequest (`_stored_zero_is_unset`) maps to the 1% default
+ * (conviction-adjusted), so the 0% the user saved is silently ignored.
+ * Decision P3C-SCHEDULE-ZERO-RISK-WARNS-2026-09-25. Options entries never
+ * carry `risk_pct` and are never flagged.
+ */
+export function scheduleRiskIgnored(entry: { mode: string; resolved_request: unknown }): boolean {
+  const req = entry.resolved_request;
+  return (
+    entry.mode === 'stocks' &&
+    typeof req === 'object' &&
+    req !== null &&
+    'risk_pct' in req &&
+    (req as { risk_pct: unknown }).risk_pct === 0
+  );
 }
