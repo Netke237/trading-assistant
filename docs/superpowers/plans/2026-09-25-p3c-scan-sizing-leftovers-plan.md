@@ -1040,3 +1040,20 @@ Traceback; importing with the default sqlite URL creates no `dev.db`; `BookingOu
 | 6 | LOW | 1-14 rows also make ATR/move stats undefined | `TOO FEW ROWS ({n})` sixth verdict; fixture symbol with 5 rows; "five" → "six" |
 | 7 | LOW | sqlite URL with `?query` breaks the `mode=ro` URI | path from `make_url(url).database` |
 
+
+## Code round 1 log — §5/§6 check script (0 gate-level findings; CLEAN)
+
+Scope: commit 33bd446 (`backend/scripts/p3c_data_checks.py`, `backend/tests/test_p3c_data_checks.py`), whole change.
+Brief quoted `audit_rule` clause (1) and the comment-truth exception verbatim. Result: ZERO GATE-LEVEL FINDINGS —
+the script's code stage is closed (one zero-finding round). Checked: no DB write path (read-only transaction,
+`mode=ro` sqlite, no `get_bars`/`_store_bars`), announced DB == read DB, `adj_factor` semantics match
+`_read_bars`, verdict/segment logic, ATR, target ladder + fallback, §6 source isolation.
+
+Below the gate — logged against main, NOT fixed in-branch:
+- `detect_splits` 3% band: a real ~-50%/+100% one-day move on a `--symbols` name reads as a 2:1/1:2 split (STALE).
+  Not reachable for the five default symbols.
+- Same band: a split day with an extra >~3% move is missed → NO SPLIT IN WINDOW. The printed largest |Δclose| line
+  against known split dates catches it.
+- §6 calls `compute_omm` below `min_obs` where the scan skips; both yield no verdict, output identical.
+- A Postgres URL with a libpq-only query param (`?sslmode=require`) crashes with a traceback instead of the tidy
+  connect error; fails loudly, never reads a different DB.
