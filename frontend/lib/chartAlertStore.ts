@@ -55,40 +55,89 @@ interface ChartAlertState {
 
   syncRules: () => Promise<void>;
   setMigrated: () => void;
+
+  /** P4a A2 (decision Q1) -- rules the server REFUSED on their last POST,
+   *  id -> the server's reason. NOT persisted (absent from `partialize`), so
+   *  a mark cannot outlive the refusal it describes; every `syncRules` and
+   *  `addRule` POST rebuilds or clears it. */
+  unsavedRules: Record<string, string>;
+  /** P4a A3 -- the Alerts-page toggle. Sets `enabled` locally and PATCHes
+   *  `{enabled}` only, so a stale local interval / composite_def is never
+   *  re-sent (a full PUT could be refused, losing the toggle, or overwrite
+   *  the server). */
+  setRuleEnabled: (id: string, enabled: boolean) => void;
+  /** P4a A4 -- records a trigger time. `persist: true` PATCHes
+   *  `{last_triggered_at}` with the stamp UNCHANGED (the client's
+   *  `toISOString()`; the server's cooldown check normalises an aware stamp,
+   *  alert_evaluator.is_cooldown_passed). `persist: false` when the backend
+   *  already wrote it (the WebSocket `alert_triggered` message). */
+  stampRuleTriggered: (id: string, at: string, opts: { persist: boolean }) => void;
 }
 
-async function pushRuleToAPI(rule: AlertRule): Promise<void> {
+/** P4a A1 (decision Q1) -- ONE body for POST and PUT.
+ *
+ *  A composite rule's `group` is only ever the backend's display placeholder
+ *  {logic:'AND', conditions:[]} -- never the real trigger definition (see
+ *  _rule_to_dict on the backend). Sending that placeholder would create or
+ *  overwrite the rule as an empty STANDARD rule: a dead alert under the user's
+ *  name. The POST used to do exactly that for a local-only composite that
+ *  `syncRules` re-sent; composite rules send rule_type/composite_def instead. */
+export function ruleBodyForApi(rule: AlertRule): Record<string, unknown> {
+  const shared = {
+    name: rule.name, symbol: rule.symbol, interval: rule.interval,
+    enabled: rule.enabled,
+    cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
+  };
+  return rule.rule_type === 'composite'
+    ? { ...shared, rule_type: 'composite', composite_def: rule.composite_def }
+    : { ...shared, group: rule.group };
+}
+
+/** How a POST ended. 'ok' includes 409 (the server already has this id).
+ *  'refused' carries the server's reason as TEXT: a pydantic 422 `detail` is
+ *  an array of objects, an HTTPException's a string. 'offline' is a network
+ *  error or a 5xx -- nothing is known, so nothing is marked. */
+export type PostOutcome = { kind: 'ok' } | { kind: 'refused'; detail: string } | { kind: 'offline' };
+
+async function pushRuleToAPI(rule: AlertRule): Promise<PostOutcome> {
   try {
-    await fetch(`${BASE_URL}/alerts/rules`, {
+    const res = await fetch(`${BASE_URL}/alerts/rules`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: rule.id,              // send client id so server preserves it
-        name: rule.name, symbol: rule.symbol, interval: rule.interval,
-        enabled: rule.enabled, group: rule.group,
-        cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
-      }),
+      // `id`: send the client id so the server preserves it.
+      body: JSON.stringify({ id: rule.id, ...ruleBodyForApi(rule) }),
     });
-  } catch { /* fire-and-forget */ }
+    if (res.ok || res.status === 409) return { kind: 'ok' };
+    if (res.status >= 400 && res.status < 500) {
+      let detail: string = `HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        const d = (body as { detail?: unknown })?.detail;
+        if (typeof d === 'string') detail = d;
+        else if (d !== undefined) detail = JSON.stringify(d);
+      } catch { /* keep the status */ }
+      return { kind: 'refused', detail };
+    }
+    return { kind: 'offline' };
+  } catch {
+    return { kind: 'offline' };
+  }
+}
+
+async function patchRuleToAPI(id: string, body: { enabled?: boolean; last_triggered_at?: string }): Promise<void> {
+  // A 404 (the rule is local-only) needs nothing more: the next syncRules
+  // re-POSTs the rule with its current fields.
+  try {
+    await fetch(`${BASE_URL}/alerts/rules/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {}
 }
 
 async function putRuleToAPI(rule: AlertRule): Promise<void> {
-  // A composite rule's `group` is only ever the backend's display placeholder
-  // {logic:'AND', conditions:[]} — never the real trigger definition (see
-  // _rule_to_dict on the backend). Sending that placeholder here would overwrite
-  // the rule's real composite_def with an empty group, silently corrupting it into
-  // a dead standard rule. Composite rules must PUT rule_type/composite_def instead.
-  const body = rule.rule_type === 'composite'
-    ? {
-        name: rule.name, symbol: rule.symbol, interval: rule.interval,
-        enabled: rule.enabled, rule_type: 'composite', composite_def: rule.composite_def,
-        cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
-      }
-    : {
-        name: rule.name, symbol: rule.symbol, interval: rule.interval,
-        enabled: rule.enabled, group: rule.group,
-        cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
-      };
+  const body = ruleBodyForApi(rule);
   try {
     await fetch(`${BASE_URL}/alerts/rules/${encodeURIComponent(rule.id)}`, {
       method: 'PUT',
@@ -139,6 +188,7 @@ export const useChartAlertStore = create<ChartAlertState>()(
       toasts: [],
       newSinceView: 0,
       migrated: false,
+      unsavedRules: {},
 
       addRule: (rule) => {
         let added = false;
@@ -153,7 +203,13 @@ export const useChartAlertStore = create<ChartAlertState>()(
           added = true;
           return { rules: [...s.rules, rule] };
         });
-        if (added) pushRuleToAPI(rule);
+        if (added) {
+          void pushRuleToAPI(rule).then((outcome) => {
+            if (outcome.kind === 'refused') {
+              set((s) => ({ unsavedRules: { ...s.unsavedRules, [rule.id]: outcome.detail } }));
+            }
+          });
+        }
         return added;
       },
 
@@ -218,18 +274,38 @@ export const useChartAlertStore = create<ChartAlertState>()(
           const serverIds = new Set(serverRules.map((r) => r.id));
           const localOnly = localRules.filter((r) => !serverIds.has(r.id));
 
-          for (const rule of localOnly) await pushRuleToAPI(rule);
+          // A2 (Q1): a refused re-POST keeps the rule locally and says why;
+          // an accepted one (201/409) clears any old mark; offline changes
+          // nothing (nothing is known).
+          const unsaved: Record<string, string> = {};
+          for (const rule of localOnly) {
+            const outcome = await pushRuleToAPI(rule);
+            if (outcome.kind === 'refused') unsaved[rule.id] = outcome.detail;
+            else if (outcome.kind === 'offline' && get().unsavedRules[rule.id]) {
+              unsaved[rule.id] = get().unsavedRules[rule.id]!;
+            }
+          }
 
           const merged = [...serverRules];
           for (const rule of localOnly) {
             if (!merged.find((r) => r.id === rule.id)) merged.push(rule);
           }
 
-          set({ rules: merged, migrated: true });
+          set({ rules: merged, migrated: true, unsavedRules: unsaved });
         } catch {}
       },
 
       setMigrated: () => set({ migrated: true }),
+
+      setRuleEnabled: (id, enabled) => {
+        set((s) => ({ rules: s.rules.map((r) => (r.id === id ? { ...r, enabled } : r)) }));
+        void patchRuleToAPI(id, { enabled });
+      },
+
+      stampRuleTriggered: (id, at, { persist }) => {
+        set((s) => ({ rules: s.rules.map((r) => (r.id === id ? { ...r, last_triggered_at: at } : r)) }));
+        if (persist) void patchRuleToAPI(id, { last_triggered_at: at });
+      },
     }),
     {
       name: 'bamendjou:alerts',
