@@ -20,7 +20,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
-import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
+import { resolveProfileToScanRequest, scheduleRiskIgnored } from '@/lib/scanScheduleResolve';
 import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal, type ScanScheduleEntry, type ScanScheduleRun } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import { PREMIUM_STOP_MAX_PCT, premiumStopPctLabel } from '@/lib/premiumStop';
@@ -758,6 +758,9 @@ function ScheduleEntryRow({
       <div className={styles.rowLabel}>
         <span className={styles.defaultTag}>{entry.mode === 'options' ? 'Options' : 'Stocks'}</span>
         {stale && <Text size={11} tone="caution">May be out of date — last re-sync push failed</Text>}
+        {scheduleRiskIgnored(entry) && (
+          <Text size={11} tone="caution">Saved with 0% max loss per trade — ignored; this schedule runs at the 1% default (conviction-adjusted). Set it in Settings → Risk, then re-save the profile.</Text>
+        )}
       </div>
       <div className={styles.rowControl} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
