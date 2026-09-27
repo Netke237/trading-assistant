@@ -1127,3 +1127,28 @@ Below the gate — logged against main, NOT fixed in-branch:
   unrelated pre-existing guard).
 - `min_mult: 100` → "Did you mean 1?", which is full size; valid, of doubtful use.
 - The comment's line refs (stock_scan.py:1016, auto_trader.py:1392) will drift.
+
+## Code round 1 log — item 7, POST /auto-trade/fire off the event loop (0 gate-level findings; CLEAN)
+
+Scope: commit cb5dda8, whole change. Brief quoted `audit_rule` clause (1) and the comment-truth exception
+verbatim; a duplicate order, an order sent but not booked outside the designed logged cancel path, or a booking
+with a wrong quantity/price/strategy counted as gate-level. Result: ZERO GATE-LEVEL FINDINGS — item 7's code stage
+is closed. Checked: no duplicate send (`fire()`'s lock + `expect=` identity + single worker; scan and /fire
+contend on the same lock; a wedged worker's queued `fire(expect=B)` gets `ArmPreservedError`); the cancel branch is
+reachable only at shutdown (CORS is pure ASGI, Starlette does not cancel on disconnect) and `_log_unbooked` cannot
+raise; booking reads `FiredOrder.strategy` (post-sizing), not the pre-read state; `portfolio_snapshot` is plain
+dataclasses built before the rollback and `book_fired_order` reopens its own transaction; nothing `fire()` calls
+depends on the loop thread; exception objects and mapping order unchanged; a hung broker call now wedges only
+`_FIRE_EXECUTOR` instead of the whole loop.
+
+Below the gate — logged against main, NOT fixed in-branch:
+- Wider exposure-snapshot race: /fire B's snapshot can be read while /fire A's broker call is in flight (seconds,
+  was milliseconds), so B's exposure check can miss A's unbooked position. Pre-existing race; post-fill
+  `create_position` still computes `over_exposure` and pages. Closest call of the review.
+- Daily-loss TOCTOU gains a second interleaving (/fire A on the worker → /arm B → scan fires B); the mirror
+  interleaving already existed.
+- A /fire queued behind a stuck worker can run `fire()` long after the click, on a stale snapshot; `expect=` still
+  pins which order fires and it is booked.
+- `_FIRE_EXECUTOR` is non-daemon: a hung broker call delays interpreter exit indefinitely (intended, same as the
+  default executor).
+- A fired-but-unbooked order on the shutdown-cancel path produces a log line only, no page (by design per §7).
