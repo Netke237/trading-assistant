@@ -38,7 +38,7 @@ The marker moves to the **newest** index being evaluated **before** any of them 
 
 Key: `(symbol, interval)` with the **stored** spelling. The scheduler reads both from `AlertRuleModel` (symbol stored upper-case by `create_rule`/`replace_rule`); the WS passes `symbol.upper()` and the stored spelling (§2). Same key, same marker.
 
-Marker residuals (unchanged, restated so the audit does not re-derive them): markers are in memory, so a server restart makes the next sighting a first sighting (newest closed candle only), exactly as today; `_prune_markers` drops a key with no enabled rule at each scheduler tick, so a WS claim on a pair with no rule is dropped within one tick. A WS claim made while a pair has no enabled rule means a rule created before the next tick does not fire on that already-claimed bar — the same "not a catch-up over candles from before the rule" posture P4a chose for first sightings.
+Marker residuals (unchanged, restated so the audit does not re-derive them): markers are in memory, so a server restart makes the next sighting a first sighting (newest closed candle only), exactly as today; `_prune_markers` drops a key with no enabled rule at each scheduler tick. **The WS never claims for a pair with no enabled rule** (§2c, plan r1 finding 1): a claim there would make a rule drawn or re-enabled on an open 1D/1W chart skip its first sighting (the newest closed bar), which P4a evaluates (chart_alert_scheduler.py:83-85, pinned by `test_b2_pair_that_left_and_returned_is_a_first_sighting`). So a pair gets a marker only from a path that has a rule to judge, as today.
 
 ## 2. The chart WS evaluates 1D/1W through the shared function
 
@@ -53,16 +53,17 @@ Marker residuals (unchanged, restated so the audit does not re-derive them): mar
 if daily_alerts and time.monotonic() >= next_daily_check:
     next_daily_check = time.monotonic() + _DAILY_ALERT_CHECK_SECONDS
     try:
-        from app.services.chart_alert_scheduler import evaluate_closed_candles
-        d_candles, d_fetched = await get_intraday_with_fetched_at(symbol, interval)
-        for entry in await evaluate_closed_candles(symbol, rule_interval, d_candles, d_fetched):
-            await websocket.send_json({"type": "alert_triggered", "entry": entry})
+        from app.services.chart_alert_scheduler import evaluate_closed_candles, has_enabled_rule
+        if await has_enabled_rule(symbol, rule_interval):
+            d_candles, d_fetched = await get_intraday_with_fetched_at(symbol, interval)
+            for entry in await evaluate_closed_candles(symbol, rule_interval, d_candles, d_fetched):
+                await websocket.send_json({"type": "alert_triggered", "entry": entry})
     except WebSocketDisconnect:
         raise
     except Exception:
         logger.warning("Daily/weekly alert evaluation failed for %s [%s]", symbol, rule_interval, exc_info=True)
 ```
-`next_daily_check` starts at `0.0`, so the first check runs on the first loop pass (first tick or first ping). The fetch uses the plain call, as the WS does today: for daily/weekly `refresh_on_close` has no effect (`_needs_refresh` has no due-instant rule for them, and the scheduler's `max_age` is `None` for them), so the scheduler and the WS see the same cached rows. Which bar is judged is the scheduler's (`candles[-2]` and the P4a catch-up list), because it is the scheduler's code. A `send_json` failing after a fire loses only the toast: history, `last_triggered_at` and Gmail/Telegram were already done by `evaluate_and_notify_for_symbol`; the marker is already claimed, so neither path re-sends.
+`has_enabled_rule(symbol, interval) -> bool` is new in chart_alert_scheduler.py: one `select(AlertRuleModel.id).where(symbol ==, interval ==, enabled == True).limit(1)` in its own `AsyncSessionLocal` session -- the same filter `_tick`'s pair query uses (any user_id, like `_tick`), so the WS claims exactly the pairs the scheduler would. The claim stays after the last `await` before it (inside `evaluate_closed_candles`, `_claim_candles_to_evaluate` is synchronous and runs after the fetch), so it is still atomic between the paths. A rule disabled between the check and the claim: `evaluate_and_notify_for_symbol` finds no enabled row and the marker is pruned at the next tick -- the same outcome as the scheduler meeting the same race today. `next_daily_check` starts at `0.0`, so the first check runs on the first loop pass (first tick or first ping). The fetch uses the plain call, as the WS does today: for daily/weekly `refresh_on_close` has no effect (`_needs_refresh` has no due-instant rule for them, and the scheduler's `max_age` is `None` for them), so the scheduler and the WS see the same cached rows. Which bar is judged is the scheduler's (`candles[-2]` and the P4a catch-up list), because it is the scheduler's code. A `send_json` failing after a fire loses only the toast: history, `last_triggered_at` and Gmail/Telegram were already done by `evaluate_and_notify_for_symbol`; the marker is already claimed, so neither path re-sends.
 
 ## 3. The browser stops judging 1D/1W rules
 
@@ -89,6 +90,7 @@ Backend (new file `backend/tests/test_chart_ws_1d_1w_rules.py`; fixtures reuse `
 - **T6 intraday unchanged:** WS `?interval=15min` with one new-timestamp tick → the existing path (the A4e T7 test stays green unchanged) and no `evaluate_closed_candles` call; `_last_seen_candle` has no `('AAPL','15min')` key after.
 - **T7 claim before evaluate:** `_claim_candles_to_evaluate` with an unseen list of two → marker equals the newer candle's time on return, before anything is awaited; a second call returns `[]`.
 - **T8 scheduler parity:** the existing scheduler tests (`test_chart_alert_scheduler.py`, `test_p4a_chart_alert_rules.py`, `test_a4e_closed_candle_alignment.py` T5/T6) pass unchanged — they pin catch-up count, first sighting, per-candle failure isolation and the `view` truncation that `evaluate_closed_candles` now owns.
+- **T10 no claim without a rule (plan r1 finding 1):** WS `?interval=daily` with no enabled `('AAPL','1D')` row → `evaluate_closed_candles` not called and no `('AAPL','1D')` marker; then a rule row is added and `_tick` runs with the same candles → `evaluate_and_notify_for_symbol` called once, on `candles[-2]`. Fails if the existence check is removed.
 - **T9 failure isolation:** `evaluate_and_notify_for_symbol` raising on the WS path → WARNING logged, stream stays open (a following ping is received), marker still claimed (no retry).
 
 Frontend (`frontend/lib/__tests__/chartAlertEngine.test.ts`): `browserJudgesInterval` is false for `'1D'`, `'1W'`; true for `'1min'`, `'5min'`, `'15min'`, `'1h'`, `'4h'`. The existing W2-STRUCT `1D/1W is unchanged` engine test stays (engine behaviour is unchanged).
