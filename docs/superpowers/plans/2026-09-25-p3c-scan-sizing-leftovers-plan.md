@@ -1093,3 +1093,21 @@ Below the gate — logged against main, NOT fixed in-branch:
 - The post-gather gate's comment ("never a placeholder") holds only while the `_process_symbol` drop stays ahead
   of it. Accurate today.
 - `_rest` tests `_dir_removed >= len(symbols)`; it cannot exceed it, so `>=` vs `==` is cosmetic.
+
+## Code round 1 log — item 3, 0% scan schedule warning (0 gate-level findings; CLEAN)
+
+Scope: commit 2afa61e, whole change. Brief quoted `audit_rule` clause (1) and the comment-truth exception
+verbatim; a "wrong number" was defined as the warning shown for an entry that does not run at the 1% default, or
+missing for one that does. Result: ZERO GATE-LEVEL FINDINGS — item 3's code stage is closed. Checked: helper and
+row line match §3; backend `_stored_zero_is_unset` → `_DEFAULT_RISK_PCT` path is the same for scheduled fires
+(`scan_schedule_scheduler.py` re-validates through `StockScanRequest`); a stored 0 / 0.0 round-trips through the
+YAML store and JSON as a JS 0; a string "0" is rejected at save; `risk_pct` is always sent explicitly, never
+null/NaN from the Risk form; options entries excluded; the warning reads the stored request, not live `riskStore`.
+
+Below the gate — logged against main, NOT fixed in-branch:
+- "(conviction-adjusted)": with `regime_sizing` disabled the multiplier is 1.0, so the run is a flat 1%. The
+  mechanism statement is still right (0 takes the None path).
+- The Risk input shows two decimals: 0.001% displays as "0%" and runs at 0.001% with no warning (correct here;
+  the display can confuse).
+- The render test's `resolved_request` fixture is cast `as unknown as`, so it would not catch a type change.
+- A hand-edited `scan_schedule.yaml` with `risk_pct: "0"` makes the GET list 500. Pre-existing, manual edit only.
