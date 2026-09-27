@@ -1,4 +1,4 @@
-import { evaluateRules, conditionLabel } from '@/lib/chartAlertEngine';
+import { browserJudgesInterval, evaluateRules, conditionLabel } from '@/lib/chartAlertEngine';
 import type { AlertRule, PriceCondition, IndicatorCondition, RegimeCondition, StructureCondition } from '@/types/alerts';
 import type { Candle } from '@/lib/indicators';
 import type { StructureSignal } from '@/types/structure';
@@ -429,5 +429,14 @@ describe('evaluateRules checklist', () => {
     expect(result[0].reason).toContain('(1-of-2)');
     expect(result[0].reason).not.toContain('(0-of-');
     expect(result[0].reason).toBe('Price > 185 (1-of-2) Price < 100');
+  });
+});
+
+describe('CHART-WS-1D-1W-RULES: browserJudgesInterval', () => {
+  it.each(['1D', '1W'] as const)('%s is left to the backend', (iv) => {
+    expect(browserJudgesInterval(iv)).toBe(false);
+  });
+  it.each(['1min', '5min', '15min', '1h', '4h'] as const)('%s is judged in the browser', (iv) => {
+    expect(browserJudgesInterval(iv)).toBe(true);
   });
 });

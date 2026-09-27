@@ -205,6 +205,13 @@ function buildReason(rule: AlertRule, triggerValues: Record<string, number>): st
     .join(sep);
 }
 
+/** CHART-WS-1D-1W-RULES: 1D/1W rules are judged by the backend only (chart WS
+ *  or scheduler, once per closed bar, one shared claim); the chart receives a
+ *  fire as `alert_triggered`. The browser judges every other interval. */
+export function browserJudgesInterval(interval: Interval): boolean {
+  return interval !== '1D' && interval !== '1W';
+}
+
 export function evaluateRules(
   rules: AlertRule[],
   closedCandle: Candle,
@@ -234,8 +241,9 @@ export function evaluateRules(
     // judges the whole rule on closed bars (A4e) and pushes `alert_triggered`
     // to the open chart. Rule level, not condition level: an OR / N_OF_M rule
     // firing here on its other conditions would record the structure line as
-    // unmet. 1D/1W are untouched: the chart WS does not evaluate those rules
-    // ('daily' vs stored '1D'), only the scheduler does, with no chart push.
+    // unmet. 1D/1W never reach this function from the chart (ChartWorkspace
+    // skips them via browserJudgesInterval; the backend judges them and pushes
+    // `alert_triggered`), so this skip is intraday-only.
     if (rule.interval !== '1D' && rule.interval !== '1W'
       && rule.group.conditions.some((c) => c.kind === 'structure')) continue;
 
