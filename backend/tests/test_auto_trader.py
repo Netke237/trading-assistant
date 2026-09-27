@@ -3492,6 +3492,11 @@ async def test_the_manual_fire_endpoint_fires_the_order_it_checked(mocker):
         async def execute(self, *a, **k):
             return _FakeResult()
 
+        # P3c item 7: fire_now releases the snapshot read's transaction
+        # before it waits on the fire executor.
+        async def rollback(self):
+            pass
+
     armed = _make_armed(symbol="MSFT")
     rt.auto_trader.arm(armed)
     fire_spy = mocker.patch.object(

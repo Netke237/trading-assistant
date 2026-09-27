@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
+import functools
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -22,6 +27,42 @@ SIZING_CONFIG_REFUSED_PREFIX = "Refused, nothing sent: regime_sizing is unusable
 REGIME_GATE_CONFIG_REFUSED_PREFIX = "Refused, nothing sent: regime_gate is unusable: "
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
+
+logger = logging.getLogger(__name__)
+
+# P3c item 7: POST /fire runs `auto_trader.fire()` here, off the event loop.
+# DEDICATED, not the default executor: that one is shared with a running
+# scan's `to_thread` calls, so a manual fire during a large scan could queue
+# before its market-open check even started. ONE worker also SERIALISES two
+# concurrent /fire calls: the second enters `fire()` only after the first has
+# disarmed, and gets `ArmPreservedError` -> 400. Non-daemon, joined at
+# interpreter exit like the default executor's.
+_FIRE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="auto-trade-fire")
+
+
+def _log_unbooked(symbol: str, cf: concurrent.futures.Future) -> None:
+    """Record the outcome of a `fire()` whose /fire request was cancelled.
+
+    Runs as a `concurrent.futures` done-callback — in the worker thread when
+    `fire()` finishes, or at once if it already has — so it is written even
+    while `asyncio.run`'s teardown is cancelling every task. MUST NOT RAISE:
+    `add_done_callback` swallows a callback's exception and logs only
+    "exception calling callback for <Future>", losing this line. Hence
+    `cancelled()` first (`result()` raises on a cancelled future) and
+    `exception()` before `result()` (`result()` re-raises `fire()`'s error).
+    """
+    if cf.cancelled():
+        logger.warning(
+            "POST /auto-trade/fire for %s was cancelled before fire() ran; "
+            "nothing was sent", symbol,
+        )
+        return
+    exc = cf.exception()
+    outcome = exc if exc is not None else cf.result()
+    logger.error(
+        "POST /auto-trade/fire for %s was cancelled while fire() ran; this "
+        "outcome was NOT booked: %r", symbol, outcome,
+    )
 
 
 class ArmRequest(BaseModel):
@@ -207,32 +248,48 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     result_q = await db.execute(select(PortfolioPositionModel))
     orm_positions = result_q.scalars().all()
     portfolio_snapshot = orm_positions_to_risk(orm_positions)
+    armed_symbol = _armed_state.strategy.symbol
+    # The read opened a transaction and holds a pool connection; nothing is
+    # written. Release it so a /fire queued behind the one worker (market-open
+    # check + regime deadline + broker call) does not pin a connection;
+    # `book_fired_order` checks one out again.
+    await db.rollback()
+    cf = _FIRE_EXECUTOR.submit(
+        auto_trader.fire,
+        portfolio_snapshot=portfolio_snapshot,
+        portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
+        # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same contract
+        # `maybe_fire_on_scan` passes, and for the same reason. This handler
+        # reads the armed slot, decides something about what it read (the 400
+        # above), and only then calls: exactly the caller shape `fire()`'s
+        # docstring says `expect` exists for. Without it, `fire()`'s halt check
+        # runs on the symbol read in its first lock block and the submission
+        # happens on whatever the second one finds, so a re-arm in that window
+        # — which spans a 3s network call — authorizes order B on order A's
+        # halt decision.
+        #
+        # REACHABLE OVER HTTP since P3c item 7: `fire()` runs on
+        # `_FIRE_EXECUTOR`, off the loop, so other requests (an /arm among
+        # them) are served inside the window. The single worker serialises
+        # /fire against /fire only; `expect=` stays the guard against a re-arm
+        # by /arm or any other producer during the window. A mismatch raises
+        # `ArmPreservedError`, which is a RuntimeError, so the handler below
+        # maps it to the 400 it should be.
+        expect=_armed_state.strategy,
+    )
     try:
-        fired = auto_trader.fire(
-            portfolio_snapshot=portfolio_snapshot,
-            portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
-            # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same
-            # contract `maybe_fire_on_scan` passes, and for the same reason.
-            # This handler reads the armed slot, decides something about what
-            # it read (the 400 above), and only then calls: exactly the caller
-            # shape `fire()`'s docstring says `expect` exists for. Without it,
-            # `fire()`'s halt check runs on the symbol read in its first lock
-            # block and the submission happens on whatever the second one
-            # finds, so a re-arm in that window — which spans a 3s network
-            # call — authorizes order B on order A's halt decision.
-            #
-            # NOT REACHABLE OVER HTTP TODAY, and recorded here so the next
-            # reader does not decide it is therefore pointless: `fire_now` is
-            # `async def` but calls `fire()` synchronously, blocking the loop,
-            # so no second request can be parsed inside the window. That is an
-            # accident of this endpoint's shape, not a guard. It stops holding
-            # the moment `fire()` moves behind `asyncio.to_thread` (which this
-            # codebase is already doing for broker order execution), a second
-            # worker shares the state, or any non-HTTP producer calls `arm()`.
-            # A mismatch raises `ArmPreservedError`, which is a RuntimeError,
-            # so the handler below already maps it to the 400 it should be.
-            expect=_armed_state.strategy,
-        )
+        fired = await asyncio.wrap_future(cf)
+    except asyncio.CancelledError:
+        # No middleware cancels on client disconnect; a forced/timed-out
+        # shutdown does, and then every task is cancelled — an asyncio-side
+        # callback would see only "cancelled". So the outcome is logged on the
+        # THREAD side of `cf`: `add_done_callback` runs at once if `fire()` is
+        # already done, else in the worker when it finishes (the Future's lock
+        # makes that hand-off atomic). The cancel also reached `cf.cancel()`,
+        # a no-op while running and a real cancel while still queued. Booking
+        # is not attempted: the request's session is gone.
+        cf.add_done_callback(functools.partial(_log_unbooked, armed_symbol))
+        raise
     except SizingConfigError as exc:
         # 500, NOT 400 -- decision A7B-FIRE-SIZING-CONFIG-500-2026-09-24, and
         # the same answer POST /stock-scan gives for the same broken block: the
