@@ -966,6 +966,9 @@ export interface RiskSettings {
   maxSinglePositionPct?: number;
   maxLossPerTradePct?: number;
   maxTotalExposurePct?: number;
+  /** STOCK-SENDS: the stock caps (price x shares / portfolio value). */
+  maxSingleStockPositionPct?: number;
+  maxTotalStockExposurePct?: number;
   maxConcurrentPositions?: number;
   maxDailyRecommendations?: number;
   targetT1Pct?: number;

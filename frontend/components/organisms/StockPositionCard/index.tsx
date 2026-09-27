@@ -57,9 +57,10 @@ interface StockEditOverlay {
  *  him. Capping would silently overrule a spec-mandated number and would make
  *  the recommendation useless on any liquid large-cap with a tight stop.
  *
- *  `cap` and `portfolioValue` MUST arrive from riskStore — the same two numbers
- *  RiskPanel and computeMetrics measure concentration against — never a second
- *  copy of 0.05 that would drift from Settings the first time Kenneth edits it.
+ *  `cap` and `portfolioValue` MUST arrive from riskStore. The cap is the STOCK
+ *  single-position cap `maxSingleStockPositionPct` — the number check_position_risk
+ *  judges a stock save against and computeMetrics' stock concentration band uses
+ *  (STOCK-SENDS) — never a second copy that would drift from Settings.
  *
  *  Returns null when there is nothing truthful to say: no recommendation, or a
  *  portfolio value / cap that cannot produce a meaningful limit. A cap of 100%
@@ -1121,14 +1122,16 @@ export function StockPositionCard({
                 plan.recommendedShares,
                 overlay.entry,
                 riskLimits.portfolioValue,
-                riskLimits.maxSingleTradeExposurePct,
+                // STOCK-SENDS (R2-2): the STOCK single-position cap, the one the
+                // server judges a stock save against -- not the options 5%.
+                riskLimits.maxSingleStockPositionPct,
               );
               if (!c) return null;
               return (
                 <Text size={10} tone="caution">
                   Concentration: ≈${c.positionDollar.toFixed(0)} is{' '}
                   {c.positionPct.toFixed(1)}% of your ${riskLimits.portfolioValue.toFixed(0)}{' '}
-                  account — over the {(riskLimits.maxSingleTradeExposurePct * 100).toFixed(0)}%
+                  account — over the {(riskLimits.maxSingleStockPositionPct * 100).toFixed(0)}%
                   {' '}single-position cap (${c.capDollar.toFixed(0)}, ≈{c.capShares} shares).
                   Sized by risk budget, as the plan intends. Nothing is blocked — your call.
                 </Text>

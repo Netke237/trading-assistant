@@ -351,13 +351,23 @@ export function positionMultiplier(p: PortfolioPosition): number {
   return p.contract.endsWith('|STOCK') ? 1 : 100;
 }
 
-export function totalNotional(positions: PortfolioPosition[]): number {
+/** Sum of notional. `kind` (STOCK-SENDS) limits it to option or stock rows:
+ *  each kind's total counts only its own rows (decision
+ *  STOCK-SENDS-STOCK-CAPS-2026-09-27). */
+export function totalNotional(positions: PortfolioPosition[], kind?: 'option' | 'stock'): number {
   return positions.reduce(
-    (sum, p) => sum + p.currentPrice * positionMultiplier(p) * (p.contracts ?? 1),
+    (sum, p) => {
+      if (kind && p.contract.endsWith('|STOCK') !== (kind === 'stock')) return sum;
+      return sum + p.currentPrice * positionMultiplier(p) * (p.contracts ?? 1);
+    },
     0,
   );
 }
 
+/** NOT the dashboard's source: RiskPanel reads `riskStore.computeMetrics`,
+ *  which judges options and stocks against their own caps (STOCK-SENDS). This
+ *  older helper has no production caller; it still sums every row, and its
+ *  stock fields are placeholders. Use `computeMetrics` for anything shown. */
 export function computePortfolioRiskMetrics(
   positions: PortfolioPosition[],
   limits: RiskLimits,
@@ -409,6 +419,9 @@ export function computePortfolioRiskMetrics(
     dailyRecommendations,
     largestConcentrationPct,
     largestConcentrationSymbol,
+    stockExposurePct: 0,
+    largestStockConcentrationPct: 0,
+    largestStockConcentrationSymbol: '—',
     status,
   };
 }
@@ -532,7 +545,9 @@ export function checkTradeRisk(
   const mid = card.contractDetails?.mid ?? 0;
   const car = capitalAtRisk(mid, proposedContracts);
   const singleExposure = exposurePct(car, limits.portfolioValue);
-  const currentNotional = totalNotional(positions);
+  // Options only (this check runs on the options basket): stock rows count
+  // against the stock total, not this one (STOCK-SENDS).
+  const currentNotional = totalNotional(positions, 'option');
   const totalExposure = exposurePct(currentNotional + car, limits.portfolioValue);
 
   if (!checkInvalidation(resolvedInvalidation ?? card.exit.invalidation)) {

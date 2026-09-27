@@ -19,6 +19,9 @@ const DEFAULT_LIMITS: RiskLimits = {
   maxDailyRecommendations: 5,
   portfolioValue: 100000,
   maxLossPerTradePct: 0.0375,
+  // Decision STOCK-SENDS-STOCK-CAPS-2026-09-27 (mirrors risk_rules.yaml).
+  maxSingleStockPositionPct: 0.20,
+  maxTotalStockExposurePct: 1.00,
 };
 
 const DEFAULT_METRICS: PortfolioRiskMetrics = {
@@ -27,6 +30,9 @@ const DEFAULT_METRICS: PortfolioRiskMetrics = {
   dailyRecommendations: 0,
   largestConcentrationPct: 0,
   largestConcentrationSymbol: '—',
+  stockExposurePct: 0,
+  largestStockConcentrationPct: 0,
+  largestStockConcentrationSymbol: '—',
   status: 'PASS',
 };
 
@@ -116,6 +122,19 @@ export function migrateRisk(persistedState: unknown, _version: number): Partial<
         0,
         1,
       ),
+      // v4 (STOCK-SENDS): absent before -> the decided defaults.
+      maxSingleStockPositionPct: boundedNumber(
+        rawLimits.maxSingleStockPositionPct,
+        DEFAULT_LIMITS.maxSingleStockPositionPct,
+        0.01,
+        1,
+      ),
+      maxTotalStockExposurePct: boundedNumber(
+        rawLimits.maxTotalStockExposurePct,
+        DEFAULT_LIMITS.maxTotalStockExposurePct,
+        0.01,
+        1,
+      ),
     },
     dailyRecommendations: Math.max(
       0,
@@ -162,41 +181,55 @@ export const useRiskStore = create<RiskState>()(
       computeMetrics: (positions) => {
         const { limits, dailyRecommendations } = get();
         const portfolioValue = limits.portfolioValue || 1;
-        let totalNotional = 0;
-        const symbolNotional: Record<string, number> = {};
-        for (const p of positions) {
-          const notional = p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1);
-          totalNotional += notional;
-          symbolNotional[p.symbol] = (symbolNotional[p.symbol] ?? 0) + notional;
-        }
-        const totalExposurePct = totalNotional / portfolioValue;
-        const concurrentPositions = positions.length;
-        let largestConcentrationPct = 0;
-        let largestConcentrationSymbol = '—';
-        for (const [sym, notional] of Object.entries(symbolNotional)) {
-          const pct = notional / portfolioValue;
-          if (pct > largestConcentrationPct) {
-            largestConcentrationPct = pct;
-            largestConcentrationSymbol = sym;
+        // STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): each kind is
+        // judged against its own caps and its totals count only its own rows,
+        // as check_position_risk does on the server. Per-symbol grouping runs
+        // within each kind.
+        const byKind = (stock: boolean) => {
+          let total = 0;
+          const bySymbol: Record<string, number> = {};
+          for (const p of positions) {
+            if (p.contract.endsWith('|STOCK') !== stock) continue;
+            const notional = p.currentPrice * (stock ? 1 : 100) * (p.contracts ?? 1);
+            total += notional;
+            bySymbol[p.symbol] = (bySymbol[p.symbol] ?? 0) + notional;
           }
-        }
+          let largestPct = 0;
+          let largestSymbol = '—';
+          for (const [sym, notional] of Object.entries(bySymbol)) {
+            const pct = notional / portfolioValue;
+            if (pct > largestPct) {
+              largestPct = pct;
+              largestSymbol = sym;
+            }
+          }
+          return { pct: total / portfolioValue, largestPct, largestSymbol };
+        };
+        const option = byKind(false);
+        const stock = byKind(true);
+        const concurrentPositions = positions.length;
 
         const statuses: Status[] = [
-          riskBandStatus('fraction', totalExposurePct, limits.maxTotalExposurePct),
+          riskBandStatus('fraction', option.pct, limits.maxTotalExposurePct),
           riskBandStatus('count', concurrentPositions, limits.maxConcurrentPositions),
           riskBandStatus('count', dailyRecommendations, limits.maxDailyRecommendations),
-          riskBandStatus('fraction', largestConcentrationPct, limits.maxSingleTradeExposurePct),
+          riskBandStatus('fraction', option.largestPct, limits.maxSingleTradeExposurePct),
+          riskBandStatus('fraction', stock.pct, limits.maxTotalStockExposurePct),
+          riskBandStatus('fraction', stock.largestPct, limits.maxSingleStockPositionPct),
         ];
 
         const status = worstStatus(...statuses);
 
         set({
           metrics: {
-            totalExposurePct,
+            totalExposurePct: option.pct,
             concurrentPositions,
             dailyRecommendations,
-            largestConcentrationPct,
-            largestConcentrationSymbol,
+            largestConcentrationPct: option.largestPct,
+            largestConcentrationSymbol: option.largestSymbol,
+            stockExposurePct: stock.pct,
+            largestStockConcentrationPct: stock.largestPct,
+            largestStockConcentrationSymbol: stock.largestSymbol,
             status,
           },
           symbols: positions.map((p) => p.symbol),
@@ -206,7 +239,7 @@ export const useRiskStore = create<RiskState>()(
     {
       name: 'bamendjou-risk-v1',
       skipHydration: true,
-      version: 3,
+      version: 4,
       migrate: migrateRisk,
       partialize: (state) => ({
         limits: state.limits,

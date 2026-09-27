@@ -1283,6 +1283,8 @@ function RiskForm() {
           ...(s.maxSinglePositionPct     !== undefined && { maxSingleTradeExposurePct:  s.maxSinglePositionPct }),
           ...(s.maxLossPerTradePct       !== undefined && { maxLossPerTradePct:         s.maxLossPerTradePct }),
           ...(s.maxTotalExposurePct      !== undefined && { maxTotalExposurePct:        s.maxTotalExposurePct }),
+          ...(s.maxSingleStockPositionPct !== undefined && { maxSingleStockPositionPct: s.maxSingleStockPositionPct }),
+          ...(s.maxTotalStockExposurePct !== undefined && { maxTotalStockExposurePct:   s.maxTotalStockExposurePct }),
           ...(s.maxConcurrentPositions   !== undefined && { maxConcurrentPositions:     s.maxConcurrentPositions }),
           ...(s.maxDailyRecommendations  !== undefined && { maxDailyRecommendations:    s.maxDailyRecommendations }),
         };
@@ -1328,6 +1330,8 @@ function RiskForm() {
         maxSinglePositionPct:    localLimits.maxSingleTradeExposurePct,
         maxLossPerTradePct:      localLimits.maxLossPerTradePct,
         maxTotalExposurePct:     localLimits.maxTotalExposurePct,
+        maxSingleStockPositionPct: localLimits.maxSingleStockPositionPct,
+        maxTotalStockExposurePct:  localLimits.maxTotalStockExposurePct,
         maxConcurrentPositions:  localLimits.maxConcurrentPositions,
         maxDailyRecommendations: localLimits.maxDailyRecommendations,
         targetT1Pct: orderedTargetPct.t1,
@@ -1389,7 +1393,7 @@ function RiskForm() {
       })()}
       <Row
         label="Max single trade exposure"
-        hint="Notional of one trade as % of portfolio."
+        hint="Options: notional of one trade as % of portfolio. Stocks have their own cap below."
         defaultValue="5%"
       >
         <input
@@ -1421,7 +1425,7 @@ function RiskForm() {
       </Row>
       <Row
         label="Max total exposure"
-        hint="All open positions combined."
+        hint="All open OPTION positions combined. Stocks count against their own total below."
         defaultValue="25%"
       >
         <input
@@ -1432,6 +1436,42 @@ function RiskForm() {
           step={1}
           value={Math.round(localLimits.maxTotalExposurePct * 100)}
           onChange={(e) => updateLimit('maxTotalExposurePct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
+          onBlur={handleSaveRisk}
+        />
+      </Row>
+      {/* STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): the stock caps,
+        * on price x shares as a % of portfolio value. */}
+      <Row
+        label="Max single stock position"
+        hint="Price × shares of one stock position as % of portfolio. A larger stock order is resized to fit."
+        defaultValue="20%"
+      >
+        <input
+          type="number"
+          aria-label="Max single stock position %"
+          className={styles.input}
+          min={1}
+          max={100}
+          step={1}
+          value={Math.round(localLimits.maxSingleStockPositionPct * 100)}
+          onChange={(e) => updateLimit('maxSingleStockPositionPct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
+          onBlur={handleSaveRisk}
+        />
+      </Row>
+      <Row
+        label="Max total stock exposure"
+        hint="All open STOCK positions combined, as % of portfolio. 100% = no margin."
+        defaultValue="100%"
+      >
+        <input
+          type="number"
+          aria-label="Max total stock exposure %"
+          className={styles.input}
+          min={1}
+          max={100}
+          step={1}
+          value={Math.round(localLimits.maxTotalStockExposurePct * 100)}
+          onChange={(e) => updateLimit('maxTotalStockExposurePct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
           onBlur={handleSaveRisk}
         />
       </Row>

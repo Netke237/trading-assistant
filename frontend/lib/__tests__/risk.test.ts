@@ -34,7 +34,7 @@ const DEFAULT_LIMITS: RiskLimits = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 50000,
-  maxLossPerTradePct: 0.0375,
+  maxLossPerTradePct: 0.0375, maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
 };
 
 function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
@@ -222,6 +222,15 @@ describe('risk helpers', () => {
       const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, positions, 0);
       expect(result.approved).toBe(false);
       expect(result.reasons).toContain('total_exposure_limit_reached');
+    });
+
+    // STOCK-SENDS (plan C2): the options basket's total counts OPTION rows
+    // only; stock rows count against the stock total on the server.
+    it('does not count a stock row toward the option total', () => {
+      const stock = makePosition({ symbol: 'MSFT', contract: 'MSFT|STOCK', currentPrice: 200, contracts: 300, recId: 'S' }); // $60k
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [stock], 0, null, undefined, pick());
+      expect(result.reasons).not.toContain('total_exposure_limit_reached');
+      expect(result.approved).toBe(true);
     });
 
     it('rejects when max concurrent positions reached', () => {

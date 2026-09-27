@@ -7,7 +7,7 @@ import type { SearchProfile } from '@/types/searchProfile';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
 
 const BASE_RISK_LIMITS = {
-  portfolioValue: 100_000, maxLossPerTradePct: 0.0375,
+  portfolioValue: 100_000, maxLossPerTradePct: 0.0375, maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
   maxSingleTradeExposurePct: 0.05, maxTotalExposurePct: 0.25,
   maxConcurrentPositions: 10, maxDailyRecommendations: 5,
 };

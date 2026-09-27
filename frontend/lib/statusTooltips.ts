@@ -406,17 +406,18 @@ export function fundamentalScoreTooltip(kind: 'overall' | 'growth' | 'quality' |
   }
 }
 
-/** RiskPanel's combined RiskBadge, and (with `metric` set) each of the 4 individual Stat cells.
+/** RiskPanel's combined RiskBadge, and (with `metric` set) each of the 6 individual Stat cells
+ *  (STOCK-SENDS added the two stock bands, each against its own stock cap).
  *  Verdicts come from lib/status.ts's riskBandStatus — the same function riskStore's
  *  computeMetrics uses for the badge — so the tooltip and the badge cannot disagree. Each
  *  band only declares its kind ('fraction' or 'count'); never re-implement a comparator here. */
 export function riskStatusTooltip(
   metrics: PortfolioRiskMetrics,
   limits: RiskLimits,
-  metric?: 'exposure' | 'positions' | 'concentration' | 'daily',
+  metric?: 'exposure' | 'positions' | 'concentration' | 'daily' | 'stockExposure' | 'stockConcentration',
 ): string {
   const bands: Array<{
-    key: 'exposure' | 'positions' | 'concentration' | 'daily';
+    key: 'exposure' | 'positions' | 'concentration' | 'daily' | 'stockExposure' | 'stockConcentration';
     label: string;
     value: number;
     cap: number;
@@ -424,7 +425,7 @@ export function riskStatusTooltip(
     kind: RiskBandKind;
   }> = [
     {
-      key: 'exposure', label: 'total exposure', value: metrics.totalExposurePct, cap: limits.maxTotalExposurePct,
+      key: 'exposure', label: 'option exposure', value: metrics.totalExposurePct, cap: limits.maxTotalExposurePct,
       fmt: (n) => `${(n * 100).toFixed(0)}%`,
       kind: 'fraction',
     },
@@ -434,7 +435,17 @@ export function riskStatusTooltip(
       kind: 'count',
     },
     {
-      key: 'concentration', label: `largest position (${metrics.largestConcentrationSymbol})`, value: metrics.largestConcentrationPct, cap: limits.maxSingleTradeExposurePct,
+      key: 'concentration', label: `largest option position (${metrics.largestConcentrationSymbol})`, value: metrics.largestConcentrationPct, cap: limits.maxSingleTradeExposurePct,
+      fmt: (n) => `${(n * 100).toFixed(0)}%`,
+      kind: 'fraction',
+    },
+    {
+      key: 'stockExposure', label: 'stock exposure', value: metrics.stockExposurePct, cap: limits.maxTotalStockExposurePct,
+      fmt: (n) => `${(n * 100).toFixed(0)}%`,
+      kind: 'fraction',
+    },
+    {
+      key: 'stockConcentration', label: `largest stock position (${metrics.largestStockConcentrationSymbol})`, value: metrics.largestStockConcentrationPct, cap: limits.maxSingleStockPositionPct,
       fmt: (n) => `${(n * 100).toFixed(0)}%`,
       kind: 'fraction',
     },

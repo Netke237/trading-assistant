@@ -27,8 +27,9 @@ export function RiskPanel() {
   return (
     <div className={styles.wrap}>
       <div className={styles.grid}>
+        {/* STOCK-SENDS: options and stocks each against their own caps. */}
         <Stat
-          label="Exposure"
+          label="Option exposure"
           value={`${(metrics.totalExposurePct * 100).toFixed(1)}%`}
           tone={metrics.totalExposurePct > limits.maxTotalExposurePct ? 'reject' : metrics.totalExposurePct > limits.maxTotalExposurePct * 0.8 ? 'caution' : 'pass'}
           tooltip={riskStatusTooltip(metrics, limits, 'exposure')}
@@ -40,10 +41,22 @@ export function RiskPanel() {
           tooltip={riskStatusTooltip(metrics, limits, 'positions')}
         />
         <Stat
-          label="Largest"
+          label="Largest option"
           value={`${(metrics.largestConcentrationPct * 100).toFixed(1)}% ${metrics.largestConcentrationSymbol}`}
           tone={metrics.largestConcentrationPct > limits.maxSingleTradeExposurePct ? 'reject' : metrics.largestConcentrationPct > limits.maxSingleTradeExposurePct * 0.8 ? 'caution' : 'pass'}
           tooltip={riskStatusTooltip(metrics, limits, 'concentration')}
+        />
+        <Stat
+          label="Stock exposure"
+          value={`${(metrics.stockExposurePct * 100).toFixed(1)}%`}
+          tone={metrics.stockExposurePct > limits.maxTotalStockExposurePct ? 'reject' : metrics.stockExposurePct > limits.maxTotalStockExposurePct * 0.8 ? 'caution' : 'pass'}
+          tooltip={riskStatusTooltip(metrics, limits, 'stockExposure')}
+        />
+        <Stat
+          label="Largest stock"
+          value={`${(metrics.largestStockConcentrationPct * 100).toFixed(1)}% ${metrics.largestStockConcentrationSymbol}`}
+          tone={metrics.largestStockConcentrationPct > limits.maxSingleStockPositionPct ? 'reject' : metrics.largestStockConcentrationPct > limits.maxSingleStockPositionPct * 0.8 ? 'caution' : 'pass'}
+          tooltip={riskStatusTooltip(metrics, limits, 'stockConcentration')}
         />
         <Stat
           label="Daily"

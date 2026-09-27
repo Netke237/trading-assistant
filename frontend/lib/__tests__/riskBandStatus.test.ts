@@ -25,6 +25,7 @@ for (let c = 1; c <= 30; c++) for (let v = 0; v <= c + 2; v++) CASES.push([c, v]
 const WIDE: RiskLimits = {
   maxTotalExposurePct: 1000, maxConcurrentPositions: 1000, maxSingleTradeExposurePct: 1000,
   maxDailyRecommendations: 1000, portfolioValue: 100_000, maxLossPerTradePct: 0.0375,
+  maxSingleStockPositionPct: 1000, maxTotalStockExposurePct: 1000,
 };
 
 function stockPosition(i: number, currentPrice: number): PortfolioPosition {
@@ -41,6 +42,12 @@ function badge(limits: RiskLimits, positions: PortfolioPosition[], daily = 0): P
     useRiskStore.getState().computeMetrics(positions);
   });
   return useRiskStore.getState().metrics;
+}
+
+/** One OPTION row worth `notional` (price x 100 x 1 contract). STOCK-SENDS:
+ *  the option bands count option rows only. */
+function optionPosition(i: number, notional: number): PortfolioPosition {
+  return { ...stockPosition(i, notional / 100), contract: `O${i}|100|2026-12-18|C` } as PortfolioPosition;
 }
 
 const zeroed = (n: number) => Array.from({ length: n }, (_, i) => stockPosition(i, 0));
@@ -79,16 +86,32 @@ describe('riskBandStatus — fraction bands at their boundaries', () => {
 
   it.each(POINTS)('total exposure %f: badge and tooltip -> %s', (v, s, pct) => {
     const limits = { ...WIDE, maxTotalExposurePct: 0.5 };
-    const metrics = badge(limits, [stockPosition(0, v * 100_000)]);
+    const metrics = badge(limits, [optionPosition(0, v * 100_000)]);
     expect(metrics.status).toBe(s);
     expect(riskStatusTooltip(metrics, limits, 'exposure')).toBe(`${pct} of a 50% limit (${s}).`);
   });
 
   it.each(POINTS)('largest concentration %f: badge and tooltip -> %s', (v, s, pct) => {
     const limits = { ...WIDE, maxSingleTradeExposurePct: 0.5 };
-    const metrics = badge(limits, [stockPosition(0, v * 100_000)]);
+    const metrics = badge(limits, [optionPosition(0, v * 100_000)]);
     expect(metrics.status).toBe(s);
     expect(riskStatusTooltip(metrics, limits, 'concentration')).toBe(`${pct} of a 50% limit (${s}).`);
+  });
+
+  // STOCK-SENDS: the two stock bands, each against its own stock cap.
+  it.each(POINTS)('stock exposure %f: badge and tooltip -> %s', (v, s, pct) => {
+    const limits = { ...WIDE, maxTotalStockExposurePct: 0.5 };
+    const metrics = badge(limits, [stockPosition(0, v * 100_000)]);
+    expect(metrics.status).toBe(s);
+    expect(metrics.totalExposurePct).toBe(0);
+    expect(riskStatusTooltip(metrics, limits, 'stockExposure')).toBe(`${pct} of a 50% limit (${s}).`);
+  });
+
+  it.each(POINTS)('largest stock %f: badge and tooltip -> %s', (v, s, pct) => {
+    const limits = { ...WIDE, maxSingleStockPositionPct: 0.5 };
+    const metrics = badge(limits, [stockPosition(0, v * 100_000)]);
+    expect(metrics.status).toBe(s);
+    expect(riskStatusTooltip(metrics, limits, 'stockConcentration')).toBe(`${pct} of a 50% limit (${s}).`);
   });
 });
 

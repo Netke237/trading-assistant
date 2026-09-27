@@ -32,7 +32,7 @@ beforeEach(() => {
         maxConcurrentPositions: 10,
         maxDailyRecommendations: 5,
         portfolioValue: 100000,
-        maxLossPerTradePct: 0.0375,
+        maxLossPerTradePct: 0.0375, maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
       },
       dailyRecommendations: 0,
     });
