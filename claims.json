@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "claude/clever-planck-rpz8yh",
-      "claimed_at": "2026-09-27T14:09:30Z",
-      "expires_at": "2026-09-27T17:25:14Z",
-      "note": "OrderBlock/FVG/Divergence rules can fire",
-      "task": "W2-STRUCT"
-    }
-  ]
+  "claims": []
 }
