@@ -191,3 +191,7 @@ On merge: phase `verify` becomes a presence probe on `pending_events` in `strate
   write-after-each-entry leaves at most one sent-but-unwritten event; `_committed`/`_pending` never reach a persisted state.
   Below the gate, applied in the build at no cost: `w_eff` is built inside `_collect`'s per-watch `try`, so a hand-edited
   malformed tail `new_state` skips only that watch.
+- **Build (2026-09-27):** as planned. Tests 1-16 in `tests/test_watch_undelivered_resend.py` (19 cases); three old-behaviour
+  tests in `test_p4b_watch_isolation_and_delivery.py` updated (committed/pending split). One deviation, intended: the HTML
+  body's bold subject line also carries "Delayed: " (it prints the subject). Mutations M1-M10 all killed. Backend
+  3709 passed, 1 skipped.

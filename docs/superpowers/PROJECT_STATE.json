@@ -1195,17 +1195,17 @@
     {
       "id": "WATCH-UNDELIVERED-EVENT-RESEND",
       "name": "An undelivered strategy/composite watch event is stored and re-sent on the next run even if the condition no longer holds (labelled 'delayed'), instead of being re-derived from the live price",
-      "status": "in_progress",
+      "status": "shipped_unaudited",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
-        "kind": "defect_marker",
+        "kind": "present",
         "path": "backend/app/services/strategy_watch_evaluator.py",
-        "pattern": "state kept, retries next run",
-        "note": "DEFECT MARKER: today an undelivered transition is only retried by re-evaluating live data, so an exit whose price reverted overnight is never alerted and the watch stays armed. Gone = the pending event is persisted and re-sent."
+        "pattern": "async def _resend_pending\\(",
+        "note": "PRESENCE probe: the resend-before-evaluation step exists. Pins presence only; tests/test_watch_undelivered_resend.py pins behaviour. The old defect marker 'state kept, retries next run' is gone."
       },
-      "note": "IN PROGRESS 2026-09-27 on claude/clever-planck-rpz8yh (claimed). Plan: docs/superpowers/plans/2026-09-27-watch-undelivered-event-resend-plan.md. Decisions P4B-FOLLOWUPS-2026-09-26 (3) and WATCH-RESEND-QUEUE-2026-09-27. Plan round 1: 2 gate findings fixed (guarded writes; write after each resend). Plan round 2 CLEAN -- plan stage closed; build next, then code rounds (cap 3). || QUEUED 2026-09-26 by decision P4B-FOLLOWUPS-2026-09-26 (Kenneth). Claim it (scripts/claim.py take WATCH-UNDELIVERED-EVENT-RESEND). Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean. Scope and owned files: docs/superpowers/plans/2026-09-25-work-packages.md section 'P4b follow-ups'."
+      "note": "IN PROGRESS 2026-09-27 on claude/clever-planck-rpz8yh (claimed). Plan: docs/superpowers/plans/2026-09-27-watch-undelivered-event-resend-plan.md. Decisions P4B-FOLLOWUPS-2026-09-26 (3) and WATCH-RESEND-QUEUE-2026-09-27. Plan round 1: 2 gate findings fixed (guarded writes; write after each resend). Plan round 2 CLEAN -- plan stage closed. BUILT (not on main): evaluator stores undelivered events in last_state.pending_events, resends them labelled Delayed before evaluation, queues newer ones oldest first, keeps disabled watches' events; every write guarded. 19 new tests (tests/test_watch_undelivered_resend.py), 3 old-behaviour tests in test_p4b_watch_isolation_and_delivery.py updated; mutations M1-M10 all killed; backend 3709 passed 1 skipped. Code round 1 (= round 3) next. || QUEUED 2026-09-26 by decision P4B-FOLLOWUPS-2026-09-26 (Kenneth). Claim it (scripts/claim.py take WATCH-UNDELIVERED-EVENT-RESEND). Full loop: plan -> adversarial round -> build + mutations -> code round -> merge only when clean. Scope and owned files: docs/superpowers/plans/2026-09-25-work-packages.md section 'P4b follow-ups'."
     },
     {
       "id": "P4A-CHART-ALERT-RULES",

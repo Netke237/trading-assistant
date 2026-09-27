@@ -37,6 +37,13 @@ class _Store:
     def state(self, watch_id: str) -> dict:
         return next(w for w in self.watches if w["id"] == watch_id)["last_state"]
 
+    def committed(self, watch_id: str) -> dict:
+        """The state without the undelivered-event queue (WATCH-UNDELIVERED-EVENT-RESEND)."""
+        return {k: v for k, v in self.state(watch_id).items() if k != "pending_events"}
+
+    def pending(self, watch_id: str) -> list:
+        return self.state(watch_id).get("pending_events") or []
+
 
 def _bars(close: float, n: int = 260) -> list[dict]:
     return [{"time": f"2024-{1 + i // 28:02d}-{1 + i % 28:02d}",
@@ -130,16 +137,22 @@ async def test_a_failing_composite_watch_skips_only_itself():
 
 @pytest.mark.asyncio
 async def test_undelivered_strategy_entry_keeps_state_and_retries():
+    # WATCH-UNDELIVERED-EVENT-RESEND replaced "re-derive next run" with "store and
+    # re-send": run 2's signal is gone, yet the stored entry is still sent (delayed).
     store = _Store([_strategy_watch("a")])
     p1, p2, p3 = _fire_strategy(store, _signal())
     notify = AsyncMock(side_effect=[False, True])
     with p1, p2, p3, _channels(True), patch(f"{_EV}.notify_enabled_channels", notify):
         first = await evaluate_and_notify()
         assert [e.event_type for e in first] == ["entry"]     # reported as fired
-        assert store.state("a") == {"phase": "idle"}           # not committed
+        assert store.committed("a") == {"phase": "idle"}       # not committed
+        assert len(store.pending("a")) == 1                    # stored
+        ev_mod._SIGNAL_FNS["pullback_ema"].return_value = None  # setup gone
         second = await evaluate_and_notify()
-    assert [e.event_type for e in second] == ["entry"]         # re-fired, re-sent
+    assert second == []                                        # nothing NEW fired
+    assert notify.await_args_list[1].args[0].startswith("Delayed: ")
     assert store.state("a")["phase"] == "armed"
+    assert "pending_events" not in store.state("a")
     assert notify.await_count == 2
 
 
@@ -152,7 +165,8 @@ async def test_undelivered_strategy_exit_stays_armed():
             patch(f"{_EV}.notify_enabled_channels", new_callable=AsyncMock, return_value=False):
         events = await evaluate_and_notify()
     assert [e.event_type for e in events] == ["exit_stop"]
-    assert store.state("a")["phase"] == "armed"
+    assert store.committed("a")["phase"] == "armed"
+    assert [p["event"]["event_type"] for p in store.pending("a")] == ["exit_stop"]
 
 
 @pytest.mark.asyncio
@@ -163,7 +177,8 @@ async def test_undelivered_composite_entry_stays_unarmed():
             patch(f"{_EV}.notify_enabled_channels", new_callable=AsyncMock, return_value=False):
         events = await evaluate_and_notify()
     assert [e.watch_id for e in events] == ["a"]
-    assert store.state("a") == {"phase": "idle"}
+    assert store.committed("a") == {"phase": "idle"}
+    assert [p["event"]["event_type"] for p in store.pending("a")] == ["entry"]
 
 
 @pytest.mark.asyncio
@@ -175,7 +190,8 @@ async def test_notify_raising_counts_as_undelivered():
                   side_effect=RuntimeError("smtp down")):
         events = await evaluate_and_notify()
     assert len(events) == 1
-    assert store.state("a") == {"phase": "idle"}
+    assert store.committed("a") == {"phase": "idle"}
+    assert len(store.pending("a")) == 1
 
 
 @pytest.mark.asyncio
