@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "claude/clever-planck-rpz8yh",
-      "claimed_at": "2026-09-27T19:08:01Z",
-      "expires_at": "2026-09-27T22:21:06Z",
-      "note": "1D/1W rules evaluated on the chart WS",
-      "task": "CHART-WS-1D-1W-RULES"
-    }
-  ]
+  "claims": []
 }
