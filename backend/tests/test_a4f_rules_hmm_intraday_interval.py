@@ -3,7 +3,7 @@
 A composite HMM_intraday chart-alert RULE stored on '1D'/'1W' never fires:
 evaluate_and_notify_for_symbol hands the HMM no intraday bars on those intervals.
 The rules API now refuses such a pair (422), a PUT may keep a legacy pair it does not
-change, and run_chart_alert_scheduler migrates stored ones to '5m' before its first
+change, and run_chart_alert_scheduler migrates stored ones to '5min' before its first
 tick (name marked "(interval was 1D)", sustain clock reset, one WARNING).
 
 Isolation: every test uses its own in-memory SQLite engine; nothing here runs the app
@@ -169,7 +169,7 @@ async def test_r3_put_keeps_legacy_pair_but_refuses_new_bad_pairs():
         assert (await c.put('/alerts/rules/notype', json=_body('1D'))).status_code == 422
         # (g) intraday -> intraday is fine
         assert (await c.put('/alerts/rules/fine', json=_body('15m'))).status_code == 200
-        assert (await _get(Session, 'fine')).interval == '15m'
+        assert (await _get(Session, 'fine')).interval == '15min'  # W2-INTERVAL: stored in the chart spelling
 
 
 # ── R4: the migration ────────────────────────────────────────────────────────
@@ -205,14 +205,14 @@ async def test_r4_migration_moves_only_dead_composite_hmm_intraday_rules(caplog)
 
     assert sorted(m['id'] for m in out) == ['d1', 'off', 'usr', 'w1']
     d1 = await _get(Session, 'd1')
-    assert d1.interval == '5m' and d1.name == 'Dead daily (interval was 1D)'
+    assert d1.interval == '5min' and d1.name == 'Dead daily (interval was 1D)'
     assert d1.condition_state == '{}'
     assert d1.enabled is True and json.loads(d1.rule_json) == _composite(HMM)
     w1 = await _get(Session, 'w1')
-    assert w1.interval == '5m' and w1.name.endswith(' (interval was 1W)') and len(w1.name) <= 200
+    assert w1.interval == '5min' and w1.name.endswith(' (interval was 1W)') and len(w1.name) <= 200
     off = await _get(Session, 'off')
-    assert off.interval == '5m' and off.enabled is False
-    assert (await _get(Session, 'usr')).interval == '5m'
+    assert off.interval == '5min' and off.enabled is False
+    assert (await _get(Session, 'usr')).interval == '5min'
     for rid, snap in before.items():
         r = await _get(Session, rid)
         assert (r.interval, r.name, r.rule_json, r.condition_state, r.enabled) == snap, rid
@@ -236,7 +236,7 @@ async def test_r5_migrated_rule_reaches_the_hmm_fit(monkeypatch, caplog):
     chart_alerts._dispatch (AsyncMock), chart_alerts._load_notification_config ({}),
     regime_hmm.compute_intraday_hmm (recorder, resolved lazily by the evaluator via
     the module attribute). No strategy_confirmations -> no get_bars; no standard rules
-    -> no indicator/regime work; '5m' is not a Tradier interval -> no feed-lag lookup."""
+    -> no indicator/regime work; '5min' is a Tradier interval -> feed lag read."""
     from unittest.mock import AsyncMock
     import app.routers.chart_alerts as ca
     import app.services.regime_hmm as regime_hmm
@@ -264,7 +264,7 @@ async def test_r5_migrated_rule_reaches_the_hmm_fit(monkeypatch, caplog):
 
     await ca.migrate_hmm_intraday_rule_intervals(Session)
 
-    await ca.evaluate_and_notify_for_symbol('AAPL', '5m', candles[-2], candles, [], as_of=as_of)
+    await ca.evaluate_and_notify_for_symbol('AAPL', '5min', candles[-2], candles, [], as_of=as_of)
     assert calls and calls[0] > 0
     dispatch.assert_not_awaited()  # the recorder returns None -> the primary check fails closed
 
@@ -288,6 +288,10 @@ def _drive_scheduler(monkeypatch, migrate_side_effects):
             raise eff
         return []
 
+    async def respell(*a, **k):
+        order.append('respell')   # W2-INTERVAL: runs after the A4f migration
+        return []
+
     async def tick():
         order.append('tick')
 
@@ -299,6 +303,7 @@ def _drive_scheduler(monkeypatch, migrate_side_effects):
             raise _Stop()
 
     monkeypatch.setattr(ca, 'migrate_hmm_intraday_rule_intervals', migrate)
+    monkeypatch.setattr(ca, 'migrate_rule_interval_spellings', respell)
     monkeypatch.setattr(sched, '_tick', tick)
     monkeypatch.setattr(sched, '_load_check_interval_seconds', lambda: 15)
     # Module-local: only chart_alert_scheduler's `asyncio` name is replaced. Its other
@@ -312,7 +317,7 @@ async def test_r6_scheduler_migrates_once_before_the_first_tick(monkeypatch):
     sched, order = _drive_scheduler(monkeypatch, [None])
     with pytest.raises(_Stop):
         await sched.run_chart_alert_scheduler()
-    assert order == ['migrate', 'tick', 'tick']
+    assert order == ['migrate', 'respell', 'tick', 'tick']
 
 
 @pytest.mark.asyncio
@@ -321,7 +326,7 @@ async def test_r6_failed_migration_is_logged_and_retried_until_it_succeeds(monke
     with caplog.at_level(logging.ERROR, logger='app.services.chart_alert_scheduler'):
         with pytest.raises(_Stop):
             await sched.run_chart_alert_scheduler()
-    assert order == ['migrate', 'tick', 'migrate', 'tick']
+    assert order == ['migrate', 'tick', 'migrate', 'respell', 'tick']
     assert any('migration failed' in r.getMessage() for r in caplog.records)
 
 
@@ -342,7 +347,7 @@ async def test_r4b_one_unexpected_row_does_not_block_the_others(monkeypatch, cap
     with caplog.at_level(logging.WARNING, logger='app.routers.chart_alerts'):
         out = await ca.migrate_hmm_intraday_rule_intervals(Session)
     assert [m['id'] for m in out] == ['good']
-    assert (await _get(Session, 'good')).interval == '5m'
+    assert (await _get(Session, 'good')).interval == '5min'
     boom = await _get(Session, 'boom')
     assert (boom.interval, boom.name) == ('1D', 'Boom')
     assert any('skipping boom' in r.getMessage() for r in caplog.records)

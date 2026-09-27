@@ -155,7 +155,7 @@ async def test_intraday_vwap_reads_completed_bars_on_both_paths(monkeypatch, sig
     now = WED_MID
     candles = _intraday(now.timestamp(), 900, trig=trig)
     daily = _daily_rows(date(2026, 9, 22), trig_last=False)
-    watch, _ = await _watch_fired(monkeypatch, _composite_watch("15m"), daily=daily,
+    watch, _ = await _watch_fired(monkeypatch, _composite_watch("15min"), daily=daily,
                                   intraday=candles, now=now)
     rule, _ = await _rule_fired(monkeypatch, "15min", candles, as_of=now.timestamp())
     assert watch is expected
@@ -171,7 +171,7 @@ async def test_feed_lag_drops_the_same_bar_on_both_paths(monkeypatch, signals, l
     now = WED_MID
     candles = _intraday(now.timestamp() + 600, 900, trig="completed")   # last bar ends now-300
     daily = _daily_rows(date(2026, 9, 22), trig_last=False)
-    watch, _ = await _watch_fired(monkeypatch, _composite_watch("15m"), daily=daily,
+    watch, _ = await _watch_fired(monkeypatch, _composite_watch("15min"), daily=daily,
                                   intraday=candles, now=now)
     rule, _ = await _rule_fired(monkeypatch, "15min", candles, as_of=now.timestamp())
     assert watch is expected
@@ -182,7 +182,8 @@ async def test_feed_lag_drops_the_same_bar_on_both_paths(monkeypatch, signals, l
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stored, fetched, signal_iv", [
-    ("15m", "15min", "15m"), ("5m", "5min", "5m"), ("4h", "4h", "4h"), ("1h", "1h", "1h"),
+    # W2-INTERVAL: the store holds the chart spelling, fetched unchanged.
+    ("15min", "15min", "15m"), ("5min", "5min", "5m"), ("4h", "4h", "4h"), ("1h", "1h", "1h"),
 ])
 async def test_watch_fetches_with_the_chart_spelling(monkeypatch, signals, stored, fetched, signal_iv):
     completed_ivs = []
@@ -190,7 +191,7 @@ async def test_watch_fetches_with_the_chart_spelling(monkeypatch, signals, store
     monkeypatch.setattr(market, "completed_bars_for_interval",
                         lambda bars, iv, now=None: completed_ivs.append(iv) or real(bars, iv, now=now))
     now = WED_MID
-    span = {"15m": 900, "5m": 300, "4h": 14400, "1h": 3600}[stored]
+    span = {"15min": 900, "5min": 300, "4h": 14400, "1h": 3600}[stored]
     _, fetch = await _watch_fired(monkeypatch, _composite_watch(stored),
                                   daily=_daily_rows(date(2026, 9, 22), trig_last=False),
                                   intraday=_intraday(now.timestamp(), span, trig=None), now=now)

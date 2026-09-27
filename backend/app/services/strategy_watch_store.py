@@ -57,8 +57,8 @@ def _primary_model(trigger_def: object) -> object:
 def _migrate_hmm_intraday_intervals(watches: list[dict]) -> list[tuple]:
     """A4f: a composite HMM_intraday watch stored with a non-intraday interval
     (the dialog saved '1D' while displaying '5m') fetched ~38 daily bars, below
-    the HMM's minimum, and never fired. Move it to '5m' -- what the user saw --
-    and keep the old value in `interval_migrated_from`. Returns (id, symbol, old)
+    the HMM's minimum, and never fired. Move it to '5min' -- the chart spelling
+    (W2-INTERVAL) of what the user saw -- and keep the old value in `interval_migrated_from`. Returns (id, symbol, old)
     for each migrated entry; idempotent."""
     from app.data.market import is_intraday_interval
     migrated = []
@@ -68,9 +68,26 @@ def _migrate_hmm_intraday_intervals(watches: list[dict]) -> list[tuple]:
         old = w.get("interval")
         if is_intraday_interval(old):
             continue
-        w["interval"] = "5m"
+        w["interval"] = "5min"
         w["interval_migrated_from"] = old
         migrated.append((w.get("id"), w.get("symbol"), old))
+    return migrated
+
+
+def _migrate_interval_spellings(watches: list[dict]) -> list[tuple]:
+    """W2-INTERVAL (decisions FOLLOWUPS-QUEUE-2026-09-25 (1), P4B-FOLLOWUPS-2026-09-26
+    (2)): a watch stored on a short interval spelling ('5m', '15m', ...) moves to
+    the chart's spelling ('5min', ...), the one the evaluator fetches with now
+    that P4b's read-side map is gone. Only `interval` changes. Returns
+    (id, symbol, old, new) for each migrated entry; idempotent."""
+    from app.data.market import _CHART_SPELLING
+    migrated = []
+    for w in watches:
+        old = w.get("interval")
+        if not isinstance(old, str) or old not in _CHART_SPELLING:
+            continue
+        w["interval"] = _CHART_SPELLING[old]
+        migrated.append((w.get("id"), w.get("symbol"), old, w["interval"]))
     return migrated
 
 
@@ -101,14 +118,25 @@ class StrategyWatchStore:
                 w.setdefault("enabled", True)
                 w.setdefault("direction", "Bullish")
             migrated = _migrate_hmm_intraday_intervals(self._watches)
+            respelled = _migrate_interval_spellings(self._watches)
             self._schedule = {**_DEFAULT_SCHEDULE, **(raw.get("schedule") or {})}
-        if not migrated:
+        if not migrated and not respelled:
             return
-        listing = ", ".join(f"{i} {s} {old!r}" for i, s, old in migrated)
-        logger.warning(
-            "A4f: migrated %d HMM_intraday composite watch(es) from a non-intraday interval "
-            "to '5m' (on that interval they could not fire): [%s]", len(migrated), listing,
+        listing = ", ".join(
+            [f"{i} {s} {old!r}" for i, s, old in migrated]
+            + [f"{i} {s} {old!r}->{new!r}" for i, s, old, new in respelled]
         )
+        if migrated:
+            logger.warning(
+                "A4f: migrated %d HMM_intraday composite watch(es) from a non-intraday interval "
+                "to '5min' (on that interval they could not fire): [%s]", len(migrated),
+                ", ".join(f"{i} {s} {old!r}" for i, s, old in migrated),
+            )
+        if respelled:
+            logger.warning(
+                "W2-INTERVAL: migrated %d watch(es) to the chart's interval spelling: [%s]",
+                len(respelled), ", ".join(f"{i} {s} {old!r}->{new!r}" for i, s, old, new in respelled),
+            )
         # load() runs at import time of the module-level store and must never
         # raise: a failed write would stop the backend from booting (A4f plan F-1).
         # The migration stays in memory; the next mutation's save() persists it.
@@ -189,11 +217,13 @@ class StrategyWatchStore:
         Does NOT deduplicate — multiple composite watches per symbol with different trigger
         definitions are allowed. Each call creates a new entry with a unique ID.
         """
+        from app.data.market import chart_interval
+        interval = chart_interval(interval)   # W2-INTERVAL: stored in the chart's spelling
         if _primary_model(trigger_def) == "HMM_intraday":
             from app.data.market import is_intraday_interval
             if not is_intraday_interval(interval):
                 raise ValueError(
-                    f"HMM_intraday needs an intraday interval (e.g. 5m, 15m, 1h), got {interval!r}"
+                    f"HMM_intraday needs an intraday interval (e.g. 5min, 15min, 1h), got {interval!r}"
                 )
         symbol = symbol.strip().upper()
         with self._lock:

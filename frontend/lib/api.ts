@@ -829,7 +829,7 @@ export const api = {
     patch<{ id: string; enabled: boolean }>(`/api/composite-watches/${id}`, { enabled }),
   getCompositeWatchDefaults: () =>
     get<CompositeWatchDefaults>('/api/composite-watches/defaults'),
-  getSymbolRegimeSnapshot: (symbol: string, model: string, direction: string = 'Bullish', interval: string = '15m') =>
+  getSymbolRegimeSnapshot: (symbol: string, model: string, direction: string = 'Bullish', interval: string = '15min') =>
     get<SymbolRegimeSnapshot>(
       `/api/composite-watches/regime-snapshot?symbol=${encodeURIComponent(symbol)}&model=${model}&direction=${direction}&interval=${interval}`,
     ),

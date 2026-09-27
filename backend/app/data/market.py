@@ -247,6 +247,19 @@ _YF_MAX_DAYS: dict[str, int] = {
 _INTERVAL_ALIASES: dict[str, str] = {"1D": "daily", "1W": "weekly", "60m": "1h"}
 
 
+# W2-INTERVAL (decision FOLLOWUPS-QUEUE-2026-09-25 (1)): the chart's spelling of an
+# interval is the one stored on composite rules and watches. The short forms the
+# CompositeAlertDialog used to save map to it. Deliberately NOT folded into
+# normalize_interval: that feeds every fetch, and '15m' callers elsewhere
+# (regime.py, strategy_engine) would silently switch series.
+_CHART_SPELLING: dict[str, str] = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min", "60m": "1h"}
+
+
+def chart_interval(interval: object) -> object:
+    """The chart's spelling of `interval`; anything else (incl. non-strings) unchanged."""
+    return _CHART_SPELLING.get(interval, interval) if isinstance(interval, str) else interval
+
+
 def normalize_interval(interval: str) -> str:
     """Canonicalize chart-facing interval spellings to this module's internal
     convention, so lookup tables (_YF_INTERVAL_MAP, _YF_MAX_DAYS, IBKR eligibility)

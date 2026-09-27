@@ -1,6 +1,7 @@
 """P4b T4: HMM-INTRADAY-4H-HISTORY -- a 4h composite watch (and the dialog's
 regime snapshot) fetch ~180 days, enough completed 4h bars for the HMM; the
-snapshot reads the watch's series (D4/D5)."""
+snapshot reads the watch's series (D4/D5). W2-INTERVAL: D5's read-side map is
+gone -- both fetch with the stored/query interval, which is the chart spelling."""
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -8,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import app.data.market as market
-from app.services.composite_trigger_evaluator import intraday_history_days, watch_fetch_interval
+import app.services.composite_trigger_evaluator as cte
+from app.services.composite_trigger_evaluator import intraday_history_days
 
 _EV = "app.services.strategy_watch_evaluator"
 
@@ -19,10 +21,9 @@ def test_history_days_per_interval():
         assert intraday_history_days(iv) == 55
 
 
-def test_watch_fetch_interval_maps_the_dialog_spellings():
-    assert [watch_fetch_interval(i) for i in ("1m", "5m", "15m", "30m")] == ["1min", "5min", "15min", "30min"]
-    for iv in ("1h", "4h", "1D", "1W", "15min"):
-        assert watch_fetch_interval(iv) == iv
+def test_w2_interval_read_side_map_is_deleted():
+    assert not hasattr(cte, "watch_fetch_interval")
+    assert not hasattr(cte, "_WATCH_TO_FETCH_INTERVAL")
 
 
 def _daily(n=260):
@@ -31,7 +32,7 @@ def _daily(n=260):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("interval, days", [("4h", 180), ("15m", 55), ("1h", 55)])
+@pytest.mark.parametrize("interval, days", [("4h", 180), ("15min", 55), ("1h", 55), ("5min", 55)])
 async def test_hmm_intraday_watch_requests_enough_history(interval, days):
     from app.services.strategy_watch_evaluator import evaluate_all
     store = MagicMock()
@@ -47,11 +48,13 @@ async def test_hmm_intraday_watch_requests_enough_history(interval, days):
         await evaluate_all()
     fetch.assert_called_once()
     assert fetch.call_args.kwargs["days"] == days
+    # W2-INTERVAL: the stored (chart-spelled) interval is fetched unchanged.
+    assert fetch.call_args.kwargs["interval"] == interval
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("interval, fetched_as, days", [
-    ("4h", "4h", 180), ("15m", "15min", 55), ("30m", "30min", 55), ("1h", "1h", 55),
+    ("4h", "4h", 180), ("15min", "15min", 55), ("30min", "30min", 55), ("1h", "1h", 55),
 ])
 async def test_regime_snapshot_reads_the_watch_series(monkeypatch, interval, fetched_as, days):
     import app.routers.composite_watch as cw
@@ -70,3 +73,9 @@ async def test_regime_snapshot_reads_the_watch_series(monkeypatch, interval, fet
     await cw.get_regime_snapshot(symbol="AAPL", model="HMM_intraday", direction="Bullish", interval=interval)
     assert calls == [(fetched_as, days)]
     assert completed == [fetched_as]
+
+
+def test_w2_interval_regime_snapshot_default_is_the_chart_spelling():
+    import inspect
+    import app.routers.composite_watch as cw
+    assert inspect.signature(cw.get_regime_snapshot).parameters["interval"].default == "15min"

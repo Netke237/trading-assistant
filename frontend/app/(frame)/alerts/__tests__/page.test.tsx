@@ -152,7 +152,7 @@ describe('Alerts page — a fired row is labelled with the threshold it fired at
 });
 
 // ── A4f-rules ────────────────────────────────────────────────────────────────
-// The backend migrates stored HMM_intraday composite rules off '1D'/'1W' to '5m'
+// The backend migrates stored HMM_intraday composite rules off '1D'/'1W' to '5min'
 // and marks the name. The rules table reads the persisted local copy, so the page
 // must refresh from GET /alerts/rules on mount -- otherwise it shows (and a toggle
 // re-PUTs) the stale '1D'.
@@ -171,7 +171,7 @@ describe('Alerts page — rules are refreshed from the backend on mount (A4f-rul
       if (String(url).endsWith('/alerts/rules')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve([rule({ interval: '5m', name: 'X (interval was 1D)' })]),
+          json: () => Promise.resolve([rule({ interval: '5min', name: 'X (interval was 1D)' })]),
         });
       }
       return Promise.resolve({ ok: false });
@@ -182,7 +182,7 @@ describe('Alerts page — rules are refreshed from the backend on mount (A4f-rul
     fireEvent.click(screen.getByRole('button', { name: 'Rules' }));
 
     expect(await screen.findByText('X (interval was 1D)')).toBeInTheDocument();
-    expect(screen.getByText('5m')).toBeInTheDocument();
+    expect(screen.getByText('5min')).toBeInTheDocument();
     expect(screen.queryByText('1D')).not.toBeInTheDocument();
     const ruleGets = fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/alerts/rules'));
     expect(ruleGets).toHaveLength(1);
