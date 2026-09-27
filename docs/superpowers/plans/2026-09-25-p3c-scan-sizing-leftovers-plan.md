@@ -1072,3 +1072,24 @@ Below the gate — logged against main, NOT fixed in-branch:
   refused at fire time. Timing-dependent, pre-existing.
 - A `regime_gate` block with missing/non-bool `enabled` makes the fire refuse (`RegimeGateConfigError`) while the
   scan reads `bool(...)`. Not reachable with the shipped YAML.
+
+## Code round 1 log — item 2, options direction gate removes an UNMEASURED trend (0 gate-level findings; CLEAN)
+
+Scope: commit 436dfb3, whole change. Brief quoted `audit_rule` clause (1) and the comment-truth exception
+verbatim. Result: ZERO GATE-LEVEL FINDINGS — item 2's code stage is closed. Checked: drop on `card_pre` after the
+pre-screen REJECT and before the chain fetch, only the unmeasured verdict acted on; Intraday exempt via
+`min_trend is None`; trend rule never reads `iv_rank`, both `score_stock` calls get the same `_bench`; production
+`score_stock` always emits a trend rule, and under `additive` an unmeasured trend (REJECT 0) was already removed,
+so only its reason/bucket changes; bar time formats (DB, Tradier, yfinance) all handled by `_bar_day`;
+`additive` fetches nothing new; a raising `_rs_benchmark_candles` degrades to None + WARNING; `_is_direction`
+defined before the banner and funnel, no bucket overlap, `failed_direction` == banner count, funnel invariant
+holds; one caller of `_process_symbol`, scheduled path goes through `_execute_scan_core`.
+
+Below the gate — logged against main, NOT fixed in-branch:
+- Under `relative_strength`, a DB-miss name fetched from Tradier with today's partial bar never aligns with the
+  DB benchmark during market hours, so every such name is removed unmeasured (the r2-M6 residual; the INFO line
+  makes it visible).
+- Intraday with `relative_strength` still fetches the benchmark once per scan though the gate is exempt. Cost only.
+- The post-gather gate's comment ("never a placeholder") holds only while the `_process_symbol` drop stays ahead
+  of it. Accurate today.
+- `_rest` tests `_dir_removed >= len(symbols)`; it cannot exceed it, so `>=` vs `==` is cosmetic.
