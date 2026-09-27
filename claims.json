@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/clever-planck-rpz8yh",
+      "claimed_at": "2026-09-27T17:35:59Z",
+      "expires_at": "2026-09-27T20:35:59Z",
+      "note": "Store undelivered watch event, resend next run labelled delayed",
+      "task": "WATCH-UNDELIVERED-EVENT-RESEND"
+    }
+  ]
 }
