@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "claude/clever-planck-rpz8yh",
       "claimed_at": "2026-09-27T11:54:53Z",
-      "expires_at": "2026-09-27T15:19:52Z",
+      "expires_at": "2026-09-27T15:47:37Z",
       "note": "P1 remainder: stock sends save first, then real-share risk check (plan stage)",
       "task": "STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES"
     }
