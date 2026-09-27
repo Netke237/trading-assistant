@@ -4,7 +4,7 @@ Phase: W2-STRUCT. Package: `2026-09-25-work-packages.md` §W2-STRUCT.
 Decisions: Q16 (do NOT hide these kinds; fix with a per-kind "confirmed at" time). Q16b answered 2026-09-27: **no "not firing yet" note** — the fix ships in this package, so AlertRuleBuilder is not edited.
 Prerequisite: P4a merged (met). Branch `claude/clever-planck-rpz8yh`, from main `480c322`.
 
-Two build parts, one layer each (audit_rule: batch size): A backend, B frontend mirror. Both small (< 250 lines incl. tests).
+Two build parts, one layer each (audit_rule: batch size): A backend, B frontend (browser stops judging structure). Both small (< 250 lines incl. tests).
 
 ## 0. Today (main `480c322`)
 
@@ -55,30 +55,32 @@ if signal_time == candle_time:
 (f) Dry-run endpoint: with a full-history `signals` list, a BOS rule matches only on the BOS bar, not on earlier bars.
 Existing `tests/test_a4e_closed_candle_alignment.py` and alert-evaluator tests must pass unchanged; any that asserted `>=`-only behaviour is reported, not silently edited.
 
-## Part B — frontend mirror (browser-side evaluation on the chart)
+## Part B — frontend: the browser stops judging structure conditions (R1-1)
 
-`ChartWorkspace` evaluates the same rules in the browser on candle close (`index.tsx:~401-420`) against `structureSignals`
-from the chart WebSocket — the FULL list (`chart.py:55/81`), which includes signals confirmed by the forming bar.
+`ChartWorkspace` evaluates the same rules in the browser on candle close (`index.tsx:399-440`) against `structureSignals`
+from the chart WebSocket. That list is ALWAYS computed on a bar that was still forming:
+- the first "closed" candle after load is `candles[prevCount-1]`, the last bar of the `history` message, which was the forming bar when `chart.py:49-55` computed the structure it sent;
+- after that, `chart.py` sends the `tick` BEFORE it recomputes and re-sends `structure`, so the browser judges the closed bar against the list computed while that bar was forming.
+So a browser-side structure match reads partial-bar data (a gap or break that may undo before the close; FVG confidence from an ATR that includes the partial bar). The fire is not display-only: `addHistory` posts it to the server history and `stampRuleTriggered(..., {persist: true})` PATCHes `last_triggered_at`, which starts the SERVER's cooldown (`alert_evaluator.is_cooldown_passed`) and can suppress the correct backend fire. Today this already happens for BOS/CHoCH; `confirmed_at` alone would widen it to three more kinds.
 
-**B1. `frontend/types/structure.ts`:** `confirmed_at?: string` on `ZoneSignal`, `LineSignal`, `DivergenceSignal` (optional: a cached list from before the deploy lacks it).
-**B2. `frontend/lib/chartAlertEngine.ts` structure branch:** same rule as A2 —
-`signalTime = s.confirmed_at ?? ('time' in s ? s.time : 'time_start' in s ? s.time_start : '')`, met iff `String(signalTime) === String(candleTime)`.
-With the full list, `>=` would fire the closed candle's rule on a signal the forming bar confirmed (the A4e defect, browser side); `===` fires only on a signal confirmed by the closed bar itself.
-**B3. Tests (`frontend/lib/__tests__/chartAlertEngine.test.ts`):** per kind, a signal with `confirmed_at` equal to the closed candle fires; one bar later (forming-bar-confirmed) does not; one bar earlier does not; missing `confirmed_at` falls back to `time`. Existing BOS tests updated only if they relied on `>` (reported in the round log).
+The backend already evaluates every server-stored rule causally (A4e) and pushes the result to the open chart as `alert_triggered` (`chart.py:105` → `ChartWorkspace/index.tsx:375`), so the browser check is redundant for structure.
+
+**B1. `frontend/lib/chartAlertEngine.ts` `evaluateCondition` structure branch:** return `{ met: false, triggerValues: {} }` always, with a comment naming the reason above and the backend path that owns it. Price / indicator / regime browser evaluation unchanged. `conditionLabel` unchanged. No type change (`frontend/types/structure.ts` not edited; the new `confirmed_at` field arrives in the JSON and is ignored by the browser).
+Effect by group logic, browser only: AND with a structure condition → browser never fires, backend does; OR → browser fires only on its other conditions; N_OF_M → the structure condition counts as unmet in the browser. The backend's decision for the same rule is unchanged by Part B.
+**B2. Tests (`frontend/lib/__tests__/chartAlertEngine.test.ts`):** a structure condition whose signal is timed on the closed candle (and one with `confirmed_at` on it) is NOT met browser-side, per kind; an OR rule with price + structure fires on price alone; the existing BOS structure-match tests (`:129`, `:143`) are rewritten to assert not-met, reported in the round log.
 
 ## What changes for Kenneth
 
-OrderBlock, FVG and Divergence alert rules start firing — once, on the bar that completes the pattern (FVG: the third bar of the gap; OrderBlock: the breakout bar; Divergence: 5 bars after the second swing, the first bar the swing is certain). The rule builder is unchanged. The "test rule" dry-run now shows a match only on the bar a live rule would fire.
+OrderBlock, FVG and Divergence alert rules start firing (from the backend, which notifies and pushes to the open chart) — once, on the bar that completes the pattern (FVG: the third bar of the gap; OrderBlock: the breakout bar; Divergence: 5 bars after the second swing, the first bar the swing is certain). The rule builder is unchanged. The "test rule" dry-run now shows a match only on the bar a live rule would fire.
 
 ## Out of scope (logged, not fixed)
 
 - A BOS (and its OrderBlock) can vanish from a later recompute (seen: AAPL 1+1, NVDA 2+2 over 211 bars) because `_is_duplicate_bos` and the trend state depend on history. Pre-existing; affects composite confirmations and drawing, not whether a standard rule fired.
-- The browser path can evaluate before the new `structure` message arrives (stale list → a miss). Best-effort display path; the backend path is the one that notifies.
 - A mitigated zone still fires on its confirmation bar only if mitigation happened on that same bar (FVG: impossible, mitigation scan starts after c2; OrderBlock: the BOS bar itself closing through the block — unchanged semantics).
 
 ## Owned files
 
-`backend/app/services/market_structure.py`, `backend/app/services/alert_evaluator.py`, `backend/tests/test_w2_struct_confirmed_at.py`; `frontend/types/structure.ts`, `frontend/lib/chartAlertEngine.ts`, its test. AlertRuleBuilder: not edited (Q16b).
+`backend/app/services/market_structure.py`, `backend/app/services/alert_evaluator.py`, `backend/tests/test_w2_struct_confirmed_at.py`; `frontend/lib/chartAlertEngine.ts`, its test. AlertRuleBuilder: not edited (Q16b).
 
 ## Verification
 
@@ -90,4 +92,4 @@ Retire `AUTOTRADE-DIRECTION-SIZING` in PROJECT_STATE.json as superseded by sub-p
 
 ## Round log
 
-(empty)
+- **Plan round 1 (2026-09-27): 1 gate-level finding, fixed.** R1-1: Part B's browser `===` still judged the closed bar against a structure list computed while that bar was forming (first tick after `history`; `tick` sent before the `structure` recompute), and a browser fire persists history and the server cooldown stamp. Fix: Part B rewritten — the browser treats structure conditions as not met; the backend (causal, A4e) owns them and already pushes `alert_triggered`. Part A confirmed correct and causal by the reviewer on all four fixtures; `==` confirmed equivalent to `>=` on both live backend paths (chart WS and scheduler/catch-up via `closed_candle_structure`).
