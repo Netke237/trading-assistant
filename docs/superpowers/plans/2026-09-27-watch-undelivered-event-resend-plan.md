@@ -195,3 +195,6 @@ On merge: phase `verify` becomes a presence probe on `pending_events` in `strate
   tests in `test_p4b_watch_isolation_and_delivery.py` updated (committed/pending split). One deviation, intended: the HTML
   body's bold subject line also carries "Delayed: " (it prints the subject). Mutations M1-M10 all killed. Backend
   3709 passed, 1 skipped.
+- **Code round 1 (= round 3, 2026-09-27): ZERO gate-level findings — code stage CLEAN.** Whole diff e101c42..2f4ede8.
+  Below the gate, logged: the test `_Store` fake raises before mutating memory (real store mutates first); the frontend
+  badge follow-up (§3).
