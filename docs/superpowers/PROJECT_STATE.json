@@ -1126,7 +1126,7 @@
         "pattern": "= min\\(proposed_contracts, ",
         "note": "DEFECT MARKER: check_position_risk still clamps a quantity with min(proposed_contracts, max_contracts_per_trade) -- after P1 only on the |STOCK branch."
       },
-      "note": "QUEUED 2026-09-25 by decision P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25 (Kenneth). Order matters: the save-first reorder must land before real-share judging, or a full-size stock order is trimmed/refused in the books after it is at the broker."
+      "note": "CLAIMED 2026-09-27 by claude/clever-planck-rpz8yh (plan stage; no plan file yet). Decision STOCK-SENDS-STOCK-CAPS-2026-09-27 (20% single / 100% total stock caps on dollar value; each kind counts only its own rows). Open: fold in the manual-path account-size/risk_pct fix (pending_kenneth, A5b)? || QUEUED 2026-09-25 by decision P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25 (Kenneth). Order matters: the save-first reorder must land before real-share judging, or a full-size stock order is trimmed/refused in the books after it is at the broker."
     },
     {
       "id": "P1B1-STEP7-SAVE-FIRST-CORE",
@@ -1494,6 +1494,12 @@
     }
   ],
   "decisions": [
+    {
+      "id": "STOCK-SENDS-STOCK-CAPS-2026-09-27",
+      "q": "STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES: once check_position_risk judges stocks at their real share count, what caps apply to stocks, and which open positions count toward each total?",
+      "a": "(1) Two new stock caps, on the position's DOLLAR value (price x shares) against portfolio value: a single stock position at most 20%, all stock positions together at most 100% (no margin). A 1%-risk card whose stop is more than 5% away is resized. (2) Each kind counts only its own rows: the options 25% total counts option rows only, the stock total counts stock rows only -- which also ends today's behaviour where a large stock position blocks every option trade.",
+      "by": "Kenneth 2026-09-27 (STOCK-SENDS session, plan stage)"
+    },
     {
       "id": "P3C-PLAN-ACCEPTED-NOT-CLEAN-2026-09-27",
       "q": "P3c plan ran 22 rounds past audit_rule's 3-round cap (briefs lacked the severity gate; every finding was fixed). Split the package or accept the plan?",
