@@ -13,6 +13,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { api } from '@/lib/api';
+import { sendStockSaveFirst } from '@/lib/stockDirectSend';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
@@ -230,6 +231,7 @@ export function StockPositionCard({
     setQueued(false);
     setAdding(false);
     setOrderId(null);
+    setOrderMsg(null);
     estimateReq.current?.abort();
     estimateReq.current = null;
     structuralReq.current?.abort();
@@ -346,6 +348,9 @@ export function StockPositionCard({
   const [execMode, setExecMode]         = useState<ExecMode>('recommendation');
   const [placingType, setPlacingType]   = useState<'LMT' | 'MKT' | null>(null);
   const [orderId, setOrderId]           = useState<string | null>(null);
+  // STOCK-SENDS: what to say about `orderId`'s order -- placed (with any
+  // resize, R1-2) or status unknown.
+  const [orderMsg, setOrderMsg]         = useState<{ text: string; tone: 'pass' | 'caution' } | null>(null);
   const [err, setErr]                   = useState<string | null>(null);
   const [warning, setWarning]           = useState<string | null>(null);
   const [added, setAdded]               = useState(false);
@@ -529,20 +534,11 @@ export function StockPositionCard({
     setPlacingType(orderType);
     setErr(null);
     setWarning(null);
+    // STOCK-SENDS (P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25): SAVE first,
+    // then the order at the quantity the save approved (lib/stockDirectSend.ts).
     try {
-      const res = await api.postStockOrder({
-        broker: execMode,
-        symbol: card.symbol,
-        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
-        effect: 'OPEN',
-        quantity: overlay.shares,
-        order_type: orderType,
-        limit_price: orderType === 'LMT' ? overlay.entry : null,
-        tif: 'DAY',
-      });
-      setOrderId(res.order_id);
-      try {
-        const addRes = await addPosition({
+      const outcome = await sendStockSaveFirst({
+        pos: {
           ...buildPaperStockPosition(
             card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
             stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
@@ -561,23 +557,32 @@ export function StockPositionCard({
               structuralStop: structural?.price ?? null,
             },
           ),
-          source: 'broker',
-          sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
-          orderedAt: new Date().toISOString(),
-          // Phase G (piece 5) — confirmed gap as of build step 4: the send
-          // gate blocked an unpicked send but nothing carried a made pick's
-          // VALUE into the created position. `methodPick` is this card's own
-          // local pick state (synced from stocksCardEdits.picks).
+          // Phase G (piece 5) — `methodPick` is this card's own local pick
+          // state (synced from stocksCardEdits.picks).
           ...pickedFieldsFrom(methodPick),
-        });
-        if (addRes.status === 'rejected' || addRes.status === 'pending') {
-          setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
-        }
-      } catch {
-        setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+        },
+        broker: execMode,
+        orderType,
+        limitPrice: orderType === 'LMT' ? overlay.entry : null,
+        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        addPosition,
+      });
+      // A placed order, or one whose status is unknown after a confirmed save,
+      // disables the buttons: a second click could duplicate a live order.
+      if (outcome.kind === 'placed' || (outcome.kind === 'unknown' && outcome.qty != null)) {
+        const sizedLine = outcome.resizedFrom != null
+          ? ` Portfolio sized it to ${outcome.qty} shares; the order was sent for ${outcome.qty}.`
+          : '';
+        setOrderId(outcome.kind === 'placed' ? outcome.orderId : 'UNKNOWN');
+        setOrderMsg(outcome.kind === 'placed'
+          ? { text: `Order placed — ID: ${outcome.orderId}.${sizedLine}`, tone: 'pass' }
+          : { text: `${outcome.message}${sizedLine}`, tone: 'caution' });
+      } else {
+        setErr(outcome.message);
       }
     } catch (e) {
-      setErr(String(e));
+      // Only pre-save work can throw here: nothing saved, no order sent.
+      setErr(`No order was sent — ${String(e)}`);
     } finally {
       setPlacingType(null);
     }
@@ -718,6 +723,7 @@ export function StockPositionCard({
     }
     setAdding(true);
     setErr(null);
+    setWarning(null);
     try {
       // The user's EDITED overlay is what gets persisted as the live stop/targets —
       // it is what they intend to trade, and it is what TP_HIT / STOP_REACHED will
@@ -760,6 +766,11 @@ export function StockPositionCard({
         // (the row is already in the store; another add would merge/duplicate).
         setQueued(true);
         return;
+      }
+      // STOCK-SENDS (§A4): the SHARES field must not be the only number on
+      // screen when Portfolio stored a smaller one.
+      if (res.adjustedQty != null && res.adjustedQty !== overlay.shares) {
+        setWarning(`Portfolio sized it to ${res.adjustedQty} shares (exposure limit).`);
       }
       setAdded(true);
     } finally {
@@ -1296,7 +1307,7 @@ export function StockPositionCard({
       )}
 
       {/* Section 6 — Order result / error */}
-      {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
+      {orderId && orderMsg && <Text size={12} tone={orderMsg.tone}>{orderMsg.text}</Text>}
       {err      && <Text size={12} tone="reject">{err}</Text>}
       {warning  && <Text size={12} tone="caution">{warning}</Text>}
       {queued   && <Text size={12} tone="caution">Queued — backend unreachable, will sync automatically.</Text>}

@@ -9,6 +9,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
+import { sendStockSaveFirst } from '@/lib/stockDirectSend';
 import { checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
 import type { PositionCardData } from '@/types/stockDomain';
 import type { Direction } from '@/types/domain';
@@ -149,47 +150,44 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         });
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
+        // STOCK-SENDS (§A4): the row's share count must not be the only number shown.
+        else if (res.adjustedQty != null && res.adjustedQty !== r.shares) {
+          warn[c.symbol] = `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).`;
+        }
       } else if (broker !== 'recommendation') {
-        // Auto-send → broker, then mirror the fill into the local portfolio
-        // (same pattern as the manual branch just above) so this position
-        // carries a tradeCardSnapshot and real stop/target too — without
-        // this, a broker-executed stock position has no local record at all
-        // and the Portfolio EditDrawer's Monte Carlo estimate has nothing to
-        // work from.
+        // STOCK-SENDS (P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25): SAVE
+        // first, then the order at the quantity the save approved
+        // (lib/stockDirectSend.ts). The position carries the tradeCardSnapshot
+        // and real stop/targets, as the manual branch's does.
+        //   refused / not-placed -> `errs` (retryable: nothing tracked, no order);
+        //   unknown -> `warn` (NOT retryable: an order may be live, or a
+        //     save-unconfirmed note owns the row); placed + resized -> `warn`
+        //     so the sent share count is on screen before the dialog closes.
         try {
-          const res = await api.postStockOrder({
-            broker,
-            symbol: c.symbol,
-            action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
-            effect: 'OPEN',
-            quantity: r.shares,
-            order_type: 'LMT',
-            limit_price: c.strategy.entry_price,
-            tif: 'DAY',
-          });
-          // The broker order has ALREADY succeeded at this point — a failure
-          // below must never be written to `errs`/`q` (those drive the retry
-          // set; retrying here would resubmit an already-filled order). It's
-          // tracked in `warn` instead, purely informational.
-          try {
-            const addRes = await addPosition({
+          const outcome = await sendStockSaveFirst({
+            pos: {
               ...buildPaperStockPosition(
                 c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
                 stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
               ),
-              source: 'broker',
-              sourceLabel: `${broker} — Limit (ID: ${res.order_id})`,
-              orderedAt: new Date().toISOString(),
               ...pickedFieldsFrom(pick),
-            });
-            if (addRes.status === 'rejected' || addRes.status === 'pending') {
-              warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
-            }
-          } catch {
-            warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
+            },
+            broker,
+            orderType: 'LMT',
+            limitPrice: c.strategy.entry_price,
+            action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
+            addPosition,
+          });
+          if (outcome.kind === 'refused' || outcome.kind === 'not-placed') {
+            errs[c.symbol] = outcome.message;
+          } else if (outcome.kind === 'unknown') {
+            warn[c.symbol] = outcome.message;
+          } else if (outcome.resizedFrom != null) {
+            warn[c.symbol] = `${outcome.message} Portfolio sized it to ${outcome.qty} shares; the order was sent for ${outcome.qty}.`;
           }
         } catch (e) {
-          errs[c.symbol] = String(e);
+          // Only pre-save work can throw here: nothing saved, no order sent.
+          errs[c.symbol] = `No order was sent — ${String(e)}`;
         }
       } else {
         // Auto-send but broker = recommendation → fall back to paper
@@ -202,6 +200,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         });
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
+        // STOCK-SENDS (§A4): the row's share count must not be the only number shown.
+        else if (res.adjustedQty != null && res.adjustedQty !== r.shares) {
+          warn[c.symbol] = `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).`;
+        }
       }
     }
 

@@ -18,6 +18,7 @@ import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
+import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPanel';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
@@ -349,6 +350,10 @@ export default function Step4StocksPage() {
 
       {error && <Text size={12} tone="reject">{error}</Text>}
       {notice && <Text size={12} tone="caution">{notice}</Text>}
+      {/* STOCK-SENDS (§A3): notes left by a stock send (StockPositionCard or
+        * StockSendDialog) whose row may have no order, or whose order's status
+        * is unknown. */}
+      <DirectSendNotesPanel />
 
       {result?.pipeline && (
         <details className={styles.logPanel}>

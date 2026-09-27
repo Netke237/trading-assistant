@@ -18,6 +18,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getBrokerStatus: jest.fn().mockResolvedValue({}),
     postStockOrder: jest.fn(),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
   },
 }));
 jest.mock('@/components/organisms/StockAutoTradeArm', () => ({ StockAutoTradeArm: () => null }));
@@ -51,6 +52,19 @@ function makeCard(): PositionCardData {
 }
 
 const originalFetch = global.fetch;
+
+/** STOCK-SENDS: the save POST echoes its body (a real 201 carries
+ *  `entryPrice`; a reply without it is an unconfirmed save and sends no
+ *  order). Any other request answers `{}`. `adjustedQty` resizes the save. */
+function echoFetch(adjustedQty?: number): typeof fetch {
+  return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => ({ ...body, ...(adjustedQty != null ? { adjustedQty } : {}) }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
 
 describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
   beforeEach(() => {
@@ -100,7 +114,7 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
 
   it('unblocks both S1 and S2 once the trader picks a method', async () => {
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     useScanStore.setState({
       stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
@@ -130,7 +144,7 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
   });
 
   it('S2 — Add to Portfolio also carries the pick onto the created position', async () => {
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
     useScanStore.setState({
       stockScanResult: { scan_id: 'stk-1', timestamp: '2026-09-14T09:00:00Z' } as any,
       stocksCardEdits: {
