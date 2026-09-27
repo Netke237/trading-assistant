@@ -10,6 +10,8 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
+import { sendStockSaveFirst } from '@/lib/stockDirectSend';
+import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPanel';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
@@ -59,6 +61,9 @@ export default function Step7PositionCardPage() {
   // navigation, is what lets "does this candidate have an order" stay
   // correct regardless of how the user gets back to it.
   const [orderedIdx, setOrderedIdx] = useState<number | null>(null);
+  // STOCK-SENDS: what to say about `orderedIdx`'s order -- placed (with any
+  // resize, R1-2) or status unknown. Durable like orderId, not transient.
+  const [orderMsg, setOrderMsg] = useState<{ text: string; tone: 'pass' | 'caution' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const settings = useSettingsStore();
@@ -126,25 +131,13 @@ export default function Step7PositionCardPage() {
     setPlacingType(orderType);
     setError(null);
     setWarning(null);
+    // STOCK-SENDS (P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25): SAVE first,
+    // then the order at the quantity the save approved (lib/stockDirectSend.ts).
+    // The position is still tracked for the originally-submitted card whatever
+    // the user looks at next; only the transient error is guarded.
     try {
-      const res = await api.postStockOrder({
-        broker: execMode,
-        symbol: card.symbol,
-        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
-        effect: 'OPEN',
-        quantity: card.shares,
-        order_type: orderType,
-        limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,
-        tif: 'DAY',
-      });
-      // Recorded regardless of `stillViewing()` — unlike error/warning below
-      // (transient feedback about a submit the user watched happen), this is
-      // durable "does candidate X have an order" state that must stay correct
-      // even after the user has navigated away, per `hasOrderForCurrent` above.
-      setOrderId(res.order_id);
-      setOrderedIdx(submittedIdx);
-      try {
-        const addRes = await addPosition({
+      const outcome = await sendStockSaveFirst({
+        pos: {
           ...buildPaperStockPosition(
             card.symbol, card.strategy.entry_price, card.shares, card.direction as 'Bullish' | 'Bearish',
             stockCardSnapshotOf(card, scanHorizon),
@@ -154,22 +147,34 @@ export default function Step7PositionCardPage() {
                 .map((price) => ({ price })),
             },
           ),
-          source: 'broker',
-          sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
-          orderedAt: new Date().toISOString(),
-          // Phase G (piece 5) — confirmed gap as of build step 4: the send
-          // gate blocked an unpicked send but nothing carried a made pick's
-          // VALUE into the created position.
+          // Phase G (piece 5) — the made pick's VALUE rides into the position.
           ...pickedFieldsFrom(stocksPicks[card.symbol] ?? null),
-        });
-        if (stillViewing() && (addRes.status === 'rejected' || addRes.status === 'pending')) {
-          setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
-        }
-      } catch {
-        if (stillViewing()) setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+        },
+        broker: execMode,
+        orderType,
+        limitPrice: orderType === 'LMT' ? card.strategy.entry_price : null,
+        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        addPosition,
+      });
+      // A placed order, or one whose status is unknown after a confirmed save,
+      // disables this candidate's buttons: a second click could duplicate a
+      // live order. Recorded regardless of `stillViewing()` (durable state).
+      if (outcome.kind === 'placed' || (outcome.kind === 'unknown' && outcome.qty != null)) {
+        const sizedLine = outcome.resizedFrom != null
+          ? ` Portfolio sized it to ${outcome.qty} shares; the order was sent for ${outcome.qty}.`
+          : '';
+        setOrderId(outcome.kind === 'placed' ? outcome.orderId : 'UNKNOWN');
+        setOrderedIdx(submittedIdx);
+        setOrderMsg(outcome.kind === 'placed'
+          ? { text: `Order placed — ID: ${outcome.orderId}.${sizedLine}`, tone: 'pass' }
+          : { text: `${outcome.message}${sizedLine}`, tone: 'caution' });
+      } else if (stillViewing()) {
+        setError(outcome.message);
       }
     } catch (e) {
-      if (stillViewing()) setError(String(e));
+      // Only pre-save work (building the position) can throw here: nothing was
+      // saved and no order was sent.
+      if (stillViewing()) setError(`No order was sent — ${String(e)}`);
     } finally {
       setPlacingType(null);
     }
@@ -257,12 +262,13 @@ export default function Step7PositionCardPage() {
         </div>
       )}
 
-      {hasOrderForCurrent && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
+      {hasOrderForCurrent && orderMsg && <Text size={12} tone={orderMsg.tone}>{orderMsg.text}</Text>}
       {execMode !== 'recommendation' && pickMissing && (
         <Text size={12} tone="reject">{MISSING_METHOD_PICK_MESSAGE}</Text>
       )}
       {error && <Text size={12} tone="reject">{error}</Text>}
       {warning && <Text size={12} tone="caution">{warning}</Text>}
+      <DirectSendNotesPanel />
     </div>
   );
 }

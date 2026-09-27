@@ -61,6 +61,22 @@ describe('persist migrations', () => {
     expect(migrated.portfolioValueUpdatedAt).toBe('2026-04-01T00:00:00.000Z');
   });
 
+  // STOCK-SENDS (plan C1): v3 -> v4 backfills the stock caps with the decided
+  // defaults and leaves every existing limit as it was.
+  it('riskStore v3->v4 migration backfills the stock caps and keeps the rest', () => {
+    const v3 = { limits: { maxSingleTradeExposurePct: 0.07, maxTotalExposurePct: 0.3, portfolioValue: 75000, maxLossPerTradePct: 0.02 } };
+    const migrated = migrateRisk(v3, 3);
+    expect(migrated.limits).toMatchObject({
+      maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
+      maxSingleTradeExposurePct: 0.07, maxTotalExposurePct: 0.3, portfolioValue: 75000, maxLossPerTradePct: 0.02,
+    });
+  });
+
+  it('riskStore migration keeps saved stock caps', () => {
+    const v4 = { limits: { maxSingleStockPositionPct: 0.15, maxTotalStockExposurePct: 0.8 } };
+    expect(migrateRisk(v4, 4).limits).toMatchObject({ maxSingleStockPositionPct: 0.15, maxTotalStockExposurePct: 0.8 });
+  });
+
   it('structureStore migration restores missing visibility keys', () => {
     const state = { visibility: { FVG: true }, structureVisible: true };
     expect(migrateStructure(state, 1)).toMatchObject({

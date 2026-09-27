@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import SettingsPage from '../page';
 import { useRiskStore } from '@/lib/riskStore';
-import { getRiskSettings } from '@/lib/api';
+import { getRiskSettings, saveRiskSettings } from '@/lib/api';
 
 // Regression test for PLAN_TIER1_RISK_SAFETY.md item 1b: the Settings page's
 // backend-fetch effect used to update only the local `useState` mirror of the
@@ -36,7 +36,7 @@ const STALE_LIMITS = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 100000,
-  maxLossPerTradePct: 0.0375,
+  maxLossPerTradePct: 0.0375, maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
 };
 
 describe('Settings page — risk store hydration', () => {
@@ -51,7 +51,7 @@ describe('Settings page — risk store hydration', () => {
         concurrentPositions: 0,
         dailyRecommendations: 0,
         largestConcentrationPct: 0,
-        largestConcentrationSymbol: '—',
+        largestConcentrationSymbol: '—', stockExposurePct: 0, largestStockConcentrationPct: 0, largestStockConcentrationSymbol: '—',
         status: 'PASS',
       },
       symbols: [],
@@ -93,6 +93,30 @@ describe('Settings page — risk store hydration', () => {
     expect(useRiskStore.getState().limits.maxTotalExposurePct).toBe(0.40);
     expect(useRiskStore.getState().limits.maxConcurrentPositions).toBe(15);
     expect(useRiskStore.getState().limits.maxDailyRecommendations).toBe(8);
+  });
+
+  // STOCK-SENDS (plan C1): the stock caps hydrate from the backend and save
+  // back with the rest.
+  it('hydrates and saves the stock caps', async () => {
+    mockGetRiskSettings.mockResolvedValue({
+      premiumStopPct: 0.60, portfolioValue: 100000, maxSinglePositionPct: 0.05,
+      maxLossPerTradePct: 0.0375, maxTotalExposurePct: 0.25,
+      maxSingleStockPositionPct: 0.15, maxTotalStockExposurePct: 0.8,
+      maxConcurrentPositions: 10, maxDailyRecommendations: 5,
+      targetT1Pct: 0.20, targetT2Pct: 0.35, targetT3Pct: 0.50,
+    });
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByText('Risk'));
+    await waitFor(() => expect(useRiskStore.getState().limits.maxSingleStockPositionPct).toBe(0.15));
+    expect(useRiskStore.getState().limits.maxTotalStockExposurePct).toBe(0.8);
+    const input = screen.getByLabelText('Max single stock position %') as HTMLInputElement;
+    expect(input.value).toBe('15');
+    fireEvent.change(input, { target: { value: '25' } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(saveRiskSettings).toHaveBeenCalled());
+    expect((saveRiskSettings as jest.Mock).mock.calls.at(-1)[0]).toMatchObject({
+      maxSingleStockPositionPct: 0.25, maxTotalStockExposurePct: 0.8,
+    });
   });
 
   it('does not reset the portfolioValue staleness nudge when hydration merely reconciles a divergent backend value', async () => {

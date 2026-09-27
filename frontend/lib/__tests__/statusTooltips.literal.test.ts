@@ -430,11 +430,11 @@ describe('riskStatusTooltip — per-band comparators, as riskStore.computeMetric
   // both 7 -- and Math.round on the daily band shipped green.)
   const limits: RiskLimits = {
     maxTotalExposurePct: 0.5, maxConcurrentPositions: 7, maxSingleTradeExposurePct: 0.2,
-    maxDailyRecommendations: 12, portfolioValue: 100_000, maxLossPerTradePct: 0.0375,
+    maxDailyRecommendations: 12, portfolioValue: 100_000, maxLossPerTradePct: 0.0375, maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
   };
   const m = (over: Partial<PortfolioRiskMetrics>): PortfolioRiskMetrics => ({
     totalExposurePct: 0.1, concurrentPositions: 1, dailyRecommendations: 1,
-    largestConcentrationPct: 0.05, largestConcentrationSymbol: 'MSFT', status: 'PASS', ...over,
+    largestConcentrationPct: 0.05, largestConcentrationSymbol: 'MSFT', stockExposurePct: 0, largestStockConcentrationPct: 0, largestStockConcentrationSymbol: '—', status: 'PASS', ...over,
   });
 
   it.each([
@@ -465,7 +465,13 @@ describe('riskStatusTooltip — per-band comparators, as riskStore.computeMetric
   });
   it('names the worst band', () => {
     expect(riskStatusTooltip(m({ concurrentPositions: 5, largestConcentrationPct: 0.25 }), limits))
-      .toBe('Driven by largest position (MSFT): 25% of a 20% limit (REJECT).');
+      .toBe('Driven by largest option position (MSFT): 25% of a 20% limit (REJECT).');
+  });
+  it('names a stock band against the STOCK cap (STOCK-SENDS)', () => {
+    expect(riskStatusTooltip(m({ largestStockConcentrationPct: 0.25, largestStockConcentrationSymbol: 'AAPL' }), limits))
+      .toBe('Driven by largest stock position (AAPL): 25% of a 20% limit (REJECT).');
+    expect(riskStatusTooltip(m({ stockExposurePct: 0.9 }), limits, 'stockExposure'))
+      .toBe('90% of a 100% limit (CAUTION).');
   });
   it('a CAUTION alone', () => {
     expect(riskStatusTooltip(m({ dailyRecommendations: 10 }), limits))
@@ -473,7 +479,7 @@ describe('riskStatusTooltip — per-band comparators, as riskStore.computeMetric
   });
   it('on a tie of verdicts, the first band in panel order', () => {
     expect(riskStatusTooltip(m({ totalExposurePct: 0.6, concurrentPositions: 7 }), limits))
-      .toBe('Driven by total exposure: 60% of a 50% limit (REJECT).');
+      .toBe('Driven by option exposure: 60% of a 50% limit (REJECT).');
   });
 });
 

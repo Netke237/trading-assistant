@@ -102,7 +102,7 @@ describe('StockPositionCard — single-position concentration flag', () => {
         maxConcurrentPositions: 10,
         maxDailyRecommendations: 5,
         portfolioValue: 100000,
-        maxLossPerTradePct: 0.0375,
+        maxLossPerTradePct: 0.0375, maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
       },
     });
   });
@@ -110,11 +110,12 @@ describe('StockPositionCard — single-position concentration flag', () => {
 
   it('fires on the decision\'s worked example, with every number checkable', async () => {
     await renderAndCompute();
-    // 239 x 211.59 = 50,570.01 -> "50570"; 50.6% of 100k; cap 5% = $5,000;
-    // floor(5000 / 211.59) = 23 shares.
+    // 239 x 211.59 = 50,570.01 -> "50570"; 50.6% of 100k; STOCK cap 20% =
+    // $20,000 (STOCK-SENDS: the stock cap, not the options 5%);
+    // floor(20000 / 211.59) = 94 shares.
     expect(flagText()).toBe(
-      'Concentration: ≈$50570 is 50.6% of your $100000 account — over the 5% '
-      + 'single-position cap ($5000, ≈23 shares). Sized by risk budget, as the '
+      'Concentration: ≈$50570 is 50.6% of your $100000 account — over the 20% '
+      + 'single-position cap ($20000, ≈94 shares). Sized by risk budget, as the '
       + 'plan intends. Nothing is blocked — your call.',
     );
   });
@@ -132,8 +133,17 @@ describe('StockPositionCard — single-position concentration flag', () => {
     expect(sharesFieldValue()).toBe('239');
   });
 
+  it('judges the STOCK cap, not the options cap (STOCK-SENDS R2-2)', async () => {
+    useRiskStore.setState({
+      limits: { ...useRiskStore.getState().limits, maxSingleTradeExposurePct: 0.9, maxSingleStockPositionPct: 0.3 },
+    });
+    await renderAndCompute();
+    // 30% of $100k = $30,000; floor(30000 / 211.59) = 141.
+    expect(flagText()).toContain('over the 30% single-position cap ($30000, ≈141 shares)');
+  });
+
   it('stays silent when the recommendation is inside the cap', async () => {
-    // 20 x 211.59 = $4,231.80, under the $5,000 cap.
+    // 20 x 211.59 = $4,231.80, under the $20,000 stock cap.
     await renderAndCompute(makePlan({ recommendedShares: 20 }));
     expect(flagText()).toBeNull();
   });
@@ -141,14 +151,14 @@ describe('StockPositionCard — single-position concentration flag', () => {
   it('reads riskStore, not a second copy of 0.05 — a wider cap silences it', async () => {
     // 60% of $100k = $60,000, above the $50,570 position.
     useRiskStore.setState({
-      limits: { ...useRiskStore.getState().limits, maxSingleTradeExposurePct: 0.6 },
+      limits: { ...useRiskStore.getState().limits, maxSingleStockPositionPct: 0.6 },
     });
     await renderAndCompute();
     expect(flagText()).toBeNull();
   });
 
   it('reads riskStore portfolioValue too — a bigger account silences it', async () => {
-    // 5% of $2,000,000 = $100,000, above the $50,570 position.
+    // 20% of $2,000,000 = $400,000, above the $50,570 position.
     useRiskStore.setState({
       limits: { ...useRiskStore.getState().limits, portfolioValue: 2_000_000 },
     });
@@ -175,11 +185,11 @@ describe('StockPositionCard — single-position concentration flag', () => {
 
     // Re-running the fetch brings back a plan for the NEW entry, and the flag
     // returns with figures built from it: 239 x 105.79 = $25,283.81, still over
-    // the $5,000 cap, which now allows floor(5000 / 105.79) = 47 shares.
+    // the $20,000 stock cap, which now allows floor(20000 / 105.79) = 189 shares.
     fireEvent.click(screen.getByText('Arithmetic plan'));
     await waitFor(() => expect(screen.getByText('RISK/SHARE')).toBeTruthy());
     expect(flagText()).toContain('≈$25284 is 25.3% of your $100000 account');
-    expect(flagText()).toContain('≈47 shares');
+    expect(flagText()).toContain('≈189 shares');
   });
 
   it('says nothing when there is no recommendation to flag', async () => {
@@ -189,7 +199,7 @@ describe('StockPositionCard — single-position concentration flag', () => {
 
   it('never fires at a 100% cap — legal in Settings, and not a concentration limit', async () => {
     useRiskStore.setState({
-      limits: { ...useRiskStore.getState().limits, maxSingleTradeExposurePct: 1 },
+      limits: { ...useRiskStore.getState().limits, maxSingleStockPositionPct: 1 },
     });
     await renderAndCompute();
     expect(flagText()).toBeNull();

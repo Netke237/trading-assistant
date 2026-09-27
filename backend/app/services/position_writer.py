@@ -153,7 +153,8 @@ class WriteOutcome:
         ordered quantity is over the single-position cap and can be over the
         total cap with `approved` still True;
       - `risk.judged_size != body.qty` -- the check judged a different quantity
-        from the one booked (today only the deferred |STOCK share clamp).
+        from the one booked. No path produces this today (STOCK-SENDS removed
+        the |STOCK share clamp, the last one); kept as a guard.
     This is wider than spec section 5.1's comment "risk.approved was False";
     it is that comment's own gloss, "the booking went past a cap", made true
     (O4 step 2, round 1).
@@ -167,6 +168,41 @@ class WriteOutcome:
     adjusted_size: Optional[int]
     over_exposure: bool
     wrong_side_stop: Optional[str] = None
+
+
+def _rescale_rung_shares(targets: list, asked: int, stored: int) -> list:
+    """STOCK-SENDS (plan B3): scale a resized stock row's per-rung
+    `contractsToSell` from the `asked` share count to the `stored` one, so the
+    sell-to-close plan never sells more than the position holds.
+
+    Proportional, so a partial ladder stays partial (its runner is kept):
+    S = sum of the rung shares, target = min(stored, floor(S * stored / asked));
+    each rung gets floor(c * stored / asked), and the `target - sum(floors)`
+    leftover units go one each to the largest fractional parts (ties: the
+    earlier rung). 50/30/20 of 100 -> 20/12/8 of 40; 33/33 of 100 -> 13/13 of 40.
+    A rung rounded to 0 keeps its price with `contractsToSell: 0`. Rungs without
+    a positive integer `contractsToSell` are left untouched and not counted."""
+    if asked <= 0 or stored >= asked:
+        return targets
+    idx = [
+        i for i, t in enumerate(targets)
+        if isinstance(t, dict) and isinstance(t.get("contractsToSell"), int)
+        and not isinstance(t.get("contractsToSell"), bool) and t["contractsToSell"] > 0
+    ]
+    if not idx:
+        return targets
+    shares = {i: targets[i]["contractsToSell"] for i in idx}
+    total = sum(shares.values())
+    target_sum = min(stored, (total * stored) // asked)
+    new = {i: (c * stored) // asked for i, c in shares.items()}
+    leftover = target_sum - sum(new.values())
+    # Largest fractional part first; ties keep the earlier rung.
+    for i in sorted(idx, key=lambda i: (-((shares[i] * stored) % asked), i))[:max(leftover, 0)]:
+        new[i] += 1
+    return [
+        {**t, "contractsToSell": new[i]} if i in new else t
+        for i, t in enumerate(targets)
+    ]
 
 
 async def create_position(
@@ -550,16 +586,21 @@ async def create_position(
             rr_ratios=_rr_ratios,
         )
 
+        # Gates off: the quantity that was ORDERED, never the gate's resize
+        # (spec section 5.2) -- booking 3 when the broker traded 5 puts every
+        # downstream P&L and exposure number on a quantity that never happened.
+        stored_qty = (risk.adjusted_size or body.qty) if enforce_pre_trade_gates else body.qty
+        if body.contract.endswith("|STOCK") and stored_qty < body.qty:
+            # STOCK-SENDS (plan B3): the rung shares follow the resize.
+            adjusted_targets = _rescale_rung_shares(adjusted_targets, body.qty, stored_qty)
+
         position = PortfolioPositionModel(
             rec_id=body.recId,
             symbol=body.symbol,
             contract=body.contract,
             direction=body.direction,
             entry_price=entry_price,
-            # Gates off: the quantity that was ORDERED, never the gate's resize
-            # (spec section 5.2) -- booking 3 when the broker traded 5 puts every
-            # downstream P&L and exposure number on a quantity that never happened.
-            qty=(risk.adjusted_size or body.qty) if enforce_pre_trade_gates else body.qty,
+            qty=stored_qty,
             entry_date=body.entryDate,
             stop=_floor_stop(adjusted_stop),
             structural_stop=_floor_stop(adjusted_structural_stop),

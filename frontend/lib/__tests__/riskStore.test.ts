@@ -8,7 +8,7 @@ const DEFAULT_LIMITS = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 100000,
-  maxLossPerTradePct: 0.0375,
+  maxLossPerTradePct: 0.0375, maxSingleStockPositionPct: 0.2, maxTotalStockExposurePct: 1,
 };
 
 function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
@@ -45,7 +45,7 @@ describe('riskStore', () => {
           concurrentPositions: 0,
           dailyRecommendations: 0,
           largestConcentrationPct: 0,
-          largestConcentrationSymbol: '—',
+          largestConcentrationSymbol: '—', stockExposurePct: 0, largestStockConcentrationPct: 0, largestStockConcentrationSymbol: '—',
           status: 'PASS',
         },
         symbols: [],

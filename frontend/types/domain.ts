@@ -1079,6 +1079,11 @@ export interface RiskLimits {
    *  auto-clamps contract count. See docs/superpowers/plans/
    *  2026-08-26-exit-plan-pipeline.md Feature C. */
   maxLossPerTradePct: number;
+  /** STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): the STOCK caps, on
+   *  price x shares as a fraction of portfolioValue. The two caps above judge
+   *  OPTIONS only, and each kind's total counts only its own rows. */
+  maxSingleStockPositionPct: number;  // e.g. 0.20 = 20%
+  maxTotalStockExposurePct: number;   // e.g. 1.00 = 100%
 }
 
 export interface RiskCheckResult {
@@ -1116,11 +1121,18 @@ export interface MaxLossOverride {
 }
 
 export interface PortfolioRiskMetrics {
+  /** OPTION rows only (STOCK-SENDS: each kind has its own caps). */
   totalExposurePct: number;
   concurrentPositions: number;
   dailyRecommendations: number;
+  /** Largest OPTION position (per symbol). */
   largestConcentrationPct: number;
   largestConcentrationSymbol: string;
+  /** STOCK rows only, against maxTotalStockExposurePct. */
+  stockExposurePct: number;
+  /** Largest STOCK position (per symbol), against maxSingleStockPositionPct. */
+  largestStockConcentrationPct: number;
+  largestStockConcentrationSymbol: string;
   status: Status;  // PASS if all within limits, CAUTION if near, REJECT if breached
 }
 

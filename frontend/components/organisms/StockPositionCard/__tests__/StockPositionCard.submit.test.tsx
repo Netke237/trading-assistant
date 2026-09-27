@@ -4,6 +4,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
+import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import type { PositionCardData } from '@/types/stockDomain';
 import type { MethodPick } from '@/types/domain';
 
@@ -23,6 +24,7 @@ const pick = (): MethodPick => ({
 jest.mock('@/lib/api', () => ({
   api: {
     postStockOrder: jest.fn(),
+    deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     getBrokerStatus: jest.fn().mockResolvedValue({}),
   },
 }));
@@ -50,9 +52,23 @@ function makeCard(): PositionCardData {
 
 const originalFetch = global.fetch;
 
+/** STOCK-SENDS: the save POST echoes its body (a real 201 carries
+ *  `entryPrice`; a reply without it is an unconfirmed save and sends no
+ *  order). Any other request answers `{}`. `adjustedQty` resizes the save. */
+function echoFetch(adjustedQty?: number): typeof fetch {
+  return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 201, json: async () => ({ ...body, ...(adjustedQty != null ? { adjustedQty } : {}) }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
+
 describe('StockPositionCard — broker order submit()', () => {
   beforeEach(() => {
     usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    useDirectSendNotesStore.setState({ notes: [] });
     useSettingsStore.setState({
       ibkrPaper: { baseUrl: 'https://localhost:7499/v1/api', accountId: 'ACC' },
     } as any);
@@ -71,7 +87,7 @@ describe('StockPositionCard — broker order submit()', () => {
 
   it('creates a local position with a snapshot after a successful broker order', async () => {
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
@@ -84,18 +100,60 @@ describe('StockPositionCard — broker order submit()', () => {
     expect(pos.stop).toBe(145);
   });
 
-  it('shows a non-blocking warning (not an error) and permanently disables the order buttons when the order succeeds but local tracking fails', async () => {
-    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-2' });
+  it('an unconfirmed save (backend unreachable) sends NO order and leaves a note', async () => {
+    // STOCK-SENDS: this used to be "order placed, tracking failed". Saving
+    // first means an unreachable Portfolio stops the order instead.
     global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
 
     render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
 
-    expect(await screen.findByText(/not yet tracked in Portfolio/)).toBeInTheDocument();
-    // The order genuinely succeeded — clicking again must not be possible, since
-    // that would fire a second broker order for shares already bought.
+    expect(await screen.findByText(/AAPL 30 sh: Portfolio tracking could not be confirmed, so NO order was sent/)).toBeInTheDocument();
+    expect(api.postStockOrder).not.toHaveBeenCalled();
+    expect(useDirectSendNotesStore.getState().notes).toEqual([
+      expect.objectContaining({ kind: 'save-unconfirmed', label: 'AAPL 30 sh' }),
+    ]);
+    await waitFor(() => expect(screen.getByRole('button', { name: /limit @/i })).toBeEnabled());
+  });
+
+  // STOCK-SENDS (plan §A2): save first; the order carries the saved quantity,
+  // and the screen says so (R1-2).
+  it('saves BEFORE ordering and orders the saved (resized) share count', async () => {
+    const log: string[] = [];
+    global.fetch = echoFetch(12);
+    const inner = (global.fetch as jest.Mock).getMockImplementation()!;
+    (global.fetch as jest.Mock).mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') log.push('save');
+      return inner(url, init);
+    });
+    (api.postStockOrder as jest.Mock).mockImplementationOnce(async () => { log.push('order'); return { order_id: 'ORD-7', status: 'Submitted' }; });
+
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
+
+    expect(await screen.findByText(/Order placed — ID: ORD-7\. Portfolio sized it to 12 shares; the order was sent for 12\./)).toBeInTheDocument();
+    expect(log).toEqual(['save', 'order']);
+    expect((api.postStockOrder as jest.Mock).mock.calls[0][0]).toMatchObject({ quantity: 12, limit_price: 150 });
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    expect(usePortfolioStore.getState().positions[0].contracts).toBe(12);
     expect(screen.getByRole('button', { name: /limit @/i })).toBeDisabled();
+  });
+
+  it('a refused save sends NO order and shows the reason', async () => {
+    global.fetch = jest.fn().mockImplementation(async (url: string, init?: RequestInit) => (
+      String(url).endsWith('/api/portfolio') && init?.method === 'POST'
+        ? { ok: false, status: 422, json: async () => ({ detail: 'duplicate_symbol_already_open' }) }
+        : { ok: true, json: async () => ({}) }
+    )) as unknown as typeof fetch;
+
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
+
+    expect(await screen.findByText(/AAPL 30 sh: No order was sent — duplicate_symbol_already_open/)).toBeInTheDocument();
+    expect(api.postStockOrder).not.toHaveBeenCalled();
   });
 
   // MANUAL-IBKR-CONFIRM-AS-ERROR (2026-09-25). When IBKR answers with a
@@ -107,7 +165,7 @@ describe('StockPositionCard — broker order submit()', () => {
       'API /broker/stock-order → 502: IBKR did not place the order: it asked for a ' +
       'confirmation this app does not send. IBKR said: Are you sure you want to submit this order?',
     ));
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+    global.fetch = echoFetch();
 
     render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
     fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
