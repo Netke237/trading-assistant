@@ -341,19 +341,18 @@ async def test_p1a_6_gates_off_a_six_lot_is_booked_at_six_and_flagged(Session):
 
 
 @pytest.mark.asyncio
-async def test_p1a_6b_a_stock_judged_at_the_clamp_is_flagged_only_through_judged_size(
-    Session, caplog,
-):
-    """20 shares at $10 on 1M fit every cap, and the REAL check approves with no
-    resize -- so `over_exposure` can only come from judged 5 != booked 20."""
+async def test_p1a_6b_a_stock_within_its_caps_is_not_over_exposure(Session, caplog):
+    """STOCK-SENDS flipped this test. 20 shares at $10 on 1M fit every cap and,
+    with the |STOCK clamp gone, the check judges the REAL 20 -- so a gates-off
+    booking of 20 is no longer flagged as over the exposure gate."""
     with caplog.at_level(logging.WARNING, _LOGGER):
         async with Session() as db:
             outcome = await create_position(
                 _body(contract="ABT|STOCK", entryPrice=10.0, qty=20, stop=9.0), db,
                 enforce_pre_trade_gates=False, **_fetchers(quote={"price": 10.0}))
     assert outcome.adjusted_size is None, "precondition: no resize"
-    assert (outcome.position.qty, outcome.over_exposure) == (20, True)
-    assert any("the check judged 5, not the ordered 20" in m for m in caplog.messages)
+    assert (outcome.position.qty, outcome.over_exposure) == (20, False)
+    assert not any("the check judged" in m for m in caplog.messages)
 
 
 @pytest.mark.asyncio

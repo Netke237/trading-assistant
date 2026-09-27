@@ -79,6 +79,20 @@ class RiskConfig(BaseModel):
         le=1.0,
         description='Max total exposure across all positions as a fraction of portfolio value',
     )
+    # STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): the stock caps,
+    # on dollar value (price x shares) as a fraction of portfolio value.
+    maxSingleStockPositionPct: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description='Max single STOCK position (price x shares) as a fraction of portfolio value',
+    )
+    maxTotalStockExposurePct: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description='Max total STOCK exposure across stock positions as a fraction of portfolio value',
+    )
     maxConcurrentPositions: Optional[int] = Field(
         default=None,
         ge=1,
@@ -129,6 +143,10 @@ async def get_risk_settings() -> dict:
         'maxSinglePositionPct': float(portfolio.get('max_single_position_pct', 0.05)),
         'maxLossPerTradePct': float(portfolio.get('max_loss_per_trade_pct', 0.0375)),
         'maxTotalExposurePct': float(portfolio.get('max_total_exposure_pct', 0.25)),
+        'maxSingleStockPositionPct': float(portfolio.get(
+            'max_single_stock_position_pct', portfolio_risk.STOCK_SINGLE_DEFAULT)),
+        'maxTotalStockExposurePct': float(portfolio.get(
+            'max_total_stock_exposure_pct', portfolio_risk.STOCK_TOTAL_DEFAULT)),
         'maxConcurrentPositions': int(portfolio.get('max_concurrent_positions', 10)),
         'maxDailyRecommendations': int(portfolio.get('max_daily_recommendations', 5)),
         'targetT1Pct': float(rr.get('target_t1_pct', 0.20)),
@@ -156,6 +174,10 @@ async def save_risk_settings(body: RiskConfig) -> dict:
         cfg['portfolio']['max_loss_per_trade_pct'] = body.maxLossPerTradePct
     if body.maxTotalExposurePct is not None:
         cfg['portfolio']['max_total_exposure_pct'] = body.maxTotalExposurePct
+    if body.maxSingleStockPositionPct is not None:
+        cfg['portfolio']['max_single_stock_position_pct'] = body.maxSingleStockPositionPct
+    if body.maxTotalStockExposurePct is not None:
+        cfg['portfolio']['max_total_stock_exposure_pct'] = body.maxTotalStockExposurePct
     if body.maxConcurrentPositions is not None:
         cfg['portfolio']['max_concurrent_positions'] = body.maxConcurrentPositions
     if body.maxDailyRecommendations is not None:
@@ -171,6 +193,8 @@ async def save_risk_settings(body: RiskConfig) -> dict:
         'maxSinglePositionPct': body.maxSinglePositionPct,
         'maxLossPerTradePct': body.maxLossPerTradePct,
         'maxTotalExposurePct': body.maxTotalExposurePct,
+        'maxSingleStockPositionPct': body.maxSingleStockPositionPct,
+        'maxTotalStockExposurePct': body.maxTotalStockExposurePct,
         'maxConcurrentPositions': body.maxConcurrentPositions,
         'maxDailyRecommendations': body.maxDailyRecommendations,
         'targetT1Pct': body.targetT1Pct,

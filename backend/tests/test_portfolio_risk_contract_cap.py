@@ -1,8 +1,9 @@
 # backend/tests/test_portfolio_risk_contract_cap.py
 """P1a (Q18, P1-CLAMP-AT-SOURCE-2026-09-25): `check_position_risk` REFUSES an
 option quantity above `sizing.max_contracts_per_trade` instead of clamping it
-and judging the smaller number. Stocks keep the clamp (deferred by
-P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25).
+and judging the smaller number. Stocks are judged at their real share count
+(STOCK-SENDS flipped test 3; the stock caps are pinned in
+tests/test_stock_sends_real_shares.py).
 
 Plan: docs/superpowers/plans/2026-09-25-p1a-backend-contract-cap-plan.md s5 1-4.
 """
@@ -51,13 +52,15 @@ def test_2_the_exposure_caps_are_judged_at_the_real_option_qty():
     assert six.adjusted_size == int(100_000 * 0.05 / (9.0 * 100))
 
 
-def test_3_stock_shares_keep_the_deferred_clamp():
-    """Pinned DEFERRED behaviour -- phase STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES
-    flips this test."""
+def test_3_stock_shares_are_judged_at_the_real_count():
+    """STOCK-SENDS flipped this test: the |STOCK clamp is gone. 100 sh x $10 on
+    $100k is $1,000 (1%), well inside the stock caps, and never refused for
+    max_contracts_per_trade."""
     r = _check(100, premium=10.0, contract="AAPL|STOCK")
     assert EXCEEDS_MAX_CONTRACTS not in r.reasons
     assert r.approved is True
-    assert r.judged_size == CAP
+    assert r.judged_size == 100
+    assert r.adjusted_size is None
 
 
 @pytest.mark.parametrize("qty, value", [

@@ -23,10 +23,9 @@ class RiskCheckResult:
     reasons: list[str] = field(default_factory=list)
     adjusted_size: Optional[int] = None
     portfolio_exposure_pct: float = 0.0
-    # P1a: the quantity the caps were judged at. Equal to the ordered quantity
-    # for an option; for a |STOCK row it is the deferred clamp's value (see the
-    # stock branch below). None only on the `portfolio_too_small` return, which
-    # comes before anything is judged.
+    # P1a: the quantity the caps were judged at -- the proposed quantity, for
+    # both kinds (STOCK-SENDS removed the |STOCK clamp). None only on the
+    # `portfolio_too_small` return, which comes before anything is judged.
     judged_size: Optional[int] = None
     # P1a: the per-trade contract cap this check read, so a caller can word a
     # refusal without a config read of its own.
@@ -35,8 +34,15 @@ class RiskCheckResult:
 
 # Q18 / P1-CLAMP-AT-SOURCE-2026-09-25: an OPTION quantity above
 # `sizing.max_contracts_per_trade` is REFUSED with this reason (a hard reason),
-# for every caller -- card POST, drawer PATCH, auto-trade fire check.
+# for every caller -- card POST, drawer PATCH, auto-trade fire check. A stock
+# share count is never judged against it (STOCK-SENDS).
 EXCEEDS_MAX_CONTRACTS = "exceeds_max_contracts_per_trade"
+
+
+# Decision STOCK-SENDS-STOCK-CAPS-2026-09-27: the stock caps' values when
+# risk_rules.yaml does not carry them (routers/risk_settings.py reads the same).
+STOCK_SINGLE_DEFAULT = 0.20
+STOCK_TOTAL_DEFAULT = 1.00
 
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
@@ -73,26 +79,26 @@ def check_position_risk(
             max_contracts=max_per_trade,
         )
 
-    # REFUSE, DON'T CLAMP (Q18 at the source). This line used to be an
-    # unconditional `min(proposed_contracts, max_contracts_per_trade)`: a 10-lot
-    # was judged as 5 and then booked as 10 (card POST), set to 10 (drawer
-    # PATCH) or fired as 10 (auto-trader). An option quantity above the cap is
-    # now a hard reason, and every cap below is judged at the REAL quantity.
-    if contract_id.endswith("|STOCK"):
-        # DEFERRED by P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25: the stock
-        # send paths place the broker order BEFORE saving, so judging real share
-        # counts now would refuse the books after a full-size order. Phase
-        # STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES removes this clamp.
-        proposed_contracts = min(proposed_contracts, max_per_trade)
-    elif proposed_contracts > max_per_trade:
+    # REFUSE, DON'T CLAMP (Q18 at the source). An option quantity above the cap
+    # is a hard reason, and every cap below is judged at the REAL quantity.
+    # STOCK-SENDS (P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25): a stock is
+    # judged at its REAL share count too -- its clamp to max_contracts_per_trade
+    # is gone now that every stock send saves before it orders -- and against
+    # the stock caps below, never the contract cap.
+    is_stock = contract_id.endswith("|STOCK")
+    if not is_stock and proposed_contracts > max_per_trade:
         reasons.append(EXCEEDS_MAX_CONTRACTS)
     judged_size = proposed_contracts
+    # Decision STOCK-SENDS-STOCK-CAPS-2026-09-27: each kind has its own caps,
+    # and its total counts only its own rows. The concurrent-position, daily and
+    # duplicate-symbol checks below still count every row.
+    same_kind = [p for p in portfolio if p.contract_id.endswith("|STOCK") == is_stock]
 
     if daily_recommendation_count >= rules["max_daily_recommendations"]:
         return RiskCheckResult(
             approved=False,
             reasons=["daily_recommendation_limit_reached"],
-            portfolio_exposure_pct=_current_exposure(portfolio, portfolio_value),
+            portfolio_exposure_pct=_current_exposure(same_kind, portfolio_value),
             judged_size=judged_size,
             max_contracts=max_per_trade,
         )
@@ -101,7 +107,7 @@ def check_position_risk(
         return RiskCheckResult(
             approved=False,
             reasons=["max_concurrent_positions_reached"],
-            portfolio_exposure_pct=_current_exposure(portfolio, portfolio_value),
+            portfolio_exposure_pct=_current_exposure(same_kind, portfolio_value),
             judged_size=judged_size,
             max_contracts=max_per_trade,
         )
@@ -111,16 +117,20 @@ def check_position_risk(
         return RiskCheckResult(
             approved=False,
             reasons=["duplicate_symbol_already_open"],
-            portfolio_exposure_pct=_current_exposure(portfolio, portfolio_value),
+            portfolio_exposure_pct=_current_exposure(same_kind, portfolio_value),
             judged_size=judged_size,
             max_contracts=max_per_trade,
         )
 
-    is_stock = contract_id.endswith("|STOCK")
     multiplier = 1 if is_stock else 100
     capital_at_risk = entry_premium * proposed_contracts * multiplier
     single_exposure_pct = capital_at_risk / portfolio_value
-    max_single = rules["max_single_position_pct"]
+    # .get with the decided defaults: a risk_rules.yaml written before
+    # STOCK-SENDS has no stock keys, and a KeyError here would refuse every save.
+    max_single = (
+        float(rules.get("max_single_stock_position_pct", STOCK_SINGLE_DEFAULT)) if is_stock
+        else rules["max_single_position_pct"]
+    )
 
     if single_exposure_pct > max_single:
         max_allowed_premium = portfolio_value * max_single
@@ -133,9 +143,12 @@ def check_position_risk(
         else:
             reasons.append("single_trade_exposure_too_high")
 
-    current_exposure = _current_exposure_abs(portfolio)
+    current_exposure = _current_exposure_abs(same_kind)
     total_exposure_pct = (current_exposure + capital_at_risk) / portfolio_value
-    max_total = rules["max_total_exposure_pct"]
+    max_total = (
+        float(rules.get("max_total_stock_exposure_pct", STOCK_TOTAL_DEFAULT)) if is_stock
+        else rules["max_total_exposure_pct"]
+    )
 
     if total_exposure_pct > max_total:
         reasons.append("total_exposure_limit_reached")
@@ -151,7 +164,7 @@ def check_position_risk(
             approved=not hard_reasons,
             reasons=reasons,
             adjusted_size=adjusted_size,
-            portfolio_exposure_pct=_current_exposure(portfolio, portfolio_value),
+            portfolio_exposure_pct=_current_exposure(same_kind, portfolio_value),
             judged_size=judged_size,
             max_contracts=max_per_trade,
         )
