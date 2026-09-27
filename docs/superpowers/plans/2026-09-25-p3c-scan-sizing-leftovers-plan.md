@@ -1057,3 +1057,18 @@ Below the gate — logged against main, NOT fixed in-branch:
 - §6 calls `compute_omm` below `min_obs` where the scan skips; both yield no verdict, output identical.
 - A Postgres URL with a libpq-only query param (`?sslmode=require`) crashes with a traceback instead of the tidy
   connect error; fails loudly, never reads a different DB.
+
+## Code round 1 log — item 1, options Intraday regime-data drop (0 gate-level findings; CLEAN)
+
+Scope: commit 02eb341, whole change. Brief quoted `audit_rule` clause (1) and the comment-truth exception
+verbatim. Result: ZERO GATE-LEVEL FINDINGS — item 1's code stage is closed. Checked: drop condition equals the
+fire's refusal (`_apply_regime_gate` / `_apply_vol_sizing` → `_measure_trade_regime`; malformed sizing fails
+closed on both sides), short series abstains, `_rcfg` None path unchanged, daily timeframes untouched, helper
+exceptions isolated per symbol by `gather(return_exceptions=True)`, funnel prefix matches
+`_REGIME_DATA_PREFIX` with no bucket overlap, no import cycle.
+
+Below the gate — logged against main, NOT fixed in-branch:
+- The fire's 15-min fetch has an 8s deadline; the scan's has none. A slow feed can be kept by the scan and
+  refused at fire time. Timing-dependent, pre-existing.
+- A `regime_gate` block with missing/non-bool `enabled` makes the fire refuse (`RegimeGateConfigError`) while the
+  scan reads `bool(...)`. Not reachable with the shipped YAML.
