@@ -12,8 +12,25 @@ r10. r10 → round 10 (§7): 3 findings (1 MED, 2 LOW), addressed in r11. r11 �
 r12 → round 12 (the unaudited r5 edits to §2-§5 + §7's r12 fix): 6 findings (1 MED, 5 LOW), addressed in r13.
 r13 → round 13 (the r13 fixes): 4 LOW, addressed in r14. r14 → round 14: 4 LOW, all the same class (the hand-copied
 setup rules drift from the code), addressed in r15 by calling the real signal instead. r15 → round 15 (§5): 7 findings (1 MED,
-6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20. r20 → round 20: 4 LOW, addressed in r21. r21 → round 21: 4 findings (1 HIGH, 1 MED, 2 LOW), addressed in r22. r22 → round 22: 7 findings (2 MED, 5 LOW), addressed in r23.
-Logs at the end.
+6 LOW), addressed in r16. r16 → round 16 (§5): 3 LOW, addressed in r17. r17 → round 17: 2 LOW, addressed in r18. r18 → round 18: 3 LOW, addressed in r19. r19 → round 19 (FULL plan vs merged main): 8 LOW, addressed in r20. r20 → round 20: 4 LOW, addressed in r21. r21 → round 21: 4 findings (1 HIGH, 1 MED, 2 LOW), addressed in r22. r22 → round 22: 7 findings (2 MED, 5 LOW), addressed in r23. r23 = Postgres made primary (decision below), not
+re-audited. Logs at the end.
+
+**PLAN STAGE CLOSED — ACCEPTED BY KENNETH, NOT CLEAN (2026-09-27).** 22 plan rounds were run against
+`audit_rule`'s HARD CAP of three per stage; none came back clean. The overrun happened because the audit briefs
+lacked the rule's severity gate and every finding (wording, line refs, test hygiene) was fixed, which the rule
+forbids. Recorded as `audit_rounds` 22 / `audit_clean` false for the plan stage.
+
+**Kenneth's decisions (2026-09-27):**
+- P3C-PLAN-ACCEPTED-NOT-CLEAN-2026-09-27: plan r23 is accepted as it is; no further plan rounds. The CODE stage
+  starts at round 1 of 3 (per AUDIT-CAP-PER-STAGE-2026-09-25). EVERY code-audit brief carries `audit_rule`'s
+  gate verbatim: a finding counts only if it can put a WRONG NUMBER in front of a user or on a broker order, or
+  CORRUPT PERSISTED DATA; the reviewer is told NOT to report anything else (wording, comments, line refs, test
+  hygiene, dead code, unreachable latent defects); round N>1 reviews ONLY the previous round's fixes and their
+  interactions; only gate-level findings are fixed in-branch, everything else is logged against main; one
+  zero-finding round closes the stage; a third round that is not clean → STOP and tell Kenneth.
+- P3C-SCRIPT-POSTGRES-PRIMARY-2026-09-27: `p3c_data_checks.py` targets Kenneth's Postgres. Its primary path is
+  the `DATABASE_URL` from the environment / `backend/.env` (postgres schemes), read-only as §5 states; SQLite is
+  only the unit-test fixture and is refused at run time unless `--allow-sqlite` is passed (see §5).
 
 **Kenneth's decisions (2026-09-25, plan round 1):**
 - P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25: item 2 is done inside the options scan's `_process_symbol` with
@@ -342,7 +359,17 @@ It validates and, for postgres, rewrites that URL (rules below), exits non-zero 
 then sets `os.environ["DATABASE_URL"]` to the rewritten URL (env beats `.env` in pydantic-settings; tests that
 call `main()` in-process set the variable with `monkeypatch.setenv` so teardown restores it — r22-4) and only then
 imports `app.routers.stock_scan` (for `_merge_strategy_params`, `_SIGNAL_KWARGS`, `_HISTORY_YEARS`) and
-`app.services.strategy_engine`, lazily inside `main()`. Routing (r19-L8: a sqlite `DATABASE_URL` or none → stdlib
+`app.services.strategy_engine`, lazily inside `main()`.
+**Postgres is the primary path (P3C-SCRIPT-POSTGRES-PRIMARY-2026-09-27).** The script is written for, and Kenneth
+runs it against, his Postgres. The code's own default `DATABASE_URL` is `sqlite+aiosqlite:///./dev.db`
+(config.py:13), so a missing or unread `DATABASE_URL` would otherwise open an empty or stale `dev.db` and print
+"NO ROWS" for every symbol — a silent wrong answer. Therefore: when the resolved URL is sqlite, the script exits
+non-zero BEFORE opening anything, printing `DATABASE_URL resolves to SQLite ({path}), not Postgres. Set
+DATABASE_URL (environment or backend/.env) to your Postgres URL, or pass --allow-sqlite to read this file.`;
+with `--allow-sqlite` it proceeds on the sqlite branch below. Every run prints, first, the database it reads:
+`reading postgresql+asyncpg://user:***@host/db` (password hidden, `render_as_string(hide_password=True)`) or
+`reading SQLite file {path}`.
+Routing (r19-L8: a sqlite `DATABASE_URL`, only with `--allow-sqlite` → stdlib
 sqlite3 with a `mode=ro` URI — the path is `sqlalchemy.engine.make_url(url).database` (r22-7: not iv_basis's
 split on `///`, which keeps a `?query` and yields `file:…?x=y?mode=ro`), resolved against `BACKEND` when relative
 (as `iv_basis_analysis.py:146-147` does), opened as `f"file:{path.as_posix()}?mode=ro"`; a missing file → exit
@@ -678,7 +705,8 @@ backtesting.py skips a falsy tp (:1105-1106), not the raise P3a guarded against;
 extension leads (rungs sort nearest-first, :318-321, so a bearish 0.0 is always last), it is only a 0.00 rung in
 `targets` (the UI ladder) — r17-2, r18-3), the ScanFunnel unmeasured stage (r2-M7), the
 stale "market structure does not support" text in the frontend fixture `step-4-ranking/__tests__/emptyStateBanner.test.tsx:21-22` (r3-L5).
-The two Kenneth decisions above go to the front of `decisions`. One new decision
+The Kenneth decisions above (2026-09-25 and 2026-09-27) go to the front of `decisions`; the P3c phase records
+the plan stage as `audit_rounds` 22, `audit_clean` false, accepted by P3C-PLAN-ACCEPTED-NOT-CLEAN-2026-09-27. One new decision
 per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `direction_conviction_unmeasured` in scan.py.
 
 ## Verification
@@ -686,14 +714,18 @@ per Q below once answered. Phase probe: a regex for `_NO_REGIME_FILTER` and `dir
 `cd backend && pytest` (all), `cd frontend && npm run typecheck && npm run test`, `python3 scripts/state.py`.
 The script: `cd backend && python3 scripts/p3c_data_checks.py --help` (r22-2), and the same `--help` from the repo root to show cwd-independence; sections chosen by `--sections db,sources`
 (default both; `sources` is the only one that touches the network — r2-L10). `tests/test_p3c_data_checks.py` runs
-`--sections db` only, against a fixture sqlite `ohlcv_daily` with three symbols — Alpaca-shaped 3:1 split
+`--sections db --allow-sqlite` only (the unit tests cannot rely on a Postgres server; Kenneth's real run is
+Postgres), against a fixture sqlite `ohlcv_daily` with three symbols — Alpaca-shaped 3:1 split
 (`split_factor` 1.0, correct `adj_factor`, raw OHLC) → `MIXED ADJUSTMENT`; stale pre-split `adj_factor` 1.0 (one of its rows NULL, r19-L7) →
 `STALE ADJ_FACTOR`; no split → `NO SPLIT IN WINDOW` — and asserts the DB file's bytes and mtime are unchanged
 after the run, and that no socket was opened (socket.socket patched to raise). Verdict strings are exactly the
 six in §5: `STALE ADJ_FACTOR`, `MIXED ADJUSTMENT`, `NO SPLIT IN WINDOW`, `CLEAN`, `NO ROWS`, `TOO FEW ROWS` (r2-L9, r21-2, r22-6); the fixture adds a symbol with 5 rows → `TOO FEW ROWS (5)`. The same module holds
 §5's two target pins (r14-4): the >350-bar all-positive fixture (patched = unpatched on setup bars, stop and
 target; a setup bar at index ≥ 350 asserted to exist) and the MIXED-shaped empty-ladder fixture (unpatched None,
-patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8, r21-1): each URL case runs the script in a SUBPROCESS (`sys.executable <abs path>/scripts/p3c_data_checks.py --sections db`, run once with cwd `backend/` and once with cwd the repo root, `DATABASE_URL` set in its env) — an in-process importlib load imports `app.database` once under the test's sqlite URL and so can never see the import-time crash r21-1 found, and pytest's own `sys.path` hides r22-1's missing path insert. `mysql://u@h/db` → exit non-zero, stderr names the scheme, no `Traceback`. For `postgresql+asyncpg://`, `postgresql://` and `postgres://`, each as `…://u:s3cret@127.0.0.1:1/db` (r22-3): exit non-zero; stderr contains `cannot connect to postgresql+asyncpg://`, `***` and `ConnectionRefusedError` (or `Connect call failed`), and NOT `s3cret`, `Traceback`, `ModuleNotFoundError` or `NoSuchModuleError` — which proves the rewrite ran before `app.database` built its engine. A sqlite URL naming a missing file → exit non-zero naming the resolved path. The read-only contract is pinned in-process (`DATABASE_URL` via `monkeypatch.setenv` — r22-4): the importlib-loaded module (like tests/test_iv_basis_analysis.py) with its module-level `create_async_engine` patched ON THE LOADED MODULE to a hand-written recording fake — NOT a `MagicMock` (r22-5: it would silently accept `engine.begin()` / `conn.begin()`, which commit without a recorded `commit()`) — exposing only `engine.connect()` and, on the connection, `execute` / `close` (anything else, `begin` included, raises `AttributeError`), whose queries return no rows; assert `connect()` was called exactly once and the recorded sequence is exactly `connect, SET TRANSACTION READ ONLY, SELECT…, close` (no `commit`, no other statement), and each symbol printed `NO ROWS in ohlcv_daily for …`.
+patched `NONE — no valid rung`, primary `not below entry`, fallback < 0); `--params-json` with a key outside the five (e.g. `ema_period`, `direction`) exits non-zero naming it. DB-URL routing (r19-L8, r21-1): each URL case runs the script in a SUBPROCESS (`sys.executable <abs path>/scripts/p3c_data_checks.py --sections db`, run once with cwd `backend/` and once with cwd the repo root, `DATABASE_URL` set in its env) — an in-process importlib load imports `app.database` once under the test's sqlite URL and so can never see the import-time crash r21-1 found, and pytest's own `sys.path` hides r22-1's missing path insert. `mysql://u@h/db` → exit non-zero, stderr names the scheme, no `Traceback`. For `postgresql+asyncpg://`, `postgresql://` and `postgres://`, each as `…://u:s3cret@127.0.0.1:1/db` (r22-3): exit non-zero; stderr contains `cannot connect to postgresql+asyncpg://`, `***` and `ConnectionRefusedError` (or `Connect call failed`), and NOT `s3cret`, `Traceback`, `ModuleNotFoundError` or `NoSuchModuleError` — which proves the rewrite ran before `app.database` built its engine. A sqlite URL naming a missing file (with `--allow-sqlite`) → exit non-zero naming the resolved path. A sqlite URL
+WITHOUT `--allow-sqlite` → exit non-zero, stderr contains `resolves to SQLite` and `--allow-sqlite`, and the file's
+mtime is unchanged (nothing opened). Every run's first stdout line names the database read, password hidden
+(P3C-SCRIPT-POSTGRES-PRIMARY-2026-09-27). The read-only contract is pinned in-process (`DATABASE_URL` via `monkeypatch.setenv` — r22-4): the importlib-loaded module (like tests/test_iv_basis_analysis.py) with its module-level `create_async_engine` patched ON THE LOADED MODULE to a hand-written recording fake — NOT a `MagicMock` (r22-5: it would silently accept `engine.begin()` / `conn.begin()`, which commit without a recorded `commit()`) — exposing only `engine.connect()` and, on the connection, `execute` / `close` (anything else, `begin` included, raises `AttributeError`), whose queries return no rows; assert `connect()` was called exactly once and the recorded sequence is exactly `connect, SET TRANSACTION READ ONLY, SELECT…, close` (no `commit`, no other statement), and each symbol printed `NO ROWS in ohlcv_daily for …`.
 
 ## Open questions for Kenneth
 
