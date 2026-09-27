@@ -186,12 +186,16 @@ def _force_passing_stock_score():
     """Patches app.routers.scan.score_stock so the pre-screen/score gates
     always pass — isolates the DTE hard-reject gate under test from the
     unrelated stock-scoring pipeline, which the synthetic _MOCK_CANDLES series
-    doesn't reliably clear on its own."""
-    from app.scoring.stock_scorer import StockScoreCard
+    doesn't reliably clear on its own.
+
+    Carries a MEASURED trend rule: since P3c item 2 a card with no trend rule
+    is an unmeasured trend, which the options direction gate removes."""
+    from app.scoring.stock_scorer import StockScoreCard, RuleResult
     return patch(
         "app.routers.scan.score_stock",
         MagicMock(return_value=StockScoreCard(
             symbol="AAPL", direction="Bullish", horizon="Swing", score=80, status="PASS",
+            rules=[RuleResult("trend", "PASS", 80, {})],
         )),
     )
 

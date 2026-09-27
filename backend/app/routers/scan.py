@@ -73,7 +73,9 @@ from app.models.heston import calibrate_heston, HestonParams
 from types import SimpleNamespace
 # P3c: stock_scan imports only the regime and contracts routers, neither of
 # which imports this module, so there is no cycle.
-from app.routers.stock_scan import _regime_data_drop
+from app.routers.stock_scan import (
+    _regime_data_drop, _direction_conviction_drop, _rs_benchmark_candles, _aligned_benchmark,
+)
 from app.services.audit import new_rec_id, log_event
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
@@ -501,6 +503,13 @@ async def _process_symbol(
     iv_abs_threshold: float = 50.0,
     min_credit: float = 0.50,
     max_debit_pct: float = 40.0,
+    # P3c item 2: the direction-conviction floor (None = exempt, e.g. Intraday),
+    # the relative_strength benchmark bars fetched once per scan (None unless
+    # that trend method is on), and a shared list collecting the names whose
+    # bars did not align with the benchmark (for the per-scan INFO line).
+    direction_min_trend: float | None = None,
+    rs_benchmark: list[dict] | None = None,
+    rs_misaligned: list[str] | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -671,8 +680,15 @@ async def _process_symbol(
     # on trend/pullback/trigger/event — the components that drive most rejections.
     # ~70-80% of symbols exit here, saving the option chain fetch entirely.
     _fh: FundamentalHealth | None = (fund_map or {}).get(symbol)
+    # relative_strength needs the benchmark trimmed to THIS symbol's last day;
+    # None leaves the trend unmeasured (removed below as "no data"). Computed
+    # once and handed to both score_stock calls.
+    _bench = _aligned_benchmark(rs_benchmark, candles)
+    if rs_benchmark is not None and _bench is None and rs_misaligned is not None:
+        rs_misaligned.append(symbol)   # one event loop (gather): no lock needed
     card_pre: StockScoreCard = score_stock(
         symbol, direction, horizon, candles,
+        benchmark_candles=_bench,
         earnings_date=earnings_date,
         dividend_date=dividend_date,
         iv_rank=None,
@@ -686,6 +702,17 @@ async def _process_symbol(
         bd = {r.name: r.score for r in card_pre.rules}
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"Pre-screen: score {card_pre.score} rejected"})
         return RejectedCandidate(symbol=symbol, reason=f"Pre-screen: score {card_pre.score} rejected", breakdown=bd)
+
+    # P3c item 2 (decision P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25): an
+    # UNMEASURED trend (no trend rule, or its placeholder 0/50) is removed as
+    # "no data" here, before the chain fetch, with the stock scan's helper --
+    # the trend rule does not read iv_rank, so card_pre's trend is the final
+    # card's. Only the unmeasured verdict is acted on; a measured trend below
+    # the floor is left to the post-gather gate in _execute_scan_core.
+    _dc = _direction_conviction_drop(symbol, card_pre, direction_min_trend, direction, horizon)
+    if _dc and _dc["reason"].startswith("direction_conviction_unmeasured:"):
+        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": _dc["reason"]})
+        return RejectedCandidate(symbol=symbol, reason=_dc["reason"])
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
     async with sem:
@@ -758,6 +785,7 @@ async def _process_symbol(
 
     card: StockScoreCard = score_stock(
         symbol, direction, horizon, candles,
+        benchmark_candles=_bench,
         earnings_date=earnings_date,
         dividend_date=dividend_date,
         iv_rank=iv_rank,
@@ -1594,6 +1622,19 @@ async def _execute_scan_core(
                       scan_id, _dte_bounds[0], _dte_bounds[1],
                       req.hold_min_days, req.hold_max_days, _mult)
 
+    # P3c item 2: the relative_strength benchmark, fetched once per scan (None
+    # unless that trend method is on, so the shipped `additive` method fetches
+    # nothing). A failure here -- a malformed `trend` block raises outside the
+    # helper's own try -- must not fail the scan: None leaves every trend
+    # unmeasured, the fail-closed outcome.
+    try:
+        _rs_bench = await _rs_benchmark_candles(
+            SimpleNamespace(horizon=req.horizon, overrides=req.overrides or {}))
+    except Exception as exc:
+        _log.warning("SCAN %s rs_benchmark resolve failed: %s -- trend left unmeasured", scan_id, exc)
+        _rs_bench = None
+    _rs_misaligned: list[str] = []
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
@@ -1631,10 +1672,17 @@ async def _execute_scan_core(
                 iv_abs_threshold=req.iv_abs_threshold,
                 min_credit=req.min_credit,
                 max_debit_pct=req.max_debit_pct,
+                direction_min_trend=_direction_min_trend,
+                rs_benchmark=_rs_bench,
+                rs_misaligned=_rs_misaligned,
             )
             for symbol in symbols
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    if _rs_bench is not None:
+        _log.info("SCAN %s rs_benchmark: misaligned=%d of %d",
+                  scan_id, len(_rs_misaligned), len(symbols))
 
     _log.info(
         "SCAN %s data-provenance: bars_from_db=%d bars_missed=%d symbols=%d",
@@ -1666,7 +1714,6 @@ async def _execute_scan_core(
     # `None` means this direction/horizon is exempt. `_direction_min_trend` was
     # resolved at the top of this function, before the fan-out.
     _min_trend = _direction_min_trend
-    direction_filtered_count = 0
     if _min_trend is not None and candidates:
         _kept: list[TradeCardData] = []
         for _c in candidates:
@@ -1676,14 +1723,11 @@ async def _execute_scan_core(
             # guard this used to carry was dead, and its 50 quietly changed
             # meaning when the gate became a floor — it went from "rejected on a
             # bearish scan" to "passes". Removed rather than re-tuned.
-            # An int: this gate cannot tell an UNMEASURED trend (placeholder
-            # 0 or 50) from a reading. The stock scan's copy of this gate
-            # removes unmeasured names as "no data" (RuleResult.measured,
-            # decision P3A-UNMEASURED-TREND-REMOVE-2026-09-25); this one still
-            # judges the placeholder until stockBreakdown carries the flag.
+            # An int, but never a placeholder: an UNMEASURED trend (0 or 50
+            # with nothing measured) was already removed as "no data" in
+            # _process_symbol (P3c item 2), so what reaches here is a reading.
             _t = _c.stockBreakdown.trend
             if _t < _min_trend:
-                direction_filtered_count += 1
                 rejected.append(RejectedCandidate(
                     symbol=_c.symbol,
                     # `:g` so a threshold that resolved to 40.0 reads "40" in
@@ -1695,14 +1739,25 @@ async def _execute_scan_core(
                 _kept.append(_c)
         candidates = _kept
 
+    # Both direction-gate reasons -- measured below the floor, and unmeasured
+    # (removed in _process_symbol) -- count as this gate's removals, for the
+    # banner and for the funnel's `failed_direction` alike.
+    def _is_direction(r):
+        return r.reason.startswith(("direction_conviction:", "direction_conviction_unmeasured:"))
+    _dir_removed = sum(1 for r in rejected if _is_direction(r))
+
     # Compose direction banner: shown when candidates all score CAUTION, or when
-    # direction filter removed everything.
+    # nothing survived and the direction gate removed some. The stock scan's
+    # form, word for word: counts, not a cause -- "market structure does not
+    # support" named a cause the scan did not measure.
     _direction_banner: str | None = None
-    _side = "short-side" if req.direction == "Bearish" else "long-side"
-    if not candidates and direction_filtered_count > 0:
+    if not candidates and _dir_removed > 0:
+        _floor = f" (trend below {_min_trend:g})" if _min_trend is not None else ""
+        _rest = ("" if _dir_removed >= len(symbols)
+                 else "; the rest were removed by other gates — see the pipeline")
         _direction_banner = (
-            f"No confirmed {req.direction.lower()} setups in this universe. "
-            f"All candidates were removed — market structure does not support {_side} entries."
+            f"No {req.direction.lower()} candidates survived. The direction-conviction gate "
+            f"removed {_dir_removed} of {len(symbols)}{_floor}{_rest}."
         )
     elif candidates and all(c.status == "CAUTION" for c in candidates):
         _direction_banner = (
@@ -1750,7 +1805,6 @@ async def _execute_scan_core(
     def _is_no_chain(r):   return r.reason == "no option chain"
     def _is_score(r):      return r.reason.startswith("Score gate:")
     def _is_contracts(r):  return "contracts rejected" in r.reason
-    def _is_direction(r):  return r.reason.startswith("direction_conviction:")
     _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts, _is_direction)
 
     _pipeline = OptionsPipeline(
@@ -1761,7 +1815,7 @@ async def _execute_scan_core(
         failed_score=sum(1 for r in rejected if _is_score(r)),
         failed_contracts=sum(1 for r in rejected if _is_contracts(r)),
         other_rejected=sum(1 for r in rejected if not any(f(r) for f in _buckets)),
-        failed_direction=direction_filtered_count,
+        failed_direction=_dir_removed,
         failed_shortlist=original_count - len(candidates),
         candidates=len(candidates),
     )

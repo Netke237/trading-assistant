@@ -240,6 +240,8 @@ _REAL_REASONS = [
     # which the regex above cannot see, so the guard relies on this entry.
     ("regime data unavailable: no completed 15-min bars for X", "failed_data"),
     ("regime data unavailable: no completed 15-min bars for X (fetch failed: boom)", "failed_data"),
+    # P3c item 2: literal lives in stock_scan._direction_conviction_drop.
+    ("direction_conviction_unmeasured: no trend measurement for Bullish Swing", "failed_direction"),
 ]
 
 
