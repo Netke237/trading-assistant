@@ -171,20 +171,20 @@ describe('CompositeAlertDialog — A4f interval follows the model', () => {
     await act(async () => {});
   }
 
-  it('FE1 watch: HMM_intraday untouched displays and saves 5m (was: displayed 5m, saved 1D)', async () => {
+  it('FE1 watch: HMM_intraday untouched displays and saves 5min (was: displayed 5m, saved 1D; W2-INTERVAL: chart spelling)', async () => {
     await renderDialog();
     await pickModel('HMM_intraday');
-    expect(intervalSelect().value).toBe('5m');
+    expect(intervalSelect().value).toBe('5min');
     await save();
-    expect(mockApi.addCompositeWatch.mock.calls[0][3]).toBe('5m');
+    expect(mockApi.addCompositeWatch.mock.calls[0][3]).toBe('5min');
   });
 
-  it('FE1 rule: HMM_intraday untouched saves the rule at 5m', async () => {
+  it('FE1 rule: HMM_intraday untouched saves the rule at 5min', async () => {
     await renderDialog();
     fireEvent.click(screen.getByRole('button', { name: /Rule \(live\)/ }));
     await pickModel('HMM_intraday');
     await save();
-    expect(mockApi.addCompositeAlertRule.mock.calls[0][2]).toBe('5m');
+    expect(mockApi.addCompositeAlertRule.mock.calls[0][2]).toBe('5min');
   });
 
   it('FE2: switching HMM_intraday back to OMM saves 1D', async () => {
@@ -196,10 +196,26 @@ describe('CompositeAlertDialog — A4f interval follows the model', () => {
     expect(mockApi.addCompositeWatch.mock.calls[0][3]).toBe('1D');
   });
 
-  it('FE3: the snapshot after switching to HMM_intraday is fetched at 5m', async () => {
+  it('FE3: the snapshot after switching to HMM_intraday is fetched at 5min', async () => {
     await renderDialog();
     await pickModel('HMM_intraday');
-    expect(mockApi.getSymbolRegimeSnapshot).toHaveBeenLastCalledWith('AAPL', 'HMM_intraday', 'Bullish', '5m');
+    expect(mockApi.getSymbolRegimeSnapshot).toHaveBeenLastCalledWith('AAPL', 'HMM_intraday', 'Bullish', '5min');
+  });
+
+  it('W2-INTERVAL: the Interval select offers exactly the chart spellings', async () => {
+    await renderDialog();
+    await pickModel('HMM_intraday');
+    const values = Array.from(intervalSelect().options).map((o) => o.value);
+    expect(values).toEqual(['5min', '15min', '30min', '1h', '4h']);
+  });
+
+  it('W2-INTERVAL: a picked 15min is saved as 15min on the rule', async () => {
+    await renderDialog();
+    fireEvent.click(screen.getByRole('button', { name: /Rule \(live\)/ }));
+    await pickModel('HMM_intraday');
+    await act(async () => { fireEvent.change(intervalSelect(), { target: { value: '15min' } }); });
+    await save();
+    expect(mockApi.addCompositeAlertRule.mock.calls[0][2]).toBe('15min');
   });
 
   it('FE4: a user-picked interval is saved as picked', async () => {

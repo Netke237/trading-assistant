@@ -251,15 +251,16 @@ async def _eval_composite_watch(
     # Lazy imports: tests patch these at their source modules.
     from app.data.market import completed_bars_for_interval, fetch_intraday_candles, normalize_interval
     from app.services.composite_trigger_evaluator import (
-        _strategy_bar_type, completed_daily_rows, intraday_history_days, watch_fetch_interval,
+        _strategy_bar_type, completed_daily_rows, intraday_history_days,
     )
     # Every consumer of the daily bars (OMM/HMM_daily, rsi/bb, VWAP daily)
     # reads completed sessions only: get_bars can hold today's forming bar.
     bars = completed_daily_rows(bars, now_dt)
     if not bars:
         return None
-    interval = w.get("interval") or "1D"          # the store's default
-    fetch_iv = watch_fetch_interval(interval)     # D5: the chart spelling a rule reads
+    # W2-INTERVAL: the store holds the chart's spelling (migrated on load, and
+    # every write maps it), so the stored interval is the one a rule reads.
+    fetch_iv = w.get("interval") or "1D"          # the store's default
     confirmations = trigger_def.get("strategy_confirmations") or []
     vwap_intraday = (
         "mean_reversion_vwap" in confirmations

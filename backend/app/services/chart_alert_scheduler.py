@@ -182,15 +182,18 @@ async def run_chart_alert_scheduler() -> None:
     rules_migrated = False
     while True:
         # A4f-rules: move stored HMM_intraday composite rules off '1D'/'1W' before
-        # this tick evaluates anything. Once per server start; a failure (e.g. the
-        # DB not up yet) is logged and retried next iteration until one run succeeds.
+        # this tick evaluates anything; then W2-INTERVAL moves every rule on a short
+        # spelling ('5m') to the chart's ('5min'). Once per server start; a failure
+        # (e.g. the DB not up yet) is logged and BOTH are retried next iteration
+        # (both idempotent) until one run of the pair succeeds.
         if not rules_migrated:
             try:
                 from app.routers import chart_alerts as _chart_alerts
                 await _chart_alerts.migrate_hmm_intraday_rule_intervals()
+                await _chart_alerts.migrate_rule_interval_spellings()
                 rules_migrated = True
             except Exception:
-                logger.error('A4f: HMM_intraday rule interval migration failed; retrying next tick', exc_info=True)
+                logger.error('A4f/W2-INTERVAL: rule interval migration failed; retrying next tick', exc_info=True)
         try:
             await _tick()
         except Exception:

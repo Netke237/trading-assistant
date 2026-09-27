@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.data.market import completed_bars_for_interval
+from app.data.market import _CHART_SPELLING, chart_interval, completed_bars_for_interval
 from app.services.market_session import completed_session_bars
 from app.services.scheduling_tz import MARKET_TZ
 from app.database import get_db, AsyncSessionLocal
@@ -205,11 +205,11 @@ def _stored_pair(row: AlertRuleModel) -> tuple:
 async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict]:
     """A4f-rules (decision A4F-MIGRATE-LEGACY-RULES-TOO-2026-09-25): a composite
     HMM_intraday rule stored on '1D'/'1W' never fires -- evaluate_and_notify_for_symbol
-    hands the HMM no intraday bars on those intervals. Move each to '5m' (what the
-    dialog displayed), mark its name "(interval was 1D)", reset its sustain clock and
+    hands the HMM no intraday bars on those intervals. Move each to '5min' (the chart
+    spelling of the '5m' the dialog displayed; W2-INTERVAL), mark its name "(interval was 1D)", reset its sustain clock and
     log the list. Every such row (disabled ones and any user_id included); only
     '1D'/'1W', the two spellings that path treats as daily/weekly. Idempotent: a
-    migrated row is '5m'. run_chart_alert_scheduler calls it at the top of each loop
+    migrated row is '5min'. run_chart_alert_scheduler calls it at the top of each loop
     iteration until one call succeeds -- normally once, before the first tick; after
     a failure (e.g. the DB not up yet) ticks run, on unmigrated rules that cannot
     fire anyway, until a retry succeeds. A row that raises unexpectedly is logged
@@ -237,7 +237,7 @@ async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict
             except Exception:
                 logger.warning('A4f rule migration: skipping %s, unexpected row shape', row.id, exc_info=True)
                 continue
-            row.interval = '5m'
+            row.interval = '5min'
             row.name = new_name
             row.condition_state = '{}'
             migrated.append({'id': row.id, 'symbol': row.symbol, 'name': row.name, 'from': old})
@@ -247,7 +247,41 @@ async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict
         listing = ', '.join(f"{m['id']} {m['symbol']} {m['from']!r}" for m in migrated)
         logger.warning(
             "A4f: migrated %d HMM_intraday composite rule(s) from a daily/weekly interval "
-            "to '5m' (on that interval they could not fire): [%s]", len(migrated), listing,
+            "to '5min' (on that interval they could not fire): [%s]", len(migrated), listing,
+        )
+    return migrated
+
+
+async def migrate_rule_interval_spellings(session_factory=None) -> list[dict]:
+    """W2-INTERVAL (decisions FOLLOWUPS-QUEUE-2026-09-25 (1), P4B-FOLLOWUPS-2026-09-26
+    (2)): move every stored rule on a short interval spelling ('5m', '15m', ...;
+    the keys of market._CHART_SPELLING) to the chart's spelling, so the chart tab
+    evaluates and lists it and it reads the chart's series. Only `interval`
+    changes: the name is not annotated and the sustain clock is kept (same bar
+    width, same symbol). Every row (any user_id, enabled or not). Idempotent. A
+    row that raises is logged and skipped. run_chart_alert_scheduler calls it
+    after migrate_hmm_intraday_rule_intervals, retried the same way."""
+    factory = session_factory or AsyncSessionLocal
+    migrated: list[dict] = []
+    async with factory() as db:
+        result = await db.execute(
+            select(AlertRuleModel).where(AlertRuleModel.interval.in_(tuple(_CHART_SPELLING)))
+        )
+        for row in result.scalars().all():
+            try:
+                old = row.interval
+                row.interval = chart_interval(old)
+            except Exception:
+                logger.warning('W2-INTERVAL rule migration: skipping %s', row.id, exc_info=True)
+                continue
+            migrated.append({'id': row.id, 'symbol': row.symbol, 'from': old, 'to': row.interval})
+        if migrated:
+            await db.commit()
+    if migrated:
+        listing = ', '.join(f"{m['id']} {m['symbol']} {m['from']!r}->{m['to']!r}" for m in migrated)
+        logger.warning(
+            "W2-INTERVAL: migrated %d alert rule(s) to the chart's interval spelling: [%s]",
+            len(migrated), listing,
         )
     return migrated
 
@@ -288,12 +322,13 @@ def _parse_candle_time(raw: object) -> datetime:
 _INTERVAL_LABELS = {
     '1D': 'Daily chart', '1W': 'Weekly chart',
     '1min': '1-minute chart', '5min': '5-minute chart', '15min': '15-minute chart',
-    '1h': 'Hourly chart', '4h': '4-hour chart',
+    '30min': '30-minute chart', '1h': 'Hourly chart', '4h': '4-hour chart',
 }
 
 
 def _interval_label(interval: str) -> str:
-    return _INTERVAL_LABELS.get(interval, f'{interval} chart')
+    # W2-INTERVAL: a history entry can still carry a short spelling ('5m').
+    return _INTERVAL_LABELS.get(chart_interval(interval), f'{interval} chart')
 
 
 def _composite_checklist(td: dict, detail: dict) -> list[dict]:
@@ -558,11 +593,13 @@ async def create_rule(body: AlertRuleCreate, db: AsyncSession = Depends(get_db))
         if existing:
             raise HTTPException(status_code=409, detail='Rule with this id already exists')
     now = datetime.now().isoformat()
+    # W2-INTERVAL: every rule is stored under the chart's spelling of its interval.
+    interval = chart_interval(body.interval)
 
     if body.rule_type == 'composite':
         if not body.composite_def:
             raise HTTPException(status_code=422, detail='composite_def is required when rule_type is "composite"')
-        _err = hmm_intraday_interval_error(body.composite_def, body.interval)
+        _err = hmm_intraday_interval_error(body.composite_def, interval)
         if _err:
             raise HTTPException(status_code=422, detail=_err)
         rule_json = json.dumps({"__type": "composite", **body.composite_def})
@@ -571,7 +608,7 @@ async def create_rule(body: AlertRuleCreate, db: AsyncSession = Depends(get_db))
 
     rule = AlertRuleModel(
         id=rule_id, user_id='default', name=body.name, symbol=body.symbol.upper(),
-        interval=body.interval, enabled=body.enabled,
+        interval=interval, enabled=body.enabled,
         rule_json=rule_json,
         cooldown_minutes=body.cooldown_minutes, expiry_date=body.expiry_date,
         created_at=now, last_triggered_at=None,
@@ -612,14 +649,17 @@ async def replace_rule(rule_id: str, body: AlertRuleCreate, db: AsyncSession = D
     # A4f-rules: refuse an HMM_intraday composite on a non-intraday interval --
     # unless this PUT leaves the stored (interval, primary model) pair as it is, so a
     # legacy rule the startup migration could not move stays toggleable/renameable.
-    # A stale '1D' sent back onto a migrated '5m' rule changes the pair: refused.
+    # A stale '1D' sent back onto a migrated '5min' rule changes the pair: refused.
+    # W2-INTERVAL: compared and stored under the chart's spelling, so a stale '5m'
+    # sent back onto a migrated '5min' rule is the same pair.
+    interval = chart_interval(body.interval)
     if body.rule_type == 'composite' and body.composite_def:
-        _err = hmm_intraday_interval_error(body.composite_def, body.interval)
-        if _err and _stored_pair(row) != (body.interval, _composite_primary_model(body.composite_def)):
+        _err = hmm_intraday_interval_error(body.composite_def, interval)
+        if _err and _stored_pair(row) != (interval, _composite_primary_model(body.composite_def)):
             raise HTTPException(status_code=422, detail=_err)
     row.name = body.name
     row.symbol = body.symbol.upper()
-    row.interval = body.interval
+    row.interval = interval
     row.enabled = body.enabled
     _old_rule_json = row.rule_json
     if body.rule_type == 'composite':

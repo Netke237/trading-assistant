@@ -214,8 +214,9 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                   setToState('any');
                   // A4f: the Interval select (intraday options only) is shown for
                   // HMM_intraday; set a value it offers so what it displays is what
-                  // is saved. Every other model keeps today's '1D'.
-                  setIntervalVal(next === 'HMM_intraday' ? '5m' : '1D');
+                  // is saved. Every other model keeps today's '1D'. W2-INTERVAL: the
+                  // chart's spellings, so a rule shows on (and is checked from) its tab.
+                  setIntervalVal(next === 'HMM_intraday' ? '5min' : '1D');
                 }}
               >
                 <option value="OMM">OMM (daily)</option>
@@ -229,7 +230,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
               <div className={styles.row}>
                 <Text size={16} tone="secondary">Interval</Text>
                 <select className={styles.select} value={interval} onChange={(e) => setIntervalVal(e.target.value)}>
-                  {['5m', '15m', '30m', '1h', '4h'].map((v) => <option key={v} value={v}>{v}</option>)}
+                  {['5min', '15min', '30min', '1h', '4h'].map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
               </div>
             )}

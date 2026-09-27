@@ -3,7 +3,7 @@
 The regime-alert dialog saved '1D' for HMM_intraday while its Interval select
 displayed '5m'; such a watch fetched ~38 daily bars (< regime_hmm.MIN_BARS) and
 never fired. The backend now rejects that combination, and stored watches are
-migrated to '5m' at load, reported (one WARNING, a persisted
+migrated to '5min' at load, reported (one WARNING, a persisted
 `interval_migrated_from` marker). Plan:
 docs/superpowers/plans/2026-09-25-a4f-hmm-intraday-interval-default-plan.md
 """
@@ -73,7 +73,7 @@ def test_b1b_store_rejects_hmm_intraday_non_intraday(tmp_path, iv):
 def test_b1b_store_accepts_hmm_intraday_intraday(tmp_path, iv):
     store = StrategyWatchStore(path=tmp_path / "w.yaml")
     w = store.add_composite_watch("AAPL", {"primary": {"model": "HMM_intraday"}}, interval=iv)
-    assert w["interval"] == iv
+    assert w["interval"] == {"5m": "5min", "15m": "15min"}.get(iv, iv)  # W2-INTERVAL
 
 
 @pytest.mark.parametrize("model", ["OMM", "HMM_daily", "any"])
@@ -108,7 +108,7 @@ async def test_b1c_router_rejects_hmm_intraday_1d(tmp_path):
     assert resp.status_code == 400
     assert "HMM_intraday" in resp.json()["detail"]
     assert ok.status_code == 201
-    assert [w["interval"] for w in store.list_watches()] == ["5m"]
+    assert [w["interval"] for w in store.list_watches()] == ["5min"]
 
 
 # ── B2: migration at load ────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ def _mixed(tmp_path):
         _strategy("wch_s"),
         _composite("cwch_omm", "OMM", "1D"),
         _composite("cwch_hd", "HMM_daily", "1D"),
-        _composite("cwch_ok", "HMM_intraday", "15m"),
+        _composite("cwch_ok", "HMM_intraday", "15min"),
     ]
     stale = [
         _composite("cwch_d", "HMM_intraday", "1D"),
@@ -135,7 +135,7 @@ def test_b2a_only_stale_hmm_intraday_watches_migrate(tmp_path):
     store = StrategyWatchStore(path=path)
     by_id = {w["id"]: w for w in store.list_watches()}
     for wid, old in (("cwch_d", "1D"), ("cwch_w", "1W"), ("cwch_missing", "1D")):
-        assert by_id[wid]["interval"] == "5m"
+        assert by_id[wid]["interval"] == "5min"
         assert by_id[wid]["interval_migrated_from"] == old
         assert by_id[wid]["last_state"] == {"phase": "idle", "last_event": "entry"}
         assert by_id[wid]["enabled"] is False
@@ -148,9 +148,9 @@ def test_b2b_migration_persisted_and_idempotent(tmp_path, caplog):
     path, _, _ = _mixed(tmp_path)
     StrategyWatchStore(path=path)
     on_disk = {w["id"]: w for w in yaml.safe_load(path.read_text())["watches"]}
-    assert on_disk["cwch_d"]["interval"] == "5m"
+    assert on_disk["cwch_d"]["interval"] == "5min"
     assert on_disk["cwch_d"]["interval_migrated_from"] == "1D"
-    assert on_disk["cwch_ok"]["interval"] == "15m"
+    assert on_disk["cwch_ok"]["interval"] == "15min"
 
     before = path.read_text()
     caplog.clear()
@@ -177,7 +177,7 @@ def test_b2c_one_warning_names_every_migrated_watch(tmp_path, caplog):
 
 def test_b2c_no_log_no_save_when_nothing_to_migrate(tmp_path, caplog):
     path = tmp_path / "w.yaml"
-    _write(path, [_strategy("wch_s"), _composite("cwch_ok", "HMM_intraday", "5m")])
+    _write(path, [_strategy("wch_s"), _composite("cwch_ok", "HMM_intraday", "5min")])
     with caplog.at_level(logging.WARNING, logger="app.services.strategy_watch_store"), \
          patch.object(StrategyWatchStore, "save") as save:
         StrategyWatchStore(path=path)
@@ -192,7 +192,7 @@ def test_b2e_save_failure_does_not_raise(tmp_path, caplog):
     with caplog.at_level(logging.ERROR, logger="app.services.strategy_watch_store"), \
          patch.object(StrategyWatchStore, "save", side_effect=OSError("read-only")):
         store = StrategyWatchStore(path=path)
-    assert {w["id"]: w["interval"] for w in store.list_watches()}["cwch_d"] == "5m"
+    assert {w["id"]: w["interval"] for w in store.list_watches()}["cwch_d"] == "5min"
     errors = [r for r in caplog.records if r.levelno == logging.ERROR and "A4f" in r.getMessage()]
     assert len(errors) == 1 and "cwch_d" in errors[0].getMessage()
 
@@ -217,6 +217,6 @@ async def test_b2d_evaluator_fetches_migrated_watch_at_5m(tmp_path):
          patch("app.services.composite_trigger_evaluator.evaluate_scheduled", return_value=False):
         await evaluate_all()
     fetch.assert_called_once()
-    # FLIPPED by P4b (decision D5): a watch stored '5m' reads with the chart
+    # FLIPPED by P4b (decision D5): a watch the A4f migration moved reads with the chart
     # spelling '5min', so it fetches the series a 5min rule reads.
     assert fetch.call_args.kwargs["interval"] == "5min"
