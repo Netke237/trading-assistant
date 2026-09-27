@@ -14,7 +14,7 @@ import type { MtfRow } from '@/types/overlays';
 import { useStructureStore } from '@/lib/structureStore';
 import type { StructureSignal } from '@/types/structure';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
-import { evaluateRules, type RegimeSnapshot } from '@/lib/chartAlertEngine';
+import { browserJudgesInterval, evaluateRules, type RegimeSnapshot } from '@/lib/chartAlertEngine';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import AlertToast from '@/components/organisms/AlertToast';
 import ChartClickPopover from '@/components/molecules/ChartClickPopover';
@@ -399,7 +399,8 @@ export default function ChartWorkspace() {
   // Alert evaluation on candle-close
   const prevCandleCount = useRef(candles.length);
   useEffect(() => {
-    if (candles.length > prevCandleCount.current && prevCandleCount.current > 0) {
+    // CHART-WS-1D-1W-RULES: 1D/1W rules are judged by the backend only.
+    if (candles.length > prevCandleCount.current && prevCandleCount.current > 0 && browserJudgesInterval(interval)) {
       const closedCandle = candles[prevCandleCount.current - 1];
       const alertRules = useChartAlertStore.getState().rules.filter(
         r => r.symbol === symbol && r.interval === interval

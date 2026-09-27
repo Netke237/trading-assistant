@@ -88,8 +88,6 @@ async def _tick() -> None:
     if not pairs:
         return
 
-    from app.routers.chart_alerts import closed_candle_structure, evaluate_and_notify_for_symbol
-
     for symbol, interval in pairs:
         key = (symbol, interval)
         try:
@@ -102,30 +100,76 @@ async def _tick() -> None:
             _t = candles[-1].get('time')
             if isinstance(_t, int) and not isinstance(_t, bool):
                 _last_newest_bar[key] = _t
-            ht_candles = None
-            for idx in _candles_to_evaluate(key, candles):
-                closed = candles[idx]
-                # P4a B2: advance BEFORE evaluating -- one attempt per candle.
-                # evaluate_and_notify_for_symbol dispatches Gmail/Telegram before
-                # its commit, so a retry after a failed commit would re-send.
-                _last_seen_candle[key] = closed['time']
-                # The newest closed candle keeps today's call (the full list,
-                # forming bar included). An OLDER one gets the list truncated at
-                # it, so no regime model, indicator or structure reads a later bar.
-                view = candles if idx == len(candles) - 2 else candles[:idx + 1]
-                try:
-                    if interval == '1h' and ht_candles is None:
-                        ht_candles = await get_intraday(symbol, '1D')
-                    # A4e: structure for the alert decision stops at the closed candle.
-                    signals = await asyncio.to_thread(closed_candle_structure, view, closed, interval, symbol, ht_candles)
-                    await evaluate_and_notify_for_symbol(symbol, interval, closed, view, signals, as_of=fetched_at)
-                except Exception:
-                    # Per candle (P4a F): a failure on an older candle does not
-                    # stop the newer ones in this tick.
-                    logger.warning('chart alert background check failed for %s [%s] candle %s',
-                                   symbol, interval, closed.get('time'), exc_info=True)
+            await evaluate_closed_candles(symbol, interval, candles, fetched_at)
         except Exception:
             logger.warning('chart alert background check failed for %s [%s]', symbol, interval, exc_info=True)
+
+
+async def has_enabled_rule(symbol: str, interval: str) -> bool:
+    """CHART-WS-1D-1W-RULES: does (symbol, interval) have an enabled rule? The
+    same filter as `_tick`'s pair query (any user_id), so the chart WS claims
+    exactly the pairs this loop would. A claim on a pair with no rule would make
+    a rule drawn next on that chart skip its first sighting (plan r1 finding 1)."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(AlertRuleModel.id)
+            .where(
+                AlertRuleModel.symbol == symbol,
+                AlertRuleModel.interval == interval,
+                AlertRuleModel.enabled == True,  # noqa: E712
+            )
+            .limit(1)
+        )
+        return result.first() is not None
+
+
+async def evaluate_closed_candles(symbol: str, interval: str, candles: list[dict],
+                                  fetched_at: float | None) -> list[dict]:
+    """Evaluate every closed candle of `candles` not yet judged for
+    (symbol, interval) and return the triggered entries, oldest candle first.
+
+    CHART-WS-1D-1W-RULES: shared by this loop and the chart WS (1D/1W), so both
+    judge the same bars; `_claim_candles_to_evaluate` marks them judged before
+    the first `await`, so a bar is judged once across both paths.
+    """
+    # Imported here, as before, so tests patching chart_alerts intercept both paths.
+    from app.routers.chart_alerts import closed_candle_structure, evaluate_and_notify_for_symbol
+
+    if len(candles) < 2:
+        return []
+    key = (symbol, interval)
+    triggered: list[dict] = []
+    ht_candles = None
+    for idx in _claim_candles_to_evaluate(key, candles):
+        closed = candles[idx]
+        # The newest closed candle keeps today's call (the full list,
+        # forming bar included). An OLDER one gets the list truncated at
+        # it, so no regime model, indicator or structure reads a later bar.
+        view = candles if idx == len(candles) - 2 else candles[:idx + 1]
+        try:
+            if interval == '1h' and ht_candles is None:
+                ht_candles = await get_intraday(symbol, '1D')
+            # A4e: structure for the alert decision stops at the closed candle.
+            signals = await asyncio.to_thread(closed_candle_structure, view, closed, interval, symbol, ht_candles)
+            triggered.extend(await evaluate_and_notify_for_symbol(symbol, interval, closed, view, signals, as_of=fetched_at))
+        except Exception:
+            # Per candle (P4a F): a failure on an older candle does not
+            # stop the newer ones.
+            logger.warning('chart alert background check failed for %s [%s] candle %s',
+                           symbol, interval, closed.get('time'), exc_info=True)
+    return triggered
+
+
+def _claim_candles_to_evaluate(key: tuple[str, str], candles: list[dict]) -> list[int]:
+    """`_candles_to_evaluate`, with the marker moved to the newest of them before
+    any is evaluated. Synchronous, so under asyncio it is atomic against the
+    other path (chart WS vs this loop). P4a B2's "one attempt per candle" holds:
+    evaluate_and_notify_for_symbol dispatches Gmail/Telegram before its commit,
+    so a candle whose evaluation failed is not retried."""
+    idxs = _candles_to_evaluate(key, candles)
+    if idxs:
+        _last_seen_candle[key] = candles[idxs[-1]]['time']
+    return idxs
 
 
 def _prune_markers(active: set[tuple[str, str]]) -> None:
@@ -173,10 +217,11 @@ async def run_chart_alert_scheduler() -> None:
     """Long-running loop started in app lifespan. Evaluates chart-drawn alert
     rules on a configurable cadence, independent of any open chart tab.
 
-    Known limitation: if a browser also has this exact symbol+interval chart
-    open at the same time, both paths may evaluate the same newly-closed
-    candle within moments of each other. The rule's own cooldown_minutes
-    (default 60) makes a duplicate notification rare and low-cost even so.
+    CHART-WS-1D-1W-RULES: a 1D/1W candle is judged once across this loop and
+    the chart WS (`evaluate_closed_candles`, one shared claim per closed bar).
+    Known limitation: intraday rules are still evaluated by both paths (the WS
+    on its tick-based close check), with the rule's cooldown_minutes (default
+    60) as the only guard against a duplicate notification.
     """
     logger.info('Chart alert background scheduler started (default interval=%ds)', _DEFAULT_CHECK_INTERVAL)
     rules_migrated = False
