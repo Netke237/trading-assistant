@@ -62,9 +62,13 @@ saved, will retry", so they share the text.
 **C2. `addRule`.** When the POST settles:
 - `refused` → mark with the server's detail (unchanged);
 - `offline` → mark with `OFFLINE_SAVE_REASON` (new);
-- `ok` → nothing (unchanged; a fresh id has no mark).
+- `ok` (201/409) → delete any `unsavedRules[rule.id]` key, unconditionally
+  (no (i)/(ii) check). A 201/409 proves the server holds the rule whatever the
+  ordering, and a mark CAN exist here: a `syncRules` that ran while this POST
+  was in flight may have re-POSTed the rule, got `offline` and marked it under
+  C3 (r1 finding 1). Today's code writes nothing on `ok`.
 
-Either mark is written inside a functional `set((s) => …)`, and only if both
+Either mark (`refused`/`offline`) is written inside a functional `set((s) => …)`, and only if both
 hold:
 
 - (i) a rule with that id is still in `s.rules` when the POST settles. A rule
@@ -125,6 +129,9 @@ in the store test's `beforeEach`.
   a sync re-POSTs n1 and gets 201); the `addRule` POST then settles offline →
   no mark. Control: with no sync in between, the same late offline answer
   does mark.
+- T5d (r1). `addRule`'s POST is pending; a sync's GET omits n1 and its re-POST
+  of n1 is offline (n1 marked `OFFLINE_SAVE_REASON`); the `addRule` POST then
+  settles 201 → no key. Same with 409, and with a prior refusal mark.
 
 `frontend/app/(frame)/alerts/__tests__/page.test.tsx`:
 - T6. The offline reason renders as
@@ -139,4 +146,9 @@ After the build, the phase probe is re-pointed from the defect marker to a
 
 ## Audit record
 
-(none yet)
+- **Plan r1** (2026-09-28): 1 gate-level finding, fixed in this plan. C3's new
+  offline mark could be set by a sync while `addRule`'s POST was in flight;
+  that POST then succeeding left the mark on a rule the server holds, because
+  C2's `ok` branch wrote nothing. Fix: `ok` clears the key unconditionally (C2,
+  T5d). Reviewer confirmed C2(ii), C2(i), the bump placement and
+  persisted/sent data clean.
