@@ -1124,3 +1124,73 @@ separate plans, each written only after the previous one ships.
 
 **Do not carry §3-§8 forward.** Carry §1, §2, §9 and §11 — the diagnosis and the
 decisions. Those are verified and they are what the four rounds actually bought.
+
+---
+
+## 13. Round 5 (2026-09-28) — the last round, scoped to §1, §9, §11.1 — NOT CLEAN
+
+Run at Kenneth's request as the one last round. Scoped per §12: §3–§8 were NOT
+re-audited. The reviewer checked each claim against main `7d7159b` by reading the
+code and running Python. **Auditing of this document stops here**: the phase is
+past the hard cap, and the findings below go into the fresh Document C plans.
+
+### 13.1 Gate-level findings (none reachable on the shipped config; each needs a hand edit)
+
+- **G1 — a missing or misspelled money block reads as OFF.**
+  `conviction_sizing.resolve_sizing(None)` returns `None`, so the multiplier is 1.0.
+  `stock_scan.py:1466-1486` and `auto_trader.py:470` both treat an absent
+  `regime_sizing` as "sizing off". `scan.py:658` and `stock_scan.py:1143` read
+  `regime_gate` with `.get`, so a missing block means no gate
+  (`stock_scorer.py:989`). Consequences:
+  - `regime_sizng:` fires auto-trades at full size where they should be 0.30x,
+    a 3.3x larger order.
+  - `regime_gates:` removes the headwind REJECT on both scans and on the fire path.
+  - Both blocks sit at the end of the file (`scoring_rules.yaml:457,463`), so a
+    truncated file drops them and still parses cleanly.
+  This is Mode C1 and the concrete cost of §9.6.
+- **G2 — the options scan fails OPEN on a broken `regime.<horizon>` block.**
+  - The read is now inside a try (`scan.py:591-592`); the handler at `:644-645`
+    only logs a warning.
+  - `_regime_signal` stays `None`, so the regime gate has no signal, and names
+    the enabled gate would REJECT or CAUTION show as PASS.
+  - The stock path does the opposite: `stock_scan.py:141-142` indexes the block
+    directly, so every symbol is rejected.
+  - This supersedes §11.1 item 1.
+- **G3 — Step 5 can show thresholds that differ from the backend's.**
+  - `eventThresholdsStore.ts:25-40` and `ivThresholdsStore.ts:31-46` fall back to
+    a hardcoded `FALLBACK` on any fetch failure.
+  - They fetch once and never re-fetch.
+  - The fallback equals the shipped YAML today; any edit to those thresholds
+    breaks that.
+  - This is §11.1 item 3, still true.
+
+### 13.2 Status of §1 and §11.1 today
+
+| Item | Status |
+|---|---|
+| A (six caches) | Still true; accepted under §9.2 |
+| A1a | Fixed |
+| B1, B3, B3b | Fixed (Q3B) |
+| B2 | Raises by design (Q3B) |
+| C1 | Still true (G1) |
+| C2 | Partly true: bare `KeyError` in `routers/config.py:31,58`, `stock_scorer.py:58`, `signal_confidence.py:30,34` |
+| C3 | Fixed for `regime_sizing`; still reachable for `regime` and `regime_gate` (empties the scan, no wrong number) |
+| D1 | Still true |
+| D2 | Fixed (`atomic_yaml.py`) |
+| §11.1 #2 | Fixed (SCAN-FAILURE-REASON) |
+| §11.1 #4 | Still true, below the gate |
+
+### 13.3 §9 as of round 5
+
+| Decision | Status |
+|---|---|
+| 9.1 | ANSWERED: fail closed (SIZING-FAIL-CLOSED) |
+| 9.9 | ANSWERED: refuse (A7C-MIN-MULT-REFUSAL-CONFIRMED-2026-09-24) |
+| 9.2b | MOOT |
+| 9.4 | Answered by code as "gated if specified"; waiting for Kenneth to ratify |
+| 9.3b | (b) done; D1 remainder live |
+| 9.5 | 500 settled; re-stat on every poll live (only if Document C builds `config_health`) |
+| 9.6 | LIVE |
+| 9.8 | LIVE |
+
+The questions on the live items were put to Kenneth on 2026-09-28.
