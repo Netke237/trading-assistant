@@ -103,6 +103,14 @@ older offline verdict re-marking a rule a newer sync proved saved). With runs
 serial, every final write is the newest verdict, and C2's counter needs only
 to order `addRule` against a sync.
 
+**C3-bound.** A run can never wedge the queue (r3 finding): each fetch inside
+`syncRules` (the GET and each re-POST) gets an AbortController timeout of 15s; a
+timed-out re-POST is `offline` (so the rule is marked `OFFLINE_SAVE_REASON`),
+a timed-out GET returns early as a failed GET does today; the in-flight slot is
+cleared in a `finally`, so a thrown run (e.g. a localStorage write error in the
+final `set`) cannot block later runs. Module-level state (in-flight promise,
+deletion seq, generation map) gets a test-only reset used in `beforeEach`.
+
 **C4. Doc comments** on `unsavedRules` and `PostOutcome` updated (they say an
 offline outcome marks nothing).
 
@@ -144,6 +152,9 @@ offline outcome marks nothing).
   second's follow-up run (exactly two GETs).
 - T8. The r2 scenario: first run's n1 re-POST offline while a second call is
   queued; the queued run's re-POST gets 201 → n1 ends unmarked.
+- T9. The first run's GET never resolves: after the 15s timeout (fake timers)
+  the queued call sends its own GET and marks the offline rule; a run whose
+  final `set` throws does not block the next call.
 - T6. Page test (`alerts/__tests__/page.test.tsx`): the offline reason renders
   as `Not saved to server: could not reach the server; …`.
 
@@ -166,3 +177,7 @@ re-pointed from the defect marker to `present` on `OFFLINE_SAVE_REASON`.
   could re-mark a rule a newer run proved saved (C3-serial, T7/T8); (2) a rule
   another run brought in, then deleted, could come back unmarked (C3-deleted
   now records deletions, T5b(iii)).
+- **Plan r3** (2026-09-28): 1 gate-level finding: under C3-serial a run whose
+  GET or re-POST never settles would block every later sync for the life of
+  the tab (worse than today). Fix written in as C3-bound/T9. **PLAN-STAGE CAP
+  REACHED (3 rounds, none clean): auditing stopped, decision asked of Kenneth.**
