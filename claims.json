@@ -31,6 +31,14 @@
       "expires_at": "2026-09-28T22:01:06Z",
       "note": "Document C plan 1: money-block validation (G1, 9.6, 9.8) on claude/docc-money-blocks",
       "task": "YAML-CONFIG-INTEGRITY"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/bold-ride-7nf8wj",
+      "claimed_at": "2026-09-28T19:06:24Z",
+      "expires_at": "2026-09-28T22:06:24Z",
+      "note": "find + fix intermittent backend test on main",
+      "task": "BACKEND-INTERMITTENT-TEST"
     }
   ]
 }
