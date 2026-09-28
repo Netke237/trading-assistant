@@ -42,6 +42,7 @@ function mockServer(server: AlertRule[], post: Response | 'throw' = res(201)) {
 const originalFetch = global.fetch;
 beforeEach(() => {
   __resetChartAlertSyncGenForTests();
+  localStorage.removeItem('bamendjou:alert-tombstones');
   act(() => { useChartAlertStore.setState({ rules: [], unsavedRules: {} } as never); });
 });
 afterEach(() => { global.fetch = originalFetch; });
