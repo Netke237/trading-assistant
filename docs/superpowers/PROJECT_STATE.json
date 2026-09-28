@@ -1275,7 +1275,7 @@
     {
       "id": "CHART-RULE-OFFLINE-SAVE-MARK",
       "name": "An offline/unconfirmed chart rule save is marked 'Not saved to server' (closes CHART-WS-1D-1W-RULES L3, display only) -- PIECE A of the 2026-09-28 split",
-      "status": "in_progress",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [
