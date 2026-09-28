@@ -84,11 +84,24 @@ and `current` = `s.rules`:
   plus, for each rule added mid-sync, its current mark if any. Ids in
   `serverIds` have no mark.
 
-**C3-deleted.** "Deleted mid-sync" drops a server rule too: a rule in the
-snapshot that the user deleted while the sync awaited would otherwise come back
-from a GET that predated the DELETE, shown unmarked although the server no
-longer holds it (the reverse of finding 1). A server rule not in the snapshot
-(created elsewhere) is kept as today.
+**C3-deleted.** Deletions are recorded, not inferred (r2 finding 2). A
+module-level sequence number goes up on every `deleteRule`, which stores
+`deletedAt[id] = seq`. Each sync reads `seq` when it starts; its final write
+drops any id deleted since then (`deletedAt[id] > startSeq`) that is not in
+`current`, whichever list it came from (server or snapshot). Without this a
+rule the user deleted while the sync awaited comes back from a GET that
+predated the DELETE, unmarked, although the server no longer holds it. A server
+rule not in the snapshot and not deleted (created elsewhere) is kept as today.
+
+**C3-serial.** `syncRules` never runs twice at once (r2 finding 1). A
+module-level in-flight promise: a call while one runs does not start a second
+concurrent run; it waits for the running one, then runs once more (several
+calls during one run share that single follow-up run), so a mount that comes
+second still gets a fresh GET. Two overlapping runs otherwise let the older
+run's final write, carrying an older verdict, overwrite a newer run's (e.g. an
+older offline verdict re-marking a rule a newer sync proved saved). With runs
+serial, every final write is the newest verdict, and C2's counter needs only
+to order `addRule` against a sync.
 
 **C4. Doc comments** on `unsavedRules` and `PostOutcome` updated (they say an
 offline outcome marks nothing).
@@ -120,10 +133,17 @@ offline outcome marks nothing).
   refused).
 - T5. `addRule` of n1 while a `syncRules` is awaiting a re-POST, n1's POST
   offline: after the sync, n1 is in `rules` AND marked `OFFLINE_SAVE_REASON`.
-- T5b. A snapshot rule (local-only, and separately a server one) deleted while
-  the sync awaits: not in `rules` after the sync, no key in `unsavedRules`.
+- T5b. Deleted while the sync awaits, for (i) a local-only snapshot rule,
+  (ii) a server snapshot rule, and (iii) a rule the GET returned that was not in
+  the snapshot but entered `rules` and was deleted during the sync: none is in
+  `rules` after the sync, and none has a key in `unsavedRules`.
 - T5c. `addRule` POST pending → a sync re-POSTs n1 and gets 201 → the `addRule`
   POST then settles offline → no mark.
+- T7. Two `syncRules` calls back to back: the second GET is not sent until
+  the first run's final write; a third call during the first run shares the
+  second's follow-up run (exactly two GETs).
+- T8. The r2 scenario: first run's n1 re-POST offline while a second call is
+  queued; the queued run's re-POST gets 201 → n1 ends unmarked.
 - T6. Page test (`alerts/__tests__/page.test.tsx`): the offline reason renders
   as `Not saved to server: could not reach the server; …`.
 
@@ -141,3 +161,8 @@ re-pointed from the defect marker to `present` on `OFFLINE_SAVE_REASON`.
   offline answer to `addRule`'s POST could re-mark a rule a sync had just
   proved saved (C2's generation counter, T5c). The reverse of (1), a rule
   deleted mid-sync coming back unmarked, was added as C3-deleted/T5b.
+- **Plan r2** (2026-09-28): 2 gate-level findings, both from two `syncRules`
+  runs overlapping, fixed in this plan: (1) an older run's offline verdict
+  could re-mark a rule a newer run proved saved (C3-serial, T7/T8); (2) a rule
+  another run brought in, then deleted, could come back unmarked (C3-deleted
+  now records deletions, T5b(iii)).
