@@ -181,3 +181,9 @@ After the build, the phase probe is re-pointed from the defect marker to a
   `addRule`'s ok can land against the sync's GET, its re-POST and its final
   set. It also checked the offline and refused paths against `syncGen`, and
   that persisted and sent data are untouched.
+- **Code r4 (code round 1)** (2026-09-28, commit 8358ce2): **ZERO GATE-LEVEL
+  FINDINGS — CLEAN.** The code matches C1–C4 and C3-ok. The reviewer traced
+  every order of `addRule` answers against sync GET, re-POST and final set.
+  `partialize` and the request bodies are unchanged. Mutations: 5 guards each
+  removed in turn, and every one was caught by a failing test. Frontend
+  3936/3936, typecheck clean.
