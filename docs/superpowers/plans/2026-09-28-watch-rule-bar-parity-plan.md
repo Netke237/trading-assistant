@@ -1,163 +1,173 @@
-# WATCH-RULE-BAR-PARITY — plan r1 (pre-audit)
+# WATCH-RULE-BAR-PARITY — plan r2 (after adversarial round 1)
 
-Task: PROJECT_STATE phase `WATCH-RULE-BAR-PARITY`, decision `P4B-FOLLOWUPS-2026-09-26`
-items (4), (5), (8), plus decision `WATCH-RULE-BAR-PARITY-SCOPE-2026-09-28` (1D rules, OMM, 1h VWAP). Scope and owned files: `docs/superpowers/plans/2026-09-25-work-packages.md`
-section "P4b follow-ups". Loop: this plan -> adversarial round -> build + mutations -> code round
--> merge only when clean.
+Task: PROJECT_STATE phase `WATCH-RULE-BAR-PARITY`, decision `P4B-FOLLOWUPS-2026-09-26` items
+(4), (5), (8), plus decision `WATCH-RULE-BAR-PARITY-SCOPE-2026-09-28` (1D rules, OMM, 1h VWAP).
+Scope and owned files: `docs/superpowers/plans/2026-09-25-work-packages.md` section "P4b follow-ups".
+Loop: plan -> adversarial rounds until clean -> build + mutations -> code round -> merge when clean.
 
-**Owned:** `backend/app/routers/chart_alerts.py` (composite block of
-`evaluate_and_notify_for_symbol` only), `backend/app/services/composite_trigger_evaluator.py`,
-`backend/app/routers/composite_watch.py` (`/regime-snapshot` fetch), their tests.
-**Not touched:** `chart_cache.py` display windows; the rest of `chart_alerts.py` (P4a);
-`strategy_watch_evaluator.py` (owned by COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD, claimed now, and
-WATCH-UNDELIVERED-EVENT-RESEND) — this plan is built so it needs no edit there.
+**Owned (as used by r2):** `backend/app/routers/chart_alerts.py` — the composite block of
+`evaluate_and_notify_for_symbol` and its docstring sentences about composite inputs;
+`backend/app/services/composite_trigger_evaluator.py` — `intraday_history_days` /
+`_INTRADAY_HISTORY_DAYS` only (plus the OMM direction line **iff** question Q-A below is answered yes);
+`backend/app/routers/composite_watch.py` — the `/regime-snapshot` fetches; their tests.
+**Not touched:** `chart_cache.py` (called with an explicit `days`, never edited);
+`strategy_watch_evaluator.py`; `evaluate_scheduled` / `evaluate_from_context*` / `describe_match` /
+`_matched_strategy_signals` (COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD holds a live claim on those
+functions' momentum paths); `historical_store.py`; the rest of `chart_alerts.py` (P4a).
 
-## 1. What each path reads today (verified in code)
+**r1 -> r2 design change.** r1 trimmed series inside the evaluator entry points. Round 1 showed that
+(a) it reaches into functions another claimed package owns and changes the watch path, (b) it misses
+`describe_match`, and (c) a calendar trim cannot reproduce a yfinance *period* fetch (`"6mo"` is
+181–184 days). r2 instead makes the rule **make the same fetch the watch makes**: the same function
+(`fetch_intraday_candles`, via `chart_cache` with an explicit `days`) with the same `days`, and the
+same `get_bars` window. No trim helper, no evaluator edit.
 
-| Input | Composite WATCH (`strategy_watch_evaluator._eval_composite_watch`) | Composite RULE (`chart_alerts.evaluate_and_notify_for_symbol`) |
-|---|---|---|
-| HMM_intraday bars | `fetch_intraday_candles(days=intraday_history_days(iv))` = 55d (180d on 4h), completed at `now` | chart-cache candles: 55d below 1h, **730d on 1h/4h**, completed at `as_of`, then capped to the last `MAX_LIVE_MODEL_CANDLES`=1500 |
-| VWAP intraday bars | same series as the HMM | same `_regime_candles` (730d / 1500 cap) |
-| `bars_daily` (HMM_daily, rsi/bb) | `completed_daily_rows(get_bars(today-730d, today), now)` | intraday: `completed_daily_rows(get_bars(...), _as_of_dt)`; **1D/1W: the chart's daily/weekly candles** (`_bars_daily = _regime_candles`, the defect marker) |
-| VWAP daily (1D/1W) | the same get_bars rows | `completed_daily_rows(get_bars(...), _as_of_dt)` — a second fetch |
-| OMM primary | `compute_omm` on the completed daily get_bars closes | `compute_omm` on `_regime_candles` closes — **intraday bars on an intraday rule, weekly on 1W**, daily chart candles on 1D |
-| `/regime-snapshot` HMM_intraday | `fetch_intraday_candles(days=intraday_history_days(iv))`, completed at now | — |
+## 1. What each path reads today, and what actually changes an answer
 
-Why each difference changes an answer:
-- `compute_intraday_hmm` fits on the last 800 bars (`regime_hmm.py:67`). 1h: the watch has ~270
-  bars (55d x 7/day), the rule 800 of ~1500 -> different model. 4h: watch ~250, rule 800 of ~1000.
-- `mean_reversion_vwap_signal` uses `_vwap(bars)` over the **whole** series (`strategy_engine.py:77`,
-  cumulative, no lookback) — history length moves the VWAP itself. Below 1h the 1500 cap already
-  diverges from the watch (5min 55d ~ 2900 RTH bars; Tradier `session_filter=all` more).
-- 1D: chart daily candles (1825d, yfinance/IBKR) vs get_bars (730d, historical store) -> the
-  HMM_daily fit sees ~800 of ~1250 vs ~500 bars, and the price sources can differ. 1W: weekly bars
-  are fed to strategies/HMM that expect daily bars.
-- Item (5): a chart snapshot fetched before 16:00 and evaluated after it makes the rule drop today's
-  completed daily row that the watch keeps.
+Effective windows (round 1 finding 4): `compute_intraday_hmm` fits only the last **800** bars
+(`regime_hmm.py:67`); strategy confirmations (rsi/bb/VWAP) read **≤120-bar** slices
+(`composite_trigger_evaluator.py:289-291`, `bars[max(0, i-119): i+1]`); OMM's transition matrix
+uses the last **500** rows (`regime_omm.py:16`, `WINDOW`).
+
+| Input | WATCH | RULE today | Effective difference |
+|---|---|---|---|
+| HMM_intraday, below 1h | `fetch_intraday_candles(days=55)`, completed at now | chart cache, 55d, completed at `as_of`, cap 1500 | **none** beyond fetch instant (both >800 bars; last 800 equal) |
+| HMM_intraday, 1h | 55d (~270 bars) | chart cache 730d, last 800 | **real**: 270 vs 800 bars |
+| HMM_intraday, 4h | 180d (~250 bars) | chart cache 730d (~1000), last 800 | **real**: 250 vs 800 bars |
+| VWAP intraday | same series as HMM | same `_regime_candles` | **none** once ≥ ~122 bars (120-bar slices) |
+| `bars_daily` 1D | completed get_bars 730d at now | chart daily candles (1825d, other source) | **real**: HMM_daily 500 vs 800 bars; source differs |
+| `bars_daily` 1W | same | **weekly** candles | **real**: weekly bars fed to daily models |
+| `bars_daily` intraday | same | completed get_bars at `as_of` | item (5) only |
+| OMM primary | `compute_omm(daily closes)` | `compute_omm(_regime_candles closes)` — intraday/weekly/chart-daily | **real** on every interval |
+| `/regime-snapshot` OMM, HMM_daily | — | — | **real**: get_bars **400d**, forming row **kept**, OMM with `direction=` (watch/rule: default Bullish) |
+| `/regime-snapshot` HMM_intraday | same fetch as the watch | — | none |
+
+r1's claim that VWAP reads the whole series was **wrong**: `_vwap` only sees ≤120-bar slices, so
+the 1h window change does **not** move the watch's VWAP (except a series too short for 122 bars).
+Decision SCOPE (3) was accepted on that false premise; it is moot and Kenneth is told so.
 
 ## 2. Design
 
-### 2.1 One intraday history window, applied inside the evaluator (item 4)
+### 2.1 One HMM_intraday window (item 4)
 
-In `composite_trigger_evaluator.py`:
+`_INTRADAY_HISTORY_DAYS = {"1h": 180, "4h": 180}` (below 1h: 55). Consequences:
+- **Watch:** unchanged code; on 1h it now fetches 180d (`"6mo"`) -> ~880 bars -> fits the last 800.
+- **Rule:** in the composite block, when some composite rule on an intraday interval needs
+  HMM_intraday or intraday VWAP, fetch the model series with
+  `get_intraday_with_fetched_at(symbol, interval, days=intraday_history_days(interval), refresh_on_close=True)`.
+  Below 1h this is the **same cache key** as the chart candles (`symbol:iv:55`) -> no extra fetch.
+  On 1h/4h it is one extra cached entry (`symbol:1h:180`), which calls `fetch_intraday_candles` with
+  the watch's exact arguments (same yfinance period, same IBKR/Tradier merge). Completion is judged
+  at **that entry's** `fetched_at` (A4c), then cut at the closed candle (2.6). No 1500 cap.
+  A failed fetch -> `[]` -> HMM_intraday/VWAP fail closed (as today when bars are missing).
+- **`/regime-snapshot`:** unchanged (already the watch's fetch).
+- `_regime_candles` (1500 cap, `as_of`) stays for standard rules and nothing else in the composite
+  block (OMM moves in 2.5).
 
-```python
-# WATCH-RULE-BAR-PARITY (decision P4B-FOLLOWUPS-2026-09-26, item 4)
-_INTRADAY_HISTORY_DAYS = {"1h": 180, "4h": 180}          # below 1h: 55
+### 2.2 Item (5): daily rows judged at now (or the closed candle, 2.6)
 
-def intraday_history_days(interval) -> int: ...            # unchanged signature
+The composite block's `completed_daily_rows(get_bars(...), X)` uses
+`X = min(datetime.now(MARKET_TZ), close instant of closed_candle)` instead of `_as_of_dt`.
+For the newest closed candle this is "now" except across the session close, where the candle's
+close instant keeps exactly the rows completed by then; `_as_of_dt` stays only for the chart candles.
 
-def trim_intraday_history(bars, interval) -> list[dict]:
-    """Bars whose time >= newest_time - days*86400. Anchored on the NEWEST bar,
-    not the wall clock, so two paths holding the same newest completed bar keep
-    exactly the same bars. A non-int newest time -> bars unchanged (fail open,
-    like completed_bars_for_interval); order preserved, input not mutated."""
-```
+### 2.3 1W and 1D read completed daily get_bars rows (item 8, SCOPE (1))
 
-- **Where it is applied:** at the top of both `evaluate_scheduled` and `evaluate_from_context(_detailed)`,
-  to `bars_intraday` and `regime_bars_intraday` when `interval` is intraday. Both paths therefore run
-  the identical trim on their own series; the watch file needs no edit (it already fetches
-  `intraday_history_days(iv)` days, which will now be 180 on 1h).
-- **Why anchored on the newest bar:** the watch's fetch is a yfinance *period* (`"6mo"` for 180,
-  `"60d"` for 55 — `_days_to_yf_period`), not a start date, so the two raw series never start at the
-  same instant. Trimming both to `newest - N days` makes the kept set a function of the data only.
-  Coverage: `6mo` >= 180d, `60d` >= 55d, Tradier start = today-55d <= newest-55d, and the rule's
-  730d chart window covers both -> the trim never cuts a series short of the window.
-- **4h:** buckets are `_resample_bars(origin="epoch")`, so a bucket's content does not depend on
-  where the fetch started; the trimmed sets match.
-- `/regime-snapshot` (`composite_watch.py`): apply `trim_intraday_history` after
-  `completed_bars_for_interval`, so the dialog shows the value the watch and rule compare against.
+Delete `_bars_daily = _regime_candles`. One `get_bars(symbol, date.today()-730d, date.today())`
+per call (the watch's `_HISTORY_DAYS` window), passed through `completed_daily_rows(..., X)` (2.2),
+shared by `bars_daily`, `bars_vwap_daily` and OMM. Fetched when any composite rule needs it:
+strategy confirmations, HMM_daily, VWAP daily, **or OMM** (including a missing model — both
+evaluators default to `"OMM"`; read as `(_rj.get("primary") or {}).get("model") or "OMM"`, so a
+stored `"primary": null` cannot raise outside the per-row try — round 1 finding 13). Failure -> `[]`
+for all three (fail closed). Today 1D/1W make **at most one** get_bars call (VWAP only); r2 keeps one.
 
-### 2.2 The rule's composite series drops the 1500 cap
+**Freshness (round 1 finding 3, checked and mostly rebutted).** A 1D rule judges day D as
+`candles[-2]` (`chart_alert_scheduler._candles_to_evaluate`), i.e. once day D+1's candle exists. By
+then `historical_store._prev_trading_day()` is D, so `get_bars` fetches D if the DB lacks it. 1W
+likewise judges week W on the following Monday. Residual, pre-existing and shared with the watch:
+a D row stored **partial** mid-session is never refetched (A4g open question (a), documented at
+`completed_daily_rows`); this only happens when the DB was ≥2 sessions behind during a session.
+Stated in §4; no guard (a guard would silence 1D rules instead).
 
-In the composite block only, build `_composite_intraday` = `_regime_candles` **without**
-`[-MAX_LIVE_MODEL_CANDLES:]` (same `completed_session_bars(completed_bars_for_interval(...))` call,
-judged at `as_of` — the chart snapshot's own completeness is still an A4c fetch-time question).
-Pass it as `bars_intraday` and `regime_bars_intraday` on intraday intervals; the evaluator trims it
-to 55/180 days. Standard rules and the composite OMM keep `_regime_candles` (1500 cap) — unchanged.
-Memory: <= 730d of 1h bars (~5k dicts), already held in `all_candles`.
+### 2.4 `/regime-snapshot` OMM and HMM_daily read what the watch reads (round 1 finding 1)
 
-Chart display history is unchanged (chart_cache untouched).
+Replace `get_bars(today-400d)` with `completed_daily_rows(get_bars(today-730d, today),
+datetime.now(MARKET_TZ))` for OMM and HMM_daily. The OMM `direction` argument: see Q-A.
 
-### 2.3 Daily rows trimmed at `now` (item 5)
+### 2.5 Composite OMM reads the daily rows (SCOPE (2))
 
-Both `completed_daily_rows(get_bars(...), ...)` calls in the composite block take
-`_now_dt = datetime.now(MARKET_TZ)` (computed once per call) instead of `_as_of_dt`. `_as_of_dt`
-stays for the chart candles (a cached chart candle's content is frozen at fetch time; a get_bars
-row is not the chart snapshot).
+`_omm` = `compute_omm([b["close"] for b in bars])` over the shared rows of 2.3, with the watch's
+exact call and empty handling (`None` when no rows; the rule's `len >= 100` pre-check goes, since
+`compute_omm` returns None below its own minimum — verified in build, pinned by test).
 
-### 2.4 1W **and 1D** composite rules read completed daily get_bars rows (item 8)
+### 2.6 Catch-up candles never read later data (round 1 finding 2)
 
-Delete the `if interval in ("1D", "1W"): _bars_daily = _regime_candles` branch. On every interval:
-one `get_bars(symbol, today-730d, today)` (same window as the watch's `_HISTORY_DAYS`), trimmed by
-`completed_daily_rows(..., _now_dt)`, fetched once per call when any composite rule needs daily
-bars (strategy confirmations or HMM_daily) or VWAP daily, and shared by `_bars_daily` and
-`_bars_vwap_daily` (today two fetches on 1D/1W). A failed fetch -> `[]` for both (fail closed,
-unchanged).
+`chart_alert_scheduler` evaluates older closed candles with `view = candles[:idx+1]`. The daily
+rows and the rule's own model fetch are not cut by `view`, so r2 cuts them explicitly:
+- daily rows: `completed_daily_rows(rows, X)` with X from 2.2 (the closed candle's close instant
+  drops every later session);
+- intraday model series: bars with `time <= closed_candle["time"]`.
+The watch has no catch-up, so for the newest candle both paths still match.
 
-**1D decision (the work package asks the plan to decide):** 1D goes to get_bars too. Keeping chart
-candles cannot give parity: different source (yfinance/IBKR vs historical store) and different depth
-(1825d vs 730d) change the HMM_daily fit, which is the model a 1D rule is most likely to use. Cost:
-one DB-first read per tick for symbols with such rules; D7 already pays it for VWAP.
+## 3. Tests (new `tests/test_watch_rule_bar_parity.py`) and mutations
 
-### 2.5 Composite OMM reads the daily rows too (decision WATCH-RULE-BAR-PARITY-SCOPE-2026-09-28 (2))
+Stubs: one synthetic intraday universe placed **far from the wall clock** (e.g. 2031) with an
+injected clock; `fetch_intraday_candles` stubbed as a pure function of `(interval, days)` that
+returns `days` + 4 extra leading days (like `"6mo"`), shared by both paths — so the only way the
+rule can match the watch is by calling it with the same `days`. `get_bars` stubbed likewise.
+Assertions are on what the **models** receive (`compute_intraday_hmm`, `compute_omm`, the
+rsi/bb/VWAP signal functions) and, for HMM, on the fitted result.
 
-`_omm` in the composite block is computed from the closes of the shared completed daily get_bars
-rows (2.4), with exactly the call the watch makes in `evaluate_scheduled` (same arguments, same
-empty-input handling) — not from `_regime_candles`. The daily fetch condition gains "some composite
-rule's primary model is OMM", **including a missing `primary.model`** (both evaluators default it to
-`"OMM"`). Fetch failure -> no OMM reading -> the OMM rule does not fire (fail closed, as the watch).
-Standard rules' regime conditions keep `build_regime_snapshot(_regime_candles)` — out of scope.
+1. 1h HMM_intraday: rule model input == watch input (800 bars from the 180d series); under the
+   old code the rule's 800 differ (behavioural).
+2. 4h HMM_intraday: equal, ~250 bars; old code: 800 (behavioural).
+3. 15min HMM_intraday: equal; the rule reuses the chart cache entry (one fetch call).
+4. 1h VWAP: same slices on both paths.
+5. 1D and 1W: HMM_daily + rsi + bb read the get_bars rows on both paths; weekly/chart candles unread.
+6. OMM on 15min, 1D, 1W: identical closes to `compute_omm`; `primary` missing and `primary: null`
+   both fetch and neither raises.
+7. Item (5): `as_of` 15:30, now 16:30 -> today's completed row reaches the rule, as the watch.
+8. Catch-up: an older `view` -> no daily row after the closed candle's session and no intraday bar
+   after its time reaches any model.
+9. `/regime-snapshot` OMM and HMM_daily inputs == the watch's `bars_daily` (730d, completed).
+10. One `get_bars` call per evaluation when OMM, rsi and VWAP rules coexist on 1D.
 
-## 3. Tests (new file `tests/test_watch_rule_bar_parity.py`)
+Existing tests updated because they pin reversed behaviour (round 1 finding 8):
+`test_p4b_4h_history.py` (1h 55 -> 180); `test_a4c_user_alert_completed_bars.py:197-201` (composite
+OMM on 15min received intraday closes); `test_a4g_forming_daily_weekly_bar.py` 1D/1W chart cases
+incl. the D2 composite-OMM case (`:272`). Docstring of `evaluate_and_notify_for_symbol`
+(`chart_alerts.py:888-896`) corrected for composite OMM and bars_daily.
 
-A shared bar universe per case (one synthetic intraday series long enough for 730d, one daily
-get_bars series); the rule path gets it via the chart candles argument and a stubbed `get_bars`,
-the watch path via stubbed `fetch_intraday_candles` (returning the watch's shorter window of the SAME
-series) and `get_bars`. Spies on `compute_intraday_hmm`, `_check_strategy_signals`' bar args and the
-strategy signal functions record what each path read. Each asserts **equal bar lists**:
+**Mutations** (each must turn a test red): m1 1h back to 55 (tests 1, 4 via watch days);
+m2 rule HMM series from `_regime_candles` again (tests 1, 2); m3 rule fetch with default `days`
+(tests 1, 2); m4 restore the 1W branch (5); m5 restore a 1D branch (5); m6 `_as_of_dt` back (7);
+m7 `_omm` on `_regime_candles` (6); m8 daily-fetch condition ignores missing/null model (6);
+m9 drop the catch-up cut on daily rows (8); m10 drop it on the intraday series (8);
+m11 snapshot back to 400d or without `completed_daily_rows` (9).
 
-1. 15min HMM_intraday: rule (55d chart, >1500 bars) == watch (55d) — pins the dropped cap.
-2. 1h HMM_intraday: rule (730d chart) == watch (180d fetch) == `/regime-snapshot` input.
-3. 4h HMM_intraday: same, 180d.
-4. 1h and 15min VWAP intraday confirmation: same bars both paths.
-5. 1D HMM_daily + rsi: rule reads get_bars rows == watch's `bars_daily`; chart candles unread.
-6. 1W HMM_daily + bb: same; weekly candles never reach bars_daily (flips the A4g 1W pin).
-7. Item 5: `as_of` = 15:30, now = 16:30 on a session day -> the rule keeps today's daily row, like
-   the watch.
-8. `trim_intraday_history` unit: anchor on newest, boundary inclusive, non-int time -> unchanged,
-   empty -> empty, input not mutated.
-9b. OMM: an OMM composite rule on 15min, 1D and 1W and the same watch pass identical closes to
-   `compute_omm`; a rule with no `primary.model` fetches the daily rows.
-9. One get_bars call per tick on 1D/1W when both a VWAP and an rsi rule exist.
+Before each push: full `cd backend && pytest`, `python3 scripts/state.py`, PROJECT_STATE phase +
+probe updated (defect marker gone -> presence probe).
 
-Existing tests to update (the behaviour they pin is the one being reversed): `test_p4b_4h_history.py`
-(1h 55 -> 180), `test_a4g_forming_daily_weekly_bar.py` 1D/1W chart-path cases (bars_daily now from
-get_bars), `test_p4b_vwap_like_regime_models.py` where it pins the 1500-capped series.
+## 4. Behaviour changes and residual non-parity
 
-**Mutations** (each must turn a test red): (m1) 1h back to 55; (m2) remove the trim from
-`evaluate_from_context`; (m3) remove it from `evaluate_scheduled`; (m4) re-add the 1500 cap to
-`_composite_intraday`; (m5) `_as_of_dt` back in `completed_daily_rows`; (m6) restore the 1W branch;
-(m7) restore a 1D-only branch; (m8) drop the trim in `/regime-snapshot`; (m9) anchor the trim on
-`time.time()` instead of the newest bar; (m10) `_omm` back on `_regime_candles`; (m11) the daily-fetch
-condition ignores a missing `primary.model`.
+Changes: 1h watches fit HMM_intraday on 180d; 1h/4h rules fit on 180d; 1D/1W rules read the
+historical store's daily rows; every composite OMM rule judges daily OMM; `/regime-snapshot` OMM
+and HMM_daily show 730d completed rows (the preview moves); catch-up candles stop reading later data.
 
-Checks before each push: `cd backend && pytest` (full), the state probe (`python3 scripts/state.py`),
-PROJECT_STATE phase status + verify probe updated (defect marker gone -> switch to a presence probe
-on `trim_intraday_history`).
+Residual non-parity, out of scope (round 1 findings 7, 14):
+- the two paths fetch at different instants (cache TTL, IBKR up on one fetch and down on the other,
+  Tradier sandbox partial-bar rule) — same call, not same response;
+- a partial daily row stored mid-session is never refetched (historical_store, pre-existing);
+- structure confirmations: the watch reads daily-bar structure, the rule the chart interval's
+  signals — no owner yet (logged as an open question at build);
+- momentum confirmations: COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD.
 
-## 4. Behaviour changes to accept
+## 5. Questions for Kenneth (r2)
 
-- Composite **watches** on 1h fetch 180d instead of 55d: their HMM_intraday fit AND their
-  intraday VWAP confirmation change (VWAP is cumulative over the series). This follows from "one
-  window" and is intended; 4h and below-1h watches are unchanged.
-- Composite **rules** on 1h/4h fit a shorter history (180d), below 1h a longer one (no 1500 cap);
-  1D/1W rules read the historical store's daily rows.
-- Every composite **OMM rule** on an intraday or 1W interval now judges daily OMM (as the watch and
-  the dialog preview already do) — its alerts can change.
-
-## 5. Decisions (answered 2026-09-28, `WATCH-RULE-BAR-PARITY-SCOPE-2026-09-28`)
-
-1. 1D rules -> completed daily get_bars rows (supersedes D7's "1D rsi/bb/HMM_daily unchanged").
-2. OMM gap folded in (2.5).
-3. 1h watch VWAP change accepted (VWAP and HMM share one series).
+- **Q-A (new, pre-existing bug on BOTH paths):** the watch and the rule call `compute_omm(closes)`
+  with the default `direction="Bullish"`, so a **Bearish** OMM composite compares `conviction_min`
+  against the *bullish* conviction; `/regime-snapshot` shows the direction-aligned value. Options:
+  (a) fix here — pass the trigger's direction on both paths (one argument in `evaluate_scheduled`'s
+  OMM line and in the rule block; needs that one line of `evaluate_scheduled`, not a momentum path);
+  (b) log as its own task. Recommend (a).
+- **SCOPE (3) correction:** the 1h watch VWAP does not change (section 1). No answer needed.
