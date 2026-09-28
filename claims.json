@@ -23,6 +23,14 @@
       "expires_at": "2026-09-28T21:57:23Z",
       "note": "piece B: sync concurrency (mid-sync add/delete, serial runs, timeouts)",
       "task": "CHART-RULES-SYNC-CONCURRENCY"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/docc-money-blocks",
+      "claimed_at": "2026-09-28T19:01:06Z",
+      "expires_at": "2026-09-28T22:01:06Z",
+      "note": "Document C plan 1: money-block validation (G1, 9.6, 9.8) on claude/docc-money-blocks",
+      "task": "YAML-CONFIG-INTEGRITY"
     }
   ]
 }
