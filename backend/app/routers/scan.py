@@ -43,7 +43,9 @@ from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve
 from app.scoring.fundamentals_scorer import score_fundamentals, FundamentalHealth
 from app.services.regime_omm import compute_omm as _compute_omm
 from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
-from app.services.money_config import MoneyConfigError, validate_money_blocks
+from app.services.money_config import (
+    MoneyConfigError, RegimeConfigError, validate_money_blocks, validate_regime_block,
+)
 from app.services.regime_hmm_daily import compute_directional_hmm as _compute_dhmm, alignment as _hmm_alignment
 from typing import Literal
 from app.data.market import (
@@ -589,9 +591,14 @@ async def _process_symbol(
     _regime_bars: list[dict] = []
     _regime_fetch_exc: Exception | None = None
     _rcfg: dict | None = None
+    # DOCC-2: read OUTSIDE the `try` below. S2 in `_execute_scan_core` has
+    # already validated regime.<horizon> for this same `horizon` (req.horizon),
+    # so this cannot raise there; and if a future caller skips S2, a config
+    # fault now raises instead of being swallowed by the WARNING handler into
+    # an ungated card. The `try` keeps wrapping only the data fetch and the
+    # computation, whose failures still abstain.
+    _rcfg = _load_scoring_cfg()["regime"][horizon.lower()]
     try:
-        _scfg = _load_scoring_cfg()
-        _rcfg = _scfg["regime"][horizon.lower()]
         # A4: the regime is measured on the bars its `timeframe` names. Intraday
         # is `15min`; this block used to measure it on the DAILY `candles` and
         # only LABEL it 15min, so Options and Stocks mode could give one symbol
@@ -1543,6 +1550,16 @@ async def _execute_scan_core(
         validate_money_blocks(_cfg_doc)
     except MoneyConfigError as e:
         _log.error("SCAN %s aborted on scoring_rules.yaml money blocks: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+    # DOCC-2 S2 (decision DOCC-2-REGIME-BLOCK-REFUSES-2026-09-28): a broken
+    # regime.<horizon> refuses the whole scan. It used to be read inside
+    # `_process_symbol`'s regime `try`, whose handler only logs a WARNING, so
+    # the symbol was scored with NO headwind gate and names the gate would
+    # REJECT came back PASS (round-5 finding G2).
+    try:
+        validate_regime_block(_cfg_doc, (req.horizon,))
+    except RegimeConfigError as e:
+        _log.error("SCAN %s aborted on scoring_rules.yaml regime block: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
     gate = _resolve_gate(req)
