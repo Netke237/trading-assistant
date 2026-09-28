@@ -6,7 +6,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
-import { useChartAlertStore } from '@/lib/chartAlertStore';
+import { useChartAlertStore, OFFLINE_SAVE_REASON } from '@/lib/chartAlertStore';
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -207,6 +207,16 @@ describe('Alerts page — P4a rule rows', () => {
     render(<AlertsPage />);
     openRules();
     expect(screen.getByText('Not saved to server: HMM_intraday needs an intraday interval')).toBeInTheDocument();
+  });
+
+  it('CHART-RULE-OFFLINE-SAVE-MARK T6: shows the offline reason for an unconfirmed save', () => {
+    useChartAlertStore.setState({ rules: [r], unsavedRules: { c1: OFFLINE_SAVE_REASON } } as any);
+    useChartAlertStore.setState({ syncRules: async () => {} } as any);
+    render(<AlertsPage />);
+    openRules();
+    expect(screen.getByText(
+      'Not saved to server: could not reach the server; retried when the Alerts page or a chart next opens',
+    )).toBeInTheDocument();
   });
 
   it('the toggle calls setRuleEnabled, not updateRule', () => {

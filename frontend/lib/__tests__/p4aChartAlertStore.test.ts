@@ -4,7 +4,9 @@
  * docs/superpowers/plans/2026-09-26-p4a-chart-alert-rules-plan.md
  */
 import { act } from '@testing-library/react';
-import { useChartAlertStore, ruleBodyForApi } from '@/lib/chartAlertStore';
+import {
+  useChartAlertStore, ruleBodyForApi, OFFLINE_SAVE_REASON, __resetChartAlertSyncGenForTests,
+} from '@/lib/chartAlertStore';
 import type { AlertRule, PriceCondition } from '@/types/alerts';
 
 const rule = (o: Partial<AlertRule> = {}): AlertRule => ({
@@ -38,7 +40,10 @@ function mockServer(server: AlertRule[], post: Response | 'throw' = res(201)) {
 }
 
 const originalFetch = global.fetch;
-beforeEach(() => { act(() => { useChartAlertStore.setState({ rules: [], unsavedRules: {} } as never); }); });
+beforeEach(() => {
+  __resetChartAlertSyncGenForTests();
+  act(() => { useChartAlertStore.setState({ rules: [], unsavedRules: {} } as never); });
+});
 afterEach(() => { global.fetch = originalFetch; });
 
 describe('A1 -- one body builder for POST and PUT', () => {
@@ -87,14 +92,15 @@ describe('A2 -- a refused re-POST keeps the rule and marks it', () => {
     expect(useChartAlertStore.getState().unsavedRules).toEqual({});
   });
 
-  it('offline (network error or 5xx) marks nothing new and keeps an existing mark', async () => {
+  it('offline (network error or 5xx) marks OFFLINE_SAVE_REASON and keeps an existing mark verbatim', async () => {
     act(() => { useChartAlertStore.setState({ rules: [rule(), rule({ id: 'r2' })], unsavedRules: { r2: 'old' } } as never); });
     mockServer([], 'throw');
     await act(async () => { await useChartAlertStore.getState().syncRules(); });
-    expect(useChartAlertStore.getState().unsavedRules).toEqual({ r2: 'old' });
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({ r1: OFFLINE_SAVE_REASON, r2: 'old' });
+    act(() => { useChartAlertStore.setState({ unsavedRules: { r2: 'old' } } as never); });
     mockServer([], res(503));
     await act(async () => { await useChartAlertStore.getState().syncRules(); });
-    expect(useChartAlertStore.getState().unsavedRules).toEqual({ r2: 'old' });
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({ r1: OFFLINE_SAVE_REASON, r2: 'old' });
   });
 
   it('addRule marks a refusal too', async () => {
@@ -139,5 +145,127 @@ describe('A4 -- last_triggered_at stamps', () => {
     await flush();
     expect(bodyOf('PATCH', '/alerts/rules/r1')).toEqual({ last_triggered_at: '2026-09-26T14:00:00.000Z' });
     expect(calls().some(([, i]) => i?.method === 'PUT')).toBe(false);
+  });
+});
+
+/** A fetch whose POSTs to each id are answered by the test, one at a time. */
+function manualServer(server: () => AlertRule[]) {
+  const pending: { id: string; resolve: (r: Response | 'throw') => void }[] = [];
+  global.fetch = jest.fn((url: string, init?: RequestInit) => {
+    const m = init?.method ?? 'GET';
+    if (m === 'GET') return Promise.resolve(res(200, server()));
+    if (m === 'POST') {
+      const id = JSON.parse(init!.body as string).id as string;
+      return new Promise<Response>((ok, fail) => {
+        pending.push({ id, resolve: (r) => (r === 'throw' ? fail(new Error('offline')) : ok(r)) });
+      });
+    }
+    return Promise.resolve(res(200));
+  }) as unknown as typeof fetch;
+  /** Answer a pending POST for `id`: the oldest ('first', addRule's when a
+   *  sync re-POSTs the same id later) or the newest ('last'). */
+  return async (id: string, r: Response | 'throw', pick: 'first' | 'last' = 'first') => {
+    const i = pick === 'first'
+      ? pending.findIndex((p) => p.id === id)
+      : pending.map((p) => p.id).lastIndexOf(id);
+    if (i < 0) throw new Error(`no pending POST for ${id}`);
+    pending.splice(i, 1)[0]!.resolve(r);
+    await flush();
+  };
+}
+
+describe('CHART-RULE-OFFLINE-SAVE-MARK -- an unconfirmed save is marked', () => {
+  it('T1: addRule + network error or 503 marks OFFLINE_SAVE_REASON', async () => {
+    mockServer([], 'throw');
+    act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n1' })); });
+    await flush();
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({ n1: OFFLINE_SAVE_REASON });
+    act(() => { useChartAlertStore.setState({ rules: [], unsavedRules: {} } as never); });
+    mockServer([], res(503));
+    act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n2' })); });
+    await flush();
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({ n2: OFFLINE_SAVE_REASON });
+  });
+
+  it.each([[res(201)], [res(409)]])('T3: a later re-POST accepted clears an offline mark', async (post) => {
+    act(() => { useChartAlertStore.setState({ rules: [rule()], unsavedRules: { r1: OFFLINE_SAVE_REASON } } as never); });
+    mockServer([], post);
+    await act(async () => { await useChartAlertStore.getState().syncRules(); });
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({});
+  });
+
+  it('T3: a sync whose GET returns the rule clears an offline mark', async () => {
+    act(() => { useChartAlertStore.setState({ rules: [rule()], unsavedRules: { r1: OFFLINE_SAVE_REASON } } as never); });
+    mockServer([rule()]);
+    await act(async () => { await useChartAlertStore.getState().syncRules(); });
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({});
+  });
+
+  it.each([['throw' as const], [res(422, { detail: 'nope' })]])(
+    'T4: a rule deleted before its POST settles leaves no key', async (post) => {
+      const answer = manualServer(() => []);
+      act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n1' })); });
+      act(() => { useChartAlertStore.getState().deleteRule('n1'); });
+      await answer('n1', post);
+      expect(useChartAlertStore.getState().unsavedRules).toEqual({});
+    },
+  );
+
+  it('T5c: a late offline addRule answer does not mark a rule a sync proved saved (GET lists it)', async () => {
+    let server: AlertRule[] = [];
+    const answer = manualServer(() => server);
+    act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n1' })); });
+    server = [rule({ id: 'n1' })];
+    await act(async () => { await useChartAlertStore.getState().syncRules(); });
+    await answer('n1', 'throw');
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({});
+  });
+
+  it('T5c: a late offline addRule answer does not mark a rule a sync re-POSTed with 201', async () => {
+    const answer = manualServer(() => []);
+    act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n1' })); });
+    const sync = useChartAlertStore.getState().syncRules();
+    await flush();
+    await answer('n1', res(201), 'last'); // the sync's re-POST
+    await act(async () => { await sync; });
+    await answer('n1', 'throw', 'first'); // addRule's, late
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({});
+  });
+
+  it.each([
+    ['201', res(201), {}],
+    ['409', res(409), {}],
+    ['201 over a prior refusal', res(201), { n1: 'old' }],
+  ])('T5d: addRule settles %s after a sync marked it offline -> no key', async (_l, post, prior) => {
+    const answer = manualServer(() => []);
+    act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n1' })); });
+    act(() => { useChartAlertStore.setState({ unsavedRules: prior } as never); });
+    const sync = useChartAlertStore.getState().syncRules();
+    await flush();
+    await answer('n1', 'throw', 'last');
+    await act(async () => { await sync; });
+    expect(useChartAlertStore.getState().unsavedRules.n1).toBeDefined();
+    await answer('n1', post, 'first');
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({});
+  });
+
+  it.each([[true], [false]])('T5e: addRule 201 before the sync final write (%s) drops the sync offline mark', async (addRuleOk) => {
+    const answer = manualServer(() => []);
+    act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n1' })); });
+    act(() => { useChartAlertStore.setState((s) => ({ rules: [...s.rules, rule({ id: 'r2' })] })); });
+    const sync = useChartAlertStore.getState().syncRules();
+    await flush();
+    await answer('n1', res(500), 'last'); // the sync's re-POST races addRule's insert
+    if (addRuleOk) await answer('n1', res(201), 'first');
+    await answer('r2', res(201)); // the sync's last re-POST -> its final write
+    await act(async () => { await sync; });
+    expect(useChartAlertStore.getState().unsavedRules).toEqual(addRuleOk ? {} : { n1: OFFLINE_SAVE_REASON });
+  });
+
+  it('T5c control: with no sync in between, the late offline answer does mark', async () => {
+    const answer = manualServer(() => []);
+    act(() => { useChartAlertStore.getState().addRule(rule({ id: 'n1' })); });
+    await answer('n1', 'throw');
+    expect(useChartAlertStore.getState().unsavedRules).toEqual({ n1: OFFLINE_SAVE_REASON });
   });
 });

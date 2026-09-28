@@ -56,9 +56,11 @@ interface ChartAlertState {
   syncRules: () => Promise<void>;
   setMigrated: () => void;
 
-  /** P4a A2 (decision Q1) -- rules the server REFUSED on their last POST,
-   *  id -> the server's reason. NOT persisted (absent from `partialize`), so
-   *  a mark cannot outlive the refusal it describes; every `syncRules` and
+  /** P4a A2 (decision Q1) -- rules the server does not hold as far as the
+   *  last POST knows, id -> reason: the server's reason on a refusal, or
+   *  OFFLINE_SAVE_REASON when the POST got a network error or a 5xx
+   *  (CHART-RULE-OFFLINE-SAVE-MARK). NOT persisted (absent from `partialize`),
+   *  so a mark cannot outlive the POST it describes; every `syncRules` and
    *  `addRule` POST rebuilds or clears it. */
   unsavedRules: Record<string, string>;
   /** P4a A3 -- the Alerts-page toggle. Sets `enabled` locally and PATCHes
@@ -96,8 +98,33 @@ export function ruleBodyForApi(rule: AlertRule): Record<string, unknown> {
 /** How a POST ended. 'ok' includes 409 (the server already has this id).
  *  'refused' carries the server's reason as TEXT: a pydantic 422 `detail` is
  *  an array of objects, an HTTPException's a string. 'offline' is a network
- *  error or a 5xx -- nothing is known, so nothing is marked. */
+ *  error or a 5xx -- the server did not confirm the save, so the rule is
+ *  marked OFFLINE_SAVE_REASON (a 1D/1W rule is judged by the server only). */
 export type PostOutcome = { kind: 'ok' } | { kind: 'refused'; detail: string } | { kind: 'offline' };
+
+/** CHART-RULE-OFFLINE-SAVE-MARK C1 -- the mark for an 'offline' POST.
+ *  `syncRules` runs when the Alerts page or a chart mounts, hence the text. */
+export const OFFLINE_SAVE_REASON =
+  'could not reach the server; retried when the Alerts page or a chart next opens';
+
+/** CHART-RULE-OFFLINE-SAVE-MARK C2/C3-ok -- per-id generation counters that
+ *  order an `addRule` POST against a `syncRules` run. Module-level, not store
+ *  state (never persisted or rendered).
+ *  - syncGen: bumped by `syncRules` right after its final write, for every id
+ *    it ruled on. A late 'offline'/'refused' answer to an `addRule` POST that
+ *    started before that bump is dropped: the sync's verdict is newer.
+ *  - okGen: bumped by `addRule` on a 201/409. A `syncRules` run that saw it
+ *    move since the run started drops its mark for that id: the server holds
+ *    the rule, whatever the run's own re-POST answered. */
+const syncGen = new Map<string, number>();
+const okGen = new Map<string, number>();
+const bump = (m: Map<string, number>, id: string) => m.set(id, (m.get(id) ?? 0) + 1);
+
+/** Test-only: clears both generation maps. */
+export function __resetChartAlertSyncGenForTests(): void {
+  syncGen.clear();
+  okGen.clear();
+}
 
 async function pushRuleToAPI(rule: AlertRule): Promise<PostOutcome> {
   try {
@@ -204,10 +231,27 @@ export const useChartAlertStore = create<ChartAlertState>()(
           return { rules: [...s.rules, rule] };
         });
         if (added) {
+          const gen = syncGen.get(rule.id) ?? 0;
           void pushRuleToAPI(rule).then((outcome) => {
-            if (outcome.kind === 'refused') {
-              set((s) => ({ unsavedRules: { ...s.unsavedRules, [rule.id]: outcome.detail } }));
+            if (outcome.kind === 'ok') {
+              // The server holds the rule, so no mark is right whatever the
+              // ordering: a sync that ran during this POST may have marked it.
+              bump(okGen, rule.id);
+              set((s) => {
+                if (!(rule.id in s.unsavedRules)) return s;
+                const { [rule.id]: _cleared, ...rest } = s.unsavedRules;
+                return { unsavedRules: rest };
+              });
+              return;
             }
+            const reason = outcome.kind === 'refused' ? outcome.detail : OFFLINE_SAVE_REASON;
+            set((s) => {
+              // Deleted meanwhile, or a sync has ruled on this id since the
+              // POST started (its verdict is newer): write nothing.
+              if (!s.rules.some((r) => r.id === rule.id)) return s;
+              if ((syncGen.get(rule.id) ?? 0) !== gen) return s;
+              return { unsavedRules: { ...s.unsavedRules, [rule.id]: reason } };
+            });
           });
         }
         return added;
@@ -266,6 +310,7 @@ export const useChartAlertStore = create<ChartAlertState>()(
       markViewed: () => set({ newSinceView: 0 }),
 
       syncRules: async () => {
+        const okAtStart = new Map(okGen);
         try {
           const res = await fetch(`${BASE_URL}/alerts/rules`);
           if (!res.ok) return;
@@ -275,15 +320,21 @@ export const useChartAlertStore = create<ChartAlertState>()(
           const localOnly = localRules.filter((r) => !serverIds.has(r.id));
 
           // A2 (Q1): a refused re-POST keeps the rule locally and says why;
-          // an accepted one (201/409) clears any old mark; offline changes
-          // nothing (nothing is known).
+          // an accepted one (201/409) clears any old mark; an offline one
+          // keeps an existing mark verbatim (a refusal reason says more),
+          // else marks OFFLINE_SAVE_REASON.
           const unsaved: Record<string, string> = {};
           for (const rule of localOnly) {
             const outcome = await pushRuleToAPI(rule);
             if (outcome.kind === 'refused') unsaved[rule.id] = outcome.detail;
-            else if (outcome.kind === 'offline' && get().unsavedRules[rule.id]) {
-              unsaved[rule.id] = get().unsavedRules[rule.id]!;
+            else if (outcome.kind === 'offline') {
+              unsaved[rule.id] = get().unsavedRules[rule.id] ?? OFFLINE_SAVE_REASON;
             }
+          }
+          // C3-ok: an addRule POST that got 201/409 during this run proves
+          // the server holds the rule (this run's re-POST may have raced it).
+          for (const id of Object.keys(unsaved)) {
+            if ((okGen.get(id) ?? 0) !== (okAtStart.get(id) ?? 0)) delete unsaved[id];
           }
 
           const merged = [...serverRules];
@@ -292,6 +343,8 @@ export const useChartAlertStore = create<ChartAlertState>()(
           }
 
           set({ rules: merged, migrated: true, unsavedRules: unsaved });
+          for (const id of serverIds) bump(syncGen, id);
+          for (const rule of localOnly) bump(syncGen, rule.id);
         } catch {}
       },
 
