@@ -85,6 +85,7 @@ from app.services import portfolio_risk
 from app.routers.contracts import FirstPassageInvalidationOut
 from app.services.regime_omm import compute_omm
 from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
+from app.services.money_config import MoneyConfigError, validate_money_blocks
 from app.services.regime_hmm_daily import compute_directional_hmm, alignment
 from app.services.fundamentals_store import get_fundamentals as _get_fundamentals
 from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundamentals, FundamentalHealth
@@ -936,6 +937,23 @@ async def _market_backdrop() -> "MarketBackdropOut | None":
 @router.post("/analyze-stock")
 async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     _reject_unsupported_multi_variants(req)
+    # DOCC-1 S3: the Analysis page mirrors the scan (A5-ANALYSIS-MIRRORS-SCAN),
+    # so it must not show PASS where the scan refuses on a missing or
+    # misspelled money block. Same guards and same 500 as the stock scan core.
+    try:
+        _cfg_doc = _load_full_scoring_cfg()
+    except (OSError, _yaml.YAMLError) as e:
+        logger.error("ANALYZE %s aborted: scoring_rules.yaml unreadable: %s", req.symbol, e)
+        raise HTTPException(status_code=500, detail=f"scoring_rules.yaml unreadable: {e}")
+    if not isinstance(_cfg_doc, dict):
+        _msg = f"scoring_rules.yaml must be a mapping, got {type(_cfg_doc).__name__}"
+        logger.error("ANALYZE %s aborted: %s", req.symbol, _msg)
+        raise HTTPException(status_code=500, detail=_msg)
+    try:
+        validate_money_blocks(_cfg_doc)
+    except MoneyConfigError as e:
+        logger.error("ANALYZE %s aborted on scoring_rules.yaml money blocks: %s", req.symbol, e)
+        raise HTTPException(status_code=500, detail=str(e))
     symbol = req.symbol.upper()
     is_index = _is_index(symbol)
 
@@ -1462,10 +1480,13 @@ async def _execute_stock_scan_core(
     # the per-symbol worker, where the `asyncio.gather(..., return_exceptions=True)`
     # below would turn one broken key into a universe of rejected symbols.
     #
-    # `.get("regime_sizing")` with no default on purpose: an absent block and an
-    # explicitly null one both mean sizing is off (multiplier 1.0), which is a
-    # configuration, not a failure. Only a block that is PRESENT and unusable
-    # refuses the scan — §9.1's fail-closed posture, Kenneth 2026-09-17.
+    # AN ABSENT BLOCK NOW REFUSES (DOCC-1, decision
+    # DOCC-9.6-MONEY-BLOCKS-REQUIRED-2026-09-28). `validate_money_blocks` below
+    # refuses a missing or null regime_sizing / regime_gate / confidence_gate /
+    # fundamentals_gate, an `enabled` that is not a real bool, and any unknown
+    # key inside them (DOCC-9.8) -- all of which used to read as "off" or as
+    # the key's default. Off is `enabled: false`. A block that is PRESENT and
+    # has an unusable value still refuses through resolve_sizing, unchanged.
     #
     # The document itself is loaded inside the same guard: one that fails to
     # read or parse, or parses to a non-mapping, used to raise past
@@ -1479,6 +1500,11 @@ async def _execute_stock_scan_core(
         _msg = f"scoring_rules.yaml must be a mapping, got {type(_cfg_doc).__name__}"
         logger.error("STOCK SCAN %s aborted: %s", scan_id, _msg)
         raise HTTPException(status_code=500, detail=_msg)
+    try:
+        validate_money_blocks(_cfg_doc)
+    except MoneyConfigError as e:
+        logger.error("STOCK SCAN %s aborted on scoring_rules.yaml money blocks: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
     try:
         resolve_sizing(_cfg_doc.get("regime_sizing"))
     except SizingConfigError as e:

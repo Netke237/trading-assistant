@@ -484,3 +484,25 @@ def client():
               side_effect=_candles_for_symbol),
     ):
         yield TestClient(test_app)
+
+
+def shipped_scoring_doc(drop: tuple = (), **overrides) -> dict:
+    """The SHIPPED scoring_rules.yaml as a fresh dict, with top-level blocks
+    replaced by `overrides` and the names in `drop` removed.
+
+    DOCC-1 (decision DOCC-9.6-MONEY-BLOCKS-REQUIRED-2026-09-28): the four money
+    blocks are required, so a test that patches a PARTIAL scoring doc into a
+    scan, the Analysis endpoint or the fire now trips the money-block check
+    first. Such tests patch this instead: the real file with their override
+    merged in.
+    """
+    import copy
+    import yaml
+    from pathlib import Path
+
+    path = Path(__file__).parent.parent / "config" / "scoring_rules.yaml"
+    doc = copy.deepcopy(yaml.safe_load(path.read_text()))
+    for name in drop:
+        doc.pop(name, None)
+    doc.update(copy.deepcopy(overrides))
+    return doc

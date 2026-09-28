@@ -29,7 +29,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.routers.stock_scan import router as stock_scan_router
-from tests.conftest import _override_get_db
+from tests.conftest import _override_get_db, shipped_scoring_doc
 
 
 @pytest.fixture
@@ -404,9 +404,12 @@ def test_the_stock_rejection_reason_names_the_floor_as_an_integer(stock_client):
 # SHARES the response carries rather than which names come back, so it gets
 # the same pre-check the direction-conviction floor above already has.
 
-_BAD_SIZING = {"regime_sizing": {
+# The shipped file with the bad block merged in, not a one-block doc: since
+# DOCC-1 a doc missing the other money blocks refuses on THAT first, so a
+# partial doc would stop pinning the regime_sizing refusal at all.
+_BAD_SIZING = shipped_scoring_doc(regime_sizing={
     "enabled": True, "min_mult": 0.3, "full_conviction_pct": -40,
-}}
+})
 
 
 def test_an_unusable_regime_sizing_block_fails_the_stock_scan(stock_client):
@@ -441,13 +444,19 @@ def test_the_sizing_fail_fast_runs_before_the_universe_price_fetch(stock_client)
 
 
 @pytest.mark.parametrize("cfg", [
-    {},                                    # block absent
-    {"regime_sizing": None},               # `regime_sizing:` with nothing under it
-    {"regime_sizing": {"enabled": False, "full_conviction_pct": "junk"}},
+    shipped_scoring_doc(regime_sizing={"enabled": False, "full_conviction_pct": "junk"}),
+    shipped_scoring_doc(regime_sizing={"enabled": False}),
 ])
 def test_sizing_off_does_not_fail_the_scan(stock_client, cfg):
     """Off is a configuration, not a failure: the up-front check must let it
     through. Refusing here would restrict more than section 9.1 asks for.
+
+    `enabled: false` is now the ONLY way to say off. An absent or null block
+    used to be here too; it refuses since DOCC-1 (decision
+    DOCC-9.6-MONEY-BLOCKS-REQUIRED-2026-09-28) and is pinned by
+    test_an_absent_or_null_sizing_block_now_fails_the_scan below. A junk VALUE
+    under a disabled block is still inert (values are not the money-block
+    check's to judge); a junk KEY is not (DOCC-9.8).
 
     WHAT THIS DOES NOT PIN, because round 1 measured it: these symbols drop at
     "insufficient history" and conviction_mult is never called, so this asserts
@@ -461,3 +470,21 @@ def test_sizing_off_does_not_fail_the_scan(stock_client, cfg):
             "horizon": "Swing", "strategy": "pullback_ema",
         })
     assert r.status_code == 200, r.text
+
+
+@pytest.mark.parametrize("cfg", [
+    shipped_scoring_doc(drop=("regime_sizing",)),   # block absent
+    shipped_scoring_doc(regime_sizing=None),        # `regime_sizing:` with nothing under it
+])
+def test_an_absent_or_null_sizing_block_now_fails_the_scan(stock_client, cfg):
+    """INVERTED by DOCC-1 (decision DOCC-9.6-MONEY-BLOCKS-REQUIRED-2026-09-28).
+    These two cases were "sizing off" -- multiplier 1.0, full size -- and are
+    now a named 500: off is `enabled: false`, and a missing block is more
+    likely a truncated or mis-edited file than a decision."""
+    with patch("app.routers.stock_scan._load_full_scoring_cfg", return_value=cfg):
+        r = stock_client.post("/api/stock-scan", json={
+            "symbols": ["AAA"], "universe": [], "direction": "Bullish",
+            "horizon": "Swing", "strategy": "pullback_ema",
+        })
+    assert r.status_code == 500, r.text
+    assert "regime_sizing" in r.json()["detail"]
