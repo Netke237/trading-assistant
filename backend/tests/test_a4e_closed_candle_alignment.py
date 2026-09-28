@@ -237,6 +237,7 @@ def test_t7_ws_displays_full_list_structure_but_evaluates_on_the_closed_prefix()
                     msgs.append(ws.receive_json())
                 except WebSocketDisconnect:
                     break
+                assert len(msgs) <= 10, f'server never closed the stream: {msgs}'  # fail, never hang
     assert [m['type'] for m in msgs] == ['history', 'structure', 'tick', 'structure']
     full = compute_structure(candles, '15min', 'AAPL')
     assert msgs[3]['signals'] == json.loads(json.dumps(full))  # display: full list
