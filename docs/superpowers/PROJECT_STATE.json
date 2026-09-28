@@ -1274,9 +1274,9 @@
     },
     {
       "id": "CHART-RULE-OFFLINE-SAVE-MARK",
-      "name": "An offline/unconfirmed chart rule save is marked 'Not saved to server' (closes CHART-WS-1D-1W-RULES L3, display only)",
+      "name": "An offline/unconfirmed chart rule save is marked 'Not saved to server' (closes CHART-WS-1D-1W-RULES L3, display only) -- PIECE A of the 2026-09-28 split",
       "status": "not_started",
-      "audit_rounds": 3,
+      "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [
         "CHART-WS-1D-1W-RULES",
@@ -1288,7 +1288,24 @@
         "pattern": "if \\(outcome\\.kind === 'refused'\\) \\{",
         "note": "DEFECT MARKER: addRule marks unsavedRules only on a refusal, so an offline save of a 1D/1W rule (judged by the server only since CHART-WS-1D-1W-RULES) is judged nowhere, silently. Gone = addRule marks offline too."
       },
-      "note": "2026-09-28 on branch claude/clever-planck-rpz8yh off main d46a7cd. Decision CHART-WS-1D-1W-L3-OFFLINE-MARK-2026-09-28. Plan docs/superpowers/plans/2026-09-28-chart-rule-offline-save-mark-plan.md. Plan r1: 2 gate-level (a rule added mid-sync was dropped from rules; a late addRule offline answer re-marked a rule a sync proved saved) fixed in plan. Plan r2: 2 gate-level (both from two overlapping syncRules runs) fixed in plan: syncs made serial, deletions recorded. Plan r3: 1 gate-level (a never-settling run would block all later syncs under the serial design) fix written in (15s AbortController timeouts, finally-cleared slot) but NOT re-audited. PLAN-STAGE CAP REACHED 2026-09-28 (3 rounds, none clean): auditing stopped per audit_rule; waiting on Kenneth."
+      "note": "SPLIT 2026-09-28 by decision CHART-RULE-OFFLINE-SAVE-MARK-SPLIT-2026-09-28 (Kenneth, option 1): narrowed to the mark itself (C1-C4 minus the concurrency parts); needs a FRESH plan (rounds restart at 0, plan-stage cap 3). Concurrency moved to CHART-RULES-SYNC-CONCURRENCY. Claim released. || PREVIOUS: 2026-09-28 on branch claude/clever-planck-rpz8yh off main d46a7cd. Decision CHART-WS-1D-1W-L3-OFFLINE-MARK-2026-09-28. Plan docs/superpowers/plans/2026-09-28-chart-rule-offline-save-mark-plan.md. Plan r1: 2 gate-level (a rule added mid-sync was dropped from rules; a late addRule offline answer re-marked a rule a sync proved saved) fixed in plan. Plan r2: 2 gate-level (both from two overlapping syncRules runs) fixed in plan: syncs made serial, deletions recorded. Plan r3: 1 gate-level (a never-settling run would block all later syncs under the serial design) fix written in (15s AbortController timeouts, finally-cleared slot) but NOT re-audited. PLAN-STAGE CAP REACHED 2026-09-28 (3 rounds, none clean): auditing stopped per audit_rule; waiting on Kenneth."
+    },
+    {
+      "id": "CHART-RULES-SYNC-CONCURRENCY",
+      "name": "chartAlertStore syncRules/addRule/deleteRule ordering: a rule added mid-sync is kept, deletions mid-sync stay deleted, sync runs are serial and bounded by timeouts, a late addRule answer never overrides a newer sync verdict -- PIECE B of the 2026-09-28 split",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "CHART-RULE-OFFLINE-SAVE-MARK"
+      ],
+      "verify": {
+        "kind": "absent",
+        "path": "frontend/lib/chartAlertStore.ts",
+        "pattern": "CHART-RULES-SYNC-CONCURRENCY",
+        "note": "Not built. Re-point to a present probe on the serialising code when built."
+      },
+      "note": "QUEUED 2026-09-28 by decision CHART-RULE-OFFLINE-SAVE-MARK-SPLIT-2026-09-28. Source: docs/superpowers/plans/2026-09-28-chart-rule-offline-save-mark-plan.md (C2 generation counter, C3 functional final set, C3-deleted, C3-serial, C3-bound; tests T5, T5b, T5c, T7, T8, T9) and its r1-r3 audit record. Needs a fresh plan."
     }
   ],
   "already_shipped": [
@@ -1532,6 +1549,11 @@
     }
   ],
   "decisions": [
+    {
+      "id": "CHART-RULE-OFFLINE-SAVE-MARK-SPLIT-2026-09-28",
+      "q": "CHART-RULE-OFFLINE-SAVE-MARK's plan reached the plan-stage cap (3 rounds, none clean). Every finding came from syncRules concurrency (a rule added/deleted mid-sync, overlapping runs, a never-settling run), not from the mark. What now?",
+      "a": "Kenneth 2026-09-28: OPTION 1, SPLIT IT (audit_rule's remedy: a batch that will not converge is too big). PIECE A = CHART-RULE-OFFLINE-SAVE-MARK, narrowed to the mark itself: C1 OFFLINE_SAVE_REASON, C2 addRule marks an offline/5xx outcome (only if the rule is still in `rules`), C3 syncRules marks an offline re-POST (a prior refusal mark kept verbatim; ok clears; refused stores detail), C4 doc comments; the concurrency parts of the r1-r3 plan (C2 generation counter, C3 functional final set, C3-deleted, C3-serial, C3-bound) are OUT. PIECE B = new phase CHART-RULES-SYNC-CONCURRENCY: syncRules/addRule/deleteRule ordering -- rule added mid-sync kept (pre-existing drop), deletions recorded, runs serial, fetch timeouts, and a late addRule offline answer never re-marking a rule a sync proved saved. Each piece gets a FRESH plan and its own 3-round caps; the 2026-09-28 plan file is their shared source. INTERPRETATION NOTE: 'option 1' was offered in a stretch of the session not visible to the agent that recorded this; the split boundary above is that agent's reading -- confirm it at the start of piece A."
+    },
     {
       "id": "CHART-WS-1D-1W-L3-OFFLINE-MARK-2026-09-28",
       "q": "CHART-WS-1D-1W-RULES logged L3: a 1D/1W rule that exists only in the browser (its save failed) is judged nowhere -- the server does not have it and the browser no longer judges 1D/1W. A REFUSED save is flagged ('Not saved to server: <reason>' on the Alerts page); an OFFLINE save shows nothing. Close it how?",
