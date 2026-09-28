@@ -31,6 +31,14 @@
       "expires_at": "2026-09-28T22:06:24Z",
       "note": "find + fix intermittent backend test on main",
       "task": "BACKEND-INTERMITTENT-TEST"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/docc-money-blocks",
+      "claimed_at": "2026-09-28T19:17:44Z",
+      "expires_at": "2026-09-28T22:17:44Z",
+      "note": "build DOCC-1 money-block validation per 2026-09-28 plan",
+      "task": "DOCC-1-MONEY-BLOCKS"
     }
   ]
 }
