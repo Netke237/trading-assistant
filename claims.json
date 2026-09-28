@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "claude/clever-planck-rpz8yh",
-      "claimed_at": "2026-09-28T10:58:56Z",
-      "expires_at": "2026-09-28T14:06:40Z",
-      "note": "Mark offline/unconfirmed chart rule saves 'Not saved to server' (L3 option 1)",
-      "task": "CHART-RULE-OFFLINE-SAVE-MARK"
-    }
-  ]
+  "claims": []
 }
