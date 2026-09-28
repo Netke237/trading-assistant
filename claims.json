@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/sleepy-gates-4084r7",
-      "claimed_at": "2026-09-28T18:57:23Z",
-      "expires_at": "2026-09-28T21:57:23Z",
-      "note": "piece B: sync concurrency (mid-sync add/delete, serial runs, timeouts)",
-      "task": "CHART-RULES-SYNC-CONCURRENCY"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/docc-money-blocks",
       "claimed_at": "2026-09-28T19:01:06Z",
       "expires_at": "2026-09-28T22:01:06Z",
