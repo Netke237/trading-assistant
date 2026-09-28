@@ -23,14 +23,6 @@
       "expires_at": "2026-09-28T22:06:24Z",
       "note": "find + fix intermittent backend test on main",
       "task": "BACKEND-INTERMITTENT-TEST"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/sleepy-gates-4084r7",
-      "claimed_at": "2026-09-28T19:27:15Z",
-      "expires_at": "2026-09-28T22:27:15Z",
-      "note": "build + code audit",
-      "task": "CHART-RULES-SYNC-CONCURRENCY"
     }
   ]
 }
