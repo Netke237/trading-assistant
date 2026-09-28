@@ -1,10 +1,12 @@
-# WATCH-RULE-BAR-PARITY — plan r4 (after adversarial rounds 1 and 2; Q-B, Q-C, Q-D answered)
+# WATCH-RULE-BAR-PARITY — plan r5 (after adversarial rounds 1-3; Q-B..Q-G answered)
 
 Task: PROJECT_STATE phase `WATCH-RULE-BAR-PARITY`, decision `P4B-FOLLOWUPS-2026-09-26` items
 (4), (5), (8), plus decisions `WATCH-RULE-BAR-PARITY-SCOPE-2026-09-28` (1D rules, OMM; its item 3 is moot) and
 `WATCH-RULE-BAR-PARITY-OMM-DIRECTION-2026-09-28` (OMM uses the trigger's direction on both paths),
 `WATCH-RULE-BAR-PARITY-PARTIAL-ROW-2026-09-28` (the partial-daily-row fix in `historical_store.py`, 2.10)
-and `WATCH-RULE-BAR-PARITY-QB-QD-2026-09-28` (2.2's candle-close rule; comment-only `chart_cache.py` fix).
+`WATCH-RULE-BAR-PARITY-QB-QD-2026-09-28` (2.2's candle-close rule; comment-only `chart_cache.py` fix)
+and `WATCH-RULE-BAR-PARITY-QE-QF-QG-2026-09-28` (1D/1W lag accepted and documented; never store an
+unsettled daily row; three out-of-scope descriptions of `get_bars` corrected).
 Scope and owned files: `docs/superpowers/plans/2026-09-25-work-packages.md` section "P4b follow-ups".
 Loop: plan -> adversarial rounds until clean -> build + mutations -> code round -> merge when clean.
 
@@ -14,9 +16,13 @@ Loop: plan -> adversarial rounds until clean -> build + mutations -> code round 
 `_INTRADAY_HISTORY_DAYS`, the new pure helpers of 2.6, and the OMM line of `evaluate_scheduled`
 (decision OMM-DIRECTION);
 `backend/app/routers/composite_watch.py` — the `/regime-snapshot` fetches;
-`backend/app/services/historical_store.py` — `get_bars`, `_store_bars`'s clock, and the new
-provisional-row helpers of 2.10 (r4, decision PARTIAL-ROW); their tests.
-`backend/app/data/chart_cache.py` — **the docstring at lines 115-118 only** (Q-D, comment-only).
+`backend/app/services/historical_store.py` — `get_bars`, `_store_bars`, `most_recent_trading_day` /
+`_prev_trading_day`'s clock, and the new settle helpers of 2.10 (decisions PARTIAL-ROW, Q-F); their
+tests.
+**Comment/test-only edits outside the owned code (Q-D, Q-G):** `chart_cache.py:115-118` docstring;
+`auto_trader.py:673-676` comment; `completed_daily_rows`' docstring in
+`composite_trigger_evaluator.py` (its "get_bars never re-fetches" limit sentence);
+`tests/test_auto_trader.py` `_scan_series_times` helper (models get_bars' fetch rule).
 **Not touched:** `chart_cache.py` code (called with an explicit `days`);
 `strategy_watch_evaluator.py`; `evaluate_scheduled` beyond its OMM line; `evaluate_from_context*` /
 `describe_match` / `_matched_strategy_signals` (COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD holds a live
@@ -86,8 +92,11 @@ is `candles[-2]` of a snapshot taken at `as_of`), so it did not implement item (
 
 **Rule (Q-B ANSWERED 2026-09-28: adopted, replaces item (5)'s literal "trim at now"):** a composite rule judging a closed candle reads exactly the daily
 rows whose **session close is at or before that candle's close instant** ("the rows completed when
-the candle closed"). Candle close instant:
-- intraday: `time + span` (`_INTERVAL_COMPLETION_SECONDS`);
+the candle closed"). Candle close instant `T`:
+- intraday: `time + nominal span` from a new `_NOMINAL_SPAN_SECONDS` (1min 60 ... 1h 3600, 4h
+  14400) in `composite_trigger_evaluator.py` -- **not** `_INTERVAL_COMPLETION_SECONDS`, whose 4h
+  entry is 5 h (a completion lag, `market.py:623`) and would let an 11:00-stamped 4h candle read
+  row D (round 3 finding 15);
 - 1D / 1W: the first session close (1D) / week close (1W) **at or after** the stamp — the
   convention `completed_session_bars` already relies on (every stamp in use — 00:00 ET, 00:00 UTC,
   session open, session close; Monday or Friday for a week — lies after the previous close and at or
@@ -100,15 +109,27 @@ Consequences: the 1D candle for day D keeps row D; the 1W candle keeps that Frid
 catch-up included). `_as_of_dt` is no longer used for daily rows. Item (5)'s literal wording
 ("trim at now") would let a pre-close candle read the session's close; Kenneth adopted the rule
 above instead (Q-B). For the newest candle the two differ only when a stale snapshot straddles 16:00,
-and then the candle-close rule is the correct one. In practice the D row rarely exists on day D
-(get_bars fetches through `_prev_trading_day`). Where it does exist it may be provisional (fetched
-before D's close); 2.10 heals it after D's close + settle, and this rule reads whatever get_bars
-returns at that instant (see 2.3 Freshness).
+and then the candle-close rule is the correct one. `get_bars` fetches through `end` (today) when `last < min(end, _prev_trading_day())`;
+`_prev_trading_day` is only the staleness threshold. With 2.10 no row is stored before its
+session's close + 30 min, so a row D exists only after that.
 
 Helper: `daily_rows_at_candle(rows, closed_candle, interval)` (pure, in
-`composite_trigger_evaluator.py`), built on `last_session_close` / `last_week_close` and
-`completed_daily_rows`; unit-tested at 15:59:59 / 16:00:00 / 16:00:01, all stamp conventions,
-Friday for 1W, and undatable stamps.
+`composite_trigger_evaluator.py`). **Exact formula (round 3 finding 12):** keep row `d` iff
+`close(d) <= T`, with `close(d) = datetime.combine(d, 16:00, MARKET_TZ)` computed directly. For
+1D/1W, `T` = `close(d')` for the first weekday `d'` (1D) / first Friday `d'` (1W) with
+`close(d') >= stamp`. It does **not** call `completed_daily_rows`, `last_session_close` or
+`last_week_close`: those answer "latest close at or before", and `todays_bar_is_unclosed` is
+inclusive at 16:00:00, so `completed_daily_rows(rows, close(D))` drops row D (the r2 bug).
+Unit-tested at 15:59:59 / 16:00:00 / 16:00:01, all stamp conventions, 4h and 1h stamps, Friday for
+1W, and undatable stamps.
+
+**Accepted structural lag (Q-E, round 3 finding 1).** The rule judges `candles[-2]`
+(`chart_alert_scheduler.py:193`); the watch cuts daily rows at *now*
+(`strategy_watch_evaluator.py:374`). So on 1D, from close(D) until D+1's candle exists (~17 h) the
+rule reads rows to D-1 and the watch to D; on 1W the rule reads to last Friday while the watch reads
+this week's completed days (up to a week). Kenneth accepted this 2026-09-28 as documented, not
+fixed (fixing it means the watch evaluator or the scheduler's candle pick, both out of scope). Test
+5 asserts each path's rows explicitly, never "equal".
 
 ### 2.3 1W and 1D read completed daily get_bars rows (item 8, SCOPE (1))
 
@@ -116,7 +137,10 @@ Delete `_bars_daily = _regime_candles`. One `get_bars(symbol, date.today()-730d,
 (the watch's `_HISTORY_DAYS` window), cut by 2.2, shared by `bars_daily`, `bars_vwap_daily` and OMM.
 Fetched whenever composite rules exist (not only when some rule "needs" it — round 2 finding 13:
 `trigger_values.omm_state` stays filled for every composite fire as today). Failure -> `[]` for all
-(fail closed). **Memoised** per `(symbol, date.today())` for 300 s in a module-level dict inside the
+(fail closed). **Memoised** per `(symbol, settle boundary)` for 300 s, where the settle boundary is the latest
+`close(d) + _SETTLE <= now` (round 3 finding 13: a row can only appear in the store at a boundary,
+2.10, so the key changes exactly when a new row can exist and the rule never keeps a pre-boundary
+copy the watch no longer reads) in a module-level dict inside the
 composite block's helpers (round 2 finding 7: OMM is the default model and the chart WS evaluates on
 every tick; `get_bars` can hit the providers all day after a holiday, `_prev_trading_day` has no
 holiday calendar). The cut (2.2) is applied after the memo, per candle.
@@ -124,19 +148,13 @@ holiday calendar). The cut (2.2) is applied after the memo, per candle.
 Every `.get("primary", {})` in the block becomes `(_rj.get("primary") or {})` (round 2 finding 5 —
 `chart_alerts.py:1059` runs per row outside the try; `composite_def` is stored unvalidated).
 
-**Freshness (r4, after Q-C).** A 1D rule judges day D as `candles[-2]` once D+1's candle exists
-(scheduler and WS), when `_prev_trading_day()` is D. Two cases:
-- the DB already holds D-1 or earlier and no row D: `last < _prev_trading_day()` fetches through
-  today (existing behaviour), so row D arrives from the provider after D's close -- complete unless
-  the fetch lands inside the settle window (2.10), in which case it is stored provisional and
-  healed by the first `get_bars` after `close(D) + _SETTLE`; the 300 s memo (above) bounds how long
-  a rule keeps the unhealed copy.
-- the DB holds a row D fetched during session D (the Q-C defect, `historical_store.py:230-232`):
-  before r4 it was never refetched; with 2.10 it is provisional and is refetched by the first
-  `get_bars` after `close(D) + _SETTLE`.
-A rule evaluated inside `[close(D), close(D) + _SETTLE)` may read a row D that is still provisional;
-the watch reading at the same instant reads the same row (same `get_bars`), so parity holds and only
-the settle-window freshness residual remains (section 4).
+**Freshness (r5, after Q-F).** No daily row is stored before `close(d) + _SETTLE` (2.10), so
+every row either path reads is settled, apart from legacy rows written before this fix (healed by
+2.10). A 1D rule judges D once D+1's candle exists; by then row D is in the store if any `get_bars`
+call after `close(D) + 30 min` ran with `last < _prev_trading_day()`, else it arrives with the
+nightly ingestion or the first call on D+1 (existing staleness rule, unchanged). Both paths read the
+same `get_bars`, and the memo key moves at the settle boundary, so the only remaining difference is
+the fetch instant (section 4) and the Q-E lag.
 
 ### 2.4 `/regime-snapshot` reads what the watch reads (round 1 finding 1, round 2 finding 15)
 
@@ -147,10 +165,20 @@ depends on the daily rows. Existing router tests whose rows lack `time` are upda
 
 ### 2.5 Composite OMM (SCOPE (2), OMM-DIRECTION)
 
-- Watch: `evaluate_scheduled`'s OMM line passes `direction=` the trigger's direction (same
-  default "Bullish" when absent) — the only line of that function touched.
-- Rule: `_omm` becomes a per-direction memo within the call (`{"Bullish": ..., "Bearish": ...}`,
-  computed lazily from the 2.2-cut rows, round 2 finding 12); `trigger_values.omm_state` reads the
+- One pure helper `omm_direction(trigger_def, fallback)` in `composite_trigger_evaluator.py`:
+  `trigger_def["direction"]` if it is exactly "Bullish"/"Bearish", else `fallback` if it is, else
+  "Bullish". `compute_omm` raises `ValueError` on anything else (`regime_omm.py:182`) and
+  `composite_def` is stored unvalidated, so the value is never passed through raw (round 3 finding 9).
+- Watch: `evaluate_scheduled`'s OMM line passes `direction=omm_direction(trigger_def,
+  w.get("direction"))` — the watch's own `direction` (`strategy_watch_store.py:234`) is the
+  fallback, so a legacy Bearish watch whose `trigger_def` has no direction (dialogs before
+  `CompositeAlertDialog` index.tsx:126-130, or "any" = null) judges Bearish OMM (round 3 finding 10).
+  The only line of that function touched.
+- Rule: `_omm` becomes a per-direction memo within the call (`{"Bullish": ..., "Bearish": ...}`),
+  keyed by `omm_direction(_td, None)` and computed lazily **inside the per-row try** from the
+  2.2-cut rows (round 2 finding 12; round 3 finding 9 -- today's `_omm` at `chart_alerts.py:1004`
+  sits outside any try, and a raise there would abort the block after standard-rule emails and
+  before the commit); `trigger_values.omm_state` reads the
   firing rule's direction entry. `compute_omm` returns None below its own minimum (verified), so
   the rule's `len >= 100` pre-check goes.
 
@@ -161,16 +189,20 @@ Bars with int `time <= closed_candle["time"]`; an undatable closed-candle time -
 
 ### 2.7 The model series must reach the closed candle (round 2 finding 11)
 
-After the cut, if the series' last `time != closed_candle["time"]`, refetch once with
-`max_age=0` (forces a refetch through `refresh_on_close`); still short -> series `[]` (fail
-closed) + WARNING naming the gap. Pinned by a test with a stalled cache entry.
+After the cut, if the series' last `time != closed_candle["time"]`, refetch with `max_age=0`
+(forces a refetch through `refresh_on_close`) **at most once per `(symbol, interval, as_of)`**
+(module dict, pruned to the last 64 keys): `evaluate_closed_candles` calls the block once per
+catch-up candle (`chart_alert_scheduler.py:139-160`), and without the bound a stalled entry would
+cost one 180-day refetch per candle (round 3 finding 14). Still short -> series `[]` (fail closed)
++ WARNING naming the gap. Pinned by a test with a stalled cache entry and a 3-candle catch-up (one
+refetch).
 
 ### 2.8 Unchanged, stated
 
 `_regime_candles` (1500 cap, `as_of`) keeps serving standard rules. The chart display windows,
 chart_cache code and TTLs are unchanged. `chart_cache.py:115-118`'s docstring ("the chart WebSocket
 ... pass neither") becomes false because the WS path now reaches `refresh_on_close` through the
-composite block -> **Q-D** (a comment-only edit in a file this task does not own).
+composite block -> Q-D answered: comment-only edit allowed.
 
 ### 2.9 Coordination with COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (round 2 finding 10)
 
@@ -179,69 +211,83 @@ momentum branch and read its diff of the block; whichever merges second merges m
 resolves (no rebase of the other's branch). The OMM line of `evaluate_scheduled` is not a momentum
 path; recorded as such in decision OMM-DIRECTION.
 
-### 2.10 Provisional daily rows in `historical_store` (decision PARTIAL-ROW, Q-C (b))
+### 2.10 Never store an unsettled daily row (decisions PARTIAL-ROW, Q-F)
 
-**Defect.** `get_bars` fetches `last+1 .. end` whenever `last < min(end, _prev_trading_day())`.
-During session D that range includes D, and Alpaca (and yfinance) return D's **forming** bar, which
-`_store_bars` upserts. From D+1 on, `last == D == _prev_trading_day()` so nothing refetches D; and
-once a later stale fetch appends from `last+1`, row D is **buried** and can never be reached again.
-`ingestion_job.run_ingestion` has the same shape when run manually in session (`fetch_end =
-date.today()`); the nightly Alpaca batch rewrites the whole range and so heals rows for universe
-symbols only when Alpaca is configured and the symbol is in the batch. Custom-universe symbols, a
-missing Alpaca key or a gap-fill symbol keep the partial row for good.
+**Defect.** `get_bars` fetches `last+1 .. end` whenever `last < min(end, _prev_trading_day())`
+(`historical_store.py:230`). During session D that range includes D; Alpaca and Tiingo may return
+D's **forming** bar (yfinance does not: its `end` is exclusive, `historical_store.py:184-187`, and
+stale mode passes `end=today`), and `_store_bars` upserts it. From D+1, `last == D ==
+_prev_trading_day()` so nothing refetches D, and once a later stale fetch appends from `last+1`
+the row is buried for good. `ingestion_job.run_ingestion` writes the same way when run in session
+(`fetch_end = date.today()`, manual run or the startup catch-up); the nightly Alpaca batch rewrites
+the range, so universe symbols heal overnight, but custom-universe and gap-fill symbols do not.
 
-**Definition.** `close(d) = datetime.combine(d, 16:00, MARKET_TZ)` (the same boundary as
-`market_session`; reached by a lazy in-function import of `market_session._close_on`, because
-`market_session` imports `strategy_watch_scheduler`, which imports this module -- a module-level
-import would be a cycle). `_SETTLE = timedelta(minutes=30)`: time after the close for the providers'
-daily bar to include the closing auction (Alpaca's daily bar keeps updating for minutes after
-16:00; Tiingo publishes its EOD bar later, but a Tiingo fetch before then returns no row D rather
-than a partial one). A stored row for date `d` is **provisional** iff
-`fetched_at < close(d) + _SETTLE`, and **healable at `now`** iff it is provisional and
-`now >= close(d) + _SETTLE`. `fetched_at` comes back naive from SQLite (stored UTC wall clock) and
-aware from PostgreSQL; a naive value is read as UTC (that is what `_store_bars` wrote). The clock is
-one module function `_utcnow()`, used by both `_store_bars` (for `fetched_at`) and the heal test, so
-tests inject one instant.
+**Rule (Q-F).** `_SETTLE = timedelta(minutes=30)`; `close(d) = datetime.combine(d, dtime(16, 0),
+MARKET_TZ)` with `MARKET_TZ` from `scheduling_tz` (no import chain; **not** `market_session`,
+whose import of `strategy_watch_scheduler` would make a cycle with this module and add 0.3 s to the
+first `get_bars` — round 3 minor). `is_settled(d, now) := now >= close(d) + _SETTLE`.
+1. `_store_bars` drops every bar with `not is_settled(date, _utcnow())` before the upsert (one
+   DEBUG line with the count). This covers `get_bars` and `ingestion_job` alike: no forming row can
+   enter the store from any writer.
+2. **Legacy rows** (written before this fix) are healed: a row is *provisional* iff `fetched_at <
+   close(d) + _SETTLE`. `get_bars` reads the `(date, fetched_at)` pairs in `[start, end]` (one
+   extra indexed SELECT; ~500 rows at 730 days); `heal = min(d provisional and is_settled(d, now))` (a legacy row
+   for today written in session before deploy waits for its own settle). Stale mode: `fetch_start = min(last+1, heal)`. Heal-only
+   mode (not stale): fetch `heal .. end + 1 day` (the `+1` makes the request independent of each
+   provider's `end` inclusivity -- Alpaca is passed a date-only `end`, `alpaca.py:44`, and its
+   inclusivity is not verified here; the settled filter of step 1 and a `date <= end` filter make
+   the extra day harmless).
+3. **Heal success** = a row for date `heal` was stored with a new `fetched_at`. Otherwise the chain
+   falls through to the next provider (today "first success wins" on any non-empty list,
+   `historical_store.py:243/260/277`, which could stop at a provider that returns other dates but
+   not `heal`). **Retry bound** (round 3 finding 7): a module dict `(symbol, heal date) -> next
+   attempt` allows one heal attempt per pair per 6 h; a halted, delisted or IEX-missing day is then
+   retried four times a day, not per call.
+4. `fetched_at` is normalised by one helper `_as_utc(dt)`: naive (SQLite stores the UTC wall
+   clock) -> `replace(tzinfo=UTC)`; aware (PostgreSQL) -> `astimezone(UTC)`.
+5. **Clock (round 3 finding 2).** One `_utcnow()` feeds `_store_bars` (`fetched_at` and the settled
+   filter), the heal test, and a `_host_today()` = `_utcnow().astimezone().date()` that replaces
+   `date.today()` inside `most_recent_trading_day` (so `_prev_trading_day` follows). This is the
+   host's date exactly as today (host zone, not New York -- the anchor residual recorded in
+   `market_session.todays_bar_is_unclosed` is unchanged); tests patch `_utcnow` alone.
 
-**Algorithm (only `get_bars` changes; `_read_bars` and the return shape are unchanged).**
-1. Read `last` (as today) and the `(date, fetched_at)` pairs for `symbol` in `[start, end]` (one
-   extra indexed SELECT; ~500 rows at 730 days). `heal = min(d for healable d)` or `None`.
-2. **Stale mode** -- the existing condition holds: fetch as today, but
-   `fetch_start = min(last+1, heal)` when `heal` is set, so a buried provisional row inside the
-   request is refetched in the same call. Provider `end` and what is stored are unchanged (a
-   forming row for today may still be stored -- it is provisional and heals later). This keeps the
-   in-session behaviour the scan and guard (i) records were measured against.
-3. **Heal-only mode** -- not stale, `heal` set: fetch `heal .. end + 1 day` from the same provider
-   chain (the `+1` because yfinance's `end` is exclusive; a heal of today's own row after 16:30
-   would otherwise ask yfinance for nothing), then **store only bars with
-   `heal <= date <= end` that are settled at `now`** (`now >= close(date) + _SETTLE`). A heal must
-   never store a forming row: without this filter, healing a provisional D-1 during session D would
-   also pull D's forming bar into the scan's series, a new in-session change that guard (i)'s gate
-   trims -- the exact mismatch shape the AUTOTRADE-2B-CORE records measured.
-4. Provider failure or a provider that returns no row for `d` leaves the row provisional; the next
-   call retries (same retry-per-call shape as today's stale-DB case). Logged at DEBUG once per call.
+**Behaviour changes for every `get_bars` caller** (round 3 findings 4, 5; none edited):
+- `routers/scan.py:1574` (options scan), `routers/stock_scan.py` (7 sites: :345 regime proxy, :638,
+  :913 benchmark, :1044, :1500 SPY, :1684 fib-pullback, :1794 prebreakout),
+  `strategy_param_optimizer`, `historical_store._run_prefetch` (:315, which also warms the
+  confidence cache from the result):
+  * **In session, stale-DB symbol:** today's forming bar is no longer stored or returned; the
+    series ends at D-1. The auto-trade gate trims today's forming bar in session (guard (i)), so
+    scan and gate now **agree** where they disagreed. Confidence-cache entries computed in session
+    for such symbols change accordingly.
+  * **Legacy partial row D-1 (or buried D-k):** healed on the first call; the series keeps its
+    length and only those rows' values change, in session or not.
+  * **After 16:30, stale-DB symbol:** row D is stored and returned (complete), as before.
+  * **16:00-16:30, stale-DB symbol:** row D is skipped; `last` becomes D-1 == `_prev_trading_day()`,
+    so D arrives only with the nightly ingestion or the first call on D+1. For that evening the
+    scan ends at D-1 while guard (i)'s gate keeps D -- **the same mismatch Kenneth accepted for the
+    fresh-DB path** (AUTOTRADE-2B-CORE-GUARD-I-KEPT-COMMON-PATH-COST-ACCEPTED-2026-09-22), now also
+    reachable for a stale-DB symbol first fetched inside that 30-minute window (Q-F residual).
+  * **Fresh DB:** unchanged (nightly rows have `fetched_at` after the settle; no heal, no fetch).
+- `auto_trader`: the fire path does not call `get_bars`; only the agreement above changes. The
+  `auto_trader.py:673-676` comment ("would hand back ... partial bar included") becomes false and
+  is corrected (Q-G); `test_auto_trader.py`'s `_scan_series_times` helper gets the new ceiling
+  (`min(end, last settled day)` on a backfill) by calling the production `is_settled`, so the
+  AUTOTRADE-2B acceptance tests keep modelling the real scan (Q-G).
+- `ingestion_job`: step 1 stores only settled rows (an in-session manual run or startup catch-up no
+  longer writes ~600 forming rows -- round 3 finding 6's burst source is removed, not throttled);
+  step 3's gap-fill heals as above.
+- `regime.py`, `composite_watch.py`, `chart_alerts.py`, `strategy_watch_evaluator.py`: read settled
+  rows only.
 
-**What changes for other `get_bars` callers** (not edited; listed so round 3 can check them):
-- `routers/scan.py` (stock + options scan) and `strategy_param_optimizer`: after `close(D) +
-  _SETTLE`, a symbol that stored a partial D (stale-DB case, AUTOTRADE-2B-CORE-GUARD-I's "narrow
-  case") now reads the completed D. Guard (i)'s gate keeps today's completed Tradier bar after the
-  close, so the scan and the gate now **agree** where they disagreed by one partial bar. In
-  session nothing changes: stale mode stores and returns what it did; heal-only mode never adds a
-  forming row. The accepted common-path cost (fresh DB, post-close, scan ends at D-1 while the
-  gate keeps D) is **untouched**: a row D-1 written by the nightly job has
-  `fetched_at > close(D-1) + _SETTLE`, so it is not provisional and no fetch is triggered.
-- `auto_trader`: does not call `get_bars` on the fire path (`_fetch_scan_window_bars` reads the
-  Tradier feed); unaffected apart from agreeing with the scan more often (above).
-- `ingestion_job`: step 1 writes via `_store_bars`, whose `fetched_at` now comes from `_utcnow()`
-  (same value in production); step 3's gap-fill goes through `get_bars` and heals as above.
-- `regime.py`, `composite_watch.py`, `chart_alerts.py`, `strategy_watch_evaluator.py`: read the
-  healed row; this is the fix they need.
+**One-time legacy heal burst.** Rows written in session before this fix are healed on first read;
+universe symbols with Alpaca are rewritten nightly anyway. At build, a read-only count of
+provisional rows in the dev DB is recorded in the build commit; the per-pair retry bound caps
+repeats.
 
-**Not fixed (residuals, section 4):** provisional rows **outside** a caller's `[start, end]` stay
-until a call covers them (every production caller asks for >= 400 days ending today, so a partial
-row older than that no longer matters to anyone); a day a provider never returns (halt) is retried
-on every call; half-days settle at 16:30, not 13:30 (one extra refetch, harmless); rows written
-before this fix are healed by the same rule on first read, no migration.
+**Residuals (section 4):** the 16:00-16:30 case above; provisional legacy rows outside every
+caller's range stay (all production callers ask >= 400 days ending today); half-days settle at
+16:30 not 13:30 (one row later than necessary on three days a year).
 
 ## 3. Tests and mutations
 
@@ -261,35 +307,53 @@ New file `tests/test_watch_rule_bar_parity.py`:
 3. 15min HMM_intraday: `days=55`; the rule reuses the chart's cache entry (one fetch).
 4. 1h VWAP: identical slices on both paths.
 5. 1D and 1W: HMM_daily, rsi, bb and VWAP-daily read the get_bars rows on both paths; the 1D
-   candle keeps row D, the 1W candle keeps Friday; weekly/chart candles unread.
+   candle keeps row D, the 1W candle keeps Friday; weekly/chart candles unread. **Each path's rows
+   are asserted separately**, including mid-week (1W) and D evening (1D), where they differ (Q-E).
 6. OMM on 15min, 1D, 1W, Bullish and Bearish: identical closes and direction to `compute_omm` on
    both paths; `primary` missing, `primary: null` and `model: null` never raise.
-7. Daily cut (2.2): candle closes at 15:30 -> no row D; 16:00:00 -> row D; undatable time -> `[]`.
+7. Daily cut (2.2): candle closes at 15:30 -> no row D; 16:00:00 -> row D; undatable time -> `[]`;
+   4h candle stamped 11:00 ET -> no row D, 12:00 ET -> row D; 1h 15:30 -> row D.
 8. Catch-up: an older `view` -> no daily row or intraday bar after that candle reaches any model.
 9. `/regime-snapshot` OMM/HMM_daily inputs == the watch's `bars_daily`; Bearish direction pinned;
    HMM_intraday does not 404 on empty daily rows.
-10. One get_bars call across repeated evaluations within the memo window; a new call after it.
-11. Stalled model entry (2.7): one forced refetch, then fail closed.
+10. One get_bars call across repeated evaluations within the memo window; a new call after it and
+    at a settle boundary crossing.
+11. Stalled model entry (2.7): one forced refetch, then fail closed; a 3-candle catch-up forces
+    one refetch in total.
 12. `trigger_values.omm_state` present on an HMM_intraday-only composite fire.
 
-New file `tests/test_historical_store_provisional.py` (2.10) -- in-memory aiosqlite engine patched
-over `historical_store.AsyncSessionLocal`, `_utcnow` patched, the three providers stubbed with
+New file `tests/test_historical_store_settle.py` (2.10) -- in-memory aiosqlite engine patched over
+`historical_store.AsyncSessionLocal`, `_utcnow` patched (so `_host_today`, `most_recent_trading_day`
+and `_prev_trading_day` follow; every scenario pins a weekday), the three providers stubbed with
 recorded `(start, end)` calls (the yfinance stub honours an exclusive `end`):
-13. Q-C scenario: DB ends D-2; a call at session D 11:00 stores D-1 (complete) and D (forming,
-    `fetched_at` 11:00) -> at D+1 11:00 the call refetches D (heal-only), the stored close equals
-    the completed bar, and no D+1 row is stored (forming filter).
-14. Settle boundary: row D fetched 16:10 ET -> provisional; call at 16:29:59 does not fetch, at
-    16:30:00 fetches; row D fetched 16:30:00 -> not provisional (no fetch at D+1).
-15. Buried row: DB holds provisional D and D+1..D+3 (settled) plus staleness -> stale-mode fetch
-    starts at D, not `last+1`.
-16. Heal-only never stores a forming row: provisional D-1 healed at session D 11:00 with providers
-    returning D-1 and D -> only D-1 stored.
-17. yfinance-only chain heals today's own row after 16:30 (`end + 1` passed; row stored).
-18. Fresh DB (nightly-written D-1, `fetched_at` 02:00 next day) at session D and after the close:
-    **zero provider calls** (the accepted common-path cost untouched).
-19. Naive (SQLite) and aware `fetched_at` both judged as UTC; no TypeError.
-20. Provider failure leaves the row provisional and the next call retries.
-Existing `test_historical_store.py` / `test_historical_store_guard.py` stay green unchanged.
+13. Q-C scenario, new writes: DB ends D-2; a call at session D 11:00 with providers returning D-1
+    and a forming D stores D-1 only and returns a series ending D-1; the same scenario run fresh
+    (DB again ending D-2) at 16:29:59 stores D-1 only, and at 16:30:00 stores D-1 and D.
+14. `_store_bars` directly (ingestion's writer): a batch holding today's forming row stores all
+    rows but that one.
+15. Legacy heal-only: a pre-existing row D-1 with `fetched_at` session D-1 11:00 is refetched at
+    D 11:00 (fetch `D-1 .. end+1`), its close replaced, **series length unchanged**, no row D stored.
+16. Buried legacy row: provisional D-3 plus settled D-2..D-1 and a stale DB -> the stale fetch
+    starts at D-3, not `last+1`.
+17. Heal success falls through: Alpaca returns other dates but not the heal date -> Tiingo is
+    called; nothing returns it -> one attempt, then no provider call within 6 h, one after.
+18. Fresh DB (nightly rows, `fetched_at` 02:00 next day) at session D and after the close:
+    **zero provider calls**.
+19. `_as_utc`: naive and aware inputs, under `TZ=America/Los_Angeles` (`monkeypatch.setenv` +
+    `time.tzset()`), so a "read naive as local" mutant is visible on a UTC host (round 3 finding 3).
+20. yfinance-only chain heals today's own legacy row after 16:30 (`end + 1` passed).
+21. Composite direction: `omm_direction` table (valid, lower-case, "Neutral", None, fallback);
+    a rule with direction "bullish" and a legacy Bearish watch with `trigger_def.direction` null
+    reach `compute_omm` with "Bullish" and "Bearish" respectively; no raise escapes the block.
+Existing `test_historical_store.py` / `test_historical_store_guard.py` stay green unchanged (fixed
+2024 dates, all settled).
+
+Suite hygiene (round 3 finding 11): `tests/conftest.py` gets an autouse fixture clearing the new
+module-level memos (daily rows, refetch bound, heal retry bound).
+`test_composite_sustain.py:52-168` and `test_a4e_closed_candle_alignment.py:155-199` call the
+composite block without patching `get_bars`; they get the same `get_bars` patch as the parity
+tests (they would otherwise go to real providers and stay green). The build also greps every test
+calling `evaluate_and_notify_for_symbol` with a composite rule and lists them in the build commit.
 
 Existing tests updated (intended new assertion in brackets):
 - `test_p4b_4h_history.py` [1h -> 180];
@@ -314,17 +378,22 @@ exclusive (r2 bug) -> 5, 7; m8 `_omm` on `_regime_candles` -> 6; m9 OMM without 
 either path -> 6, 9; m10 `.get("primary", {})` back -> 6; m11 drop the catch-up cut, daily -> 8;
 m12 drop it, intraday -> 8; m13 snapshot back to 400d / no completion -> 9; m14 no memo -> 10;
 m15 no refetch-then-fail-closed -> 11;
-m16 no provisional check -> 13; m17 `_SETTLE` dropped (compare to `close(d)`) -> 14; m18 `<=`
-instead of `<` in the provisional test -> 14; m19 stale mode starts at `last+1` -> 15; m20 heal-only
-without the settled filter -> 16; m21 heal-only provider `end` without `+1` -> 17; m22 heal
-triggered on rows fetched after the close (e.g. `fetched_at < end-of-day`) -> 18; m23 naive
-`fetched_at` read as local / not normalised -> 19.
+m16 `_store_bars` without the settled filter -> 13, 14; m17 `_SETTLE` dropped (compare to `close(d)`)
+-> 13; m18 `>` instead of `>=` in `is_settled` -> 13 (16:30:00); m19 stale mode starts at `last+1`
+-> 16; m20 no heal (legacy provisional ignored) -> 15; m21 heal-only provider `end` without `+1` ->
+20; m22 heal success = any non-empty list -> 17; m23 no retry bound -> 17; m24 `_as_utc` reads naive
+as local -> 19; m25 heal triggered on nightly rows -> 18; m26 `_host_today` bypassed (`date.today()`
+kept) -> 13 (pinned weekday vs real date); m27 raw direction to `compute_omm` -> 21; m28 watch
+without `w["direction"]` fallback -> 21; m29 daily cut via `_INTERVAL_COMPLETION_SECONDS` -> 7
+(4h 11:00); m30 memo keyed by date only -> 10; m31 refetch bound per call instead of per
+`(symbol, interval, as_of)` -> 11.
 
 The Q-D docstring fix (`chart_cache.py:115-118`) is comment-only and needs no test; the build
 commit quotes old and new text.
 
 Before each push: full `cd backend && pytest`, `python3 scripts/state.py`, PROJECT_STATE phase +
-probe updated (defect marker gone -> presence probe on `daily_rows_at_candle`).
+probe updated (defect marker gone -> presence probes on `daily_rows_at_candle` and on `def is_settled` in
+`historical_store.py`, round 3 finding 16).
 
 ## 4. Behaviour changes and residual non-parity
 
@@ -332,23 +401,33 @@ Changes: 1h watches fit HMM_intraday on 180d; 4h rules fit on 180d; 1D/1W rules 
 historical store's daily rows; every composite OMM (watch and rule) judges daily OMM in the
 trigger's direction — Bearish OMM composites change on both paths; `/regime-snapshot` OMM/HMM_daily
 show 730d completed rows; catch-up candles stop reading later data; a composite rule whose model
-series cannot reach the closed candle fails closed instead of fitting a stale series; a daily row
-stored before its session's close + 30 min is refetched after it (2.10) -- scans, regime, watches
-and rules read the completed bar instead of a stuck partial one, and the scan agrees with guard
-(i)'s gate in the stale-DB case.
+series cannot reach the closed candle fails closed instead of fitting a stale series; no daily row is
+stored before its session's close + 30 min and legacy partial rows are refetched (2.10) -- scans,
+regime, watches and rules read completed bars only; an in-session scan of a stale-DB symbol ends at
+D-1 (now agreeing with guard (i)'s gate); a legacy Bullish-default Bearish watch judges Bearish OMM.
 
 Residual non-parity, out of scope (logged as open questions at build):
 - different fetch instants (cache TTL, IBKR up on one fetch only, Tradier sandbox partial bar);
-- a rule and a watch evaluated inside `[close(D), close(D) + 30 min)` may read a still-provisional
-  row D (both read the same row, so they agree; freshness, not parity);
-- provisional rows outside every caller's range, halted days retried per call, half-days settling
-  at 16:30 (2.10);
+- **1D/1W structural lag (Q-E, accepted):** the rule reads rows to the judged candle's close, the
+  watch to now -- up to ~17 h on 1D and a week on 1W (2.2);
+- a stale-DB symbol first fetched in 16:00-16:30 lacks row D that evening; scan vs guard (i) gate
+  then show the accepted fresh-DB mismatch (2.10, Q-F);
+- legacy provisional rows outside every caller's range; half-days settle at 16:30 (2.10);
 - structure confirmations: watch = daily-bar structure, rule = chart-interval signals (no owner);
 - momentum confirmations: COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD;
 - `primary.model: null`: the rule passes the primary, the watch fails it (round 2 finding 14).
 
 ## 5. Questions for Kenneth
 
-All answered (2026-09-28): Q-B adopted (2.2), Q-C (b) widen (2.10), Q-D comment-only fix allowed.
-Round 3 may raise new ones; `_SETTLE = 30 min` is a plan choice, not a decision, and can be
-challenged there.
+All answered (2026-09-28): Q-B adopted (2.2), Q-C (b) widen (2.10), Q-D comment-only fix allowed,
+Q-E accept + document the 1D/1W lag, Q-F never store an unsettled row, Q-G correct the three
+out-of-scope descriptions of get_bars. `_SETTLE = 30 min` is a plan choice, not a decision.
+
+## 6. Round 3 disposition (16 findings)
+
+1 -> Q-E, documented + test 5; 2 -> `_utcnow`/`_host_today`; 3 -> test 19 under a non-UTC TZ;
+4, 5 -> 2.10 caller list; 6 -> removed at the source by Q-F; 7 -> heal success + retry bound;
+8 -> yfinance claim corrected, `+1` independent of Alpaca's inclusivity; 9, 10 -> `omm_direction`
++ lazy OMM inside the try; 11 -> conftest memo reset + two files patched; 12 -> exact formula;
+13 -> memo keyed by settle boundary; 14 -> per-`(symbol, interval, as_of)` bound; 15 -> nominal
+span; 16 -> Q-G edits, 2.2 sentence, 2.10 probe. None rejected.

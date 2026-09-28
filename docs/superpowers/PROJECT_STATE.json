@@ -2558,6 +2558,11 @@
       "id": "WATCH-RULE-BAR-PARITY-QB-QD-2026-09-28",
       "q": "WATCH-RULE-BAR-PARITY plan r3 Q-B (which daily rows a composite rule judging a closed candle may read) and Q-D (may the task make a comment-only fix of chart_cache.py:115-118's docstring, which becomes false once the WS path reaches refresh_on_close?).",
       "a": "Kenneth, 2026-09-28: Q-B ADOPTED -- a candle reads exactly the daily rows whose session close is at or before that candle's close instant (inclusive at the close; 1D keeps day D, 1W keeps Friday, a 15:15 candle never sees D's close). This REPLACES item (5)'s literal 'trim at now'. Q-D ALLOWED -- comment-only fix of chart_cache.py:115-118 inside this task; no code in chart_cache.py changes. Plan r4 records both and adds section 2.10 (historical_store provisional-row heal) for decision WATCH-RULE-BAR-PARITY-PARTIAL-ROW-2026-09-28."
+    },
+    {
+      "id": "WATCH-RULE-BAR-PARITY-QE-QF-QG-2026-09-28",
+      "q": "WATCH-RULE-BAR-PARITY adversarial round 3 on plan r4 (16 findings) raised three questions: Q-E the 1D/1W rule-vs-watch structural lag (rule judges candles[-2] and reads rows to that candle's close; the watch cuts rows at now); Q-F store-and-heal vs never-store for forming daily rows in historical_store; Q-G may the task correct three out-of-scope descriptions of get_bars.",
+      "a": "Kenneth, 2026-09-28: Q-E ACCEPT AND DOCUMENT -- up to ~17 h on 1D and up to a week on 1W, listed in plan section 4 and pinned per path in test 5; no follow-up task. Q-F NEVER STORE AN UNSETTLED ROW -- _store_bars drops any bar before close(d)+30 min (every writer incl. ingestion_job); legacy partial rows are healed with a retry bound. Stated consequences: in session a stale-DB symbol's scan series ends at D-1 (now agreeing with guard (i)'s gate); a stale-DB symbol first fetched in 16:00-16:30 lacks row D that evening, the same scan-vs-gate mismatch accepted for the fresh-DB path in AUTOTRADE-2B-CORE-GUARD-I-KEPT-COMMON-PATH-COST-ACCEPTED-2026-09-22, now also reachable for that case. Q-G YES -- comment-only fix at auto_trader.py:673-676, update test_auto_trader.py _scan_series_times, docstring fix in composite_trigger_evaluator.completed_daily_rows."
     }
   ],
   "pending_kenneth": [
