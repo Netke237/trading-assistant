@@ -214,6 +214,7 @@ class _OneTickQueue:
 
 
 def test_t7_ws_displays_full_list_structure_but_evaluates_on_the_closed_prefix():
+    from fastapi import WebSocketDisconnect
     from starlette.testclient import TestClient
     from app.main import app
 
@@ -225,8 +226,17 @@ def test_t7_ws_displays_full_list_structure_but_evaluates_on_the_closed_prefix()
          patch('app.routers.chart.get_stream_client') as sc:
         sc.return_value.subscribe = AsyncMock(return_value=_OneTickQueue('new-candle'))
         sc.return_value.unsubscribe = lambda *a: None
+        # Drain until the SERVER closes (the queue's second get ends the stream),
+        # never a fixed count: the handler awaits `evaluate` only AFTER sending the
+        # 4th message, and leaving this block cancels the handler, so a client that
+        # stopped at 4 raced that await and failed under CPU load (BACKEND-INTERMITTENT-TEST).
+        msgs = []
         with TestClient(app).websocket_connect('/chart/stream/AAPL?interval=15min') as ws:
-            msgs = [ws.receive_json() for _ in range(4)]  # history, structure, tick, structure
+            while True:
+                try:
+                    msgs.append(ws.receive_json())
+                except WebSocketDisconnect:
+                    break
     assert [m['type'] for m in msgs] == ['history', 'structure', 'tick', 'structure']
     full = compute_structure(candles, '15min', 'AAPL')
     assert msgs[3]['signals'] == json.loads(json.dumps(full))  # display: full list
