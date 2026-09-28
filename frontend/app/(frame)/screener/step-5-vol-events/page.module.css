@@ -57,3 +57,15 @@
 .gateCell {
   display: contents;
 }
+
+/* The table body does not scroll. The shared .stepBody sets `overflow-x: auto`,
+ * which (forcing overflow-y to auto too) turns it into a clipping box: a GATE
+ * tooltip on the first rows was cut off at its top edge and the panel's width
+ * added a horizontal scrollbar while hovered. Nothing here needs scrolling --
+ * the fixed tracks in COLUMNS total ~590px and the NAME track shrinks to 0 --
+ * so the tooltip is allowed to paint outside the table instead.
+ * `div.` raises specificity above the shared single-class .stepBody, so the
+ * override does not depend on which CSS chunk the bundler emits last. */
+div.tableBody {
+  overflow: visible;
+}

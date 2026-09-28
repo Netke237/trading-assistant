@@ -219,7 +219,13 @@ import pageStyles from './page.module.css';
 // not the 1200 CLAUDE.md said until it was corrected alongside this): header 94px vs row
 // track 114.8px on "T-Mobile US Telecommunications", putting IV, IV PCTL, NEXT
 // EVENT and GATE 21px off their own data; 173px off on a long single-word name.
-const COLUMNS = '24px 32px 72px minmax(0, 1fr) 120px 70px 110px 80px';
+//
+// The NAME track is also CAPPED (240px) rather than taking every spare pixel: a
+// `1fr` NAME stretched the table to the full step width, leaving a wide empty
+// band between a short name and the IV column and pushing GATE to the far right
+// edge. Capped, the columns sit together on the left and the spare width falls
+// after GATE.
+const COLUMNS = '24px 32px 72px minmax(0, 240px) 120px 70px 110px 80px';
 
 /** Module-level so the "no scan yet" case is a STABLE reference. `?? []` built a
  *  fresh array every render, so before a scan landed every memo below it
@@ -588,7 +594,7 @@ export default function Step5Page() {
         )}
       </div>
 
-      <div className={`${styles.stepBody} ${styles.stepBody_noPad}`}>
+      <div className={`${styles.stepBody} ${styles.stepBody_noPad} ${pageStyles.tableBody}`}>
         <div
           className={pageStyles.tableHeader}
           style={{ gridTemplateColumns: COLUMNS }}
@@ -715,6 +721,10 @@ export default function Step5Page() {
               >
               <StatusBadge
                 status={gate}
+                // Right-anchored: the panel opens leftward from the badge. Centred
+                // on it, the panel reached past the table's right edge, where it
+                // was cut off and summoned a horizontal scrollbar.
+                tooltipAlign="right"
                 tooltip={eventVolGateTooltip({
                   ivRank: iv.value,
                   ivBasis: iv.basis,
