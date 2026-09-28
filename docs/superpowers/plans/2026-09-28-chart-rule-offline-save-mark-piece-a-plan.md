@@ -92,7 +92,9 @@ existing mark verbatim, since a previous refusal reason says more. With no
 existing mark, set `OFFLINE_SAVE_REASON`. `ok` (201/409) clears the mark and
 `refused` stores the detail, both unchanged. A failed GET still returns early
 and changes nothing, because without it the store cannot tell which rules are
-local-only. **C3-ok (r2 finding 1).** `syncRules` copies `okGen` (`new Map(okGen)`)
+local-only.
+
+**C3-ok (r2 finding 1).** `syncRules` copies `okGen` (`new Map(okGen)`)
 when it starts, before its GET. In its final write it drops the `unsaved`
 entry, whatever kind it is, for every id whose `okGen` value has moved since
 that copy. An `addRule` 201/409 that settles during the sync proves the
@@ -101,7 +103,7 @@ settles `ok` first, then the sync's final `set` writes an offline mark. That
 offline mark can come from the sync's own re-POST, whose same-id insert
 races `addRule`'s POST and gets a 500.
 
-The final write keeps today's shape: one `set` with
+The final write otherwise keeps today's shape: one `set` with
 `rules: merged`, `unsavedRules: unsaved` and `migrated: true`. The `syncGen`
 bump happens right after that `set`. No other change is made to
 `syncRules`' ordering (piece B).
