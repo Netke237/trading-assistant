@@ -2553,6 +2553,11 @@
       "id": "WATCH-RULE-BAR-PARITY-PARTIAL-ROW-2026-09-28",
       "q": "WATCH-RULE-BAR-PARITY plan r3 Q-C: historical_store.get_bars stores today's FORMING daily bar when it runs during session D while the DB lacks D-1 (fetch last+1..today, historical_store.py:230-232), and never refetches it (on D+1 last == _prev_trading_day). Already affects every composite watch and intraday rule's daily inputs; r3 extends it to 1D/1W rules and OMM. Accept + separate task, or widen this task?",
       "a": "Kenneth, 2026-09-28: (b) WIDEN THIS TASK -- WATCH-RULE-BAR-PARITY also fixes the partial-daily-row defect in backend/app/services/historical_store.py (owned file added). The plan must design it (scanner and auto-trade paths read get_bars too -- see AUTOTRADE-2B-CORE-F1-GUARD-I records before touching the today's-bar logic) and go through the adversarial loop. Q-B (daily rows per candle = rows completed at the candle's close, replacing item 5's literal 'trim at now') and Q-D (comment-only fix of chart_cache.py:115-118) were NOT answered in this session -- still open."
+    },
+    {
+      "id": "WATCH-RULE-BAR-PARITY-QB-QD-2026-09-28",
+      "q": "WATCH-RULE-BAR-PARITY plan r3 Q-B (which daily rows a composite rule judging a closed candle may read) and Q-D (may the task make a comment-only fix of chart_cache.py:115-118's docstring, which becomes false once the WS path reaches refresh_on_close?).",
+      "a": "Kenneth, 2026-09-28: Q-B ADOPTED -- a candle reads exactly the daily rows whose session close is at or before that candle's close instant (inclusive at the close; 1D keeps day D, 1W keeps Friday, a 15:15 candle never sees D's close). This REPLACES item (5)'s literal 'trim at now'. Q-D ALLOWED -- comment-only fix of chart_cache.py:115-118 inside this task; no code in chart_cache.py changes. Plan r4 records both and adds section 2.10 (historical_store provisional-row heal) for decision WATCH-RULE-BAR-PARITY-PARTIAL-ROW-2026-09-28."
     }
   ],
   "pending_kenneth": [
