@@ -1552,7 +1552,7 @@
     {
       "id": "CHART-RULES-SYNC-CONCURRENCY-PLAN-R4-2026-09-28",
       "q": "Plan stage of CHART-RULES-SYNC-CONCURRENCY capped at r3 (none clean). Option 1 (accept r3 fix + one more plan round), 2 (narrow to in-memory tombstones, re-plan) or 3 (split cross-tab/reload tombstones out)?",
-      "a": "Kenneth 2026-09-28: 'Lets go as you recommend with option 1' (the agent had recommended option 2; clarification declined). Recorded as OPTION 1: one more plan round (r4) over the r3 fix. Confirm at next session start."
+      "a": "Kenneth 2026-09-28: 'Lets go as you recommend with option 1' (the agent had recommended option 2; clarification declined). Recorded as OPTION 1: one more plan round (r4) over the r3 fix. CONFIRMED by Kenneth at the next session start (2026-09-28): option 1."
     },
     {
       "id": "CHART-RULE-OFFLINE-SAVE-MARK-PIECE-A-SCOPE-2026-09-28",
