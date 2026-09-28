@@ -176,3 +176,8 @@ After the build, the phase probe is re-pointed from the defect marker to a
   mark. That mark can come from the sync's own re-POST racing the server's
   check-then-insert and getting a 500. Fix: C3-ok (`okGen`, copied at sync
   start, drops the mark), test T5e.
+- **Plan r3** (2026-09-28, reviewing only the r2 fix): **ZERO GATE-LEVEL
+  FINDINGS — plan stage CLEAN.** The reviewer traced every order in which
+  `addRule`'s ok can land against the sync's GET, its re-POST and its final
+  set. It also checked the offline and refused paths against `syncGen`, and
+  that persisted and sent data are untouched.
