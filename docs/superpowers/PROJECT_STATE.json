@@ -2538,6 +2538,11 @@
       "id": "CHART-WS-1D-1W-APPROACH-A-2026-09-27",
       "q": "CHART-WS-1D-1W-RULES: how should the chart WS evaluate 1D/1W rules without a daily bar being judged twice (WS + scheduler) or re-judged every cooldown?",
       "a": "Kenneth, 2026-09-27: approach A. The WS evaluates with the stored spelling ('1D'/'1W') and shares one already-judged marker per (symbol, interval, closed bar) with the chart-alert scheduler, so each daily/weekly bar is judged once by whichever path gets there first; the in-app toast shows only when the chart path gets there first; the browser stops judging 1D/1W. Rejected: B (scheduler pushes fires to open charts; bigger change) and C (rename only; the WS re-judges the same bar every cooldown)."
+    },
+    {
+      "id": "WATCH-RULE-BAR-PARITY-SCOPE-2026-09-28",
+      "q": "WATCH-RULE-BAR-PARITY plan section 5: (1) do 1D composite rules also read completed daily get_bars rows? (2) fold the rule-path OMM input gap (rule OMM runs on the chart interval's closes -- intraday, or weekly on 1W -- while the watch, /regime-snapshot and the auto-trader gate run OMM on daily closes) into this task? (3) accept that 1h composite watches' intraday VWAP changes with the 55d->180d window?",
+      "a": "Kenneth, 2026-09-28: YES to all three, as proposed. (1) 1D rules read completed daily get_bars rows for rsi/bb/HMM_daily, like 1W -- supersedes D7's 'rsi/bb/HMM_daily on 1D rules unchanged' (P4B-DECISIONS-2026-09-25 item 7), on the A4G-CHART-COMPLETED-FOR-ALL principle (same data on rule and watch); shares D7's existing get_bars fetch. (2) Folded in: composite rules compute OMM on the same completed daily get_bars rows as the watch (same fetch), matching the /regime-snapshot preview (P4B item 4b). (3) Accepted: VWAP and HMM keep one shared completed series (VWAP-CONFIRMATION-LIKE-REGIME-MODELS), so the 1h window change moves the watch VWAP too; precedent P4B item 5 (watch-side change accepted for parity)."
     }
   ],
   "pending_kenneth": [
