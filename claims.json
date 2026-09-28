@@ -7,6 +7,14 @@
       "expires_at": "2026-09-28T21:44:27Z",
       "note": "plan + build: volume-spike/RSI-cross/MACD-cross composite confirmations",
       "task": "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/blissful-maxwell-c8g4nk",
+      "claimed_at": "2026-09-28T18:47:17Z",
+      "expires_at": "2026-09-28T21:47:17Z",
+      "note": "plan: shared HMM_intraday window, rule trims at now, 1W rules read daily rows",
+      "task": "WATCH-RULE-BAR-PARITY"
     }
   ]
 }
