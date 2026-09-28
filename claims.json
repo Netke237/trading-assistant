@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/bold-ride-7nf8wj",
-      "claimed_at": "2026-09-28T19:06:24Z",
-      "expires_at": "2026-09-29T00:45:13Z",
-      "note": "find + fix intermittent backend test on main",
-      "task": "BACKEND-INTERMITTENT-TEST"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/docc-2-options-regime",
       "claimed_at": "2026-09-28T20:38:13Z",
       "expires_at": "2026-09-28T23:52:20Z",
