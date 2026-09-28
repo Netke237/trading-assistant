@@ -15,6 +15,14 @@
       "expires_at": "2026-09-28T21:47:17Z",
       "note": "plan: shared HMM_intraday window, rule trims at now, 1W rules read daily rows",
       "task": "WATCH-RULE-BAR-PARITY"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/sleepy-gates-4084r7",
+      "claimed_at": "2026-09-28T18:57:23Z",
+      "expires_at": "2026-09-28T21:57:23Z",
+      "note": "piece B: sync concurrency (mid-sync add/delete, serial runs, timeouts)",
+      "task": "CHART-RULES-SYNC-CONCURRENCY"
     }
   ]
 }
