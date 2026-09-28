@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/blissful-maxwell-c8g4nk",
       "claimed_at": "2026-09-28T18:47:17Z",
-      "expires_at": "2026-09-28T21:47:17Z",
+      "expires_at": "2026-09-28T22:07:49Z",
       "note": "plan: shared HMM_intraday window, rule trims at now, 1W rules read daily rows",
       "task": "WATCH-RULE-BAR-PARITY"
     },
