@@ -2573,6 +2573,11 @@
       "id": "WATCH-RULE-BAR-PARITY-Q-I-LEGACY-WATCH-DIRECTION-2026-09-28",
       "q": "WATCH-RULE-BAR-PARITY Q-I: evaluate_scheduled cannot see the watch's own saved direction, so a legacy Bearish watch whose trigger_def has no direction would still get Bullish OMM. Making it Bearish needs a new parameter plus an edit of the caller in strategy_watch_evaluator.py (not owned; COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD owns that call). Drop the fallback or widen scope?",
       "a": "Kenneth, 2026-09-28: DROP THE FALLBACK AND LOG IT. The watch uses the trigger's direction when present, else Bullish; legacy Bearish watches without a trigger direction keep judging Bullish OMM exactly as today. strategy_watch_evaluator.py stays untouched. Follow-up to log: pass the watch's direction through to evaluate_scheduled."
+    },
+    {
+      "id": "WATCH-RULE-BAR-PARITY-BUILD-AFTER-PLAN-CAP-2026-09-28",
+      "q": "WATCH-RULE-BAR-PARITY: the plan has run 3 adversarial rounds (14/15/16 findings, not shrinking -- the round 1-2 briefs omitted audit_rule v2's gate and shrinking target). Another plan round, or build now?",
+      "a": "Kenneth, 2026-09-28: BUILD NOW, precedent A5D-BUILD-AFTER-PLAN-CAP-2026-09-25. (1) Plan r6 = r5 + Q-H (keep get_bars' fetch rule) + Q-I (no legacy direction fallback) + a note that the round that raised Q-H/Q-I left no saved findings; no further plan round. (2) Build as two audit units: UNIT A = plan 2.10 (historical_store: never store an unsettled daily row) FIRST, then UNIT B = parity sections 2.1-2.9 on top. (3) Each unit gets its own code stage of up to 3 rounds; every brief states audit_rule v2's gate (blocks only a wrong number to the user / on a broker order, or corrupt persisted data; report nothing else) and rounds N>1 review only the previous round's fixes. (4) Before touching chart_alerts.py, read COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD's branch (claude/youthful-rubin-l0p9ed); whichever merges second merges main in. Work continues in a new session."
     }
   ],
   "pending_kenneth": [
