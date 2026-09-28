@@ -1193,4 +1193,4 @@ past the hard cap, and the findings below go into the fresh Document C plans.
 | 9.6 | LIVE |
 | 9.8 | LIVE |
 
-The questions on the live items were put to Kenneth on 2026-09-28.
+Kenneth answered all of them on 2026-09-28 (recommended options), recorded as decisions `DOCC-9.6-MONEY-BLOCKS-REQUIRED`, `DOCC-9.8-CLOSED-MONEY-SUBTREES`, `DOCC-9.3B-D1-ACCEPT-COMMENT-LOSS` and `DOCC-9.4-9.5-RATIFIED-RESTAT` (all `-2026-09-28`). No §9 question remains open.
