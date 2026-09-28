@@ -79,7 +79,10 @@ re-POST of a rule deleted meanwhile is skipped (C4).
 ## Changes
 
 All new module-level state sits beside `syncGen`/`okGen` (never persisted or
-rendered); `__resetChartAlertSyncGenForTests` also resets it.
+rendered); `__resetChartAlertSyncGenForTests` also resets it — **in memory
+only** (the `deletedIds` Set, `running`, `queued`); it never touches
+localStorage, so T4c can simulate a reload. Test files clear the storage key
+themselves (see Tests, r4 N2).
 
 **C1. Serial runs (G4).** `syncRules` becomes a thin wrapper over
 `runSync()` (today's body, changed as below):
@@ -117,7 +120,8 @@ the rules read after the GET, `serverIds` = the GET's ids, `current` =
   2. each snapshot `localOnly` rule still in `current`, **as its current
      object** (`currentById.get(id)`, G6), unless `dropped(id)`;
   3. each rule in `current` whose id is in neither `snapshot` nor `serverIds`
-     (added mid-sync), in `current` order.
+     (added mid-sync), in `current` order, unless `dropped(id)` (r4 N5: a
+     rule added here and deleted in another tab meanwhile).
 - **unsavedRules** = this run's verdicts for the ids in (2) (after the existing
   okGen filter), plus, for each rule in (3), `s.unsavedRules[id]` if present
   (its own `addRule` answer may already have marked it). Server ids carry no
@@ -134,18 +138,32 @@ the 500 most recent; colon form per CLAUDE.md). The `'bamendjou:alerts'` key,
 its `partialize` and `version` are untouched. Every storage read/write is in
 `try/catch` and is skipped when `window` is undefined; if storage is
 unavailable the Set still works for the tab's life.
+- **Reading the stored array (r4 N3).** If the key is missing, the value is not
+  valid JSON, or it is not an array, it is read as `[]`; non-string entries are
+  discarded. A failed or odd read never stops the write that follows.
 - `deleteRule(id)` adds `id` before sending its DELETE, by **read-merge-write**:
   read the stored array, add `id`, drop duplicates, keep the 500 most recent,
   write it back, and add `id` to the Set. Storage is never written straight
-  from the Set, so one tab's write cannot erase another tab's tombstone (r3 F1).
+  from the Set, so one tab's write does not erase another tab's tombstone
+  (r3 F1) — except when two tabs read-merge-write the same key within the
+  same instant (localStorage is last-writer-wins per key): not reachable in
+  use, since it needs two human deletes in two tabs within milliseconds
+  (r4 N1, accepted).
+- **Order in `deleteRule` (r4 N4):** (a) tombstone (Set + storage), (b) send
+  the DELETE, (c) the existing `set(...)` removing the rule. Step (a)'s storage
+  write is in its own `try/catch`, so a quota error in (a) or in zustand
+  persist's write during (c) can no longer skip the DELETE or the in-memory
+  tombstone.
 - Every tombstone test goes through one function, `isTombstoned(id)`, which
   re-reads storage first (merging it into the Set; the Set alone if storage
   fails). It is called before each re-POST (skip), in every POST settle
   handler (`addRule`'s, a sync re-POST's on time and late), for each id a GET
   lists, and once, synchronously, right before the final functional `set`,
   whose `dropped(id)` uses that fresh set. So a tombstone written by another
-  tab, or before a reload, counts even when it lands mid-run (r3 F2). *(r3
-  fix, written in but NOT re-audited — plan-stage cap reached.)*
+  tab, or before a reload, counts even when it lands mid-run (r3 F2; r4
+  audited clean). The GET's ids may be checked with one storage read for the
+  whole list rather than one per id (r4 N9), provided the check right before
+  the final `set` is still a fresh read.
 - Rule ids come from `makeId()` (`AlertRuleBuilder`) and are never reused, so
   a tombstone never hides a later rule. The 500 cap only matters for an id
   whose racing POST commits after 500 later deletions — not reachable in use.
@@ -209,8 +227,12 @@ offline `deleteRule` today (not in scope); it is still never restored locally
 - **`addRule`'s own `refused`/`offline` mark on a rule deleted meanwhile** —
   already dropped by piece A's check (i).
 - **Tombstones are shared by the tabs of one browser** (same localStorage,
-  re-read at each run's start). A rule deleted in another browser is seen
-  through its absence from a later GET, as today.
+  re-read at every `isTombstoned` check). A rule deleted in another browser is
+  seen through its absence from a later GET, as today.
+- **Stale copies in other tabs (r4 N6, pre-existing).** A tab still holding a
+  rule another tab deleted rewrites it into `'bamendjou:alerts'` on any `set`
+  (e.g. `addHistory`); a reload shows it until the mount sync drops it via its
+  tombstone. Not changed here.
 
 ## Tests (`frontend/lib/__tests__/p4aChartAlertStore.test.ts`, new describe)
 
@@ -238,7 +260,17 @@ offline `deleteRule` today (not in scope); it is still never restored locally
 - T4d (r3). Tombstones written to storage directly (another tab) survive this
   tab's `deleteRule`; a tombstone written to storage directly while a re-POST
   is pending → the POST answers 201 → a DELETE is sent and the rule is not in
-  `rules` after the run.
+  `rules` after the run. Also (r4 N7):
+  (i) a server rule listed by the GET, tombstoned in storage between the GET
+  and the final `set` (while a re-POST awaits) → not in `rules`;
+  (ii) a re-POST past the deadline, tombstoned in storage only (Set untouched)
+  before its late 201 → a DELETE is sent;
+  (iii) 501 `deleteRule` calls → storage holds the 500 most recent, oldest
+  first;
+  (iv) storage pre-set to `'not json'`, then to `'{}'` → `deleteRule(x)`
+  still writes `["x"]`, and a later sync drops a GET-listed `x`;
+  (v) a rule added mid-sync, tombstoned in storage before the final `set` →
+  not in `rules` (C2 bucket 3).
 - T5 (G4). Two `syncRules` calls back to back: the second GET is not sent
   until the first run's final write; a third call during the first run shares
   the follow-up (exactly two GETs); all three promises resolve.
@@ -251,7 +283,11 @@ offline `deleteRule` today (not in scope); it is still never restored locally
   next call.
 - T8 (G6). `updateRule`/`setRuleEnabled` on a local-only rule while the sync
   awaits its re-POST: the edit survives the final write.
-- Existing piece A tests (T1–T6, T5c/d/e) keep passing unchanged.
+- Existing piece A tests (T1–T6, T5c/d/e) and `chartAlertStore.test.ts` keep
+  passing; the only change to them is one added line in each file's
+  `beforeEach`: `localStorage.removeItem('bamendjou:alert-tombstones')`
+  (r4 N2: T4's `deleteRule('n1')` would otherwise leave an `n1` tombstone that
+  makes later `n1` tests drop the rule).
 
 ## Verification
 
@@ -282,5 +318,16 @@ comment names the phase next to `requestSync`).
   F2 a tombstone another tab wrote during a run was invisible to that run's
   checks (its accepted re-POST left the deleted rule created on the server and
   kept locally). Fix written in (read-merge-write; `isTombstoned` re-reads
-  storage at every check) but NOT re-audited. **PLAN-STAGE CAP REACHED (3
-  rounds, none clean): auditing stopped per audit_rule; waiting on Kenneth.**
+  storage at every check). **PLAN-STAGE CAP REACHED (3 rounds, none clean);
+  Kenneth chose option 1 (decision CHART-RULES-SYNC-CONCURRENCY-PLAN-R4-2026-09-28,
+  confirmed): one more plan round.**
+- **Plan r4** (2026-09-28, scope: the r3 diff and its interactions): **CLEAN,
+  0 gate-level.** 9 non-gate notes, folded in without re-audit (none changes
+  a gate-relevant path; each tightens the spec): N1 read-merge-write not
+  atomic across tabs (accepted, wording narrowed); N2 stored tombstones leak
+  between tests (reset helper memory-only, tests clear the key); N3
+  unreadable stored value → `[]`, write still happens; N4 `deleteRule` order
+  (tombstone, DELETE, then `set`); N5 bucket (3) filtered by `dropped`; N6
+  stale copies in other tabs (pre-existing, recorded); N7 T4d cases (i)–(v);
+  N8 stale wording fixed; N9 one storage read per GET list allowed.
+  **Plan stage closed; next: code stage (≤ 3 rounds).**
