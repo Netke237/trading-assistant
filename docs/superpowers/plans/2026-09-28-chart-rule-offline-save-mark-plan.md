@@ -56,14 +56,39 @@ not distinguish the two (acceptable — both mean "not saved, will retry").
 - `refused` → mark with the server's detail (unchanged);
 - `offline` → mark with `OFFLINE_SAVE_REASON`;
 - `ok` → nothing (unchanged; a fresh id has no mark).
-Either mark is written only if a rule with that id is still in `rules` when the
-POST settles, so a rule deleted mid-POST leaves no stale key.
+Either mark is written only if (i) a rule with that id is still in `rules`
+when the POST settles, so a rule deleted mid-POST leaves no stale key, and
+(ii) no `syncRules` has ruled on that id since this POST started (r1 finding
+2): a module-level `Map<string, number>` generation counter (not Zustand state,
+like `notesStore`'s timer map) is read by `addRule` before its POST; every
+`syncRules` bumps it, at its final write, for every id it ruled on (each id in
+`serverIds` and each re-POSTed `localOnly` id). A late offline answer to the
+original POST can then not re-mark a rule a sync has just proved saved.
 
 **C3. `syncRules`.** For a local-only rule whose re-POST is `offline`: keep an
 existing mark verbatim (a previous refusal reason is more informative), else
 mark `OFFLINE_SAVE_REASON`. `ok` (201/409) clears; `refused` stores the detail
 (both unchanged). A failed GET still returns early and changes nothing — the
 store cannot tell which rules are local-only without it.
+
+The final write becomes a functional `set((s) => …)` computed against the
+state at that moment, not the snapshot taken before the awaits (r1 finding 1:
+today a rule added while the sync awaits its re-POSTs is dropped from `rules`,
+and so from localStorage, silently). With `snapshot` = the ids in `localRules`
+and `current` = `s.rules`:
+- **rules** = the server rules, then the snapshot's `localOnly` rules, each
+  kept only if its id is not "deleted mid-sync" (in `snapshot` but no longer
+  in `current`); then every rule in `current` whose id is neither in
+  `snapshot` nor in `serverIds` (added mid-sync), appended in `current` order.
+- **unsavedRules** = the sync's verdicts for the ids it re-POSTed and kept,
+  plus, for each rule added mid-sync, its current mark if any. Ids in
+  `serverIds` have no mark.
+
+**C3-deleted.** "Deleted mid-sync" drops a server rule too: a rule in the
+snapshot that the user deleted while the sync awaited would otherwise come back
+from a GET that predated the DELETE, shown unmarked although the server no
+longer holds it (the reverse of finding 1). A server rule not in the snapshot
+(created elsewhere) is kept as today.
 
 **C4. Doc comments** on `unsavedRules` and `PostOutcome` updated (they say an
 offline outcome marks nothing).
@@ -79,13 +104,9 @@ offline outcome marks nothing).
   reload the mark comes back on the first sync whose GET succeeds and whose
   re-POST fails. If the server is wholly down the GET fails and no mark shows;
   but then nothing can be proven either way. Logged as **L3-b**.
-- **Race: sync and add in flight together.** `syncRules` sets `unsavedRules`
-  from a map built during its loop; an `addRule` mark written in between for a
-  rule that was not yet in the sync's `localRules` snapshot would be dropped by
-  that `set`. To close it, C3's final `set` merges: marks for ids that are not
-  in the sync's `localOnly` list and are still in `rules` are carried over
-  from the current state (they were not examined by this sync). Ids the sync
-  examined take the sync's verdict; ids the server returned are cleared.
+- **Edit mid-sync.** An `updateRule` while the sync awaits is overwritten by the
+  server's version in `merged` (as today); its PUT still lands on the server,
+  and the next sync shows it. Not a saved/not-saved state error; unchanged.
 
 ## Tests (`frontend/lib/__tests__/p4aChartAlertStore.test.ts`)
 
@@ -97,8 +118,12 @@ offline outcome marks nothing).
   whose GET returns the rule → cleared.
 - T4. `addRule`, rule deleted before the POST settles → no key (offline and
   refused).
-- T5. An `addRule` mark written while a `syncRules` is in flight, for a rule
-  the sync did not examine, survives the sync's `set`.
+- T5. `addRule` of n1 while a `syncRules` is awaiting a re-POST, n1's POST
+  offline: after the sync, n1 is in `rules` AND marked `OFFLINE_SAVE_REASON`.
+- T5b. A snapshot rule (local-only, and separately a server one) deleted while
+  the sync awaits: not in `rules` after the sync, no key in `unsavedRules`.
+- T5c. `addRule` POST pending → a sync re-POSTs n1 and gets 201 → the `addRule`
+  POST then settles offline → no mark.
 - T6. Page test (`alerts/__tests__/page.test.tsx`): the offline reason renders
   as `Not saved to server: could not reach the server; …`.
 
@@ -107,3 +132,12 @@ offline outcome marks nothing).
 `cd frontend && npx tsc --noEmit && npx jest --silent` clean. Backend untouched
 (no backend run needed; state.py exit 0). After the build the phase probe is
 re-pointed from the defect marker to `present` on `OFFLINE_SAVE_REASON`.
+
+## Audit record
+
+- **Plan r1** (2026-09-28): 2 gate-level findings, both fixed in this plan.
+  (1) a rule added while `syncRules` awaits was dropped from `rules` and never
+  marked (pre-existing drop; C3's functional final `set`, T5); (2) a late
+  offline answer to `addRule`'s POST could re-mark a rule a sync had just
+  proved saved (C2's generation counter, T5c). The reverse of (1), a rule
+  deleted mid-sync coming back unmarked, was added as C3-deleted/T5b.
