@@ -120,10 +120,123 @@ const syncGen = new Map<string, number>();
 const okGen = new Map<string, number>();
 const bump = (m: Map<string, number>, id: string) => m.set(id, (m.get(id) ?? 0) + 1);
 
-/** Test-only: clears both generation maps. */
+/** CHART-RULES-SYNC-CONCURRENCY C3 -- deleted rule ids ("tombstones").
+ *  `deleteRule` adds its id here BEFORE sending the DELETE, and nothing ever
+ *  removes one: no DELETE answer (2xx, 404, 5xx, network error, in any order)
+ *  can bring a deleted rule back (G2), and a POST that was in flight when the
+ *  rule was deleted is answered with another DELETE (C4, G3). Rule ids come
+ *  from `makeId()` and are never reused, so a tombstone never hides a later
+ *  rule.
+ *
+ *  Mirrored to localStorage under its OWN key (the colon-form
+ *  `'bamendjou:alert-tombstones'`: a JSON array of ids, oldest first, the 500
+ *  most recent), so a tombstone survives a reload and is shared by this
+ *  browser's tabs. `'bamendjou:alerts'`, its `partialize` and `version` are
+ *  untouched. Storage is only ever written by read-merge-write
+ *  (`addTombstone`), never straight from this Set, so one tab cannot erase
+ *  another tab's tombstone; and every check goes through `isTombstoned`,
+ *  which re-reads storage first, so a tombstone another tab writes mid-run
+ *  counts. Known limit: two tabs read-merge-writing within the same instant
+ *  can lose one tombstone (localStorage is last-writer-wins per key). */
+const TOMBSTONE_KEY = 'bamendjou:alert-tombstones';
+const TOMBSTONE_LIMIT = 500;
+const deletedIds = new Set<string>();
+
+/** The stored tombstone array: `[]` when the key is missing, not JSON or not
+ *  an array (non-string entries dropped); `null` when storage itself is
+ *  unavailable (SSR, blocked storage) -- the Set alone then serves. */
+function readStoredTombstones(): string[] | null {
+  if (typeof window === 'undefined') return null;
+  let raw: string | null;
+  try { raw = window.localStorage.getItem(TOMBSTONE_KEY); } catch { return null; }
+  if (raw === null) return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return []; }
+  return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+}
+
+/** Merges storage into the Set (another tab's or a pre-reload tombstone). */
+function refreshTombstones(): void {
+  const stored = readStoredTombstones();
+  if (stored) for (const id of stored) deletedIds.add(id);
+}
+
+function isTombstoned(id: string): boolean {
+  refreshTombstones();
+  return deletedIds.has(id);
+}
+
+function addTombstone(id: string): void {
+  deletedIds.add(id);
+  const stored = readStoredTombstones();
+  if (stored === null) return;
+  for (const s of stored) deletedIds.add(s);
+  const next = [...new Set([...stored.filter((s) => s !== id), id])].slice(-TOMBSTONE_LIMIT);
+  try { window.localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(next)); } catch { /* the Set still holds it */ }
+}
+
+/** CHART-RULES-SYNC-CONCURRENCY C5 (G5) -- the longest a sync run waits on one
+ *  fetch (the GET, or one re-POST). */
+export const SYNC_FETCH_TIMEOUT_MS = 15_000;
+
+const TIMED_OUT = Symbol('timed out');
+
+/** Races `p` against a timer; the timer is always cleared. `p` is NOT
+ *  aborted: a re-POST the server may still commit must keep running so its
+ *  late answer can be acted on (C4/C5). */
+async function raceDeadline<T>(p: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<typeof TIMED_OUT>((resolve) => { timer = setTimeout(() => resolve(TIMED_OUT), ms); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Runs `work` with an abort signal, rejecting after `ms` (and aborting) even
+ *  if the fetch ignores the signal. For the sync GET only (C5). */
+async function withDeadline<T>(ms: number, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ctl = new AbortController();
+  const out = await raceDeadline(work(ctl.signal), ms);
+  if (out === TIMED_OUT) {
+    ctl.abort();
+    throw new Error('sync fetch timed out');
+  }
+  return out;
+}
+
+/** CHART-RULES-SYNC-CONCURRENCY C1 (G4) -- `syncRules` runs are serial. A call
+ *  while a run is in flight waits for it, then runs once more (a second mount
+ *  still gets a fresh GET); every call made during one run shares that single
+ *  follow-up. `run` never rejects, and `running` is cleared in `finally`, so a
+ *  throwing run cannot wedge the queue. */
+let running: Promise<void> | null = null;
+let queued: Promise<void> | null = null;
+function requestSync(run: () => Promise<void>): Promise<void> {
+  if (!running) {
+    running = run().finally(() => { running = null; });
+    return running;
+  }
+  if (!queued) {
+    const next = () => { queued = null; return requestSync(run); };
+    queued = running.then(next, next);
+  }
+  return queued;
+}
+
+/** Test-only: clears the in-memory module state (both generation maps, the
+ *  tombstone Set, the sync queue). Never touches localStorage, so a test can
+ *  simulate a reload; test files clear `'bamendjou:alert-tombstones'`
+ *  themselves. */
 export function __resetChartAlertSyncGenForTests(): void {
   syncGen.clear();
   okGen.clear();
+  deletedIds.clear();
+  running = null;
+  queued = null;
 }
 
 async function pushRuleToAPI(rule: AlertRule): Promise<PostOutcome> {
@@ -233,6 +346,9 @@ export const useChartAlertStore = create<ChartAlertState>()(
         if (added) {
           const gen = syncGen.get(rule.id) ?? 0;
           void pushRuleToAPI(rule).then((outcome) => {
+            // C4 (G3): deleted while this POST was in flight -- an accepted
+            // (or unconfirmed) POST may have created it on the server.
+            if (outcome.kind !== 'refused' && isTombstoned(rule.id)) void deleteRuleFromAPI(rule.id);
             if (outcome.kind === 'ok') {
               // The server holds the rule, so no mark is right whatever the
               // ordering: a sync that ran during this POST may have marked it.
@@ -266,11 +382,15 @@ export const useChartAlertStore = create<ChartAlertState>()(
       },
 
       deleteRule: (id) => {
+        // C3: tombstone first, then the DELETE, then the local removal -- a
+        // storage error in either write cannot skip the DELETE or the
+        // in-memory tombstone.
+        addTombstone(id);
+        void deleteRuleFromAPI(id);
         set((s) => ({
           rules: s.rules.filter((r) => r.id !== id),
           history: s.history.filter((h) => h.rule_id !== id),
         }));
-        deleteRuleFromAPI(id);
       },
 
       addHistory: (entry, skipApiSync = false) => {
@@ -309,15 +429,36 @@ export const useChartAlertStore = create<ChartAlertState>()(
 
       markViewed: () => set({ newSinceView: 0 }),
 
-      syncRules: async () => {
+      /** CHART-RULES-SYNC-CONCURRENCY (piece B) -- a sync run GETs the
+       *  server's rules, re-POSTs each local-only rule, then writes the merge.
+       *  While it awaits, the user may add, delete or edit rules, and another
+       *  mount may sync. The run therefore:
+       *  - G4: runs serially (`requestSync`, C1), so every final write is the
+       *    newest verdict;
+       *  - G1/G6: writes functionally against the state at that moment (C2):
+       *    a rule added mid-run is kept, a local-only rule keeps its edits;
+       *  - G2: drops every tombstoned id (C3), re-read right before the write;
+       *  - G3: skips re-POSTing a tombstoned rule, and re-DELETEs one the
+       *    server lists or a POST may have created (C4);
+       *  - G5: never waits more than SYNC_FETCH_TIMEOUT_MS on one fetch (C5). */
+      syncRules: () => requestSync(async () => {
         const okAtStart = new Map(okGen);
         try {
-          const res = await fetch(`${BASE_URL}/alerts/rules`);
-          if (!res.ok) return;
-          const serverRules: AlertRule[] = await res.json();
-          const localRules = get().rules;
+          const serverRules = await withDeadline(SYNC_FETCH_TIMEOUT_MS, async (signal) => {
+            const res = await fetch(`${BASE_URL}/alerts/rules`, { signal });
+            if (!res.ok) return null;
+            return (await res.json()) as AlertRule[];
+          });
+          if (!serverRules) return;
+          const snapshot = get().rules;
+          const snapshotIds = new Set(snapshot.map((r) => r.id));
           const serverIds = new Set(serverRules.map((r) => r.id));
-          const localOnly = localRules.filter((r) => !serverIds.has(r.id));
+          const localOnly = snapshot.filter((r) => !serverIds.has(r.id));
+
+          // C4: the server lists a rule deleted here -- delete it again
+          // (fire and forget). One storage read for the whole list.
+          refreshTombstones();
+          for (const id of serverIds) if (deletedIds.has(id)) void deleteRuleFromAPI(id);
 
           // A2 (Q1): a refused re-POST keeps the rule locally and says why;
           // an accepted one (201/409) clears any old mark; an offline one
@@ -325,7 +466,26 @@ export const useChartAlertStore = create<ChartAlertState>()(
           // else marks OFFLINE_SAVE_REASON.
           const unsaved: Record<string, string> = {};
           for (const rule of localOnly) {
-            const outcome = await pushRuleToAPI(rule);
+            if (isTombstoned(rule.id)) continue; // C4: deleted meanwhile -- never POST it
+            const post = pushRuleToAPI(rule);
+            const outcome = await raceDeadline(post, SYNC_FETCH_TIMEOUT_MS);
+            if (outcome === TIMED_OUT) {
+              // C5: treated as offline; the POST keeps running (not aborted)
+              // and its late answer is acted on.
+              unsaved[rule.id] = get().unsavedRules[rule.id] ?? OFFLINE_SAVE_REASON;
+              void post.then((late) => {
+                if (late.kind !== 'refused' && isTombstoned(rule.id)) void deleteRuleFromAPI(rule.id);
+                if (late.kind !== 'ok') return;
+                bump(okGen, rule.id);
+                set((s) => {
+                  if (!(rule.id in s.unsavedRules)) return s;
+                  const { [rule.id]: _cleared, ...rest } = s.unsavedRules;
+                  return { unsavedRules: rest };
+                });
+              });
+              continue;
+            }
+            if (outcome.kind !== 'refused' && isTombstoned(rule.id)) void deleteRuleFromAPI(rule.id);
             if (outcome.kind === 'refused') unsaved[rule.id] = outcome.detail;
             else if (outcome.kind === 'offline') {
               unsaved[rule.id] = get().unsavedRules[rule.id] ?? OFFLINE_SAVE_REASON;
@@ -337,16 +497,42 @@ export const useChartAlertStore = create<ChartAlertState>()(
             if ((okGen.get(id) ?? 0) !== (okAtStart.get(id) ?? 0)) delete unsaved[id];
           }
 
-          const merged = [...serverRules];
-          for (const rule of localOnly) {
-            if (!merged.find((r) => r.id === rule.id)) merged.push(rule);
-          }
-
-          set({ rules: merged, migrated: true, unsavedRules: unsaved });
+          // C2: computed against the state at the moment of writing.
+          refreshTombstones();
+          set((s) => {
+            const currentById = new Map(s.rules.map((r) => [r.id, r]));
+            const dropped = (id: string) =>
+              deletedIds.has(id) || (snapshotIds.has(id) && !currentById.has(id));
+            const rules: AlertRule[] = [];
+            const seen = new Set<string>();
+            const unsavedRules: Record<string, string> = {};
+            // (1) the server's rules
+            for (const r of serverRules) {
+              if (seen.has(r.id) || dropped(r.id)) continue;
+              seen.add(r.id);
+              rules.push(r);
+            }
+            // (2) snapshot local-only rules, as their current object (G6)
+            for (const r of localOnly) {
+              const cur = currentById.get(r.id);
+              if (!cur || seen.has(r.id) || dropped(r.id)) continue;
+              seen.add(r.id);
+              rules.push(cur);
+              if (r.id in unsaved) unsavedRules[r.id] = unsaved[r.id]!;
+            }
+            // (3) rules added mid-run (G1), keeping their own addRule mark
+            for (const r of s.rules) {
+              if (seen.has(r.id) || snapshotIds.has(r.id) || serverIds.has(r.id) || dropped(r.id)) continue;
+              seen.add(r.id);
+              rules.push(r);
+              if (r.id in s.unsavedRules) unsavedRules[r.id] = s.unsavedRules[r.id]!;
+            }
+            return { rules, migrated: true, unsavedRules };
+          });
           for (const id of serverIds) bump(syncGen, id);
           for (const rule of localOnly) bump(syncGen, rule.id);
         } catch {}
-      },
+      }),
 
       setMigrated: () => set({ migrated: true }),
 
