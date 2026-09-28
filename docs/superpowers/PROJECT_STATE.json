@@ -2548,6 +2548,11 @@
       "id": "WATCH-RULE-BAR-PARITY-OMM-DIRECTION-2026-09-28",
       "q": "WATCH-RULE-BAR-PARITY plan r2 Q-A: composite watches and rules call compute_omm(closes) with the default direction='Bullish', so a Bearish OMM composite compares conviction_min against the BULLISH conviction, while /regime-snapshot shows the direction-aligned value. Fix here or separate task? Also recorded: SCOPE (3)'s premise was wrong -- strategy confirmations read <=120-bar slices, so the 1h window change does not move the watch VWAP; (3) is moot.",
       "a": "Kenneth, 2026-09-28: (a) FIX HERE. Both paths pass the trigger's direction to compute_omm (one argument in evaluate_scheduled's OMM line, composite_trigger_evaluator.py, and one in the chart_alerts composite block), matching the /regime-snapshot preview. Scope extension: that single evaluate_scheduled line (not a momentum path of COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD)."
+    },
+    {
+      "id": "WATCH-RULE-BAR-PARITY-PARTIAL-ROW-2026-09-28",
+      "q": "WATCH-RULE-BAR-PARITY plan r3 Q-C: historical_store.get_bars stores today's FORMING daily bar when it runs during session D while the DB lacks D-1 (fetch last+1..today, historical_store.py:230-232), and never refetches it (on D+1 last == _prev_trading_day). Already affects every composite watch and intraday rule's daily inputs; r3 extends it to 1D/1W rules and OMM. Accept + separate task, or widen this task?",
+      "a": "Kenneth, 2026-09-28: (b) WIDEN THIS TASK -- WATCH-RULE-BAR-PARITY also fixes the partial-daily-row defect in backend/app/services/historical_store.py (owned file added). The plan must design it (scanner and auto-trade paths read get_bars too -- see AUTOTRADE-2B-CORE-F1-GUARD-I records before touching the today's-bar logic) and go through the adversarial loop. Q-B (daily rows per candle = rows completed at the candle's close, replacing item 5's literal 'trim at now') and Q-D (comment-only fix of chart_cache.py:115-118) were NOT answered in this session -- still open."
     }
   ],
   "pending_kenneth": [

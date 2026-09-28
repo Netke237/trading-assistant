@@ -238,6 +238,8 @@ Residual non-parity, out of scope (logged as open questions at build):
 
 - **Q-B** daily rows per candle: adopt 2.2's rule ("a candle reads the rows completed when it
   closed"), which replaces item (5)'s literal "trim at now". Recommended.
-- **Q-C** partial daily rows: accept for now and open a separate task for `historical_store`
-  (recommended), or extend this task into `historical_store.py`.
+- **Q-C ANSWERED 2026-09-28 (decision WATCH-RULE-BAR-PARITY-PARTIAL-ROW-2026-09-28): (b) widen.**
+  `historical_store.py` is now owned; r4 must add a section designing the partial-row fix (the
+  scanner and auto-trade paths also read get_bars -- read the AUTOTRADE-2B-CORE-F1-GUARD-I records
+  first) and update 2.3's freshness paragraph and section 4. Q-B and Q-D are still open.
 - **Q-D** allow a comment-only fix of `chart_cache.py:115-118`'s docstring. Recommended.
