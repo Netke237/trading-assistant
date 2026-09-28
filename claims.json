@@ -39,14 +39,6 @@
       "expires_at": "2026-09-28T22:17:47Z",
       "note": "build DOCC-1 money-block validation per 2026-09-28 plan",
       "task": "DOCC-1-MONEY-BLOCKS"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/sleepy-gates-4084r7",
-      "claimed_at": "2026-09-28T19:18:54Z",
-      "expires_at": "2026-09-28T22:18:54Z",
-      "note": "plan audit r4 (r3 diff) then build if clean",
-      "task": "CHART-RULES-SYNC-CONCURRENCY"
     }
   ]
 }
