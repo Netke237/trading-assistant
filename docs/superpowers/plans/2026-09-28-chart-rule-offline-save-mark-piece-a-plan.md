@@ -66,7 +66,9 @@ saved, will retry", so they share the text.
   (no (i)/(ii) check). A 201/409 proves the server holds the rule whatever the
   ordering, and a mark CAN exist here: a `syncRules` that ran while this POST
   was in flight may have re-POSTed the rule, got `offline` and marked it under
-  C3 (r1 finding 1). Today's code writes nothing on `ok`.
+  C3 (r1 finding 1). Today's code writes nothing on `ok`. It also bumps a
+  module-level `okGen = new Map<string, number>()` for that id (r2 finding 1,
+  see C3).
 
 Either mark (`refused`/`offline`) is written inside a functional `set((s) => …)`, and only if both
 hold:
@@ -90,14 +92,23 @@ existing mark verbatim, since a previous refusal reason says more. With no
 existing mark, set `OFFLINE_SAVE_REASON`. `ok` (201/409) clears the mark and
 `refused` stores the detail, both unchanged. A failed GET still returns early
 and changes nothing, because without it the store cannot tell which rules are
-local-only. The final write keeps today's shape: one `set` with
+local-only. **C3-ok (r2 finding 1).** `syncRules` copies `okGen` (`new Map(okGen)`)
+when it starts, before its GET. In its final write it drops the `unsaved`
+entry, whatever kind it is, for every id whose `okGen` value has moved since
+that copy. An `addRule` 201/409 that settles during the sync proves the
+server holds the rule. This covers the ordering r1's fix misses: `addRule`
+settles `ok` first, then the sync's final `set` writes an offline mark. That
+offline mark can come from the sync's own re-POST, whose same-id insert
+races `addRule`'s POST and gets a 500.
+
+The final write keeps today's shape: one `set` with
 `rules: merged`, `unsavedRules: unsaved` and `migrated: true`. The `syncGen`
 bump happens right after that `set`. No other change is made to
 `syncRules`' ordering (piece B).
 
 **C4. Doc comments.** Update the comments on `unsavedRules` and `PostOutcome`,
-which today say an offline outcome marks nothing, and comment `syncGen` too.
-A test-only reset `__resetChartAlertSyncGenForTests()` is exported and called
+which today say an offline outcome marks nothing, and comment `syncGen`/`okGen` too.
+A test-only reset `__resetChartAlertSyncGenForTests()` (clears both maps) is exported and called
 in the store test's `beforeEach`.
 
 ## Checked, not changed
@@ -132,6 +143,11 @@ in the store test's `beforeEach`.
 - T5d (r1). `addRule`'s POST is pending; a sync's GET omits n1 and its re-POST
   of n1 is offline (n1 marked `OFFLINE_SAVE_REASON`); the `addRule` POST then
   settles 201 → no key. Same with 409, and with a prior refusal mark.
+- T5e (r2). `addRule`'s POST is pending; a sync's GET omits n1, and its re-POST
+  of n1 returns 500. A second local-only rule's re-POST is held open, so the
+  sync has not written yet. `addRule` then settles 201, and the held re-POST
+  is released → no key for n1. Control: without the `addRule` 201, n1 is
+  marked.
 
 `frontend/app/(frame)/alerts/__tests__/page.test.tsx`:
 - T6. The offline reason renders as
@@ -152,3 +168,9 @@ After the build, the phase probe is re-pointed from the defect marker to a
   C2's `ok` branch wrote nothing. Fix: `ok` clears the key unconditionally (C2,
   T5d). Reviewer confirmed C2(ii), C2(i), the bump placement and
   persisted/sent data clean.
+- **Plan r2** (2026-09-28, reviewing only the r1 fix): the unconditional clear is
+  confirmed safe. 1 gate-level finding, fixed in this plan: the reverse order,
+  where `addRule` settles `ok` before the sync's final `set` writes an offline
+  mark. That mark can come from the sync's own re-POST racing the server's
+  check-then-insert and getting a 500. Fix: C3-ok (`okGen`, copied at sync
+  start, drops the mark), test T5e.
