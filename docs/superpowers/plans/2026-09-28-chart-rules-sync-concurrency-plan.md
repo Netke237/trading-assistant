@@ -134,9 +134,18 @@ the 500 most recent; colon form per CLAUDE.md). The `'bamendjou:alerts'` key,
 its `partialize` and `version` are untouched. Every storage read/write is in
 `try/catch` and is skipped when `window` is undefined; if storage is
 unavailable the Set still works for the tab's life.
-- `deleteRule(id)` adds `id` (Set and storage) before sending its DELETE.
-- `runSync` re-reads the stored array into the Set when it starts (so a
-  tombstone written by another tab, or before a reload, counts).
+- `deleteRule(id)` adds `id` before sending its DELETE, by **read-merge-write**:
+  read the stored array, add `id`, drop duplicates, keep the 500 most recent,
+  write it back, and add `id` to the Set. Storage is never written straight
+  from the Set, so one tab's write cannot erase another tab's tombstone (r3 F1).
+- Every tombstone test goes through one function, `isTombstoned(id)`, which
+  re-reads storage first (merging it into the Set; the Set alone if storage
+  fails). It is called before each re-POST (skip), in every POST settle
+  handler (`addRule`'s, a sync re-POST's on time and late), for each id a GET
+  lists, and once, synchronously, right before the final functional `set`,
+  whose `dropped(id)` uses that fresh set. So a tombstone written by another
+  tab, or before a reload, counts even when it lands mid-run (r3 F2). *(r3
+  fix, written in but NOT re-audited — plan-stage cap reached.)*
 - Rule ids come from `makeId()` (`AlertRuleBuilder`) and are never reused, so
   a tombstone never hides a later rule. The 500 cap only matters for an id
   whose racing POST commits after 500 later deletions — not reachable in use.
@@ -226,6 +235,10 @@ offline `deleteRule` today (not in scope); it is still never restored locally
   re-POST past the deadline that later settles 201 for a rule deleted
   meanwhile → a DELETE is sent after that 201; a late 201 for a rule not
   deleted clears its offline mark.
+- T4d (r3). Tombstones written to storage directly (another tab) survive this
+  tab's `deleteRule`; a tombstone written to storage directly while a re-POST
+  is pending → the POST answers 201 → a DELETE is sent and the rule is not in
+  `rules` after the run.
 - T5 (G4). Two `syncRules` calls back to back: the second GET is not sent
   until the first run's final write; a third call during the first run shares
   the follow-up (exactly two GETs); all three promises resolve.
@@ -263,3 +276,11 @@ comment names the phase next to `requestSync`).
   Fix: re-POSTs are raced but no longer aborted, their late answer re-DELETEs
   a tombstoned id (and a late `ok` clears the mark); tombstones are mirrored
   to their own localStorage key and re-read at each run's start.
+- **Plan r3** (2026-09-28): 2 gate-level findings, both from r2's shared
+  tombstone storage across tabs: F1 a tab writing storage from its own Set
+  erased another tab's tombstone (then a reload restored the deleted rule);
+  F2 a tombstone another tab wrote during a run was invisible to that run's
+  checks (its accepted re-POST left the deleted rule created on the server and
+  kept locally). Fix written in (read-merge-write; `isTombstoned` re-reads
+  storage at every check) but NOT re-audited. **PLAN-STAGE CAP REACHED (3
+  rounds, none clean): auditing stopped per audit_rule; waiting on Kenneth.**
