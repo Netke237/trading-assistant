@@ -71,8 +71,9 @@ Caps: plan stage ≤ 3 rounds, code stage ≤ 3 rounds (AUDIT-CAP-PER-STAGE-2026
 Frontend only: `frontend/lib/chartAlertStore.ts` and
 `frontend/lib/__tests__/p4aChartAlertStore.test.ts` (plus a new test file if
 cleaner). No backend, page or persisted-shape change (`partialize` and
-`version` untouched). What is sent over the wire is unchanged except: syncRules
-fetches carry an abort signal (C5), a DELETE may be re-sent (C4), and a
+`version` untouched; one new localStorage key, `'bamendjou:alert-tombstones'`,
+C3). What is sent over the wire is unchanged except: the sync GET carries an
+abort signal (C5), a DELETE may be re-sent (C4), and a
 re-POST of a rule deleted meanwhile is skipped (C4).
 
 ## Changes
@@ -126,21 +127,31 @@ the rules read after the GET, `serverIds` = the GET's ids, `current` =
   `addRule` answer still marks it (the `syncGen` guard of piece A lets it
   through).
 
-**C3. Deletions are tombstoned (G2).** A module-level
-`deletedIds = new Set<string>()`. `deleteRule(id)` adds `id` before sending
-its DELETE. Rule ids come from `makeId()` (`AlertRuleBuilder`) and are never
-reused, so a tombstone never hides a later rule; it lives for the tab's life
-(not persisted). In the final write, `dropped(id)` = `deletedIds.has(id)`, or
-`id` is in `snapshot` but not in `current` (defensive: `deleteRule` is the
-only path that removes a rule). No DELETE answer (2xx, 404, 5xx, network
-error, in any order, for any number of DELETEs of that id) changes the
-tombstone, so a 404 that raced an in-flight POST (r1 F1) or a failing older
-DELETE (r1 F3) can never bring the rule back. A server rule not in `snapshot`,
-not in `current` and not tombstoned (created elsewhere) is kept, as today.
+**C3. Deletions are tombstoned (G2).** Deleted ids are kept in a module-level
+`deletedIds: Set<string>`, mirrored to localStorage under its **own** key
+`'bamendjou:alert-tombstones'` (a JSON array of ids, oldest first, capped at
+the 500 most recent; colon form per CLAUDE.md). The `'bamendjou:alerts'` key,
+its `partialize` and `version` are untouched. Every storage read/write is in
+`try/catch` and is skipped when `window` is undefined; if storage is
+unavailable the Set still works for the tab's life.
+- `deleteRule(id)` adds `id` (Set and storage) before sending its DELETE.
+- `runSync` re-reads the stored array into the Set when it starts (so a
+  tombstone written by another tab, or before a reload, counts).
+- Rule ids come from `makeId()` (`AlertRuleBuilder`) and are never reused, so
+  a tombstone never hides a later rule. The 500 cap only matters for an id
+  whose racing POST commits after 500 later deletions — not reachable in use.
+- In the final write, `dropped(id)` = `id` is tombstoned, or `id` is in
+  `snapshot` but not in `current` (defensive: `deleteRule` is the only path
+  that removes a rule).
+- No DELETE answer (2xx, 404, 5xx, network error, in any order, for any
+  number of DELETEs of that id) changes the tombstone, so a 404 that raced an
+  in-flight POST (r1 F1) or a failing older DELETE (r1 F3) can never bring
+  the rule back, in this tab or after a reload (r2 F1).
+- A server rule not in `snapshot`, not in `current` and not tombstoned
+  (created elsewhere) is kept, as today.
 
 **C4. A deleted rule is deleted again (G3).** A tombstoned id can still be
-created on the server by a POST that was in flight (or that the server
-committed after C5 aborted it). The store re-sends the DELETE (fire and
+created on the server by a POST that was in flight when the user deleted it. The store re-sends the DELETE (fire and
 forget, never awaited, so it cannot hold a run) whenever it has reason to
 think the server might hold a tombstoned id:
 - `addRule`'s POST settles `ok` or `offline` and `rule.id` is tombstoned
@@ -151,21 +162,31 @@ think the server might hold a tombstoned id:
   retries until the server stops listing it.
 - `runSync`: before each re-POST, a snapshot rule that is tombstoned by then
   is **skipped** (no POST is sent, r1 F2); a re-POST that settles `ok` or
-  `offline` for an id tombstoned meanwhile sends a DELETE.
+  `offline` for an id tombstoned meanwhile sends a DELETE — including a
+  re-POST that settles only after C5 stopped waiting for it (see C5).
 If every re-DELETE fails, the rule stays on the server — the same state as an
-offline `deleteRule` today (not in scope); after a reload the tombstone is
-gone and a GET listing it restores it, unmarked (truthful: the server holds it).
+offline `deleteRule` today (not in scope); it is still never restored locally
+(C3), and each later sync, in any tab of this browser, retries the DELETE.
 
-**C5. Bounded fetches (G5).** `runSync`'s GET (including `res.json()`) and
-each re-POST (including reading a refusal body) run under a 15 s deadline:
-`withDeadline(ms, (signal) => …)` passes an `AbortController` signal to
-`fetch`, and races the work against a timer that aborts and rejects, so the
-bound holds even if a `fetch` ignores the signal; the timer is cleared in
-`finally`. A timed-out GET returns early (as a failed GET does today); a
-timed-out re-POST is `offline` (marked `OFFLINE_SAVE_REASON`, or its prior
-mark kept). `pushRuleToAPI` takes an optional `signal`; `addRule`'s POST is not
-bounded (it never blocks a sync). `SYNC_FETCH_TIMEOUT_MS = 15_000` is exported
-for tests.
+**C5. Bounded waits (G5).** `runSync` never waits more than
+`SYNC_FETCH_TIMEOUT_MS = 15_000` (exported for tests) on one fetch:
+- **GET** (including `res.json()`): run under `withDeadline(ms, (signal) => …)`,
+  which passes an `AbortController` signal to `fetch` and races the work
+  against a timer that aborts and rejects, so the bound holds even if a
+  `fetch` ignores the signal; the timer is cleared in `finally`. A timed-out
+  GET returns early, as a failed GET does today (nothing written).
+- **Re-POST** (including reading a refusal body): raced against the same kind
+  of timer but **not aborted** (r2 F1: an aborted POST the server still
+  commits would leave C4 re-DELETEing too early). On timeout the run treats
+  the outcome as `offline` (marked `OFFLINE_SAVE_REASON`, or its prior mark
+  kept) and moves on; the POST keeps running, and when it settles:
+  - `ok` → bump `okGen` for the id, clear its `unsavedRules` key if present
+    (the server holds it — the same rule as `addRule`'s `ok`), and if the id
+    is tombstoned send a DELETE (C4);
+  - `offline` → if tombstoned, send a DELETE (C4); nothing else;
+  - `refused` → nothing (the rule already carries a mark).
+- `addRule`'s own POST is not bounded (it never blocks a sync).
+- Fire-and-forget DELETEs (C4) are never awaited by a run.
 
 **C6. Doc comments** on `syncRules` / module state naming G1–G6 and this phase.
 
@@ -178,8 +199,9 @@ for tests.
   own `addRule` mark lifecycle.
 - **`addRule`'s own `refused`/`offline` mark on a rule deleted meanwhile** —
   already dropped by piece A's check (i).
-- **Tombstones are per tab.** Another tab deleting a rule is seen through its
-  absence from a later GET, as today.
+- **Tombstones are shared by the tabs of one browser** (same localStorage,
+  re-read at each run's start). A rule deleted in another browser is seen
+  through its absence from a later GET, as today.
 
 ## Tests (`frontend/lib/__tests__/p4aChartAlertStore.test.ts`, new describe)
 
@@ -198,6 +220,12 @@ for tests.
   that id is sent after it; with `refused` → no extra DELETE.
 - T4b (r1 F2). A snapshot rule deleted before the sync reaches its turn: no
   POST for it is sent.
+- T4c (r2 F1). The tombstone survives a reload: `deleteRule(r1)`, then reset
+  the in-memory module state only (simulated reload, storage kept) and a sync
+  whose GET lists r1 → r1 not restored, a DELETE for r1 sent. Also: a
+  re-POST past the deadline that later settles 201 for a rule deleted
+  meanwhile → a DELETE is sent after that 201; a late 201 for a rule not
+  deleted clears its offline mark.
 - T5 (G4). Two `syncRules` calls back to back: the second GET is not sent
   until the first run's final write; a third call during the first run shares
   the follow-up (exactly two GETs); all three promises resolve.
@@ -206,7 +234,7 @@ for tests.
 - T7 (G5). With fake timers: the first run's GET never resolves → after
   `SYNC_FETCH_TIMEOUT_MS` the call resolves and the queued call sends its own
   GET; a re-POST that never resolves → after the timeout the rule is marked
-  `OFFLINE_SAVE_REASON`; a run whose final `set` throws does not block the
+  `OFFLINE_SAVE_REASON` and the POST's signal is not aborted; a run whose final `set` throws does not block the
   next call.
 - T8 (G6). `updateRule`/`setRuleEnabled` on a local-only rule while the sync
   awaits its re-POST: the edit survives the final write.
@@ -229,3 +257,9 @@ comment names the phase next to `requestSync`).
   `offline`, so C4 sent no DELETE and a later GET restored the rule; F3 a
   failing older DELETE removed the entry a later successful DELETE had set.
   C1, C2, okGen/syncGen traced clean.
+- **Plan r2** (2026-09-28): 1 gate-level finding, fixed: a re-POST aborted by
+  C5 that the server still committed after both DELETEs had answered 404 left
+  the rule on the server, and a reload (in-memory tombstone lost) restored it.
+  Fix: re-POSTs are raced but no longer aborted, their late answer re-DELETEs
+  a tombstoned id (and a late `ok` clears the mark); tombstones are mirrored
+  to their own localStorage key and re-read at each run's start.
