@@ -966,12 +966,15 @@ async def _await_abandoned_heston_calibrations(timeout: float = 10.0) -> None:
     enough: under full-suite load the executor thread can finish after the
     sleep, pytest-asyncio then closes the loop with the task still pending,
     and the task is later finalized as 'Task was destroyed but it is
-    pending!' -- an asyncio ERROR that the NEXT test's gc.collect() + caplog
-    assertion picks up (HESTON-SCAN-TEST-INTERMITTENT-2026-09-29)."""
+    pending!' -- an asyncio ERROR that the first LATER test running
+    gc.collect() + a caplog assertion
+    (test_abandoned_heston_task_exception_does_not_leak_unretrieved) picks up.
+    Until it is finalized, such a task also holds a permit on the
+    module-global _HESTON_SEMAPHORE, which later tests assert on
+    (HESTON-SCAN-TEST-INTERMITTENT-2026-09-29)."""
     tasks = {
         t for t in asyncio.all_tasks()
-        if t is not asyncio.current_task()
-        and getattr(t.get_coro(), "__qualname__", "") == "_run_heston_calibration"
+        if getattr(t.get_coro(), "__qualname__", "") == "_run_heston_calibration"
     }
     if not tasks:
         return
@@ -1179,6 +1182,9 @@ async def test_heston_calibration_respects_scan_concurrency_limit(monkeypatch):
                 _process_symbol(f"SYM{i}", "Bullish", "Swing", mock_client, sem, "test-scan-id")
                 for i in range(symbol_count)
             ])
+        # Normally a no-op (0.05s fakes vs the 2.0s ceiling); under heavy load
+        # a symbol could be abandoned, and its task must finish on this loop.
+        await _await_abandoned_heston_calibrations()
     finally:
         wide_executor.shutdown(wait=True)
 
