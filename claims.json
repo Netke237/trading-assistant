@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "claude/youthful-rubin-l0p9ed",
       "claimed_at": "2026-09-29T04:50:57Z",
-      "expires_at": "2026-09-29T07:50:57Z",
+      "expires_at": "2026-09-29T08:04:59Z",
       "note": "G3: Step 5 threshold stores fall back to hardcoded values and never re-fetch",
       "task": "DOCC-3"
     }
