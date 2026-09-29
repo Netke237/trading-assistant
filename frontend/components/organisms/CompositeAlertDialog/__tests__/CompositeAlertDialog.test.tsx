@@ -227,3 +227,136 @@ describe('CompositeAlertDialog — A4f interval follows the model', () => {
     expect(mockApi.addCompositeWatch.mock.calls[0][3]).toBe('1h');
   });
 });
+
+describe('CompositeAlertDialog — COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD test 15 (momentum rows)', () => {
+  async function renderDialog(direction = 'Bullish') {
+    mockApi.getSymbolRegimeSnapshot.mockResolvedValue(SNAPSHOT as any);
+    mockApi.addCompositeWatch.mockResolvedValue({} as any);
+    mockApi.addCompositeAlertRule.mockResolvedValue({} as any);
+    await act(async () => {
+      render(<CompositeAlertDialog symbol="AAPL" direction={direction} onClose={() => {}} />);
+    });
+  }
+  const box = (label: string) => screen.getByRole('checkbox', { name: label }) as HTMLInputElement;
+  const sustain = () => screen.getByRole('spinbutton') as HTMLInputElement;
+  async function save() {
+    fireEvent.click(screen.getByRole('button', { name: /create alert/i }));
+    await act(async () => {});
+  }
+
+  // The labels must read exactly as the backend's _momentum_label, so the row the
+  // user ticks is the row the alert's checklist names.
+  it.each([
+    ['Bullish', ['RSI crosses up through 60', 'MACD crosses above its signal line',
+      'Volume spike (at least 2x usual, up candle)']],
+    ['Bearish', ['RSI crosses down through 40', 'MACD crosses below its signal line',
+      'Volume spike (at least 2x usual, down candle)']],
+    ['any', ['RSI crosses up through 60 or down through 40', 'MACD crosses above or below its signal line',
+      'Volume spike (at least 2x usual, any candle colour)']],
+  ])('labels the three momentum rows by direction (%s)', async (direction, labels) => {
+    await renderDialog(direction);
+    for (const l of labels) expect(box(l)).toBeInTheDocument();
+  });
+
+  it('keeps the six structure rows', async () => {
+    await renderDialog();
+    for (const l of ['Break of Structure', 'Change of Character', 'Fair Value Gap', 'Order Block',
+      'RSI Divergence', 'MACD Divergence']) {
+      expect(box(l)).toBeInTheDocument();
+    }
+  });
+
+  it('saves a momentum row as type momentum with the alert direction, in list order after structure', async () => {
+    await renderDialog('Bearish');
+    fireEvent.click(box('RSI crosses down through 40'));
+    fireEvent.click(box('Break of Structure'));
+    await save();
+    const td = mockApi.addCompositeWatch.mock.calls[0][1] as any;
+    expect(td.confirmations).toEqual([
+      { type: 'structure', signal_kind: 'BOS', direction: 'Bearish', min_confidence: 60 },
+      { type: 'momentum', signal_kind: 'rsi_cross', direction: 'Bearish', min_confidence: 60 },
+    ]);
+  });
+
+  it('saves direction null for momentum rows when the alert direction is any (rule path too)', async () => {
+    await renderDialog('any');
+    fireEvent.click(screen.getByRole('button', { name: /Rule \(live\)/ }));
+    fireEvent.click(box('MACD crosses above or below its signal line'));
+    fireEvent.click(box('Volume spike (at least 2x usual, any candle colour)'));
+    await save();
+    const td = mockApi.addCompositeAlertRule.mock.calls[0][3] as any;
+    expect(td.confirmations.map((c: any) => [c.type, c.signal_kind, c.direction])).toEqual([
+      ['momentum', 'macd_cross', null],
+      ['momentum', 'volume_spike', null],
+    ]);
+  });
+
+  it('counts structure and momentum together in one N-of-M control', async () => {
+    await renderDialog();
+    fireEvent.click(box('Fair Value Gap'));
+    fireEvent.click(box('RSI crosses up through 60'));
+    fireEvent.click(box('MACD crosses above its signal line'));
+    expect(screen.getByText('Require 1 of 3')).toBeInTheDocument();
+    expect(
+      screen.getByText('N of the selected confirmations (structure and momentum together)'),
+    ).toBeInTheDocument();
+    const slider = screen.getByRole('slider', { name: 'Confirmations required' });
+    fireEvent.change(slider, { target: { value: '3' } });
+    await save();
+    const td = mockApi.addCompositeWatch.mock.calls[0][1] as any;
+    expect(td.confirmations).toHaveLength(3);
+    expect(td.min_confirmations).toBe(3);
+  });
+
+  it('disables sustain with a note while a momentum row is selected, and saves sustain 0', async () => {
+    await renderDialog();
+    fireEvent.change(sustain(), { target: { value: '30' } });
+    expect(sustain().disabled).toBe(false);
+    fireEvent.click(box('Volume spike (at least 2x usual, up candle)'));
+    expect(sustain().disabled).toBe(true);
+    expect(screen.getByText(/Sustain does not apply with a momentum confirmation/)).toBeInTheDocument();
+    await save();
+    const td = mockApi.addCompositeWatch.mock.calls[0][1] as any;
+    expect(td.sustain_minutes).toBe(0);
+  });
+
+  it('re-enables sustain and keeps the typed value once the momentum row is unticked', async () => {
+    await renderDialog();
+    fireEvent.change(sustain(), { target: { value: '30' } });
+    fireEvent.click(box('RSI crosses up through 60'));
+    fireEvent.click(box('RSI crosses up through 60'));
+    expect(sustain().disabled).toBe(false);
+    expect(screen.queryByText(/Sustain does not apply/)).not.toBeInTheDocument();
+    await save();
+    expect((mockApi.addCompositeWatch.mock.calls[0][1] as any).sustain_minutes).toBe(30);
+  });
+
+  it('a structure-only selection leaves sustain enabled', async () => {
+    await renderDialog();
+    fireEvent.click(box('Order Block'));
+    expect(sustain().disabled).toBe(false);
+  });
+
+  it('explains how often a momentum confirmation can fire, per delivery mode (Q4/Q8 watch, Q8b rule)', async () => {
+    await renderDialog();
+    const watchNote = screen.getByText(/A Watch judges only the candle that closed last before each run/);
+    expect(watchNote.textContent).toMatch(/use a Rule for intraday momentum/);
+    expect(watchNote.textContent).toMatch(/re-arms/);
+    fireEvent.click(screen.getByRole('button', { name: /Rule \(live\)/ }));
+    const ruleNote = screen.getByText(/A Rule judges every closed candle once/);
+    expect(ruleNote.textContent).toMatch(/cooldown/);
+    expect(screen.queryByText(/A Watch judges only/)).not.toBeInTheDocument();
+  });
+
+  it('each momentum row carries a tooltip naming what it reads', async () => {
+    await renderDialog();
+    const row = (l: string) => box(l).closest('label') as HTMLElement;
+    expect(row('RSI crosses up through 60').title).toMatch(/RSI\(14\)/);
+    expect(row('MACD crosses above its signal line').title).toMatch(/MACD\(12, 26, 9\)/);
+    expect(row('Volume spike (at least 2x usual, up candle)').title).toMatch(/same time of day over the previous 10 sessions/);
+    for (const l of ['RSI crosses up through 60', 'MACD crosses above its signal line',
+      'Volume spike (at least 2x usual, up candle)']) {
+      expect(row(l).title).toMatch(/regular-session/);
+    }
+  });
+});
