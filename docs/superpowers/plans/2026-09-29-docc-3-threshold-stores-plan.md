@@ -266,6 +266,18 @@ to a whitelist.
     `loading` with the last good record). With no fetched record it shows the
     error text instead.
 - A new **"Reset to scoring_rules.yaml"** button calls `clearOverrides()`.
+- **What each input shows is always what is applied, or it is marked as not
+  applied** (plan round 2, F4). The text buffers are rewritten explicitly. They
+  are not left to value-keyed effects, which do not fire when the seed does not
+  change.
+  - **Reset** sets both buffers to their seeds (the fetched `abs_pass_max`, or
+    `''`) and clears both dirty flags.
+  - **Apply** sets every field it accepted, or did not need to write, to its
+    effective seed and clears that field's dirty flag. A **refused** field keeps
+    its text, **stays dirty**, and keeps its inline error, so the next Apply
+    refuses it again and says so.
+  - The existing sync effects stay, for store changes from elsewhere, such as a
+    re-fetch. They overwrite a field only while it is not dirty.
 - The blurb is reworded to say that the edit is a session override on top of
   the fetched values, and that it changes Step 5 and the Step 7 checklist only,
   never the scan.
@@ -388,8 +400,11 @@ export if the file's convention forbids that.
   error text is shown when the store has `failed`.
 - G2: Apply writes `overrides` and leaves `thresholds` untouched.
 - G3: a re-fetch after Apply keeps the input value and the override.
-- G4: Reset clears it.
-- G5: Apply with a value outside `[1, 100]` sets nothing and says so.
+- G4: Reset clears it. Also: type an unapplied Swing value, then Reset. The
+  input equals the YAML value, even though no override existed, so the seed did
+  not change.
+- G5: Apply with a value outside `[1, 100]` sets nothing and says so. A second
+  Apply still reports the refusal, and the input still shows the refused text.
 - G6: edit only Swing, then Apply. `overrides.Position` stays `undefined`. A
   re-fetch that changes Position's YAML value then shows up in Position's input
   and in Step 5.
@@ -471,7 +486,28 @@ export if the file's convention forbids that.
   would have made the header quote the raw ceiling while the badges applied the
   override.
 
-Logged below the gate, not fixed:
+**Plan round 2 (2026-09-29): NOT CLEAN, 1 gate-level finding, fixed above.**
+F1 and F3 were confirmed closed. F2's original defect is closed, but its fix
+opened one:
+- F4: the dirty-flag Apply plus a Reset that only cleared overrides could leave
+  Settings showing a pass ceiling that is not applied. For example, type 60,
+  Reset, then Apply: the input shows 60 while 34 is graded. The fix is explicit
+  buffer rewrites on Reset and Apply, and a refused field stays dirty.
+
+Round-2 items logged below the gate, not fixed:
+- Tests read `data-horizon` as a `string` and need `as ThresholdHorizon`, which
+  goes against the "NO CAST" comment at `gateSummary.test.tsx:168-172`. That
+  cast is authorised.
+- F3 item 3's "in place of" means the `PART_ORDER` list becomes a superset. The
+  ready-state parts stay in it.
+- Only `expectPageCopy` can be shared as-is in the failed and loading states;
+  `expectGateCopy` reads `head` unconditionally.
+- The `iv-override` sentence shows even when the rows are graded on the rank
+  basis, which the override never touches.
+- Typing today's YAML value back into an input marks it dirty, so Apply freezes
+  it as an override (labelled).
+
+Round-1 items logged below the gate, not fixed:
 - While the first fetch is in flight, the rail says "could not be loaded". The
   CAUTION verdict is right; the reason is not.
 - Settings accepts an override for a horizon whose YAML has no gate. It is never
