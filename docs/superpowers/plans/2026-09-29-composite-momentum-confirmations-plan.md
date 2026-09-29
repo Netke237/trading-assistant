@@ -1,4 +1,4 @@
-# COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD — plan (r4, after adversarial rounds 1-4; section 2 answered)
+# COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD — plan (r5, plan stage CLOSED by Kenneth; build unit A next)
 
 - **Phase:** `COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD` (PROJECT_STATE.json), decision `P4B-FOLLOWUPS-2026-09-26`, item 1.
 - **Scope source:** `docs/superpowers/plans/2026-09-25-work-packages.md` → "P4b follow-ups" → "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (item 1)".
@@ -9,6 +9,10 @@
   round 5 over the round-4 fixes and the answers (`COMPOSITE-MOMENTUM-PLAN-CAP-2026-09-29`), and split the build:
   **unit A** = backend (3.1-3.4, save validation, tests 1-14 and 16-18), **unit B** = dialog (3.5, test 15).
   Continued on branch `ccr-2fe3aef8-jpt3lz`.
+- **Plan stage CLOSED 2026-09-29** (decision `COMPOSITE-MOMENTUM-PLAN-CLOSED-2026-09-29`): round 5 found one
+  gate-level defect (Q11 4h session filter); Kenneth chose to apply the fix (Q11 span-overlap rule, test 17 4h
+  cases) WITHOUT a further plan round and go straight to building **unit A**. The code stage starts at code
+  round 1 of 3 (continuous numbering: round 6 = code round 1).
 
 ## 1. What is true on main today (verified at adb597c)
 
@@ -171,7 +175,12 @@ to "the momentum task": recommended **not** taken here (a separate follow-up), r
 **Q11 — Extended hours (round 4).** With a Tradier token, intraday series include pre-/post-market bars
 (`session_filter: "all"`, `market.py:407`); yfinance does not. Recommended: **momentum on intraday reads
 regular-session bars only** — RSI/MACD/volume inputs are filtered to 09:30-16:00 ET, and a judged bar outside
-regular hours is not matched. So a rule gives the same signal with or without a token, and thin pre-market bars
+regular hours is not matched. **(r5 fix) A bar is regular when its SPAN `[t, t + interval)` OVERLAPS
+09:30-16:00 ET on its Eastern date — never by its start time alone:** 4h bars are UTC-epoch buckets
+(`market.py:271-282`, IBKR `ibkr.py:174,250-251` the same) stamped 08:00 ET (EDT) / 07:00 ET (EST) while holding
+the 09:30-11:59 1h bars, so a start-time test would drop the morning 4h bar from every input and never judge it.
+A Tradier 09:25 5min bar (span ends 09:30) and a 16:00 post-market bar (span starts at 16:00) stay excluded;
+1D/1W are not filtered. So a rule gives the same signal with or without a token, and thin pre-market bars
 never cross RSI/MACD. (The watch's `rows[-2]` is taken after the filter.)
 
 **Q12 — Half-day sessions (a design call r2 made alone; now put to Kenneth).** The code has no early-close
@@ -278,8 +287,11 @@ raises (a guard returns False and logs).
     unknown momentum kind, or direction `"up"` → 422; valid ones stored; PUT with an unchanged invalid
     `composite_def` and `enabled: false` → 200. Mutations: drop the check; drop the PUT exemption.
 17. Extended hours (Q11): token-style series with pre/post bars — RSI inputs exclude them (a pre-market-only
-    cross → False); a judged post-market bar → False; the watch at 16:15 ET judges a regular bar. Mutation: no
-    session filter.
+    cross → False); a judged post-market bar → False; a 09:25 5min bar and a 16:00 5min bar excluded; the watch
+    at 16:15 ET judges a regular bar. **4h (r5):** an EDT series (morning bar stamped 08:00 ET) and an EST series
+    (07:00 ET) where the morning 4h bar holds the cross → matched, and the morning bars are in the RSI inputs
+    (reading equals the unfiltered 4h RSI on a regular-only 1h source). Mutations: no session filter; classify by
+    start time; overlap test with `<=` at the 09:30/16:00 edges.
 18. Existing tests updated, not deleted: `test_chart_alerts_notification_text.py:387,402` ("confirmation signals"),
     `test_composite_sustain.py:48,147` and `test_p4b_watch_isolation_and_delivery.py:93` (detail dicts without
     `matched_indexes` still work via the fallback), `test_p4b_momentum_confirmations.py` (rewritten off
@@ -320,8 +332,8 @@ against the code:** Q11's regular-session filter keys on a bar's START time, but
 1h regular bars (`market.py:271-282`, IBKR the same), stamped 08:00 ET (EDT) / 07:00 ET (EST) while holding the
 09:30-11:59 bars. The filter would drop the morning 4h bar from RSI/MACD/volume inputs (every 4h reading wrong) and
 never judge it (a real morning cross never fires), with or without a token, on both paths. Per decision
-`COMPOSITE-MOMENTUM-PLAN-CAP-2026-09-29` the plan stage STOPS here and goes to Kenneth. Proposed fix (not yet
-applied): classify a bar as regular when its SPAN `[t, t+interval)` overlaps 09:30-16:00 ET (source-agnostic;
+`COMPOSITE-MOMENTUM-PLAN-CAP-2026-09-29` the plan stage stopped and went to Kenneth, who chose (b): fix applied
+in r5 without a further round (`COMPOSITE-MOMENTUM-PLAN-CLOSED-2026-09-29`). Fix (APPLIED, Q11 + test 17): classify a bar as regular when its SPAN `[t, t+interval)` overlaps 09:30-16:00 ET (source-agnostic;
 a Tradier 09:25 5min bar still excluded), test 17 gains EDT and EST 4h cases where the morning bar holds the
 cross (mutation: classify by start time). Alternative: apply the filter only to `1min/5min/15min`.
 **Round 4 (9, none HIGH, none rejected):** 1 → 3.1/3.3 stale r2 text fixed. 2 → Q3 4h filter dropped (the Eastern
