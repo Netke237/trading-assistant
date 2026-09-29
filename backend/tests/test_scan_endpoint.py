@@ -957,6 +957,33 @@ async def test_heston_pricing_disabled_flag_skips_calibration(monkeypatch):
     assert mock_build_plan.call_args.kwargs["heston_params"] is None
 
 
+async def _await_abandoned_heston_calibrations(timeout: float = 10.0) -> None:
+    """Waits for every _run_heston_calibration task the caller abandoned
+    (asyncio.wait gave up on it, leaving it pending-uncancelled -- by design,
+    see its docstring) to actually finish on THIS test's event loop.
+
+    A fixed asyncio.sleep sized to the fake calibration's duration is not
+    enough: under full-suite load the executor thread can finish after the
+    sleep, pytest-asyncio then closes the loop with the task still pending,
+    and the task is later finalized as 'Task was destroyed but it is
+    pending!' -- an asyncio ERROR that the NEXT test's gc.collect() + caplog
+    assertion picks up (HESTON-SCAN-TEST-INTERMITTENT-2026-09-29)."""
+    tasks = {
+        t for t in asyncio.all_tasks()
+        if t is not asyncio.current_task()
+        and getattr(t.get_coro(), "__qualname__", "") == "_run_heston_calibration"
+    }
+    if not tasks:
+        return
+    _done, still_pending = await asyncio.wait(tasks, timeout=timeout)
+    assert not still_pending, (
+        f"{len(still_pending)} abandoned Heston calibration task(s) still "
+        f"pending after {timeout}s"
+    )
+    # Let the tasks' done callbacks (_log_abandoned_heston_exception) run.
+    await asyncio.sleep(0)
+
+
 @pytest.mark.asyncio
 async def test_process_symbol_falls_back_when_calibration_exceeds_timeout(monkeypatch):
     """A calibration that runs past the wait_for ceiling must not stall this
@@ -1009,9 +1036,9 @@ async def test_process_symbol_falls_back_when_calibration_exceeds_timeout(monkey
 
     # By design (see _run_heston_calibration's docstring), the abandoned
     # calibration keeps running in the background and holds _HESTON_SEMAPHORE
-    # until it actually finishes. Give it a moment to do so before this test
-    # ends, so its event loop doesn't tear down with that task still pending.
-    await asyncio.sleep(0.5)
+    # until it actually finishes. Wait for it to do so before this test ends,
+    # so its event loop doesn't tear down with that task still pending.
+    await _await_abandoned_heston_calibrations()
 
 
 _MULTI_MOCK_CHAIN = [
@@ -1245,8 +1272,8 @@ async def test_abandoned_heston_task_exception_does_not_leak_unretrieved(monkeyp
         patch("app.routers.scan.calibrate_heston", side_effect=_slow_then_raise),
     ):
         await _process_symbol("AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id")
-        # Give the abandoned task time to actually raise and be finalized.
-        await asyncio.sleep(0.3)
+        # Wait for the abandoned task to actually raise and be finalized.
+        await _await_abandoned_heston_calibrations()
 
     # Force finalization of the now-unreferenced task so any unretrieved
     # exception would be logged by asyncio's default finalizer handler.
