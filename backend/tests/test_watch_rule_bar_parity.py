@@ -456,10 +456,10 @@ async def test_10_one_get_bars_per_memo_window_and_settle_boundary(monkeypatch, 
     mono[0] += ca._DAILY_ROWS_TTL                          # memo window over
     await _rule(monkeypatch, "15min", _td("OMM"), candles)
     assert gb.await_count == 2
-    utc[0] = datetime(2026, 9, 23, 16, 30, tzinfo=ET)      # D's settle boundary crossed
+    utc[0] = datetime(2026, 9, 23, 18, 0, tzinfo=ET)       # D's settle boundary crossed
     await _rule(monkeypatch, "15min", _td("OMM"), candles)
     assert gb.await_count == 3
-    utc[0] = datetime(2026, 9, 23, 18, 0, tzinfo=ET)       # same boundary, within the window
+    utc[0] = datetime(2026, 9, 23, 19, 30, tzinfo=ET)      # same boundary, within the window
     await _rule(monkeypatch, "15min", _td("OMM"), candles)
     assert gb.await_count == 3
     assert len(ca._DAILY_ROWS_MEMO) == 1                   # the old boundary's copy is gone
@@ -467,9 +467,9 @@ async def test_10_one_get_bars_per_memo_window_and_settle_boundary(monkeypatch, 
 
 def test_10_last_settle_boundary():
     at = lambda *a: datetime(*a, tzinfo=ET)  # noqa: E731
-    close = lambda d: datetime(d.year, d.month, d.day, 16, 30, tzinfo=ET)  # noqa: E731
-    assert hs.last_settle_boundary(at(2026, 9, 23, 16, 29, 59)) == close(date(2026, 9, 22))
-    assert hs.last_settle_boundary(at(2026, 9, 23, 16, 30)) == close(date(2026, 9, 23))
+    close = lambda d: datetime(d.year, d.month, d.day, 18, 0, tzinfo=ET)  # noqa: E731
+    assert hs.last_settle_boundary(at(2026, 9, 23, 17, 59, 59)) == close(date(2026, 9, 22))
+    assert hs.last_settle_boundary(at(2026, 9, 23, 18, 0)) == close(date(2026, 9, 23))
     assert hs.last_settle_boundary(at(2026, 9, 21, 9)) == close(date(2026, 9, 18))   # Monday -> Friday
     assert hs.last_settle_boundary(at(2026, 9, 26, 12)) == close(date(2026, 9, 25))  # Saturday
 

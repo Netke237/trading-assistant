@@ -4194,7 +4194,7 @@ def test_guard_i_acceptance_stale_db_gate_series_equals_scan_series(mocker):
 
     scan_times = _scan_series_times(stored, last_stored=last_stored,
                                     start=start, end=today,
-                                    now=_ny(today.year, today.month, today.day, 16, 30))
+                                    now=_ny(today.year, today.month, today.day, 18, 0))
     assert scan_times[-1] == today.isoformat(), (
         "premise check: a stale DB backfills, so the SCAN sees today's bar"
     )
@@ -4246,7 +4246,7 @@ def test_guard_i_acceptance_fresh_db_divergence_is_the_accepted_cost(mocker):
 
     scan_times = _scan_series_times(stored, last_stored=last_stored,
                                     start=start, end=today,
-                                    now=_ny(today.year, today.month, today.day, 16, 30))
+                                    now=_ny(today.year, today.month, today.day, 18, 0))
     assert scan_times[-1] == last_stored.isoformat(), (
         "premise check: a fresh DB does NOT backfill, so the scan's series "
         "ends at the previous session"

@@ -328,7 +328,7 @@ def completed_daily_rows(bars: list[dict], now: datetime) -> list[dict]:
     timestamp. Any other last ``time``, or a str that is not an ISO date,
     drops that bar only and stops (fail closed, as A4g). Order is preserved and
     ``bars`` is not mutated. Since WATCH-RULE-BAR-PARITY plan 2.10 get_bars
-    never stores a daily row before its session's close + 30 min, and re-fetches
+    never stores a daily row before its session's close + 2 h (18:00 ET), and re-fetches
     legacy rows stored before that rule once they have settled (A4g open
     question (a)), so a stored row is a completed bar; this trim still guards
     the rows a caller passes from elsewhere.
