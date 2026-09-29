@@ -223,7 +223,7 @@ Default seed: `scanOverrides: {}` (empty = use backend defaults).
 | EMA condition active | `ema_required` | false | true | true | bool |
 | Max delta | `max_delta` | 0.85 | 0.85 | 0.85 | 0.00–1.00 |
 | ATR caution max (candle body) | `atr_caution_max` | 2.5 | 2.5 | 2.5 | decimal |
-| Swing high lookback (bars) | `swing_high_lookback_bars` | 20 | 40 | 15 | int |
+| Swing high lookback (bars) | `swing_high_lookback_bars` | 20 | 40 | 75 | int |
 | Bid-ask spread ceiling | `max_bid_ask_spread_pct` | 0.20 | 0.20 | 0.20 | 0.00–1.00 |
 | Event reject days | `event_reject_days` | 1 | 7 | 30 | days |
 | Event caution days | `event_caution_days` | 3 | 21 | 60 | days |

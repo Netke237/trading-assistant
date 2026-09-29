@@ -19,7 +19,7 @@ from app.data.market import (
 )
 from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
-from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
+from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.trade_plan import build_trade_plan
 from app.scoring.structural_stop import find_structural_stop
 from app.scoring.stop_cost import compute_stop_cost
@@ -109,7 +109,8 @@ async def get_contracts(
     # 1. Fetch raw option chain
     async with httpx.AsyncClient(timeout=8) as client:
         raw_chain = await fetch_option_chain_async(
-            client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds
+            client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds,
+            min_dte_floor=widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None,
         ) or []
 
         # 2. Fetch current stock price.

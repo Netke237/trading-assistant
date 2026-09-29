@@ -1,5 +1,8 @@
 import type { ScanResult, RejectedEntry } from '@/lib/scanStore';
 
+/** Mirrors `_SHORTLIST_REASON_PREFIX` in backend/app/routers/scan.py. */
+export const SHORTLIST_REASON_PREFIX = 'Shortlist cap:';
+
 /**
  * The four numbers in the Step-3 SCAN LOG header, derived together.
  *
@@ -24,7 +27,9 @@ export interface ScanLogTotals {
   totalPassed: number;
   totalRejected: number;
   totalScanned: number;
-  /** Trimmed candidates: neither returned nor rejected, so exactly the amount
+  /** Trimmed candidates: not returned, and not counted in `totalRejected`.
+   *  The options scan does LIST them in `rejected` (prefix `Shortlist cap:`),
+   *  but `totalRejected` filters them out, so this is still exactly the amount
    *  by which the three headline numbers fail to sum. */
   totalTrimmed: number;
 }
@@ -41,7 +46,11 @@ export function scanLogTotals(
     ? liveRejectedLog
     : (shownResult?.rejected ?? []);
   const totalPassed = shownResult?.candidates?.length ?? 0;
-  const totalRejected = rejectedLog.length;
+  // The options scan lists names trimmed by the shortlist cap in `rejected`
+  // (reason prefix `Shortlist cap:`, backend `_SHORTLIST_REASON_PREFIX`) so they
+  // stay visible in the log below. They were not rejected, though: they count
+  // toward "Over cap", not toward "Rejected".
+  const totalRejected = rejectedLog.filter((e) => !e.reason.startsWith(SHORTLIST_REASON_PREFIX)).length;
   const totalScanned = shownResult?.pipeline?.scanned ?? totalPassed + totalRejected;
   const totalTrimmed = Math.max(0, totalScanned - totalPassed - totalRejected);
 

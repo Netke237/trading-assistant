@@ -270,10 +270,20 @@ export default function Step5Page() {
   const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
     : context?.horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
-  // Fetched from the backend (/api/config/event-thresholds), which reads the same
-  // scoring_rules.yaml block score_stock()'s _rule_event uses — so this gate always
-  // matches the reject/caution window that already shaped the candidate's score.
-  const eventWindow = getEventWindow(horizonKey, eventThresholds);
+  // FALLBACK ONLY: the horizon's YAML window from /api/config/event-thresholds,
+  // used for results persisted before scans echoed `event_window` (below).
+  const baseWindow = getEventWindow(horizonKey, eventThresholds);
+  // A Step-3 override of the window (typed by hand, or restored by a search
+  // profile such as SemiAnnual_* at 7/30) replaces the YAML window inside
+  // score_stock()'s _rule_event. Gating here on the YAML window alone
+  // re-rejected stocks the scan had just accepted (earnings in 15 days passed a
+  // 7-day reject server-side, then showed REJECT here against 30). The window
+  // comes from the RESULT, which echoes what the scan applied -- not from live
+  // scanOverrides, which are not persisted (a reload reverted the fix) and can
+  // be edited after the scan (grading rows against a window they were never
+  // scored on). Results from before the echo existed fall back to the YAML window.
+  const scanEventWindow = useScanStore((s) => s.scanResult?.event_window);
+  const eventWindow = scanEventWindow ? { ...baseWindow, ...scanEventWindow } : baseWindow;
   const { reject_days: evReject, caution_days: evCaution } = eventWindow;
 
   // The volatility figure behind each row is EITHER a true percentile
@@ -342,8 +352,8 @@ export default function Step5Page() {
     const ivSt: Status = hasIv
       ? ivStatusFor(iv.value as number, iv.basis)
       : gateDisabled ? 'PASS' : 'CAUTION';
-    // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
-    // already fetched above via useEventThresholdsStore) — not a fixed cutoff. The
+    // Gate must use THIS scan's window (evCaution/evReject: the result's echoed
+    // event_window, else the horizon's YAML window) — not a fixed cutoff. The
     // generic eventProximity() helper (frontend/lib/date.ts) is intentionally
     // NOT used here: it backs the EventFlag badge's fixed 3d/7d "how soon"
     // color and has no notion of scan horizon, which previously caused this

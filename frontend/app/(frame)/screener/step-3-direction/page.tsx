@@ -18,7 +18,7 @@ import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
-import { scanLogTotals } from './scanLogTotals';
+import { scanLogTotals, SHORTLIST_REASON_PREFIX } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from '../screener.module.css';
@@ -119,7 +119,12 @@ const GROUPED_PREFIXES = ['Pre-screen:', 'Score gate:'];
 function ScanLogSection({ entries, horizonKey }: { entries: RejectedEntry[]; horizonKey: string }) {
   if (entries.length === 0) return null;
   const stockRejects = entries.filter((e) => GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)));
-  const otherRejects = entries.filter((e) => !GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)));
+  // Names the shortlist cap trimmed were not rejected — they survived every
+  // gate and lost on rank — so they get their own group rather than sitting in
+  // OTHER beside exceptions and direction-conviction rejects.
+  const overCap = entries.filter((e) => e.reason.startsWith(SHORTLIST_REASON_PREFIX));
+  const otherRejects = entries.filter((e) =>
+    !GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)) && !e.reason.startsWith(SHORTLIST_REASON_PREFIX));
   const byReason = new Map<string, RejectedEntry[]>();
   for (const e of stockRejects) {
     const list = byReason.get(e.reason) ?? [];
@@ -133,6 +138,17 @@ function ScanLogSection({ entries, horizonKey }: { entries: RejectedEntry[]; hor
         .map(([reason, list]) => (
           <StockRejectGroup key={reason} reason={reason} entries={list} horizonKey={horizonKey} />
         ))}
+      {overCap.length > 0 && (
+        <div className={formStyles.otherRejects}>
+          <Text size={11} tone="caution" weight={500}>OVER CAP</Text>
+          {overCap.map((e) => (
+            <div key={e.symbol} className={formStyles.otherRejectRow}>
+              <Text size={11} weight={500}>{e.symbol}</Text>
+              <Text size={11} tone="dim">{e.reason.slice(SHORTLIST_REASON_PREFIX.length).trim()}</Text>
+            </div>
+          ))}
+        </div>
+      )}
       {otherRejects.length > 0 && (
         <div className={formStyles.otherRejects}>
           <Text size={11} tone="dim" weight={500}>OTHER</Text>
