@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "ccr-2fe3aef8-jpt3lz",
       "claimed_at": "2026-09-29T17:14:26Z",
-      "expires_at": "2026-09-29T20:14:26Z",
+      "expires_at": "2026-09-29T20:19:31Z",
       "note": "resume from plan r4 (claude/composite-momentum-confirmations): answer Q4/Q12, audit, build",
       "task": "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD"
     }
