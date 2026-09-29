@@ -328,3 +328,94 @@ def test_r13_with_gate_and_sizing_off_a_missing_block_is_not_read(mocker, tmp_pa
         assert execute.call_args.args[0].quantity == 4
     finally:
         at._load_scoring_doc.cache_clear()
+
+
+# ── DOCC-2-REGIME-RELATIONS: combinations that can never be measured ────────
+# Each value passes the per-key rules alone; together they leave every symbol
+# (or every Bull/Bear symbol) unmeasured, and so ungated.
+
+import datetime as _dt
+import inspect as _inspect
+import re as _re
+from pathlib import Path as _Path
+
+from app.services.money_config import REGIME_SERIES_FLOOR
+
+_APP = _Path(__file__).parent.parent / "app"
+
+
+def _with(h: str, **vals) -> dict:
+    doc = shipped_scoring_doc()
+    doc["regime"][h].update(vals)
+    return doc
+
+
+@pytest.mark.parametrize("h,vals,path", [
+    ("swing", {"window": 50}, "regime.swing.min_obs"),            # min_obs 100 > window
+    ("swing", {"min_obs": 1000}, "regime.swing.min_obs"),
+    ("swing", {"lookback": 2000}, "regime.swing.lookback"),
+    ("swing", {"lookback": 500}, "regime.swing.lookback"),        # == window
+    ("swing", {"min_obs": 350, "window": 750}, "regime.swing.min_obs"),  # only the floor
+    ("swing", {"min_obs": 240}, "regime.swing.min_obs"),          # > 250 - 20
+    ("position", {"min_obs": 210}, "regime.position.min_obs"),    # > 250 - 50
+    ("intraday", {"min_obs": 825}, "regime.intraday.min_obs"),    # > 850 - 26
+])
+def test_rel1_combinations_that_can_never_be_measured_refuse(h, vals, path):
+    errs = regime_block_errors(_with(h, **vals), (h,))
+    assert path in _paths(errs), errs
+
+
+@pytest.mark.parametrize("h,vals", [
+    ("swing", {"min_obs": 230}),
+    ("position", {"min_obs": 200}),
+    ("intraday", {"min_obs": 824}),
+])
+def test_rel2_the_largest_measurable_min_obs_passes(h, vals):
+    assert regime_block_errors(_with(h, **vals), (h,)) == []
+
+
+def test_rel3_the_floor_message_names_lookback_too():
+    errs = regime_block_errors(_with("swing", min_obs=240), ("swing",))
+    assert any("lookback" in msg for p, msg in errs if p == "regime.swing.min_obs")
+
+
+def test_rel4_relations_are_skipped_for_a_key_that_failed_its_own_rule():
+    """A broken window reports once, as itself, not again as a relation."""
+    errs = regime_block_errors(_with("swing", window="500"), ("swing",))
+    assert _paths(errs) == ["regime.swing.window"]
+
+
+def test_rel5_the_scan_refuses_a_relation_fault_through_the_same_validator():
+    with pytest.raises(RegimeConfigError, match="regime.swing.min_obs"):
+        validate_regime_block(_with("swing", min_obs=1000), ("Swing",))
+
+
+def _min_weekdays(n: int) -> int:
+    """The fewest weekdays in any n consecutive calendar days."""
+    start = _dt.date(2024, 1, 1)  # a Monday; every weekday alignment is tried
+    return min(
+        sum((start + _dt.timedelta(days=o + i)).weekday() < 5 for i in range(n))
+        for o in range(7)
+    )
+
+
+def test_rel6_daily_floor_fits_the_shortest_daily_series():
+    from app.data.market import fetch_candles_async
+    bars_default = _inspect.signature(fetch_candles_async).parameters["bars"].default
+    assert REGIME_SERIES_FLOOR["daily"] <= bars_default - 2
+    m = _re.search(r"_bar_start = _bar_end - _td\(days=int\(([\d.]+) \* (\d+)\)\)",
+                   (_APP / "routers" / "scan.py").read_text())
+    assert m, "scan.py's DB window expression moved; re-derive the daily floor"
+    calendar_days = int(float(m.group(1)) * int(m.group(2)))
+    assert REGIME_SERIES_FLOOR["daily"] <= _min_weekdays(calendar_days) - 10
+
+
+def test_rel7_15min_floor_fits_the_shortest_intraday_series():
+    from app.routers.stock_scan import _INTRADAY_FETCH_DAYS
+    assert _min_weekdays(_INTRADAY_FETCH_DAYS) == 39
+    assert REGIME_SERIES_FLOOR["15min"] <= (_min_weekdays(_INTRADAY_FETCH_DAYS) - 4) * 26 - 2 * 13
+    # The other two 15-min readers fetch the same span, as literals.
+    assert (f'fetch_intraday_candles, symbol, "15min", {_INTRADAY_FETCH_DAYS}'
+            in (_APP / "routers" / "scan.py").read_text())
+    assert (f'fetch_intraday_candles(symbol, "15min", {_INTRADAY_FETCH_DAYS})'
+            in (_APP / "services" / "auto_trader.py").read_text())

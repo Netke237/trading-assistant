@@ -171,6 +171,18 @@ REGIME_HORIZONS = ("intraday", "swing", "position")
 # daily bars without a word.
 REGIME_TIMEFRAMES = ("15min", "daily")
 _REGIME_INT_KEYS = ("lookback", "window", "min_obs")
+# DOCC-2-REGIME-RELATIONS: the bar count of the SHORTEST series any reader
+# fetches for that timeframe. `lookback` + `min_obs` above it can never be met
+# for a Bull or Bear current state (`label_daily_states` forces the first
+# `lookback` labels to Choppy, regime_omm.py), so every such symbol would come
+# back unmeasured -- and an unmeasured symbol is scored and fired with no
+# regime gate. Pinned against the fetch constants they derive from by
+# tests/test_docc2_regime_block.py.
+#  - daily 250: the options scan's DB-miss fallback, `fetch_candles_async`'s
+#    `bars=252` default, less a 2-row allowance for non-finite rows.
+#  - 15min 850: every 15-min reader fetches 55 calendar days; regular hours
+#    only, worst case (39 weekdays - 4 holidays) * 26 - 2 half-days * 13 = 884.
+REGIME_SERIES_FLOOR = {"daily": 250, "15min": 850}
 
 
 class RegimeConfigError(ValueError):
@@ -225,6 +237,7 @@ def regime_block_errors(doc: Mapping, horizons: Iterable[str]) -> list[tuple[str
                 f"{path}.timeframe",
                 f"is {shown} — must be one of {', '.join(REGIME_TIMEFRAMES)}",
             ))
+        ok: dict[str, int] = {}
         for key in _REGIME_INT_KEYS:
             if key not in rcfg or rcfg[key] is None:
                 errors.append((f"{path}.{key}", "is missing — must be a positive whole number"))
@@ -235,6 +248,37 @@ def regime_block_errors(doc: Mapping, horizons: Iterable[str]) -> list[tuple[str
                     f"{path}.{key}",
                     f"must be a positive whole number, got {v!r} ({type(v).__name__})",
                 ))
+            else:
+                ok[key] = v
+        errors.extend(_regime_relation_errors(path, tf, ok))
+    return errors
+
+
+def _regime_relation_errors(path: str, tf: object, ok: Mapping[str, int]) -> list[tuple[str, str]]:
+    """DOCC-2-REGIME-RELATIONS: values that each pass alone but together can
+    never be measured, so every symbol (or every Bull/Bear symbol) would be
+    unmeasured and therefore ungated. Checked only for keys that passed the
+    per-key rules above."""
+    errors: list[tuple[str, str]] = []
+    lookback, window, min_obs = ok.get("lookback"), ok.get("window"), ok.get("min_obs")
+    # compute_omm: `window_labels.count(current) < min_obs` always holds.
+    if min_obs is not None and window is not None and min_obs > window:
+        errors.append((f"{path}.min_obs", f"must be <= window ({window}), got {min_obs}"))
+    # build_transition_matrix_stride samples at most one label: a uniform
+    # matrix, shown as a measured Neutral 0% that passes the gate.
+    if lookback is not None and window is not None and lookback >= window:
+        errors.append((f"{path}.lookback", f"must be < window ({window}), got {lookback}"))
+    if tf in REGIME_SERIES_FLOOR and lookback is not None:
+        floor = REGIME_SERIES_FLOOR[tf]
+        if lookback + 2 > floor:
+            errors.append((f"{path}.lookback",
+                           f"lookback + 2 must be <= {floor} (the shortest {tf} series "
+                           f"fetched), got {lookback}"))
+        if min_obs is not None and min_obs > floor - lookback:
+            errors.append((f"{path}.min_obs",
+                           f"must be <= {floor} - lookback ({lookback}) = {floor - lookback} "
+                           f"(the shortest {tf} series fetched, less the Choppy warm-up), "
+                           f"got {min_obs}"))
     return errors
 
 
