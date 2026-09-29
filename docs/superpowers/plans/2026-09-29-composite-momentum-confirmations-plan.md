@@ -369,3 +369,6 @@ Kenneth's approval.
      (about 45 test call sites pass it positionally); the rule path passes `{}`.
   4. A flat RSI window (both Wilder averages 0) reads 50, not `_calc_rsi`'s 100, so a flat series never "crosses".
 - Q9 logged in `PROJECT_STATE.json` open_questions as a backlog defect.
+- **Round 6 (code round 1, gated, target `git diff 30e5008 af092f8`) — CLEAN.** No gate-level findings; 24 section-4
+  mutations re-run independently, all killed; ownership (section 5) respected; deviations 1-4 accepted. Below the
+  gate: a stored `rsi_cross` with an explicit `min_confidence: null` runs at the default 60 (create refuses it).
