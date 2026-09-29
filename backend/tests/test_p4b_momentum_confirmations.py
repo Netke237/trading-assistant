@@ -12,6 +12,7 @@ import app.services.regime_omm as regime_omm
 from app.database import Base
 from app.models.alert import AlertRuleModel
 from app.services.composite_trigger_evaluator import _matched_confirmations, indicator_values_at
+from tests.parity_harness import parity_no_real_feeds  # noqa: F401  (WATCH-RULE-BAR-PARITY: no real feeds)
 
 _TD = {"confirmations": [{"type": "momentum", "signal_kind": "rsi_cross", "min_confidence": 60}]}
 

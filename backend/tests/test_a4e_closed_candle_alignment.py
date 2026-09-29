@@ -20,6 +20,7 @@ from app.models.alert import AlertHistoryModel, AlertRuleModel
 from app.services.alert_evaluator import _evaluate_condition
 from app.services.indicator_compute import compute_indicators_for_conditions
 from app.services.market_structure import compute_structure
+from tests.parity_harness import parity_no_real_feeds  # noqa: F401  (WATCH-RULE-BAR-PARITY: no real feeds)
 
 _T0 = 1_700_000_000
 _SPAN = 900  # 15min

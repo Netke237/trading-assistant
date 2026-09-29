@@ -256,6 +256,10 @@ async def test_r5_migrated_rule_reaches_the_hmm_fit(monkeypatch, caplog):
          "low": 99 + i * 0.1, "close": 100 + (i % 7) * 0.3 + i * 0.05, "volume": 1000 + i}
         for i in range(250)
     ]
+    # WATCH-RULE-BAR-PARITY: the HMM reads the watch's intraday fetch (stubbed
+    # to the same candles), cut at the closed candle.
+    from tests.parity_harness import patch_feeds
+    fetches, _ = patch_feeds(monkeypatch, intraday=candles)
 
     with caplog.at_level(logging.WARNING):
         await ca.evaluate_and_notify_for_symbol('AAPL', '1D', candles[-2], candles, [], as_of=as_of)
@@ -265,7 +269,8 @@ async def test_r5_migrated_rule_reaches_the_hmm_fit(monkeypatch, caplog):
     await ca.migrate_hmm_intraday_rule_intervals(Session)
 
     await ca.evaluate_and_notify_for_symbol('AAPL', '5min', candles[-2], candles, [], as_of=as_of)
-    assert calls and calls[0] > 0
+    assert calls == [249]   # candles[:-1]: the model fetch cut at candles[-2]
+    assert fetches == [('AAPL', '5min', 55)]
     dispatch.assert_not_awaited()  # the recorder returns None -> the primary check fails closed
 
 

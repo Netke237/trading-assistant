@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.database import Base
 from app.models.alert import AlertRuleModel, AlertHistoryModel  # noqa: F401
+from tests.parity_harness import daily_rows, parity_no_real_feeds, patch_feeds  # noqa: F401
 
 
 async def _make_session_factory():
@@ -42,13 +43,20 @@ _TRIGGER_DEF = {
     "direction": "Bullish",
 }
 
-_FLAT_BARS = [
-    {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000}
-    for _ in range(120)
-]
+# WATCH-RULE-BAR-PARITY: get_bars rows carry an ISO `time` (as the store returns
+# them) and the chart candles int times -- the composite block keeps only the
+# daily rows closed by the judged candle's close, so both must be datable.
+from datetime import date as _date  # noqa: E402
+import time as _t  # noqa: E402
 
+_FLAT_BARS = daily_rows(120, _date(2026, 6, 10), close=100.0)
+for _b in _FLAT_BARS:
+    _b.update(high=101.0, low=99.0)
+
+_NOW = int(_t.time())
 _FLAT_CANDLES = [
-    {"time": f"t{i}", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000}
+    {"time": _NOW - 900 * (120 - i + 1), "open": 100.0, "high": 101.0, "low": 99.0,
+     "close": 100.0, "volume": 1000}
     for i in range(120)
 ]
 
@@ -124,8 +132,10 @@ async def test_ws_composite_path_fires_when_strategy_confirms(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ws_composite_path_skips_bars_fetch_when_not_needed(monkeypatch):
-    """A composite rule with no strategy_confirmations must not trigger a bars fetch at all."""
+async def test_ws_composite_path_fetches_daily_rows_once_even_when_no_rule_needs_them(monkeypatch):
+    """FLIPPED by WATCH-RULE-BAR-PARITY 2.3: the daily rows are fetched whenever
+    composite rules exist (trigger_values.omm_state reads OMM on them for every
+    fire), once per call."""
     from app.routers import chart_alerts
 
     Session = await _make_session_factory()
@@ -141,7 +151,7 @@ async def test_ws_composite_path_skips_bars_fetch_when_not_needed(monkeypatch):
         'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
     )
     assert len(triggered) == 1
-    get_bars_mock.assert_not_called()
+    get_bars_mock.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -202,8 +212,8 @@ async def test_ws_composite_path_does_not_treat_daily_interval_candles_as_intrad
 
     monkeypatch.setattr(strategy_engine, 'mean_reversion_vwap_signal', _fake_vwap_signal)
     # P4b (VWAP-CONFIRMATION-LIKE-REGIME-MODELS, D7): on 1D the daily variant runs on
-    # the completed get_bars rows (_FLAT_BARS, no "time" key) -- never the chart
-    # candles (_FLAT_CANDLES, which carry "time").
+    # the completed get_bars rows (_FLAT_BARS, ISO-date "time") -- never the chart
+    # candles (_FLAT_CANDLES, int "time").
     seen_daily = []
 
     def _fake_vwap_daily_signal(bars, direction='Bullish'):
@@ -226,15 +236,14 @@ async def test_ws_composite_path_does_not_treat_daily_interval_candles_as_intrad
     assert seen_bars_lengths == []
     # FLIPPED by P4b: the daily variant now runs, on the get_bars rows only.
     assert seen_daily, "the VWAP daily variant must run on a 1D rule"
-    assert all("time" not in b for sl in seen_daily for b in sl)
+    assert all(isinstance(b["time"], str) for sl in seen_daily for b in sl)
 
 
 @pytest.mark.asyncio
-async def test_ws_composite_path_evaluates_hmm_daily_using_all_candles_when_interval_is_daily(monkeypatch):
-    """A composite rule with primary.model='HMM_daily' saved on a '1D' rule must be
-    evaluated over WS using all_candles directly as bars_daily (no extra get_bars()
-    fetch needed, since all_candles already IS daily data for a '1D' rule) — instead
-    of always failing closed as it did before this fix."""
+async def test_ws_composite_path_evaluates_hmm_daily_on_get_bars_rows_when_interval_is_daily(monkeypatch):
+    """A composite rule with primary.model='HMM_daily' saved on a '1D' rule is
+    evaluated over WS. FLIPPED by WATCH-RULE-BAR-PARITY (item 8): it reads the
+    completed get_bars rows a 1D composite watch reads, never all_candles."""
     from app.routers import chart_alerts
     import app.services.regime_hmm as regime_hmm
 
@@ -244,7 +253,8 @@ async def test_ws_composite_path_evaluates_hmm_daily_using_all_candles_when_inte
     monkeypatch.setattr(chart_alerts, 'get_bars', get_bars_mock)
 
     hmm_result = MagicMock(state="Trending", p_stay=0.8, p_transition=[])
-    monkeypatch.setattr(regime_hmm, 'compute_intraday_hmm', lambda bars: hmm_result)
+    fitted = []
+    monkeypatch.setattr(regime_hmm, 'compute_intraday_hmm', lambda bars: fitted.append(bars) or hmm_result)
 
     async with Session() as db:
         db.add(_make_composite_rule_row('rule-6', 'AAPL', '1D', _HMM_TRIGGER_DAILY))
@@ -254,7 +264,8 @@ async def test_ws_composite_path_evaluates_hmm_daily_using_all_candles_when_inte
         'AAPL', '1D', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
     )
     assert len(triggered) == 1
-    get_bars_mock.assert_not_called()
+    get_bars_mock.assert_called_once()
+    assert fitted and fitted[0] == _FLAT_BARS
 
 
 @pytest.mark.asyncio
@@ -281,6 +292,8 @@ async def test_ws_composite_path_evaluates_hmm_intraday_primary_condition(monkey
     import time as _time
     _now = int(_time.time())
     candles = [{**c, "time": _now - 900 * (len(_FLAT_CANDLES) - i + 1)} for i, c in enumerate(_FLAT_CANDLES)]
+    # WATCH-RULE-BAR-PARITY 2.1: the HMM reads the watch's intraday fetch.
+    patch_feeds(monkeypatch, intraday=candles, daily=_FLAT_BARS)
     triggered = await chart_alerts.evaluate_and_notify_for_symbol(
         'AAPL', '15min', candles[-1], candles, [],
     )

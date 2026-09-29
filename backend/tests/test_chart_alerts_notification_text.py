@@ -20,6 +20,7 @@ from app.routers.chart_alerts import (
     _build_notification_text, _interval_label, _composite_checklist,
     _composite_need_suffix,
 )
+from tests.parity_harness import parity_no_real_feeds  # noqa: F401  (WATCH-RULE-BAR-PARITY: no real feeds)
 
 # Telegram's HTML parse_mode only recognizes this tag allowlist -- anything else
 # (including <br> or any block tag) makes the Bot API reject the whole message

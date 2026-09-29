@@ -40,13 +40,117 @@ def hmm_intraday_interval_error(trigger_def: object, interval: object) -> str | 
 # HMM-INTRADAY-4H-HISTORY (Kenneth, 2026-09-25): history a composite WATCH
 # fetches per interval. 4h is yfinance 1h resampled, so 55 days gave ~110
 # completed 4h bars < regime_hmm.MIN_BARS (200) and the HMM never fitted;
-# 180 days ("6mo") gives ~250. Every other interval keeps 55.
-_INTRADAY_HISTORY_DAYS = {"4h": 180}
+# 180 days ("6mo") gives ~250. WATCH-RULE-BAR-PARITY 2.1: 1h also fetches 180
+# days (~880 bars), so the HMM fits its last 800 bars as a composite RULE did on
+# the chart's 730-day series; a composite rule now makes this same fetch
+# (chart_alerts._composite_model_series). Every other interval keeps 55.
+_INTRADAY_HISTORY_DAYS = {"1h": 180, "4h": 180}
 
 
 def intraday_history_days(interval: str) -> int:
     from app.data.market import normalize_interval
     return _INTRADAY_HISTORY_DAYS.get(normalize_interval(interval), 55)
+
+
+def omm_direction(trigger_def: object) -> str:
+    """WATCH-RULE-BAR-PARITY 2.5 (decision OMM-DIRECTION): the direction a
+    composite's OMM is judged in, on the watch and the rule path alike -- the
+    trigger's own ``direction`` when it is exactly "Bullish"/"Bearish", else
+    "Bullish". compute_omm raises ValueError on any other value and
+    ``composite_def`` / ``trigger_def`` are stored unvalidated, so the raw value
+    is never passed through. No fallback to a watch's saved direction (Q-I)."""
+    d = trigger_def.get("direction") if isinstance(trigger_def, dict) else None
+    return d if d in ("Bullish", "Bearish") else "Bullish"
+
+
+# WATCH-RULE-BAR-PARITY 2.2: the nominal span of an intraday candle, i.e. its
+# close instant is ``time + span``. NOT market._INTERVAL_COMPLETION_SECONDS: its
+# 4h entry is 5 h (a completion lag), which would let an 11:00-stamped 4h candle
+# read that day's 16:00 close.
+_NOMINAL_SPAN_SECONDS: dict[str, int] = {
+    "1min": 60, "1m": 60,
+    "5min": 300, "5m": 300,
+    "15min": 900, "15m": 900,
+    "30min": 1800, "30m": 1800,
+    "1h": 3600,
+    "4h": 4 * 3600,
+}
+
+
+def _daily_session_close(d: date) -> datetime:
+    from datetime import time as dtime
+    from app.services.scheduling_tz import MARKET_TZ
+    return datetime.combine(d, dtime(16, 0), tzinfo=MARKET_TZ)
+
+
+def candle_close_instant(closed_candle: object, interval: object) -> datetime | None:
+    """The instant a closed candle of ``interval`` closed (aware, ET), or None
+    when it cannot be dated: a non-int / bool ``time``, or an unknown interval.
+
+    Intraday: ``time + _NOMINAL_SPAN_SECONDS``. 1D / 1W: the close of the first
+    weekday (1D) / first Friday (1W) ``d`` with ``close(d) >= stamp`` -- every
+    stamp convention in use (00:00 ET, 00:00 UTC, session open, session close;
+    Monday or Friday for a week) lies after the previous close and at or before
+    its own, as market_session.completed_session_bars relies on."""
+    from datetime import timedelta
+    from app.data.market import normalize_interval
+    from app.services.scheduling_tz import MARKET_TZ
+
+    t = closed_candle.get("time") if isinstance(closed_candle, dict) else None
+    if not isinstance(t, int) or isinstance(t, bool) or not isinstance(interval, str):
+        return None
+    span = _NOMINAL_SPAN_SECONDS.get(interval)
+    if span is None:
+        span = _NOMINAL_SPAN_SECONDS.get(normalize_interval(interval))
+    if span is not None:
+        return datetime.fromtimestamp(t + span, MARKET_TZ)
+    norm = normalize_interval(interval)
+    if norm not in ("daily", "weekly"):
+        return None
+    stamp = datetime.fromtimestamp(t, MARKET_TZ)
+    d = stamp.date()
+    for _ in range(8):   # a weekday / Friday with close >= stamp is at most 7 days on
+        if (d.weekday() < 5) if norm == "daily" else (d.weekday() == 4):
+            close = _daily_session_close(d)
+            if close >= stamp:
+                return close
+        d += timedelta(days=1)
+    return None   # unreachable
+
+
+def daily_rows_at_candle(rows: list[dict], closed_candle: object, interval: object) -> list[dict]:
+    """WATCH-RULE-BAR-PARITY 2.2 (decision Q-B): the daily rows a composite rule
+    judging ``closed_candle`` may read -- exactly those whose session close
+    (16:00 ET on the row's date) is at or before the candle's close instant.
+
+    So the 1D candle of day D keeps row D, the 1W candle keeps its Friday, a
+    15:45 15min candle (close 16:00) keeps row D, and a 15:15 one never sees
+    day D's close -- catch-up candles included. Deliberately NOT built on
+    completed_daily_rows / last_session_close: those answer "latest close at
+    or before", inclusive-forming at 16:00:00, and would drop row D.
+
+    An undatable candle (see candle_close_instant) -> [] (fail closed) and one
+    WARNING. A row whose ``time`` is not an ISO date string is dropped. Order is
+    preserved and ``rows`` is not mutated."""
+    close_at = candle_close_instant(closed_candle, interval)
+    if close_at is None:
+        logger.warning(
+            "daily_rows_at_candle: cannot date closed candle %r on %r; no daily rows (fail closed)",
+            closed_candle.get("time") if isinstance(closed_candle, dict) else closed_candle, interval,
+        )
+        return []
+    out: list[dict] = []
+    for r in rows:
+        t = r.get("time") if isinstance(r, dict) else None
+        if not isinstance(t, str):
+            continue
+        try:
+            d = date.fromisoformat(t[:10])
+        except ValueError:
+            continue
+        if _daily_session_close(d) <= close_at:
+            out.append(r)
+    return out
 
 
 def _check_primary_omm(trigger_def: dict, omm_result) -> bool:
@@ -520,7 +624,11 @@ def evaluate_scheduled(
     # Run appropriate model. primary_met: True / False / None (no reading).
     primary_met: bool | None = False
     if model == "OMM":
-        omm_result = compute_omm([b["close"] for b in bars_daily]) if bars_daily else None
+        # WATCH-RULE-BAR-PARITY 2.5: the trigger's direction, as the rule path.
+        omm_result = (
+            compute_omm([b["close"] for b in bars_daily], direction=omm_direction(td))
+            if bars_daily else None
+        )
         primary_met = None if omm_result is None else _check_primary_omm(td, omm_result)
     elif model == "HMM_intraday":
         _hmm_bars = regime_bars_intraday if regime_bars_intraday is not None else bars_intraday

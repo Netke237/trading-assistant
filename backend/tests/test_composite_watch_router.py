@@ -6,6 +6,12 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from httpx import ASGITransport, AsyncClient
 from app.main import app
 
+# WATCH-RULE-BAR-PARITY 2.4: the snapshot reads completed get_bars rows, which
+# carry an ISO date `time`; an undatable last row would be dropped.
+from datetime import date as _date  # noqa: E402
+from tests.parity_harness import daily_rows  # noqa: E402
+_ROWS = daily_rows(300, _date(2026, 6, 10), close=100.0)
+
 
 @pytest.mark.asyncio
 async def test_regime_snapshot_omm_returns_state_and_conviction():
@@ -16,7 +22,7 @@ async def test_regime_snapshot_omm_returns_state_and_conviction():
     fake_result.p_stay = 0.7123
     fake_result.conviction_pct = 42
     fake_result.conviction_label = "Strong conviction"
-    with patch("app.services.historical_store.get_bars", new=AsyncMock(return_value=[{"close": 100.0}] * 300)), \
+    with patch("app.services.historical_store.get_bars", new=AsyncMock(return_value=list(_ROWS))), \
          patch("app.services.regime_omm.compute_omm", return_value=fake_result):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
@@ -36,7 +42,7 @@ async def test_regime_snapshot_omm_returns_state_and_conviction():
 
 @pytest.mark.asyncio
 async def test_regime_snapshot_omm_insufficient_history_returns_422():
-    with patch("app.services.historical_store.get_bars", new=AsyncMock(return_value=[{"close": 100.0}] * 300)), \
+    with patch("app.services.historical_store.get_bars", new=AsyncMock(return_value=list(_ROWS))), \
          patch("app.services.regime_omm.compute_omm", return_value=None):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
@@ -62,7 +68,7 @@ async def test_regime_snapshot_unknown_model_rejected():
 
 @pytest.mark.asyncio
 async def test_regime_snapshot_invalid_direction_returns_400():
-    with patch("app.services.historical_store.get_bars", new=AsyncMock(return_value=[{"close": 100.0}] * 300)):
+    with patch("app.services.historical_store.get_bars", new=AsyncMock(return_value=list(_ROWS))):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/api/composite-watches/regime-snapshot",

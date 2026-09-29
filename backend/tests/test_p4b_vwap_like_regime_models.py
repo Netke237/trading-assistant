@@ -133,7 +133,10 @@ async def _rule_fired(monkeypatch, interval, candles, *, as_of: float, td: dict 
         await conn.run_sync(Base.metadata.create_all)
     monkeypatch.setattr(chart_alerts, "AsyncSessionLocal", Session)
     gb = AsyncMock(return_value=get_bars_rows or [], side_effect=get_bars_exc)
-    monkeypatch.setattr(chart_alerts, "get_bars", gb)
+    # WATCH-RULE-BAR-PARITY: the rule's intraday VWAP reads the watch's fetch
+    # (stubbed to the same candles, completed at as_of); daily rows via get_bars.
+    from tests.parity_harness import patch_feeds
+    patch_feeds(monkeypatch, intraday=candles, daily=gb, now=as_of)
     async with Session() as db:
         db.add(AlertRuleModel(
             id="r1", user_id="default", name="Composite", symbol="AAPL", interval=interval,
@@ -231,9 +234,12 @@ async def test_1d_watch_and_rule_read_completed_get_bars_rows(monkeypatch, signa
 
 @pytest.mark.asyncio
 async def test_1w_rule_reads_daily_rows_not_weekly_candles(monkeypatch, signals):
-    now = SAT
+    # WATCH-RULE-BAR-PARITY (Q-E): the rule judges candles[-2]. On the Monday
+    # after, that is the week of 09-21, whose Friday (09-25) row the rule reads.
+    now = datetime(2026, 9, 28, 12, 0, tzinfo=_ET)
     rows = _daily_rows(date(2026, 9, 25), trig_last=True)
-    weekly = [_bar(int(now.timestamp()) - 7 * 86400 * (80 - i)) for i in range(80)]
+    mon = int(datetime(2026, 9, 28, tzinfo=_ET).timestamp())
+    weekly = [_bar(mon - 7 * 86400 * (79 - i)) for i in range(80)]
     rule, gb = await _rule_fired(monkeypatch, "1W", weekly, as_of=now.timestamp(), get_bars_rows=rows)
     gb.assert_awaited()
     assert rule is True
