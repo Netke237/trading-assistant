@@ -1,9 +1,14 @@
-# COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD — plan (r4, after adversarial rounds 1-4; decisions pending)
+# COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD — plan (r4, after adversarial rounds 1-4; section 2 answered)
 
 - **Phase:** `COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD` (PROJECT_STATE.json), decision `P4B-FOLLOWUPS-2026-09-26`, item 1.
 - **Scope source:** `docs/superpowers/plans/2026-09-25-work-packages.md` → "P4b follow-ups" → "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (item 1)".
 - **Branch:** `claude/composite-momentum-confirmations` (off `origin/main` at `adb597c`).
-- **Status:** plan written; **no code until Kenneth answers section 2** (the phase note makes this the first step).
+- **Status:** section 2 ANSWERED 2026-09-29 — Kenneth: **yes to all recommendations** (decision
+  `COMPOSITE-MOMENTUM-ANSWERS-2026-09-29`): Q0 (a), Q4 single `rows[-2]` bar, Q12 (a), all others as recommended.
+  The design in section 3 is therefore unchanged. Plan stage is past its 3-round cap; Kenneth allowed ONE gated
+  round 5 over the round-4 fixes and the answers (`COMPOSITE-MOMENTUM-PLAN-CAP-2026-09-29`), and split the build:
+  **unit A** = backend (3.1-3.4, save validation, tests 1-14 and 16-18), **unit B** = dialog (3.5, test 15).
+  Continued on branch `ccr-2fe3aef8-jpt3lz`.
 
 ## 1. What is true on main today (verified at adb597c)
 
