@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "claude/sleepy-gates-4084r7",
-      "claimed_at": "2026-09-29T08:23:37Z",
-      "expires_at": "2026-09-29T11:23:37Z",
-      "note": "port DOCC-2 relation/series-floor checks onto main's regime_block_errors",
-      "task": "DOCC-2-REGIME-RELATIONS"
-    }
-  ]
+  "claims": []
 }
