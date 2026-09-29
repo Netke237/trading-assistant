@@ -124,3 +124,46 @@ describe('scanLogTotals', () => {
     expectCoherent(t);
   });
 });
+
+describe('scanLogTotals — shortlist-trimmed names listed in `rejected`', () => {
+  // The options scan now records every name the shortlist cap trimmed as a
+  // `rejected` entry prefixed `Shortlist cap:`, so the log can name them. They
+  // must count as "Over cap", not "Rejected" — otherwise the header would say
+  // Rejected 513 / Over cap 0 for the same scan the funnel shows 3 trimmed in.
+  const withTrimmed: ScanResult = {
+    ...completed,
+    rejected: [
+      ...completed.rejected,
+      { symbol: 'T1', reason: 'Shortlist cap: PASS score 71 contract 75 ranked 3 of 5 (cap 2)' },
+      { symbol: 'T2', reason: 'Shortlist cap: CAUTION score 64 contract 70 ranked 4 of 5 (cap 2)' },
+      { symbol: 'T3', reason: 'Shortlist cap: CAUTION score 58 contract 66 ranked 5 of 5 (cap 2)' },
+    ],
+  };
+
+  it('counts trimmed names as over cap, keeps them in the log', () => {
+    const t = scanLogTotals('COMPLETED', [], withTrimmed);
+    expect(t.totalScanned).toBe(518);
+    expect(t.totalPassed).toBe(2);
+    expect(t.totalRejected).toBe(513);
+    expect(t.totalTrimmed).toBe(3);
+    expect(t.totalTrimmed).toBe(withTrimmed.pipeline!.failed_shortlist);
+    expect(t.rejectedLog.map((e) => e.symbol)).toEqual(expect.arrayContaining(['T1', 'T2', 'T3']));
+    expectCoherent(t);
+  });
+
+  it('applies the split to the live log too, not only the persisted copy', () => {
+    // The persisted result carries NO rejected entries here, so the only place
+    // the trimmed names can come from is the live log: the filter must run on it.
+    const t = scanLogTotals('COMPLETED', withTrimmed.rejected, { ...withTrimmed, rejected: [] });
+    expect(t.totalRejected).toBe(513);
+    expect(t.totalTrimmed).toBe(3);
+  });
+
+  it('matches the prefix, not the phrase anywhere in the reason', () => {
+    const t = scanLogTotals('COMPLETED', [], {
+      ...completed,
+      rejected: [...completed.rejected, { symbol: 'X', reason: 'contracts rejected: Shortlist cap: n/a' }],
+    });
+    expect(t.totalRejected).toBe(514);
+  });
+});

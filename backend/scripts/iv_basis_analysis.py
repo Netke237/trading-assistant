@@ -381,7 +381,13 @@ def observations(result: dict, request: dict | None, collected_at: str) -> list[
     for row in rows:
         row["scan_rejected_iv_too_high"] = trunc_abs
         row["scan_rejected_iv_rank_too_high"] = trunc_rank
-        row["scan_rejected_total"] = len(result.get("rejected") or [])
+        # Names the shortlist cap trimmed are listed in `rejected` too (reason
+        # prefix "Shortlist cap:", scan.py) but were not rejected; excluded so
+        # this stays comparable with rows measured before they were listed.
+        row["scan_rejected_total"] = sum(
+            1 for r in (result.get("rejected") or [])
+            if not str(r.get("reason", "")).startswith("Shortlist cap:")
+        )
     return rows
 
 

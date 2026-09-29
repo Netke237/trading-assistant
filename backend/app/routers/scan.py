@@ -140,6 +140,16 @@ def _resolve_gate(req: ScanRequest) -> dict:
 
 
 
+# Shortlist ranking: lower sorts first. Any other status sorts after CAUTION --
+# in practice REJECT, which `_final_status` returns when entry quality is REJECT
+# and which does survive to the cap (a REJECT *contract* never does: it leaves
+# earlier as "all contracts rejected").
+_SHORTLIST_STATUS_ORDER: dict[str, int] = {"PASS": 0, "CAUTION": 1}
+# Reason prefix for candidates trimmed by the shortlist cap. The funnel's
+# `_is_shortlist` bucket and the frontend's scanLogTotals both match on it.
+_SHORTLIST_REASON_PREFIX = "Shortlist cap:"
+
+
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
     """Compare current candidates with previous run and compute rank/score deltas."""
     if previous is None or not previous.candidates:
@@ -1612,7 +1622,10 @@ async def _execute_scan_core(
         )
 
     # ── Shortlist cap ─────────────────────────────────────────────────────────
-    _default_max = int(_settings.get("scan", {}).get("shortlist_max_candidates", 10))
+    # Clamped like the override below: a settings value of 0 or less would
+    # otherwise slice nonsensically and now also write every candidate into
+    # `rejected` as "ranked 0 of N (cap -1)".
+    _default_max = max(1, min(50, int(_settings.get("scan", {}).get("shortlist_max_candidates", 10))))
     try:
         _overrides = req.overrides or {}
         max_candidates: int = max(1, min(50, int(
@@ -1620,8 +1633,32 @@ async def _execute_scan_core(
         )))
     except (ValueError, TypeError):
         max_candidates = _default_max
+    # Rank BEFORE cutting. `candidates` arrives in universe-file order (the
+    # order of `symbols`), so slicing it unsorted kept whichever names happened
+    # to sit early in sp500.csv and dropped higher scorers further down — a
+    # measured Semi-annual run lost PFE, CRM, GILD, HPE and SMCI that way while
+    # keeping lower-scoring names. finalStatus first (a CAUTION must never push
+    # out a PASS), then stock score, then contract score. The sort is stable,
+    # so exact ties keep universe order. It runs even when nothing is trimmed:
+    # _compute_deltas reads list position as rank, which is only meaningful
+    # once the list is ranked.
+    candidates.sort(key=lambda c: (
+        _SHORTLIST_STATUS_ORDER.get(c.finalStatus, len(_SHORTLIST_STATUS_ORDER)),
+        -c.stockScore,
+        -c.contractScore,
+    ))
     original_count: int = len(candidates)
     shortlist_truncated: bool = original_count > max_candidates
+    # Trimmed names go into `rejected` with a reason the funnel can classify
+    # (`_is_shortlist` below). Before, they vanished: neither returned nor
+    # rejected, so a user could not tell a name the cap dropped from one the
+    # scan never looked at.
+    for _rank, _c in enumerate(candidates[max_candidates:], start=max_candidates + 1):
+        rejected.append(RejectedCandidate(
+            symbol=_c.symbol,
+            reason=f"{_SHORTLIST_REASON_PREFIX} {_c.finalStatus} score {_c.stockScore} "
+                   f"contract {_c.contractScore} ranked {_rank} of {original_count} (cap {max_candidates})",
+        ))
     candidates = candidates[:max_candidates]
 
     # ── Pipeline funnel counters ───────────────────────────────────────────────
@@ -1649,7 +1686,9 @@ async def _execute_scan_core(
     def _is_score(r):      return r.reason.startswith("Score gate:")
     def _is_contracts(r):  return "contracts rejected" in r.reason
     def _is_direction(r):  return r.reason.startswith("direction_conviction:")
-    _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts, _is_direction)
+    def _is_shortlist(r):  return r.reason.startswith(_SHORTLIST_REASON_PREFIX)
+    _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts,
+                _is_direction, _is_shortlist)
 
     _pipeline = OptionsPipeline(
         scanned=len(symbols),
