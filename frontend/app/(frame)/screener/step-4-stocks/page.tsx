@@ -16,6 +16,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { regimeFitTooltip, stockScanGateTooltip, fundamentalScoreTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
+import { splitStockRejected } from '@/lib/stockShortlist';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
 import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPanel';
@@ -144,6 +145,9 @@ export default function Step4StocksPage() {
   // predicate was always true. Dropped rather than kept for reassurance — the
   // funnel's count and this table are the same list.
   const shownCandidates = result?.candidates ?? [];
+  // Names ranked below the shortlist cap passed every gate; they ride in
+  // `rejected` so they are visible, but are listed apart from real rejections.
+  const { rejected: gateRejected, overCap } = splitStockRejected(result?.rejected);
 
   const scanning = scanState === 'SCANNING';
 
@@ -475,10 +479,18 @@ export default function Step4StocksPage() {
             })}
           </div>
 
-          {result.rejected.length > 0 && (
+          {overCap.length > 0 && (
             <details className={styles.rejectedSection}>
-              <summary><Text size={12} tone="dim">{result.rejected.length} rejected</Text></summary>
-              {result.rejected.map((r) => (
+              <summary><Text size={12} tone="caution">{overCap.length} over cap</Text></summary>
+              {overCap.map((r) => (
+                <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
+              ))}
+            </details>
+          )}
+          {gateRejected.length > 0 && (
+            <details className={styles.rejectedSection}>
+              <summary><Text size={12} tone="dim">{gateRejected.length} rejected</Text></summary>
+              {gateRejected.map((r) => (
                 <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
               ))}
             </details>
