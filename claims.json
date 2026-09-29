@@ -7,6 +7,14 @@
       "expires_at": "2026-09-29T23:15:39Z",
       "note": "resume from plan r4 (claude/composite-momentum-confirmations): answer Q4/Q12, audit, build",
       "task": "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/pensive-cori-we2hm6",
+      "claimed_at": "2026-09-29T20:39:55Z",
+      "expires_at": "2026-09-29T23:39:55Z",
+      "note": "Step 6 /api/contracts applies the contract rules the scan applied (profile overrides dropped)",
+      "task": "STEP6-SCAN-CONTRACT-RULES"
     }
   ]
 }
