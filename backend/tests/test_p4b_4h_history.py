@@ -16,8 +16,10 @@ _EV = "app.services.strategy_watch_evaluator"
 
 
 def test_history_days_per_interval():
-    assert intraday_history_days("4h") == 180
-    for iv in ("1h", "15m", "15min", "5m", "5min", "1min", "30min"):
+    # WATCH-RULE-BAR-PARITY 2.1: 1h also fetches 180 days (~880 bars, the HMM's 800).
+    for iv in ("4h", "1h", "60m"):
+        assert intraday_history_days(iv) == 180
+    for iv in ("15m", "15min", "5m", "5min", "1min", "30min"):
         assert intraday_history_days(iv) == 55
 
 
@@ -32,7 +34,7 @@ def _daily(n=260):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("interval, days", [("4h", 180), ("15min", 55), ("1h", 55), ("5min", 55)])
+@pytest.mark.parametrize("interval, days", [("4h", 180), ("15min", 55), ("1h", 180), ("5min", 55)])
 async def test_hmm_intraday_watch_requests_enough_history(interval, days):
     from app.services.strategy_watch_evaluator import evaluate_all
     store = MagicMock()
@@ -54,7 +56,7 @@ async def test_hmm_intraday_watch_requests_enough_history(interval, days):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("interval, fetched_as, days", [
-    ("4h", "4h", 180), ("15min", "15min", 55), ("30min", "30min", 55), ("1h", "1h", 55),
+    ("4h", "4h", 180), ("15min", "15min", 55), ("30min", "30min", 55), ("1h", "1h", 180),
 ])
 async def test_regime_snapshot_reads_the_watch_series(monkeypatch, interval, fetched_as, days):
     import app.routers.composite_watch as cw

@@ -97,6 +97,19 @@ def is_settled(d: date, now: datetime) -> bool:
     return now >= _session_close(d) + _SETTLE
 
 
+def last_settle_boundary(now: datetime | None = None) -> datetime:
+    """The latest ``close(d) + _SETTLE <= now`` over weekdays ``d`` (``now``
+    defaults to ``_utcnow()``). A daily row can enter the store only at such a
+    boundary, so a cache of get_bars rows keyed by it changes exactly when a
+    new row can exist (WATCH-RULE-BAR-PARITY 2.3). No holiday calendar: a
+    holiday's boundary simply adds no row."""
+    now = _utcnow() if now is None else now
+    d = now.astimezone(MARKET_TZ).date()
+    while d.weekday() >= 5 or not is_settled(d, now):
+        d -= timedelta(days=1)
+    return _session_close(d) + _SETTLE
+
+
 def _as_utc(dt: datetime) -> datetime:
     """Normalise a stored ``fetched_at``: SQLite hands back the UTC wall clock naive,
     PostgreSQL an aware value."""

@@ -53,11 +53,18 @@ async def get_regime_snapshot(
     if model not in ("OMM", "HMM_daily", "HMM_intraday"):
         raise HTTPException(status_code=400, detail=f"unknown model {model!r}")
 
-    end = date.today()
-    start = end - timedelta(days=400)
-    bars = await get_bars(symbol, start, end)
-    if not bars:
-        raise HTTPException(status_code=404, detail=f"no price history for {symbol}")
+    if model in ("OMM", "HMM_daily"):
+        # WATCH-RULE-BAR-PARITY 2.4: the rows a composite watch reads -- 730
+        # days of completed get_bars sessions -- and OMM in the trigger's
+        # direction, the value both the watch and the rule now compare.
+        from datetime import datetime
+        from app.services.composite_trigger_evaluator import completed_daily_rows
+        from app.services.scheduling_tz import MARKET_TZ
+        end = date.today()
+        start = end - timedelta(days=730)
+        bars = completed_daily_rows(await get_bars(symbol, start, end), datetime.now(MARKET_TZ))
+        if not bars:
+            raise HTTPException(status_code=404, detail=f"no price history for {symbol}")
 
     if model == "OMM":
         closes = [b["close"] for b in bars]

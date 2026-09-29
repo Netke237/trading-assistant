@@ -115,8 +115,11 @@ async def get_intraday_with_fetched_at(
 
     P4a (Q14): `refresh_on_close=True` (the chart-alert scheduler) refetches a
     still-valid entry when `_needs_refresh` says a new bar is due or the entry
-    is older than `max_age`. The chart WebSocket and /chart/history pass
-    neither; they simply read the fresher entry.
+    is older than `max_age`. The chart WebSocket's own candle fetch and
+    /chart/history pass neither; they simply read the fresher entry. (The
+    composite-rule model series -- chart_alerts._composite_model_series, reached
+    from both the scheduler and the chart WebSocket -- passes
+    `refresh_on_close=True`, and `max_age=0` for its one forced refetch.)
     """
     interval = normalize_interval(interval)
     if days is None:
