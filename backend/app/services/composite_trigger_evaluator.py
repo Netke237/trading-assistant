@@ -223,9 +223,11 @@ def completed_daily_rows(bars: list[dict], now: datetime) -> list[dict]:
     date against the last completed session close, an int (non-bool) time by
     timestamp. Any other last ``time``, or a str that is not an ISO date,
     drops that bar only and stops (fail closed, as A4g). Order is preserved and
-    ``bars`` is not mutated. Limit: get_bars never re-fetches a stored bar, so
-    a forming bar stored mid-session stays a snapshot after the close (A4g open
-    question (a)); this cannot tell.
+    ``bars`` is not mutated. Since WATCH-RULE-BAR-PARITY plan 2.10 get_bars
+    never stores a daily row before its session's close + 30 min, and re-fetches
+    legacy rows stored before that rule once they have settled (A4g open
+    question (a)), so a stored row is a completed bar; this trim still guards
+    the rows a caller passes from elsewhere.
     """
     from app.services.market_session import last_session_close
 

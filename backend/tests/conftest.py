@@ -486,6 +486,17 @@ def client():
         yield TestClient(test_app)
 
 
+@pytest.fixture(autouse=True)
+def _reset_historical_store_heal_bound():
+    """Clear historical_store's per-(symbol, date) heal retry bound around every
+    test (WATCH-RULE-BAR-PARITY plan 2.10), so one test's heal attempt cannot
+    suppress another test's for six hours."""
+    from app.services import historical_store as hs
+    hs._heal_next_attempt.clear()
+    yield
+    hs._heal_next_attempt.clear()
+
+
 def shipped_scoring_doc(drop: tuple = (), **overrides) -> dict:
     """The SHIPPED scoring_rules.yaml as a fresh dict, with top-level blocks
     replaced by `overrides` and the names in `drop` removed.
