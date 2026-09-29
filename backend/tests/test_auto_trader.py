@@ -4847,13 +4847,16 @@ def test_a_malformed_regime_block_is_recorded_as_a_config_refusal(
     assert svc.get_state().history[-1]["status"] == "regime_gate_config_blocked"
 
 
-def test_a_missing_regime_horizon_still_abstains(mocker, monkeypatch):
+def test_a_missing_regime_horizon_now_refuses(mocker, monkeypatch):
+    """INVERTED BY DOCC-2 (decision DOCC-2-REGIME-BLOCK-REFUSES-2026-09-28).
+    A missing regime.<horizon> used to return {} and the gate ABSTAINED, so the
+    trade fired with the regime unmeasured. It is now refused and recorded as
+    `regime_gate_config_blocked`, with nothing sent to the broker."""
     import app.services.auto_trader as at
     doc = _doc_with(regime={})
     monkeypatch.setattr(at, "_load_scoring_doc", lambda: doc)
-    qty, svc, _ = _gate_fire(mocker)
-    assert qty == 4
-    assert svc.get_state().history[-1]["regime_gate"] == "abstained"
+    with pytest.raises(at.RegimeGateConfigError, match="regime.position"):
+        _gate_fire(mocker)
 
 
 # E11: contracts round DOWN (decision P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25)

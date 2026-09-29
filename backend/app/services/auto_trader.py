@@ -528,39 +528,31 @@ def _load_regime_cfg(horizon: str) -> dict:
     cached doc as the two blocks above, for the reason stated there: one file,
     one reader.
 
-    SHAPE-CHECKED (P3b). A missing `regime` block or a missing horizon entry
-    returns {} and the gate abstains, as before. A MALFORMED one -- `regime`
-    or the horizon entry not a mapping, or a `min_obs` that is not a positive
-    number -- used to raise AttributeError/TypeError outside every handler in
-    `fire()`, consuming the armed order with no history row. It now raises
-    RegimeGateConfigError, which fire() records as
+    VALIDATED BY THE SHARED DOCC-2 CHECK (decision
+    DOCC-2-REGIME-BLOCK-REFUSES-2026-09-28), the same rules the three scan
+    sites apply: `regime` and `regime.<horizon>` present and mappings,
+    `timeframe` one of 15min/daily, `lookback`/`window`/`min_obs` positive
+    ints. Any failure raises RegimeGateConfigError, which fire() records as
     `regime_gate_config_blocked` and the scan trigger alerts.
+
+    A MISSING block used to return {} and the gate abstained, so the trade
+    fired with the regime unmeasured and only a WARNING said so. It is now
+    refused like any other broken block. P3b's narrower checks (non-mapping
+    `regime` or entry, a bad `min_obs`) are covered by the shared rules; the
+    class, status and alert are unchanged, only the message wording is.
+
+    Only reached when the regime is actually measured (gate enabled or sizing
+    on), so with both off a broken block is not read and does not refuse.
     """
-    regime = _load_scoring_doc().get("regime")
-    if regime is None:
-        return {}
-    if not isinstance(regime, dict):
+    from app.services.money_config import regime_block_errors
+    errs = regime_block_errors(_load_scoring_doc(), (horizon,))
+    if errs:
         raise RegimeGateConfigError(
-            f"scoring_rules.yaml's regime block is not a mapping (got "
-            f"{type(regime).__name__}) — the regime window cannot be read"
+            "scoring_rules.yaml's regime block cannot be used, so the regime "
+            "cannot be measured: "
+            + "; ".join(f"{path}: {msg}" for path, msg in errs)
         )
-    rcfg = regime.get(horizon.lower())
-    if rcfg is None:
-        return {}
-    if not isinstance(rcfg, dict):
-        raise RegimeGateConfigError(
-            f"scoring_rules.yaml's regime.{horizon.lower()} block is not a "
-            f"mapping (got {type(rcfg).__name__}) — the regime window cannot "
-            f"be read"
-        )
-    if "min_obs" in rcfg and not (_is_real_number(rcfg["min_obs"])
-                                  and rcfg["min_obs"] > 0):
-        raise RegimeGateConfigError(
-            f"scoring_rules.yaml's regime.{horizon.lower()}.min_obs is "
-            f"{rcfg['min_obs']!r} rather than a positive number — the regime "
-            f"cannot be measured"
-        )
-    return rcfg
+    return _load_scoring_doc()["regime"][horizon.lower()]
 
 
 def _resolve_regime_gate(strategy: ArmedStrategy) -> dict:
@@ -955,14 +947,9 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
         )
         return None
 
+    # Raises RegimeGateConfigError on a missing or broken block (DOCC-2); it
+    # no longer returns {} for "abstain".
     rcfg = _load_regime_cfg(strategy.horizon)
-    if not rcfg:
-        logger.warning(
-            "regime_gate: %s %s NOT evaluated — scoring_rules.yaml has no "
-            "regime.%s block to measure with",
-            strategy.symbol, strategy.direction, str(strategy.horizon).lower(),
-        )
-        return None
 
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
