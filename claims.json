@@ -15,6 +15,14 @@
       "expires_at": "2026-09-29T07:26:19Z",
       "note": "Document C plan 2: options scan fails closed on a broken regime.<horizon> block (G2)",
       "task": "DOCC-2-OPTIONS-REGIME-FAIL-CLOSED"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/youthful-rubin-l0p9ed",
+      "claimed_at": "2026-09-29T04:50:57Z",
+      "expires_at": "2026-09-29T07:50:57Z",
+      "note": "G3: Step 5 threshold stores fall back to hardcoded values and never re-fetch",
+      "task": "DOCC-3"
     }
   ]
 }
