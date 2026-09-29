@@ -484,3 +484,14 @@ def client():
               side_effect=_candles_for_symbol),
     ):
         yield TestClient(test_app)
+
+
+@pytest.fixture(autouse=True)
+def _reset_historical_store_heal_bound():
+    """Clear historical_store's per-(symbol, date) heal retry bound around every
+    test (WATCH-RULE-BAR-PARITY plan 2.10), so one test's heal attempt cannot
+    suppress another test's for six hours."""
+    from app.services import historical_store as hs
+    hs._heal_next_attempt.clear()
+    yield
+    hs._heal_next_attempt.clear()

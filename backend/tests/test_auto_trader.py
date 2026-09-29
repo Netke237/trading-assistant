@@ -4125,7 +4125,7 @@ def test_guard_i_call_site_consults_the_real_clock(mocker, ny_now,
         assert newest == (today - timedelta(days=1)).isoformat(), why
 
 
-def _scan_series_times(stored, *, last_stored, start, end):
+def _scan_series_times(stored, *, last_stored, start, end, now):
     """The scan's series, built the way the scan really builds it.
 
     `scan.py:1470-1483` calls `historical_store.get_bars(symbol, start, end)`
@@ -4142,13 +4142,25 @@ def _scan_series_times(stored, *, last_stored, start, end):
 
     `_prev_trading_day` is CALLED, not re-derived, so the predicate's
     load-bearing half cannot drift from production here.
+
+    WATCH-RULE-BAR-PARITY plan 2.10 (Q-G): a backfill stores only SETTLED rows
+    (`historical_store._store_bars` drops every day for which `is_settled(day,
+    now)` is false), so the rows it adds end at the last settled day <= `end`,
+    not at `end`. `is_settled` is CALLED too, with the scan's own `now`.
     """
-    from app.services.historical_store import _prev_trading_day
+    from app.services.historical_store import _prev_trading_day, is_settled
 
     fetch_needed = (last_stored is None) or (last_stored < min(end, _prev_trading_day()))
-    ceiling = end if fetch_needed else min(end, last_stored)
-    return [b["time"] for b in stored
-            if start.isoformat() <= b["time"] <= ceiling.isoformat()]
+    out = []
+    for b in stored:
+        t = b["time"]
+        if not (start.isoformat() <= t <= end.isoformat()):
+            continue
+        d = date.fromisoformat(t[:10])
+        held = last_stored is not None and d <= last_stored
+        if held or (fetch_needed and is_settled(d, now)):
+            out.append(t)
+    return out
 
 
 def test_guard_i_acceptance_stale_db_gate_series_equals_scan_series(mocker):
@@ -4173,7 +4185,8 @@ def test_guard_i_acceptance_stale_db_gate_series_equals_scan_series(mocker):
     last_stored = _prev_trading_day() - timedelta(days=4)
 
     scan_times = _scan_series_times(stored, last_stored=last_stored,
-                                    start=start, end=today)
+                                    start=start, end=today,
+                                    now=_ny(today.year, today.month, today.day, 16, 30))
     assert scan_times[-1] == today.isoformat(), (
         "premise check: a stale DB backfills, so the SCAN sees today's bar"
     )
@@ -4224,7 +4237,8 @@ def test_guard_i_acceptance_fresh_db_divergence_is_the_accepted_cost(mocker):
     last_stored = _prev_trading_day()
 
     scan_times = _scan_series_times(stored, last_stored=last_stored,
-                                    start=start, end=today)
+                                    start=start, end=today,
+                                    now=_ny(today.year, today.month, today.day, 16, 30))
     assert scan_times[-1] == last_stored.isoformat(), (
         "premise check: a fresh DB does NOT backfill, so the scan's series "
         "ends at the previous session"

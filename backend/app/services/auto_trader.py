@@ -670,10 +670,12 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
         fire path writing shared state every other reader sees -- the same
         defect class as round 2's candle-cache rewrite, one layer down and
         durable rather than per-process.
-      - `get_bars(symbol, start, today)` would hand back whatever the DB holds
-        through TODAY, partial bar included, because `_prev_trading_day()` is
-        its fetch-staleness test and never a trim. The end-trim below would
-        still be required.
+      - `get_bars(symbol, start, today)` stores and returns only SETTLED daily
+        rows (16:00 ET + 30 min; WATCH-RULE-BAR-PARITY plan 2.10), so in session
+        it ends at D-1 -- but from 16:00 to 16:30 it still ends at D-1 while the
+        guard below keeps D, and after the settle it ends at D only if the DB
+        was stale. It is a staleness-driven fetch, not this function's
+        completed-bar rule, so the end-trim below would still be required.
     So the network call stays, and the source residual above stays with it.
     """
     import app.data.market as _market
