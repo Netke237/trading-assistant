@@ -315,6 +315,15 @@ tests 10-11. 5 → 3.1 signature `interval`, `log_key`. 6 → Q10c save validati
 `cooldown_minutes=0` + 4h variant. 8 → Q4 `<=` + concurrency residual. 9d → Q5 intraday EOD lag. 9e → Q5/3.4 alert
 names the judged bar. 9f → 3.3 caveat deleted. 9g → Q8b. (r3 superseded the round-2 dispositions that mention
 `momentum_through`, the 500 cap and the multi-bar window.)
+**Round 5 (gated, shrinking target: r3->r4 diff + Kenneth's answers) — NOT CLEAN, 1 gate-level finding, verified
+against the code:** Q11's regular-session filter keys on a bar's START time, but 4h bars are UTC-epoch buckets of
+1h regular bars (`market.py:271-282`, IBKR the same), stamped 08:00 ET (EDT) / 07:00 ET (EST) while holding the
+09:30-11:59 bars. The filter would drop the morning 4h bar from RSI/MACD/volume inputs (every 4h reading wrong) and
+never judge it (a real morning cross never fires), with or without a token, on both paths. Per decision
+`COMPOSITE-MOMENTUM-PLAN-CAP-2026-09-29` the plan stage STOPS here and goes to Kenneth. Proposed fix (not yet
+applied): classify a bar as regular when its SPAN `[t, t+interval)` overlaps 09:30-16:00 ET (source-agnostic;
+a Tradier 09:25 5min bar still excluded), test 17 gains EDT and EST 4h cases where the morning bar holds the
+cross (mutation: classify by start time). Alternative: apply the filter only to `1min/5min/15min`.
 **Round 4 (9, none HIGH, none rejected):** 1 → 3.1/3.3 stale r2 text fixed. 2 → Q3 4h filter dropped (the Eastern
 slot key already separates DST), test 4. 3 → Q10c PUT exemption, test 16. 4 → Q11 regular session only, Q5
 corrected, test 17. 5 → `has_momentum` needs `min_confirmations > 0`, test 13. 6 → `composite_fired_candle` keyed
