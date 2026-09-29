@@ -495,7 +495,7 @@ async def test_11_stalled_entry_one_refetch_then_fail_closed(monkeypatch, rec, c
     await _rule(monkeypatch, "15min", _td("HMM_intraday"), candles)
     assert len(calls) == 2                                  # the fetch + one forced refetch
     assert rec["hmm"] == []                                 # fail closed
-    assert any("not the closed candle" in r.getMessage() for r in caplog.records)
+    assert any("before the closed candle" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -570,3 +570,29 @@ async def test_21_both_paths_reach_compute_omm_with_a_valid_direction(monkeypatc
     await _rule(monkeypatch, "15min", td, universe("15min", 55))   # the real compute_omm: no raise
     await _watch("15min", td)
     assert seen == [expected, expected]
+
+
+# ── code round 1 finding 1: the sandbox feed lag is not a stalled entry ──────
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interval, days", [("15min", 55), ("5min", 55), ("1h", 180)])
+async def test_r1_feed_lag_rule_reads_what_the_watch_reads(monkeypatch, rec, interval, days):
+    """With the Tradier-sandbox lag (900 s) the completed series ends before the
+    candle the scheduler judges at time + span. The rule must still fit on the
+    lag-completed bars, as the watch does -- no forced refetch, no fail closed."""
+    monkeypatch.setattr(market, "intraday_feed_lag_seconds", lambda: 900)
+    import app.data.chart_cache as cc
+    # 30 s past NOW: at NOW itself a 5min bar completes exactly on the instant
+    # (11:50 + 300 + 900 = 12:10:00), and the harness' cache fetched_at is a few
+    # ms before its clock, so the two paths would straddle that boundary.
+    at = NOW_TS + 30
+    calls, _ = patch_feeds(monkeypatch, intraday=_stub, daily=ROWS, now=at)
+    chart, _f = await cc.get_intraday_with_fetched_at("AAPL", interval)
+    await _rule(monkeypatch, interval, _td("HMM_intraday"), chart, as_of=at)
+    await _watch(interval, _td("HMM_intraday"), now=NOW + timedelta(seconds=30))
+    rule_bars, watch_bars = rec["hmm"]
+    assert rule_bars == watch_bars and len(rule_bars) > 200
+    if interval != "1h":                    # the lag applies to the Tradier intervals only
+        assert rule_bars[-1]["time"] < chart[-2]["time"]
+    assert len([c for c in calls if c[1] == interval and c[2] == days]) <= 2   # no forced refetch
+    assert ca._MODEL_REFETCHED == {}

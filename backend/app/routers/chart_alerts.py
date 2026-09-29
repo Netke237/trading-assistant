@@ -924,9 +924,14 @@ async def _composite_model_series(
     intraday VWAP read -- the watch's fetch (fetch_intraday_candles with
     intraday_history_days(interval), via chart_cache so below 1h it is the
     chart's own entry), completed at that entry's fetched_at (A4c), cut at the
-    closed candle. When the cut series does not end AT the closed candle, one
-    forced refetch per (symbol, interval, as_of); still short -> [] (fail
-    closed) + WARNING. An undatable closed candle -> [] + WARNING."""
+    closed candle. Staleness is judged on the RAW entry: when it holds no bar
+    at or after the closed candle, one forced refetch per (symbol, interval,
+    as_of); still none -> [] (fail closed) + WARNING. NOT on the completed
+    series: completion also subtracts the Tradier-sandbox feed lag
+    (market.intraday_feed_lag_seconds), so on 1min/5min/15min the completed
+    series legitimately ends before a candle judged at `time + span`, exactly
+    as the watch's does (code round 1 finding 1). An undatable closed candle ->
+    [] + WARNING."""
     from app.data import chart_cache
     from app.services.composite_trigger_evaluator import intraday_history_days
 
@@ -937,16 +942,16 @@ async def _composite_model_series(
         return []
     days = intraday_history_days(interval)
 
-    def _cut(rows: list[dict], fetched_at: float) -> list[dict]:
-        done = completed_bars_for_interval(rows or [], interval, now=fetched_at)
-        return [b for b in done
-                if isinstance(b.get("time"), int) and not isinstance(b.get("time"), bool) and b["time"] <= t]
+    def _dated(b: dict) -> bool:
+        return isinstance(b.get("time"), int) and not isinstance(b.get("time"), bool)
+
+    def _reaches(rows: list[dict]) -> bool:
+        return any(_dated(b) and b["time"] >= t for b in rows or [])
 
     rows, fetched_at = await chart_cache.get_intraday_with_fetched_at(
         symbol, interval, days=days, refresh_on_close=True,
     )
-    series = _cut(rows, fetched_at)
-    if not series or series[-1]["time"] != t:
+    if not _reaches(rows):
         key = (symbol, interval, as_of)
         if key not in _MODEL_REFETCHED:
             _MODEL_REFETCHED[key] = None
@@ -955,15 +960,16 @@ async def _composite_model_series(
             rows, fetched_at = await chart_cache.get_intraday_with_fetched_at(
                 symbol, interval, days=days, refresh_on_close=True, max_age=0,
             )
-            series = _cut(rows, fetched_at)
-    if not series or series[-1]["time"] != t:
+    if not _reaches(rows):
+        _last = max((b["time"] for b in rows or [] if _dated(b)), default=None)
         logger.warning(
-            "composite rule: %s [%s] model series ends at %s, not the closed candle %s; "
+            "composite rule: %s [%s] model series ends at %s, before the closed candle %s; "
             "HMM_intraday/VWAP fail closed",
-            symbol, interval, series[-1]["time"] if series else None, t,
+            symbol, interval, _last, t,
         )
         return []
-    return series
+    done = completed_bars_for_interval(rows, interval, now=fetched_at)
+    return [b for b in done if _dated(b) and b["time"] <= t]
 
 
 def _primary_of(rule_json: object) -> dict:
