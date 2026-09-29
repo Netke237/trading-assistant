@@ -16,12 +16,17 @@ check (plan §4).
 
 Called from exactly four places (plan §2.2): the stock scan core, the options
 scan core, `POST /analyze-stock`, and the auto-trader's `_load_scoring_doc`.
+
+DOCC-2 (docs/superpowers/plans/2026-09-28-docc-2-options-regime-plan.md,
+decision DOCC-2-REGIME-BLOCK-REFUSES-2026-09-28) adds `regime_block_errors` /
+`validate_regime_block` below, for the `regime.<horizon>` block: the same four
+sites, the same named 500 at the three scan sites. Closes round-5 finding G2.
 """
 from __future__ import annotations
 
 import difflib
 import logging
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from app.scoring.conviction_sizing import SizingConfigError
 
@@ -154,3 +159,87 @@ def validate_money_blocks(doc: Mapping) -> None:
         _check_closed(value, MONEY_BLOCK_KEYS[block], block, errors)
     if errors:
         raise MoneyConfigError(errors)
+
+
+# --------------------------------------------------------------------------
+# DOCC-2: the regime.<horizon> block
+# --------------------------------------------------------------------------
+
+REGIME_HORIZONS = ("intraday", "swing", "position")
+# The only two values any reader branches on: every reader tests `== "15min"`
+# and treats anything else as daily, so `15m` or `1h` used to be measured on
+# daily bars without a word.
+REGIME_TIMEFRAMES = ("15min", "daily")
+_REGIME_INT_KEYS = ("lookback", "window", "min_obs")
+
+
+class RegimeConfigError(ValueError):
+    """scoring_rules.yaml's regime.<horizon> cannot be measured with.
+    `errors` is [(dotted_path, message), ...], every problem found.
+
+    A ValueError, NOT a MoneyConfigError (plan §2.1): on the fire path a
+    SizingConfigError subclass would be recorded `sizing_config_blocked` and
+    paged as a money-block fault. The scan sites catch this class by name; the
+    fire path never sees it -- `auto_trader._load_regime_cfg` converts the
+    error list into its own RegimeGateConfigError.
+    """
+
+    def __init__(self, errors: list[tuple[str, str]]):
+        self.errors = list(errors)
+        lines = "; ".join(f"{path}: {msg}" for path, msg in self.errors)
+        super().__init__(
+            f"scoring_rules.yaml regime block refused ({len(self.errors)} "
+            f"problem{'s' if len(self.errors) != 1 else ''}): {lines}"
+        )
+
+
+def regime_block_errors(doc: Mapping, horizons: Iterable[str]) -> list[tuple[str, str]]:
+    """Every problem with `regime` and each asked-for `regime.<horizon>`.
+
+    Rules (plan §2.1): `regime` present and a mapping; `regime.<h>` present and
+    a mapping; `timeframe` one of REGIME_TIMEFRAMES; `lookback`, `window` and
+    `min_obs` each a positive int (not a bool). A null counts as absent.
+    Unknown keys are NOT refused -- nothing reads them, and a misspelled
+    required key already fails as missing.
+    """
+    regime = doc.get("regime")
+    if regime is None:
+        return [("regime", "is missing — the regime cannot be measured without it")]
+    if not isinstance(regime, Mapping):
+        return [("regime", f"must be a mapping, got {type(regime).__name__}")]
+    errors: list[tuple[str, str]] = []
+    for h in horizons:
+        h = str(h).lower()
+        path = f"regime.{h}"
+        rcfg = regime.get(h)
+        if rcfg is None:
+            errors.append((path, "is missing — the regime cannot be measured for this horizon"))
+            continue
+        if not isinstance(rcfg, Mapping):
+            errors.append((path, f"must be a mapping, got {type(rcfg).__name__}"))
+            continue
+        tf = rcfg.get("timeframe")
+        if tf not in REGIME_TIMEFRAMES:
+            shown = "missing" if "timeframe" not in rcfg else f"{tf!r}"
+            errors.append((
+                f"{path}.timeframe",
+                f"is {shown} — must be one of {', '.join(REGIME_TIMEFRAMES)}",
+            ))
+        for key in _REGIME_INT_KEYS:
+            if key not in rcfg or rcfg[key] is None:
+                errors.append((f"{path}.{key}", "is missing — must be a positive whole number"))
+                continue
+            v = rcfg[key]
+            if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
+                errors.append((
+                    f"{path}.{key}",
+                    f"must be a positive whole number, got {v!r} ({type(v).__name__})",
+                ))
+    return errors
+
+
+def validate_regime_block(doc: Mapping, horizons: Iterable[str]) -> None:
+    """Raise RegimeConfigError if `regime_block_errors` finds anything."""
+    errs = regime_block_errors(doc, horizons)
+    if errs:
+        raise RegimeConfigError(errs)
