@@ -79,8 +79,7 @@ Alternative: also require the line on the matching side of zero.
   buckets are UTC-anchored (`resample(origin="epoch")`, `market.py:279-282`; IBKR the same) and start at
   08:00/12:00 ET in EDT but 07:00/11:00/15:00 ET in EST, so the Eastern slot key already never mixes DST regimes;
   for ~5 sessions after a switch there are too few matches → not matched (stated). The code has no early-close calendar
-  (`market_session` has none; P4b item 6 was closed as accepted), so half days are not excluded: a half day's
-  closing auction bar can read as a spike. Stated, not fixed. Comparing to the previous 20 bars (r0) flags every
+  (`market_session` has none; P4b item 6 was closed as accepted), so half days are not excluded — see Q12. Comparing to the previous 20 bars (r0) flags every
   open (U-shaped intraday volume).
 - **1min:** yfinance gives 7 days (~5 sessions, `market.py:232-233`), so without a Tradier token the slot
   baseline is usually short and `volume_spike` does not match on 1min. Stated in the dialog tooltip; ask:
@@ -99,7 +98,7 @@ Alternative: also require the line on the matching side of zero.
   `replace_rule` keeps `condition_state` across an interval edit, `chart_alerts.py:662,685-686`). Residual, stated: the WS path and the scheduler
   run in separate DB sessions, so two truly concurrent evaluations can both fire (same race the cooldown comment
   documents, `chart_alerts.py:1099-1113`).
-- **Watch — recommended: the same single bar as the rule** (`rows[-2]` of the same chart-cache fetch, Q5). Exact
+- **Watch — Kenneth decides (Q4 is a question, not a settled design): recommended the same single bar as the rule** (`rows[-2]` of the same chart-cache fetch, Q5). Exact
   rule/watch parity, no new watch state, and the existing once-per-entry `armed` phase does the rest (a 1D watch
   polled every 4h sees the same cross bar all day → one alert; the next day no cross → re-arms). **Cost:** a watch
   only sees the bar that closed last before each run, so an intraday momentum watch misses crosses between runs
@@ -169,6 +168,13 @@ to "the momentum task": recommended **not** taken here (a separate follow-up), r
 regular-session bars only** — RSI/MACD/volume inputs are filtered to 09:30-16:00 ET, and a judged bar outside
 regular hours is not matched. So a rule gives the same signal with or without a token, and thin pre-market bars
 never cross RSI/MACD. (The watch's `rows[-2]` is taken after the filter.)
+
+**Q12 — Half-day sessions (a design call r2 made alone; now put to Kenneth).** The code has no early-close
+calendar, so the intraday volume baseline cannot recognise a half day: its 12:45/13:00 ET closing-auction bar can
+read as a `volume_spike` against normal 12:45 bars, and RSI/MACD treat the short session as normal bars.
+- (a) Recommended: **accept and document** (about 3 half days a year; affects intraday `volume_spike` only).
+- (b) Add a small hard-coded NYSE early-close date list (maintained yearly) and leave those sessions out of the
+  baseline and the judged set (new file, outside ownership — needs your OK).
 
 **Residual (round 4 finding 7), stated:** the watch has no marker of bars it judged, so if the daily chart row
 for today does not exist yet while the `get_bars` regime already moved forward, the watch can pair a cross on an
