@@ -466,6 +466,8 @@ def test_t7_reason_producer_set_is_unchanged():
         "mean_reversion_multi: variants produced no valid combined levels", "no",
         "no mean_reversion_multi:", "no price data", "price $", "regime headwind",
         "unknown strategy",
+        # Not a gate: a candidate ranked below the shortlist cap (bucket failed_shortlist).
+        "Shortlist cap:",
     }
 
 

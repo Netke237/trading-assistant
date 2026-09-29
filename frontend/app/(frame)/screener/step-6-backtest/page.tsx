@@ -8,6 +8,7 @@ import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { splitStockRejected } from '@/lib/stockShortlist';
 import { backtestGateTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
@@ -94,7 +95,9 @@ export default function Step6BacktestPage() {
     if (eventFilter === 'only_pre_event') return days != null && days <= 21;
     return true;
   });
-  const rejected = result.rejected;
+  // Over-cap names passed every gate (backtest included) and were only ranked
+  // below the shortlist cap, so they are not "rejected before backtest".
+  const { rejected, overCap } = splitStockRejected(result.rejected);
 
   function proceedWith(symbol: string) {
     setSelected(symbol);
@@ -111,7 +114,8 @@ export default function Step6BacktestPage() {
           {/* No "N failed" — candidates.length - passing.length is always 0,
               since a symbol failing the gate is rejected before it becomes a
               candidate. It was rendering a permanent "0 failed". */}
-          {filteredPassing.length} candidates passed · {rejected.length} rejected before backtest
+          {filteredPassing.length} candidates passed · {rejected.length} rejected
+          {overCap.length > 0 && ` · ${overCap.length} over cap`}
         </Text>
       </div>
 
@@ -149,10 +153,18 @@ export default function Step6BacktestPage() {
         ))}
       </div>
 
-      {result.rejected.length > 0 && (
+      {overCap.length > 0 && (
         <details className={styles.rejectedSection}>
-          <summary><Text size={12} tone="dim">{result.rejected.length} rejected</Text></summary>
-          {result.rejected.map((r) => (
+          <summary><Text size={12} tone="caution">{overCap.length} over cap</Text></summary>
+          {overCap.map((r) => (
+            <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
+          ))}
+        </details>
+      )}
+      {rejected.length > 0 && (
+        <details className={styles.rejectedSection}>
+          <summary><Text size={12} tone="dim">{rejected.length} rejected</Text></summary>
+          {rejected.map((r) => (
             <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
           ))}
         </details>
