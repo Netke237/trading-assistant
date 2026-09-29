@@ -76,8 +76,10 @@ Alternative: also require the line on the matching side of zero.
 - **Intraday (incl. 4h):** mean volume of the **same slot over the previous 10 full sessions** (at least 5, else
   not matched + one WARNING). Slot = the bar's UTC time-of-day (its bucket start), so 4h's `origin="epoch"` UTC
   buckets (`market.py:280-282`) compare like with like across DST (for ~5 sessions after a DST switch the new
-  grid has too few matches → not matched; stated). Early-close sessions (`market_session` half days) are left
-  out of the baseline; a judged bar on a half day is judged normally. Comparing to the previous 20 bars (r0)
+  grid has too few matches → not matched; stated). The code has no early-close calendar (`market_session`
+  has none; P4b item 6 "early-close sessions" was closed as accepted), so half days are not excluded: a half day's
+  closing auction bar can read as a spike against its normal slot, and its missing afternoon slots simply do not
+  count toward those slots' 10 sessions. Stated, not fixed. Comparing to the previous 20 bars (r0)
   flags every open (U-shaped intraday volume).
 - **1min:** yfinance gives 7 days (~5 sessions, `market.py:232-233`), so without a Tradier token the slot
   baseline is usually short and `volume_spike` does not match on 1min. Stated in the dialog tooltip; ask:
@@ -197,7 +199,7 @@ raises (a guard returns False and logs).
    history → same answer where full-history RSI differs. Mutations: drop the slice; min 200.
 4. Volume: open-slot bar ≥ 2× prior 20 bars but < 2× its slot → False; zero-volume symbol → False; missing
    judged volume → False; 4 slot sessions → False; 1D with 19 prior → False; 4h slots across a DST switch keyed
-   by UTC bucket; half-day session excluded from baseline. Mutations: prior-20 intraday; drop `baseline > 0`; Eastern
+   by UTC bucket. Mutations: prior-20 intraday; drop `baseline > 0`; Eastern
    time slot.
 5. Normalisation: `"bullish"` ok; `min_confidence` `"60"`/`True`/`0`/`100` → False, no raise.
 6. Standard rules unchanged: golden `compute_indicators_for_conditions` for every name in its table.
