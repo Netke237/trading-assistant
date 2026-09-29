@@ -1,4 +1,4 @@
-# COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD — plan (r3, after adversarial rounds 1-3; decisions pending)
+# COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD — plan (r4, after adversarial rounds 1-4; decisions pending)
 
 - **Phase:** `COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD` (PROJECT_STATE.json), decision `P4B-FOLLOWUPS-2026-09-26`, item 1.
 - **Scope source:** `docs/superpowers/plans/2026-09-25-work-packages.md` → "P4b follow-ups" → "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (item 1)".
@@ -76,9 +76,9 @@ Alternative: also require the line on the matching side of zero.
 - **Intraday (incl. 4h):** mean volume of the **same slot over the previous 10 sessions** (at least 5, else
   not matched + one WARNING). Slot = the bar's **Eastern wall-clock time of day** (so the 09:30 open bar is always
   compared with previous 09:30 bars across DST, and a Tradier pre-market bar only with pre-market bars). 4h
-  buckets are UTC-anchored (`resample(origin="epoch")`, `market.py:280-282`) and cover different ET hours in EDT
-  and EST, so on 4h a baseline session also needs the **same UTC offset** as the judged session (for ~5 sessions
-  after a DST switch there are too few → not matched; stated). The code has no early-close calendar
+  buckets are UTC-anchored (`resample(origin="epoch")`, `market.py:279-282`; IBKR the same) and start at
+  08:00/12:00 ET in EDT but 07:00/11:00/15:00 ET in EST, so the Eastern slot key already never mixes DST regimes;
+  for ~5 sessions after a switch there are too few matches → not matched (stated). The code has no early-close calendar
   (`market_session` has none; P4b item 6 was closed as accepted), so half days are not excluded: a half day's
   closing auction bar can read as a spike. Stated, not fixed. Comparing to the previous 20 bars (r0) flags every
   open (U-shaped intraday volume).
@@ -93,9 +93,10 @@ Alternative: also require the line on the matching side of zero.
   catch-up at most 3, only the newest after a restart — stated residual). The chart WebSocket path
   (`chart.py:100-121`, intraday only, fetched without `refresh_on_close`) also calls
   `evaluate_and_notify_for_symbol` with its `candles[-2]`, without the claim, so a closed candle can be judged
-  more than once. A composite rule with a momentum confirmation therefore stores the int time of the newest
-  candle it fired on (`condition_state["composite_fired_candle"]`) and does not fire for a closed candle with
-  `time <= ` that value (type-guarded; non-int → no suppression). Residual, stated: the WS path and the scheduler
+  more than once. A composite rule with a momentum confirmation therefore stores `{"interval": iv, "time": t}` of
+  the newest candle it fired on (`condition_state["composite_fired_candle"]`) and does not fire for a closed
+  candle of the **same interval** with `time <= t` (type-guarded; non-int or other interval → no suppression;
+  `replace_rule` keeps `condition_state` across an interval edit, `chart_alerts.py:662,685-686`). Residual, stated: the WS path and the scheduler
   run in separate DB sessions, so two truly concurrent evaluations can both fire (same race the cooldown comment
   documents, `chart_alerts.py:1099-1113`).
 - **Watch — recommended: the same single bar as the rule** (`rows[-2]` of the same chart-cache fetch, Q5). Exact
@@ -121,7 +122,8 @@ daily rows.
   momentum on D-1 until D+1's row exists (same pick as the rule scheduler). The regime on the watch reads
   completed `get_bars` rows through D, so an EOD watch judges regime on D and momentum on D-1 (the rule has the
   same mix: `_regime_candles` keeps D, closed candle D-1). The same one-bar lag applies to an EOD watch on an
-  intraday interval (the session's last bar is judged the next day). Recommended: accept, documented. Alternative: on
+  intraday interval (with Q11, a run at 16:15 ET judges the last regular-session bar only once a newer regular bar
+  exists, i.e. the next session). Recommended: accept, documented. Alternative: on
   1D/1W judge the newest *completed* row (breaks the rule/watch pick parity after the close unless the rule
   scheduler changes too — out of scope).
 
@@ -153,12 +155,26 @@ stated in the tooltip.
 (composite-only helpers just above the block: labels, "structure" → "confirmation" wording) and (b)
 the sustain skip in `_eval_composite_watch`, and (c) **validation on save**: `create_rule`/`replace_rule`
 (`chart_alerts.py:605,668`) store `composite_def` raw and `CompositeWatchCreate.trigger_def` is a plain dict,
-so nothing enforces the schema; add a 422 for a momentum confirmation whose kind is not one of the three,
+so nothing enforces the schema (files: `chart_alerts.py` create/replace handlers, `routers/composite_watch.py`); add a 422 for a momentum confirmation whose kind is not one of the three,
 direction not Bullish/Bearish/null (case-insensitive), or `rsi_cross` `min_confidence` not an int in 1..99 —
-otherwise a bad value is stored and silently never fires, the very defect this package fixes. The runtime guard
-stays for already-stored rows. Recommended: extend ownership
+otherwise a bad value is stored and silently never fires, the very defect this package fixes. On PUT the 422 applies only when the momentum confirmations differ
+from the stored `composite_def` (the frontend toggles `enabled` by re-sending the full rule, `chart_alerts.py:679-684`;
+same exemption as A4f, `:649-659`). The watch check is an `HTTPException(422)` in `routers/composite_watch.py`
+(its `ValueError` → 400 mapping is left alone). The runtime guard stays for already-stored rows. Recommended: extend ownership
 to these. Also (d) WATCH-RULE-BAR-PARITY r6 §2.5 left passing the watch's `direction` into `evaluate_scheduled`
 to "the momentum task": recommended **not** taken here (a separate follow-up), recorded in both plans.
+
+**Q11 — Extended hours (round 4).** With a Tradier token, intraday series include pre-/post-market bars
+(`session_filter: "all"`, `market.py:407`); yfinance does not. Recommended: **momentum on intraday reads
+regular-session bars only** — RSI/MACD/volume inputs are filtered to 09:30-16:00 ET, and a judged bar outside
+regular hours is not matched. So a rule gives the same signal with or without a token, and thin pre-market bars
+never cross RSI/MACD. (The watch's `rows[-2]` is taken after the filter.)
+
+**Residual (round 4 finding 7), stated:** the watch has no marker of bars it judged, so if the daily chart row
+for today does not exist yet while the `get_bars` regime already moved forward, the watch can pair a cross on an
+older bar with today's regime (the rule, judging each candle once with that candle's regime, would not). Rare
+(early-session window on 1D) and documented; a fix needs a freshness rule on the judged bar — follow-up if
+Kenneth wants it.
 
 ## 3. Design (assuming the recommendations)
 
@@ -168,7 +184,7 @@ MOMENTUM_RSI_MACD_HISTORY = 200
 def momentum_match(bars, interval, kind, direction, min_confidence, log_key) -> bool
 ```
 Judges the last bar of `bars`. `interval` picks the Q3 baseline and slot keys; `log_key` (rule/watch id) dedupes
-the one-per-id WARNINGs (module-level set). RSI/MACD for index `j` computed on the last 201 bars with a private correct
+the one-per-id WARNINGs (module-level set). RSI/MACD for the last bar and the one before it, computed on the last 201 bars with a private correct
 EMA (`_ema_seeded`) and Wilder RSI (copied, not shared, so `_calc_rsi`/`_calc_macd` and
 `compute_indicators_for_conditions` are byte-for-byte unchanged). Direction normalised case-insensitively; other
 strings → False. Non-finite/missing OHLCV on a bar a kind reads → False for that bar. Unknown kind → False. Never
@@ -187,14 +203,16 @@ raises (a guard returns False and logs).
   `momentum_matched`/`momentum_total`; plus `matched_indexes` so the checklist marks the right row when two
   confirmations share a kind (e.g. rsi_cross 60 and 70). `format_composite_reason` adds "N/M momentum
   confirmations (…)".
-- `has_momentum(td) -> bool` helper used by both paths for the sustain skip and the fetch decision.
+- `has_momentum(td) -> bool` = at least one momentum confirmation **and** `min_confirmations > 0` (with 0 the
+  confirmations are never evaluated, `composite_trigger_evaluator.py:417-421,558-570`, so sustain must still
+  apply) — helper used by both paths for the sustain skip and the fetch decision.
 
 ### 3.3 Rule path — `chart_alerts.py` composite block (+ Q10 helpers)
 - If any composite rule `has_momentum`: `cut` = `all_candles` up to and including the candle whose time equals
-  `closed_candle["time"]` (from the end); `MomentumInput(cut, [len(cut)-1])`.
-- For a `has_momentum` rule: sustain skipped (Q7); fire suppressed when the closed candle's int time
-  `<= condition_state["composite_fired_candle"]`, set when it fires (Q4).
-- `_composite_checklist` uses `matched_indexes` and `_MOMENTUM_LABELS` (the same-kind caveat, `chart_alerts.py:341-350,372-373`, is deleted — per-index matching makes it wrong); `_composite_need_suffix` says
+  `closed_candle["time"]` (from the end); `MomentumInput(cut, interval, rule id)`.
+- For a `has_momentum` rule: sustain skipped (Q7); fire suppressed per Q4
+  (`composite_fired_candle`, same interval, `time <=`), set when it fires.
+- `_composite_checklist` uses `matched_indexes` and `_MOMENTUM_LABELS`, reading `detail.get("matched_indexes")` with a by-kind fallback for older detail dicts (the same-kind caveat, `chart_alerts.py:341-350,372-373`, is deleted — per-index matching makes it wrong); `_composite_need_suffix` says
   "confirmation signals".
 
 ### 3.4 Watch path — `_eval_composite_watch`
@@ -218,8 +236,8 @@ raises (a guard returns False and logs).
 4. Volume: open-slot bar ≥ 2× prior 20 bars but < 2× its slot → False; zero-volume symbol → False; missing
    judged volume → False; 4 slot sessions → False; 1D with 19 prior → False; 5min open bar after the November DST switch compared with
    09:30 ET bars, not 10:30; a Tradier pre-market bar never in the open's baseline; 4h baseline across DST excludes
-   the other UTC offset. Mutations: prior-20 intraday; drop `baseline > 0`; UTC time-of-day slot; drop the 4h
-   offset filter.
+   the other DST regime (by the slot key alone). Mutations: prior-20 intraday; drop `baseline > 0`; UTC
+   time-of-day slot.
 5. Normalisation: `"bullish"` ok; `min_confidence` `"60"`/`True`/`0`/`100` → False, no raise.
 6. Standard rules unchanged: golden `compute_indicators_for_conditions` for every name in its table.
 7. Leak gone: a standard series named `rsi_cross` no longer satisfies a composite.
@@ -229,7 +247,8 @@ raises (a guard returns False and logs).
    Mutations: use `_regime_candles`; use `all_candles` uncut.
 9. Once per cross (`cooldown_minutes=0`): same closed candle evaluated twice → one fire; an older candle after a
    newer fired one → no fire; next candle without a cross → no fire. Variant: 4h, 60-min cooldown, second
-   evaluation 90 min later → still one fire. Mutations: drop `composite_fired_candle`; `==` instead of `<=`.
+   evaluation 90 min later → still one fire. Mutations: drop `composite_fired_candle`; `==` instead of `<=`. Plus: 1h→1D interval edit, first daily
+   candle with a cross fires. Mutation: ignore the interval key.
 10. Watch: spy asserts `evaluate_scheduled` got a non-None `momentum` whose bars end at `rows[-2]`; fetch raises +
     no other confirmation → None and state untouched; fetch raises + structure already meets min → True; 1D watch
     run twice on the same cross bar → one alert (armed), next run with no cross → re-armed. Mutations: pass None;
@@ -240,11 +259,20 @@ raises (a guard returns False and logs).
 12. Three-valued gate: momentum-only + structure raising + momentum False → False; momentum unread + count+unread ≥
     min → None; < min → False. Mutation: OR instead of the count.
 13. Sustain skip: momentum trigger with sustain 30 fires on the cross bar (rule and watch), WARNING once; a
-    non-momentum trigger's sustain unchanged. Mutation: skip sustain for every trigger.
+    non-momentum trigger's sustain unchanged; `min_confirmations` 0 + a momentum confirmation + sustain 30 still
+    honours the sustain. Mutations: skip sustain for every trigger; `has_momentum` ignoring the minimum.
 14. Checklist: rsi_cross 60 and 70, only 60 matched → only its row met. Mutation: match by kind.
 15. (Q0 = a) Jest: rows, labels per direction, sustain disabled, save `type: 'momentum'`.
 16. Save validation (Q10c): rule create/PUT and watch create with `rsi_cross` `min_confidence` 0 or `"60"`, an
-    unknown momentum kind, or direction `"up"` → 422; valid ones stored. Mutation: drop the check.
+    unknown momentum kind, or direction `"up"` → 422; valid ones stored; PUT with an unchanged invalid
+    `composite_def` and `enabled: false` → 200. Mutations: drop the check; drop the PUT exemption.
+17. Extended hours (Q11): token-style series with pre/post bars — RSI inputs exclude them (a pre-market-only
+    cross → False); a judged post-market bar → False; the watch at 16:15 ET judges a regular bar. Mutation: no
+    session filter.
+18. Existing tests updated, not deleted: `test_chart_alerts_notification_text.py:387,402` ("confirmation signals"),
+    `test_composite_sustain.py:48,147` and `test_p4b_watch_isolation_and_delivery.py:93` (detail dicts without
+    `matched_indexes` still work via the fallback), `test_p4b_momentum_confirmations.py` (rewritten off
+    `indicator_values_at`).
 
 Runs: backend full suite (`backend/.venv/bin/python -m pytest`), `python3 scripts/state.py` exit 0 with the phase
 `verify` switched to a presence probe on `momentum_match` (test 10's spy proves the watch supplies it), frontend
@@ -274,7 +302,12 @@ None on 1D/1W. 13 → Q1 WARNING + null formula. 14 → Q3 1D/1W < 20. 15 → te
 Q4 watch judges the single `rows[-2]` bar (multi-bar window dropped; stated cost, follow-up option), Q8 reworded,
 tests 10-11. 5 → 3.1 signature `interval`, `log_key`. 6 → Q10c save validation, test 16. 7 → test 9
 `cooldown_minutes=0` + 4h variant. 8 → Q4 `<=` + concurrency residual. 9d → Q5 intraday EOD lag. 9e → Q5/3.4 alert
-names the judged bar. 9f → 3.3 caveat deleted. 9g → Q8b.
+names the judged bar. 9f → 3.3 caveat deleted. 9g → Q8b. (r3 superseded the round-2 dispositions that mention
+`momentum_through`, the 500 cap and the multi-bar window.)
+**Round 4 (9, none HIGH, none rejected):** 1 → 3.1/3.3 stale r2 text fixed. 2 → Q3 4h filter dropped (the Eastern
+slot key already separates DST), test 4. 3 → Q10c PUT exemption, test 16. 4 → Q11 regular session only, Q5
+corrected, test 17. 5 → `has_momentum` needs `min_confirmations > 0`, test 13. 6 → `composite_fired_candle` keyed
+by interval, test 9. 7 → stated residual after Q11. 8 → Q10c files + router 422. 9 → test 18, `.get` fallback.
 
 ## 7. Loop
 Plan → adversarial rounds until clean → Kenneth's answers → plan revised to the answers (re-audited if the design
