@@ -454,6 +454,10 @@ regime:
   position: { timeframe: daily, lookback: 50, window: 750,  min_obs: 100 }
   enhanced_states: false
 
+# regime_gate, regime_sizing, confidence_gate and fundamentals_gate are the four
+# MONEY BLOCKS: each is REQUIRED, must say `enabled: true` or `enabled: false`,
+# and is CLOSED (an unknown key anywhere inside it refuses the scans and the
+# auto-trade fire). Keys are declared in app/services/money_config.py (DOCC-1).
 regime_gate:
   enabled: true
   headwind_caution_pct: -15

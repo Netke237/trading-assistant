@@ -785,18 +785,26 @@ def test_a_file_that_parses_to_a_non_mapping_refuses(mocker, tmp_path):
         at._load_scoring_doc.cache_clear()
 
 
-def test_an_absent_block_is_still_sizing_off_not_a_failure(mocker, tmp_path):
-    """The distinction the whole change rests on: a file that parses and says
-    nothing about regime_sizing has turned sizing OFF, and full size is right."""
+def test_an_absent_block_now_refuses(mocker, tmp_path):
+    """INVERTED by DOCC-1 (decision DOCC-9.6-MONEY-BLOCKS-REQUIRED-2026-09-28).
+    This was `test_an_absent_block_is_still_sizing_off_not_a_failure`: a file
+    that parsed and said nothing about regime_sizing turned sizing OFF and the
+    order went at full size. An absent money block now refuses the fire with a
+    SizingConfigError (MoneyConfigError) naming it; off is `enabled: false`."""
+    import yaml
     import app.services.auto_trader as at
+    from app.scoring.conviction_sizing import SizingConfigError
+    from tests.conftest import shipped_scoring_doc
 
-    ok = tmp_path / "scoring_rules.yaml"
-    ok.write_text("some_other_block:\n  a: 1\n")
-    mocker.patch.object(at, "_SCORING_CONFIG_PATH", ok)
+    f = tmp_path / "scoring_rules.yaml"
+    f.write_text(yaml.safe_dump(shipped_scoring_doc(drop=("regime_sizing",))))
+    mocker.patch.object(at, "_SCORING_CONFIG_PATH", f)
     at._load_scoring_doc.cache_clear()
     try:
-        assert at._load_scoring_config() == {}
-        assert at._apply_vol_sizing(_sizing_strategy(4)).quantity == 4
+        with pytest.raises(SizingConfigError, match="regime_sizing"):
+            at._load_scoring_config()
+        with pytest.raises(SizingConfigError, match="regime_sizing"):
+            at._apply_vol_sizing(_sizing_strategy(4))
     finally:
         at._load_scoring_doc.cache_clear()
 

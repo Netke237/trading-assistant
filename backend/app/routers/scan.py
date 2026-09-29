@@ -43,6 +43,7 @@ from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve
 from app.scoring.fundamentals_scorer import score_fundamentals, FundamentalHealth
 from app.services.regime_omm import compute_omm as _compute_omm
 from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
+from app.services.money_config import MoneyConfigError, validate_money_blocks
 from app.services.regime_hmm_daily import compute_directional_hmm as _compute_dhmm, alignment as _hmm_alignment
 from typing import Literal
 from app.data.market import (
@@ -1522,6 +1523,27 @@ async def _execute_scan_core(
         _merge_rr_cfg(req.overrides)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+    # DOCC-1 S2: the four money blocks are required, explicit and closed
+    # (decisions DOCC-9.6-MONEY-BLOCKS-REQUIRED-2026-09-28 and
+    # DOCC-9.8-CLOSED-MONEY-SUBTREES-2026-09-28). Checked BEFORE `_resolve_gate`
+    # below, which bare-indexes `confidence_gate` and would otherwise answer a
+    # missing block with an unnamed KeyError. 500 and a log line, for the
+    # reasons given at the conviction-floor check below.
+    try:
+        _cfg_doc = _load_scoring_cfg()
+    except (OSError, yaml.YAMLError) as e:
+        _log.error("SCAN %s aborted: scoring_rules.yaml unreadable: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=f"scoring_rules.yaml unreadable: {e}")
+    if not isinstance(_cfg_doc, dict):
+        _msg = f"scoring_rules.yaml must be a mapping, got {type(_cfg_doc).__name__}"
+        _log.error("SCAN %s aborted: %s", scan_id, _msg)
+        raise HTTPException(status_code=500, detail=_msg)
+    try:
+        validate_money_blocks(_cfg_doc)
+    except MoneyConfigError as e:
+        _log.error("SCAN %s aborted on scoring_rules.yaml money blocks: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
 
     gate = _resolve_gate(req)
     # Direction-conviction floor, resolved HERE — before the chain, quote and

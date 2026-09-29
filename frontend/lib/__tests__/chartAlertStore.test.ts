@@ -37,6 +37,7 @@ function makeHistory(overrides: Partial<AlertHistory> = {}): AlertHistory {
 
 describe('chartAlertStore', () => {
   beforeEach(() => {
+    localStorage.removeItem('bamendjou:alert-tombstones');
     useChartAlertStore.setState({ rules: [], history: [], toasts: [], newSinceView: 0 });
   });
 

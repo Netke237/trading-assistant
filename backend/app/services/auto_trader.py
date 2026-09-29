@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 # name so `_fetch_scan_window_bars` and the tests that patch
 # `auto_trader._todays_bar_is_unclosed` keep reaching the name that runs.
 from app.services.market_session import todays_bar_is_unclosed as _todays_bar_is_unclosed
+from app.services.money_config import MoneyConfigError, validate_money_blocks
 from app.scoring.conviction_sizing import (
     SizingConfigError,
     conviction_mult,
@@ -452,9 +453,16 @@ def _load_scoring_doc() -> dict:
     largest possible position. §9.1's fail-closed posture (Kenneth,
     2026-09-17) is that a config this path cannot read stops the trade.
 
-    An absent regime_sizing block is NOT a failure and still returns {}: the
-    file parsed, and it says sizing is off. A block that is PRESENT and cannot
-    be read as on or off is a failure — resolve_sizing decides that, not this.
+    AN ABSENT MONEY BLOCK IS A FAILURE (DOCC-1, decision
+    DOCC-9.6-MONEY-BLOCKS-REQUIRED-2026-09-28). `validate_money_blocks` below
+    raises MoneyConfigError -- a SizingConfigError -- when `regime_sizing`,
+    `regime_gate`, `confidence_gate` or `fundamentals_gate` is missing, has no
+    real-bool `enabled`, or carries an unknown key; it used to return {} and
+    read as "sizing off" / "gate disabled". Turning a block off is
+    `enabled: false` inside it. Values inside a present block are still
+    resolve_sizing's and `_apply_regime_gate`'s to judge, not this function's.
+    The raise happens inside this cached function, so nothing is cached and a
+    fixed file is re-read on the next fire.
 
     lru_cache does not cache exceptions, so a file that could not be READ or
     PARSED is re-read on the next fire attempt. THAT IS NOT TRUE OF A BAD
@@ -478,6 +486,7 @@ def _load_scoring_doc() -> dict:
             f"{_SCORING_CONFIG_PATH} did not parse to a mapping "
             f"(got {type(doc).__name__})"
         )
+    validate_money_blocks(doc)
     return doc
 
 
@@ -505,8 +514,8 @@ def _load_regime_gate_config() -> dict:
     A second `open()` here would be a second reader of one file, which is how
     two call sites come to disagree about what it says -- the defect
     conviction_sizing.py exists to prevent, one layer down. An absent block
-    returns {} and the gate treats that as disabled, matching `_regime_cap`,
-    which requires `enabled` to be truthy before it caps anything.
+    cannot reach here any more: `_load_scoring_doc` refuses it (DOCC-1). The
+    {} default is left in place, unreachable through the fire path.
     """
     return _load_scoring_doc().get("regime_gate", {})
 
@@ -1693,7 +1702,9 @@ def _alert_sizing_config_refusal(symbol: str, exc: Exception) -> None:
         "sizing-config refusal",
         (
             f"Auto-trade REFUSED to fire {symbol}: "
-            + ("scoring_rules.yaml's regime_sizing block cannot be honoured"
+            + ("scoring_rules.yaml's money blocks are missing or misspelled"
+               if isinstance(exc, MoneyConfigError)
+               else "scoring_rules.yaml's regime_sizing block cannot be honoured"
                if isinstance(exc, SizingConfigError)
                else "the regime conviction is not a usable number")
             + f", so the position size is unknown. Nothing was sent and the "
@@ -2461,7 +2472,9 @@ class AutoTradeService:
             logger.error(
                 "AutoTrader fire REFUSED for %s — %s, so the order size is "
                 "unknown: %s", strategy.symbol,
-                "regime_sizing unusable" if isinstance(exc, SizingConfigError)
+                "the money blocks are missing or misspelled"
+                if isinstance(exc, MoneyConfigError)
+                else "regime_sizing unusable" if isinstance(exc, SizingConfigError)
                 else "the regime conviction is not a usable number", exc,
             )
             raise
