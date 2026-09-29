@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "claude/blissful-maxwell-c8g4nk",
       "claimed_at": "2026-09-29T04:11:05Z",
-      "expires_at": "2026-09-29T07:11:05Z",
+      "expires_at": "2026-09-29T07:25:16Z",
       "note": "plan r6 + build unit A (historical_store) then unit B",
       "task": "WATCH-RULE-BAR-PARITY"
     },
