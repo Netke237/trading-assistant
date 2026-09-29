@@ -1596,15 +1596,15 @@
     },
     {
       "name": "SETTLE-2H -- a daily row settles at 18:00 ET, not 16:30",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "audit_rounds": 1,
+      "audit_clean": true,
       "verify": {
         "path": "backend/app/services/historical_store.py",
         "kind": "present",
         "pattern": "^_SETTLE = timedelta\\(hours=2\\)",
         "note": "PRESENCE ONLY. Behavioural pins: test_historical_store_settle.py test_13_settle_boundary_is_1800_inclusive (17:59:59 no row D, 18:00:00 row D), test_19 (_is_provisional at 21:59/22:00 UTC), test_20/20b; test_watch_rule_bar_parity.py test_10_last_settle_boundary + memo boundary; test_auto_trader.py _scan_series_times premises at 18:00. Mutants 30 min, 90 min, 3 h all fail."
       },
-      "note": "Built 2026-09-29 on claude/blissful-maxwell-c8g4nk per decision SETTLE-2H-2026-09-29: one constant (historical_store._SETTLE 30 min -> 2 h), comments quoting 30 min/16:30 in historical_store, composite_trigger_evaluator.completed_daily_rows and auto_trader corrected, tests re-pinned to 18:00 ET. Full backend suite 3902 passed, 1 skipped. Code round pending."
+      "note": "Built 2026-09-29 on claude/blissful-maxwell-c8g4nk per decision SETTLE-2H-2026-09-29: one constant (historical_store._SETTLE 30 min -> 2 h), comments quoting 30 min/16:30 in historical_store, composite_trigger_evaluator.completed_daily_rows and auto_trader corrected, tests re-pinned to 18:00 ET. Full backend suite 3902 passed, 1 skipped. CODE ROUND 1 (target git diff 3fc5d8e 14c1cfc, fresh subagent, audit_rule v2 gate) CLEAN -- zero gate-level findings. Checked: one constant feeds is_settled/last_settle_boundary/_is_provisional (store gate, heal, composite memo move together); no row dropped for good (monotone settle, staleness refetches D once host date passes D); Berlin host midnight = 18:00 ET (19:00 in DST-mismatch weeks), hosts further east refetch until 18:00 (extra calls, no wrong data); nightly 02:00 Berlin keeps >= 2 h margin; EOD watch 16:30 default and auto-trader gap as the decision states; legacy rows written 16:30-18:00 heal once (upsert, retry-bounded). Not merged: awaiting Kenneth."
     }
   ],
   "decisions": [
