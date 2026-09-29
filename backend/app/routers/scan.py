@@ -60,7 +60,7 @@ from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.contract_validator import hard_reject_delta_band
-from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
+from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
 from app.scoring.exit_plan import resolve_stock_stop, final_stop_out
@@ -370,6 +370,7 @@ async def _build_spreads(
     sem: asyncio.Semaphore,
     *,
     dte_bounds: tuple[int, int] | None = None,
+    min_dte_floor: int | None = None,
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
@@ -389,11 +390,19 @@ async def _build_spreads(
         iv=iv_rank, iv_basis=iv_basis,
         rank_threshold=iv_rank_threshold, abs_threshold=iv_abs_threshold,
     )
+    # Pin the legs to the main contract's expiry: the legs are labelled with it
+    # (`_spread_expiry` below), so re-deriving the expiry from the bounds would
+    # let any drift between the two fetches (arguments, or date.today() across
+    # midnight) put another expiry's strikes under this one's label. An explicit
+    # expiry wins in the picker; bounds + floor remain only as the fallback.
+    _leg_expiry = contract.get("expiry")
     try:
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
-                fetch_option_chain_async(client, symbol, option_type="P", dte_bounds=dte_bounds),
-                fetch_option_chain_async(client, symbol, option_type="C", dte_bounds=dte_bounds),
+                fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="P",
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
+                fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="C",
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
             )
     except Exception as exc:
         _log.debug("Spread: chain fetch failed for %s: %s", symbol, exc)
@@ -610,8 +619,12 @@ async def _process_symbol(
         return RejectedCandidate(symbol=symbol, reason=f"Pre-screen: score {card_pre.score} rejected", breakdown=bd)
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
+    # The fetch must only consider expiries the validator will accept, so it
+    # gets the same floor the contract hard-reject uses (widen_contract_overrides_for_dte).
+    _dte_floor = widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None
     async with sem:
-        chain = await fetch_option_chain_async(client, symbol, option_type=option_type, dte_bounds=dte_bounds)
+        chain = await fetch_option_chain_async(client, symbol, option_type=option_type,
+                                               dte_bounds=dte_bounds, min_dte_floor=_dte_floor)
 
     if not chain:
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
@@ -1079,6 +1092,7 @@ async def _process_symbol(
     _primary_sp, _alt_sp = await _build_spreads(
         symbol, direction, contract, iv_rank, client, sem,
         dte_bounds=dte_bounds,
+        min_dte_floor=_dte_floor,
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,

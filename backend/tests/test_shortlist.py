@@ -254,3 +254,50 @@ def test_an_exact_tie_keeps_universe_order(client):
         body = _scan(client, list(spec))
 
     assert [c["symbol"] for c in body["candidates"]] == ["CCC", "AAA"]
+
+
+# ── The scan passes the validator's DTE floor to the expiry pick ──────────────
+# (Lives here for the scan-level patch harness above.) Only one expiry is
+# fetched per symbol; without the floor a Custom 15-200d hold (window 30-400,
+# centre 215, floor 201) could pick a 199d monthly the validator then rejects.
+
+def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
+    seen = []
+
+    async def _chain(_client, symbol, **kw):
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        return _MOCK_CHAIN
+
+    with _enter_shortlist_patches(10) as stack:
+        stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Position",
+            "hold_min_days": 15, "hold_max_days": 200,
+        })
+    assert r.status_code == 200
+    assert seen and all(s == ((30, 400), 201) for s in seen), seen
+
+
+def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
+    """Bearish scans fetch two more chains for the spread legs. They must use the
+    main contract's expiry, which the legs are labelled with; if they re-picked
+    from the bounds, a drift would put another expiry's strikes under this label."""
+    seen = []
+
+    async def _chain(_client, symbol, **kw):
+        seen.append((kw.get("expiry"), kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        return [{**_MOCK_CHAIN[0], "right": kw.get("option_type", "C"),
+                 "strike": s, "expiry": "2027-06-18"} for s in (180, 185, 190, 195)]
+
+    with _enter_shortlist_patches(10) as stack:
+        stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bearish", "horizon": "Position",
+            "hold_min_days": 15, "hold_max_days": 200,
+        })
+    assert r.status_code == 200
+    main, legs = seen[0], seen[1:]
+    assert main == (None, (30, 400), 201)
+    assert r.json()["candidates"], r.json()["rejected"]  # else nothing below is exercised
+    assert len(legs) == 2, seen
+    assert all(e == "2027-06-18" and b == (30, 400) and f == 201 for e, b, f in legs), seen

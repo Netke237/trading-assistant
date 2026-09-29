@@ -1,11 +1,44 @@
 # 18 options-mode search profiles
 
-3 horizon groups (`Intraday`, `Swing`, `PositionPlus`) x 3 tiers (`Baseline`,
+3 horizon groups (`Intraday`, `Swing`, `SemiAnnual`) x 3 tiers (`Baseline`,
 `Restrictive`, `Loose`) x 2 directions (`Bullish`, `Bearish`), named
-`<Group>_<Tier>_<Direction>`. Universe: SP500 for all 18. Full rationale and
-the finalized tier numbers are in `docs/superpowers/scratchpad` history for
-branch `claude/options-scan-liquidity-profiles` (merged to `main` at
-`ab705ea7`) — this folder holds the *output*, not the design discussion.
+`<Group>_<Tier>_<Direction>`. Universe: SP500 for all 18. All 18 are
+**Options-mode** profiles: the Step-3 profile dropdown only lists profiles
+whose mode matches the screener mode, so none of them appear in Stocks mode.
+A Stocks profile is saved from Stocks mode.
+
+## Corrections of 2026-09-29 (after an adversarial review)
+
+- `PositionPlus_*` (Custom, 15-200d hold) became `SemiAnnual_*` (Semi-annual
+  preset, 90-105d hold, DTE 180-210). A contract must outlive the maximum hold,
+  so a 200-day max hold forced every contract past 200 DTE: the group never
+  covered Position/Quarterly/Annual, and together with a backend bug in the
+  expiry pick (fixed in the same change, `market.py`
+  `_nearest_expiration_in_window` now honours the validator's DTE floor) it
+  rejected whole symbols as `dte_too_short`. The profile **ids are unchanged**.
+  A schedule entry built from a PositionPlus profile still runs its own saved
+  copy of the old request (Custom 15-200) until you open the profile in the
+  app and click Update, which re-syncs the entry; the import script cannot do
+  that for you.
+- `SemiAnnual_Restrictive_*`: min volume 50 (the Baseline floor) instead of
+  200, because a single ~200-DTE strike rarely trades 200 contracts a day.
+  That is a judgement from the measured Baseline Semi-annual run (3 of 518
+  candidates, with 101 contract rejects mostly on liquidity and spread), not a
+  measured Restrictive run: whether 50/1000/8% returns anything on a given day
+  is unverified. It still requires OI >= 1000 and spread <= 8%, so every
+  contract it accepts Baseline accepts too; its candidates are a subset of
+  Baseline's before the shortlist cap (after the cap, a name Baseline trimmed
+  can appear in Restrictive's shorter list).
+- `*_Loose_*`: shortlist cap 20 instead of 10, so the cap no longer hides how
+  many candidates really pass.
+- Intraday profiles were rejecting every contract from Wednesday to Friday
+  (Friday's weekly sat below the DTE floor of 3). That was the same backend
+  bug; no profile value changed for it.
+
+The original design rationale and tier numbers are in the
+`docs/superpowers/scratchpad` history for branch
+`claude/options-scan-liquidity-profiles` (merged to `main` at `ab705ea7`) —
+this folder holds the *output*, not the design discussion.
 
 ## Files
 
@@ -13,7 +46,9 @@ branch `claude/options-scan-liquidity-profiles` (merged to `main` at
   profiles and their filter values (hard-reject + soft-rank/preferred), with
   a Legend & Notes tab.
 - `search-profiles-export.json` — the raw `bamendjou:search-profiles`
-  localStorage payload, byte-for-byte what a real save produced.
+  localStorage payload. Originally a real save; the 2026-09-29 corrections
+  were applied to it by script (renamed profiles, `updatedAt`
+  2026-09-29T12:00:00.000Z), in the same shape the app writes.
 - `import-search-profiles.js` — the same JSON embedded in a paste-into-
   DevTools-console script (see below).
 
@@ -29,12 +64,17 @@ separate `localStorage`. To actually load them into a browser:
 1. Open the Bamendjou app in that browser.
 2. Open DevTools → Console.
 3. Paste the full contents of `import-search-profiles.js`, press Enter.
-4. Reload the page. The 18 profiles now appear in the Search Profile
-   dropdown on Step 3 (Options mode).
+4. Reload every open Bamendjou tab. The 18 profiles now appear in the Search
+   Profile dropdown on Step 3 (Options mode).
 
-This **replaces** whatever that browser already had under the
-`bamendjou:search-profiles` key — back up first with
-`copy(localStorage.getItem("bamendjou:search-profiles"))` if it isn't empty.
+The script **merges by profile id**: each of the 18 replaces the profile with
+the same id, and any profile you saved yourself is kept. The previous value is
+backed up first under `bamendjou:search-profiles:backup-<timestamp>`. Reload
+every open app tab afterwards: a tab left open still holds the old list in
+memory and would write it back on its next profile save. An unreadable
+existing value is kept in the backup key and only the 18 are imported. The
+stored schema version is kept, so the app still migrates your own profiles.
+Each run adds a backup key; delete old ones by hand if they pile up.
 
 ## Is reuse guaranteed?
 
@@ -51,11 +91,15 @@ Not unconditionally. Two concrete dependencies:
    but lose the matching soft-rank widening — contracts could still fall to
    `too_many_soft_failures` that the intended "Loose" behavior was meant to
    let through.
-2. **`Restrictive`/`Loose` freeze specific numbers, `Baseline` doesn't.**
-   `Baseline` profiles carry empty `scanOverrides` (`{}`), so they always
-   track whatever `contract_rules.yaml`/`executionParamDefaults.ts` currently
-   ship as default. `Restrictive`/`Loose` bake in fixed values (0.08/200/1000
-   and 0.30/20/75) — if the app's own defaults change later, these two tiers
+2. **`Restrictive`/`Loose` freeze specific liquidity numbers, `Baseline`
+   doesn't.** `Baseline` profiles carry empty `scanOverrides` (`{}`), so their
+   liquidity and scoring parameters always track whatever
+   `contract_rules.yaml`/`scoring_rules.yaml` currently ship as default. All
+   18, Baseline included, do freeze `scanSettings` (confidence gate,
+   fundamentals gate, shortlist cap, spreads), and loading any profile writes
+   those into Settings, where they stay after the scan. `Restrictive`/`Loose`
+   bake in fixed values (0.08/200/1000, except `SemiAnnual_Restrictive` at
+   0.08/50/1000; and 0.30/20/75) — if the app's own defaults change later, these two tiers
    won't auto-rescale relative to the new baseline; they'd need to be
    re-derived and re-saved.
 

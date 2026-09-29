@@ -50,3 +50,50 @@ def test_annual_window_finds_a_far_dated_expiry():
 
 def test_empty_dates_returns_none():
     assert _nearest_expiration_in_window([], (30, 90), date.today()) is None
+
+
+# ── The pick must respect the validator's floor ───────────────────────────────
+#
+# Only one expiry is fetched per symbol. When the centre-nearest listed expiry
+# sat below the contract validator's floor (dte_window.widened_min_dte, never
+# under hold_max + 1), every contract came back dte_too_short and the WHOLE
+# symbol was rejected, even though a valid expiry was listed. Both cases below
+# are the calendars that did it.
+
+from app.scoring.dte_window import widened_min_dte  # noqa: E402
+
+
+def _dates(today, *dtes):
+    return [(today + timedelta(days=n)).isoformat() for n in dtes]
+
+
+def test_custom_15_200_hold_skips_an_expiry_below_the_201_floor():
+    today = date(2026, 9, 29)
+    # Custom 15-200d at multiplier 2: window (30, 400), centre 215, floor 201.
+    floor = widened_min_dte(30, 200)
+    assert floor == 201
+    dates = _dates(today, 199, 263, 381)
+    assert _nearest_expiration_in_window(dates, (30, 400), today) == _dates(today, 199)[0]  # the old pick
+    assert _nearest_expiration_in_window(dates, (30, 400), today, min_dte_floor=floor) == _dates(today, 263)[0]
+
+
+def test_intraday_on_a_wednesday_skips_fridays_2_day_weekly():
+    today = date(2026, 9, 30)  # a Wednesday
+    floor = widened_min_dte(1, 2)  # Intraday: window (1, 4), hold_max 2
+    assert floor == 3
+    dates = _dates(today, 2, 9, 16)
+    assert _nearest_expiration_in_window(dates, (1, 4), today) == _dates(today, 2)[0]  # the old pick
+    # Nothing in [3, 4]; the tolerance margin reaches 14, so next Friday (9d).
+    assert _nearest_expiration_in_window(dates, (1, 4), today, min_dte_floor=floor) == _dates(today, 9)[0]
+
+
+def test_no_floor_keeps_the_old_behaviour():
+    today = date(2026, 9, 29)
+    dates = _dates(today, 199, 263)
+    assert (_nearest_expiration_in_window(dates, (30, 400), today, min_dte_floor=None)
+            == _nearest_expiration_in_window(dates, (30, 400), today))
+
+
+def test_nothing_at_or_above_the_floor_returns_none():
+    today = date(2026, 9, 29)
+    assert _nearest_expiration_in_window(_dates(today, 150, 199), (30, 400), today, min_dte_floor=201) is None

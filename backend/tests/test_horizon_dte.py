@@ -250,7 +250,7 @@ def test_get_contracts_applies_hold_day_dte_window(monkeypatch):
         **near_contract, "id": "AAPL|185|far|C",
         "expiry": _expiry_str(365), "dte": 365, "dteTotal": 365,
     }
-    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None):
         return [far_contract] if dte_bounds == (330, 400) else [near_contract, far_contract]
 
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
@@ -274,7 +274,7 @@ def test_get_contracts_applies_hold_day_dte_window(monkeypatch):
 def test_get_contracts_without_hold_days_keeps_legacy_behaviour(monkeypatch):
     """No hold days -> dte_bounds=None -> unchanged from today's behaviour."""
     calls = []
-    async def _fake_fetch(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+    async def _fake_fetch(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None):
         calls.append(dte_bounds)
         return []
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_fetch)
@@ -302,7 +302,7 @@ def test_get_contracts_does_not_hard_reject_a_tolerance_fallback_expiry(monkeypa
         "price": 27.1, "bid": 26.85, "ask": 27.4, "delta": 0.558, "theta": -0.02,
         "volume": 224, "open_interest": 19059, "iv_rank": 30,
     }
-    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None):
         return [contract_179d]
 
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
@@ -332,7 +332,7 @@ def test_get_contracts_still_rejects_a_too_short_contract_for_a_narrow_horizon(m
         "price": 2.0, "bid": 1.9, "ask": 2.1, "delta": 0.45, "theta": -0.05,
         "volume": 500, "open_interest": 1000, "iv_rank": 30,
     }
-    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None):
         return [contract_12d]
 
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
@@ -382,7 +382,7 @@ def test_get_contracts_falls_back_gracefully_on_misconfigured_multiplier(monkeyp
     call as scan.py's round-1 fix addressed, just on the sibling endpoint. A
     misconfigured dte_holding_multiplier (0 here) must not 500 /api/contracts."""
     monkeypatch.setattr("app.routers.contracts.dte_holding_multiplier", lambda: 0.0)
-    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None):
         return []
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
     async def _fake_price(client, symbol):
@@ -405,7 +405,7 @@ def test_get_contracts_rejects_inverted_hold_range(monkeypatch):
     string) works against both endpoints. The `loc` contents legitimately
     differ (this is a query-param check, /api/scan's is a whole-body check) —
     only the list-of-dicts envelope is asserted here, not exact loc equality."""
-    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None):
         return []
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
     async def _fake_price(client, symbol):
@@ -419,3 +419,21 @@ def test_get_contracts_rejects_inverted_hold_range(monkeypatch):
     detail = resp.json()["detail"]
     assert isinstance(detail, list)
     assert "hold_max_days" in detail[0]["msg"]
+
+
+def test_get_contracts_passes_the_validator_floor_to_the_expiry_pick(monkeypatch):
+    """The fetch picks ONE expiry. If it may pick below the validator's floor
+    (hold_max + 1), every contract comes back dte_too_short. A Custom 15-200d
+    hold is window (30, 400) at multiplier 2, floor 201: the fetch must be told."""
+    calls = []
+    async def _fake_fetch(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None):
+        calls.append((dte_bounds, min_dte_floor))
+        return []
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_fetch)
+    async def _fake_price(client, symbol):
+        return 190.0
+    monkeypatch.setattr("app.routers.contracts.fetch_price_async", _fake_price)
+    client = TestClient(app)
+    client.get("/api/contracts", params={"symbol": "AAPL", "right": "C",
+                                          "hold_min_days": 15, "hold_max_days": 200})
+    assert calls == [((30, 400), 201)]
