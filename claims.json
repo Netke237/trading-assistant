@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/amazing-planck-b4033x",
+      "claimed_at": "2026-09-29T10:44:12Z",
+      "expires_at": "2026-09-29T13:44:12Z",
+      "note": "stocks scan shortlist cap: rank before cutting, report trimmed names",
+      "task": "STOCK-SHORTLIST-RANK"
+    }
+  ]
 }
