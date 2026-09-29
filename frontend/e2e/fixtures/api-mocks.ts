@@ -343,6 +343,9 @@ export async function setupApiMocks(page: Page): Promise<void> {
       body: JSON.stringify({
         scan_id: 'test-scan-001',
         timestamp: new Date().toISOString(),
+        // The contract rules the scan applied; {} = none overridden. Without it
+        // Step 6 takes the "no recorded contract rules" path.
+        contract_rules: {},
         candidates: [MOCK_SCAN_CANDIDATE],
         rejected: [],
       }),

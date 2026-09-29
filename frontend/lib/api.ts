@@ -403,7 +403,9 @@ export const api = {
     symbol: string,
     right: 'C' | 'P' = 'C',
     ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number;
-            hold_min_days?: number; hold_max_days?: number },
+            hold_min_days?: number; hold_max_days?: number;
+            /** The scan's ScanResult.contract_rules. Absent = contract_rules.yaml. */
+            contract_rules?: Record<string, number> },
     signal?: AbortSignal,
   ) => get<OptionContract[]>(
     `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
@@ -413,7 +415,9 @@ export const api = {
     (ctx?.limit != null ? `&limit=${ctx.limit}` : '') +
     (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : '') +
     (ctx?.hold_min_days != null ? `&hold_min_days=${ctx.hold_min_days}` : '') +
-    (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : ''),
+    (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : '') +
+    (ctx?.contract_rules && Object.keys(ctx.contract_rules).length > 0
+      ? `&contract_rules=${encodeURIComponent(JSON.stringify(ctx.contract_rules))}` : ''),
     signal,
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),

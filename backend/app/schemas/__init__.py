@@ -894,6 +894,14 @@ class ScanResult(BaseModel):
     # Absent on results persisted before 2026-09-29; the UI then falls back to
     # the horizon's YAML window.
     event_window: Optional[EventWindow] = None
+    # The contract-rule overrides this scan graded contracts with
+    # (contract_validator.effective_contract_overrides of the request's
+    # overrides, BEFORE the hold-days DTE widening, which /api/contracts
+    # re-derives from the same hold days). Step 6 sends it back to
+    # /api/contracts so its table grades with the trade cards' rules, not
+    # contract_rules.yaml's. {} = the scan overrode nothing. None = absent:
+    # a result from before 2026-09-29, or the recording failed.
+    contract_rules: Optional[dict[str, float]] = None
 
 
 class ScanSessionStatus(BaseModel):

@@ -87,6 +87,12 @@ export interface ScanResult {
    *  default, replaced by any Step-3 override). Absent on results from before
    *  2026-09-29. Step 5 gates on it. */
   event_window?: { reject_days: number; caution_days: number };
+  /** The contract-rule overrides the scan graded contracts with (Step-3
+   *  liquidity, spread, delta, IV and min-stock-score rules; `{}` when it
+   *  overrode none). Absent, or null from the backend, on results from before
+   *  2026-09-29 or when the scan could not record them. Step 6 sends it to
+   *  /api/contracts so its table grades with the trade cards' rules. */
+  contract_rules?: Record<string, number> | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
