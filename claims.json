@@ -15,6 +15,14 @@
       "expires_at": "2026-09-29T08:18:07Z",
       "note": "G3: Step 5 threshold stores fall back to hardcoded values and never re-fetch",
       "task": "DOCC-3"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/blissful-maxwell-c8g4nk",
+      "claimed_at": "2026-09-29T06:51:18Z",
+      "expires_at": "2026-09-29T09:51:18Z",
+      "note": "raise historical_store _SETTLE 30 min -> 2 h (Kenneth ok 2026-09-29)",
+      "task": "SETTLE-2H"
     }
   ]
 }
