@@ -85,7 +85,10 @@ from app.services import portfolio_risk
 from app.routers.contracts import FirstPassageInvalidationOut
 from app.services.regime_omm import compute_omm
 from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
-from app.services.money_config import MoneyConfigError, validate_money_blocks
+from app.services.money_config import (
+    REGIME_HORIZONS, MoneyConfigError, RegimeConfigError, validate_money_blocks,
+    validate_regime_block,
+)
 from app.services.regime_hmm_daily import compute_directional_hmm, alignment
 from app.services.fundamentals_store import get_fundamentals as _get_fundamentals
 from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundamentals, FundamentalHealth
@@ -954,6 +957,13 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     except MoneyConfigError as e:
         logger.error("ANALYZE %s aborted on scoring_rules.yaml money blocks: %s", req.symbol, e)
         raise HTTPException(status_code=500, detail=str(e))
+    # DOCC-2 S3: ALL THREE horizons, because this page builds a regime card for
+    # each (`_regime_block_for_horizon`), not only the request's.
+    try:
+        validate_regime_block(_cfg_doc, REGIME_HORIZONS)
+    except RegimeConfigError as e:
+        logger.error("ANALYZE %s aborted on scoring_rules.yaml regime block: %s", req.symbol, e)
+        raise HTTPException(status_code=500, detail=str(e))
     symbol = req.symbol.upper()
     is_index = _is_index(symbol)
 
@@ -1504,6 +1514,15 @@ async def _execute_stock_scan_core(
         validate_money_blocks(_cfg_doc)
     except MoneyConfigError as e:
         logger.error("STOCK SCAN %s aborted on scoring_rules.yaml money blocks: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+    # DOCC-2 S1 (decision DOCC-2-REGIME-BLOCK-REFUSES-2026-09-28): checked once
+    # here, so a broken regime.<horizon> is one named 500 instead of a bare
+    # KeyError per symbol that `gather(..., return_exceptions=True)` turned into
+    # a universe of rejected names with nothing naming the file.
+    try:
+        validate_regime_block(_cfg_doc, (req.horizon,))
+    except RegimeConfigError as e:
+        logger.error("STOCK SCAN %s aborted on scoring_rules.yaml regime block: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
     try:
         resolve_sizing(_cfg_doc.get("regime_sizing"))
