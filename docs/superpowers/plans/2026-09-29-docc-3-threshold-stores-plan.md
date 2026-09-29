@@ -252,10 +252,16 @@ to a whitelist.
 
   The literals `?? 34` and `?? 44` are deleted, and so are the `isNaN → 34/44`
   defaults.
+- **The `Row` "Default:" tags** (`defaultValue="34"` at `:1174` and `"44"` at
+  `:1188`) show the fetched `abs_pass_max` when a record is in hand. With no
+  record, or a fetched `null`, the prop is omitted (plan round 1, F1).
 - **Apply:**
   - A field whose parsed value is not a number in `[1, 100]` is not applied, and
     the section says so inline.
-  - Otherwise it calls `setAbsPassOverride(h, v)`.
+  - Otherwise it calls `setAbsPassOverride(h, v)` **only for an input the user
+    edited since the last Apply or Reset**, tracked per input as a dirty flag.
+    An untouched input writes nothing, so editing Swing alone never freezes
+    Position at today's YAML value past a later re-fetch (plan round 1, F2).
   - Apply is disabled unless the store's thresholds are non-null (`ready`, or
     `loading` with the last good record). With no fetched record it shows the
     error text instead.
@@ -347,8 +353,23 @@ The `'Nonsense'` horizon case is deleted, because the type now forbids it.
   test's explicit record) and `status: 'ready'`.
 - `jest.mock('@/lib/api', …)` resolves the same records, so the mount fetch
   re-sets the values the test set rather than clearing them.
-- **No assertion changes.** Any assertion that changes is a finding against the
-  build.
+- **No assertion changes, except these three, which are authorised and
+  specified here** (plan round 1, F3). Any other assertion that changes is a
+  finding against the build.
+  1. The `iv-thresholds` pin (`gateSummary.test.tsx:~174-178`) compares each
+     band against `effectiveIvThresholds(thresholds, overrides)`, not the raw
+     `thresholds`. The header must quote the same ceiling the badges apply.
+  2. The gate-cell pin in `CELL_PINS` (`:~279`, reading `data-ev-reject` at
+     `:~342`) branches on the page root's new `data-avail` attribute (§2.4). When
+     it is `ready`, the tooltip is `eventVolGateTooltip(...)` as today. Otherwise
+     it is exactly the unavailable sentence.
+  3. `PART_ORDER` (`:~262`) gains `iv-override` after `iv-thresholds`, and gains
+     `thresholds-unavailable` then `thresholds-retry` in place of `iv-thresholds`,
+     `event-window` and `gate-rule`. Each gets a `PART_PINS` entry. Every adjacent
+     pair of parts, the Retry button included, is separated by a `' '` text node,
+     so "a line says exactly the sum of its parts" (`:~826-829`) still holds.
+- The `data-avail` attribute (`'ready' | 'loading' | 'failed'`) is published on
+  the `step-5` root.
 
 **Step 7 rail (`rail.test.tsx`):**
 
@@ -369,6 +390,11 @@ export if the file's convention forbids that.
 - G3: a re-fetch after Apply keeps the input value and the override.
 - G4: Reset clears it.
 - G5: Apply with a value outside `[1, 100]` sets nothing and says so.
+- G6: edit only Swing, then Apply. `overrides.Position` stays `undefined`. A
+  re-fetch that changes Position's YAML value then shows up in Position's input
+  and in Step 5.
+- G7: with no record, no `Default:` tag shows 34 or 44. With a fetched record,
+  each tag shows that record's value.
 
 **Gates:** `npm run typecheck`, `npm run lint` if the repo runs it, and
 `npm run test` all clean. The backend is untouched.
@@ -416,8 +442,10 @@ export if the file's convention forbids that.
 ## 7. Audit notes
 
 - Confirm that no reader can still reach a hardcoded threshold:
-  - grep for `FALLBACK`, `?? 34`, `?? 44` and `loaded` across `app/`, `lib/` and
-    `components/`;
+  - grep for `FALLBACK`, `?? 34`, `?? 44`, `defaultValue="34"`,
+    `defaultValue="44"` and `loaded` across `app/`, `lib/` and `components/`;
+  - grep for `IV_SHIPPED` and `EVENT_SHIPPED`: they may be imported only by test
+    files;
   - check that the deleted shim `lib/ivThresholds.ts` has no importer.
 - Confirm that every `null` returned by `getIvPassMax` or `getIvCautionMax` now
   comes only from a validated payload's explicit `null`. None may come from a
@@ -430,6 +458,27 @@ export if the file's convention forbids that.
 - Confirm that the override is applied identically on Step 5 and in the rail
   (the same `effectiveIvThresholds`), and never where the YAML has no gate.
 - Confirm that the Zustand selectors do not return fresh objects.
+- Confirm that Apply writes an override only for an input that was edited.
+- Confirm that the Step 5 header's bands and the badges read the same effective
+  record.
+
+## 8. Audit record
+
+**Plan round 1 (2026-09-29): NOT CLEAN, 3 gate-level findings, all fixed above.**
+- F1: Settings' "Default: 34/44" tags were hardcoded.
+- F2: Apply froze an unedited horizon as an override.
+- F3: the Step 5 pins contradicted "no assertion changes". The easy way out
+  would have made the header quote the raw ceiling while the badges applied the
+  override.
+
+Logged below the gate, not fixed:
+- While the first fetch is in flight, the rail says "could not be loaded". The
+  CAUTION verdict is right; the reason is not.
+- Settings accepts an override for a horizon whose YAML has no gate. It is never
+  applied, but the input shows it.
+- Tests that inject partial records need a per-test api mock resolving the same
+  full record.
+- The Settings blurb's hardcoded "Intraday has no IV gate".
 
 Gate: a finding blocks only if it can put a wrong number in front of a user or
 on a broker order, or corrupt persisted data.
