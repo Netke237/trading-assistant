@@ -672,8 +672,8 @@ def _fetch_scan_window_bars(symbol: str) -> list[dict]:
         defect class as round 2's candle-cache rewrite, one layer down and
         durable rather than per-process.
       - `get_bars(symbol, start, today)` stores and returns only SETTLED daily
-        rows (16:00 ET + 30 min; WATCH-RULE-BAR-PARITY plan 2.10), so in session
-        it ends at D-1 -- but from 16:00 to 16:30 it still ends at D-1 while the
+        rows (16:00 ET + 2 h; WATCH-RULE-BAR-PARITY plan 2.10, SETTLE-2H), so in session
+        it ends at D-1 -- but from 16:00 to 18:00 it still ends at D-1 while the
         guard below keeps D, and after the settle it ends at D only if the DB
         was stale. It is a staleness-driven fetch, not this function's
         completed-bar rule, so the end-trim below would still be required.

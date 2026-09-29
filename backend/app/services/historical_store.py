@@ -9,7 +9,7 @@ Bars are written with an upsert (INSERT OR REPLACE for SQLite) so re-running the
 is always safe and idempotent.
 
 Only SETTLED daily rows are ever stored (WATCH-RULE-BAR-PARITY plan 2.10, decisions
-PARTIAL-ROW / Q-F): a row for day ``d`` is written only once ``now >= 16:00 ET on d + 30 min``.
+PARTIAL-ROW / Q-F): a row for day ``d`` is written only once ``now >= 16:00 ET on d + 2 h`` (18:00 ET).
 During session D, Alpaca and Tiingo may return D's forming bar; before this rule it was
 upserted and, because ``get_bars``' staleness test never looks at D again from D+1, stayed in
 the store for good. Rows written before the rule (``fetched_at`` earlier than their own
@@ -67,9 +67,10 @@ _prefetch_task: asyncio.Task | None = None
 
 # ── Clock + settle rule (plan 2.10) ─────────────────────────────────────────
 
-# A daily row is stored only this long after its session's 16:00 ET close. Half-days
-# (13:00 close) settle at 16:30 too: one row later than necessary, three days a year.
-_SETTLE = timedelta(minutes=30)
+# A daily row is stored only this long after its session's 16:00 ET close: 18:00 ET, late
+# enough for Tiingo's end-of-day bar (published ~17:30 ET) when Alpaca is missing or fails
+# (decision SETTLE-2H-2026-09-29; was 30 min). Half-days (13:00 close) settle at 18:00 too.
+_SETTLE = timedelta(hours=2)
 _SESSION_CLOSE = dtime(16, 0)
 
 # One heal attempt per (symbol, provisional date) per this interval, so a halted,

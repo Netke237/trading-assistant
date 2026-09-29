@@ -8,7 +8,7 @@ to the clock's own date, the FINAL bar once that day has settled and a visibly
 different FORMING bar before -- so a stored forming bar is a wrong number, not a
 coincidence.
 
-D = Wednesday 2026-06-10 (EDT: 16:00 ET = 20:00 UTC, settle 16:30 ET = 20:30 UTC).
+D = Wednesday 2026-06-10 (EDT: 16:00 ET = 20:00 UTC, settle 18:00 ET = 22:00 UTC).
 """
 from __future__ import annotations
 
@@ -148,9 +148,9 @@ async def test_13_in_session_stale_fetch_stores_settled_rows_only(world):
     assert world.calls == [("alpaca", D1, D)]
 
 
-@pytest.mark.parametrize("clock,expect_d", [((16, 29, 59), False), ((16, 30, 0), True)])
+@pytest.mark.parametrize("clock,expect_d", [((17, 59, 59), False), ((18, 0, 0), True)])
 @pytest.mark.asyncio
-async def test_13_settle_boundary_is_1630_inclusive(world, clock, expect_d):
+async def test_13_settle_boundary_is_1800_inclusive(world, clock, expect_d):
     await _seed(world, [(d, _nightly(d)) for d in _weekdays(START, D2)])
     world.now = _et(D, *clock)
     bars = await hs.get_bars("AAPL", START, D)
@@ -263,10 +263,10 @@ def test_19_as_utc_naive_is_utc_wall_clock_and_aware_is_converted(la_host):
     aware = _et(D, 16)
     assert hs._as_utc(aware) == datetime(2026, 6, 10, 20, 0, tzinfo=timezone.utc)
     assert hs._as_utc(aware).tzinfo == timezone.utc
-    # A naive SQLite value of 20:15 UTC is provisional for D (settle 20:30 UTC) ...
-    assert hs._is_provisional(D, datetime(2026, 6, 10, 20, 15)) is True
-    # ... and 20:30 UTC is not. Read as LA local it would be 03:30 UTC next day.
-    assert hs._is_provisional(D, datetime(2026, 6, 10, 20, 30)) is False
+    # A naive SQLite value of 21:59 UTC is provisional for D (settle 22:00 UTC) ...
+    assert hs._is_provisional(D, datetime(2026, 6, 10, 21, 59)) is True
+    # ... and 22:00 UTC is not. Read as LA local it would be 05:00 UTC next day.
+    assert hs._is_provisional(D, datetime(2026, 6, 10, 22, 0)) is False
 
 
 # ── 20. yfinance-only chain heals today's own legacy row after the settle ────
@@ -277,7 +277,7 @@ async def test_20_yfinance_only_heals_todays_legacy_row(world):
     await _seed(world, rows, forming={D})
     world.alpaca_enabled = False
     world.override["tiingo"] = lambda s, e: []
-    world.now = _et(D, 17)
+    world.now = _et(D, 18)
 
     bars = await hs.get_bars("AAPL", START, D)
     assert ("yfinance", D, D + timedelta(days=1)) in world.calls
@@ -289,7 +289,7 @@ async def test_20_yfinance_only_heals_todays_legacy_row(world):
 async def test_20b_todays_legacy_row_waits_for_its_own_settle(world):
     rows = [(d, _nightly(d)) for d in _weekdays(START, D1)] + [(D, _et(D, 11))]
     await _seed(world, rows, forming={D})
-    world.now = _et(D, 16, 29, 59)
+    world.now = _et(D, 17, 59, 59)
     await hs.get_bars("AAPL", START, D)
     assert world.calls == []
 
