@@ -23,6 +23,14 @@
       "expires_at": "2026-09-29T08:18:07Z",
       "note": "G3: Step 5 threshold stores fall back to hardcoded values and never re-fetch",
       "task": "DOCC-3"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/composite-momentum-confirmations",
+      "claimed_at": "2026-09-29T05:22:58Z",
+      "expires_at": "2026-09-29T08:22:58Z",
+      "note": "plan + build: volume_spike/rsi_cross/macd_cross composite confirmations",
+      "task": "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD"
     }
   ]
 }
