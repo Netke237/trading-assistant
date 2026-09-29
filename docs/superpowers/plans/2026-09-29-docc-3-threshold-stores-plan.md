@@ -494,6 +494,25 @@ opened one:
   Reset, then Apply: the input shows 60 while 34 is graded. The fix is explicit
   buffer rewrites on Reset and Apply, and a refused field stays dirty.
 
+**Plan round 3 (2026-09-29): CLEAN, zero gate-level findings. The plan stage
+is closed; the code stage starts at round 1 of 3.** It reviewed only F4's fix.
+The reviewer walked type-Reset-Apply, a refused field, a failed re-fetch with
+an override set, and Reset while a field is refused, and each ends with the
+input matching what is applied or marked as not applied.
+
+Round-3 items logged below the gate, not fixed:
+- An accepted field's buffer should be set to `String(v)`, the value just
+  written, not to a seed read from the render closure, which is stale. G3's
+  input assertion catches the stale version.
+- The plan does not say whether Reset or a later accepted Apply clears a
+  refused field's inline error.
+- A typed but unapplied value is not marked. That is ordinary form behaviour,
+  and the §2.6 sentence over-claims.
+- G5 should pin whether a valid field is still applied when the other field is
+  refused (the rules are per field, so it should be).
+- A dead override on a no-gate horizon is shown back in the input (already
+  logged in round 1).
+
 Round-2 items logged below the gate, not fixed:
 - Tests read `data-horizon` as a `string` and need `as ThresholdHorizon`, which
   goes against the "NO CAST" comment at `gateSummary.test.tsx:168-172`. That
