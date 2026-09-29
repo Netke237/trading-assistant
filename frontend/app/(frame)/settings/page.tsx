@@ -15,7 +15,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair } from '@/lib/settingsStore';
-import { useIvThresholdsStore, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
+import { Row, SectionIntro } from './SettingsRow';
+import { IvThresholdsSection } from './IvThresholdsSection';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
@@ -89,14 +90,6 @@ export default function SettingsPage() {
   );
 }
 
-function SectionIntro({ title, blurb }: { title: string; blurb: string }) {
-  return (
-    <div className={styles.intro}>
-      <Text size={14} weight={600}>{title}</Text>
-      <Text size={12} tone="secondary">{blurb}</Text>
-    </div>
-  );
-}
 
 /** P2-02 / R3-1 / R3-6 / R4-1 / R4-2 / R5-1 -- what the stored global premium
  *  stop actually does, said under the field.
@@ -133,32 +126,6 @@ function PremiumStopSettingNotes({ pct }: { pct: number }) {
   );
 }
 
-function Row({
-  label,
-  hint,
-  defaultValue,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  defaultValue?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={styles.row}>
-      <div className={styles.rowLabel}>
-        <Text size={13} weight={400}>{label}</Text>
-        {hint && <Text size={11} tone="secondary">{hint}</Text>}
-        {defaultValue !== undefined && (
-          <span className={styles.defaultTag} title="Out-of-the-box value">
-            Default: {defaultValue}
-          </span>
-        )}
-      </div>
-      <div className={styles.rowControl}>{children}</div>
-    </div>
-  );
-}
 
 function AtrPairRow({
   label,
@@ -1126,85 +1093,6 @@ function SpreadsSection() {
         />
         <Text size={12} tone="secondary">%</Text>
       </Row>
-    </>
-  );
-}
-
-/* ---------- IV rank thresholds ---------- */
-
-function IvThresholdsSection() {
-  const { thresholds, setThresholds } = useIvThresholdsStore();
-
-  // These edit the ABSOLUTE ceiling (`abs_pass_max`), not the percentile one.
-  // On any chain where neither IBKR nor tastytrade supplied a rank -- the
-  // default configuration -- the absolute set is the one the gate actually
-  // applies, and 34/44 are the numbers it has been applying all along
-  // (PHASE-A-NULL-IVRANK-2026-09-06). Wiring this knob to the percentile set
-  // would give the trader a control that changes nothing they can see.
-  const [swingPassText,    setSwingPassText]    = useState(String(thresholds.Swing?.abs_pass_max    ?? 34));
-  const [positionPassText, setPositionPassText] = useState(String(thresholds.Position?.abs_pass_max ?? 44));
-
-  // Sync text buffers when the store resets
-  useEffect(() => { setSwingPassText(String(thresholds.Swing?.abs_pass_max    ?? 34));    }, [thresholds.Swing?.abs_pass_max]);
-  useEffect(() => { setPositionPassText(String(thresholds.Position?.abs_pass_max ?? 44)); }, [thresholds.Position?.abs_pass_max]);
-
-  function handleSaveIvThresholds() {
-    const swingVal = parseInt(swingPassText, 10);
-    const swingPass = isNaN(swingVal) ? 34 : Math.max(1, Math.min(100, swingVal));
-    const posVal = parseInt(positionPassText, 10);
-    const positionPass = isNaN(posVal) ? 44 : Math.max(1, Math.min(100, posVal));
-    setSwingPassText(String(swingPass));
-    setPositionPassText(String(positionPass));
-    setThresholds({
-      ...thresholds,
-      Swing:    { ...thresholds.Swing,    abs_pass_max: swingPass    },
-      Position: { ...thresholds.Position, abs_pass_max: positionPass },
-    });
-  }
-
-  return (
-    <>
-      <SectionIntro
-        title="IV thresholds"
-        blurb="Maximum implied volatility that counts as PASS for each horizon. These edit the ABSOLUTE IV ceiling — the one that applies whenever no IV-rank source (IBKR or tastytrade) is connected, which is the usual case. Intraday has no IV gate (disabled). Values are fetched from the backend on load and stored in session only — edit scoring_rules.yaml to persist permanently."
-      />
-      <Row
-        label="Swing — pass max"
-        hint="Absolute IV at or below this → PASS for Swing scans (1–100)"
-        defaultValue="34"
-      >
-        <input
-          type="text"
-          inputMode="numeric"
-          className={styles.numInput}
-          value={swingPassText}
-          onChange={(e) => setSwingPassText(e.target.value)}
-        />
-        <Text size={12} tone="secondary">%</Text>
-      </Row>
-      <Row
-        label="Position — pass max"
-        hint="Absolute IV at or below this → PASS for Position scans (1–100)"
-        defaultValue="44"
-      >
-        <input
-          type="text"
-          inputMode="numeric"
-          className={styles.numInput}
-          value={positionPassText}
-          onChange={(e) => setPositionPassText(e.target.value)}
-        />
-        <Text size={12} tone="secondary">%</Text>
-      </Row>
-      <div className={styles.applyRow}>
-        <button
-          type="button"
-          className={styles.btn}
-          onClick={handleSaveIvThresholds}
-        >
-          Apply thresholds
-        </button>
-      </div>
     </>
   );
 }

@@ -7,9 +7,17 @@
  * (/api/config/event-thresholds) via useEventThresholdsStore — see that store's
  * header comment for why this can't be a locally hardcoded constant.
  * Gate = worst of (IV status, event proximity status).
+ *
+ * NO THRESHOLDS, NO VERDICT (decision DOCC-3-THRESHOLD-STORES-REFUSE-2026-09-29).
+ * Both threshold stores hold only validated backend values and are fetched on
+ * mount. Until both records are in hand (`avail === 'ready'`) the page grades
+ * nothing: every gate is PENDING while loading and NO_DATA when a fetch failed,
+ * no counts line, no bands, and no sentence that quotes a number. The IV side
+ * reads the EFFECTIVE record (effectiveIvThresholds: fetched + Settings'
+ * session override), and the header labels an active override.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -17,10 +25,12 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
-import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
+import {
+  useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
+} from '@/lib/ivThresholdsStore';
 import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
 import {
-  useEventThresholdsStore, getEventWindow, type HorizonEventThresholds,
+  useEventThresholdsStore, getEventWindow, type HorizonEventThresholds, type ThresholdHorizon,
 } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 
@@ -141,6 +151,24 @@ export function eventWindowSentence(w: HorizonEventThresholds): string {
     + `else \u2192 PASS.`;
 }
 
+/** Whether both threshold records are in hand. `ready` does not require the
+ *  stores' status to be 'ready': a re-fetch in flight keeps the last good
+ *  record on screen. Published on the page root as `data-avail`. */
+export type ThresholdsAvail = 'ready' | 'loading' | 'failed';
+
+/** The header part (and the GATE tooltip) shown in place of every threshold
+ *  sentence while no verdict can be computed. It quotes no number. */
+export function thresholdsUnavailableSentence(avail: Exclude<ThresholdsAvail, 'ready'>, error: string | null): string {
+  return avail === 'loading'
+    ? 'Loading the volatility and event thresholds from scoring_rules.yaml\u2026'
+    : `The volatility and event thresholds could not be loaded from scoring_rules.yaml (${error ?? 'unknown error'}). No IV or event verdict is shown.`;
+}
+
+/** The header part naming an active Settings override of the IV pass ceiling. */
+export function ivOverrideSentence(value: number, yaml: number): string {
+  return `IV pass ceiling is a session override from Settings (${value}), not scoring_rules.yaml's (${yaml}).`;
+}
+
 export function headSentence(c: GateCounts): string {
   return `${c.total} shown \u2014 ${c.pass} PASS, ${c.caution} CAUTION, ${c.reject} REJECT.`;
 }
@@ -233,6 +261,11 @@ const COLUMNS = '24px 32px 72px minmax(0, 240px) 120px 70px 110px 80px';
  *  render and the "computed ONCE" claim held only after a scan. */
 const NO_CANDIDATES: TradeCardData[] = [];
 
+/** Every flag false: the drivers of a row that was never graded. */
+const NO_DRIVERS: GateDrivers = Object.freeze({
+  iv: false, event: false, ivMissing: false, hasIv: false, ivGated: false,
+});
+
 /* Why a row is not PASS is decided by `gateDrivers` (lib/statusTooltips.ts),
  * which the per-row tooltip calls too. It was a local enum here and a separate
  * expression there, and an adversarial round caught the two disagreeing on
@@ -259,22 +292,51 @@ export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? NO_CANDIDATES;
-  const ivThresholds = useIvThresholdsStore((s) => s.thresholds);
+  // Two selectors, never one returning a fresh object (Zustand v5 re-renders
+  // forever on that); the effective record is derived in a memo.
+  const ivFetched   = useIvThresholdsStore((s) => s.thresholds);
+  const ivOverrides = useIvThresholdsStore((s) => s.overrides);
+  const ivStatus    = useIvThresholdsStore((s) => s.status);
+  const ivError     = useIvThresholdsStore((s) => s.error);
   const eventThresholds = useEventThresholdsStore((s) => s.thresholds);
+  const evStatus        = useEventThresholdsStore((s) => s.status);
+  const evError         = useEventThresholdsStore((s) => s.error);
+  const ivThresholds = useMemo(
+    () => effectiveIvThresholds(ivFetched, ivOverrides),
+    [ivFetched, ivOverrides],
+  );
+
+  // Fetched on every mount, so a scoring_rules.yaml edit reaches this page on
+  // the next visit (subject to the backend's lru_cache on load_scoring_cfg).
+  const refetchThresholds = useCallback(() => {
+    void useIvThresholdsStore.getState().fetch();
+    void useEventThresholdsStore.getState().fetch();
+  }, []);
+  useEffect(() => { refetchThresholds(); }, [refetchThresholds]);
+
+  const avail: ThresholdsAvail =
+    ivStatus === 'failed' || evStatus === 'failed' ? 'failed'
+    : ivThresholds !== null && eventThresholds !== null ? 'ready'
+    : 'loading';
+  const availError = ivStatus === 'failed' ? ivError : evStatus === 'failed' ? evError : null;
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
   const candidateMap = useMemo(
     () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
     [candidates],
   );
 
-  const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
+  const horizonKey: ThresholdHorizon = context?.horizon?.startsWith('Intraday') ? 'Intraday'
     : context?.horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
   // Fetched from the backend (/api/config/event-thresholds), which reads the same
   // scoring_rules.yaml block score_stock()'s _rule_event uses — so this gate always
   // matches the reject/caution window that already shaped the candidate's score.
-  const eventWindow = getEventWindow(horizonKey, eventThresholds);
-  const { reject_days: evReject, caution_days: evCaution } = eventWindow;
+  // null while `avail !== 'ready'`: nothing below may quote a window it does not have.
+  const eventWindow = avail === 'ready' && eventThresholds !== null
+    ? getEventWindow(horizonKey, eventThresholds) : null;
+  const evReject  = eventWindow?.reject_days ?? null;
+  const evCaution = eventWindow?.caution_days ?? null;
+  const ivOverride = avail === 'ready' ? ivOverrideFor(horizonKey, ivFetched, ivOverrides) : null;
 
   // The volatility figure behind each row is EITHER a true percentile
   // (`ivRank`, present only when IBKR or tastytrade answered) OR an absolute
@@ -287,6 +349,7 @@ export default function Step5Page() {
   // and any future edit reading a fourth value here would have produced a stale
   // gate with no warning at the call site.
   const ivStatusFor = useCallback((value: number, basis: IvBasis): Status => {
+    if (ivThresholds === null) return 'NO_DATA';   // never reached: gatedRows checks avail first
     const passMax = getIvPassMax(horizonKey, ivThresholds, basis);
     if (passMax === null) return 'PASS';   // Intraday: no IV gate
     if (value <= passMax) return 'PASS';
@@ -302,7 +365,10 @@ export default function Step5Page() {
   // on Swing and Position whenever no candidate carried a reading, the empty
   // page included. The gate is not disabled there; it has nothing in front of
   // it yet, which is a different statement and the one the user needs.
+  // Computed ONLY when `ready`: "IV gate disabled" must never be said about a
+  // config nobody has read.
   const gateDisabled =
+    avail === 'ready' && ivThresholds !== null &&
     getIvPassMax(horizonKey, ivThresholds, 'absolute') === null &&
     getIvPassMax(horizonKey, ivThresholds, 'rank') === null;
 
@@ -325,6 +391,11 @@ export default function Step5Page() {
     // cheap premium); only the absolute level treats 0 as missing.
     const iv = resolveIv(c?.contractDetails);
     const hasIv = iv.basis !== 'none';
+    // No thresholds in hand: no verdict on either side, and none combined.
+    if (avail !== 'ready' || evReject === null || evCaution === null) {
+      const none: Status = avail === 'failed' ? 'NO_DATA' : 'PENDING';
+      return { r, c, iv, hasIv, ivSt: none, proxStatus: none, gate: none, drivers: NO_DRIVERS };
+    }
     // Unknown IV must not be treated as better than a clean read — this page's
     // own copy states "Gate = worst of IV and event proximity," so an unknown
     // IV is downgraded to CAUTION (not NO_DATA) specifically so it always
@@ -380,7 +451,7 @@ export default function Step5Page() {
       ivStatus: ivSt, proxStatus, gate, hasIv, ivGated: !gateDisabled,
     });
     return { r, c, iv, hasIv, ivSt, proxStatus, gate, drivers };
-  }), [watchlist, candidateMap, ivStatusFor, evReject, evCaution, gateDisabled]);
+  }), [watchlist, candidateMap, ivStatusFor, evReject, evCaution, gateDisabled, avail]);
 
 
   // DERIVED FROM gatedRows rather than looping the watchlist and calling
@@ -393,7 +464,7 @@ export default function Step5Page() {
     return [...seen];
   }, [gatedRows]);
 
-  const ivBands: IvBand[] = basesPresent
+  const ivBands: IvBand[] = avail !== 'ready' || ivThresholds === null ? [] : basesPresent
     .map((b) => {
       const passMax = getIvPassMax(horizonKey, ivThresholds, b);
       if (passMax === null) return null;
@@ -426,7 +497,7 @@ export default function Step5Page() {
   // treat as a PASS." to a `parts.push` list shipped 43/43 green.
   const gateSummary = useMemo<GateSummary | null>(() => {
     const total = gatedRows.length;
-    if (total === 0) return null;
+    if (total === 0 || avail !== 'ready') return null;
     const pass = gatedRows.filter((g) => g.gate === 'PASS').length;
     const caution = gatedRows.filter((g) => g.gate === 'CAUTION').length;
     const reject = gatedRows.filter((g) => g.gate === 'REJECT').length;
@@ -488,7 +559,7 @@ export default function Step5Page() {
     const missing = noReading === 0 ? null : { rows: noReading, claim: MISSING_READING_CLAIM };
 
     return { counts, causes: causesPart, missing };
-  }, [gatedRows, gateDisabled]);
+  }, [gatedRows, gateDisabled, avail]);
 
   return (
     /* THE WHOLE COMPONENT IS THE CONTRACT'S REGION, not one div inside it.
@@ -502,9 +573,10 @@ export default function Step5Page() {
     <div
       className={styles.main}
       data-testid="step-5"
-      data-ev-reject={evReject}
-      data-ev-caution={evCaution}
-      data-iv-gated={String(!gateDisabled)}
+      data-avail={avail}
+      data-ev-reject={evReject ?? ''}
+      data-ev-caution={evCaution ?? ''}
+      data-iv-gated={avail === 'ready' ? String(!gateDisabled) : 'unknown'}
       data-candidates={candidates.length}
       data-horizon={horizonKey}
     >
@@ -526,6 +598,21 @@ export default function Step5Page() {
         </span></span>
         <span data-line="thresholds">
           <Text size={13} tone="secondary">
+            {avail !== 'ready' ? (
+              /* NO THRESHOLDS: this part REPLACES the three below, and quotes no
+                 number. Retry re-fetches both stores. */
+              <>
+                <span data-part="thresholds-unavailable" data-avail={avail} data-error={availError ?? ''}>
+                  {thresholdsUnavailableSentence(avail, availError)}
+                </span>
+                {avail === 'failed' && (
+                  <>
+                    {' '}
+                    <button type="button" data-part="thresholds-retry" onClick={refetchThresholds}>Retry</button>
+                  </>
+                )}
+              </>
+            ) : (<>
             {/* WHICH BRANCH, published. Round 2: reordering this ternary so a
                 GATED horizon printed "IV gate disabled for this horizon."
                 shipped 67/67 green -- the pin was an alternation over the four
@@ -541,10 +628,19 @@ export default function Step5Page() {
                 :                             'no-reading'
               }
             >{gateSentence}</span>
+            {ivOverride !== null && (
+              <>
+                {' '}
+                <span data-part="iv-override" data-override={ivOverride.value} data-yaml={ivOverride.yaml}>
+                  {ivOverrideSentence(ivOverride.value, ivOverride.yaml)}
+                </span>
+              </>
+            )}
             {' '}
-            <span data-part="event-window">{eventWindowSentence(eventWindow)}</span>
+            <span data-part="event-window">{eventWindow !== null && eventWindowSentence(eventWindow)}</span>
             {' '}
             <span data-part="gate-rule">Gate = worst of IV and event proximity.</span>
+            </>)}
           </Text>
         </span>
         {gateSummary !== null && (
@@ -650,7 +746,7 @@ export default function Step5Page() {
                 {shownIv.suffix !== '' && (
                   <Text size={10} tone="dim">{shownIv.suffix}</Text>
                 )}
-                {hasIv && (
+                {hasIv && avail === 'ready' && (
                   <div className={pageStyles.ivTrack}>
                     <div
                       className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
@@ -725,7 +821,9 @@ export default function Step5Page() {
                 // on it, the panel reached past the table's right edge, where it
                 // was cut off and summoned a horizontal scrollbar.
                 tooltipAlign="right"
-                tooltip={eventVolGateTooltip({
+                tooltip={avail !== 'ready' || evReject === null || evCaution === null
+                  ? thresholdsUnavailableSentence(avail === 'ready' ? 'loading' : avail, availError)
+                  : eventVolGateTooltip({
                   ivRank: iv.value,
                   ivBasis: iv.basis,
                   ivStatus: ivSt,
