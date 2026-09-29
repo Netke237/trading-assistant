@@ -2,6 +2,8 @@
 """Compute indicator values from OHLCV candles — server-side equivalent of frontend getIndicatorPoints()."""
 from __future__ import annotations
 
+import logging
+import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -221,3 +223,271 @@ def _calc_vwap(highs: list[float], lows: list[float], closes: list[float], volum
         vwap = cum_pv / cum_vol if cum_vol > 0 else 0
         result.append({'time': times[i], 'value': round(vwap, 4)})
     return result
+
+
+# ── COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD: composite 'momentum' confirmations ──
+# Plan: docs/superpowers/plans/2026-09-29-composite-momentum-confirmations-plan.md
+# (Q1-Q3, Q6, Q11). Additions only: _calc_rsi / _calc_macd / _ema_values and
+# compute_indicators_for_conditions stay byte-for-byte unchanged (standard
+# rules keep their behaviour; the lagged _ema_values is logged separately, Q9).
+# momentum_match judges the LAST bar of what it is given, on both the rule and
+# the watch path, so the two cannot disagree on the same bars.
+_momentum_logger = logging.getLogger(__name__)
+
+MOMENTUM_KINDS = ("volume_spike", "rsi_cross", "macd_cross")
+# Q6: RSI/MACD read the judged bar and the 200 regular bars before it (201).
+MOMENTUM_RSI_MACD_HISTORY = 200
+_RSI_PERIOD = 14
+_MACD_FAST, _MACD_SLOW, _MACD_SIGNAL = 12, 26, 9
+# Q3: volume_spike = judged volume >= 2x a baseline.
+VOLUME_SPIKE_RATIO = 2.0
+_DAILY_VOLUME_LOOKBACK = 20      # 1D/1W: mean of the 20 bars before the judged one
+_SLOT_SESSIONS = 10              # intraday: same Eastern slot, previous 10 sessions
+_SLOT_MIN_SESSIONS = 5           # ... at least 5 of them, else not matched
+_DEFAULT_RSI_LEVEL = 60          # the schema's min_confidence default
+
+# Nominal bar span per intraday interval (NOT market._INTERVAL_COMPLETION_SECONDS,
+# whose 4h entry carries an extra hour of completion slack). Both spellings.
+_MOMENTUM_BAR_SECONDS: dict[str, int] = {
+    "1min": 60, "1m": 60, "5min": 300, "5m": 300, "15min": 900, "15m": 900,
+    "30min": 1800, "30m": 1800, "1h": 3600, "60m": 3600, "4h": 4 * 3600,
+}
+_DAILY_SPELLINGS = frozenset({"1D", "1W", "daily", "weekly", "1d", "1w"})
+_REGULAR_OPEN_MIN = 9 * 60 + 30      # 09:30 ET
+_REGULAR_CLOSE_MIN = 16 * 60         # 16:00 ET
+
+_momentum_warned: set[tuple[str, str]] = set()
+
+
+def momentum_warn_once(log_key: object, reason: str, msg: str, *args: object) -> None:
+    """One WARNING per (rule/watch id, reason) per process."""
+    key = (str(log_key), reason)
+    if key in _momentum_warned:
+        return
+    _momentum_warned.add(key)
+    _momentum_logger.warning(msg, *args)
+
+
+def _is_real(v: object) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _epoch(t: object) -> int | None:
+    return t if isinstance(t, int) and not isinstance(t, bool) else None
+
+
+def _is_regular_bar(t: object, span: int) -> bool:
+    """Q11 (r5): regular when the bar's SPAN [t, t+span) overlaps 09:30-16:00 ET
+    on its Eastern date -- never by its start time alone: a 4h bucket is
+    stamped 08:00 ET (EDT) / 07:00 ET (EST) while holding the morning bars."""
+    ts = _epoch(t)
+    if ts is None:
+        return False
+    local = datetime.fromtimestamp(ts, _EASTERN)
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    open_ts = midnight.replace(hour=9, minute=30).timestamp()
+    close_ts = midnight.replace(hour=16).timestamp()
+    return ts < close_ts and ts + span > open_ts
+
+
+def momentum_session_bars(bars: list[dict], interval: object) -> list[dict]:
+    """The bars momentum reads (Q11): on an intraday interval only regular-
+    session bars; 1D/1W unchanged. An unrecognised interval -> []."""
+    if not isinstance(interval, str):
+        return []
+    if interval in _DAILY_SPELLINGS:
+        return list(bars)
+    span = _MOMENTUM_BAR_SECONDS.get(interval)
+    if span is None:
+        return []
+    return [b for b in bars if isinstance(b, dict) and _is_regular_bar(b.get("time"), span)]
+
+
+def _ema_seeded(values: list[float], period: int) -> list[float | None]:
+    """A correct EMA: None for the warm-up, the SMA of the first `period`
+    values at index period-1, then each value folded in at its own index."""
+    out: list[float | None] = [None] * len(values)
+    if len(values) < period:
+        return out
+    k = 2 / (period + 1)
+    ema = sum(values[:period]) / period
+    out[period - 1] = ema
+    for i in range(period, len(values)):
+        ema = (values[i] - ema) * k + ema
+        out[i] = ema
+    return out
+
+
+def _wilder_rsi_last_two(closes: list[float], period: int = _RSI_PERIOD) -> tuple[float, float] | None:
+    """(RSI of the bar before the last, RSI of the last) -- Wilder smoothing,
+    the same arithmetic as _calc_rsi (copied, not shared). A window where both
+    averages are 0 (a flat series) reads 50, not _calc_rsi's 100."""
+    if len(closes) < period + 2:
+        return None
+    gains = [max(closes[i] - closes[i - 1], 0.0) for i in range(1, len(closes))]
+    losses = [max(closes[i - 1] - closes[i], 0.0) for i in range(1, len(closes))]
+    avg_g = sum(gains[:period]) / period
+    avg_l = sum(losses[:period]) / period
+
+    def _rsi(g: float, l: float) -> float:
+        if l == 0:
+            return 50.0 if g == 0 else 100.0
+        return 100 - 100 / (1 + g / l)
+
+    values = [_rsi(avg_g, avg_l)]
+    for i in range(period, len(gains)):
+        avg_g = (avg_g * (period - 1) + gains[i]) / period
+        avg_l = (avg_l * (period - 1) + losses[i]) / period
+        values.append(_rsi(avg_g, avg_l))
+    return values[-2], values[-1]
+
+
+def _macd_last_two(closes: list[float]) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """((line, signal) of the bar before the last, (line, signal) of the last)."""
+    fast = _ema_seeded(closes, _MACD_FAST)
+    slow = _ema_seeded(closes, _MACD_SLOW)
+    start = _MACD_SLOW - 1
+    line = [f - s for f, s in zip(fast[start:], slow[start:])]  # both defined from `start`
+    signal = _ema_seeded(line, _MACD_SIGNAL)
+    if len(line) < 2 or signal[-2] is None or signal[-1] is None:
+        return None
+    return (line[-2], signal[-2]), (line[-1], signal[-1])
+
+
+def _direction_of(direction: object) -> str | None:
+    """'bullish' / 'bearish' / 'any'; None for a value that is not one of them."""
+    if direction is None:
+        return "any"
+    if isinstance(direction, str) and direction.lower() in ("bullish", "bearish"):
+        return direction.lower()
+    return None
+
+
+def rsi_level(min_confidence: object) -> int | None:
+    """Q1: the rsi_cross level -- an int in 1..99 (bool excluded), else None."""
+    if isinstance(min_confidence, int) and not isinstance(min_confidence, bool) and 1 <= min_confidence <= 99:
+        return min_confidence
+    return None
+
+
+def _volume_baseline(bars: list[dict], interval: str, log_key: object) -> float | None:
+    """Q3: the baseline the judged (last) bar's volume is compared with; None
+    when there is not enough valid history."""
+    judged = bars[-1]
+    if interval in _DAILY_SPELLINGS:
+        prior = bars[-1 - _DAILY_VOLUME_LOOKBACK:-1]
+        if len(prior) < _DAILY_VOLUME_LOOKBACK or not all(_is_real(b.get("volume")) and b["volume"] >= 0 for b in prior):
+            return None
+        return sum(b["volume"] for b in prior) / _DAILY_VOLUME_LOOKBACK
+    # Intraday: the same Eastern wall-clock slot over the previous sessions.
+    jt = datetime.fromtimestamp(judged["time"], _EASTERN)
+    slot, day = (jt.hour, jt.minute), jt.date()
+    by_session: dict = {}
+    for b in bars[:-1]:
+        ts = _epoch(b.get("time"))
+        if ts is None or not (_is_real(b.get("volume")) and b["volume"] >= 0):
+            continue
+        lt = datetime.fromtimestamp(ts, _EASTERN)
+        if (lt.hour, lt.minute) == slot and lt.date() < day:
+            by_session[lt.date()] = b["volume"]          # the last bar per session wins
+    recent = [by_session[d] for d in sorted(by_session)[-_SLOT_SESSIONS:]]
+    if len(recent) < _SLOT_MIN_SESSIONS:
+        momentum_warn_once(
+            log_key, "volume_slot_short",
+            "momentum volume_spike [%s]: %d earlier session(s) at slot %02d:%02d ET (need %d); not matched",
+            log_key, len(recent), slot[0], slot[1], _SLOT_MIN_SESSIONS,
+        )
+        return None
+    return sum(recent) / len(recent)
+
+
+def momentum_match(
+    bars: list[dict], interval: object, kind: object, direction: object,
+    min_confidence: object, log_key: object,
+) -> bool:
+    """Whether the momentum confirmation `kind` is met on the LAST bar of `bars`.
+
+    - rsi_cross: RSI(14) crosses the level L = min_confidence (Bullish
+      prev <= L < cur; Bearish prev >= 100-L > cur; direction None: either).
+    - macd_cross: MACD(12,26,9) crosses its signal line (Bullish up, Bearish
+      down, None either), from a correct seeded EMA.
+    - volume_spike: volume >= 2x the baseline (1D/1W: the 20 bars before it;
+      intraday: the same Eastern slot over the previous 10 sessions, >= 5) and
+      the candle agrees with the direction.
+
+    Intraday inputs are regular-session bars only; a judged bar outside regular
+    hours is not matched. Every shortfall is a definite False. Never raises.
+    """
+    try:
+        return _momentum_match(bars, interval, kind, direction, min_confidence, log_key)
+    except Exception as exc:     # a guard: a bad row must never skip the rule
+        momentum_warn_once(log_key, "error", "momentum %s [%s]: %s; not matched", kind, log_key, exc)
+        return False
+
+
+def _momentum_match(bars, interval, kind, direction, min_confidence, log_key) -> bool:
+    if kind not in MOMENTUM_KINDS:
+        momentum_warn_once(log_key, f"kind:{kind}", "momentum [%s]: unknown signal_kind %r; not matched", log_key, kind)
+        return False
+    d = _direction_of(direction)
+    if d is None:
+        momentum_warn_once(log_key, f"dir:{direction}", "momentum [%s]: direction %r not Bullish/Bearish/None; not matched",
+                           log_key, direction)
+        return False
+    if not bars or not isinstance(bars[-1], dict):
+        return False
+    judged = bars[-1]
+    if isinstance(interval, str) and interval not in _DAILY_SPELLINGS:
+        span = _MOMENTUM_BAR_SECONDS.get(interval)
+        if span is None:
+            momentum_warn_once(log_key, f"iv:{interval}", "momentum [%s]: unknown interval %r; not matched", log_key, interval)
+            return False
+        if not _is_regular_bar(judged.get("time"), span):
+            return False
+    series = momentum_session_bars(bars, interval)
+    if not series or series[-1] is not judged:
+        return False
+
+    if kind == "volume_spike":
+        vol, o, c = judged.get("volume"), judged.get("open"), judged.get("close")
+        if not (_is_real(vol) and vol > 0 and _is_real(o) and _is_real(c)):
+            return False
+        if (d == "bullish" and not c > o) or (d == "bearish" and not c < o):
+            return False
+        baseline = _volume_baseline(series, interval, log_key)
+        return baseline is not None and baseline > 0 and vol >= VOLUME_SPIKE_RATIO * baseline
+
+    level = None
+    if kind == "rsi_cross":
+        level = rsi_level(_DEFAULT_RSI_LEVEL if min_confidence is None else min_confidence)
+        if level is None:
+            momentum_warn_once(log_key, f"level:{min_confidence!r}",
+                               "momentum rsi_cross [%s]: min_confidence %r is not an int in 1..99; not matched",
+                               log_key, min_confidence)
+            return False
+    window = series[-(MOMENTUM_RSI_MACD_HISTORY + 1):]
+    if len(window) < MOMENTUM_RSI_MACD_HISTORY + 1:
+        momentum_warn_once(log_key, f"history:{kind}",
+                           "momentum %s [%s]: %d bar(s) of history (need %d); not matched",
+                           kind, log_key, len(window), MOMENTUM_RSI_MACD_HISTORY + 1)
+        return False
+    closes = [b.get("close") for b in window]
+    if not all(_is_real(x) for x in closes):
+        return False
+
+    if kind == "rsi_cross":
+        pair = _wilder_rsi_last_two(closes)
+        if pair is None:
+            return False
+        prev, cur = pair
+        up = prev <= level < cur
+        down = prev >= 100 - level > cur
+        return up if d == "bullish" else down if d == "bearish" else (up or down)
+
+    pair2 = _macd_last_two(closes)
+    if pair2 is None:
+        return False
+    (pl, ps), (cl, cs) = pair2
+    up = pl <= ps and cl > cs
+    down = pl >= ps and cl < cs
+    return up if d == "bullish" else down if d == "bearish" else (up or down)

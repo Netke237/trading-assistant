@@ -350,6 +350,45 @@ async def _eval_strategy_watch(
     return _Transition(event=event, watch_id=w["id"], new_state=state)
 
 
+def _bar_label(bar: dict) -> str:
+    """'<Eastern time> (close X)' for the bar momentum judged."""
+    t = bar.get("time")
+    if isinstance(t, int) and not isinstance(t, bool):
+        when = datetime.fromtimestamp(t, MARKET_TZ).strftime("%Y-%m-%d %H:%M ET")
+    else:
+        when = str(t)
+    return f"{when} (close {bar.get('close')})"
+
+
+async def _composite_watch_momentum(w: dict, trigger_def: dict, symbol: str, fetch_iv: str):
+    """COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD 3.4 / Q5: the bars a composite
+    watch's momentum confirmations judge -- the alert's own chart candles (the
+    rule's cache key and refresh policy), regular-session bars only on intraday
+    (Q11), ending at rows[-2] (the newest row is treated as forming, as the
+    rule's closed candle). None = not read (no momentum confirmation, the fetch
+    failed, or fewer than 2 rows); evaluate_scheduled's count decides whether
+    that is no reading or a definite False. No new watch state."""
+    from app.services.composite_trigger_evaluator import MomentumInput, has_momentum
+    if not has_momentum(trigger_def):
+        return None
+    from app.data.chart_cache import get_intraday_with_fetched_at
+    from app.data.market import _INTERVAL_COMPLETION_SECONDS, normalize_interval
+    from app.services.indicator_compute import momentum_session_bars
+    span = _INTERVAL_COMPLETION_SECONDS.get(normalize_interval(fetch_iv))
+    try:
+        rows, _fetched = await get_intraday_with_fetched_at(
+            symbol, fetch_iv, refresh_on_close=True,
+            max_age=float(span) if span is not None else None,
+        )
+    except Exception as exc:
+        logger.warning("composite-watch: momentum chart fetch failed for %s [%s] — %s", symbol, fetch_iv, exc)
+        return None
+    rows = momentum_session_bars(rows or [], fetch_iv)
+    if len(rows) < 2:
+        return None
+    return MomentumInput(rows[:-1], fetch_iv, str(w["id"]))
+
+
 async def _eval_composite_watch(
     w: dict, start: date, end: date, now_ts: float, now_dt: datetime,
 ) -> _Transition | None:
@@ -395,12 +434,16 @@ async def _eval_composite_watch(
             logger.warning("composite-watch: intraday fetch failed for %s — %s", symbol, exc)
     # 1D/1W (D7): VWAP runs the daily variant on the completed daily bars.
     vwap_daily = bars if normalize_interval(fetch_iv) in ("daily", "weekly") else None
+    momentum = await _composite_watch_momentum(w, trigger_def, symbol, fetch_iv)
     try:
-        from app.services.composite_trigger_evaluator import evaluate_scheduled, describe_match, format_composite_reason
+        from app.services.composite_trigger_evaluator import (
+            describe_match, evaluate_scheduled, format_composite_reason, momentum_sustain_ignored,
+        )
         fired = evaluate_scheduled(
             symbol, trigger_def, bars, bars_intraday,
             regime_bars_intraday=bars_intraday if model == "HMM_intraday" else None,
             unknown_as_none=True, interval=fetch_iv, bars_vwap_daily=vwap_daily,
+            momentum=momentum,
         )
     except Exception as exc:
         logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
@@ -432,6 +475,9 @@ async def _eval_composite_watch(
     sustain_min = trigger_def.get("sustain_minutes")
     if isinstance(sustain_min, (int, float)) and sustain_min < 0:
         sustain_min = 0
+    # Q7: a momentum trigger fires on the bar that meets it.
+    if momentum_sustain_ignored(trigger_def, w["id"]):
+        sustain_min = 0
     if sustain_min:
         try:
             if fired:
@@ -459,9 +505,12 @@ async def _eval_composite_watch(
     try:
         _detail = describe_match(
             trigger_def, bars_daily=bars, bars_intraday=bars_intraday, symbol=symbol, direction=wdir,
-            interval=fetch_iv, bars_vwap_daily=vwap_daily,
+            interval=fetch_iv, bars_vwap_daily=vwap_daily, momentum=momentum,
         )
         _reason = format_composite_reason((trigger_def.get("primary") or {}).get("to_state"), _detail)
+        if momentum is not None and _detail.get("momentum_matched"):
+            # Q5: the event's close is the daily close; name the judged bar.
+            _reason += f" — momentum judged on the {fetch_iv} bar of {_bar_label(momentum.bars[-1])}"
     except Exception as exc:
         logger.warning("composite-watch: describe_match failed for %s — %s", symbol, exc)
         _reason = f"{symbol}: composite Markov trigger fired"
