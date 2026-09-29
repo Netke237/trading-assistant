@@ -100,6 +100,13 @@ describe('cardToRow', () => {
     expect(row.scoreDelta).toBe(3);
   });
 
+  it('carries the scan position as rank, the Step 4 default sort key', () => {
+    // The table sorts by `rank` by default, so a row without it would sort last
+    // and the backend's order (PASS before CAUTION, then score) would be lost.
+    const rows = mockCurrentRun.candidates.map((c, i) => cardToRow(c, i + 1, null, 'Swing (5–15d)'));
+    expect(rows.map((r) => r.rank)).toEqual([1, 2, 3]);
+  });
+
   it('returns zero deltas when no previous run exists', () => {
     const current = mockCurrentRun;
     const row = cardToRow(current.candidates[0], 1, null, 'Swing (5–15d)');

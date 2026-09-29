@@ -54,6 +54,19 @@ def _horizon_cfg(horizon: Horizon) -> dict:
     return _load_config()["horizons"][key]
 
 
+def effective_event_window(horizon: Horizon, overrides: dict | None) -> tuple[int, int]:
+    """(reject_days, caution_days) that `_rule_event` applies for this horizon
+    after the request's overrides -- the same int() coercion score_stock uses.
+    Returned on ScanResult so the UI gates on the window the scan actually
+    used, not on live Step-3 state that is neither persisted nor tied to the
+    result it is displaying."""
+    ec = _horizon_cfg(horizon)["event"]
+    ov = overrides or {}
+    reject = int(ov["event_reject_days"]) if ov.get("event_reject_days") is not None else int(ec["reject_days"])
+    caution = int(ov["event_caution_days"]) if ov.get("event_caution_days") is not None else int(ec["caution_days"])
+    return reject, caution
+
+
 def _thresholds() -> dict:
     return _load_config()["stock_score_thresholds"]
 
@@ -1049,8 +1062,9 @@ def score_stock(
             elif key == "macd_signal":             cfg["trigger"]["macd_signal"]             = int(val)
             elif key == "swing_high_lookback_bars": cfg["pullback"]["swing_high_lookback_bars"] = int(val)
             elif key == "atr_caution_max":         cfg["pullback"]["atr_caution_max"]        = float(val)
-            elif key == "event_reject_days":       cfg["event"]["reject_days"]               = int(val)
-            elif key == "event_caution_days":      cfg["event"]["caution_days"]              = int(val)
+            # event_reject_days / event_caution_days: applied after this loop
+            # through effective_event_window, the one function ScanResult's
+            # echoed event_window also comes from, so the two cannot diverge.
             # Two thresholds, two quantities -- `_rule_vol` picks between them
             # by `iv_basis`, so an override that names only one of them can
             # only ever reach the basis it names
@@ -1066,6 +1080,8 @@ def score_stock(
             elif key == "iv_abs_pass_max":         cfg["vol"]["iv_abs_pass_max"]             = None if val is None else float(val)
             elif key == "volume_lookback_bars":    cfg["trigger"]["volume_lookback_bars"]    = int(val)
             elif key == "volume_multiplier":       cfg["trigger"]["volume_multiplier"]       = float(val)
+
+    cfg["event"]["reject_days"], cfg["event"]["caution_days"] = effective_event_window(horizon, ov)
 
     ma_type = str(ov.get("ma_type", cfg["trend"]["crossover"].get("ma_type", "EMA"))).upper()
     ma_func = _sma if ma_type == "SMA" else _ema

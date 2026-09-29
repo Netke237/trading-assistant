@@ -31,6 +31,26 @@ A Stocks profile is saved from Stocks mode.
   can appear in Restrictive's shorter list).
 - `*_Loose_*`: shortlist cap 20 instead of 10, so the cap no longer hides how
   many candidates really pass.
+- `SemiAnnual_*` (all 6): event window 7 / 30 (`event_reject_days` /
+  `event_caution_days`; the Position default is 30 / 60). An earnings or
+  ex-dividend date fewer than 7 days away grades the event rule REJECT, fewer
+  than 30 days away CAUTION. That rule is a weighted part of the stock score (20% at Position),
+  not a veto: the scan marks the stock down, and Step 5 flags it REJECT or
+  CAUTION. A 90-105-day hold crosses an earnings date anyway, so the 30-day
+  window mainly shrank the list; the short one still flags entries in the last
+  week before a report. Every scan result now carries the window its scorer
+  applied (`event_window`), and Step 5 gates on that, so it matches the scan
+  even after a reload or a later Step-3 edit.
+- `*_Bearish` (all 6): fundamentals debt/equity reject 10 instead of 3 (10 is
+  the Settings page maximum). The rule protects a bullish buyer from
+  over-leveraged companies; for a put buyer the loss is capped at the premium
+  and heavy debt is often part of the bearish case. Negative equity is still
+  rejected, and Intraday skips fundamentals entirely. Loading a Bearish
+  profile writes 10 into Settings, where it stays for manual scans (Bullish
+  too) until another profile is loaded.
+- Schedule entries already built from any of these profiles keep their saved
+  request (without these changes) until the profile is opened in the app and
+  Updated. There were none in Kenneth's setup when this was written.
 - Intraday profiles were rejecting every contract from Wednesday to Friday
   (Friday's weekly sat below the DTE floor of 3). That was the same backend
   bug; no profile value changed for it.
@@ -47,8 +67,9 @@ this folder holds the *output*, not the design discussion.
   a Legend & Notes tab.
 - `search-profiles-export.json` — the raw `bamendjou:search-profiles`
   localStorage payload. Originally a real save; the 2026-09-29 corrections
-  were applied to it by script (renamed profiles, `updatedAt`
-  2026-09-29T12:00:00.000Z), in the same shape the app writes.
+  were applied to it by script (renamed profiles; each edited profile's
+  `updatedAt` is a 2026-09-29 timestamp, untouched ones keep 2026-09-15), in
+  the same shape the app writes.
 - `import-search-profiles.js` — the same JSON embedded in a paste-into-
   DevTools-console script (see below).
 
@@ -92,9 +113,11 @@ Not unconditionally. Two concrete dependencies:
    `too_many_soft_failures` that the intended "Loose" behavior was meant to
    let through.
 2. **`Restrictive`/`Loose` freeze specific liquidity numbers, `Baseline`
-   doesn't.** `Baseline` profiles carry empty `scanOverrides` (`{}`), so their
-   liquidity and scoring parameters always track whatever
-   `contract_rules.yaml`/`scoring_rules.yaml` currently ship as default. All
+   doesn't.** `Baseline` profiles carry no liquidity overrides, so their
+   liquidity and scoring parameters track whatever
+   `contract_rules.yaml`/`scoring_rules.yaml` currently ship as default. The
+   one exception is the earnings window, which all `SemiAnnual_*` profiles,
+   Baseline included, set to 7 / 30. All
    18, Baseline included, do freeze `scanSettings` (confidence gate,
    fundamentals gate, shortlist cap, spreads), and loading any profile writes
    those into Settings, where they stay after the scan. `Restrictive`/`Loose`

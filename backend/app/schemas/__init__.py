@@ -784,6 +784,13 @@ class OptionsPipeline(BaseModel):
     candidates:        int   # made it through everything, after every filter
 
 
+class EventWindow(BaseModel):
+    """The earnings/dividend proximity window the scan's event rule applied
+    (scoring_rules.yaml horizon default, replaced by any request override)."""
+    reject_days:  int
+    caution_days: int
+
+
 class DteWindow(BaseModel):
     """The contract expiry window actually enforced for a scan."""
     min_dte:    int
@@ -836,6 +843,9 @@ class ScanResult(BaseModel):
     pipeline: Optional[OptionsPipeline] = None
     direction_banner: Optional[str] = None
     dte_window: Optional[DteWindow] = None
+    # Absent on results persisted before 2026-09-29; the UI then falls back to
+    # the horizon's YAML window.
+    event_window: Optional[EventWindow] = None
 
 
 class ScanSessionStatus(BaseModel):

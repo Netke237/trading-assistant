@@ -301,3 +301,35 @@ def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
     assert r.json()["candidates"], r.json()["rejected"]  # else nothing below is exercised
     assert len(legs) == 2, seen
     assert all(e == "2027-06-18" and b == (30, 400) and f == 201 for e, b, f in legs), seen
+
+
+# ── The scan echoes the event window its scorer applied ──────────────────────
+# Step 5 gates on this, not on live Step-3 state (unpersisted, and editable
+# after the scan), so the gate always matches the scan that produced the rows.
+
+def test_scan_result_carries_the_overridden_event_window(client):
+    with _enter_shortlist_patches(10):
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Position",
+            "overrides": {"event_reject_days": 7, "event_caution_days": 30},
+        })
+    assert r.status_code == 200
+    assert r.json()["event_window"] == {"reject_days": 7, "caution_days": 30}
+
+
+def test_scan_result_carries_the_yaml_event_window_without_overrides(client):
+    from app.scoring.stock_scorer import _horizon_cfg
+    ec = _horizon_cfg("Position")["event"]
+    with _enter_shortlist_patches(10):
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Position",
+        })
+    assert r.status_code == 200
+    assert r.json()["event_window"] == {"reject_days": ec["reject_days"], "caution_days": ec["caution_days"]}
+
+
+def test_a_partial_event_override_falls_back_to_yaml_for_the_other_bound():
+    from app.scoring.stock_scorer import _horizon_cfg, effective_event_window
+    ec = _horizon_cfg("Position")["event"]
+    assert effective_event_window("Position", {"event_reject_days": 7}) == (7, ec["caution_days"])
+    assert effective_event_window("Position", {"event_caution_days": "30"}) == (ec["reject_days"], 30)

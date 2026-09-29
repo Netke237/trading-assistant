@@ -32,7 +32,7 @@ from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ScanState, OptionsPipeline,
-    AlternativeContract, DteWindow, ScanSessionStatus,
+    AlternativeContract, DteWindow, EventWindow, ScanSessionStatus,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     SentimentData, FundamentalsOut, SCAN_RESULT_SCHEMA_VERSION,
@@ -54,7 +54,7 @@ from app.data.market import (
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.augment import _augment, opt_float, opt_int
-from app.scoring.stock_scorer import score_stock, StockScoreCard
+from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_event_window
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
@@ -1526,6 +1526,15 @@ async def _execute_scan_core(
                       scan_id, _dte_bounds[0], _dte_bounds[1],
                       req.hold_min_days, req.hold_max_days, _mult)
 
+    # The event window score_stock will apply, echoed on the result (see
+    # effective_event_window). Never allowed to fail the scan.
+    _event_win = None
+    try:
+        _ew = effective_event_window(req.horizon, req.overrides)
+        _event_win = EventWindow(reject_days=_ew[0], caution_days=_ew[1])
+    except Exception as exc:
+        _log.warning("SCAN %s event_window unavailable: %s", scan_id, exc)
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
@@ -1775,6 +1784,7 @@ async def _execute_scan_core(
         pipeline=_pipeline,
         direction_banner=_direction_banner,
         dte_window=_dte_win,
+        event_window=_event_win,
     )
     return result
 

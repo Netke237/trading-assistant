@@ -147,6 +147,10 @@ export interface WatchlistRow {
   horizon:      Horizon;
   score:        number;        // 0–100
   rankDelta:    number;        // +2 / -1 / 0
+  /** 1-based position in the scan's own ranking (the backend orders options
+   *  candidates by finalStatus, then stock score, then contract score).
+   *  Optional because only Step 4's cardToRow knows it. */
+  rank?:        number;
   scoreDelta?:  number;        // score pts vs previous scan
   status:       Status;
   breakdown:    ScoreBreakdown;

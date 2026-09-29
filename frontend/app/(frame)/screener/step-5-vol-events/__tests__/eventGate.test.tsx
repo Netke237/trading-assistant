@@ -32,16 +32,52 @@ function setup(
   nextEventDays: number,
   horizon: string,
   thresholds: Record<string, HorizonEventThresholds> = EVENT_FALLBACK,
+  eventWindow?: { reject_days: number; caution_days: number },
+  scanOverrides: Record<string, unknown> = {},
 ) {
   useScanStore.setState({
-    scanResult: { candidates: [makeCandidate({ nextEventDays })], rejected: [], scan_id: 'x', timestamp: '' } as any,
+    scanResult: {
+      candidates: [makeCandidate({ nextEventDays })], rejected: [], scan_id: 'x', timestamp: '',
+      ...(eventWindow ? { event_window: eventWindow } : {}),
+    } as any,
     context: { direction: 'Bullish', horizon } as any,
+    // Always set, so state from one test cannot leak into the next.
+    scanOverrides,
   } as any);
   useIvThresholdsStore.setState({ thresholds: {}, loaded: true } as any);
   useEventThresholdsStore.setState({ thresholds, loaded: true } as any);
 }
 
 describe('Step 5 Volatility+Events — event proximity gate follows the scan horizon', () => {
+  // The scan echoes the window its scorer applied (a Step-3 override such as the
+  // SemiAnnual_* profiles' 7/30 replaces the YAML window), and the gate must use
+  // THAT: otherwise earnings 15 days out passes the scan and is re-REJECTED here.
+  it('uses the window the scan applied: 7/30 makes an event 15 days out CAUTION, not REJECT', () => {
+    setup(15, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 7, caution_days: 30 });
+    render(<Step5Page />);
+    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
+  });
+
+  it('uses the window the scan applied: 7/30 still REJECTS an event 5 days out', () => {
+    setup(5, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 7, caution_days: 30 });
+    render(<Step5Page />);
+    expect(screen.getByText('REJECT')).toBeInTheDocument();
+  });
+
+  it('ignores live Step-3 overrides edited after the scan (the result was scored at 30/60)', () => {
+    setup(10, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 30, caution_days: 60 },
+          { event_reject_days: 7, event_caution_days: 30 });
+    render(<Step5Page />);
+    expect(screen.getByText('REJECT')).toBeInTheDocument();
+  });
+
+  it('needs no live Step-3 overrides: the window comes from the result alone', () => {
+    setup(15, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 7, caution_days: 30 }, {});
+    render(<Step5Page />);
+    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+  });
+
   it('Position horizon: an event 8 days out is well inside the 30-day REJECT window, not a PASS', () => {
     setup(8, 'Position (90-105d)');
     render(<Step5Page />);

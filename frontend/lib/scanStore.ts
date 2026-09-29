@@ -82,6 +82,10 @@ export interface ScanResult {
   pipeline?: OptionsPipeline;
   direction_banner?: string;
   dte_window?: DteWindow;
+  /** The earnings/dividend window the scan's event rule applied (horizon
+   *  default, replaced by any Step-3 override). Absent on results from before
+   *  2026-09-29. Step 5 gates on it. */
+  event_window?: { reject_days: number; caution_days: number };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

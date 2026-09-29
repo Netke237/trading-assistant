@@ -35,6 +35,7 @@ export function cardToRow(
     direction: c.direction,
     horizon: parseHorizon(contextHorizon),
     score: c.stockScore,
+    rank: newRank,
     rankDelta,
     scoreDelta,
     status: c.status,
