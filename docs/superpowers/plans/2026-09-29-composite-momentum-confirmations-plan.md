@@ -345,3 +345,27 @@ by interval, test 9. 7 → stated residual after Q11. 8 → Q10c files + router 
 Plan → adversarial rounds until clean → Kenneth's answers → plan revised to the answers (re-audited if the design
 changed) → build with the mutation checks above → code rounds until clean → state record → merge only with
 Kenneth's approval.
+
+## 8. Unit A build record (2026-09-29, branch `ccr-2fe3aef8-jpt3lz`)
+- **Built:** 3.1 (`indicator_compute.momentum_match`, `momentum_session_bars`, `_ema_seeded`, Wilder RSI copy),
+  3.2 (`MomentumInput`, `_matched_indexes`, `has_momentum`, `momentum_sustain_ignored`, `momentum=` through
+  `evaluate_from_context[_detailed]` / `evaluate_scheduled` / `describe_match`, `format_composite_reason`
+  momentum part; `indicator_values_at` deleted), 3.3 (cut at the closed candle, Q7 sustain skip, Q4
+  `composite_fired_candle`, per-index checklist, `_MOMENTUM` labels, "confirmation signals"), 3.4
+  (`_composite_watch_momentum`: chart-cache fetch, session filter, `rows[-2]`; sustain skip; judged bar named in
+  the reason), Q10c (`momentum_confirmation_error`, 422 on rule create/PUT with the unchanged-momentum
+  exemption, and on watch create).
+- **Tests:** `tests/test_composite_momentum_match.py` (1-7, 12, 14, 17 unit), `tests/test_composite_momentum_paths.py`
+  (8-11, 13, 16, 17 watch), `tests/test_p4b_momentum_confirmations.py` rewritten (18), notification-text test
+  wording (18). **Mutations: 30/30 killed** (every mutation named in section 4, plus sustain-kept-for-momentum on
+  each path).
+- **Deviations for the code round to judge:**
+  1. `evaluate_scheduled` applies the single structure+momentum count only when the trigger HAS a momentum
+     confirmation; a momentum-free trigger keeps its old rule (a shortfall with structure unread is no reading),
+     because `tests/test_composite_watch_keyerror.py` pins it and it is outside this package's scope.
+  2. `_composite_checklist` drops the same-kind caveat when `matched_indexes` is present (3.3) but KEEPS it on the
+     by-kind fallback for a detail dict without `matched_indexes`, where it is still true.
+  3. `indicator_values` stays as an ignored parameter of `evaluate_from_context[_detailed]` / `describe_match`
+     (about 45 test call sites pass it positionally); the rule path passes `{}`.
+  4. A flat RSI window (both Wilder averages 0) reads 50, not `_calc_rsi`'s 100, so a flat series never "crosses".
+- Q9 logged in `PROJECT_STATE.json` open_questions as a backlog defect.
