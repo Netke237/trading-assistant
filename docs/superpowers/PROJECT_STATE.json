@@ -1370,6 +1370,23 @@
         "note": "Presence only; behaviour pinned by the rel1-rel7 tests in backend/tests/test_docc2_regime_block.py."
       },
       "note": "CODE r1 CLEAN 2026-09-29 (commit 67bb89a): 0 gate-level; relations and floors verified exact against regime_omm (compute_omm, label_daily_states, build_transition_matrix_stride) and against every reader's fetch length both ways; shipped yaml passes (margins intraday 824, swing 230, position 200 vs min_obs 60/100/100); errors reach all four sites through regime_block_errors. MERGED TO MAIN 2026-09-29 (Kenneth approved). || BUILT 2026-09-29 on claude/sleepy-gates-4084r7 off main 4dbd7a3 (code not yet audited). Kenneth's decision DOCC-2-DUPLICATE-PORT-RELATIONS-2026-09-29: DOCC-2 was built twice in parallel (DOCC-2-OPTIONS-REGIME-FAIL-OPEN, merged 94ee443; and DOCC-2-OPTIONS-REGIME-FAIL-CLOSED on this branch, head 3169034, plan r1-r4 + code r5 CLEAN, NOT merged). The FAIL-CLOSED branch is dropped; only its rule-4 relation checks (found gate-level by its plan r1-r3: values that pass per-key rules leave every symbol unmeasured, so ungated) are ported into main's regime_block_errors via _regime_relation_errors + REGIME_SERIES_FLOOR (daily 250, 15min 850). Source plan: docs/superpowers/plans/2026-09-29-docc-2-regime-block-fail-closed-plan.md s2.1 rule 4 (on the dropped branch, commit 3169034). Tests rel1-rel7 added to main's test_docc2_regime_block.py; mutations (relations removed; floor without lookback) killed. Backend 3918 passed 1 skipped. One code audit round, then merge (Kenneth)."
+    },
+    {
+      "id": "WATCH-DIRECTION-TO-EVALUATOR",
+      "name": "A composite watch's own saved direction reaches evaluate_scheduled, so a legacy Bearish watch without trigger_def.direction judges Bearish OMM",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD"
+      ],
+      "verify": {
+        "kind": "defect_marker",
+        "path": "backend/app/services/composite_trigger_evaluator.py",
+        "pattern": "direction=omm_direction\\(td\\)\\)",
+        "note": "DEFECT MARKER: evaluate_scheduled's OMM line judges the trigger_def direction only (omm_direction(td), else Bullish); the watch's own w['direction'] never reaches it. Gone = a fallback direction is passed through (e.g. omm_direction(td, fallback))."
+      },
+      "note": "QUEUED 2026-09-29 (Kenneth: 'yes do so'). The ORPHANED FOLLOW-UP in open_questions: deferred by WATCH-RULE-BAR-PARITY (decision WATCH-RULE-BAR-PARITY-Q-I-LEGACY-WATCH-DIRECTION-2026-09-28) and by COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (its plan's Q10d); neither owned it. START ONLY AFTER COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD MERGES: that plan changes the same evaluate_scheduled call in backend/app/services/strategy_watch_evaluator.py (_eval_composite_watch, which today reads wdir = w.get('direction', 'Bullish') but does not pass it). Scope: one new parameter on composite_trigger_evaluator.evaluate_scheduled (a fallback direction fed to omm_direction), the call site in strategy_watch_evaluator.py passing w['direction'], tests (a legacy Bearish watch with trigger_def.direction null reaches compute_omm with 'Bearish'; 'bullish'/'Neutral'/None never raise). FIRST STEP: count the live composite watches this changes (trigger_def.direction missing or null AND w['direction'] == 'Bearish') and report the number to Kenneth; if it is zero he may drop the phase. Loop: short plan -> round -> build + mutations -> code round -> merge when clean."
     }
   ],
   "already_shipped": [
@@ -2773,7 +2790,7 @@
     "LOGGED 2026-09-29 by WATCH-RULE-BAR-PARITY plan r6 (decision WATCH-RULE-BAR-PARITY-Q-H-FETCH-RULE-2026-09-28), NOT FIXED BY CHOICE: fetch day D once it has settled. With unsettled daily rows never stored (plan 2.10), a stale-DB symbol first read on day D before 16:30 ET stores through D-1 and get_bars' unchanged staleness rule does not fetch D until nightly ingestion or D+1; after the close scans end at D-1 while the auto-trade gate keeps D. Cost of fixing: ~500 fetches on the first post-settle scan (Alpaca-rate-limited, ~2-3 min) and changed post-close scan results for every symbol.",
     "LOGGED 2026-09-29 by WATCH-RULE-BAR-PARITY plan r6 (decision WATCH-RULE-BAR-PARITY-Q-I-LEGACY-WATCH-DIRECTION-2026-09-28), NOT FIXED BY CHOICE: pass the watch's own saved direction through to composite_trigger_evaluator.evaluate_scheduled so a legacy Bearish composite watch whose trigger_def has no direction judges Bearish OMM (today and after this task: Bullish). Needs a new parameter and an edit of the caller in strategy_watch_evaluator.py (owned by COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD at the time of logging).",
     "ANSWERED 2026-09-29 (Kenneth: raise to 2 h, decision SETTLE-2H-2026-09-29; built as already_shipped SETTLE-2H). LOGGED 2026-09-29 by WATCH-RULE-BAR-PARITY unit A code round 1 (below the gate, reviewer could not verify provider behaviour): is 16:30 ET (_SETTLE = 30 min, a plan choice) late enough for Tiingo's end-of-day bar (Tiingo documents ~17:30 ET) and yfinance's final volume to be complete? It matters only when Alpaca is missing/fails and a day-D row is stored between 16:30 and ~17:30 ET. Question for Kenneth: keep 30 min or raise _SETTLE (e.g. to 2 h) in historical_store.py.",
-    "ORPHANED FOLLOW-UP: passing the watch's direction into evaluate_scheduled is deferred by BOTH WATCH-RULE-BAR-PARITY (Q-I) and COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (Q10d); neither owns it. Needs its own phase."
+    "REGISTERED 2026-09-29 as phase WATCH-DIRECTION-TO-EVALUATOR (queued after COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD). ORPHANED FOLLOW-UP: passing the watch's direction into evaluate_scheduled is deferred by BOTH WATCH-RULE-BAR-PARITY (Q-I) and COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (Q10d); neither owns it. Needs its own phase."
   ],
   "authoritative_documents": [
     {
