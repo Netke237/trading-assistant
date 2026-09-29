@@ -331,6 +331,29 @@ describe('CompositeAlertDialog — COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD test 1
     expect((mockApi.addCompositeWatch.mock.calls[0][1] as any).sustain_minutes).toBe(30);
   });
 
+  it('saves the default Require 1 of 3, not all selected rows', async () => {
+    await renderDialog();
+    fireEvent.click(box('Fair Value Gap'));
+    fireEvent.click(box('RSI crosses up through 60'));
+    fireEvent.click(box('MACD crosses above its signal line'));
+    await save();
+    expect((mockApi.addCompositeWatch.mock.calls[0][1] as any).min_confirmations).toBe(1);
+  });
+
+  it('keeps sustain when min_confirmations is 0 (backend has_momentum is false then)', async () => {
+    mockApi.getCompositeWatchDefaults.mockResolvedValue({
+      conviction_min: 60, p_transition_min: 0.3, p_stay_min: 0.7, min_confirmations: 0,
+    });
+    await renderDialog();
+    fireEvent.change(sustain(), { target: { value: '30' } });
+    fireEvent.click(box('RSI crosses up through 60'));
+    expect(sustain().disabled).toBe(false);
+    await save();
+    const td = mockApi.addCompositeWatch.mock.calls[0][1] as any;
+    expect(td.min_confirmations).toBe(0);
+    expect(td.sustain_minutes).toBe(30);
+  });
+
   it('a structure-only selection leaves sustain enabled', async () => {
     await renderDialog();
     fireEvent.click(box('Order Block'));
@@ -341,9 +364,9 @@ describe('CompositeAlertDialog — COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD test 1
     await renderDialog();
     const watchNote = screen.getByText(/A Watch judges only the candle that closed last before each run/);
     expect(watchNote.textContent).toMatch(/use a Rule for intraday momentum/);
-    expect(watchNote.textContent).toMatch(/re-arms/);
+    expect(watchNote.textContent).toMatch(/re-arms on the first run where the alert is no longer met/);
     fireEvent.click(screen.getByRole('button', { name: /Rule \(live\)/ }));
-    const ruleNote = screen.getByText(/A Rule judges every closed candle once/);
+    const ruleNote = screen.getByText(/A Rule judges each closed candle once/);
     expect(ruleNote.textContent).toMatch(/cooldown/);
     expect(screen.queryByText(/A Watch judges only/)).not.toBeInTheDocument();
   });

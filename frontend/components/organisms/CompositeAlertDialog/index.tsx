@@ -239,8 +239,9 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                 </div>
                 <div className={styles.warnBox}>
                   <Text size={16} tone="caution">
-                    A live Rule is only checked while this chart tab stays open. For
-                    always-on background checking, use Watch.
+                    A Rule is checked by the server on every closed candle of its interval,
+                    whether or not the chart is open. A Watch is checked on its own schedule
+                    (end of day, or every few hours in market hours).
                   </Text>
                 </div>
               </>
@@ -347,7 +348,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
 
             <div className={styles.section}>
               {(['structure', 'momentum'] as const).map((group) => (
-                <div key={group} className={styles.section}>
+                <div key={group} className={styles.group}>
                   <Text size={16} tone="secondary" weight={500}>
                     {group === 'structure' ? 'Structure confirmations' : 'Momentum confirmations'}
                   </Text>
@@ -368,11 +369,14 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                       {deliveryMode === 'watch'
                         ? 'A Watch judges only the candle that closed last before each run, so it '
                           + 'misses crosses between runs: use a Rule for intraday momentum; a Watch '
-                          + 'suits daily charts. After an alert the Watch re-arms on the first run '
-                          + 'with no cross, and the next cross alerts again.'
-                        : 'A Rule judges every closed candle once and fires at most once per candle. '
-                          + 'Its cooldown (60 min by default) also holds back a second cross inside '
-                          + 'that window.'}
+                          + 'suits daily charts. The newest candle is treated as still forming, so a '
+                          + 'daily cross is seen the next session. After an alert the Watch re-arms on '
+                          + 'the first run where the alert is no longer met (for example, no cross), '
+                          + 'and the next cross alerts again.'
+                        : 'A Rule judges each closed candle once and fires at most once per candle; '
+                          + 'the newest candle is treated as still forming, so a daily cross is seen '
+                          + 'the next session. Its cooldown (60 min by default) also holds back a '
+                          + 'second cross inside that window.'}
                     </Text>
                   )}
                 </div>

@@ -372,3 +372,18 @@ Kenneth's approval.
 - **Round 6 (code round 1, gated, target `git diff 30e5008 af092f8`) — CLEAN.** No gate-level findings; 24 section-4
   mutations re-run independently, all killed; ownership (section 5) respected; deviations 1-4 accepted. Below the
   gate: a stored `rsi_cross` with an explicit `min_confidence: null` runs at the default 60 (create refuses it).
+
+## 9. Unit B build record (2026-09-29, branch `ccr-2fe3aef8-jpt3lz`)
+- **Built (3.5, commit 650c9d4):** `CompositeAlertDialog` momentum group (rsi_cross / macd_cross / volume_spike),
+  labels by direction matching `_momentum_label` at level 60; one selection and one N-of-M count over structure +
+  momentum with the line "N of the selected confirmations (structure and momentum together)"; sustain disabled with
+  a note and saved as 0 when a momentum row is selected and the required count is > 0 (mirrors `has_momentum`);
+  row tooltips (RSI(14)/MACD(12,26,9)/volume baselines, 201 bars, regular session, early closes, 1min) and a
+  delivery-mode note (watch: Q4/Q8, rule: Q4/Q8b); saves `type: 'momentum'`, direction Bullish/Bearish/null,
+  `min_confidence: 60`. Confirmations are saved in list order (structure first), not click order.
+- **Test 15:** 14 Jest cases in `CompositeAlertDialog.test.tsx`; 7 own mutations + 2 auditor survivors killed.
+- **Round 7 (code round 2, gated, target `git diff 14ae63a 650c9d4`) — CLEAN.** Below the gate, fixed after the round:
+  N-of-M save and min_confirmations 0 test gaps; the stale Rule warning ("only checked while this chart tab stays
+  open" — rules are checked by `chart_alert_scheduler` in the background) reworded; re-arm wording (trigger no
+  longer met); next-session lag stated; nested section gap. Left: the 1min remark in the volume tooltip (Q3 asked
+  for it) and hover-only tooltips.
