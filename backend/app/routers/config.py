@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.services.config_health import config_health
 from app.services.config_loader import load_scoring_cfg
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -67,3 +68,14 @@ def get_event_thresholds() -> dict:
             ("Position", "position"),
         ]
     }
+
+
+@router.get("/health")
+def get_config_health() -> dict:
+    """The config health report (DOCC-4): errors, warnings and staleness for
+    scoring_rules / risk_rules / contract_rules, and which checks ran.
+
+    Always 200 -- the payload carries the verdict, and this endpoint must never
+    500 over the config it reports on. Re-reads the three files on every call
+    (decision DOCC-9.4-9.5-RATIFIED-RESTAT-2026-09-28)."""
+    return config_health.report()

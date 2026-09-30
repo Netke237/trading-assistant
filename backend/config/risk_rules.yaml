@@ -1,4 +1,6 @@
 # backend/config/risk_rules.yaml
+# Settings > Risk rewrites this whole file on save and DROPS EVERY COMMENT
+# except these header lines. Keep notes about these values elsewhere.
 
 portfolio:
   max_total_exposure_pct: 0.25
