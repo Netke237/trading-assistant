@@ -1,4 +1,4 @@
-# CONTRACT-LIQUIDITY-DTE — plan (r5: round-4 findings fixed; NOT audited clean; nothing built)
+# CONTRACT-LIQUIDITY-DTE — plan (r5: round-4 findings fixed, line refs re-based on main 4c520006; NOT audited clean; nothing built)
 
 - **Phase:** `CONTRACT-LIQUIDITY-DTE` (PROJECT_STATE.json). Status `not_started`.
 - **Branch:** `claude/contract-liquidity-dte` (from `origin/main` at `599b9da2`).
@@ -10,15 +10,19 @@
 
 ## 1. What is true on main (599b9da2)
 
-1. `contract_validator._hard_reject_reasons` (`contract_validator.py:84-87`):
+*Line references in `contract_validator.py` and `auto_trader.py` are re-based onto main `4c520006`,
+merged into this branch 2026-09-30. DOCC-4 added 11 lines to `contract_validator.py` (the config-health
+watch); nothing else in scope moved.*
+
+1. `contract_validator._hard_reject_reasons` (`contract_validator.py:95-98`):
    - `volume < min_volume` (50) is a hard reject **unless** `volume == 0 and oi >= min_open_interest`.
      The comment calls 0 "Tradier's off-hours sentinel" and OI "the real liquidity proxy".
    - `oi < min_open_interest` (200) is a separate hard reject.
    - Result: volume 0 with OI 319 passes; volume 3 with OI 1,534 is rejected. The better-traded contract
      loses (AAPL 315C 2027-04-16: vol 3, OI 1,534, spread 1.2%, REJECT).
-2. `_score_liquidity` (`:152-165`) raises **two** soft flags from one axis: `low_volume` (< 200) and
+2. `_score_liquidity` (`:163-176`) raises **two** soft flags from one axis: `low_volume` (< 200) and
    `low_open_interest` (< 1,000). `validate_contract` rejects at `max_soft_fail_count` = 3 flags
-   (`:453-456`). A long-dated contract usually carries both liquidity flags, so a single further flag
+   (`:464-467`). A long-dated contract usually carries both liquidity flags, so a single further flag
    (spread > 8%, delta outside 0.30–0.70, DTE, IV) rejects it.
 3. `volume` is Tradier's **session-to-date** count: `market.py:817` reads `int(c.get("volume") or 0)`, so a
    missing value also becomes 0. The option chain is Tradier-only (the yfinance `volume` lines in
@@ -32,10 +36,10 @@
 5. Callers of `validate_contract`: `routers/scan.py` (scan) and `routers/contracts.py:244` (Step 6 and the
    Watchlist refresh). `augment.py` only mentions it in a docstring. **Auto-trade does not inherit the
    scan's grade** (corrected in r2, round 1 H2):
-   - `auto_trader.maybe_fire_on_scan` (`auto_trader.py:2726`) fires the strategy the user *armed* from a
+   - `auto_trader.maybe_fire_on_scan` (`auto_trader.py:2736`) fires the strategy the user *armed* from a
      card, and the scan is only its trigger, not a gate.
    - The armed contract can be a Step 6 pick.
-   - The only fire-time market check, `_market_is_open` (`:417`), probes whether a *stock* price comes
+   - The only fire-time market check, `_market_is_open` (`:418`), probes whether a *stock* price comes
      back, and one does off-hours too.
    - Booking (`auto_trade_booking.py:366`) happens *after* the broker order.
    So auto-trade needs its own gate (now phase `NO-LIVE-QUOTE`).
@@ -136,7 +140,7 @@ fabricated-spread rows survive.
   - every row of `PARAM_DEFAULTS_PER_HORIZON` in `frontend/lib/executionParamDefaults.ts`. There are four
     literals (:31, :59, :85, :115), but the test covers every horizon key: Intraday, Swing, Position,
     Quarterly, SemiAnnual, Annual and Custom.
-- `_hard_reject_reasons` (`contract_validator.py:84-85`): the volume branch gains an explicit
+- `_hard_reject_reasons` (`contract_validator.py:95-96`): the volume branch gains an explicit
   `hr["min_volume"] > 0 and` guard.
   - The guard changes nothing for integer volumes: `volume < 0` is never true. It only states the
     "0 = off" meaning in code; the phase probe does not depend on it.
@@ -193,14 +197,14 @@ fabricated-spread rows survive.
   hard gates.
 
 **Fix 2 — one liquidity soft flag (Q2).**
-- `_score_liquidity` (`contract_validator.py:134-165`, flags at :161-164) appends one `thin_liquidity` flag when either of
+- `_score_liquidity` (`contract_validator.py:145-176`, flags at :172-175) appends one `thin_liquidity` flag when either of
   these holds:
   - `pref_volume_min > 0 and volume < pref_volume_min`;
   - `pref_oi_min > 0 and oi < pref_oi_min`.
 - It replaces `low_volume` and `low_open_interest`.
 - The score arithmetic is unchanged: volume and OI still each weigh half.
 - No UI or backend code reads the old flag names. I checked with grep over `frontend/` and `backend/app`;
-  the only consumer is `len(soft_flags)` at `:453`.
+  the only consumer is `len(soft_flags)` at `:464`.
 - The reason stays visible through `detail["liquidity"]`, which already emits volume, OI and both preferred
   minimums.
 - The Step 3 hints for `preferred_volume_min` and `preferred_oi_min` (:319, :321) say each "counts as one
@@ -250,8 +254,8 @@ The tests:
   merge that also changed the arithmetic; today's assertions only check `== 100` / `< 100`.
 - **Exemption keeps its OI clause.** `min_volume=50`, vol 0, OI 150 → both `volume_too_low` and
   `open_interest_too_low`. This kills a mutant that drops `oi >= min_open_interest` from the exemption.
-  - Flag names verified: `spread_elevated` (`contract_validator.py:191`) and `delta_outside_preferred`
-    (`:211`). The order follows the liquidity + spread + delta concatenation at `:452`.
+  - Flag names verified: `spread_elevated` (`contract_validator.py:202`) and `delta_outside_preferred`
+    (`:222`). The order follows the liquidity + spread + delta concatenation at `:463`.
 
 *Backend, `backend/tests/test_overrides.py`* — updated deliberately, one assertion at a time:
 - `:204` (`test_loose_tier_combined_override_…`): vol 25 at the default config now asserts
@@ -318,8 +322,8 @@ The tests:
 - `contract_rules.yaml` comments are updated as above.
 
 *Operational:*
-- `_load_config` is `lru_cache`d (`contract_validator.py:44`), so the backend must restart to pick up the
-  YAML default.
+- `_load_config` is `lru_cache`d (`contract_validator.py:45`), so the backend must restart to pick up the
+  YAML default. Since DOCC-4 (on main), the config-health poll flags that stale cache until the restart.
 - A persisted `scanResult` whose `contract_rules` lack `min_volume` is re-graded in Step 6 at the new
   default of 0, while its cards were graded at 50. Step 6 and Step 7 disagree until the next scan; this is
   accepted and needs no migration.
