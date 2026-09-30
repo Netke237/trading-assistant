@@ -1469,18 +1469,33 @@
     },
     {
       "id": "CONTRACT-LIQUIDITY-DTE",
-      "name": "Contract liquidity rules: volume stops being a hard reject (PRD FR-25), one merged liquidity soft flag, no fabricated off-hours spread",
+      "name": "Contract liquidity rules: volume stops being a hard reject by default (PRD FR-25), one merged liquidity soft flag",
       "status": "not_started",
       "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
         "kind": "defect_marker",
-        "path": "backend/app/scoring/contract_validator.py",
-        "pattern": "if volume < hr\\[\"min_volume\"\\] and not \\(volume == 0",
-        "note": "DEFECT MARKER: the volume hard reject with its zero-volume exemption -- vol 0 / OI 319 passes while vol 3 / OI 1,534 is rejected. Gone = fix 1 built."
+        "path": "backend/config/contract_rules.yaml",
+        "pattern": "min_volume: 50\\b",
+        "note": "DEFECT MARKER: the shipped default hard volume floor of 50 -- vol 3 / OI 1,534 is rejected while vol 0 / OI 319 passes. Gone = fix 1 built (default 0 = off)."
       },
-      "note": "DRAFTED 2026-09-30, plan r0 NOT audited: docs/superpowers/plans/2026-09-30-contract-liquidity-dte-plan.md (measured sample in section 2). Waiting on Kenneth's answers to the plan's section 6 (Q1-Q4). Loop: answers -> plan round -> build -> code round -> merge when clean."
+      "note": "Plan docs/superpowers/plans/2026-09-30-contract-liquidity-dte-plan.md r3, NOT audited clean. Kenneth answered section 6 (decision CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30). Plan round 1: 3H/7M/6L fixed (r2). Round 2: 6H/6M/8L, all highs in the off-hours quote fix, which Kenneth split out to phase NO-LIVE-QUOTE (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30); r3 is fixes 1+2 only. Next: plan round 3 -> build -> code round -> merge."
+    },
+    {
+      "id": "NO-LIVE-QUOTE",
+      "name": "Option chain rows with no live two-sided quote are never graded or traded as a 0% spread (PRD FR-24): hard reject in the scan and at auto-trade fire time, label only in Step 6 / Watchlist",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": ["CONTRACT-LIQUIDITY-DTE"],
+      "verify": {
+        "kind": "defect_marker",
+        "path": "backend/app/data/market.py",
+        "pattern": "spread = 0\\.0",
+        "note": "DEFECT MARKER: the chain builders fabricate a 0.0 spread when Tradier's ask is 0 (off-hours), and augment.py turns it into bid = ask = last. Gone = the no-live-quote treatment built."
+      },
+      "note": "PARKED 2026-09-30, split out of CONTRACT-LIQUIDITY-DTE (was its fix 3) by Kenneth (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30). Draft + 19 open round-2 findings: docs/superpowers/plans/2026-09-30-no-live-quote-plan.md. STEP 0 before any design: observe raw Tradier chain rows (bid/ask/last/bid_date/ask_date) pre-market, in session, after close, weekend, on the production base -- the design rests on an unobserved code comment."
     }
   ],
   "already_shipped": [
@@ -2895,6 +2910,11 @@
       "id": "CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30",
       "q": "CONTRACT-LIQUIDITY-DTE plan section 6, Q1-Q4.",
       "a": "Kenneth, 2026-09-30, all four recommendations: Q1 (b) min_volume stays as an optional hard floor, default 0 (off); a saved profile that explicitly set it keeps it as its floor. Q2 yes, one merged thin_liquidity soft flag, liquidity score unchanged. Q3 a chain row with no live bid/ask is hard-rejected as quote_stale in the scan and auto-trade; Step 6 and the Watchlist only label it 'no live quote'. Q4 leave Semi-annual as is; capping the DTE multiplier would be a separate measured task."
+    },
+    {
+      "id": "CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30",
+      "q": "Two plan rounds on CONTRACT-LIQUIDITY-DTE: every high finding (3 in round 1, 6 in round 2) was in fix 3, the off-hours no-live-quote treatment, whose input has never been observed. Keep it in the plan or split it out?",
+      "a": "Kenneth, 2026-09-30: split. CONTRACT-LIQUIDITY-DTE ships fixes 1 (min_volume default 0, optional floor; zero-volume exemption kept for an explicit floor) and 2 (one thin_liquidity flag). Fix 3 becomes phase NO-LIVE-QUOTE, starting with a raw off-hours Tradier measurement; the round-2 findings are its starting list. Fixes 1+2 leave the off-hours case exactly as on main."
     }
   ],
   "pending_kenneth": [
@@ -3034,7 +3054,11 @@
     },
     {
       "path": "docs/superpowers/plans/2026-09-30-contract-liquidity-dte-plan.md",
-      "role": "CONTRACT-LIQUIDITY-DTE plan: what the contract liquidity gates do on main, the 2026-09-30 measured liquidity-by-DTE sample, the design (fixes 1-4) and Kenneth's open questions. Draft r0, not audited."
+      "role": "CONTRACT-LIQUIDITY-DTE plan: what the contract liquidity gates do on main, the 2026-09-30 measured liquidity-by-DTE sample, the design (fixes 1, 2 and tests after the split) and Kenneth's answered questions. r3, not audited clean."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-30-no-live-quote-plan.md",
+      "role": "NO-LIVE-QUOTE plan (parked): the off-hours no-live-quote treatment split out of CONTRACT-LIQUIDITY-DTE, its r2 draft design, and the 19 open round-2 findings. Starts with a raw Tradier measurement. Not audited."
     }
   ],
   "traps": [
