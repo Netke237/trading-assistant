@@ -1,4 +1,4 @@
-# WATCH-DIRECTION-TO-EVALUATOR — plan (r1, after plan round 1)
+# WATCH-DIRECTION-TO-EVALUATOR — plan (r1; plan round 2 CLEAN, plan stage closed)
 
 - **Phase:** `WATCH-DIRECTION-TO-EVALUATOR` (PROJECT_STATE.json). Origin: decision
   `WATCH-RULE-BAR-PARITY-Q-I-LEGACY-WATCH-DIRECTION-2026-09-28` ("drop the fallback and log it") and
@@ -93,3 +93,4 @@ Plan round → build + mutation checks → code round → state record → merge
 ## 6. Round dispositions
 **Round 1 (1 gate-level, accepted):** 1 → §1.4 wording, §2.3 `sdir` passed to `describe_match`, test 4b, event
 stamp stated as residual in §2.
+**Round 2 (shrinking target: the round-1 fix) — ZERO GATE-LEVEL FINDINGS. Plan stage closed; build next.**
