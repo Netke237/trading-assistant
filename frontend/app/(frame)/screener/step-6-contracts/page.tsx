@@ -107,6 +107,14 @@ export default function Step6Page() {
   const setPickedContract       = useScanStore((s) => s.setPickedContract);
   const setContractsBySymbol    = useScanStore((s) => s.setContractsBySymbol);
 
+  // The contract rules the scan graded its trade cards with (Step-3 liquidity,
+  // spread, delta, IV overrides), from the RESULT -- not live scanOverrides,
+  // which can be edited after the scan. Without them /api/contracts grades on
+  // contract_rules.yaml, so a Loose-profile scan's own contract showed here as
+  // REJECT, score 0. Missing (absent, or null from the backend) on results from
+  // before the scan recorded them, or when recording failed.
+  const contractRules = scanResult?.contract_rules ?? undefined;
+
   const stockScoreBySymbol = Object.fromEntries(
     (scanResult?.candidates ?? []).map((c) => [c.symbol, c.stockScore ?? 70]),
   );
@@ -129,6 +137,7 @@ export default function Step6Page() {
           max_price:     maxContractPrice,
           hold_min_days: hold?.hold_min_days,
           hold_max_days: hold?.hold_max_days,
+          contract_rules: contractRules,
         }, signal))
       );
       if (signal?.aborted) return;
@@ -148,7 +157,7 @@ export default function Step6Page() {
     } finally {
       if (!signal?.aborted) setRefreshing(false);
     }
-  }, [rawCandidates, candidates, context, stockScoreBySymbol, maxContractsPerChain, maxContractPrice, pickedContracts]);
+  }, [rawCandidates, candidates, context, contractRules, stockScoreBySymbol, maxContractsPerChain, maxContractPrice, pickedContracts]);
 
   // Trigger on new scan results; abort any in-flight fetch (manual or auto) first.
   useEffect(() => {
@@ -204,6 +213,14 @@ export default function Step6Page() {
 
       {offline && (
         <Text size={13} tone="dim">Backend not running — start it (uvicorn app.main:app --port 8000) to load live data.</Text>
+      )}
+
+      {candidates.length > 0 && contractRules === undefined && (
+        <Text size={13} tone="caution">
+          This scan has no recorded contract rules, so contracts below are graded on the
+          default rules and may differ from the trade cards. Re-run the scan to grade them
+          with the scan&apos;s own rules.
+        </Text>
       )}
 
       {candidates.length === 0 && (
