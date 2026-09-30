@@ -1,4 +1,4 @@
-# CONTRACT-LIQUIDITY-DTE — plan (draft r0; NOT audited; nothing built)
+# CONTRACT-LIQUIDITY-DTE — plan (r1: Kenneth's answers folded in; NOT audited; nothing built)
 
 - **Phase:** `CONTRACT-LIQUIDITY-DTE` (PROJECT_STATE.json). Status `not_started`.
 - **Branch:** `claude/contract-liquidity-dte` (from `origin/main` at `599b9da2`).
@@ -6,7 +6,7 @@
   candidates) and at Step 6, where almost every contract in the MSFT and AAPL chains read REJECT. An
   adversarial review of the first proposal ("drop the volume hard reject") found it weaker than stated; this
   plan replaces it and starts from measured data instead.
-- **Waiting on Kenneth:** the four questions in §6. No code until they are answered and a plan round is clean.
+- **Kenneth answered §6 on 2026-09-30** (all recommendations). No code until a plan round is clean.
 
 ## 1. What is true on main (599b9da2)
 
@@ -94,34 +94,87 @@ position 148 (32), quarterly 268 (43), semi-annual 38 (8).
    quarterly and then collapses; volume is low everywhere. A merged flag (fix 2) does the work without
    inventing a DTE curve.
 
-## 3. Design
+## 3. Design (r1 — Kenneth's §6 answers folded in)
 
-**Fix 1 — volume stops being a hard reject (matches PRD FR-25).**
-Remove the `volume_too_low` branch from `_hard_reject_reasons`. Liquidity hard gates become OI
-(`min_open_interest`) and spread (`max_bid_ask_spread_pct`). The zero-volume exemption disappears with it —
-there is nothing left to exempt. Volume stays in the liquidity score and the merged soft flag.
-What happens to the `min_volume` override is Q1.
+**Fix 1 — volume is no longer a default hard reject (FR-25; Q1 (b)).**
+- `_hard_reject_reasons`: replace the volume branch with
+  `if hr["min_volume"] > 0 and volume < hr["min_volume"]: reasons.append("volume_too_low")`.
+  The zero-volume/OI exemption is deleted. A floor of 0 is off. A floor above 0 is the user's explicit
+  request and applies literally, including to volume 0. Off-hours rows never reach this rule in the scan,
+  because fix 3 rejects them first as `quote_stale`.
+- Default `min_volume` 50 → 0 in `backend/config/contract_rules.yaml` and in all four presets of
+  `frontend/lib/executionParamDefaults.ts` (:31, :59, :85, :115). Step 3's label becomes
+  "Min option volume (0 = off)"; the field, its `min: 0` and `CONTRACT_OVERRIDE_KEYS` stay.
+- Saved search profiles and a scan's stored `contract_rules` are not rewritten. A profile that explicitly
+  set `min_volume` keeps it as its floor (decision `CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30`).
+- `min_open_interest` (200) and `max_bid_ask_spread_pct` (0.20) are unchanged. They remain the liquidity
+  hard gates.
 
-**Fix 2 — one liquidity soft flag.**
-`_score_liquidity` raises a single `thin_liquidity` flag when volume < `preferred_volume_min` **or** OI <
-`preferred_oi_min` (both still configurable, both still shown in the detail). The liquidity score itself is
-unchanged (volume and OI still each weigh half), so a thin contract still scores lower; it just stops
-spending two of its three soft-failure allowance on one axis. `low_volume` / `low_open_interest` stay visible
-as detail text so the reason is not lost (exact shape decided in the plan round).
+**Fix 2 — one liquidity soft flag (Q2).**
+`_score_liquidity` appends one `thin_liquidity` flag when `(pref_volume_min > 0 and volume < pref_volume_min)`
+or `(pref_oi_min > 0 and oi < pref_oi_min)`. It replaces `low_volume` and `low_open_interest`. The score
+arithmetic is unchanged: volume and OI still each weigh half. No UI reads the old flag names; checked with
+grep over `frontend/` and `backend/app`, and the only consumer is `len(soft_flags)`. The reason stays
+visible through `detail["liquidity"]`: volume, OI and both preferred minimums are already emitted.
 
-**Fix 3 — no fabricated spread.**
-When the chain has no live bid/ask (Tradier `ask == 0`), mark the contract `quote_stale` instead of building
-`bid = ask = last`. Grading then treats the spread as unknown (Q3 decides: hard reject per FR-24, or grade
-without the spread rule and label it). The price may still fall back to `last` for display. Must be verified
-off-hours before building — §1 item 4 is from reading the code.
+**Fix 3 — a row with no live quote is never graded as a 0% spread (FR-24; Q3 (a) plus a label).**
+- Chain builders: `fetch_option_chain_async` (`market.py` ~:1489-1496, the live one) and its dead sync twin
+  (`:808-814`, changed to match so the twins stay identical) set `"quote_live": ask > 0` on every row. The
+  `last` fallback for `price` stays, for display only.
+- `_augment` (`augment.py:94-95`) passes `quote_live` through. When `quote_live is False` it sets
+  `bid = ask = None` instead of the fabricated `mid ± spread/2`, so nothing downstream can compute a
+  spread from it.
+- `validate_contract(..., stale_quote: Literal["reject", "label"] = "reject")`:
+  - The rule fires only when `contract.get("quote_live") is False`. A missing key counts as live, so
+    fixtures and hand-built dicts keep working. A test pins that both chain builders always set the key.
+  - `"reject"` (the default, so any new caller is safe): hard reject reason `quote_stale`. The spread
+    rules are skipped for that row, so the one cause is not also reported as `spread_too_wide`.
+  - `"label"`: no spread hard or soft rule, spread score 0 (unknown counts as worst, never best), no spread
+    flag, and the row is graded on the rest.
+  - Both modes set a new `ContractScoreCard.quote_stale: bool`.
+- Callers:
+  - `routers/scan.py:852` keeps the default `"reject"`. Auto-trade consumes scan results, so it inherits
+    the reject.
+  - `routers/contracts.py:244` (Step 6 and the Watchlist refresh) passes `"label"`, and its
+    `OptionContract` gains `quoteStale: bool` (schemas `:224`, default False).
+- Frontend: Step 6 (`step-6-contracts/page.tsx`) and the Watchlist Contracts tab (`watchlist/page.tsx`) show
+  a "no live quote" tag on rows with `quoteStale`. The `OptionContract` TS type gains the optional field, and
+  the Jest mocks in `frontend/__mocks__/` are updated.
+- Consequence, accepted by Kenneth: an off-hours options scan returns few or no candidates, and the funnel
+  reports them as `quote_stale`.
+- Verification gate: the off-hours shape (Tradier `ask == 0`, `last > 0`) is assumed from reading the code.
+  Before fix 3 is built, rerun `backend/scripts/contract_liquidity_sample.py` outside US hours and record the
+  observed bid/ask/last shape in §2. If it differs, fix 3 is re-planned and gets its own plan round.
 
-**Fix 4 — tests and visibility.**
-- Unit: vol 3 / OI 1,534 / tight spread → not hard-rejected; vol 0 and vol 3 with identical other fields
-  grade identically; OI 150 → `open_interest_too_low` regardless of volume; volume < pref and OI < pref →
-  exactly one liquidity flag; `ask == 0` chain row → `quote_stale`, never a 0% spread.
-- Both callers: a scan test and a `/api/contracts` test asserting the same contract grades the same on both.
-- Mutations: restore the volume hard reject; restore two flags; restore `bid = ask = last` — each must fail a test.
-- Update the pinned tests listed in §1 item 8 deliberately, one by one, not by bulk edit.
+**Fix 4 — tests, mutations and visibility.**
+- Unit tests in `contract_validator`:
+  - vol 3 / OI 1,534 / spread 1.2% is not hard-rejected.
+  - vol 0 and vol 3, otherwise identical, give identical grades at the default floor.
+  - `min_volume=50` rejects both vol 0 and vol 3 (the explicit floor, no exemption).
+  - OI 150 gives `open_interest_too_low` regardless of volume.
+  - vol < pref and OI < pref give exactly one `thin_liquidity` flag; either one alone gives the same single
+    flag.
+  - `quote_live=False` → `quote_stale` under `"reject"` and no `spread_too_wide`. Under `"label"` it is
+    not rejected for spread, `quote_stale` is True, and the spread score is 0.
+  - A missing `quote_live` is treated as live.
+- Chain and augment: an `ask == 0, last > 0` Tradier row yields `quote_live False`, and `_augment` yields
+  `bid is None and ask is None`, never a 0% spread. Covered for the async builder, with a parity assertion
+  for the sync twin.
+- Both callers:
+  - A scan test and a `/api/contracts` test grade the same live contract identically.
+  - A stale row is rejected by the scan and labelled (`quoteStale: true`) by `/api/contracts`.
+- Frontend: Jest for the "no live quote" tag in Step 6 and in the Watchlist; the preset defaults test
+  asserts `min_volume: 0`.
+- Mutations, each of which must turn a test red:
+  - restore the volume hard reject at 50;
+  - restore two liquidity flags;
+  - restore `bid = ask = last`;
+  - flip the `stale_quote` default to `"label"`;
+  - drop `quoteStale` from the `/api/contracts` response.
+- Pinned tests from §1 item 8 are updated one by one, each with a one-line reason in the commit, not by
+  bulk edit.
+- Docs: CLAUDE.md needs no change. PRD FR-24/25 are already satisfied. `contract_rules.yaml` comments are
+  updated for the new `min_volume` meaning.
 
 ## 4. Out of scope (named, not done)
 
