@@ -5,6 +5,7 @@ import { Title, Text } from '@/components/primitives';
 import { RegimeIndicator } from '@/components/molecules/RegimeIndicator';
 import { TopBarActions } from '@/components/molecules/TopBarActions';
 import { MarketClock } from '@/components/molecules/MarketClock';
+import { ConfigHealthChip } from '@/components/molecules/ConfigHealthChip';
 import { useScanStore } from '@/lib/scanStore';
 import styles from './TopBar.module.css';
 
@@ -119,6 +120,8 @@ export function TopBar() {
       <RegimeIndicator />
 
       <MarketClock />
+
+      <ConfigHealthChip />
 
       <TopBarActions />
     </header>

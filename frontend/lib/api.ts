@@ -909,6 +909,9 @@ export const api = {
       '/api/config/event-thresholds'
     ),
 
+  // DOCC-5: GET /api/config/health (DOCC-4). Always 200; parsed by lib/configHealth.ts.
+  getConfigHealth: (signal?: AbortSignal) => get<unknown>('/api/config/health', signal),
+
   // ── Part 1: operator timezone ────────────────────────────────────────────
   getSchedulingTimezone: () => get<{ timezone: string }>('/settings/scheduling'),
   putSchedulingTimezone: (timezone: string) => put<{ timezone: string }>('/settings/scheduling', { timezone }),

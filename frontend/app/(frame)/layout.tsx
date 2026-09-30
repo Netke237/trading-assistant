@@ -9,6 +9,7 @@
  */
 
 import { TopBar } from '@/components/organisms/TopBar';
+import { ConfigHealthBanner } from '@/components/organisms/ConfigHealthBanner';
 import { NavRail } from '@/components/organisms/NavRail';
 import { ContextRail } from '@/components/organisms/ContextRail';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
@@ -27,6 +28,7 @@ export default function FrameLayout({
       <InitStores />
       <a href="#workspace" className={styles.skipLink}>Skip to content</a>
       <TopBar />
+      <ConfigHealthBanner />
       <NavRail />
       <main id="workspace" className={styles.workspace} tabIndex={-1}>{children}</main>
       <ContextRail>{contextRail}</ContextRail>
