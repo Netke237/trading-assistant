@@ -438,12 +438,13 @@ async def _eval_composite_watch(
     try:
         from app.services.composite_trigger_evaluator import (
             describe_match, evaluate_scheduled, format_composite_reason, momentum_sustain_ignored,
+            strategy_direction,
         )
         fired = evaluate_scheduled(
             symbol, trigger_def, bars, bars_intraday,
             regime_bars_intraday=bars_intraday if model == "HMM_intraday" else None,
             unknown_as_none=True, interval=fetch_iv, bars_vwap_daily=vwap_daily,
-            momentum=momentum,
+            momentum=momentum, fallback_direction=wdir,
         )
     except Exception as exc:
         logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
@@ -504,7 +505,9 @@ async def _eval_composite_watch(
     close = float(bars[-1]["close"])
     try:
         _detail = describe_match(
-            trigger_def, bars_daily=bars, bars_intraday=bars_intraday, symbol=symbol, direction=wdir,
+            trigger_def, bars_daily=bars, bars_intraday=bars_intraday, symbol=symbol,
+            # The strategy gate's own direction, so the alert lists what it matched.
+            direction=strategy_direction(trigger_def, wdir),
             interval=fetch_iv, bars_vwap_daily=vwap_daily, momentum=momentum,
         )
         _reason = format_composite_reason((trigger_def.get("primary") or {}).get("to_state"), _detail)
