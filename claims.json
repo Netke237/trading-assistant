@@ -2,18 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/pensive-cori-we2hm6",
-      "claimed_at": "2026-09-30T13:30:34Z",
-      "expires_at": "2026-09-30T16:30:34Z",
-      "note": "WP-0: close superseded PR #22, record MEAS kit branch in ledger, prune stale open questions, delete verified-superseded branches",
-      "task": "WP0-HOUSEKEEPING"
-    },
-    {
-      "agent": "claude",
       "branch": "ccr-2fe3aef8-jpt3lz",
-      "claimed_at": "2026-09-30T13:30:41Z",
-      "expires_at": "2026-09-30T16:30:41Z",
-      "note": "plan round 2 + build",
+      "claimed_at": "2026-09-30T16:52:16Z",
+      "expires_at": "2026-09-30T19:52:16Z",
+      "note": "plan cap fired after r3; awaiting Kenneth",
       "task": "DOCC-4-CONFIG-HEALTH"
     }
   ]
