@@ -404,6 +404,27 @@ hard floor; profiles are not rewritten.
   - the session-to-date hint;
   - the `depends_on` contradiction;
   - the `llm-contexts` scope.
+- Round 5 (r5, 2026-09-30): 1 gate-level finding, NOT fixed — **HARD CAP reached** (plan stage at 5
+  rounds vs cap 3; decision AUDIT-CAP-PER-STAGE-2026-09-25). Auditing stopped; pending Kenneth.
+  - **Gate-level (can reach a broker order):** the §3 accepted residual and §1 item 5 say the blast radius
+    is the scan and Step 6 only, and that the scan is "not a gate" for auto-trade. False:
+    `scan.py:2036` fires `maybe_fire_on_scan` only when some candidate is PASS; Step 7 cards (armable,
+    `AutoTradeArm/index.tsx:519` does not gate on contract status) come from the scan pick, which a
+    fabricated 0% spread favours (`scan.py:870-872`); `_market_is_open` (`auto_trader.py:418`) is a
+    price probe, not an hours test. So after the close, fix 1 lets a vol 1–49 / fabricated-spread
+    contract be armed and fired by a re-scan within `max_arm_age_minutes` (30), and sent directly from
+    Step 7. Options: accept this broker-order exposure explicitly, or land NO-LIVE-QUOTE first.
+  - Not gate-level, logged against main (not fixed in-branch per audit_rule): Step 3 `min_volume` may
+    never reach `validate_contract` (open_questions, 2026-09-09, unproven); `audit_rounds`/`active_phase`
+    not updated and "r5"/"round-4" subjects evade `state.py`'s `\bround\s+(\d+)`; the fix-1
+    `already_shipped` entry needs `audit_clean` at close; probe `min_volume: 0\b` also matches `0.5`
+    (use `0(?![.\d])`); pre-market/after-close Tradier volume stated as fact but unobserved; AAPL-shape
+    test bid/ask unpinned (2.00/2.025 verified); `test_step6_contract_rules.py:24` comment; xlsx title
+    date; §1 header commit id.
+  - Mandatory checks passed: weighted-44 fixture recomputed (43.8 → 44), every line ref, state.py exit-0
+    mechanics, all five mutations killed.
+  - Brief defect: the r5 brief did not tell the reviewer to report gate-level findings only, as
+    audit_rule clause (1) requires; future briefs must.
 - **PROJECT_STATE mechanics.** `scripts/state.py` counts it as drift when a phase's status disagrees with
   its probe (`state.py:717-728`).
   - Today: status `not_started`, with a defect marker on `min_volume: 50\b` in `contract_rules.yaml`.
