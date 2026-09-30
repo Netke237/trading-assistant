@@ -164,6 +164,21 @@
       "next": "NOTHING. Phase G is merged, verified on the merge result, and has no open questions. THE NEXT TWO ITEMS ARE NOT PHASE G and must not be reopened as if they were: (1) O4 -- the auto-trade fire path creates no PortfolioPosition at all, so step 5's five armed picked_* fields are captured and never read; the tripwire in backend/tests/test_phase_g_arm_pick.py goes red the day anyone wires position creation, which is the signal to do this. (2) G5-1 -- ArmRequest inherits extra='ignore', so a misspelled key returns 200 and arms with all five NULL, and tsc does not catch the frontend half either; extra='forbid' would fix it but is a behaviour change to a live endpoint. Agreed order is O4 before G5-1, each on its own branch off main with its own round. || ONE ACCEPTANCE ITEM NO TEST COVERS, from spec §11 item 5: stocks now has its first hard pre-send refusal, and Kenneth wanted to see that in the running app. It shipped without that look."
     },
     {
+      "id": "DOCC-4-CONFIG-HEALTH",
+      "name": "Document C plan 4 -- backend config-health surface (GET /api/config/health, boot-hash staleness, warn lines) + risk_rules.yaml comment-loss header",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [],
+      "verify": {
+        "kind": "absent",
+        "pattern": "capture_boot_baseline",
+        "path": "backend/app/main.py",
+        "note": "The lifespan boot-snapshot call DOCC-4 adds to main.py (plan s2.3). Verified absent 2026-09-30. Presence only; tests/test_docc4_config_health.py will pin behaviour."
+      },
+      "note": "2026-09-30: plan written, docs/superpowers/plans/2026-09-30-docc-4-config-health-plan.md (decision DOCC-4-5-SLICING-2026-09-30). Plan round 1 pending."
+    },
+    {
       "id": "YAML-CONFIG-INTEGRITY",
       "name": "YAML config integrity -- an edit either takes effect, or fails loudly",
       "status": "not_started",
