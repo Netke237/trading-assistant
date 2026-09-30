@@ -10,12 +10,13 @@
  * (a true percentile exists only when IBKR or tastytrade answered).
  */
 import { cleanup, render, screen } from '@testing-library/react';
-import Step5Page, {
+import Step5Page from '../page';
+import {
   missingReadingClause, headSentence, causesSentence, ivThresholdSentence,
   eventWindowSentence,
   CAUSE_LABEL, MISSING_READING_CLAIM,
   type MissingReadingClaim, type GateCause, type GateCounts, type CauseKey, type IvBand,
-} from '../page';
+} from '../gateSummary';
 import { STATUS_LABEL } from '@/lib/status';
 import { formatIv, type IvBasis } from '@/lib/ivBasis';
 import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';

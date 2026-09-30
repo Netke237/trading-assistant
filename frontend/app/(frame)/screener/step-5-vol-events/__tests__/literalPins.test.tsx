@@ -17,7 +17,8 @@
  * 1 F1). Each row's two sides disagree, so a swap of sides shows too.
  */
 import { cleanup, render, screen } from '@testing-library/react';
-import Step5Page, { ivThresholdSentence } from '../page';
+import Step5Page from '../page';
+import { ivThresholdSentence } from '../gateSummary';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
 import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK } from '@/lib/eventThresholdsStore';
