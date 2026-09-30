@@ -350,11 +350,13 @@ def test_t12_shipped_horizons_have_no_warning():
 def test_t13_report_never_raises(monkeypatch):
     def boom(doc):
         raise RuntimeError("kaboom")
-    monkeypatch.setattr(money_config, "money_block_errors", boom)
-    rep = config_health.report()
+    # A context, not monkeypatch.undo(): undo would also revert the fixture's
+    # CONFIG_DIR, and the memo lookup below would then miss for that reason.
+    with monkeypatch.context() as m:
+        m.setattr(money_config, "money_block_errors", boom)
+        rep = config_health.report()
     assert any("crashed" in e["message"] and "kaboom" in e["message"] for e in rep["errors"])
     assert "money blocks: presence, spelling, enabled" not in rep["checked"]
-    monkeypatch.undo()
     # a crash is never memoised: the same bytes are checked again
     assert config_health.report()["ok"]
 
@@ -808,3 +810,25 @@ def test_t29_edit_during_poll_is_stale_in_that_poll(cfg_dir, monkeypatch):
         return real(file)
     monkeypatch.setattr(config_health, "_file_result", edit_then_read)
     assert stale_names(config_health.report()) == ["config_loader.load_scoring_cfg"]
+
+
+def test_t29b_live_values_are_read_before_disk(cfg_dir, monkeypatch):
+    """A cache first filled AFTER the disk read was not live when the poll
+    began, so it is skipped (currsize 0 at the live read), not judged against
+    a disk read that predates it. Pins the order: live first, disk last."""
+    real = config_health._file_result
+    done = []
+
+    def read_then_edit_and_load(file):
+        r = real(file)
+        if file == "scoring_rules.yaml" and not done:
+            done.append(1)
+            _set_swing_event(cfg_dir, 66)
+            config_loader.load_scoring_cfg()
+        return r
+    monkeypatch.setattr(config_health, "_file_result", read_then_edit_and_load)
+    assert config_health.report()["stale"] == []
+    monkeypatch.setattr(config_health, "_file_result", real)
+    config_health._reset_for_tests()
+    assert config_health.report()["ok"]       # the next poll: cache and disk agree
+
