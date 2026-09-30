@@ -114,6 +114,12 @@ async def list_composite_watches() -> list[dict]:
 @router.post("/", status_code=201)
 async def add_composite_watch(body: CompositeWatchCreate) -> dict:
     """Create a new composite watch entry. No deduplication — each call creates a new entry."""
+    # COMPOSITE-MOMENTUM Q10c: refuse a momentum confirmation that could never
+    # fire (422; the store's ValueError -> 400 mapping below is unchanged).
+    from app.services.composite_trigger_evaluator import momentum_confirmation_error
+    _err = momentum_confirmation_error(body.trigger_def)
+    if _err:
+        raise HTTPException(status_code=422, detail=_err)
     try:
         return strategy_watch_store.add_composite_watch(
             symbol=body.symbol,

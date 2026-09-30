@@ -16,13 +16,49 @@ type MarkovModel = 'OMM' | 'HMM_daily' | 'HMM_intraday' | 'any';
 const OMM_STATES  = ['Bull', 'Bear', 'Choppy', 'any'];
 const HMM_STATES  = ['Trending', 'Choppy', 'Mean-reverting', 'any'];
 
-const CONFIRMATION_OPTIONS = [
-  { type: 'structure', signal_kind: 'BOS',            label: 'Break of Structure' },
-  { type: 'structure', signal_kind: 'CHoCH',          label: 'Change of Character' },
-  { type: 'structure', signal_kind: 'FVG',            label: 'Fair Value Gap' },
-  { type: 'structure', signal_kind: 'OrderBlock',     label: 'Order Block' },
-  { type: 'structure', signal_kind: 'RSIDivergence',  label: 'RSI Divergence' },
-  { type: 'structure', signal_kind: 'MACDDivergence', label: 'MACD Divergence' },
+type Side = 'bullish' | 'bearish' | null;
+
+// COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD (Q0 = a): structure and momentum rows
+// share one list, one selection and one N-of-M count, as the backend does.
+// Momentum labels follow the alert direction and must read exactly as the
+// backend's chart_alerts._momentum_label (the alert checklist names the row).
+const RSI_LEVEL = 60;
+const SESSION_NOTE = 'Intraday alerts read regular-session (09:30-16:00 ET) candles only.';
+const CONFIRMATION_OPTIONS: {
+  type: 'structure' | 'momentum';
+  signal_kind: string;
+  label: (side: Side) => string;
+  tip?: string;
+}[] = [
+  { type: 'structure', signal_kind: 'BOS',            label: () => 'Break of Structure' },
+  { type: 'structure', signal_kind: 'CHoCH',          label: () => 'Change of Character' },
+  { type: 'structure', signal_kind: 'FVG',            label: () => 'Fair Value Gap' },
+  { type: 'structure', signal_kind: 'OrderBlock',     label: () => 'Order Block' },
+  { type: 'structure', signal_kind: 'RSIDivergence',  label: () => 'RSI Divergence' },
+  { type: 'structure', signal_kind: 'MACDDivergence', label: () => 'MACD Divergence' },
+  {
+    type: 'momentum', signal_kind: 'rsi_cross',
+    label: (side) => side === 'bullish' ? `RSI crosses up through ${RSI_LEVEL}`
+      : side === 'bearish' ? `RSI crosses down through ${100 - RSI_LEVEL}`
+      : `RSI crosses up through ${RSI_LEVEL} or down through ${100 - RSI_LEVEL}`,
+    tip: 'RSI(14) crosses the level on the last closed candle of the alert\'s interval '
+      + '(it was on the other side on the candle before). Needs 201 candles of history. '
+      + SESSION_NOTE,
+  },
+  {
+    type: 'momentum', signal_kind: 'macd_cross',
+    label: (side) => `MACD crosses ${side === 'bullish' ? 'above' : side === 'bearish' ? 'below' : 'above or below'} its signal line`,
+    tip: 'MACD(12, 26, 9) line crosses its signal line on the last closed candle of the '
+      + 'alert\'s interval. Needs 201 candles of history. ' + SESSION_NOTE,
+  },
+  {
+    type: 'momentum', signal_kind: 'volume_spike',
+    label: (side) => `Volume spike (at least 2x usual, ${side === 'bullish' ? 'up candle' : side === 'bearish' ? 'down candle' : 'any candle colour'})`,
+    tip: 'Volume of the last closed candle is at least 2x usual. Daily/weekly: the mean of the '
+      + '20 candles before it. Intraday: the mean of the same time of day over the previous 10 '
+      + 'sessions (at least 5 needed, so 1min charts without a Tradier token rarely have enough). '
+      + 'Early-close days are not recognised. ' + SESSION_NOTE,
+  },
 ];
 
 const MR_STRATEGY_OPTIONS = [
@@ -73,6 +109,13 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
   }, [symbol, model, direction, interval]);
 
   const stateOptions = model === 'OMM' ? OMM_STATES : HMM_STATES;
+  const side: Side = direction.toLowerCase() === 'bullish' ? 'bullish'
+    : direction.toLowerCase() === 'bearish' ? 'bearish' : null;
+  const requireN = Math.min(minConf, selected.size);
+  // Q7: the backend ignores sustain for a trigger with a momentum confirmation
+  // that is actually evaluated (has_momentum: min_confirmations > 0).
+  const sustainOff = requireN > 0
+    && Array.from(selected).some((i) => CONFIRMATION_OPTIONS[i]!.type === 'momentum');
 
   const toggleConfirm = (i: number) => {
     setSelected((prev) => {
@@ -103,7 +146,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
   const handleSave = async () => {
     setSaving(true);
     setError(null);
-    const confirmations = Array.from(selected).map((i) => ({
+    const confirmations = Array.from(selected).sort((a, b) => a - b).map((i) => ({
       type: CONFIRMATION_OPTIONS[i]!.type,
       signal_kind: CONFIRMATION_OPTIONS[i]!.signal_kind,
       direction: direction === 'any' ? null : direction,
@@ -119,7 +162,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
         p_transition_min: 0.3,
       },
       confirmations,
-      min_confirmations: Math.min(minConf, confirmations.length),
+      min_confirmations: requireN,
       strategy_confirmations: strategyConfirmations,
       min_strategy_confirmations: strategyConfirmations.length > 0 ? Math.min(minMrConf, strategyConfirmations.length) : 0,
       horizon: 'swing',
@@ -128,7 +171,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
       // mean-reversion confirmation would silently evaluate as Bullish regardless
       // of the alert's real direction, for both the Watch and live Rule paths.
       direction: direction === 'any' ? null : direction,
-      sustain_minutes: sustainMinutes,
+      sustain_minutes: sustainOff ? 0 : sustainMinutes,
     };
     try {
       if (deliveryMode === 'rule') {
@@ -196,8 +239,9 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                 </div>
                 <div className={styles.warnBox}>
                   <Text size={16} tone="caution">
-                    A live Rule is only checked while this chart tab stays open. For
-                    always-on background checking, use Watch.
+                    A Rule is checked by the server on every closed candle of its interval,
+                    whether or not the chart is open. A Watch is checked on its own schedule
+                    (end of day, or every few hours in market hours).
                   </Text>
                 </div>
               </>
@@ -242,10 +286,17 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                 type="number"
                 min={0}
                 max={1440}
-                value={sustainMinutes}
+                value={sustainOff ? 0 : sustainMinutes}
+                disabled={sustainOff}
                 onChange={(e) => setSustainMinutes(Math.max(0, Math.min(1440, Number(e.target.value))))}
                 title="Optional: the composite condition must stay true for this many minutes before it fires."
               />
+              {sustainOff && (
+                <Text size={16} tone="dim">
+                  Sustain does not apply with a momentum confirmation: a cross happens on one
+                  candle, so the alert fires on the candle that meets it.
+                </Text>
+              )}
             </div>
 
             {model !== 'any' && (
@@ -296,26 +347,52 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
             </div>
 
             <div className={styles.section}>
-              <Text size={16} tone="secondary" weight={500}>Structure confirmations</Text>
-              <div className={styles.confirmList}>
-                {CONFIRMATION_OPTIONS.map((opt, i) => (
-                  <label
-                    key={opt.signal_kind}
-                    className={`${styles.confirmItem} ${selected.has(i) ? styles.confirmItemSelected : ''}`}
-                  >
-                    <input type="checkbox" checked={selected.has(i)} onChange={() => toggleConfirm(i)} />
-                    <Text size={16}>{opt.label}</Text>
-                  </label>
-                ))}
-              </div>
+              {(['structure', 'momentum'] as const).map((group) => (
+                <div key={group} className={styles.group}>
+                  <Text size={16} tone="secondary" weight={500}>
+                    {group === 'structure' ? 'Structure confirmations' : 'Momentum confirmations'}
+                  </Text>
+                  <div className={styles.confirmList}>
+                    {CONFIRMATION_OPTIONS.map((opt, i) => opt.type !== group ? null : (
+                      <label
+                        key={opt.signal_kind}
+                        title={opt.tip}
+                        className={`${styles.confirmItem} ${selected.has(i) ? styles.confirmItemSelected : ''}`}
+                      >
+                        <input type="checkbox" checked={selected.has(i)} onChange={() => toggleConfirm(i)} />
+                        <Text size={16}>{opt.label(side)}</Text>
+                      </label>
+                    ))}
+                  </div>
+                  {group === 'momentum' && (
+                    <Text size={16} tone="dim">
+                      {deliveryMode === 'watch'
+                        ? 'A Watch judges only the candle that closed last before each run, so it '
+                          + 'misses crosses between runs: use a Rule for intraday momentum; a Watch '
+                          + 'suits daily charts. The newest candle is treated as still forming, so a '
+                          + 'daily cross is seen the next session. After an alert the Watch re-arms on '
+                          + 'the first run where the alert is no longer met (for example, no cross), '
+                          + 'and the next cross alerts again.'
+                        : 'A Rule judges each closed candle once and fires at most once per candle; '
+                          + 'the newest candle is treated as still forming, so a daily cross is seen '
+                          + 'the next session. Its cooldown (60 min by default) also holds back a '
+                          + 'second cross inside that window.'}
+                    </Text>
+                  )}
+                </div>
+              ))}
               {selected.size > 0 && (
                 <div className={styles.row}>
-                  <Text size={16} tone="secondary">Require {Math.min(minConf, selected.size)} of {selected.size}</Text>
+                  <Text size={16} tone="secondary">Require {requireN} of {selected.size}</Text>
+                  <Text size={16} tone="dim">
+                    N of the selected confirmations (structure and momentum together)
+                  </Text>
                   <input
                     type="range" min={1} max={selected.size} step={1}
-                    value={Math.min(minConf, selected.size)}
+                    value={requireN}
                     onChange={(e) => setMinConf(Number(e.target.value))}
                     className={styles.range}
+                    aria-label="Confirmations required"
                   />
                 </div>
               )}
