@@ -126,6 +126,24 @@ export function eventWindowSentence(w: HorizonEventThresholds): string {
     + `else \u2192 PASS.`;
 }
 
+/** Whether both threshold records are in hand. `ready` does not require the
+ *  stores' status to be 'ready': a re-fetch in flight keeps the last good
+ *  record on screen. Published on the page root as `data-avail`. */
+export type ThresholdsAvail = 'ready' | 'loading' | 'failed';
+
+/** The header part (and the GATE tooltip) shown in place of every threshold
+ *  sentence while no verdict can be computed. It quotes no number. */
+export function thresholdsUnavailableSentence(avail: Exclude<ThresholdsAvail, 'ready'>, error: string | null): string {
+  return avail === 'loading'
+    ? 'Loading the volatility and event thresholds from scoring_rules.yaml\u2026'
+    : `The volatility and event thresholds could not be loaded from scoring_rules.yaml (${error ?? 'unknown error'}). No IV or event verdict is shown.`;
+}
+
+/** The header part naming an active Settings override of the IV pass ceiling. */
+export function ivOverrideSentence(value: number, yaml: number): string {
+  return `IV pass ceiling is a session override from Settings (${value}), not scoring_rules.yaml's (${yaml}).`;
+}
+
 export function headSentence(c: GateCounts): string {
   return `${c.total} shown \u2014 ${c.pass} PASS, ${c.caution} CAUTION, ${c.reject} REJECT.`;
 }

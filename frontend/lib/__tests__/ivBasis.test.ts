@@ -1,5 +1,6 @@
 import { resolveIv, formatIv, ivSortValue, stripLegacyIvFields, IV_COLUMN_LABEL, ivColumnLabel, ivBasesOf } from '@/lib/ivBasis';
-import { getIvPassMax, getIvCautionMax, FALLBACK } from '@/lib/ivThresholdsStore';
+import { getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
+import { IV_SHIPPED } from '@/lib/testFixtures/thresholds';
 
 describe('resolveIv', () => {
   it('prefers a true percentile over the absolute level', () => {
@@ -83,37 +84,33 @@ describe('ivSortValue', () => {
 
 describe('threshold selection by basis', () => {
   it('judges an absolute level against the absolute set', () => {
-    expect(getIvPassMax('Swing', FALLBACK, 'absolute')).toBe(34);
-    expect(getIvCautionMax('Swing', FALLBACK, 'absolute')).toBe(55);
-    expect(getIvPassMax('Position', FALLBACK, 'absolute')).toBe(44);
+    expect(getIvPassMax('Swing', IV_SHIPPED, 'absolute')).toBe(34);
+    expect(getIvCautionMax('Swing', IV_SHIPPED, 'absolute')).toBe(55);
+    expect(getIvPassMax('Position', IV_SHIPPED, 'absolute')).toBe(44);
   });
 
   it('judges a percentile against the percentile set', () => {
-    expect(getIvPassMax('Swing', FALLBACK, 'rank')).toBe(34);
-    expect(getIvCautionMax('Position', FALLBACK, 'rank')).toBe(65);
+    expect(getIvPassMax('Swing', IV_SHIPPED, 'rank')).toBe(34);
+    expect(getIvCautionMax('Position', IV_SHIPPED, 'rank')).toBe(65);
   });
 
   it('keeps the two sets independent, so measuring one never moves the other', () => {
     const measured = {
-      ...FALLBACK,
-      Swing: { ...FALLBACK.Swing, rank_pass_max: 70, rank_caution_max: 85 },
+      ...IV_SHIPPED,
+      Swing: { ...IV_SHIPPED.Swing, rank_pass_max: 70, rank_caution_max: 85 },
     };
     expect(getIvPassMax('Swing', measured, 'rank')).toBe(70);
     expect(getIvPassMax('Swing', measured, 'absolute')).toBe(34);
   });
 
   it('returns no threshold at all when there is no figure to judge', () => {
-    expect(getIvPassMax('Swing', FALLBACK, 'none')).toBeNull();
-    expect(getIvCautionMax('Swing', FALLBACK, 'none')).toBeNull();
+    expect(getIvPassMax('Swing', IV_SHIPPED, 'none')).toBeNull();
+    expect(getIvCautionMax('Swing', IV_SHIPPED, 'none')).toBeNull();
   });
 
   it('has no IV gate on either basis for Intraday', () => {
-    expect(getIvPassMax('Intraday', FALLBACK, 'absolute')).toBeNull();
-    expect(getIvPassMax('Intraday', FALLBACK, 'rank')).toBeNull();
-  });
-
-  it('falls back to the built-in defaults for an unknown horizon', () => {
-    expect(getIvPassMax('Nonsense', FALLBACK, 'absolute')).toBeNull();
+    expect(getIvPassMax('Intraday', IV_SHIPPED, 'absolute')).toBeNull();
+    expect(getIvPassMax('Intraday', IV_SHIPPED, 'rank')).toBeNull();
   });
 });
 

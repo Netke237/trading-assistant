@@ -13,8 +13,6 @@ import { NavRail } from '@/components/organisms/NavRail';
 import { ContextRail } from '@/components/organisms/ContextRail';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { InitStores } from '@/components/molecules/InitStores';
-import { IvThresholdsBootstrap } from '@/components/atoms/IvThresholdsBootstrap';
-import { EventThresholdsBootstrap } from '@/components/atoms/EventThresholdsBootstrap';
 import styles from '@/components/organisms/Frame.module.css';
 
 export default function FrameLayout({
@@ -27,8 +25,6 @@ export default function FrameLayout({
   return (
     <div className={styles.frame}>
       <InitStores />
-      <IvThresholdsBootstrap />
-      <EventThresholdsBootstrap />
       <a href="#workspace" className={styles.skipLink}>Skip to content</a>
       <TopBar />
       <NavRail />

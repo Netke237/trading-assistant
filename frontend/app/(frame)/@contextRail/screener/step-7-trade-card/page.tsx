@@ -7,8 +7,14 @@
  * merged. Never from the raw scan candidate: after a pick that is the
  * auto-picked contract, and the rail graded its IV, score, spread and R:R
  * beside a card showing another one (A8, open_questions[64]).
+ *
+ * IV thresholds are fetched on mount and read as the EFFECTIVE record (fetched
+ * + Settings' session override), the same effectiveIvThresholds Step 5 uses.
+ * No record in hand -> the IV item is CAUTION, never PASS (decision
+ * DOCC-3-THRESHOLD-STORES-REFUSE-2026-09-29).
  */
 
+import { useEffect, useMemo } from 'react';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text } from '@/components/primitives';
@@ -16,7 +22,11 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import { statusForScore } from '@/lib/status';
-import { useIvThresholdsStore, getIvPassMax, getIvCautionMax, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
+import {
+  useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
+  type HorizonIvThresholds,
+} from '@/lib/ivThresholdsStore';
+import type { ThresholdHorizon } from '@/lib/eventThresholdsStore';
 import { resolveIv, formatIv } from '@/lib/ivBasis';
 import { ScreenerStepGate } from '@/components/organisms/ScreenerStepGate';
 import type { TradeCardData, WatchlistRow } from '@/types/domain';
@@ -35,9 +45,10 @@ function buildChecklist(
   candidate: TradeCardData,
   wlRow: WatchlistRow | undefined,
   regime: Status,
-  horizonKey: string,
-  ivThresholds: Record<string, HorizonIvThresholds>,
+  horizonKey: ThresholdHorizon,
+  ivThresholds: Record<ThresholdHorizon, HorizonIvThresholds> | null,
   rrPending: boolean,
+  ivOverride: { value: number; yaml: number } | null = null,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -59,8 +70,17 @@ function buildChecklist(
   // gate could not be applied" on a horizon where the IV gate is disabled by
   // design — cautioning about the absence of a check that was never going to
   // run. Nothing is missing there, so nothing is flagged.
-  const gateDisabled = getIvPassMax(horizonKey, ivThresholds, iv.basis === 'none' ? 'absolute' : iv.basis) === null;
-  if (gateDisabled) {
+  // DOCC-3: before even that, an UNKNOWN config. No record in hand is not a
+  // disabled gate, so it is checked ahead of `gateDisabled` and never PASS.
+  const gateDisabled = ivThresholds !== null
+    && getIvPassMax(horizonKey, ivThresholds, iv.basis === 'none' ? 'absolute' : iv.basis) === null;
+  if (ivThresholds === null) {
+    gates.push({
+      label: 'IV acceptable',
+      status: 'CAUTION',
+      detail: 'IV thresholds could not be loaded from scoring_rules.yaml — the IV gate was not applied.',
+    });
+  } else if (gateDisabled) {
     gates.push({
       label: 'IV acceptable',
       status: 'PASS',
@@ -88,7 +108,10 @@ function buildChecklist(
       status: ivStatus,
       detail: ivPassMax === null
         ? `${noun} ${shown.text} — no IV gate for ${horizonKey}.`
-        : `${noun} ${shown.text} vs. pass ≤${ivPassMax}${ivCautionMax != null ? ` / caution ≤${ivCautionMax}` : ''}.`,
+        : `${noun} ${shown.text} vs. pass ≤${ivPassMax}${ivCautionMax != null ? ` / caution ≤${ivCautionMax}` : ''}.`
+          // The override replaces the ABSOLUTE pass ceiling only.
+          + (ivOverride !== null && iv.basis === 'absolute'
+            ? ` (session override from Settings; scoring_rules.yaml: ${ivOverride.yaml})` : ''),
     });
   }
 
@@ -139,9 +162,16 @@ export default function TradeCardContextRail() {
   const published           = useTradeCardUiStore((s) => s.activeCard);
   const regime              = useScanStore((s) => s.combinedRegime);
   const horizon             = useScanStore((s) => s.context?.horizon);
-  const ivThresholds        = useIvThresholdsStore((s) => s.thresholds);
+  // Two selectors (Zustand v5: never one returning a fresh object).
+  const ivFetched           = useIvThresholdsStore((s) => s.thresholds);
+  const ivOverrides         = useIvThresholdsStore((s) => s.overrides);
+  const ivThresholds = useMemo(
+    () => effectiveIvThresholds(ivFetched, ivOverrides),
+    [ivFetched, ivOverrides],
+  );
+  useEffect(() => { void useIvThresholdsStore.getState().fetch(); }, []);
 
-  const horizonKey = horizon?.startsWith('Intraday') ? 'Intraday'
+  const horizonKey: ThresholdHorizon = horizon?.startsWith('Intraday') ? 'Intraday'
     : horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
 
@@ -165,7 +195,10 @@ export default function TradeCardContextRail() {
       }
     : undefined;
 
-  const gates = candidate ? buildChecklist(candidate, wlRow, regime, horizonKey, ivThresholds, published?.rrPending ?? false) : [];
+  const gates = candidate ? buildChecklist(
+    candidate, wlRow, regime, horizonKey, ivThresholds, published?.rrPending ?? false,
+    ivOverrideFor(horizonKey, ivFetched, ivOverrides),
+  ) : [];
 
   return (
     <ScreenerStepGate>
@@ -180,7 +213,7 @@ export default function TradeCardContextRail() {
             </Text>
             <div className={styles.checklistStack}>
               {gates.map((g) => (
-                <div key={g.label} className={styles.checklistRow}>
+                <div key={g.label} className={styles.checklistRow} data-gate-label={g.label} data-status={g.status}>
                   <StatusDot tone={g.status} size="sm" title={g.detail} />
                   <Text size={12} tone={g.status === 'CAUTION' ? 'caution' : 'secondary'}>
                     {g.label}

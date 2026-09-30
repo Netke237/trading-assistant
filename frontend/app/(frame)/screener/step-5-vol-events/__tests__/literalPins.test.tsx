@@ -12,7 +12,7 @@
  * Everything below is a hand-written literal and a whole-string `toBe`. The
  * rendered scan injects IV thresholds in which ALL FOUR numbers differ from
  * each other and from the event window (rank 30/50, absolute 40/60, event
- * 21/45): the shipped FALLBACK and every other fixture set rank == absolute, so
+ * 21/45): the shipped values (IV_SHIPPED) and every other fixture set rank == absolute, so
  * a page looking up the RANK band for an ABSOLUTE row was invisible (plan round
  * 1 F1). Each row's two sides disagree, so a swap of sides shows too.
  */
@@ -21,8 +21,15 @@ import Step5Page from '../page';
 import { ivThresholdSentence } from '../gateSummary';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
-import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK } from '@/lib/eventThresholdsStore';
+import { useEventThresholdsStore } from '@/lib/eventThresholdsStore';
 import type { TradeCardData } from '@/types/domain';
+import { api } from '@/lib/api';
+import { EVENT_SHIPPED, IV_SHIPPED, echoStoredThresholds } from '@/lib/testFixtures/thresholds';
+
+// DOCC-3: the page fetches both stores on mount; each fetch answers with the
+// record the test set, so it re-sets the test's values rather than clearing them.
+jest.mock('@/lib/api', () => ({ api: { getIvThresholds: jest.fn(), getEventThresholds: jest.fn() } }));
+beforeEach(() => echoStoredThresholds(api as unknown as Parameters<typeof echoStoredThresholds>[0]));
 
 describe('ivThresholdSentence — round 7 F1', () => {
   it('a rank band', () => {
@@ -81,18 +88,18 @@ describe('the rendered Swing page, word for word', () => {
       context: { direction: 'Bullish', horizon: 'Swing (5-15d)' } as any,
     } as any);
     useIvThresholdsStore.setState({
-      thresholds: { Swing: { rank_pass_max: 30, rank_caution_max: 50, abs_pass_max: 40, abs_caution_max: 60 } },
-      loaded: true,
-    } as any);
-    useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: true } as any);   // Swing 21/45
+      thresholds: { ...IV_SHIPPED, Swing: { rank_pass_max: 30, rank_caution_max: 50, abs_pass_max: 40, abs_caution_max: 60 } },
+      status: 'ready', error: null, overrides: {},
+    });
+    useEventThresholdsStore.setState({ thresholds: EVENT_SHIPPED, status: 'ready', error: null });   // Swing 21/45
     render(<Step5Page />);
   });
 
   afterEach(() => {
     cleanup();   // unmount first, or the store resets below re-render a live page
     useScanStore.setState({ scanResult: undefined, context: undefined } as any);
-    useIvThresholdsStore.setState({ thresholds: {}, loaded: false } as any);
-    useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: false } as any);
+    useIvThresholdsStore.setState({ thresholds: null, status: 'idle', error: null, overrides: {} });
+    useEventThresholdsStore.setState({ thresholds: null, status: 'idle', error: null });
   });
 
   const line = (name: string) =>
