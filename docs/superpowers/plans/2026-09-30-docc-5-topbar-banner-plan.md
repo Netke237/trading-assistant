@@ -102,14 +102,17 @@ interface HealthView {
   error: string | null;
   fetchedAt: number | null;   // ms, of the report in hand
   multiWorker: boolean;
-  now: number;
+  now: number;               // the store's clock (§2.2), never Date.now() at render
 }
 ```
 
 Order, first match wins:
 
-1. `report === null` and `status` is `idle` or `loading` → `checking`
-   (the very first fetch has not answered).
+1. `report === null` and `error === null` and `status` is `idle` or
+   `loading` → `checking`. That is only true before any fetch has finished:
+   a failure sets `error`, and a poll that starts does **not** clear it
+   (§2.2), so a retry after a failure stays `unknown` while it is in flight
+   (round-1 G1).
 2. `report === null` → `unknown` (the last fetch failed; §2.2 clears the report
    on failure).
 3. `now - fetchedAt > MAX_REPORT_AGE_MS` (70 000: two intervals plus the 10 s
@@ -146,6 +149,8 @@ interface ConfigHealthState {
   restartedAt: number | null;  // the last time the pid changed and did not come back
   collapsed: boolean;
   collapsedFingerprint: string | null;
+  now: number;               // Date.now() at creation; advanced only by tick() and a successful poll
+  tick: () => void;          // set({ now: Date.now() })
   poll: () => Promise<void>;
   setCollapsed: (collapsed: boolean, fingerprint: string) => void;
 }
@@ -154,12 +159,14 @@ interface ConfigHealthState {
 **`poll()`**, same race guard as DOCC-3's stores:
 
 - Module-level `let seq = 0`, `const my = ++seq`, `status: 'loading'`. The
-  report in hand is **kept** while loading.
+  report in hand is **kept** while loading, and so is `error` (round-1 G1:
+  clearing it would turn a retry after a failure into `checking`, and the
+  banner renders nothing for `checking`).
 - `api.getConfigHealth(signal)` with an `AbortController` aborted after
   `FETCH_TIMEOUT_MS` (10 000).
 - After the `await`, `if (my !== seq) return`.
 - Success: `parseConfigHealth` → `report`, `status: 'ready'`, `error: null`,
-  `fetchedAt: Date.now()`, append the pid to `pids` (trim to 10).
+  `fetchedAt: Date.now()`, `now: Date.now()`, append the pid to `pids` (trim to 10).
 - Any throw (network, `apiError`, abort, parse): `report: null`,
   `status: 'failed'`, `error: message`, `fetchedAt: null`. `pids` is kept.
 
@@ -199,8 +206,11 @@ the poll:
   included, counts as visible).
 - `visibilitychange` to visible, and window `focus`: poll now, unless a poll
   started less than 2 s ago (focus and visibility fire together).
-- A 5 s `now` tick, so rule 3 of `tierOf` can turn an old green into
-  `unknown` without waiting for a poll.
+- A 5 s `setInterval` calling `tick()`, so rule 3 of `tierOf` can turn an old
+  green into `unknown` without waiting for a poll. The `visibilitychange` and
+  `focus` handlers call `tick()` **before** `poll()`, so a tab coming back
+  from a throttled or frozen period is re-judged at once, not at the next
+  throttled tick (round-1 G2).
 - All listeners and timers removed on unmount.
 
 It renders **nothing** for `checking` and `clean` (the chip covers those).
@@ -209,7 +219,8 @@ Otherwise one `<section>` with `aria-live="polite"` (`role="alert"` for the
 
 - **Headline** (always shown, also when collapsed), by tier:
   - `error`: "Config error: N problem(s) in <files>. <blocks of the first
-    error> are refused until it is fixed."
+    error> are refused until it is fixed." The second sentence is left out
+    when that `blocks` is `""` (the crash shape).
   - `stale`: "Config changed on disk: restart the backend to apply it."
   - `unknown`: "Config health unknown: <error or age reason>. Retrying every
     30 s."
@@ -265,7 +276,8 @@ It reads the same store and the same `tierOf`, through one shared hook
 `useConfigHealthView()` (in `lib/configHealthStore.ts`), so the chip and the
 banner can never disagree about the tier. The hook reads the 5 s `now` from
 the store (the banner's tick writes `now` into the store) rather than keeping
-its own clock.
+its own clock. `useConfigHealthView()` passes the store's `now` to `tierOf`;
+nothing in the view path calls `Date.now()`.
 
 ### 2.6 E2E fixtures
 
@@ -274,8 +286,8 @@ its own clock.
   `not_checked` lines, `pid: 4242`, empty lists). Specs that do not use the
   mocks and run without a backend will show the `unknown` strip; §3.4 runs the
   whole Playwright suite to find any spec that depended on the old grid.
-- `e2e/fixtures/api-mocks-reject.ts` gets the same clean route, so its
-  scenarios keep their meaning.
+- `e2e/fixtures/api-mocks-reject.ts` needs nothing: `setupRejectMocks`
+  already calls `setupApiMocks`, so it inherits the clean route.
 
 ### 2.7 Records
 
@@ -307,6 +319,8 @@ DOCC-3 did): `CLEAN_REPORT` (the shipped check names, verbatim from
 - T2: worst tier wins: errors + stale + warnings → `error`; stale + warnings
   + multiWorker → `stale`; warnings + multiWorker → `multiworker`.
 - T3: `CRASH_REPORT` → `error`.
+- T5 (round-1 G1): `status: 'loading'`, `report: null`, `error: 'x'` →
+  `unknown`, not `checking`.
 - T4: **no green without a report:** for every `status` with `report: null`,
   `tierOf` is never `clean`.
 - F1: `fingerprintOf` is stable under reordering of findings, changes when a
@@ -323,6 +337,9 @@ DOCC-3 did): `CLEAN_REPORT` (the shipped check names, verbatim from
 - S5: pids A,A,B,B → `multiWorker` false, `restartedAt` set. A,B,A →
   `multiWorker` true. After ten more polls of B only → false again.
 - S6: while loading after `ready`, the old report is still in hand.
+- S8 (round-1 G2): a clean report with `fetchedAt` 70 001 ms before a
+  `tick()` → the view's tier is `unknown`; before the `tick()` it was
+  `clean`. A poll that starts after a failure leaves `error` set.
 - S7: collapse: `setCollapsed(true, fp)`; the view is collapsed for `fp`, and
   expanded for any other fingerprint.
 
@@ -337,13 +354,18 @@ DOCC-3 did): `CLEAN_REPORT` (the shipped check names, verbatim from
   error lines, and both scope lists; the error tier has `role="alert"`.
 - B3: a 500 shows "Config health unknown" and the status in the text; the next
   good poll clears it.
+- B3b (round-1 G1): after a 500, the next poll is left pending; the strip is
+  still shown, and the chip does not read "checking".
 - B4: 30 s ticks do not poll while `visibilityState` is `'hidden'`; a
   `visibilitychange` to visible polls at once; `focus` right after it does not
   poll again within 2 s.
 - B5: collapse hides the detail and keeps the headline; a poll with a changed
   finding shows the detail again; the same finding keeps it collapsed.
-- B6: a clean report left 75 s without a successful poll (poll mocked to
-  hang, clock advanced past the abort) shows the `unknown` strip.
+- B6 (reworked, round-1 G2): one clean poll, then `visibilityState` mocked
+  to `'hidden'` so no tick polls; the clock is advanced 75 s and then
+  `visibilitychange` fires with the state back at `'visible'` and the poll
+  mocked to hang. Before the abort fires, the `unknown` strip is shown with
+  the age reason. This reaches `unknown` through rule 3, not rule 2.
 - B7: unmount clears every interval and listener (no poll after unmount).
 
 `components/molecules/ConfigHealthChip/__tests__/ConfigHealthChip.test.tsx`:
@@ -374,7 +396,9 @@ m1 drop the `ok` consistency check; m2 make rule 2 return `clean`; m3 drop
 rule 3; m4 swap rules 4 and 5; m5 keep the old report on failure; m6 remove
 the `my !== seq` guard; m7 compare pids with "any two distinct" instead of
 "a return"; m8 poll while hidden; m9 fingerprint without messages; m10 chip
-computing its own tier. Each must fail a test.
+computing its own tier; m11 clear `error` when a poll starts; m12 call
+`tick()` after `poll()` instead of before, or not at all, in the
+visibility handler. Each must fail a test.
 
 ## 4. Out of scope
 
@@ -424,4 +448,22 @@ Check in particular:
 
 ## 7. Audit record
 
-(empty: plan round 1 not yet run)
+**Plan round 1 (2026-09-30): NOT CLEAN, 2 gate-level findings, both fixed
+above.**
+- G1: after a failure, the retry's `loading` state matched rule 1
+  (`checking`), so the "unknown" strip vanished during every retry: up to
+  10 s of every 30 s with a hung backend. Fixed: rule 1 also needs
+  `error === null`, and a poll no longer clears `error` on start (T5, S8,
+  B3b, m11).
+- G2: §2.5 read `now` from the store, but §2.2's contract had no `now`, so
+  rule 3 had no clock and a frozen green could stay. B6 reached `unknown`
+  through rule 2 instead. Fixed: `now` + `tick()` in the store, the
+  visibility and focus handlers tick before polling, and B6 now goes through
+  rule 3 (S8, m12).
+
+Round-1 items logged below the gate: the crash headline's empty subject
+(fixed in passing, §2.4); the reject mocks already inherit the health route
+(fixed in passing, §2.6); keep-alive can keep a multi-worker backend on one
+pid for a tab (already in `NOT_CHECKED`); `ws-a`..`ws-e` specs will show the
+unknown strip without a backend (the §3.4 full run covers them); after a
+failed fetch a known error report shows as the caution `unknown` (decision 4).
