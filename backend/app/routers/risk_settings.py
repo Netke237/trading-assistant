@@ -30,6 +30,16 @@ def _save_settings(data: dict) -> None:
     )
 
 
+# DOCC-4 / decision DOCC-9.3B-D1-ACCEPT-COMMENT-LOSS-2026-09-28: every save
+# rewrites the whole file with yaml.dump, which drops every comment. The header
+# says so, and is re-written by every save so the save cannot erase it.
+RISK_RULES_HEADER = (
+    "# backend/config/risk_rules.yaml\n"
+    "# Settings > Risk rewrites this whole file on save and DROPS EVERY COMMENT\n"
+    "# except these header lines. Keep notes about these values elsewhere.\n"
+)
+
+
 def _load_risk() -> dict:
     if _RISK_PATH.exists():
         with open(_RISK_PATH) as f:
@@ -39,7 +49,8 @@ def _load_risk() -> dict:
 
 def _save_risk(data: dict) -> None:
     atomic_write_yaml(
-        _RISK_PATH, data, default_flow_style=False, sort_keys=False
+        _RISK_PATH, data, header=RISK_RULES_HEADER,
+        default_flow_style=False, sort_keys=False,
     )
 
 

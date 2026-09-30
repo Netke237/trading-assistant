@@ -12,6 +12,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from app.services.config_health import config_health
+
 Status = Literal["PASS", "CAUTION", "REJECT"]
 Horizon = Literal["Intraday", "Swing", "Position"]
 Direction = Literal["Bullish", "Bearish"]
@@ -54,6 +56,15 @@ CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.ya
 def _load_config() -> dict:
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
+
+
+# DOCC-4: the health poll compares this cache's live value with the file on disk.
+config_health.watch(
+    file="scoring_rules.yaml",
+    loader="stock_scorer._load_config",
+    fn=_load_config,
+    project=lambda doc: doc,
+)
 
 
 def _horizon_cfg(horizon: Horizon) -> dict:

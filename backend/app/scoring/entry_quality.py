@@ -7,6 +7,8 @@ from typing import Literal
 
 import yaml
 
+from app.services.config_health import config_health
+
 OrderType = Literal["Limit", "Market"]
 Status = Literal["PASS", "CAUTION", "REJECT"]
 
@@ -17,6 +19,15 @@ CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.ya
 def _load_config() -> dict:
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
+
+
+# DOCC-4: the health poll compares this cache's live value with the file on disk.
+config_health.watch(
+    file="scoring_rules.yaml",
+    loader="entry_quality._load_config",
+    fn=_load_config,
+    project=lambda doc: doc,
+)
 
 
 def _entry_cfg() -> dict:

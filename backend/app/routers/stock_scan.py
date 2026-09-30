@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.config_health import config_health
 from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 
@@ -140,6 +141,15 @@ _INT_OVERRIDE_KEYS = frozenset({
 @functools.lru_cache(maxsize=1)
 def _load_full_scoring_cfg() -> dict:
     return _yaml.safe_load(_SCORING_CFG.read_text())
+
+
+# DOCC-4: the health poll compares this cache's live value with the file on disk.
+config_health.watch(
+    file="scoring_rules.yaml",
+    loader="stock_scan._load_full_scoring_cfg",
+    fn=_load_full_scoring_cfg,
+    project=lambda doc: doc,
+)
 
 
 def _load_regime_cfg(horizon: str) -> dict:
