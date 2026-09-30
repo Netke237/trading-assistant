@@ -362,7 +362,9 @@ DOCC-3 did): `CLEAN_REPORT` (the shipped check names, verbatim from
 - B5: collapse hides the detail and keeps the headline; a poll with a changed
   finding shows the detail again; the same finding keeps it collapsed.
 - B6 (reworked, round-1 G2): one clean poll, then `visibilityState` mocked
-  to `'hidden'` so no tick polls; the clock is advanced 75 s and then
+  to `'hidden'` so no tick polls; the clock is moved 75 s with
+  `jest.setSystemTime` (not `advanceTimersByTime`, whose 5 s ticks would
+  re-judge the report first and let m12 survive), and then
   `visibilitychange` fires with the state back at `'visible'` and the poll
   mocked to hang. Before the abort fires, the `unknown` strip is shown with
   the age reason. This reaches `unknown` through rule 3, not rule 2.
@@ -460,6 +462,17 @@ above.**
   through rule 2 instead. Fixed: `now` + `tick()` in the store, the
   visibility and focus handlers tick before polling, and B6 now goes through
   rule 3 (S8, m12).
+
+**Plan round 2 (2026-09-30): CLEAN, zero gate-level findings. The plan stage
+is closed; the code stage starts at round 1 of 3.** It reviewed only the G1
+and G2 fixes (diff `9f277c7..f6c9f28`) and walked first fetch, failure,
+retry, a race-losing poll, success, and a return from a hidden tab.
+
+Round-2 items logged below the gate: B6 must move the clock with
+`jest.setSystemTime` so m12 can fail (applied to B6's text, test only); a
+focus poll skipped by the 2 s guard should still `tick()` (visibility already
+ticked, so harmless); after a sleep with the tab visible, the stale green
+lasts until the first queued interval fires on wake (milliseconds).
 
 Round-1 items logged below the gate: the crash headline's empty subject
 (fixed in passing, §2.4); the reject mocks already inherit the health route
