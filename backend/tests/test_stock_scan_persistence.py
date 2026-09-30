@@ -286,6 +286,8 @@ async def test_a_saved_request_that_no_longer_validates_does_not_abort_startup(c
 
     orig_request = stock_scan_module._last_stock_request
     orig_result = stock_scan_module._last_stock_result
+    orig_status = stock_scan_module._last_stock_status
+    orig_updated_at = stock_scan_module._last_stock_updated_at
     orig_async_session_local = stock_scan_module.AsyncSessionLocal
     stock_scan_module._last_stock_request = None
     stock_scan_module._last_stock_result = None
@@ -318,6 +320,12 @@ async def test_a_saved_request_that_no_longer_validates_does_not_abort_startup(c
         assert stock_scan_module._last_stock_result.scan_id == "SSCAN-3"
         assert "no longer validates" in caplog.text
     finally:
+        # The invalid row must not outlive this test in the shared DB.
+        async with _TestSession() as session:
+            await session.execute(delete(ScanSession).where(ScanSession.id == "stock-current"))
+            await session.commit()
         stock_scan_module._last_stock_request = orig_request
         stock_scan_module._last_stock_result = orig_result
+        stock_scan_module._last_stock_status = orig_status
+        stock_scan_module._last_stock_updated_at = orig_updated_at
         stock_scan_module.AsyncSessionLocal = orig_async_session_local

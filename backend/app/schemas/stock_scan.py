@@ -54,7 +54,7 @@ class StockScanRequest(BaseModel):
     # through to the 1% default, sizing UP from a request for $0; nan/inf made
     # int() raise in every symbol, which gather() swallowed into an empty scan.
     # No LIVE caller sends this field (no frontend source, no stored schedule),
-    # so refusing at the door breaks none. A request SAVED before the bound
+    # so refusing at the door breaks no live caller. A request SAVED before the bound
     # (stock_scan's last_request_json) could carry one; restore_stock_from_db
     # drops such a request instead of failing startup (r3 finding 2).
     risk_fixed_usd:     Optional[float] = Field(None, gt=0, allow_inf_nan=False)

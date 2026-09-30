@@ -587,9 +587,11 @@ async def restore_stock_from_db() -> None:
             # GUARDED (REGIME-SIZING-AUDIT r3 finding 2): a request saved before
             # a schema tightening (e.g. risk_fixed_usd gaining gt=0) must not
             # abort app startup -- nothing above or in main.py catches it. It
-            # is dropped, not coerced: the saved request is only replayed by
-            # the Analysis page, and replaying an input the API would now
-            # refuse is worse than offering no replay. The result still loads.
+            # is dropped, not coerced: the saved request feeds only the
+            # Analysis page's replay and last-run's `strategy` label (shown
+            # blank until the next scan), and replaying an input the API would
+            # now refuse is worse than offering no replay. The result still
+            # loads.
             try:
                 _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
             except ValidationError as exc:
