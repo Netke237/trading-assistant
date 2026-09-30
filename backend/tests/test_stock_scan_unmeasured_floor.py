@@ -38,9 +38,10 @@ def _omm(conviction_pct: int):
     )
 
 
-def _run(sizing, omm_result):
+def _run(sizing, omm_result, **req_kw):
     req = StockScanRequest(
         universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+        **req_kw,
     )
     cfg = dict(_router_mod._load_full_scoring_cfg())
     cfg["regime_sizing"] = sizing

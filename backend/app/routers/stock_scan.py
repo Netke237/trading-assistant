@@ -18,7 +18,7 @@ from typing import Any, Literal, Optional
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -584,7 +584,23 @@ async def restore_stock_from_db() -> None:
         if row.last_result_json:
             _last_stock_result = StockScanResult.model_validate_json(row.last_result_json)
         if row.last_request_json:
-            _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
+            # GUARDED (REGIME-SIZING-AUDIT r3 finding 2): a request saved before
+            # a schema tightening (e.g. risk_fixed_usd gaining gt=0) must not
+            # abort app startup -- nothing above or in main.py catches it. It
+            # is dropped, not coerced: the saved request feeds only the
+            # Analysis page's replay and last-run's `strategy` label (shown
+            # blank until the next scan), and replaying an input the API would
+            # now refuse is worse than offering no replay. The result still
+            # loads.
+            try:
+                _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
+            except ValidationError as exc:
+                logger.warning(
+                    "restore_stock_from_db: saved stock-scan request no longer "
+                    "validates and was dropped (no Analysis replay until the "
+                    "next scan): %s", exc,
+                )
+                _last_stock_request = None
         # A restored "running" status means the process was killed mid-scan
         # (OOM, container restart) — unlike options mode's continuous-scan
         # scheduler, no in-flight stock-scan request can survive a restart
@@ -1062,8 +1078,13 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     # The caller resolves the fallback and applies the conviction multiplier
     # before this point; a `risk_pct or 0.01` here used to replace a None with
     # an UNSIZED 1% and so drop the multiplier.
-    dollar_risk = risk_fixed if risk_fixed else (account * risk_pct)
-    shares = max(1, int(dollar_risk / risk_per_share))
+    dollar_risk = risk_fixed if risk_fixed is not None else (account * risk_pct)
+    # The 1e-9 is the fire path's (`auto_trader._sized_quantity`): a float
+    # quotient such as 669.9999999999999 for an exact 670 must not lose a
+    # share. Without it the card rounded DIFFERENTLY from the auto-trader on
+    # exact boundaries (REGIME-SIZING-AUDIT r1 finding 3: conviction -36,
+    # account 50,000, 1%, risk/share 0.25 -> 669 where the exact figure is 670).
+    shares = max(1, int(dollar_risk / risk_per_share + 1e-9))
     return shares, round(dollar_risk, 2)
 
 
