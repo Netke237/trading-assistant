@@ -1,4 +1,66 @@
-# MEAS — Market-data measurement: plan (v5, v4 + the three round-4 fixes Kenneth approved)
+# MEAS — Market-data measurement: plan (v6, v5 re-derived against main 4c52000)
+
+**What changed in v6 (2026-09-30, decision `MEAS-V6-REFRESH-ONE-ROUND-2026-09-30`).** v5 was written
+on main 91e6725e. Before the refresh, 37 commits had touched its gate code: `stock_scan.py` +419 lines,
+`scan.py` +259, `contract_validator.py` +142. Kenneth chose to refresh v5 and give it **one** confirmation
+round (plan round 5). If that round is not clean, the work stops and goes back to him. Each item below
+was verified against the code at 4c52000. Sections that changed are marked **[v6]**.
+
+- **R1 Freeze scope.** P3a is merged, so the prerequisite in decision (1) is met. The tag
+  `meas-freeze-1` was never created: Kenneth creates it on the commit he runs. The frozen set grows
+  from 8 named modules to **all of `backend/app/`** plus the two measured YAMLs. The gate logic now
+  also lives in modules v5 did not list: `services/config_loader.py` resolves the floor,
+  `scoring/conviction_sizing.py`, `services/money_config.py`, `dte_window.py`, `spread_builder.py`,
+  and the `stock_scan` helpers that `scan.py` imports. Naming modules one by one is how v5 missed
+  them (the round-4 below-gate item "unfrozen gate-shaping files").
+  `strategy_params.yaml` is not frozen, because tuning adopts rewrite it. Instead, S-scan rules pool
+  only days that share its hash (§5) (§4.0).
+- **R2 Shortlist cap.** Both paths now **rank before the cut**: options by finalStatus → stockScore
+  → contractScore (scan.py:1875-1901), stocks by `_shortlist_rank_key` (stock_scan.py:477-482,
+  :1633-1651). Every cut name goes into `rejected` as `Shortlist cap: …`. The caps stay as they are
+  (options 50, the clamp; stocks 600, no clamp). A scan with `shortlist_truncated: true` is flagged
+  `truncated`, and a C-pair with either side truncated is excluded from its rule (§3, §4.10).
+- **R3 The direction gate has two outcomes.** A *measured* trend below the floor
+  (`direction_conviction:`) and an *unmeasured* trend (`direction_conviction_unmeasured:`, decisions
+  P3A-UNMEASURED-TREND-REMOVE-2026-09-25 and P3C-UNMEASURED-TREND-NO-SCHEMA-FIELD-2026-09-25). Moving
+  the floor changes only the first, so the floor rule's rate counts measured removals over measured
+  entrants. Two details:
+  - The stock pipeline has separate `failed_direction` and `failed_direction_unmeasured` counters.
+  - The options `failed_direction` counter **adds both together** (scan.py:1837-1842), so options
+    rows are split by the reason prefix (§6, §7).
+- **R4 Position bodies follow today's defaults.** ec712489 aligned `PARAM_DEFAULTS_POSITION` with
+  `scoring_rules.yaml`: `additive_adx_pass` went from 20 to 25. The 09-18 Position bodies carry the
+  drifted 20. v6 Position bodies use 25, and the check becomes "Position override values equal
+  `PARAM_DEFAULTS_PER_HORIZON.Position`". 09-18 is a reference row only (decision (1)), so nothing
+  depends on matching it (§3, §9).
+- **R5 Proof that the override was applied.** `ScanResult.contract_rules` now records exactly the
+  contract overrides the validator applied (`effective_contract_overrides`, contract_validator.py:371-383;
+  commit 062f0e4, STEP6-SCAN-CONTRACT-RULES). The runner checks it on every options scan:
+  - base scans must show `{}`;
+  - C5 must show `min_stock_score: 35`;
+  - C6 must show the four liquidity keys at 0;
+  - `null` or a mismatch flags `override_not_applied`.
+  This replaces the indirect `liquidityDetail` inference as the primary check (§4.11, §6).
+- **R6 Live config check.** `GET /api/config/health` (DOCC-4) compares each loader's live cached value
+  with the file on disk for scoring_rules, risk_rules and contract_rules, and returns the backend
+  `pid`. The runner reads it at start and at end (§4.3):
+  - at start: `ok: false`, or a non-empty `stale` naming a measured file, stops the run;
+  - at end: a stale measured file flags `INVALID:config_changed_during_run`;
+  - a changed `pid` flags `INVALID:backend_restarted`.
+  This closes part of v5's gap ("the runner cannot see what the running backend loaded"). It covers
+  config only; for code, the restart remains a checklist step.
+- **R7 min_mult formula.** The ramp has been two-sided since 2026-09-19:
+  `mult = m + (1 − m) · clamp((c + F) / 2F, 0, 1)` (`scoring/conviction_sizing.py` `conviction_mult`).
+  The table uses this formula. **Options cards are not conviction-sized**: only the auto-trader's
+  fire applies the ramp. So the options column is labelled "what the fire's ramp would give from the
+  scan's reading", not a card size (§6).
+- **R8 Line references** re-pinned to 4c52000 throughout.
+- **R9 Logged, not MEAS scope.** Step 3's `min_stock_score` (stocks section, default 35 on every
+  horizon) is not stripped by `resolveOptionsScanRequest.ts`. After a user edits it, an options scan
+  posts it in `overrides`, and the validator applies it as its hard floor
+  (`_CONTRACT_OVERRIDES["min_stock_score"]`). The field's hint says "the Options scan does not read
+  it". The MEAS bodies do not send the key, so O-scans measure the YAML 55. The defect goes into
+  `open_questions`.
 
 Package: **MEAS** (docs/superpowers/plans/2026-09-25-work-packages.md, section "MEAS").
 Decision implemented: BACKLOG-DECISIONS-2026-09-25, Q20 + Q28. This session prepares exact scan
@@ -37,7 +99,7 @@ Owned files (all under `docs/superpowers/`, none of them app code or config):
 
 No app code, no `backend/config/*.yaml`, no tests in `backend/tests` or `frontend/`.
 
-## 1. Re-check of the 9 backlog entries against current code (main 91e6725)
+## 1. Re-check of the 9 backlog entries against current code (main 91e6725; v6: still open at 4c52000, as are the entries' own evidence lines below)
 
 | # | Entry (opening words) | Still open? | Evidence now |
 |---|---|---|---|
@@ -56,7 +118,7 @@ Kenneth has run the days and answered the proposal table.
 
 Side answer for the rescued entry "FOUND 2026-09-09 … 'Min option volume' … set to 0 DO NOT reach
 validate_contract" (not a MEAS entry): scan C6 below sends `min_volume: 0` / `min_open_interest: 0`
-as body `overrides`, which `contract_validator.py:335-343` maps. If C6 still shows
+as body `overrides`, which `contract_validator.py:319-364` (`_CONTRACT_OVERRIDES`) maps. If C6 still shows
 `volume_too_low`, the backend drops the key. If not, any loss is in the UI. The runner records this;
 it does not fix it.
 
@@ -68,20 +130,27 @@ it does not fix it.
 | Confidence gate `confidence_reject_below` 35 (Step-3 / settingsStore; applies to **both** directions) | C1 (bearish) and C1b (bullish), each paired with its base, plus "would clear the gate" counts from S-scan reject strings | proposal |
 | `min_stock_score` 55 (contract_rules.yaml hard_reject; **both** directions) | C5 (bearish) and C5b (bullish): override to 35, the stock gate's CAUTION floor (PASS is 55, scoring_rules.yaml:9-11) | proposal |
 | `min_volume` 50 / `min_open_interest` 200 | C6: hard floors **and** the soft preferred bands at 0 | report only |
-| `regime_sizing.min_mult` 0.3 | Per-candidate `sentiment.conviction_pct` / `stability` on stock results (what `_process_stock` sizes with) and on options results (built around scan.py:600). Candidates with no sentiment are tabulated separately (`sizing_basis` `floor:unmeasured`). The market `/api/regime` is used only to classify the day. | table, keep 0.3 |
+| `regime_sizing.min_mult` 0.3 | Per-candidate `sentiment.conviction_pct` / `stability` on stock results (what `_process_stock` sizes with) and on options results (built around scan.py:655-672). **[v6 R7]** The options card is not conviction-sized, so this is what the auto-trader's ramp would read, not a card size. Candidates with no sentiment are tabulated separately (`sizing_basis` `floor:unmeasured`). The market `/api/regime` is used only to classify the day. | table, keep 0.3 |
 | `iv_rank_pass_max` / `iv_rank_caution_max` per horizon, `preferred_iv_rank_max` 55 | Rank-basis **primary** rows from O1–O4 | proposal |
 | `max_iv_rank` 70 (hard ceiling) | Not measurable from survivors. Only the `iv_rank_too_high` truncation count is reported. | report only |
-| `iv_rank_threshold` 50 (rank-basis credit/debit line) | `stock_iv` of rank-basis primary rows from O1–O4: the ATM figure `choose_primary` compares (scan.py:680-686, :1132; spread_builder.py:118-121) | **report only** (Kenneth, decision (2)) |
+| `iv_rank_threshold` 50 (rank-basis credit/debit line) | `stock_iv` of rank-basis primary rows from O1–O4: the ATM figure `choose_primary` compares (scan.py:406-407, `choose_primary`; spread_builder.py:96) | **report only** (Kenneth, decision (2)) |
 | `ivAbsThreshold` 50 (absolute-basis credit/debit line) | `stock_iv` of **A1/A2** primary rows with `stock_basis == "absolute"` (percentile source OFF). The O-row `detail_iv_abs` is reported only as a labelled proxy (it is the picked contract's own IV, not the ATM figure). | **report only** (Kenneth, decision (2)) |
 
 ## 3. The scan set (per measurement day, fixed order)
 
-**Body sources.** The Position bodies are the 2026-09-18 bodies, with one change: the shortlist
-cap is raised so no candidate is dropped silently. The cap cuts `candidates[:N]` in universe order,
-after every gate (scan.py:1680-1689, stock_scan.py:1371-1373); the dropped names are not in
-`rejected`, and 09-18's bullish results were cut 18→10, 13→10 and 12→10.
+**Body sources [v6 R2, R4].** The Position bodies are the 2026-09-18 bodies with two changes. The
+first is `additive_adx_pass: 25`, today's Position default, which matches `scoring_rules.yaml`
+(09-18 sent the drifted 20). The second is a raised shortlist cap. The cap runs after every gate and
+after a rank (scan.py:1875-1901; stock_scan.py:1633-1651), and every cut name is listed in `rejected`
+as `Shortlist cap: …`. The default cap of 10 would still cut real survivors: 09-18's bullish results
+were cut 18→10, 13→10 and 12→10. The pairs need the whole survivor set, so:
 - Options set `overrides.shortlist_max_candidates: 50`, the backend clamp.
-- Stocks set `shortlist_max_candidates: 600`.
+- Stocks set `shortlist_max_candidates: 600` (no clamp on this path).
+- Any result with `shortlist_truncated: true` is flagged `truncated` (§4.10).
+
+No body sends `min_stock_score`, neither in options `overrides` nor as the stock top-level field.
+O-scans therefore measure `contract_rules.yaml`'s 55, which is what scheduled scans and the
+auto-trader use. The stock top-level field defaults to `None` (off) (R9).
 
 **Swing bodies** are rebuilt from `PARAM_DEFAULTS_PER_HORIZON.Swing`
 (`frontend/lib/executionParamDefaults.ts`) for the keys the 09-18 bodies override:
@@ -139,6 +208,7 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
 - `GET /api/regime?horizon=position&lookback=20&threshold=0.02&smoothing=0` at start and end. The
   daily OMM does not depend on `horizon`, so one call is enough.
 - `git rev-parse HEAD`, the freeze tag and the commit it points at (§4.0)
+- `GET /api/config/health` at start and at end (§4.3) [v6 R6]
 - config (§4.3): sha256 of every `backend/config/*.yaml` except `local_credentials.yaml`, at start
   and end. A **copy** is kept only of the git-tracked ones.
 - per-scan start/end, in UTC and ET
@@ -147,18 +217,23 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
 
 0. **Code freeze (Kenneth, decision (1)).**
    - No measurement day runs before P3a is merged to main. Kenneth then tags that main commit
-     `meas-freeze-1` and runs every day against it.
+     `meas-freeze-1` and runs every day against it. [v6] P3a merged on 2026-09-25, and the tag does
+     not exist yet: Kenneth creates it on the main commit he chooses for day 1.
    - The runner takes `--freeze-tag` (default `meas-freeze-1`) and stops if the tag does not exist.
      It also stops if any **frozen path** differs from the tag in the working tree:
      `git diff --name-only <tag> -- <frozen paths>` must be empty, which covers uncommitted edits
      too.
-   - The frozen paths are:
-     - the gate code: `backend/app/routers/scan.py`, `backend/app/routers/stock_scan.py`,
-       `backend/app/scoring/stock_scorer.py`, `backend/app/scoring/contract_validator.py`,
-       `backend/app/scoring/signal_confidence.py`, `backend/app/services/strategy_engine.py`,
-       `backend/app/services/strategy_backtest.py`, `backend/app/data/market.py`;
+   - The frozen paths are [v6 R1]:
+     - **all of `backend/app/`**, the whole directory rather than a list of modules. The gate
+       logic now spans `routers/scan.py`, `routers/stock_scan.py`, `scoring/*`, `services/config_loader.py`
+       (the floor resolver), `scoring/conviction_sizing.py`, `services/money_config.py`,
+       `dte_window.py`, `spread_builder.py`, `data/market.py` and the strategy services. A list is how
+       v5 missed several of these;
      - the thresholds under measurement: `backend/config/scoring_rules.yaml` and
        `backend/config/contract_rules.yaml`. This replaces v3's "equal to HEAD".
+   - `strategy_params.yaml` is **not** frozen, because strategy adopts and tuning rewrite it at
+     runtime. Its sha256 is recorded in each day's manifest, and S-scan rules pool only days with the
+     same hash (§5).
    - On a mismatch the runner lists the files and tells Kenneth to show the diff to a session. It
      never suggests `git checkout`.
    - The manifest records the tag name and the commit it points at. Only days with the **same tag
@@ -167,7 +242,7 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
      the backend after any `git checkout` / `git pull`, before `core`. That step is a checklist
      item.
 1. **Auto-trader disarmed.** `POST /api/scan` fires an armed auto-trade on a PASS candidate
-   (scan.py:1816-1845). The runner reads `/auto-trade/status` right before **every** options scan
+   (scan.py:2035-2046, `maybe_fire_on_scan`). The runner reads `/auto-trade/status` right before **every** options scan
    and stops if `armed` is not false. Stock scans never fire it.
 2. **No scheduled scans, no UI scans [r3 wording].**
    - The old continuous scan is retired. `main.py` migrates it into a scan-schedule entry, so the
@@ -189,11 +264,19 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
    - **End-of-run check:** if `scoring_rules.yaml`, `contract_rules.yaml` or `strategy_params.yaml`
      (read by the stock scans) changed during the run, the day is flagged INVALID. Changes to the
      other files are recorded, not flagged.
+   - **Live config [v6 R6].** Before O1, the runner reads `GET /api/config/health` and stops if `ok`
+     is false or `stale` names `scoring_rules.yaml` or `contract_rules.yaml`. The endpoint compares
+     each loader's cached live value with the file on disk, so this catches a YAML edited after the
+     backend started and never reloaded. At the end of `core`, the runner reads it again:
+     - a stale measured file flags `INVALID:config_changed_during_run`;
+     - a `pid` different from the start flags `INVALID:backend_restarted`.
+     The A-block reads its own start `pid` after its restart. The endpoint sees config only, so the
+     restart after a checkout stays a checklist step for code.
 4. **One rank vendor, the right IV source per block [r3: degraded].** A source whose status is
    `connected` or `degraded` counts as **up**. The data-sources router downgrades a connected probe
    to `degraded` under a tripped circuit, and the source is still serving.
    - **Before O1:** `tastytrade` must be up, and `ibkr` must not be up. IBKR ranks override
-     tastytrade (market.py:1504-1511), so a mixed-vendor day is not allowed. A `degraded`
+     tastytrade (market.py:1539-1558), so a mixed-vendor day is not allowed. A `degraded`
      tastytrade is recorded as a flag on the day.
    - **After each options scan:** the runner reads each candidate's
      `stockBreakdown.volDetail.iv_basis`. When `stockBreakdown.volDetail.iv_rank` is null, the
@@ -208,7 +291,7 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
    - Run `strip-creds --out <path outside the repo>` with the backend venv's Python, which has
      PyYAML. It copies `backend/config/local_credentials.yaml` minus `tastytrade_paper` and
      `tastytrade_live`, and keeps every other slot, including both Tradier slots (live takes
-     precedence, market.py:40-45). It refuses a path inside the repo and prints the slots it kept.
+     precedence, market.py:40-43). It refuses a path inside the repo and prints the slots it kept.
    - Kenneth stops the backend and the IBKR gateway. In the **same** cmd window he runs
      `set BAMENDJOU_CREDS_PATH=<path>` and then `start-backend.bat` (`setlocal` inherits the
      variable).
@@ -230,7 +313,7 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
     - An options result whose `state` is not `COMPLETED` (`PARTIAL` or `FAILED`) is flagged
       `state:<value>`.
     - Stock results carry no `state`. Their per-symbol exceptions land in
-      `pipeline.other_rejected`, the residual bucket (stock_scan.py:393-396). Any
+      `pipeline.other_rejected`, the residual bucket (`classify_stock_rejection`, stock_scan.py:505-540). Any
       `other_rejected > 0` is flagged `errors:<n>`. More than 2% of `scanned` is flagged
       `INVALID:errors`.
     - **A base scan** (O1–O4, S1–S4) with `state:PARTIAL`, `state:FAILED` or `INVALID:errors`
@@ -238,14 +321,35 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
       and writes `day_invalid` into the manifest.
     - **A C-scan** with such a flag is excluded from its rule, and so is its pair on that day.
     - **An A-scan** with such a flag is excluded from the IV report.
+    - **Truncated [v6 R2].** A result with `shortlist_truncated: true` is flagged `truncated`. A base
+      with the flag stays valid, because the cut names are listed in `rejected`. A C-pair where
+      either side is truncated is excluded from its rule: an added name could be one the cap cut on
+      the other side.
+11. **Overrides reached the validator [v6 R5].** Every options result carries
+    `contract_rules`, the contract overrides the validator applied. `effective_contract_overrides`
+    (contract_validator.py:371-383) reads the same table as `validate_contract`, so the recorded
+    value cannot drift from the applied one. The runner checks:
+    - O1–O4 and A1/A2 must show `{}` (no body sends a contract key);
+    - C5 / C5b must show exactly `{"min_stock_score": 35}`;
+    - C6 must show exactly `min_volume`, `min_open_interest`, `preferred_volume_min` and
+      `preferred_oi_min`, all 0;
+    - C1 / C1b must show `{}` (their change is the top-level `confidence_reject_below`).
+
+    A `null` or any other value flags `override_not_applied:<scan>`, and that pair is excluded
+    from its rule.
 
 ## 5. Days (Q28, as amended by Kenneth's decision (1) and (2))
 
 - **Valid day:**
   - all eight base scans O1–O4 and S1–S4 ran on the freeze tag;
   - none of them is INVALID or `late_for_comparison`;
-  - the manifest has no `day_invalid` and no `INVALID:config_changed_during_run`.
+  - the manifest has no `day_invalid`, no `INVALID:config_changed_during_run` and no
+    `INVALID:backend_restarted` [v6 R6].
 - At least **two valid days**, on different calendar days and the same tag commit.
+- **[v6 R1]** Rules that read S-scans (the floor rule, the S-scan "would clear" counts) pool only
+  days whose start `strategy_params.yaml` sha256 is the same. If the valid days do not share a hash,
+  those rules report per day and propose nothing ("not enough data: strategy params changed between
+  days"). O-scan rules are unaffected, because the options path reads no strategy params.
 - **2026-09-18 is a reference row only.** It ran before the freeze, on Position parameters for
   Swing, with no C- or A-scans. It is shown in RESULTS-SHEET.md as a labelled reference line next
   to each rule. It **does not count** toward the two days, and it **feeds no proposal rule**.
@@ -292,7 +396,7 @@ candidate, and its **base** rejection is the gate that was varied:
   - C1b (bullish): `breakdown.fundamentals` ≥ `rejectBelow` (30).
   - C1 (bearish): `breakdown.fundamentals` ≤ `rejectAbove` (80).
   - A missing fundamentals score passes the filter. The gate is skipped when there are no
-    fundamentals (stock_scorer.py:1150).
+    fundamentals (stock_scorer.py:1207).
   - Safety-flag rejects are not visible in `breakdown`. They cannot be admitted by C1 either, so
     they cannot produce a false attribution.
 - C5 / C5b: the base reason contains `stock_score_below_threshold` **and** the added name's
@@ -312,11 +416,22 @@ and `contractScore` ≥ the median `contractScore` of that day's base candidates
 
 - **Bearish direction floors [G5].**
   - The trend score takes only the values L = {0,15,30,40,45,55,60,70,85,100}
-    (stock_scorer.py:268-292, with the bodies' 40/30/30 maxima). A floor acts as the smallest
+    (`_trend_additive`, stock_scorer.py:296-370, with the bodies' 40/30/30 maxima; re-verified at 4c52000). A floor acts as the smallest
     L-value at or above it.
-  - On each valid day and horizon, compute the bearish reject rate (`direction_gate` rejected /
-    entered) and the bullish rate on the same day.
-  - A day whose bearish `entered` is 0 for that horizon gives **no rate**. It does not count for
+  - On each valid day and horizon, compute the bearish reject rate and the bullish rate on the same
+    day, from the S-scans. **[v6 R3]** Only a *measured* trend reacts to the floor, so:
+    - rate = `failed_direction` / (`entered` − `failed_direction_unmeasured`);
+    - `entered` = `scanned − failed_history − failed_score`. The gate order is history → score
+      (status REJECT, then the optional `min_stock_score` drop, which also counts as
+      `failed_score`) → direction. Both were re-verified at stock_scan.py:1247-1255;
+    - `failed_direction_unmeasured` is always shown next to the rate. It is data quality (a short
+      MA history, a missing benchmark), not a floor effect.
+    - The O-scans' direction removals are information only, as in v5. Their `failed_direction`
+      counter adds measured and unmeasured together (scan.py:1837-1842), so they are split by the
+      reason prefix: `direction_conviction:` is measured, `direction_conviction_unmeasured:` is
+      unmeasured. Options drop an unmeasured trend before the chain fetch (scan.py:735-744), and a
+      measured one after contracts.
+  - A day whose bearish measured entrants (`entered − failed_direction_unmeasured`) are 0 for that horizon gives **no rate**. It does not count for
     that horizon, and it is shown as "no names reached the gate".
   - Fewer than 2 counted days for a horizon means **"not enough data"** for that horizon.
   - Otherwise the rules are evaluated **in this order, and the first that holds decides**:
@@ -342,14 +457,19 @@ and `contractScore` ≥ the median `contractScore` of that day's base candidates
   spread. C6 also shows whether the overrides reached the validator. Both of these must hold:
   - no C6 `rejected` reason contains `volume_too_low` or `open_interest_too_low`;
   - every C6 candidate's `contractBreakdown.liquidityDetail.preferred_volume_min` and
-    `preferred_oi_min` are 0 (contract_validator.py:415-420 echoes the effective values).
+    `preferred_oi_min` are 0 (contract_validator.py:454-455 echoes the effective values). **[v6 R5]** These two conditions are now secondary. The primary proof is §4.11's `contract_rules` check.
 
   Either failing flags `override_not_applied:liquidity`. This answers the rescued "Min option
   volume set to 0" entry on the backend side.
 - **min_mult 0.3.** For each valid day and direction, and separately for options and stock
   candidates, report:
   - the distribution of `sentiment.conviction_pct` and `stability`;
-  - each candidate's multiplier under min_mult ∈ {0.2, 0.3, 0.4} with `full_conviction_pct` 40;
+  - each candidate's multiplier under min_mult ∈ {0.2, 0.3, 0.4} with `full_conviction_pct` 40,
+    computed with the shipped two-sided ramp **[v6 R7]**:
+    `m + (1 − m) · clamp((c + 40) / 80, 0, 1)` (`conviction_sizing.conviction_mult`). A candidate
+    at conviction 0 gets 0.65 under m = 0.3, not the floor;
+  - for options candidates, the multiplier is labelled "the fire's ramp on the scan's reading".
+    Options cards are not conviction-sized; only an armed auto-trade fire applies the ramp;
   - the count of candidates with no sentiment, which are sized at the floor.
 
   The proposal is **keep 0.3**. The table is shown for Kenneth's own choice, only under the
@@ -396,10 +516,15 @@ A session (any machine) that has the new `scans/<date>/` folder does the followi
    On Windows the interpreter is `.venv\Scripts\python.exe`, and `PYTHONUTF8=1` must be set:
    iv_basis_analysis.py reads the file with the platform encoding.
 2. Add one `scan-funnel.jsonl` row per scan, using PROTOCOL.md § "Derived rows".
-   - Stock `direction_gate.entered = scanned − failed_history − failed_score`.
+   - Stock `direction_gate.entered = scanned − failed_history − failed_score`;
+     `direction_gate.rejected = failed_direction` (measured only);
+     `direction_gate.unmeasured = failed_direction_unmeasured` [v6 R3].
+   - Options direction rows: `rejected` counts the reasons starting `direction_conviction:`, and
+     `unmeasured` counts those starting `direction_conviction_unmeasured:`. Never read the
+     `failed_direction` counter for options, because it adds the two together [v6 R3].
    - Score-gate causes come from each score-gate reject's breakdown:
      - confidence below `confidence_reject_below`. A `breakdown.confidence` of **0 reads as
-       "0 or None"** [r3]: the scorer writes 0 for a missing confidence (stock_scorer.py:1128),
+       "0 or None"** [r3]: the scorer writes 0 for a missing confidence (stock_scorer.py:1183-1185),
        so a 0 goes to **unknown**, never to "confidence";
      - fundamentals outside the direction's reject bound (bullish < `rejectBelow`, bearish >
        `rejectAbove`);
@@ -432,12 +557,22 @@ days are run and the proposals are answered.
 - Body keys must be a subset of `model_fields`.
 - Override keys must be a subset of: the Step-3 keys, the contract-validator override keys, and
   `shortlist_max_candidates`.
-- Position bodies equal 09-18 apart from the shortlist cap.
+- Position override values equal `PARAM_DEFAULTS_PER_HORIZON.Position` (so `additive_adx_pass` is
+  25), and the other body fields equal 09-18's, apart from the shortlist cap [v6 R4].
+- No body carries `min_stock_score`, in `overrides` or at the top level [v6 R9].
 - Swing override values equal `PARAM_DEFAULTS_PER_HORIZON.Swing`.
 
 **Runner against a fake HTTP server and a throwaway git repo.** The tests cover:
 - the happy path;
 - every stop and flag in §4, including:
+  - [v6 R1] a change to a `backend/app/` file outside v5's eight modules (for example
+    `services/config_loader.py`) must stop the run;
+  - [v6 R6] config health: `ok: false` at start stops the run; `stale` naming a measured file stops
+    it at start and flags INVALID at end; a `pid` change flags `INVALID:backend_restarted`;
+    `stale` naming only `risk_rules.yaml` is recorded, not flagged;
+  - [v6 R5] `contract_rules`: `{}` on a base passes; `null` on a base flags; C5 with
+    `{"min_stock_score": 35}` passes; C5 with `{}` flags; C6 missing one of its four keys flags;
+  - [v6 R2] `shortlist_truncated: true` flags `truncated` and excludes the pair;
   - the freeze tag: missing, a frozen file changed and committed, a frozen file with an
     uncommitted edit, and a non-frozen file changed, which must pass;
   - `degraded` counted as up, for both the tastytrade requirement and the IBKR refusal;
