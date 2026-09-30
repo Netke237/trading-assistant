@@ -94,3 +94,4 @@ Plan round → build + mutation checks → code round → state record → merge
 **Round 1 (1 gate-level, accepted):** 1 → §1.4 wording, §2.3 `sdir` passed to `describe_match`, test 4b, event
 stamp stated as residual in §2.
 **Round 2 (shrinking target: the round-1 fix) — ZERO GATE-LEVEL FINDINGS. Plan stage closed; build next.**
+**Code round 3 (code round 1) over 285d88e..07556fc backend/ — ZERO GATE-LEVEL FINDINGS. Phase clean; merge on Kenneth's approval.**
