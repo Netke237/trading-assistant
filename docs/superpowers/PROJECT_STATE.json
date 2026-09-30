@@ -2963,6 +2963,11 @@
       "id": "MEAS-G1-FIX-A-ROUND-6-2026-09-30",
       "q": "MEAS plan round 5 NOT CLEAN on one gate-level finding (G1: a truncated options base, ranked before the cut since v6, feeds an IV-censored sample into the IV rank-cut proposals). Fix (a) narrow: a truncated base contributes no rows to the IV rules and is named in the IV result's not-used list; (b) broad: exclude a truncated O-base from every rule reading candidate rows. Run round 6?",
       "a": "Kenneth, 2026-09-30: approved option 1 -- apply fix (a) and run ONE more confirmation round (plan round 6) scoped to the fix delta only; if not clean, stop and report to Kenneth again. To be done in a NEW session (claim MEAS-MARKET-DATA-MEASUREMENT, continue on claude/bold-ride-7nf8wj)."
+    },
+    {
+      "id": "MEAS-ROUND6-FIX-AND-CLOSE-PLAN-2026-09-30",
+      "q": "MEAS plan round 6 NOT CLEAN on one gate-level finding in fix (a)'s own wording: the section 6 day-floor sentence counts a day toward >= 2 days if an untruncated O-scan contributed any row (any IV basis), so all rank rows could come from one day. Proposed fix: count a day only if it contributed a deduplicated rank row (stock_basis == \"rank\"). Round 7, or apply the fix and close the plan stage (6 rounds, past the hard cap of 3)?",
+      "a": "Kenneth, 2026-09-30: 'ok lets apply the fix' (answering the recommendation: apply the one-line fix and CLOSE THE PLAN STAGE, no round 7). Next session: apply the fix to section 6, fold cheap below-gate round-6 items into the build, then build the runner + request bodies to plan v6 and run code rounds until clean; merge only with Kenneth's approval."
     }
   ],
   "pending_kenneth": [
