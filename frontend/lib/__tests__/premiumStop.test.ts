@@ -21,6 +21,7 @@ import {
 } from '../premiumStop';
 import { premiumStopPctFromDollars } from '../barrierRace';
 import { scanPortfolio, type AlertPosition } from '../alertEngine';
+import pythonRound4Table from './fixtures/python_round4.json';
 
 // ── The resolver ────────────────────────────────────────────────────────────
 
@@ -409,8 +410,7 @@ describe('premiumStopDollarBounds', () => {
 
 // ── pythonRound4: the 4dp rounding the backend stores (P2-22) ──────────────
 describe('pythonRound4', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const table: [number, number][] = require('./fixtures/python_round4.json');
+  const table = pythonRound4Table as [number, number][];
 
   it('matches Python round(x, 4) for every row of the generated table', () => {
     expect(table.length).toBeGreaterThan(5000);
