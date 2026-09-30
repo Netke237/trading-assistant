@@ -1,4 +1,4 @@
-# CONTRACT-LIQUIDITY-DTE — plan (r4: round-3 findings fixed; NOT audited clean; nothing built)
+# CONTRACT-LIQUIDITY-DTE — plan (r5: round-4 findings fixed; NOT audited clean; nothing built)
 
 - **Phase:** `CONTRACT-LIQUIDITY-DTE` (PROJECT_STATE.json). Status `not_started`.
 - **Branch:** `claude/contract-liquidity-dte` (from `origin/main` at `599b9da2`).
@@ -110,7 +110,7 @@ position 148 (32), quarterly 268 (43), semi-annual 38 (8).
    quarterly and then collapses; volume is low everywhere. A merged flag (fix 2) does the work without
    inventing a DTE curve.
 
-## 3. Design (r4 — fixes 1 and 2 only; fix 3 split out)
+## 3. Design (r5 — fixes 1 and 2 only; fix 3 split out)
 
 **Fix 3 moved to its own phase** on 2026-09-30, by Kenneth's call (decision
 `CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30`). It is the off-hours "no live quote" treatment; see
@@ -126,7 +126,8 @@ fabricated-spread rows survive.
 - The blast radius is the scan and the Step 6 display. Auto-trade does not inherit the scan's grade
   (§1 item 5), and its own off-hours gate is NO-LIVE-QUOTE's job.
 - This residual is listed first on NO-LIVE-QUOTE's starting list. Kenneth can order NO-LIVE-QUOTE to land
-  first if he doesn't want the window at all.
+  first if he doesn't want the window at all. The two phases have no code dependency in either direction,
+  so neither lists the other in `depends_on`.
 
 **Fix 1 — volume is no longer a hard reject by default (FR-25; Q1 (b)).**
 - Default `min_volume` goes from 50 to 0:
@@ -147,8 +148,11 @@ fabricated-spread rows survive.
   - So for a user who opts into a floor, "vol 0 / OI ≥ 200 passes, vol 3 fails" stays as it is today. That
     is a known, recorded residual that NO-LIVE-QUOTE revisits. At the default floor of 0 it disappears.
 - Step 3 (`step-3-direction/page.tsx:299-300`):
-  - the label becomes "Min option volume (0 = off)", and the hint says it is an optional hard floor, off
-    by default, because volume is scored softly under Preferred Liquidity;
+  - the label becomes "Min option volume (0 = off)";
+  - the hint says it is an optional hard floor, off by default, because volume is scored softly under
+    Preferred Liquidity;
+  - the hint also says the figure is **session-to-date** volume (§1 item 3), not a full-day total, so with
+    a floor set, results change with the time of day;
   - the `preferred_volume_min` hint (:319), which calls it "the hard 'Min option volume' floor above", is
     reworded to match;
   - the field, its `min: 0` and `CONTRACT_OVERRIDE_KEYS` stay.
@@ -156,7 +160,7 @@ fabricated-spread rows survive.
   without the key gets the new default of 0:
   - saved search profiles (browser);
   - a scan's stored `contract_rules`;
-  - scheduled-scan entries' frozen `resolved_request` (`scan_schedule_scheduler.py:139`).
+  - scheduled-scan entries' frozen `resolved_request` (`scan_schedule_scheduler.py:138`).
 
   Step 3's `scanOverrides` holds only user-edited keys and is not persisted.
 - **Canonical profile seed (round 3, finding 5).** `docs/search-profiles/search-profiles-export.json` and the
@@ -166,11 +170,25 @@ fabricated-spread rows survive.
   - SemiAnnual `*_Restrictive_*` has 50;
   - the Baselines have none.
 
-  After fix 1, every Loose profile would be *stricter* on volume than its Baseline. So both seed files set
-  `min_volume: 0` on the six Loose profiles, and Restrictive stays as is. Profiles already imported into
-  the browser are **not** touched (settled in §6). Kenneth re-imports or edits them if he wants the new
-  Loose value. The seed's `.xlsx` twin (`Bamendjou_Options_Search_Profiles.xlsx`) is updated to match, or
-  if it isn't the source of truth, `docs/search-profiles/README.md` says so.
+  After fix 1, every Loose profile would be *stricter* on volume than its Baseline. So the seed changes,
+  all in one commit.
+  - **JSON and JS:** `min_volume: 0` on the six Loose profiles, and their `updatedAt` moves to the build
+    date, per the README's convention for edited profiles (`README.md:69-71`). The JS `RAW` string stays
+    byte-identical to the JSON. Restrictive and Baseline profiles are untouched.
+  - **The xlsx** mirrors the JSON; its legend says so. Update:
+    - the six Baseline rows' Min Volume, 50 → 0 (they show the app default);
+    - the six Loose rows' Min Volume, 20 → 0;
+    - the legend's "SemiAnnual_Restrictive keeps volume at the Baseline floor (50)" → "keeps an explicit
+      50; the Baseline floor is now 0 (off)";
+    - the legend's "flagged 'low_volume'" and "flagged 'low_open_interest'" → "flagged 'thin_liquidity'
+      (volume and open interest together count as one soft miss)";
+    - the legend's Min Volume row → "optional hard floor; 0 = off".
+  - **README.md:**
+    - `:23` "min volume 50 (the Baseline floor)" → "an explicit min volume of 50 (the Baseline floor is now
+      0, off)";
+    - `:125` "0.30/20/75" → "0.30/0/75".
+  - Profiles already imported into the browser are **not** touched (settled in §6). Kenneth re-imports or
+    edits them if he wants the new Loose value.
 - `min_open_interest` (200) and `max_bid_ask_spread_pct` (0.20) are unchanged. They remain the liquidity
   hard gates.
 
@@ -192,15 +210,18 @@ fabricated-spread rows survive.
 **Fix 4 — tests, mutations, docs.** Each test names its home file.
 
 *Backend, `backend/tests/test_contract_validator.py`* — **fixture rules (round 3, findings 2 and 3).**
-- A new helper builds a gradeable contract. It never uses `_base_contract`'s literal expiry `2026-09-19`,
-  which is already past, and never uses 315C's real expiry (198 DTE, which `max_dte: 90` rejects).
-  - expiry: today + 40 days, computed;
+- Use the existing `_contract_with_expiry(40, …)` (`test_contract_validator.py:159-162`), not a new
+  helper. It gives:
+  - a computed expiry 40 days out, avoiding `_base_contract`'s past literal `2026-09-19` and 315C's real
+    198 DTE, which `max_dte: 90` rejects;
+  - bid 2.00 / ask 2.10 (4.9% spread);
   - delta 0.45;
-  - `iv_rank` 30, snake_case, with no `iv_basis`; `test_overrides._make_contract`'s camelCase `ivRank` is
-    never read, and a missing rank adds `no_iv_rank_data`;
-  - bid/ask with a spread under 8%;
-  - vol 500 and OI 2,000;
-  - `stock_score` 70.
+  - `iv_rank` 30, snake_case, with no `iv_basis`, so it is judged as absolute against 55.
+    (`test_overrides._make_contract`'s camelCase `ivRank` is never read, and a missing rank adds
+    `no_iv_rank_data`.)
+  - vol 500 and OI 2,000.
+
+  Call it with `stock_score=70`.
 - Every test overrides only the fields it is about, and asserts the **exact** `soft_flags` list, so a stray
   flag cannot hide.
 
@@ -217,10 +238,18 @@ The tests:
   OI < pref. No flag when both are at or above pref. `low_volume` and `low_open_interest` never appear.
 - **One axis costs one slot.** Base: vol 100 (< 200) **and** OI 500 (in [200, 1000)), so both liquidity
   sub-conditions are below preference.
-  - With the spread in (8%, 20%) → `soft_flags == ["thin_liquidity", "spread_elevated"]`, not rejected.
-  - Adding delta 0.25 (in [0.20, 0.30)) → three flags → `too_many_soft_failures`.
-  - Under mutation 3 the first case has three flags and is rejected, so it goes red independently of the
-    flag-name test.
+  - With the spread in (8%, 20%) → `soft_flags == ["thin_liquidity", "spread_elevated"]` and
+    `reject_reasons == []`.
+    - Assert **only** `reject_reasons`, never `status`: this contract's weighted score is 44 (liquidity
+      30, spread 0, delta 75, DTE 97, IV 45), below `caution` 45. So its status is "REJECT" by score,
+      with no reasons, on the unmutated code.
+  - Adding delta 0.25 (in [0.20, 0.30)) → three flags → `"too_many_soft_failures" in reject_reasons`.
+  - Under mutation 3, the first case has three flags and `"too_many_soft_failures" in reject_reasons`, so
+    it goes red independently of the flag-name test.
+- **Score unchanged.** vol 100 / OI 500 → `breakdown.liquidity_score == 30`, an exact value. This kills a
+  merge that also changed the arithmetic; today's assertions only check `== 100` / `< 100`.
+- **Exemption keeps its OI clause.** `min_volume=50`, vol 0, OI 150 → both `volume_too_low` and
+  `open_interest_too_low`. This kills a mutant that drops `oi >= min_open_interest` from the exemption.
   - Flag names verified: `spread_elevated` (`contract_validator.py:191`) and `delta_outside_preferred`
     (`:211`). The order follows the liquidity + spread + delta concatenation at `:452`.
 
@@ -232,11 +261,23 @@ The tests:
 - `:310-314` (`test_low_nonzero_volume_is_rejected`): re-pointed at `overrides={"min_volume": 50}`, so it
   pins that an explicit floor rejects vol 10.
 - Mutation 5 is killed by the `:296-300` test above.
-- Every positive `low_volume` / `low_open_interest` assertion (:153-191, :277-290) → `thin_liquidity`.
-  Tests named `…still_flags_low_volume` / `…low_open_interest` are renamed.
-- Every **negative** assertion (`:213-214`, `:231`, `:238`) → `"thin_liquidity" not in …`. Left on the old
-  names they would pass vacuously.
-- Stale docstrings (`:124` "passes default", `:152` "above the hard default (50)") are corrected.
+- Every positive `low_volume` / `low_open_interest` assertion (:158, :169, :191, :283, :290) →
+  `thin_liquidity`. Tests named `…still_flags_low_volume` / `…low_open_interest` are renamed.
+- Every **negative** assertion → `"thin_liquidity" not in …`, each checked to hold under fix 2. Left on the
+  old names they would pass vacuously:
+  - `:160`: vol 100 / OI 2000 with a lowered volume preference;
+  - `:171`: vol 2000 / OI 500 with `preferred_oi_min` 400;
+  - `:213-214`, `:231`, `:238`.
+- `:185-191` (`test_preferred_liquidity_overrides_do_not_mutate_cached_config`): the fixture moves to
+  `oi=2000`. With OI 500, `card_a` would carry `thin_liquidity` from OI alone, and the cache-mutation guard
+  would stop discriminating. After the change `card_a` has no `thin_liquidity` and `card_b` has it. This
+  test is added to mutation 3's kill list.
+- Docstrings:
+  - `:152` "above the hard default (50)" is corrected;
+  - `:195-201` "fails the DEFAULT hard floor on two axes (volume<50, oi<200)" → one axis (OI), matching
+    the `:204` edit;
+  - `:297` and `:311` mention the explicit `min_volume` 50 they now use;
+  - `:124` "passes default" stays true (vol 50 passes a floor of 0) and is left alone.
 - `test_min_volume_override_rejects_illiquid` (:123) keeps its meaning.
 
 *Backend, others:*
@@ -257,8 +298,8 @@ The tests:
    goes red.
 2. One horizon row in `executionParamDefaults.ts` goes back to 50. `executionParamDefaults.minVolume.test.ts`
    goes red.
-3. Restore two flags (`low_volume` + `low_open_interest`). The exactly-once test and the soft-slot test go
-   red.
+3. Restore two flags (`low_volume` + `low_open_interest`). The exactly-once test, the soft-slot test and
+   `test_overrides.py:185-191` go red.
 4. The merged flag only fires on volume. The OI-only case goes red.
 5. Delete the zero-volume exemption. The `min_volume=50`, vol 0 cases in `test_contract_validator.py` and
    `test_overrides.py:296-300` go red.
@@ -266,8 +307,12 @@ The tests:
 *Docs:*
 - CLAUDE.md needs no change.
 - `llm-contexts/22-contract-validation.md` (:113, :187-188, :221-223, :408-427) documents `min_volume: 50`,
-  the two old flags and "`volume=0` → `volume_too_low`". It is updated to the new default, the kept
-  exemption and `thin_liquidity`.
+  the two old flags and "`volume=0` → `volume_too_low`".
+  - The edit is limited to the volume floor, the kept exemption and `thin_liquidity`.
+  - Other stale content in that file is not part of this phase and is logged in `open_questions` at build:
+    - a `_score_liquidity` snippet without its `<= 0` guards;
+    - "4+ soft failures" where the code rejects at 3;
+    - a YAML block missing `max_iv_abs` / `preferred_iv_abs_max`.
 - The seed-profile files: see fix 1.
 - FR-25 is now satisfied for volume. FR-24's missing-quote clause is NO-LIVE-QUOTE's job.
 - `contract_rules.yaml` comments are updated as above.
@@ -342,6 +387,26 @@ hard floor; profiles are not rewritten.
   - `llm-contexts/22`;
   - the scheduled-entry carrier;
   - the line refs.
-- **Phase probe (PROJECT_STATE):** a defect marker on `min_volume: 50` in `contract_rules.yaml`. It goes
-  away when fix 1 is built. When the build lands, the phase gets a presence probe on `"thin_liquidity"` in
-  `contract_validator.py`, so fix 2 is pinned too.
+- Round 4 (r4): 1 high, 4 medium, 7 low, all fixed in r5:
+  - the `test_overrides.py` :160 / :171 / :185-191 negatives;
+  - the status-vs-reasons assertion;
+  - the seed xlsx and README cells;
+  - the PROJECT_STATE mechanics;
+  - reuse of `_contract_with_expiry`;
+  - the docstrings;
+  - `:138`;
+  - the exact liquidity score;
+  - the exemption OI mutant;
+  - the session-to-date hint;
+  - the `depends_on` contradiction;
+  - the `llm-contexts` scope.
+- **PROJECT_STATE mechanics.** `scripts/state.py` counts it as drift when a phase's status disagrees with
+  its probe (`state.py:717-728`).
+  - Today: status `not_started`, with a defect marker on `min_volume: 50\b` in `contract_rules.yaml`.
+  - The build commit that edits the YAML flips the status to `shipped_unaudited` in the **same** commit.
+    `in_progress` with the marker gone also counts as drift.
+  - A phase has one `verify`, and the build commit replaces it with a `present` probe on
+    `"thin_liquidity"` in `contract_validator.py`, which pins fix 2.
+  - Fix 1 is pinned by a new `already_shipped` entry, "min_volume default 0 (optional floor)", with its own
+    `present` probe on `min_volume: 0\b` in `contract_rules.yaml` (`state.py:763-770`).
+  - After a clean code round: `shipped`, with `audit_clean` true.
