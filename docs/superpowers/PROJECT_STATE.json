@@ -2958,6 +2958,11 @@
       "id": "MEAS-V6-REFRESH-ONE-ROUND-2026-09-30",
       "q": "MEAS plan v5 is past the final plan round (round 4, not clean) and 37 commits stale in the gate code it measures (main 91e6725e -> 4c52000: stock_scan.py +419, scan.py +259, contract_validator.py +142). Build on v5, refresh then build, refresh + one round, or park?",
       "a": "Kenneth, 2026-09-30: 'Refresh to v6 + 1 round'. Re-derive v5 against current main, write v6, run ONE confirmation adversarial round (plan round 5) reviewing the v6 delta and its interactions. If not clean, stop and report to Kenneth again; no further plan rounds without his call."
+    },
+    {
+      "id": "MEAS-G1-FIX-A-ROUND-6-2026-09-30",
+      "q": "MEAS plan round 5 NOT CLEAN on one gate-level finding (G1: a truncated options base, ranked before the cut since v6, feeds an IV-censored sample into the IV rank-cut proposals). Fix (a) narrow: a truncated base contributes no rows to the IV rules and is named in the IV result's not-used list; (b) broad: exclude a truncated O-base from every rule reading candidate rows. Run round 6?",
+      "a": "Kenneth, 2026-09-30: approved option 1 -- apply fix (a) and run ONE more confirmation round (plan round 6) scoped to the fix delta only; if not clean, stop and report to Kenneth again. To be done in a NEW session (claim MEAS-MARKET-DATA-MEASUREMENT, continue on claude/bold-ride-7nf8wj)."
     }
   ],
   "pending_kenneth": [
