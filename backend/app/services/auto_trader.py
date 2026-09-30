@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Literal, Optional, get_args
+from app.services.config_health import config_health
 from app.schemas import Direction, Horizon
 
 if TYPE_CHECKING:
@@ -488,6 +489,15 @@ def _load_scoring_doc() -> dict:
         )
     validate_money_blocks(doc)
     return doc
+
+
+# DOCC-4: the health poll compares this cache's live value with the file on disk.
+config_health.watch(
+    file="scoring_rules.yaml",
+    loader="auto_trader._load_scoring_doc",
+    fn=_load_scoring_doc,
+    project=lambda doc: doc,
+)
 
 
 def _load_scoring_config() -> dict:
@@ -3119,6 +3129,44 @@ class AutoTradeService:
                 f"vs limit {limit:.0f} — no further trades today"
             )
         return this_risk
+
+
+# DOCC-4: the two risk_rules readers on the class. Each wraps its WHOLE body
+# (read and parse included) in `except Exception` and returns a fallback, so
+# each projection copies that body and its except exactly, and `on_unreadable`
+# is the value the loader returns when the file cannot be read or parsed
+# (plan §2.2, round-3 finding 2). Stale only when the loader's own code on
+# today's disk would give something other than what the cache holds.
+def _project_risk_config(doc):          # loader: cfg.get("auto_trade", {}); except -> {}
+    try:
+        return doc.get("auto_trade", {})
+    except Exception:
+        return {}
+
+
+def _project_max_arm_age(doc):          # loader: int(cfg.get(...).get(..., 30)); except -> 30
+    try:
+        return int(doc.get("auto_trade", {}).get("max_arm_age_minutes", 30))
+    except Exception:
+        return 30
+
+
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="auto_trader.AutoTradeService._risk_config",
+    fn=AutoTradeService._risk_config,
+    project=_project_risk_config,
+    path="auto_trade",
+    on_unreadable={},
+)
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="auto_trader.AutoTradeService._max_arm_age_minutes",
+    fn=AutoTradeService._max_arm_age_minutes,
+    project=_project_max_arm_age,
+    path="auto_trade.max_arm_age_minutes",
+    on_unreadable=30,
+)
 
 
 # Module-level singleton

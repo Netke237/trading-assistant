@@ -107,30 +107,40 @@ def _check_closed(node: Mapping, spec: Mapping, path: str,
         _check_closed(child, child_spec, sub, errors)
 
 
-def _warn_unknown_top_level(doc: Mapping) -> None:
+def unknown_top_level_keys(doc: Mapping) -> list[tuple[object, str]]:
+    """Every top-level key of `doc` that nothing reads, as (raw key, hint).
+    Pure (DOCC-4 plan §2.5). The key is returned RAW -- the log below keys on
+    it -- and `hint` is " — did you mean 'x'?" or "". Shared by the
+    once-per-process log and the config health warnings."""
+    out: list[tuple[object, str]] = []
     for key in doc:
-        if key in KNOWN_TOP_LEVEL or key in _warned_top_level:
+        if key in KNOWN_TOP_LEVEL:
+            continue
+        close = difflib.get_close_matches(str(key), sorted(KNOWN_TOP_LEVEL), n=1)
+        out.append((key, f" — did you mean {close[0]!r}?" if close else ""))
+    return out
+
+
+def _warn_unknown_top_level(doc: Mapping) -> None:
+    for key, hint in unknown_top_level_keys(doc):
+        if key in _warned_top_level:
             continue
         _warned_top_level.add(key)
-        close = difflib.get_close_matches(str(key), sorted(KNOWN_TOP_LEVEL), n=1)
-        hint = f" — did you mean {close[0]!r}?" if close else ""
         logger.warning(
             "scoring_rules.yaml: unknown top-level key %r is ignored%s", key, hint,
         )
 
 
-def validate_money_blocks(doc: Mapping) -> None:
-    """Raise MoneyConfigError listing every problem with the four money blocks.
-
-    Rules (plan §2.1), all checked and reported together:
+def money_block_errors(doc: Mapping) -> list[tuple[str, str]]:
+    """Every problem with the four money blocks, as (dotted path, message).
+    Pure: no raise, no log (DOCC-4 plan §2.5). Rules (plan §2.1), all checked
+    and reported together:
       1. each of REQUIRED_BLOCKS is present (a null value counts as absent);
       2. each block, and each dict-marked subtree, is a mapping;
       3. each block carries `enabled` as a real bool;
       4. no unknown key at any depth -- checked whether or not the block is
          enabled, so a typo cannot sit unnoticed until it is switched on.
-    Unknown TOP-LEVEL keys only warn, once per process (rule 5).
     """
-    _warn_unknown_top_level(doc)
     errors: list[tuple[str, str]] = []
     for block in REQUIRED_BLOCKS:
         value = doc.get(block)
@@ -157,6 +167,14 @@ def validate_money_blocks(doc: Mapping) -> None:
                 f"({type(value['enabled']).__name__})",
             ))
         _check_closed(value, MONEY_BLOCK_KEYS[block], block, errors)
+    return errors
+
+
+def validate_money_blocks(doc: Mapping) -> None:
+    """Raise MoneyConfigError listing every problem `money_block_errors` finds.
+    Unknown TOP-LEVEL keys only warn, once per process (rule 5)."""
+    _warn_unknown_top_level(doc)
+    errors = money_block_errors(doc)
     if errors:
         raise MoneyConfigError(errors)
 

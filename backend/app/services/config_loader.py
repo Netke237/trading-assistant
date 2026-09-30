@@ -9,6 +9,8 @@ import math
 from functools import lru_cache
 from pathlib import Path
 
+from app.services.config_health import config_health
+
 _CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
 
 
@@ -17,6 +19,15 @@ def load_scoring_cfg() -> dict:
     """Return the parsed scoring_rules.yaml as a dict (cached after first load)."""
     import yaml
     return yaml.safe_load((_CONFIG_DIR / "scoring_rules.yaml").read_text())
+
+
+# DOCC-4: the health poll compares this cache's live value with the file on disk.
+config_health.watch(
+    file="scoring_rules.yaml",
+    loader="config_loader.load_scoring_cfg",
+    fn=load_scoring_cfg,
+    project=lambda doc: doc,
+)
 
 
 @lru_cache(maxsize=1)
@@ -30,6 +41,15 @@ def load_reward_risk_cfg() -> dict:
     return full["reward_risk"]
 
 
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="config_loader.load_reward_risk_cfg",
+    fn=load_reward_risk_cfg,
+    project=lambda doc: doc["reward_risk"],
+    path="reward_risk",
+)
+
+
 @lru_cache(maxsize=1)
 def load_exit_plan_cfg() -> dict:
     """Return risk_rules.yaml's exit_plan block (stop.atr_multiplier,
@@ -37,6 +57,15 @@ def load_exit_plan_cfg() -> dict:
     import yaml
     full = yaml.safe_load((_CONFIG_DIR / "risk_rules.yaml").read_text())
     return full["exit_plan"]
+
+
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="config_loader.load_exit_plan_cfg",
+    fn=load_exit_plan_cfg,
+    project=lambda doc: doc["exit_plan"],
+    path="exit_plan",
+)
 
 
 @lru_cache(maxsize=1)
@@ -51,6 +80,15 @@ def load_reprice_horizon_cfg() -> dict:
     return full["reprice_horizon"]
 
 
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="config_loader.load_reprice_horizon_cfg",
+    fn=load_reprice_horizon_cfg,
+    project=lambda doc: doc["reprice_horizon"],
+    path="reprice_horizon",
+)
+
+
 @lru_cache(maxsize=1)
 def load_first_passage_cfg() -> dict:
     """Return risk_rules.yaml's first_passage block (Monte Carlo simulation
@@ -58,6 +96,15 @@ def load_first_passage_cfg() -> dict:
     import yaml
     full = yaml.safe_load((_CONFIG_DIR / "risk_rules.yaml").read_text())
     return full["first_passage"]
+
+
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="config_loader.load_first_passage_cfg",
+    fn=load_first_passage_cfg,
+    project=lambda doc: doc["first_passage"],
+    path="first_passage",
+)
 
 
 # ── Direction-conviction gate ────────────────────────────────────────────────
@@ -107,6 +154,18 @@ _DIRECTION_CONVICTION_DEFAULTS: dict[str, dict[str, float | None]] = {
 _KNOWN_HORIZONS = frozenset({"swing", "intraday", "position"})
 
 
+class ConvictionConfigError(ValueError):
+    """A direction_conviction config fault, carrying `.path`: the dotted place
+    in scoring_rules.yaml it is about (DOCC-4 plan §2.5). A ValueError, so
+    every existing `except ValueError` still catches it; the message text is
+    unchanged. The config health check reads `.path` instead of parsing it out
+    of the message."""
+
+    def __init__(self, message: str, path: str):
+        super().__init__(message)
+        self.path = path
+
+
 def _walk_direction_conviction_paths(node, path: tuple[str, ...] = (), ancestors: frozenset[int] = frozenset()):
     """Yield the path (a TUPLE of key segments) of every `direction_conviction`
     key anywhere in the config, at any depth, through mappings and lists alike.
@@ -136,10 +195,11 @@ def _walk_direction_conviction_paths(node, path: tuple[str, ...] = (), ancestors
     """
     if isinstance(node, (dict, list, tuple)):
         if id(node) in ancestors:
-            raise ValueError(
+            raise ConvictionConfigError(
                 f"alias cycle in scoring_rules.yaml at {'.'.join(path) or '<root>'}: "
                 f"a YAML alias refers back to a mapping or list that contains it, "
-                f"so the direction_conviction blocks cannot be located reliably"
+                f"so the direction_conviction blocks cannot be located reliably",
+                path=".".join(path),
             )
         ancestors = ancestors | {id(node)}
     if isinstance(node, dict):
@@ -165,7 +225,7 @@ def _walk_direction_conviction_paths(node, path: tuple[str, ...] = (), ancestors
             yield path + ("direction_conviction",), None
 
 
-def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
+def _validated_direction_conviction_blocks(cfg: dict | None = None) -> dict[str, dict | None]:
     """Return {horizon_key: direction_conviction block or None} for the known
     horizons, having checked where every `direction_conviction` in the file
     actually sits.
@@ -193,13 +253,18 @@ def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
     This feature owns `direction_conviction`; it does not own the file. An
     unrecognised horizon carrying no `direction_conviction` is none of its
     business.
+
+    `cfg` defaults to the running `load_scoring_cfg()`; the config health check
+    passes the doc parsed from disk (DOCC-4).
     """
-    cfg = load_scoring_cfg()
+    if cfg is None:
+        cfg = load_scoring_cfg()
     horizons = cfg.get("horizons")
     if not isinstance(horizons, dict):
-        raise ValueError(
+        raise ConvictionConfigError(
             f"invalid scoring_rules.yaml: `horizons` must be a mapping of "
-            f"{sorted(_KNOWN_HORIZONS)}, got {type(horizons).__name__}"
+            f"{sorted(_KNOWN_HORIZONS)}, got {type(horizons).__name__}",
+            path="horizons",
         )
 
     legal_paths = {("horizons", h, "direction_conviction") for h in _KNOWN_HORIZONS}
@@ -214,12 +279,13 @@ def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
     # itself (a merge INSIDE the block is fine).
     for found_path, _block in _walk_direction_conviction_paths(cfg):
         if found_path not in legal_paths:
-            raise ValueError(
+            raise ConvictionConfigError(
                 f"misplaced direction_conviction block in scoring_rules.yaml: "
                 f"found at {'.'.join(found_path)}, but it must sit at one of "
                 f"{sorted('.'.join(p) for p in legal_paths)} — as written it is "
                 f"never read, so the gate silently keeps running on its previous "
-                f"threshold"
+                f"threshold",
+                path=".".join(found_path),
             )
 
     blocks: dict[str, dict | None] = {}
@@ -231,23 +297,26 @@ def _validated_direction_conviction_blocks() -> dict[str, dict | None]:
         # mapping means its whole scoring block is gone, which cannot be
         # benign; an unrecognised sibling key is left alone (see above).
         if not isinstance(horizon_cfg, dict):
-            raise ValueError(
+            raise ConvictionConfigError(
                 f"invalid scoring_rules.yaml: horizons.{key_text} must be a "
-                f"mapping, got {type(horizon_cfg).__name__}"
+                f"mapping, got {type(horizon_cfg).__name__}",
+                path=f"horizons.{key_text}",
             )
 
         block = horizon_cfg.get("direction_conviction")
         if block is not None and not isinstance(block, dict):
-            raise ValueError(
+            raise ConvictionConfigError(
                 f"invalid direction_conviction block for horizon {key_text!r}: "
-                f"expected a mapping of {_DIRECTION_CONVICTION_KEYS_TEXT}, got {block!r}"
+                f"expected a mapping of {_DIRECTION_CONVICTION_KEYS_TEXT}, got {block!r}",
+                path=f"horizons.{key_text}.direction_conviction",
             )
         if isinstance(block, dict):
             unknown = sorted(str(k) for k in set(block) - _DIRECTION_CONVICTION_KEYS)
             if unknown:
-                raise ValueError(
+                raise ConvictionConfigError(
                     f"unknown direction_conviction key(s) {unknown} for horizon "
-                    f"{key_text!r}: expected {_DIRECTION_CONVICTION_KEYS_TEXT}"
+                    f"{key_text!r}: expected {_DIRECTION_CONVICTION_KEYS_TEXT}",
+                    path=f"horizons.{key_text}.direction_conviction",
                 )
         blocks[key_text] = block
 
@@ -296,8 +365,16 @@ def load_direction_conviction_min_trend(direction: str, horizon: str) -> float |
     # block survived every Position and Intraday scan and only surfaced the
     # first time somebody ran a Swing scan.
     blocks = _validated_direction_conviction_blocks()
-    block = blocks.get(horizon_key)
+    return _resolve_min_trend(blocks.get(horizon_key), horizon_key, dir_key, horizon)
 
+
+def _resolve_min_trend(block: dict | None, horizon_key: str, dir_key: str,
+                       horizon: str) -> float | None:
+    """The value checks of `load_direction_conviction_min_trend`, shared with
+    `direction_conviction_value_errors` so the health check raises exactly the
+    message a scan raises. `horizon` is the caller's spelling (title case from
+    a request), used only in the message."""
+    path = f"horizons.{horizon_key}.direction_conviction.{dir_key}"
     if isinstance(block, dict) and dir_key in block:
         raw = block[dir_key]
     else:
@@ -309,23 +386,44 @@ def load_direction_conviction_min_trend(direction: str, horizon: str) -> float |
     # `true` would otherwise sail through float() as 1.0 and install a gate
     # that passes essentially everything.
     if isinstance(raw, bool):
-        raise ValueError(
+        raise ConvictionConfigError(
             f"invalid direction_conviction.{dir_key} for horizon {horizon!r}: "
-            f"{raw!r} is a boolean, expected a number in [0, 100] or null"
+            f"{raw!r} is a boolean, expected a number in [0, 100] or null",
+            path=path,
         )
     try:
         val = float(raw)
     except (ValueError, TypeError):
-        raise ValueError(
+        raise ConvictionConfigError(
             f"invalid direction_conviction.{dir_key} for horizon {horizon!r}: "
-            f"{raw!r} is not a number in [0, 100] or null"
+            f"{raw!r} is not a number in [0, 100] or null",
+            path=path,
         )
     if not math.isfinite(val) or not (0.0 <= val <= 100.0):
-        raise ValueError(
+        raise ConvictionConfigError(
             f"invalid direction_conviction.{dir_key} for horizon {horizon!r}: "
-            f"{raw!r} is outside the 0-100 range a trend score can take"
+            f"{raw!r} is outside the 0-100 range a trend score can take",
+            path=path,
         )
     return val
+
+
+def direction_conviction_value_errors(cfg: dict) -> list[tuple[str, str]]:
+    """Every value error `load_direction_conviction_min_trend` would raise on
+    `cfg`, over all three horizons and both directions, as (path, message).
+    Pure; the caller has already run `_validated_direction_conviction_blocks(cfg)`.
+    Horizons are passed title-case, as the scans pass them, so each message is
+    byte-identical to the one a scan raises (DOCC-4 plan §2.3)."""
+    blocks = _validated_direction_conviction_blocks(cfg)
+    errors: list[tuple[str, str]] = []
+    for horizon in ("Intraday", "Swing", "Position"):
+        key = horizon.lower()
+        for dir_key in ("bullish_min_trend", "bearish_min_trend"):
+            try:
+                _resolve_min_trend(blocks.get(key), key, dir_key, horizon)
+            except ConvictionConfigError as exc:
+                errors.append((exc.path, str(exc)))
+    return errors
 
 
 # Maps the Step 3 "Reward/Risk" panel's override keys (frontend/lib/

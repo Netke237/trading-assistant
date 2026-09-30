@@ -219,7 +219,11 @@ def test_save_risk_preserves_key_order(tmp_path, monkeypatch):
 
     rs_module._save_risk({"zebra": 1, "apple": 2, "mango": 3})
 
-    lines = [ln.split(":")[0] for ln in target.read_text().splitlines() if ln.strip()]
+    # DOCC-4: the file now starts with the comment-loss header (plan §2.6).
+    text = target.read_text()
+    assert text.startswith(rs_module.RISK_RULES_HEADER)
+    lines = [ln.split(":")[0] for ln in text.splitlines()
+             if ln.strip() and not ln.startswith("#")]
     assert lines == ["zebra", "apple", "mango"]
 
 
