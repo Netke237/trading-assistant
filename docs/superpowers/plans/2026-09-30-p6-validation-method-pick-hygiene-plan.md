@@ -98,6 +98,20 @@ Client impact, checked: `tpMethodPatch` (`EditDrawer.tsx:1467-1469`) always emit
 `portfolioStore.toUpdatePayload` copies each key through independently, and patches coalesce per
 recId, so both keys still travel together. No other frontend writer of either key exists.
 
+EXISTING TESTS THIS CHANGES (plan round 1, finding 1). `backend/tests/test_portfolio_update.py:83-110`
+has three tests that PATCH `resolvedTpPrice` ALONE and expect 200; under A4 each becomes a 422.
+They are rewritten, not deleted, so the round-8 floor stays pinned where it still applies:
+- `…negative…` / `…zero…` → send `{"activeTpMethod": "ladder", "resolvedTpPrice": -50 | 0}` → 200,
+  `resolvedTpPrice` null (the floor, on the ladder path where a null price is legal).
+- `…when_positive` → `{"activeTpMethod": "monte_carlo", "resolvedTpPrice": 210.5}` → 200, 210.5.
+- NEW: `{"activeTpMethod": "monte_carlo", "resolvedTpPrice": -50}` → 422 (a non-ladder method whose
+  floored price is None — the §2.7 refusal; this REPLACES round 8's "store null" outcome for
+  non-ladder methods, deliberately).
+- NEW: `{"resolvedTpPrice": 210.5}` alone and `{"activeTpMethod": "monte_carlo"}` alone → 422, and
+  the position is unchanged (nothing written before the refusal).
+- NEW: `{"activeTpMethod": null, "resolvedTpPrice": 210.5}` → 422.
+No other backend test PATCHes either key (round 1 grepped every `client.patch(`).
+
 ### A5. `ArmRequest` forbids unknown keys (G5-1; decided `P6-SCOPE-2026-09-30`)
 
 Change: `model_config = ConfigDict(extra='forbid')` on `ArmRequest`. Verified 2026-09-30: every key
