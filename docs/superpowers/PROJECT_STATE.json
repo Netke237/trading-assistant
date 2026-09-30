@@ -176,7 +176,7 @@
         "path": "backend/app/services/config_loader.py",
         "note": "Revision 2 of the plan (after round 1): the load-record hook DOCC-4 adds to each cached loader (plan s2.2); config_loader.py carries five of them. Verified absent 2026-09-30. Presence only; tests/test_docc4_config_health.py will pin behaviour."
       },
-      "note": "PLAN ROUND 1 (2026-09-30) NOT CLEAN -- 3 gate-level: (1) boot-hash staleness gives a false green after edit-then-revert (and the Settings re-baseline hid it); (2) green while scans refuse on value checks; (3) missing required non-money sections read green. Plus 10 below-gate. REVISION 2: staleness is now per-cache load records compared section-by-section with disk (replaces the boot snapshot + re-baseline; deviation from DOCC-4-5-SLICING wording flagged for Kenneth); resolve_sizing + direction_conviction value checks added; everything else unchecked is listed in a literal not_checked field (per s9.11 scoped green); all 13 findings mapped in plan s7. Plan round 2 pending. || 2026-09-30: plan written, docs/superpowers/plans/2026-09-30-docc-4-config-health-plan.md (decision DOCC-4-5-SLICING-2026-09-30). Plan round 1 pending."
+      "note": "2026-09-30 Kenneth approved revision 2's two judgement calls (decision DOCC-4-REV2-APPROVED-2026-09-30); plan round 2 next, new session. || PLAN ROUND 1 (2026-09-30) NOT CLEAN -- 3 gate-level: (1) boot-hash staleness gives a false green after edit-then-revert (and the Settings re-baseline hid it); (2) green while scans refuse on value checks; (3) missing required non-money sections read green. Plus 10 below-gate. REVISION 2: staleness is now per-cache load records compared section-by-section with disk (replaces the boot snapshot + re-baseline; deviation from DOCC-4-5-SLICING wording flagged for Kenneth); resolve_sizing + direction_conviction value checks added; everything else unchecked is listed in a literal not_checked field (per s9.11 scoped green); all 13 findings mapped in plan s7. Plan round 2 pending. || 2026-09-30: plan written, docs/superpowers/plans/2026-09-30-docc-4-config-health-plan.md (decision DOCC-4-5-SLICING-2026-09-30). Plan round 1 pending."
     },
     {
       "id": "YAML-CONFIG-INTEGRITY",
@@ -2873,6 +2873,11 @@
       "id": "DOCC-4-5-SLICING-2026-09-30",
       "q": "YAML-CONFIG-INTEGRITY remainder (every gate-level Document C item has shipped as DOCC-1/2/3): how to slice the config-health surface, the risk_rules.yaml comment-loss header (9.3b) and the 9.5 re-stat / 9.6+9.8 warning lines; and where the frontend banner goes.",
       "a": "Kenneth, 2026-09-30: BACKEND FIRST, THEN UI. DOCC-4 = backend: a config_health holder in backend/app/main.py + GET /api/config/health returning {ok, checked, errors, warnings, stale}; each poll re-hashes scoring_rules/risk_rules/contract_rules YAML against the boot snapshot (re-baselined when Settings itself saves risk_rules) and reports 'disk differs from running config -- restart'; unknown top-level families and horizons-tree keys become WARNING lines (never refuse); the risk_rules.yaml comment-loss header (DOCC-9.3B) rides along. DOCC-5 = frontend, planned after DOCC-4 ships: a FRAME-WIDE TopBar banner polling the endpoint, shown on every page whenever the config is not clean, naming the checks and a 'restart' state."
+    },
+    {
+      "id": "DOCC-4-REV2-APPROVED-2026-09-30",
+      "q": "DOCC-4 plan revision 2 (after round 1, NOT CLEAN): (a) replace DOCC-4-5-SLICING's boot-snapshot + Settings re-baseline with per-cache load records compared section-by-section with disk (holder in services/config_health.py, nothing added to main.py); (b) scope of a green: refusals named in the literal not_checked list are not a false green (per s9.11), rather than widening DOCC-4 with every value/presence check.",
+      "a": "Kenneth, 2026-09-30: approved both ('I am happy with both of them'). Next: plan round 2 on revision 2, in a new session."
     }
   ],
   "pending_kenneth": [
