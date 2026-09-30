@@ -155,5 +155,16 @@ def test_a_non_positive_or_non_finite_risk_fixed_is_refused_at_the_door(bad):
 
 
 def test_a_fixed_risk_is_conviction_sized_like_a_percentage():
-    shares, dollar_risk = stock_scan._position_size(50_000, None, 200.0 * 0.65, 152, 148)
-    assert (shares, dollar_risk) == (32, 130.0)
+    """Driven through `_process_stock`, not `_position_size` (r3 finding 1):
+    the earlier version applied the 0.65 by hand, so dropping `* mult` from
+    the card's risk_fixed_usd branch passed every test. $200 at neutral
+    (0.65) is $130 of risk, / 4 per share = 32 shares."""
+    card = _run(_ON, omm_result=_omm(0), risk_fixed_usd=200.0)
+    assert card.sizing_basis == "measured"
+    assert (card.shares, card.dollar_risk) == (32, pytest.approx(130.0))
+
+
+def test_a_fixed_risk_is_floored_when_unmeasured():
+    card = _run(_ON, omm_result=None, risk_fixed_usd=200.0)
+    assert card.sizing_basis == "floor:unmeasured"
+    assert (card.shares, card.dollar_risk) == (15, pytest.approx(60.0))

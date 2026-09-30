@@ -493,9 +493,10 @@ def test_a_zero_min_mult_is_refused_because_it_still_sizes_the_minimum():
 
 
 def test_the_multiplier_can_no_longer_reach_a_falsy_zero():
-    """`risk_pct or 0.01` was removed by P3a; `risk_fixed if risk_fixed`
-    (stock_scan.py:1015) remains, and is harmless here because the pct branch
-    is multiplied by the same `mult`. This pins that no admitted config can
+    """`risk_pct or 0.01` was removed by P3a, and the `risk_fixed if risk_fixed`
+    truthiness test in stock_scan.py `_position_size` is `is not None` since
+    REGIME-SIZING-AUDIT r2 (the schema refuses a non-positive risk_fixed_usd).
+    This pins that no admitted config can
     produce a 0.0 multiplier at all.
     """
     for min_mult in (0.0001, 0.05, 0.3, 0.5, 1.0):

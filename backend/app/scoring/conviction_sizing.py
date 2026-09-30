@@ -16,8 +16,12 @@ WHAT IS SHARED, AND WHAT IS NOT (REGIME-SIZING-AUDIT r1 finding 1). The two
 callers share this FORMULA and a round-down rule (math.floor on the fire
 path, int() on the card's positive quotient, both with a 1e-9 guard), pinned
 behaviourally by tests/test_regime_sizing_parity.py. Both also clamp to a
-minimum of 1 unit. That clamp is NOT exercised by the parity file; it is
-pinned on the fire path by the quantity=4 tests in test_auto_trader.py.
+minimum of 1 unit. That clamp is NOT exercised by the parity file. On the
+fire path it is pinned by test_auto_trader.py's
+test_contract_sizing_rounds_down[1-0.3-1] and quantity=1 fire tests such
+as test_fire_executes_and_disarms (NOT the quantity=4 ones: floor(4 x 0.3) is already 1). On the card NO
+test pins it (r3). It is part of the min-1 policy question left open for
+Kenneth.
 They do NOT size the same setup: stock_scan.py sizes SHARES on the stock
 card, while the auto-trader fires OPTIONS armed from the Step 7 options card,
 and that card is not conviction-sized. So an armed quantity of 10 is shown as

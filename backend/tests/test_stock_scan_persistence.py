@@ -274,3 +274,50 @@ def test_mid_scan_exception_after_a_completed_scan_reverts_to_complete_not_idle(
     assert stock_scan_module._last_stock_status == "complete"
     assert stock_scan_module._last_stock_request.strategy == "pullback_ema"
     assert stock_scan_module._last_stock_result.scan_id == "SSCAN-PRIOR"
+
+
+@pytest.mark.asyncio
+async def test_a_saved_request_that_no_longer_validates_does_not_abort_startup(caplog):
+    """REGIME-SIZING-AUDIT r3 finding 2: risk_fixed_usd gained gt=0, and a
+    request saved before that (last_request_json) used to raise out of
+    restore_stock_from_db and main.py's lifespan with nothing to catch it. The
+    request is dropped with a WARNING; the result still loads."""
+    import app.routers.stock_scan as stock_scan_module
+
+    orig_request = stock_scan_module._last_stock_request
+    orig_result = stock_scan_module._last_stock_result
+    orig_async_session_local = stock_scan_module.AsyncSessionLocal
+    stock_scan_module._last_stock_request = None
+    stock_scan_module._last_stock_result = None
+    stock_scan_module.AsyncSessionLocal = _TestSession
+
+    saved = json.loads(StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+    ).model_dump_json())
+    saved["risk_fixed_usd"] = 0  # admitted before the bound, refused now
+
+    try:
+        from sqlalchemy import delete
+        async with _TestSession() as session:
+            await session.execute(delete(ScanSession).where(ScanSession.id == "stock-current"))
+            await session.commit()
+        async with _TestSession() as session:
+            session.add(ScanSession(
+                id="stock-current", status="complete",
+                last_request_json=json.dumps(saved),
+                last_result_json=StockScanResult(
+                    scan_id="SSCAN-3", timestamp="2026-09-30T10:00:00", candidates=[], rejected=[],
+                ).model_dump_json(),
+            ))
+            await session.commit()
+
+        with caplog.at_level("WARNING", logger="app.routers.stock_scan"):
+            await stock_scan_module.restore_stock_from_db()
+
+        assert stock_scan_module._last_stock_request is None
+        assert stock_scan_module._last_stock_result.scan_id == "SSCAN-3"
+        assert "no longer validates" in caplog.text
+    finally:
+        stock_scan_module._last_stock_request = orig_request
+        stock_scan_module._last_stock_result = orig_result
+        stock_scan_module.AsyncSessionLocal = orig_async_session_local

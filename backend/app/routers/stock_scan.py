@@ -18,7 +18,7 @@ from typing import Any, Literal, Optional
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -584,7 +584,21 @@ async def restore_stock_from_db() -> None:
         if row.last_result_json:
             _last_stock_result = StockScanResult.model_validate_json(row.last_result_json)
         if row.last_request_json:
-            _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
+            # GUARDED (REGIME-SIZING-AUDIT r3 finding 2): a request saved before
+            # a schema tightening (e.g. risk_fixed_usd gaining gt=0) must not
+            # abort app startup -- nothing above or in main.py catches it. It
+            # is dropped, not coerced: the saved request is only replayed by
+            # the Analysis page, and replaying an input the API would now
+            # refuse is worse than offering no replay. The result still loads.
+            try:
+                _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
+            except ValidationError as exc:
+                logger.warning(
+                    "restore_stock_from_db: saved stock-scan request no longer "
+                    "validates and was dropped (no Analysis replay until the "
+                    "next scan): %s", exc,
+                )
+                _last_stock_request = None
         # A restored "running" status means the process was killed mid-scan
         # (OOM, container restart) — unlike options mode's continuous-scan
         # scheduler, no in-flight stock-scan request can survive a restart
