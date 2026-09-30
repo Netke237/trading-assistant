@@ -52,15 +52,29 @@ def intraday_history_days(interval: str) -> int:
     return _INTRADAY_HISTORY_DAYS.get(normalize_interval(interval), 55)
 
 
-def omm_direction(trigger_def: object) -> str:
+def omm_direction(trigger_def: object, fallback: object = None) -> str:
     """WATCH-RULE-BAR-PARITY 2.5 (decision OMM-DIRECTION): the direction a
     composite's OMM is judged in, on the watch and the rule path alike -- the
     trigger's own ``direction`` when it is exactly "Bullish"/"Bearish", else
-    "Bullish". compute_omm raises ValueError on any other value and
-    ``composite_def`` / ``trigger_def`` are stored unvalidated, so the raw value
-    is never passed through. No fallback to a watch's saved direction (Q-I)."""
+    ``fallback`` when it is exactly "Bullish"/"Bearish", else "Bullish".
+    compute_omm raises ValueError on any other value and ``composite_def`` /
+    ``trigger_def`` are stored unvalidated, so a raw value is never passed
+    through. WATCH-DIRECTION-TO-EVALUATOR: the watch path passes the watch's own
+    saved direction as ``fallback``; the rule path has none."""
     d = trigger_def.get("direction") if isinstance(trigger_def, dict) else None
-    return d if d in ("Bullish", "Bearish") else "Bullish"
+    if d in ("Bullish", "Bearish"):
+        return d
+    return fallback if fallback in ("Bullish", "Bearish") else "Bullish"
+
+
+def strategy_direction(trigger_def: object, fallback: object = None) -> object:
+    """WATCH-DIRECTION-TO-EVALUATOR: the direction evaluate_scheduled's
+    strategy-confirmation gate judges in -- a truthy trigger ``direction``
+    exactly as stored (today's behaviour, no normalisation), else the valid
+    ``fallback``, else "Bullish". Shared with the watch's describe_match call so
+    an alert lists the strategies the gate matched."""
+    d = trigger_def.get("direction") if isinstance(trigger_def, dict) else None
+    return d or omm_direction(None, fallback)
 
 
 # WATCH-RULE-BAR-PARITY 2.2: the nominal span of an intraday candle, i.e. its
@@ -649,6 +663,7 @@ def evaluate_scheduled(
     interval: str | None = None,
     bars_vwap_daily: list[dict] | None = None,
     momentum: MomentumInput | None = None,
+    fallback_direction: str | None = None,
 ) -> bool | None:
     """Watch/scheduler path. Receives raw bars — runs models internally.
 
@@ -660,6 +675,9 @@ def evaluate_scheduled(
         its bars). bars_intraday must be COMPLETED bars of ``interval``.
     momentum: as evaluate_from_context; None = not read (the watch's chart
         fetch failed), which counts toward "no reading" below.
+    fallback_direction: WATCH-DIRECTION-TO-EVALUATOR -- the watch's own saved
+        direction, used for OMM and the strategy gate only when the trigger has
+        no direction of its own (omm_direction / strategy_direction).
 
     unknown_as_none: when True, a reading that could not be TAKEN -- no bars,
         a model that errored or returned nothing, structure detection that
@@ -701,9 +719,10 @@ def evaluate_scheduled(
     # Run appropriate model. primary_met: True / False / None (no reading).
     primary_met: bool | None = False
     if model == "OMM":
-        # WATCH-RULE-BAR-PARITY 2.5: the trigger's direction, as the rule path.
+        # WATCH-RULE-BAR-PARITY 2.5: the trigger's direction, as the rule path;
+        # WATCH-DIRECTION-TO-EVALUATOR: else the watch's own direction.
         omm_result = (
-            compute_omm([b["close"] for b in bars_daily], direction=omm_direction(td))
+            compute_omm([b["close"] for b in bars_daily], direction=omm_direction(td, fallback_direction))
             if bars_daily else None
         )
         primary_met = None if omm_result is None else _check_primary_omm(td, omm_result)
@@ -783,7 +802,7 @@ def evaluate_scheduled(
     strategy_conf_list: list[str] = td.get("strategy_confirmations", [])
     min_strategy_conf: int = td.get("min_strategy_confirmations", 1)
     if strategy_conf_list:
-        direction: str = td.get("direction") or "Bullish"
+        direction = strategy_direction(td, fallback_direction)
         strategy_fired = _check_strategy_signals(
             strategy_conf_list, bars_daily, bars_intraday, direction=direction,
             interval=interval, bars_vwap_daily=bars_vwap_daily,
