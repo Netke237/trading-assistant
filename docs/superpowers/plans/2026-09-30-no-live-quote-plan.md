@@ -124,6 +124,11 @@ plus a label).** The reason key is `no_live_quote`; it replaces r1's `quote_stal
 These are the starting list for this plan's first round. Round 1's findings are already folded into the draft
 above.
 
+0. **The after-close residual CONTRACT-LIQUIDITY-DTE accepted (its round 3, finding 4).**
+   - Once `min_volume` defaults to 0, after-close rows with volume 1–49 and a fabricated 0% spread
+     (`ask == 0`) pass the scan's hard gates. Main used to reject them as `volume_too_low`.
+   - This plan's hard reject in the scan closes that window. Kenneth may order this phase to land first.
+
 *High*
 1. **The verification gate cannot run through `/api/contracts`.** See Step 0 above.
 2. **Step 7 still sends a 0% spread.** The recompute takes `spread: q?.spread ?? 0` from Step 7's live quote
