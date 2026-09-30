@@ -1,0 +1,12 @@
+{
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "ccr-2fe3aef8-jpt3lz",
+      "claimed_at": "2026-09-30T17:22:19Z",
+      "expires_at": "2026-09-30T20:22:19Z",
+      "note": "code r1 CLEAN; awaiting Kenneth's merge call",
+      "task": "DOCC-4-CONFIG-HEALTH"
+    }
+  ]
+}
