@@ -2,18 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/practical-dirac-ebenkq",
-      "claimed_at": "2026-09-30T04:42:33Z",
-      "expires_at": "2026-09-30T08:33:05Z",
-      "note": "First adversarial audit of already_shipped REGIME-SIZING (shared conviction ramp, scoring/conviction_sizing.py)",
-      "task": "REGIME-SIZING-AUDIT"
-    },
-    {
-      "agent": "claude",
       "branch": "ccr-2fe3aef8-jpt3lz",
-      "claimed_at": "2026-09-30T07:37:56Z",
-      "expires_at": "2026-09-30T11:01:00Z",
-      "note": "finish build (was DOCC-3, WIP 0b48b7d on claude/youthful-rubin-l0p9ed)",
+      "claimed_at": "2026-09-30T11:59:41Z",
+      "expires_at": "2026-09-30T14:59:41Z",
+      "note": "built, code r1 CLEAN at 7d87496; awaiting Kenneth's merge OK",
       "task": "DOCC-3-THRESHOLD-STORES-REFUSE"
     }
   ]
