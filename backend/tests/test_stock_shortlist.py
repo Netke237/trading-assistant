@@ -186,18 +186,60 @@ def test_the_frontend_prefix_matches_the_backend_constant():
     m = re.search(r"export const SHORTLIST_REASON_PREFIX\s*=\s*'([^']*)'", ts)
     assert m and m.group(1) == _PREFIX
 
-    # One source: every other non-test frontend file must import it
-    # (comments may name the prefix; code may not spell it).
-    literal = re.compile(r"""['"`]""" + re.escape(_PREFIX))
-    comments = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+    # One source: no other non-test file under app/components/lib/types may
+    # carry the prefix inside a string literal (comments may name it), and the
+    # two consumers must import it. Scanned with a string-aware pass so a '//'
+    # inside a URL string does not hide the rest of the line as a "comment".
+    # Not caught: a literal split by concatenation ('Shortlist ' + 'cap:').
     spelled = sorted(
-        str(f.relative_to(frontend))
+        f.relative_to(frontend).as_posix()
         for d in ("app", "components", "lib", "types")
         for f in (frontend / d).rglob("*.ts*")
         if "__tests__" not in f.parts and f.name != "shortlistCap.ts"
-        and literal.search(comments.sub("", f.read_text(encoding="utf-8")))
+        and not re.search(r"\.(test|spec)\.tsx?$", f.name)
+        and any(_PREFIX in lit for lit in _ts_string_literals(f.read_text(encoding="utf-8")))
     )
     assert spelled == []
+    imports = re.compile(r"""from\s+['"](?:@/lib/|(?:\.{1,2}/)+(?:[\w()\-]+/)*)shortlistCap['"]""")
     for rel in ("lib/stockShortlist.ts",
                 "app/(frame)/screener/step-3-direction/scanLogTotals.ts"):
-        assert "from '@/lib/shortlistCap'" in (frontend / rel).read_text(encoding="utf-8"), rel
+        assert imports.search((frontend / rel).read_text(encoding="utf-8")), rel
+
+
+def _ts_string_literals(src: str) -> list[str]:
+    """String-literal bodies ('..', "..", `..`) of TS source, comments skipped.
+    A tokenizer just good enough for the pin above: it tracks string and
+    comment state so neither can hide the other."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        ch = src[i]
+        if src.startswith("//", i):
+            j = src.find("\n", i)
+            i = n if j < 0 else j
+        elif src.startswith("/*", i):
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+        elif ch in "'\"`":
+            j, buf = i + 1, []
+            while j < n and src[j] != ch:
+                if src[j] == "\\":
+                    buf.append(src[j:j + 2]); j += 2
+                    continue
+                if ch != "`" and src[j] == "\n":
+                    break
+                buf.append(src[j]); j += 1
+            out.append("".join(buf))
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def test_the_ts_literal_scanner_is_not_fooled_by_urls_or_globs():
+    lits = _ts_string_literals(
+        "const u='http://x'; const p='Shortlist cap:';\n"
+        "const g='src/*'; const q=\"Over: Shortlist cap: y\";\n"
+        "// 'Shortlist cap: in a comment'\n/* \"Shortlist cap: block\" */ const t=`a ${b} c`;")
+    assert "Shortlist cap:" in lits
+    assert "Over: Shortlist cap: y" in lits
+    assert not any("comment" in l or "block" in l for l in lits)

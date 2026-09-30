@@ -258,10 +258,12 @@ def test_an_exact_tie_keeps_universe_order(client):
 
 
 def test_an_entry_quality_reject_ranks_after_caution_and_is_the_one_cut(client):
-    # finalStatus is the worst of stock, contract and ENTRY quality; a wide
-    # spread makes entry quality REJECT, which survives to the cap. It must
-    # rank after a CAUTION (the order map's default), even with the higher
-    # score and first place in the universe.
+    # finalStatus is the worst of stock, contract and entry quality. Stock and
+    # contract are mocked PASS here, so the REJECT the trimmed reason asserts
+    # can only come from the wide spread (entry_quality's "wide spread" rule;
+    # this test does not call it directly). A REJECT survives to the cap and
+    # must rank after a CAUTION (the order map's default), even with the
+    # higher score and first place in the universe.
     spec = {"WIDE": (99, "PASS", 99, "PASS"), "CAUT": (60, "CAUTION", 75, "PASS"),
             "GOOD": (70, "PASS", 75, "PASS")}
     strikes = {sym: 190 + i for i, sym in enumerate(spec)}
