@@ -30,7 +30,7 @@ export interface ScanLogTotals {
   totalRejected: number;
   totalScanned: number;
   /** Trimmed candidates: not returned, and not counted in `totalRejected`.
-   *  The options scan does LIST them in `rejected` (prefix `Shortlist cap:`),
+   *  The options scan does LIST them in `rejected` (reason prefix SHORTLIST_REASON_PREFIX),
    *  but `totalRejected` filters them out, so this is still exactly the amount
    *  by which the three headline numbers fail to sum. */
   totalTrimmed: number;
@@ -49,7 +49,7 @@ export function scanLogTotals(
     : (shownResult?.rejected ?? []);
   const totalPassed = shownResult?.candidates?.length ?? 0;
   // The options scan lists names trimmed by the shortlist cap in `rejected`
-  // (reason prefix `Shortlist cap:`, backend `_SHORTLIST_REASON_PREFIX`) so they
+  // (reason prefix SHORTLIST_REASON_PREFIX, backend `_SHORTLIST_REASON_PREFIX`) so they
   // stay visible in the log below. They were not rejected, though: they count
   // toward "Over cap", not toward "Rejected".
   const totalRejected = rejectedLog.filter((e) => !e.reason.startsWith(SHORTLIST_REASON_PREFIX)).length;
