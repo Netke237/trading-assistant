@@ -19,8 +19,17 @@ The payload shape comes from §9.11 of the old plan (confirmed 2026-09-17):
 **Revision 2 (after plan round 1, NOT CLEAN, 3 gate-level).** Section §7 lists
 every round-1 finding and where each one was resolved. The biggest change:
 staleness is no longer "disk vs a boot snapshot". It is "disk vs **what each
-running cache actually loaded**", compared section by section (§2.2). §7
+running cache actually holds**", compared loader by loader (§2.2). §7
 explains why this is a deliberate deviation from the decision's wording.
+
+**Revision 3 (after plan round 2, NOT CLEAN, 6 gate-level).** Section §8 lists
+every round-2 finding and its resolution. The biggest change: instead of a
+digest recorded inside each loader at load time (`note_load`) and dropped on a
+Settings save (`forget_loads`), the poll reads **each cache's live value** and
+compares it with the same projection of the disk file (§2.2). Both
+`note_load` and `forget_loads` are gone. This stays inside decision
+`DOCC-4-REV2-APPROVED-2026-09-30` (per-cache judgement, no boot snapshot,
+holder in `config_health.py`, nothing in `main.py`); §8 flags it for Kenneth.
 
 ---
 
@@ -107,10 +116,16 @@ every check.
 
 **Where the holder lives, a deliberate deviation.** The decision says the holder
 is "in backend/app/main.py". It lives in a service module instead, because 15
-loaders across 7 modules call into it (§2.2) and importing `main` from them
-would be circular. `main.py` gains no boot call: the load records replace the
-boot snapshot (§7, finding 1). The phase probe therefore pins
-`config_health.note_load` in `config_loader.py` (§2.7).
+loaders across 9 modules register with it (§2.2) and importing `main` from them
+would be circular. `main.py` gains no boot call: the poll-time comparison
+replaces the boot snapshot (§7, finding 1). The phase probe therefore pins
+`config_health.watch` in `config_loader.py` (§2.7).
+
+**Import direction (round-2 below-gate 3).** The loader modules import
+`config_health` at top level, so `config_health.py` must never import a loader
+module at top level. It imports `money_config`, `conviction_sizing` and
+`config_loader` **inside** the check functions that use them. T16 imports
+`app.main` from a fresh interpreter, which catches a cycle.
 
 **Module paths are read at call time.** `ConfigHealth` reads the module global
 `CONFIG_DIR` inside each method, never in `__init__` or a default argument, so
@@ -121,72 +136,127 @@ the other validators through their **module attribute**
 
 ### 2.2 Staleness: what the process runs vs what is on disk
 
-**Load records.** Each of the 15 cached loaders in §1.2 calls this
-**immediately before its successful `return`**. A loader that raises after
-parsing (for example `_load_scoring_doc` on a failed `validate_money_blocks`)
-therefore records nothing, just as `lru_cache` caches nothing:
+**Revision 3 (round-2 findings 1, 2, 5; below-gate 6, 7).** Revision 2 recorded
+a digest inside each loader (`note_load`) and dropped records on a Settings
+save (`forget_loads`). Round 2 showed four holes in that: the two `AutoTrader`
+loaders cache a fallback and so recorded nothing; the digest failed on parsed
+YAML with mixed-type keys and silently recorded nothing; a load racing a save
+could leave an old value cached with its record forgotten; and a record taken
+at load time cannot see a cached dict that was changed in place. All four come
+from judging a **copy** of what was cached. Revision 3 judges **the cached
+value itself**, at poll time. There are no records, and there is no
+`forget_loads`.
+
+**Registration.** Each of the 15 cached loaders in §1.2 is registered once, at
+import of its own module, directly after its definition (after the class body
+for the two `AutoTrader` staticmethods):
 
 ```python
-config_health.note_load(file="risk_rules.yaml", loader="config_loader.load_exit_plan_cfg",
-                        doc=full, section=("exit_plan",))   # section=() means the whole doc
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="config_loader.load_exit_plan_cfg",
+    fn=load_exit_plan_cfg,                  # the lru_cache wrapper itself
+    project=lambda doc: doc["exit_plan"],   # what this loader returns, from a parsed doc
+)
 ```
 
-`note_load` stores `{(file, loader): (section, digest)}` under a
-`threading.Lock`. `digest` is the sha256 of
-`json.dumps(<the subtree at section>, sort_keys=True, default=repr)`, a
-canonical form of the **parsed** values. Comment-only and whitespace edits
-therefore never read as stale. A missing section digests as the JSON `null`.
+- `watch` stores `{loader: (file, fn, project)}` under a `threading.Lock`. It
+  never raises: a bad registration is logged and becomes a permanent `stale`
+  line, "loader <name> is registered wrongly, so it cannot be judged".
+- **The loaders' bodies do not change.** They read the same file, parse it the
+  same way, return the same value and raise the same exceptions. Registration
+  adds one statement after each definition and nothing inside it.
+- `project` mirrors the loader's own return expression on a parsed doc:
+  - identity for the eight whole-doc loaders;
+  - `doc["<section>"]` for the four `config_loader` section loaders;
+  - `(doc or {}).get("auto_trade", {})` for `AutoTrader._risk_config`;
+  - `int((doc or {}).get("auto_trade", {}).get("max_arm_age_minutes", 30))`
+    for `AutoTrader._max_arm_age_minutes`.
 
-- `note_load` **never raises**. A failure inside it is caught and logged once,
-  and the loader goes on returning its value exactly as today. The loader's
-  own behaviour is unchanged: same file, same parse, same return, same
-  exceptions.
-- A loader whose parse raises records nothing, and `lru_cache` caches nothing
-  either, so there is nothing running to compare.
+  T24 pins each projection against its real loader on the shipped files, and
+  on edited files that change the section.
 
-**The comparison, on every poll (decision 9.5).**
-1. Re-read each watched file from disk and parse it.
-2. For every load record, digest the same section of the disk doc.
-3. Any mismatch → one `stale` entry per (file, section):
-   `{file, path: "<section dotted, or empty for whole>", message: "disk differs from running config (<loader names>) -- restart"}`.
-   If the disk file does not parse now, every record for that file is stale.
+**The comparison, on every poll (decision 9.5).** For each registered loader:
+1. If `fn.cache_info().currsize == 0`, skip it. Nothing is running it, and its
+   first call will read the disk. This removes revision 1's false positive for
+   files nothing has loaded.
+2. Otherwise call `fn()`. On a cache hit this returns the cached object without
+   running the body, which is how every consumer reads it. The call runs
+   outside the registry lock.
+   - Suppose a Settings save clears the cache between step 1 and step 2. The
+     call then does a real load from disk, and that value matches disk, which
+     is true: the next consumer gets the same thing.
+   - If that load raises (for example `_load_scoring_doc` on a refused money
+     block), `lru_cache` cached nothing. The loader is skipped, and the
+     refusal is already an `error` from §2.3.
+3. Compute `project(disk_doc)` from the file's memoised disk parse (§2.3).
+   - If that raises (the disk doc no longer has the section, or does not
+     parse), the loader is stale: the process runs a value that a restart
+     would not reproduce.
+4. Compare the two with `canonical(x) == canonical(y)`. `canonical` is a small
+   recursive encoder in `config_health.py`:
+   - every value is tagged with its type name, so `1`, `"1"`, `True` and
+     `1.0` all stay distinct;
+   - mapping keys are encoded, then sorted by their encoding, never by the raw
+     key, so `{"a": 1, True: 2}` (a YAML `yes:` key) encodes;
+   - lists keep their order;
+   - scalars other than `str`, `int`, `float`, `bool` and `None` (for
+     example `datetime`, which `safe_load` produces) encode as `(type name,
+     repr)`;
+   - it tracks the ids of containers on the current path, so a recursive
+     alias raises `CanonicalError` instead of looping.
+5. A mismatch → one `stale` entry per (file, loader):
+   `{file, path: "<section dotted, or empty for whole>", message: "disk differs from running config (<loader>) -- restart"}`.
+   A `CanonicalError` on either side → a `stale` entry with the message
+   "running config cannot be compared with disk (<reason>) -- restart", never
+   silence (round-2 finding 2).
 
-What this catches, where the boot snapshot did not:
-- **Edit, then revert (the ABA case, round-1 finding 1).** A cache that loaded
-  the edited bytes keeps a digest that the reverted disk no longer matches, so
-  it is stale until restart. A scan that cached a **broken** doc, and keeps
-  500ing after the file was fixed, shows as stale too, because its digest is
-  of the broken values.
+What this catches:
+- **Edit, then revert (round-1 finding 1).** The cache holds the edited
+  values. The reverted disk does not match them, so the loader stays stale
+  until restart.
+- **A cache that holds a broken doc** (for example `load_scoring_cfg` caching
+  a doc that the direction_conviction check then refuses, so every scan 500s),
+  after the file was fixed: stale.
+- **A cached fallback (round-2 finding 1).** `AutoTrader._risk_config` caches
+  `{}` ("risk limits disabled") when the file could not be read at first
+  fire. After the file is fixed, `{}` differs from `doc["auto_trade"]`, so it
+  is stale. `_max_arm_age_minutes` caching its fallback `30` reads stale only
+  when disk says something other than 30. That is the truth: the process runs
+  30.
 - **Torn state.** Two loaders of one file holding different versions: at most
   one of them can match disk, so the other is reported.
+- **A cached dict changed in place by a consumer** (below-gate 6). The live
+  object is compared, so a change is visible as stale. Today's consumers copy
+  before changing (`stock_scorer.py:1053`, `fundamentals_gate.py:26`,
+  `contract_validator.py:400`, `scan.py:678`), so this should never fire.
+- **Section scoping (below-gate 7).** Each loader is compared on its own
+  projection. `_max_arm_age_minutes` is stale only when its one value
+  differs.
 
-What it deliberately does **not** report:
-- A file that nothing has loaded yet. Nothing is running it, and the first
-  load will read the disk. This removes revision 1's accepted false positive.
+**Settings save (§1.3) needs nothing new.** The save clears its three caches.
+A cleared cache has `currsize == 0` and is skipped until the next load, which
+reads the new file. Now suppose a load that read the **old** file finishes after
+the clear, and `lru_cache` stores the old value. That is round-2 finding 5's
+race. The poll then sees `currsize == 1`, calls `fn()`, gets the old value and
+reports it stale, which is the truth. No timing can make a cached value and
+the comparison disagree, because the comparison reads that exact value. The
+five uncleared loaders are compared on their own projections, so a save that
+does not touch their sections leaves them clean. A hand edit to their section
+that was pending at save time leaves them stale.
 
-**Settings save (§1.3) needs no baseline.** The save:
-1. writes the file;
-2. clears its three caches;
-3. calls `config_health.forget_loads("risk_rules.yaml", loaders=(<the three>))`
-   right after the `cache_clear()`s, so their old records go with them.
-
-The five uncleared loaders keep their records, and each compares only its own
-section:
-- the save does not touch `exit_plan`, `reprice_horizon`, `first_passage` or
-  `auto_trade`, so after a normal save they still match and the check is clean;
-- a hand edit to one of those sections, pending at save time, keeps that
-  loader stale, which is correct;
-- a hand edit racing the save is judged the same way, so revision 1's race is
-  gone.
-
-**`forget_loads` with the wrong names.** A loader named in `forget_loads` that
-has no record is ignored. T17 pins that the three names in `risk_settings`
-equal the `loader=` strings in those three functions.
-
-**More than one worker (round-1 finding 4).** When `WEB_CONCURRENCY > 1`,
-`report()` adds one permanent `stale` line: "multiple workers: each has its own
-caches, so staleness cannot be judged from one of them -- run with --workers
-1". `main.py` already logs this setup as unsupported.
+**More than one worker (round-1 finding 4, round-2 finding 6).** Each worker
+has its own caches, and a poll reaches one of them.
+- When `WEB_CONCURRENCY > 1`, `report()` adds one permanent `stale` line:
+  "multiple workers: each has its own caches, so staleness cannot be judged
+  from one of them -- run with --workers 1".
+- `uvicorn --workers N` does **not** set `WEB_CONCURRENCY`. A child process
+  cannot reliably tell `--workers` from `--reload`, since both run the app in a
+  spawned child. So this case is not detected. It is listed in `not_checked`
+  ("single worker assumed; only WEB_CONCURRENCY is detected") and in §5.
+- The payload carries `pid`, so a caller that sees the pid change between
+  polls knows it is talking to more than one process. DOCC-5 can use this.
+  This slice does not act on it.
 
 ### 2.3 `report()`: the payload
 
@@ -200,7 +270,9 @@ caches, so staleness cannot be judged from one of them -- run with --workers
               "contract_rules.yaml parses", "running config vs disk"],
   "not_checked": ["money blocks other than regime_sizing: values",
                   "required non-money sections and keys (horizons.<h>.*, stock_score_thresholds, confidence_backtest, risk_rules sections)",
-                  "risk_rules.yaml and contract_rules.yaml contents"],
+                  "risk_rules.yaml and contract_rules.yaml contents",
+                  "single worker assumed; only WEB_CONCURRENCY is detected"],
+  "pid": 12345,
   "errors":   [{"file": "scoring_rules.yaml", "path": "regime_gate", "message": "is missing — …", "blocks": "every scan, Analysis and every auto-trade fire"}],
   "warnings": [{"file": "scoring_rules.yaml", "path": "regime_gates", "message": "unknown top-level key, ignored — did you mean 'regime_gate'?"}],
   "stale":    [{"file": "risk_rules.yaml", "path": "exit_plan", "message": "disk differs from running config (config_loader.load_exit_plan_cfg) -- restart"}]
@@ -232,18 +304,33 @@ caches, so staleness cannot be judged from one of them -- run with --workers
       value they refuse (for example `min_mult: 2`) is red here too.
       Skipped when `money_block_errors` already reported `regime_sizing`.
       `blocks`: "the stock scan and every auto-trade fire".
-    - `money_config.regime_block_errors(doc, (h,))` **per horizon**, so each
-      error's `blocks` names its scope. The scans and the fire check only the
-      requested or armed horizon, and Analysis checks all three. So a broken
-      `regime.intraday` gives `blocks: "Analysis, and Intraday scans and
-      fires"`, and the banner does not claim that every scan is blocked
-      (round-1 finding 10).
+    - Regime blocks (round-1 finding 10, round-2 below-gate 1):
+      - **First, once:** if `regime` is missing or not a mapping, report the
+        single error `regime_block_errors(doc, HORIZONS)` gives for it, with
+        `blocks: "every scan, Analysis and every auto-trade fire"`, and stop.
+        This avoids the same error three times with a too-narrow scope each.
+      - **Otherwise, per horizon:** `money_config.regime_block_errors(doc,
+        (h,))`, so each error's `blocks` names its scope. The scans and the
+        fire check only the requested or armed horizon, and Analysis checks
+        all three. So a broken `regime.intraday` gives `blocks: "Analysis, and
+        Intraday scans and fires"`, and the banner does not claim that every
+        scan is blocked.
     - direction_conviction: `_validated_direction_conviction_blocks(cfg=doc)`
       (positional), then, **when that passes**,
       `direction_conviction_value_errors(cfg=doc)` (new and pure, §2.5) for
       all three horizons × both directions, which is what every scan calls
       today. Errors carry `.path` from the new `ConvictionConfigError`, never
-      a path parsed out of the message (§2.5). `blocks`: "both scans".
+      a path parsed out of the message (§2.5).
+      - `blocks` (round-2 below-gate 2): a shape or placement error from
+        `_validated_direction_conviction_blocks` → "every stock and options
+        scan". A value error at `horizons.<h>.direction_conviction.<dir>_min_trend`
+        → "<H> <Dir> stock and options scans" (for example "Swing Bullish
+        stock and options scans"), because the scans resolve only the
+        requested pair.
+      - Message parity (round-2 below-gate 8): the value checks are called
+        with the title-case `Horizon` value (`'Swing'`), which is what the
+        scans pass from `req.horizon`, so the message is byte-identical to
+        the one a scan raises. T10 pins that.
   - `risk_rules.yaml` and `contract_rules.yaml`: parse and mapping only (see
     `not_checked`).
 - **Warnings** (`scoring_rules.yaml` only; they never refuse):
@@ -282,12 +369,13 @@ caches, so staleness cannot be judged from one of them -- run with --workers
   becomes an error `{file, path: "", message: "health check <name> crashed:
   <exc>"}`, and that check is left out of `checked`. The endpoint never 500s
   over the config it reports on.
-- **Memoised by content (round-1 finding 11).** Each file's parse and its
-  error and warning results are cached against the sha256 of its bytes, and
-  re-parsed only when the bytes change. A poll therefore costs three file
-  reads, three hashes and the stale-digest comparison. The lock is held only
-  while copying the load-record dict and the memo, never across I/O, parsing
-  or validation.
+- **Memoised by content (round-1 finding 11).** Each file's parse, its
+  error and warning results, and the `canonical` form of each registered
+  loader's projection are cached against the sha256 of its bytes, and are
+  recomputed only when the bytes change. A poll therefore costs three file
+  reads, three hashes, and one `canonical` of each loaded cache's live value.
+  The lock is held only while copying the registry and the memo, never across
+  I/O, parsing, validation or a loader call.
 
 ### 2.4 Endpoint
 
@@ -331,13 +419,11 @@ verdict.
     that both functions call. `load_direction_conviction_min_trend` keeps its
     signature, its return values and its raises.
 
-### 2.6 `risk_settings` and `atomic_yaml`: forget, and the header
+### 2.6 `risk_settings` and `atomic_yaml`: the header
 
-- **Forget.** After the three `cache_clear()`s, `save_risk_settings` calls
-  `config_health.forget_loads("risk_rules.yaml", RISK_SAVE_CLEARED_LOADERS)`.
-  The tuple is a module constant naming the three loaders. The call runs only
-  after a successful save; if `_save_risk` raises, it is not reached, as the
-  `cache_clear()`s are not reached today.
+- **No staleness hook.** `save_risk_settings` is unchanged apart from the
+  header. Its three `cache_clear()`s are what §2.2 relies on (revision 3
+  removed `forget_loads`).
 - **Header (9.3B).** A module constant in `risk_settings.py`:
   ```python
   RISK_RULES_HEADER = (
@@ -361,13 +447,22 @@ verdict.
     those three lines. No other comment is removed by hand; they are lost only
     on the first save, which is the accepted behaviour.
   - `settings.yaml`'s two writers are untouched.
+  - **One existing test changes (round-2 finding 4).**
+    `test_atomic_yaml.py::test_save_risk_preserves_key_order` (`:213-223`)
+    calls `_save_risk` and asserts that the non-blank lines are exactly the
+    three keys. With the header there are three `#` lines first. The test
+    becomes: the file starts with `RISK_RULES_HEADER`, and the non-blank,
+    non-`#` lines are `["zebra", "apple", "mango"]`. That still pins key order.
+    It is the only edit to an existing test in this slice. Every other test
+    in that file runs unchanged.
 
 ### 2.7 PROJECT_STATE
 
-- `DOCC-4-CONFIG-HEALTH`'s probe is re-pointed from `capture_boot_baseline` in
-  `main.py` (revision 1, which no longer exists) to `config_health.note_load`
-  in `backend/app/services/config_loader.py`, in the same commit that re-points
-  it.
+- `DOCC-4-CONFIG-HEALTH`'s probe is today `absent` on `config_health.note_load`
+  in `backend/app/services/config_loader.py`, which revision 3 no longer adds.
+  The commit that records this revision re-points it to `absent` on
+  `config_health.watch` in the same file. The build commit flips it to
+  `present` (round-2 below-gate 9).
 - `YAML-CONFIG-INTEGRITY`'s probe (`absent` on `config_health` in `main.py`)
   would stay absent forever, since this revision adds nothing to `main.py`. The
   build commit re-points it to DOCC-5's first frontend symbol when DOCC-5 is
@@ -380,22 +475,24 @@ verdict.
 **Isolation.**
 - Every test monkeypatches `config_health.CONFIG_DIR` to a `tmp_path` copy of
   the three shipped files, and calls `config_health._reset_for_tests()`, which
-  clears the load records and the memo **on the singleton**. Tests never swap
-  the object, because `routers/config.py` and `risk_settings.py` hold
-  `from … import config_health` bindings.
+  clears the memo **on the singleton**. It keeps the registry, which is filled
+  at import. Tests never swap the object, because the loader modules and
+  `routers/config.py` hold `from … import config_health` bindings.
 - Tests that go through a real loader also monkeypatch that loader's path
   constant to the same `tmp_path` and clear its `lru_cache` in setup and
   teardown.
-- An autouse fixture resets the singleton after every test, so order never
-  matters. `test_risk_limits_endpoint.py`, which POSTs to the real file, cannot
-  leave records behind for later tests.
+- An autouse fixture resets the memo and calls `cache_clear()` on every
+  registered loader after every test, so order never matters and no cache
+  pointing at a `tmp_path` outlives its test.
 
 **Tests.**
 - **T1**: shipped files, nothing loaded → `ok: true`; `checked` and
   `not_checked` equal their literals.
 - **T2**: the ABA case. Load via `load_scoring_cfg` → clean. Edit a value on
-  disk → stale for `load_scoring_cfg`. Revert the bytes → **still stale** (the
-  cache holds the edited values). `cache_clear()` + `forget_loads` → clean.
+  disk → stale for `load_scoring_cfg`. Load again (a cache hit, still the old
+  values) and revert the bytes → clean. Now edit, `cache_clear()`, load (the
+  edited values), revert → **stale** (the cache holds the edited values).
+  `cache_clear()` → clean.
 - **T3**: a cache loaded a broken money block, then the file was fixed → the
   loader is stale, and `errors` is empty.
 - **T4**: torn state. `load_scoring_cfg` loads version A, the file changes,
@@ -433,24 +530,53 @@ verdict.
   - `HORIZON_KEYS` ⊇ the literal set of consumer-read keys.
 - **T13**: `report()` never raises. Patch `money_config.money_block_errors` to
   raise → a "crashed" error, and the money check is absent from `checked`.
-  `note_load` with an unserialisable doc does not raise, and the loader
-  returns normally.
+- **T13b**: `canonical` (round-2 finding 2):
+  - `{"a": 1, True: 2}` encodes, and differs from `{"a": 1, "True": 2}`;
+  - `1`, `"1"`, `True` and `1.0` encode four different ways;
+  - a `datetime` encodes;
+  - a self-referencing list raises `CanonicalError`.
+
+  Then end to end: a scoring file with a top-level `yes:` key, loaded via
+  `load_scoring_cfg` and then fixed on disk → stale for that loader. A cached
+  value made self-referencing → a "cannot be compared" stale line, not
+  silence.
 - **T14**: memo. Two polls on unchanged bytes parse once (spy on
   `yaml.safe_load` inside `config_health`). Changed bytes → re-parsed.
 - **T15**: the endpoint. `GET /api/config/health` → 200, and the payload has
   the right keys and types, both clean and with an error.
-- **T16**: coverage. Every `lru_cache` function under `app/` whose source
-  names `scoring_rules`, `risk_rules` or `contract_rules` (found through
-  `inspect` plus a list of the modules from §1.2) calls
-  `config_health.note_load`. The table in §1.2 equals that set. A 16th cached
-  reader added later fails this test.
-- **T17**: `RISK_SAVE_CLEARED_LOADERS` equals the `loader=` names of the three
-  functions `save_risk_settings` clears.
+- **T16**: coverage (round-2 finding 3). The test does not look for file
+  names in source.
+  - It walks **every** `.py` file under `app/` with `ast` and collects every
+    function or method decorated with `lru_cache`, `functools.lru_cache`,
+    `cache` or `functools.cache` (bare or called), as `module.qualname`. Any
+    other use of those names (for example `lru_cache(maxsize=1)(f)`) fails
+    the test with its location.
+  - In a fresh interpreter it imports `app.main`, so every loader module
+    registers, then reads the registry.
+  - Every collected function must be either registered with `watch` or in a
+    literal allowlist in the test: `app.config.get_settings`,
+    `app.models.heston_cache._run_calibration`,
+    `app.data.sector_map._symbol_to_raw_sector`. Each allowlist entry's
+    source must not contain `_rules` or `CONFIG_DIR`.
+  - The registered names equal the §1.2 table.
+
+  So a 16th cached reader, in any module, fails the test until it is either
+  registered or allowlisted by a reviewer.
+- **T17**: registration. Every registered `fn` has `cache_info` and
+  `cache_clear`, and is the object the module exposes under that name (so a
+  later re-decoration cannot leave the registry holding a dead wrapper).
 - **T18**: Settings save, clean path. Load all eight risk loaders, then `POST
   /settings/risk` → clean.
 - **T19**: Settings save, dirty path. Load `load_exit_plan_cfg`, hand-edit
   `exit_plan`, `POST /settings/risk` → still stale at `exit_plan`.
+- **T19b**: the save race (round-2 finding 5), deterministic. Load
+  `portfolio_risk._load_config` from file version A. Write version B,
+  `cache_clear()`. Then store A back into the cache the way a late racing load
+  would: point the loader's `CONFIG_PATH` at a copy holding A, call it, and
+  point it back at the B file. → stale. Then `cache_clear()` → clean.
 - **T20**: `WEB_CONCURRENCY=2` → the permanent multi-worker stale line.
+  `not_checked` names the single-worker assumption, and `pid` equals
+  `os.getpid()`.
 - **T21**: header:
   - after `POST /settings/risk` the file starts with `RISK_RULES_HEADER`
     exactly once, and still exactly once after a second save;
@@ -460,7 +586,8 @@ verdict.
   - a header with no trailing `\n`, one containing `\r`, or one with a non-`#`
     line → `ValueError`, and no tmp file is left;
   - `header=""` gives byte-identical output to today's;
-  - the existing `test_atomic_yaml.py` is unchanged and green;
+  - the existing `test_atomic_yaml.py` is green, with only
+    `test_save_risk_preserves_key_order` edited as §2.6 says;
   - a simulated partial `write_text` with a header still leaves the target
     untouched.
 - **T23**: refactor parity. `test_docc1_money_blocks.py`,
@@ -468,6 +595,27 @@ verdict.
   `test_q3b_config_loader_hardening.py` run **unchanged** and pass. The
   `ConvictionConfigError` raised for each existing direction_conviction case
   has the documented `.path`.
+
+- **T24**: projection parity. For each of the 15 registered loaders, on the
+  shipped files, and again on a copy with that loader's section edited:
+  `canonical(project(parsed disk doc)) == canonical(fn())` after a
+  `cache_clear()`. A projection that drifts from its loader's return
+  expression fails here.
+- **T25**: the `AutoTrader` fallbacks (round-2 finding 1).
+  `risk_rules.yaml` made unparseable → `AutoTrader._risk_config()` returns `{}`
+  → the file is fixed → stale at `auto_trade` for `AutoTrader._risk_config`.
+  Same for `_max_arm_age_minutes` with a fixed file whose value is `45` →
+  stale. With a fixed file whose value is `30` → not stale, because the
+  process really runs 30.
+- **T26**: a loader whose section was removed from disk after it loaded →
+  stale (the projection raises).
+- **T27**: regime scope (below-gate 1). `regime` removed → exactly one error at
+  `regime`, `blocks` "every scan, Analysis and every auto-trade fire".
+- **T10** also asserts (below-gate 2, 8): the `bullish_min_trend: 150` error
+  has `blocks == "Swing Bullish stock and options scans"`, and its message
+  equals the one `load_direction_conviction_min_trend("Bullish", "Swing")`
+  raises on the same doc. The misplaced-block error has
+  `blocks == "every stock and options scan"`.
 
 `test_risk_settings.py` and `test_risk_limits_endpoint.py` must pass unchanged.
 
@@ -498,22 +646,38 @@ verdict.
   The files are local and hand-edited, and the memo parses once per content
   change. Below the gate, recorded here.
 - **The unwrapped monitor tasks in the lifespan** are untouched.
+- **`HORIZON_KEYS` is a snapshot (round-2 below-gate 5).** T12 pins a literal
+  set of consumer-read keys taken from the build's grep. A consumer key added
+  later is not detected automatically, and until someone adds it to
+  `HORIZON_KEYS`, setting it gives a wrong "unknown key" warning (a false red,
+  never a false green). Anyone adding a horizon key updates the table in the
+  same commit. Extracting the keys with an AST walk is below the gate.
+- **`uvicorn --workers N` without `WEB_CONCURRENCY`** is not detected (§2.2).
+  It is in `not_checked`, and `pid` is in the payload.
 
 ## 5. Behaviour changes Kenneth should know about
 
 1. `GET /api/config/health` exists. It is read-only and has no effect on any
    scan, fire or alert.
-2. The 15 cached loaders now also record a digest of what they loaded. What
-   they return, and when they raise, is unchanged.
+2. The 15 cached loaders are registered with the health check at import.
+   Their bodies, what they return and when they raise are unchanged. A
+   health poll calls each **already-filled** cache, which is a cache hit. In
+   the rare case that a Settings save clears it at that moment, the poll does
+   one real load from disk, exactly as the next scan would.
 3. After a Settings → Risk save, `risk_rules.yaml` starts with a three-line
    header saying comments are dropped on save. It is re-written on every save.
 4. Health reports "restart" whenever a running cache holds values that differ
    from disk, **including after an edit that was reverted** (the cache kept the
    edited values). It no longer reports "restart" for a file nothing has read
    yet.
-5. Under `--workers >1`, health always says staleness cannot be judged.
+5. With `WEB_CONCURRENCY > 1`, health always says staleness cannot be judged.
+   `uvicorn --workers N` alone is not detected. The payload says so in
+   `not_checked` and carries `pid`.
 6. The direction_conviction validator raises a `ValueError` subclass carrying
    `.path`. The messages are unchanged.
+7. `test_atomic_yaml.py::test_save_risk_preserves_key_order` is edited to skip
+   the header lines (§2.6).
+
 
 ## 6. Audit notes for the reviewer
 
@@ -530,9 +694,13 @@ A refusal that `not_checked` names is **not** a false green. §9.11 decided the
 surface names its scope.
 
 **Verify independently:**
-- that T16's set really is every cached reader;
-- that `forget_loads` cannot hide a live stale record, meaning a loader it
-  forgets was actually cleared;
+- that T16's AST walk really finds every cached function under `app/`;
+- that no interleaving of a load, a `cache_clear()` and a poll can make the
+  poll compare anything other than the value the cache actually holds (§2.2);
+- that each `project` in §2.2 matches its loader's return expression,
+  including the `AutoTrader` fallbacks;
+- that `canonical` cannot silently equate two different parsed values, and
+  cannot fail silently;
 - that every `ValueError` → `ConvictionConfigError` change keeps each existing
   `except` and message.
 
@@ -540,7 +708,7 @@ surface names its scope.
 
 | # | Finding | Resolution |
 |---|---|---|
-| 1 | GATE: edit then revert → false green against a boot hash; also re-baselined over | §2.2: load records per cache and per section replace the boot snapshot and the re-baseline. T2, T3, T4 |
+| 1 | GATE: edit then revert → false green against a boot hash; also re-baselined over | §2.2: per-cache judgement replaces the boot snapshot and the re-baseline (records in rev 2, live values in rev 3, §8). T2, T3, T4 |
 | 2 | GATE: green while scans refuse on values | §2.3 adds `resolve_sizing` and the direction_conviction value checks (both already existed as scan checks). The rest are listed in `not_checked`, and §6 restates the gate per §9.11 |
 | 3 | GATE: missing required non-money sections read green | Listed in `not_checked` and §4. Each already fails loudly. §6 gate per §9.11 |
 | 4 | Multi-worker poll can be green from the wrong worker | §2.2 permanent stale line. T20 |
@@ -557,7 +725,40 @@ surface names its scope.
 **Deviation from `DOCC-4-5-SLICING` wording, flagged for Kenneth.** The decision
 says "re-hashes … against the boot snapshot (re-baselined when Settings itself
 saves)". Round 1 showed that mechanism gives a false green after an
-edit-then-revert. The load records in §2.2 deliver the decision's intent ("disk
+edit-then-revert. The per-cache comparison in §2.2 delivers the decision's intent ("disk
 differs from running config -- restart") without that hole. They also remove the
 boot snapshot's false positive and the save race. The holder is in a service
 module, not `main.py`.
+
+## 8. Round 2 (2026-09-30): NOT CLEAN, 6 gate-level. Every finding and its resolution
+
+Round 2 confirmed that these hold: the 15-reader table, no config read at import
+time, every reader of the keys the risk save writes going through a cleared
+cache, the `yaml.dump` round trip, the router registration, and the
+`ConvictionConfigError` subclassing.
+
+| # | Finding | Resolution |
+|---|---|---|
+| G1 | `AutoTrader._risk_config` / `_max_arm_age_minutes` cache a fallback, so `note_load` recorded nothing → green with risk limits off | §2.2: the live cached value is compared with a projection that mirrors the fallback. T25 |
+| G2 | The `json.dumps` digest fails on mixed-type keys and alias cycles → silently no record; it also merges `1`/`"1"` | §2.2 `canonical`, type-tagged, sorted by encoding, cycle-checked; failure → a stale line, never silence. T13b |
+| G3 | T16 found readers by file name in source → could not catch an unregistered one | §3 T16: AST walk of every cached function under `app/`, registry or literal allowlist |
+| G4 | `test_atomic_yaml.py::test_save_risk_preserves_key_order` breaks with the header | §2.6: that one test is edited, and it is stated. T22 |
+| G5 | `forget_loads` after `cache_clear()` races a concurrent load → old value cached, record gone | `forget_loads` removed. The poll reads the cache's own value (§2.2). T19b |
+| G6 | `--workers N` does not set `WEB_CONCURRENCY` | §2.2 and §5: in `not_checked`, plus `pid` in the payload. T20 |
+| B1 | Missing `regime` reported three times with a narrow scope | §2.3: checked once first. T27 |
+| B2 | direction_conviction value errors over-report scope | §2.3 per-pair `blocks`. T10 |
+| B3 | Import cycle `config_loader` ↔ `config_health` | §2.1: lazy imports in `config_health`; T16 imports `app.main` fresh |
+| B4 | T17 tautological | Moot: `forget_loads` is gone. T17 now pins registration identity |
+| B5 | T12 key set is a snapshot | §4: recorded as a known limit (false red only) |
+| B6 | In-place mutation of cached dicts invisible | §2.2: the live object is compared |
+| B7 | `_max_arm_age_minutes` scoped to all of `auto_trade` | §2.2: the projection is the one int |
+| B8 | Message casing differs between health and the scans | §2.3: title-case horizon, as the scans pass. T10 |
+| B9 | §2.7 stale text; `forget_loads` signature inconsistent | §2.7 rewritten; `forget_loads` gone |
+
+**Flagged for Kenneth.** Decision `DOCC-4-REV2-APPROVED-2026-09-30` approved
+"per-cache load records". Revision 3 keeps it per cache, with no boot snapshot,
+the holder in `config_health.py` and nothing in `main.py`. But it reads each
+cache's **live value** at poll time instead of a digest recorded at load time,
+because every round-2 staleness hole (G1, G2, G5, B6, B7) came from judging a
+copy. The one new runtime effect: a poll calls filled caches (a hit), and in a
+narrow race it does one real load (§5 item 2).
