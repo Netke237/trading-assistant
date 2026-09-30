@@ -1502,7 +1502,7 @@
       "id": "DOCC-5-TOPBAR-BANNER",
       "name": "Document C plan 5 -- frame-wide config-health banner + scoped TopBar chip polling GET /api/config/health (frontend only)",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "DOCC-4-CONFIG-HEALTH"
@@ -1514,7 +1514,7 @@
         "pattern": "export function parseConfigHealth",
         "note": "ABSENT until the build (plan s2.7 flips it to present). Presence only."
       },
-      "note": "2026-09-30 PLANNED on ccr-2fe3aef8-jpt3lz (claim DOCC-5-TOPBAR-BANNER) per decisions DOCC-4-5-SLICING-2026-09-30 and DOCC-5-BANNER-DESIGN-2026-09-30. Own round count from 1. Plan round 1 next."
+      "note": "PLAN ROUND 1 (2026-09-30): NOT CLEAN, 2 gate-level findings fixed in the plan (G1 unknown strip vanished during retries; G2 rule-3 clock missing from the store contract). Plan round 2 reviews only those fixes. || 2026-09-30 PLANNED on ccr-2fe3aef8-jpt3lz (claim DOCC-5-TOPBAR-BANNER) per decisions DOCC-4-5-SLICING-2026-09-30 and DOCC-5-BANNER-DESIGN-2026-09-30. Own round count from 1. Plan round 1 next."
     }
   ],
   "already_shipped": [
