@@ -191,6 +191,25 @@ async def update_position(
     # alone, while `{"structuralStop": null}` still clears it — the drawer's
     # "0 means none" control relies on being able to null this back out.
     updates = body.model_dump(exclude_unset=True)
+    # P6 (G1-5, spec §2.7): the take-profit method and its price are ONE fact
+    # and are written together or not at all. Two independent ifs below let a
+    # method arrive alone and sit beside a stale or NULL price -- a drawer
+    # naming one basis while TP_HIT fires on the ladder. Refused BEFORE
+    # anything is written: unlike `qty`'s late raise, which exists to save the
+    # OTHER valid fields of a debounced patch, a half pair has no such
+    # companion -- the product's only writer (`tpMethodPatch`) always sends both.
+    has_method = "activeTpMethod" in updates
+    has_price = "resolvedTpPrice" in updates
+    if has_method != has_price:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="activeTpMethod and resolvedTpPrice must be sent together.")
+    if has_method:
+        if updates["activeTpMethod"] is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail="activeTpMethod cannot be null.")
+        if updates["activeTpMethod"] != "ladder" and _floor_stop(updates["resolvedTpPrice"]) is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail=f"activeTpMethod '{updates['activeTpMethod']}' needs a positive resolvedTpPrice.")
     # Set only when the risk gate approved a qty increase at a SMALLER size
     # than requested — mirrors POST /api/portfolio's resp.adjustedQty above,
     # which exists so a caller is never silently shown a size the backend
@@ -267,7 +286,9 @@ async def update_position(
         position.exit_plan = updates["exitPlan"]
     if "maxLossOverride" in updates:
         position.max_loss_override = updates["maxLossOverride"]
-    if "activeTpMethod" in updates and updates["activeTpMethod"] is not None:
+    # Validated as a pair at the top of this handler, so both keys are here or
+    # neither is.
+    if "activeTpMethod" in updates:
         position.active_tp_method = updates["activeTpMethod"]
     if "resolvedTpPrice" in updates:
         # Same non-positive-means-unset floor as stop/structuralStop above —

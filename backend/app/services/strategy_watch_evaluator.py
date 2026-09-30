@@ -30,7 +30,7 @@ from app.services.strategy_engine import (
 )
 from app.services.strategy_watch_store import strategy_watch_store
 from app.services.strategy_param_store import get_active, get_exit
-from app.services.notifications.dispatch import load_notification_config, notify_enabled_channels
+from app.services.notifications.dispatch import notify_enabled_channels, read_notification_config
 
 logger = logging.getLogger(__name__)
 
@@ -669,13 +669,19 @@ def _format_event(ev: WatchEvent, delayed_since: str | None = None) -> tuple[str
 def _any_channel_enabled() -> bool:
     """True when at least one notification channel is enabled (D3).
 
-    Same reader notify_enabled_channels uses. A null or non-dict block counts as
-    disabled. Note: load_notification_config swallows its own read/parse errors
-    and returns {} (dispatch.py), so a corrupt settings.yaml reads as "no
-    channel" and transitions commit. The True branch below only covers an
-    exception escaping the reader itself (P4b code round 1, finding 5)."""
+    Same file notify_enabled_channels reads. A null or non-dict block counts as
+    disabled. AN UNREADABLE settings.yaml COUNTS AS ENABLED (P6, decision
+    P4B-FOLLOWUPS-2026-09-26 item 7): the watch then gates its state on
+    delivery, notify_enabled_channels reports nothing delivered, and the event
+    is kept and resent next run -- never committed silently. It used to read as
+    "no channel", so a corrupt file quietly committed every transition. An
+    exception escaping the reader is treated the same way (P4b code round 1,
+    finding 5)."""
     try:
-        cfg = load_notification_config()
+        cfg, readable = read_notification_config()
+        if not readable:
+            logger.error("strategy-watch: settings.yaml unreadable; gating state on delivery")
+            return True
         if not isinstance(cfg, dict):
             return False
 

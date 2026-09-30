@@ -125,7 +125,7 @@ class _Env:
                 patch("app.services.composite_trigger_evaluator.describe_match",
                       return_value={"structure_matched": [], "structure_total": 0,
                                     "strategy_matched": [], "strategy_total": 0}), \
-                patch(f"{_EV}.load_notification_config", return_value=cfg), \
+                patch(f"{_EV}.read_notification_config", return_value=(cfg, True)), \
                 patch(f"{_EV}.notify_enabled_channels", self.notify):
             return await evaluate_and_notify(**kw)
 

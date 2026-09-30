@@ -197,7 +197,11 @@ describe('StockPositionCard — single-position concentration flag', () => {
     expect(flagText()).toBeNull();
   });
 
-  it('never fires at a 100% cap — legal in Settings, and not a concentration limit', async () => {
+  // Named for what it proves (P6): at a 100% cap the flag is silent for THIS
+  // position, whose notional is under the account. It is not "never" -- a
+  // position worth more than the whole account (239 shares of a $500 stock on
+  // $100k) still trips it, correctly.
+  it('is silent at a 100% cap (legal in Settings) for a position smaller than the account', async () => {
     useRiskStore.setState({
       limits: { ...useRiskStore.getState().limits, maxSingleStockPositionPct: 1 },
     });
