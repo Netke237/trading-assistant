@@ -129,9 +129,16 @@ def _git(*args: str) -> str | None:
     return proc.stdout if proc.returncode == 0 else None
 
 
+# Returned by `_round_numbers_in_branch_subjects` when `git log` itself could not
+# run (raised, timed out, or exited non-zero). Distinct from None, which means
+# "looked and found no rounds" -- P6 D1: collapsing the two let a failed log
+# render as "No drift", a clean bill for a check that never ran.
+_GIT_FAILED = object()
+
+
 def _round_numbers_in_branch_subjects(
     base_ref: str | None, merged_ref: str | None = None,
-) -> tuple[int, list[str]] | None:
+) -> "tuple[int, list[str]] | None | object":
     """Highest `round N` mentioned in this branch's commit SUBJECTS.
 
     `base_ref` is where the span starts -- the resolved base, or the narrower
@@ -171,7 +178,9 @@ def _round_numbers_in_branch_subjects(
         main, so no narrowing happens and its rounds are out of range.
 
     Returns (max_n, matching_subjects), or None when there is no evidence to
-    read -- no git, no resolvable base, or a branch that is not ahead of it.
+    read -- no resolvable base, a ref refused by shape, or a branch whose span
+    holds no `round N` subject. Returns `_GIT_FAILED` when `git log` itself did
+    not run, which the caller reports as COULD NOT RUN (P6 D1).
     Degrading to None is deliberate: this probe runs on every SessionStart, and
     a check that cries drift whenever git is unavailable would train the reader
     to scroll past a red banner.
@@ -180,7 +189,8 @@ def _round_numbers_in_branch_subjects(
     backward references ("round 12's follow-ups", "round 7 rejected finding 8")
     that would fire this on every session.
     """
-    ref_shape = r"[0-9A-Za-z._/-]+"
+    # No leading '-': such a "ref" is an option to git, not a revision.
+    ref_shape = r"[0-9A-Za-z._/][0-9A-Za-z._/-]*"
     if not base_ref or not re.fullmatch(ref_shape, base_ref):
         return None
     revs = [f"{base_ref}..HEAD"]
@@ -194,9 +204,9 @@ def _round_numbers_in_branch_subjects(
             cwd=ROOT, capture_output=True, text=True, timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
-        return None
+        return _GIT_FAILED
     if proc.returncode != 0:
-        return None
+        return _GIT_FAILED
 
     best = 0
     subjects: list[str] = []
@@ -569,6 +579,15 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     evidence = _round_numbers_in_branch_subjects(
         _target_scoped_base(base_ref, state), base_ref,
     )
+    if evidence is _GIT_FAILED:
+        # P6 D1. The base ref resolved, then `git log` over it failed (e.g. the
+        # ref vanished in between). Same tier and reason as the unresolved-base
+        # branch above: an unchecked bill is not a clean one.
+        return "warn", (
+            "Audit bookkeeping COULD NOT RUN: `git log` over the resolved base "
+            f"'{base_ref}' failed. audit_rounds/audit_clean were not verified "
+            "against anything on this run. That is an UNCHECKED bill, not a clean one."
+        )
     if evidence is None:
         return None
     git_max, subjects = evidence
@@ -606,8 +625,29 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"to, and record the count there. {cap} Subjects: {shown}"
         )
 
-    declared = target.get("audit_rounds") or 0
-    if git_max > declared:
+    # P6 D2: a hand-edited string must not become a TypeError inside the
+    # SessionStart hook. A whole number in any spelling JSON allows (3, 3.0,
+    # "3") is read as that number. Anything else is None: it cannot be
+    # compared, so the undercount check is skipped -- but the HARD CAP below
+    # never reads `declared` and still runs (code round 6: an early warn here
+    # turned a round-5, not-clean breach into exit 0). Only after the cap does
+    # a non-numeric count get its warning. Deliberately ONE cap check, not a
+    # copy here: STATE-PROBE-TARGET-SCOPING's verify pattern anchors on it.
+    raw = target.get("audit_rounds")
+    declared: int | None
+    if raw is None:
+        declared = 0
+    elif isinstance(raw, bool):
+        declared = None
+    elif isinstance(raw, int):
+        declared = raw
+    elif isinstance(raw, float) and raw.is_integer():
+        declared = int(raw)
+    elif isinstance(raw, str) and raw.strip().isdigit():
+        declared = int(raw.strip())
+    else:
+        declared = None
+    if declared is not None and git_max > declared:
         return "drift", (
             f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
             f"{label} -- the active target -- declares {declared}. "
@@ -653,6 +693,12 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"moving active_phase if it is pointing at finished work. Subjects: {shown}"
         )
 
+    if declared is None:
+        return "warn", (
+            f"Audit bookkeeping: {label} has audit_rounds={raw!r}, which is not a "
+            f"whole number, so the round count was NOT checked against git "
+            f"(this branch reaches round {git_max}). Fix the field."
+        )
     return None
 
 

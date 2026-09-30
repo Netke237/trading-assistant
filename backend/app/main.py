@@ -6,7 +6,12 @@ import asyncio
 import logging
 import os
 
-from fastapi import FastAPI
+import math
+
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
@@ -334,6 +339,33 @@ async def lifespan(app: FastAPI):
         pass
 
 
+def _finite_or_str(value):
+    """Replace every non-finite float, at any depth, by its string form."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)   # 'nan', 'inf', '-inf'
+    if isinstance(value, dict):
+        return {k: _finite_or_str(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite_or_str(v) for v in value]
+    return value
+
+
+async def request_validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """FastAPI's default 422, minus the 500 it turns into on a NaN/Infinity input.
+
+    P6 (G1-6 residual; decision P6-SCOPE-2026-09-30 authorised this file). The
+    default handler echoes each error's `input` into `detail`, and Starlette's
+    JSONResponse encodes with allow_nan=False -- so a body carrying NaN or
+    Infinity was correctly REFUSED and the refusal itself raised, reaching the
+    client as a 500. Same status, same `detail` list, same loc/msg/type
+    (lib/api.ts apiError reads loc and msg); only a non-finite value becomes
+    its string."""
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(_finite_or_str(exc.errors()))},
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
 
@@ -344,6 +376,7 @@ def create_app() -> FastAPI:
         debug=settings.DEBUG,
         lifespan=lifespan,
     )
+    app.add_exception_handler(RequestValidationError, request_validation_handler)
 
     app.add_middleware(
         CORSMiddleware,

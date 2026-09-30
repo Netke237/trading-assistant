@@ -1113,6 +1113,78 @@ def test_a_malformed_merged_ref_degrades_to_no_evidence(repo):
     assert _mod._round_numbers_in_branch_subjects("origin/main", "main")[0] == 2
     # A revision git WOULD accept (it yields round 2 unguarded), refused by shape.
     assert _mod._round_numbers_in_branch_subjects("origin/main", "HEAD~1") is None
-    # Belt and braces: git itself rejects `^--all`, so this line holds even
-    # without the shape guard. The HEAD~1 line above is what pins the guard.
+    # A leading '-' is an OPTION to git, not a revision, and is refused by
+    # shape (P6). Before that, git's own rejection of `^--all` produced this
+    # None; since P6 D1 a git failure is a distinct COULD-NOT-RUN result, so
+    # the shape guard is what holds this line now.
     assert _mod._round_numbers_in_branch_subjects("origin/main", "--all") is None
+
+
+# --- P6 (D1, D2) -----------------------------------------------------------
+
+def test_a_failed_git_log_warns_instead_of_reading_as_no_drift(repo, monkeypatch):
+    """P6 D1. The base ref resolves, then `git log` over it fails (the ref
+    vanished in between). This used to return None -- "No drift"."""
+    repo.commit("round 2: fixes")
+    real_run = _mod.subprocess.run
+
+    def failing_log(args, *a, **k):
+        if args[:2] == ["git", "log"]:
+            return subprocess.CompletedProcess(args, 128, "", "fatal: bad revision")
+        return real_run(args, *a, **k)
+
+    monkeypatch.setattr(_mod.subprocess, "run", failing_log)
+    severity, message = _mod.audit_bookkeeping_drift(_state(active="A"))
+    assert severity == "warn", "an unrunnable check must not exit non-zero"
+    assert "COULD NOT RUN" in message
+
+
+def test_a_git_log_that_raises_warns_too(repo, monkeypatch):
+    repo.commit("round 2: fixes")
+    real_run = _mod.subprocess.run
+
+    def raising_log(args, *a, **k):
+        if args[:2] == ["git", "log"]:
+            raise subprocess.TimeoutExpired(args, 10)
+        return real_run(args, *a, **k)
+
+    monkeypatch.setattr(_mod.subprocess, "run", raising_log)
+    assert _mod.audit_bookkeeping_drift(_state(active="A"))[0] == "warn"
+
+
+@pytest.mark.parametrize("declared, expected", [
+    ("3", None),          # a numeric string reads as its number: 2 <= 3
+    (" 3 ", None),
+    ("1", "drift"),       # ...and still catches an undercount
+    (3.0, None),          # json.loads gives a float for `3.0`; whole, so read
+    (1.0, "drift"),       # ...and an undercount through a float still drifts
+])
+def test_a_numeric_string_audit_rounds_is_read_as_its_number(repo, declared, expected):
+    """P6 D2. `declared = target.get("audit_rounds") or 0` then `git_max >
+    declared` raised TypeError on a hand-edited string -- inside the
+    SessionStart hook."""
+    repo.commit("round 2: fixes")
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": declared, "audit_clean": True}]
+    result = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
+    assert (result[0] if result else None) == expected
+
+
+@pytest.mark.parametrize("declared", ["three", 2.5, [2], True])
+def test_a_non_numeric_audit_rounds_warns_instead_of_raising(repo, declared):
+    repo.commit("round 2: fixes")
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": declared, "audit_clean": True}]
+    severity, message = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
+    assert severity == "warn"
+    assert "not a whole number" in message
+
+
+@pytest.mark.parametrize("declared", ["three", 2.5, True, [2]])
+def test_a_non_numeric_audit_rounds_still_trips_the_hard_cap(repo, declared):
+    """P6 unit D, code round 6. The non-numeric warn returned BEFORE the hard
+    cap, so round 5 on a target that is not clean exited 0. The cap never reads
+    `declared`, so it must still fire."""
+    repo.commit("round 5: fixes")
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": declared, "audit_clean": False}]
+    severity, message = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
+    assert severity == "drift"
+    assert "HARD CAP" in message

@@ -429,3 +429,47 @@ describe('armPickedFieldsFrom', () => {
     });
   });
 });
+
+// ─── P6 (G2-4-RESIDUAL, G2-8, G2-10) ───────────────────────────────────────
+describe('P6 — picks are value-checked on rehydrate', () => {
+  it('keeps a real pick, including a Barrier Race pick with no stock price', () => {
+    const race: MethodPick = { ...pick('barrier_race'), rowStockPrice: null };
+    const out = normalizeCardEdits({ scanId: 's1', picks: { a: pick(), b: race } });
+    expect(out.picks).toEqual({ a: pick(), b: race });
+  });
+
+  it.each([
+    ['an unknown method',          { method: 'ouija' }],
+    ['a zero stock price',         { rowStockPrice: 0 }],
+    ['a negative option price',    { rowOptionPrice: -1 }],
+    ['a string price',             { rowStockPrice: '197.5' }],
+    ['an unknown stop basis',      { stopBasis: 'vibes' }],
+    ['a missing pickedAt',         { pickedAt: undefined }],
+    ['an empty pickedAt',          { pickedAt: '' }],
+  ])('drops a pick with %s (absent = not picked, which the send gate refuses)', (_label, over) => {
+    const out = normalizeCardEdits({ scanId: 's1', picks: { bad: { ...pick(), ...over }, good: pick() } });
+    expect(out.picks).toEqual({ good: pick() });
+  });
+
+  it.each([null, 'x', 7, []])('drops a non-object pick entry %p', (v) => {
+    expect(normalizeCardEdits({ scanId: 's1', picks: { k: v } }).picks).toEqual({});
+  });
+});
+
+describe('P6 — clearPicksForSymbol compares the symbol case-insensitively', () => {
+  it('clears keys whose prefix differs from the raw symbol only in case', () => {
+    const slice = stamped('s1', { picks: { 'BRK.B|400|2026-10-16|C': pick(), 'MSFT|1|x|C': pick() } });
+    const next = clearPicksForSymbol(slice, 'brk.b', null);
+    expect(Object.keys(next.picks)).toEqual(['MSFT|1|x|C']);
+  });
+});
+
+describe('P6 — own-property tests, not `in`', () => {
+  // writeCardEdit's copy of the same fix has no observable test: its identity
+  // guard also needs Object.is(inherited, value), and a number is never an
+  // inherited function. clearCardPick's guard is observable, so it is pinned.
+  it('clearCardPick treats an inherited name as absent (identity returned)', () => {
+    const slice = stamped('s1', { picks: { A: pick() } });
+    expect(clearCardPick(slice, 's1', 'toString')).toBe(slice);
+  });
+});

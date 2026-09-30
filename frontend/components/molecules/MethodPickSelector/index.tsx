@@ -23,7 +23,8 @@ import styles from './MethodPickSelector.module.css';
 // whether the CARD has finished re-syncing to a new contract, which is a fact
 // only the card has. A clear effect in here would fire during the card's
 // transition commit and wipe the incoming contract's legitimate restored pick.
-// See TradeCard's `pickSettled` for that argument in full.
+// See TradeCard's note on its `pickedMethodGone` clear effect (the
+// `prevContractRef.current` comparison) for that argument in full.
 //
 // THE MAPPING TABLE IS THE CALLER'S, AND THAT IS NOT LAZINESS. §6.1 fixes which
 // field of the selected row lands in which of the two price slots, per method,
