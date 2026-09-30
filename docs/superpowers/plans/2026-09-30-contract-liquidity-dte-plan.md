@@ -141,6 +141,11 @@ this plan does not touch. Expect Semi-annual scans to stay small.
 
 ## 6. Questions for Kenneth
 
+**ANSWERED 2026-09-30 (decision `CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30`): all four recommendations —
+Q1 (b), Q2 yes, Q3 (a) in scan/auto-trade with a label-only treatment in Step 6/Watchlist, Q4 (a).**
+Consequence of Q1 (b): a saved search profile that explicitly set `min_volume` keeps that value as its
+hard floor; profiles are not rewritten.
+
 - **Q1 — `min_volume` after fix 1.** (a) Remove it from Step 3, the presets and `CONTRACT_OVERRIDE_KEYS`;
   saved profiles that carry it are ignored with a one-line notice. (b) Keep it as an *optional* hard floor,
   default 0 (off), so a user can still demand volume. (c) Keep it, but only applied when the quote is live and
