@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "ccr-2fe3aef8-jpt3lz",
-      "claimed_at": "2026-09-30T12:56:18Z",
-      "expires_at": "2026-09-30T15:56:18Z",
-      "note": "Document C: config-health surface",
-      "task": "YAML-CONFIG-INTEGRITY"
-    }
-  ]
+  "claims": []
 }
