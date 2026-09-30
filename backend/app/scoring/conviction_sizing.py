@@ -13,8 +13,11 @@ produced one identical position size, and the two paths applied multipliers
 up to 1.5x apart at conviction 20.
 
 WHAT IS SHARED, AND WHAT IS NOT (REGIME-SIZING-AUDIT r1 finding 1). The two
-callers share this FORMULA and a round-down rule (floor with a 1e-9 guard,
-never below 1), pinned behaviourally by tests/test_regime_sizing_parity.py.
+callers share this FORMULA and a round-down rule (math.floor on the fire
+path, int() on the card's positive quotient, both with a 1e-9 guard), pinned
+behaviourally by tests/test_regime_sizing_parity.py. Both also clamp to a
+minimum of 1 unit. That clamp is NOT exercised by the parity file; it is
+pinned on the fire path by the quantity=4 tests in test_auto_trader.py.
 They do NOT size the same setup: stock_scan.py sizes SHARES on the stock
 card, while the auto-trader fires OPTIONS armed from the Step 7 options card,
 and that card is not conviction-sized. So an armed quantity of 10 is shown as
@@ -320,9 +323,11 @@ def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | No
     # zero multiplier has no honest meaning here anyway: "do not trade" is not a
     # position size, and this path always ends in an order.
     #
-    # `risk_pct or 0.01` was removed by P3a; `risk_fixed if risk_fixed`
-    # (stock_scan.py `_position_size`) remains, and is harmless here because the pct branch
-    # is multiplied by the same `mult`.
+    # `risk_pct or 0.01` was removed by P3a. The `risk_fixed if risk_fixed`
+    # truthiness test that remained is `is not None` since REGIME-SIZING-AUDIT
+    # r2 finding 2, with the schema refusing a non-positive or non-finite
+    # risk_fixed_usd. It was harmless to the MULTIPLIER, but a $0 request fell
+    # through to the 1% default.
     if not 0.0 < min_mult <= 1.0:
         # P3c (3): one message per case — the old single sentence named "above
         # 1" and "0" together, and its zero clause described the pre-P3a 1%
@@ -381,9 +386,10 @@ def conviction_mult(conviction_pct: float, sizing: Mapping[str, Any] | None) -> 
     of the ramp, 0.65 on the shipped block, where it used to be the floor 0.30.
 
     THAT IS A LIVE SIZING CHANGE ON BOTH CALL SITES, deliberately: this function
-    is the single ramp the scan card and the auto-trader share, and the
-    anti-drift tests hold them to the same function object precisely so a change
-    here cannot reach one and not the other. A neutral-regime trade now sizes
+    is the single ramp the scan card and the auto-trader share, and
+    tests/test_regime_sizing_parity.py drives both call sites through it so a
+    change here cannot reach one and not the other. (The same-function-object
+    tests only prove the name is imported; REGIME-SIZING-AUDIT r1 finding 5.) A neutral-regime trade now sizes
     roughly twice what it did.
 
     The gate does NOT bound the ramp's floor. On the shipped config

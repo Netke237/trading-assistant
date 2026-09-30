@@ -1062,7 +1062,7 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     # The caller resolves the fallback and applies the conviction multiplier
     # before this point; a `risk_pct or 0.01` here used to replace a None with
     # an UNSIZED 1% and so drop the multiplier.
-    dollar_risk = risk_fixed if risk_fixed else (account * risk_pct)
+    dollar_risk = risk_fixed if risk_fixed is not None else (account * risk_pct)
     # The 1e-9 is the fire path's (`auto_trader._sized_quantity`): a float
     # quotient such as 669.9999999999999 for an exact 670 must not lose a
     # share. Without it the card rounded DIFFERENTLY from the auto-trader on
