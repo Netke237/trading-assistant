@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/options-shortlist-rank-audit",
-      "claimed_at": "2026-09-30T13:33:21Z",
-      "expires_at": "2026-09-30T16:53:20Z",
-      "note": "register + adversarially audit the options shortlist fix (9957cba); fix stale STOCK-SHORTLIST-RANK note; one frontend Shortlist-cap prefix",
-      "task": "OPTIONS-SHORTLIST-RANK-AUDIT"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/practical-dirac-ebenkq",
       "claimed_at": "2026-09-30T13:35:28Z",
       "expires_at": "2026-09-30T16:35:28Z",
