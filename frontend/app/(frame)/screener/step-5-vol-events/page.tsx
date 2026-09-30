@@ -7,9 +7,17 @@
  * (/api/config/event-thresholds) via useEventThresholdsStore — see that store's
  * header comment for why this can't be a locally hardcoded constant.
  * Gate = worst of (IV status, event proximity status).
+ *
+ * NO THRESHOLDS, NO VERDICT (decision DOCC-3-THRESHOLD-STORES-REFUSE-2026-09-29).
+ * Both threshold stores hold only validated backend values and are fetched on
+ * mount. Until both records are in hand (`avail === 'ready'`) the page grades
+ * nothing: every gate is PENDING while loading and NO_DATA when a fetch failed,
+ * no counts line, no bands, and no sentence that quotes a number. The IV side
+ * reads the EFFECTIVE record (effectiveIvThresholds: fetched + Settings'
+ * session override), and the header labels an active override.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -17,192 +25,20 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
-import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
+import {
+  useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
+} from '@/lib/ivThresholdsStore';
 import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
 import {
-  useEventThresholdsStore, getEventWindow, type HorizonEventThresholds,
+  useEventThresholdsStore, getEventWindow, type ThresholdHorizon,
 } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
-
-/* ── THE MISSING-READING CLAIM ──────────────────────────────────
- * THE MEANING IS RENDERED AS DATA. The four fields below go into the DOM as
- * `data-claim-*` attributes on the element that carries the sentence, and the
- * sentence is that same claim run through `missingReadingClause`. The tests
- * read the attributes; the English is a rendering of them, not the carrier.
- *
- * WHY, AND THE EVIDENCE IS TEN ROUNDS DEEP. Four consecutive adversarial
- * rounds tried to prove the PROSE correct and each closed one hole while
- * opening another: regex whitelists, then "positive" regex rules, then a
- * data-driven clause compared with `toContain`, then that plus a three-token
- * "no verdict word outside the clause" rule. Round 4 measured that last rule
- * ADMITTING false copy ("safe to trade as if they were clean", green) and
- * REJECTING true copy (11 red on a statement true of the page) at the same
- * time. Each of these shipped a full green suite:
- *   "graded PASS ... never CAUTION"      the semantic INVERSE of the gate
- *   "on the event side"                  the wrong side entirely
- *   "so it can be easier still"          a worst-of that gets easier
- *   "In the worst case, open the column" the reconciliation sentence deleted,
- *                                        with one list word left behind
- * The rules were not the defect; grading English with regexes was.
- *
- * WHAT REPLACES THEM. Every field below is answerable to something the page
- * RENDERS, not to a constant a human retyped in the test file:
- *   side        → each row publishes `data-side-volatility` and
- *                 `data-side-event`; exactly one of them equals `asserted` on
- *                 the row the clause describes, and it must be the one named.
- *   asserted    → that same attribute, plus the head's count for the verdict.
- *   denied      → the OTHER branch of the same ternary, observed by rendering
- *                 the same row on a horizon where volatility does not gate.
- *   combination → a row whose two sides genuinely disagree: `worse` and
- *                 `better` predict different gates, and only one is rendered.
- * A reworded clause can therefore say the same thing differently, but it
- * cannot say something different -- to do that you must change the claim, and
- * every field of the claim is pinned to behaviour. The skeleton itself is
- * pinned by one exact-string test, which is the only place a literal belongs.
- */
-export type MissingReadingClaim = {
-  /** Which side of the gate graded the row. */
-  side: 'volatility' | 'event';
-  /** The sub-verdict that side gives an unreadable row. */
-  asserted: Status;
-  /** The sub-verdict it explicitly does NOT give. */
-  denied: Status;
-  /** How the two sides combine. `worstStatus` is 'worse'. */
-  combination: 'worse' | 'better';
-};
-
-const SIDE_LABEL = {
-  volatility: 'the volatility side',
-  event:      'the event side',
-} as const;
-
-const COMBINATION_LABEL = {
-  worse:  { of: 'worse',  travel: 'lower'  },
-  better: { of: 'better', travel: 'higher' },
-} as const;
-
-/* ── THE BANNER'S CLOSED VOCABULARY ───────────────────────────────
- * ROUND 1 OF THE STRUCTURAL LOOP FOUND THE CLAIM WAS THE ONLY PART TREATED
- * THIS WAY, and that the others were graded by punctuation. Measured: with the
- * causes sentence held to "one sentence" (`/^[^.]*\.$/`), appending
- * "; these rows are safe to trade as if they were clean." shipped 51/51 GREEN
- * -- a semicolon buys any lie -- while appending a TRUE sentence with a full
- * stop went red. That is round 4's finding reproduced verbatim against the
- * replacement: false copy admitted and true copy rejected, at one edit site.
- *
- * So every cause the banner can name is a KEY, and its words live in one
- * table that a single test pins by equality. A new phrase has to be a new
- * entry here, and free text appended to an existing one fails that pin. The
- * counts beside them come from the rows; the sentence is a rendering of both.
- */
-export const CAUSE_LABEL = {
-  ivRank: 'on IV rank above its threshold',
-  ivAbs:  'on IV above its threshold',
-  event:  "on an event inside this horizon's window",
-} as const;
-export type CauseKey = keyof typeof CAUSE_LABEL;
-
-export type GateCounts = { total: number; pass: number; caution: number; reject: number };
-export type GateCause  = { n: number; key: CauseKey };
-
-/** One band per IV basis on screen, as the threshold sentence states them. */
-export type IvBand = { basis: IvBasis; passMax: number; cautionMax: number | null };
-
-/* THE NUMBERS ARE THE CLAIM HERE, and round 2 measured them ungraded: shifting
- * the PASS max by 20 in this sentence -- so the page said "IV rank <= 54 -> PASS"
- * while rejecting at 34 -- shipped 1740/1740, because the pin was a regex with
- * `\d+` holes in it. Same defect the four claim fields were rebuilt to remove,
- * left standing on the numbers beside them. Then: a builder over published
- * bands, pinned by equality against ITSELF -- round 7 measured swapping the two
- * bands inside this function shipping green, because gateSummary.test.tsx's pin
- * rebuilds its expectation with this same builder. What catches a change to the
- * numbers or their order is __tests__/literalPins.test.tsx: literal strings,
- * for the builder and for the rendered page. */
-export function ivThresholdSentence(bands: IvBand[]): string {
-  return bands
-    .map((b) => `${b.basis === 'rank' ? 'IV rank' : 'IV'} \u2264 ${b.passMax} \u2192 PASS; `
-      + `\u2264 ${b.cautionMax ?? '\u2014'} \u2192 CAUTION; above \u2192 REJECT.`)
-    .join(' ');
-}
-
-/* THE BOUNDARY IS PART OF THE CLAIM, and this sentence got it wrong while
- * every other statement of the same window got it right. It read "Earnings
- * within {caution} days -> CAUTION; within {reject} days -> REJECT", which
- * reads INCLUSIVE -- so the page announced an earnings date landing exactly on
- * day 21 as a REJECT. The ternary forty lines below grades it CAUTION (strict
- * `<`), the row tooltip one pixel away words it `reject <21d / caution <45d`,
- * and backend stock_scorer.py's _rule_event applies `< reject_days` too. Three
- * agreeing consumers and one sentence contradicting all of them, with no test
- * on the event boundary at all -- the IV boundary has a table of its own.
- * Stated now as the inequality the stack actually applies, the way the IV
- * sentence above states `<=` and the tooltip states `<`. */
-export function eventWindowSentence(w: HorizonEventThresholds): string {
-  return `Earnings < ${w.reject_days}d \u2192 REJECT; < ${w.caution_days}d \u2192 CAUTION; `
-    + `else \u2192 PASS.`;
-}
-
-export function headSentence(c: GateCounts): string {
-  return `${c.total} shown \u2014 ${c.pass} PASS, ${c.caution} CAUTION, ${c.reject} REJECT.`;
-}
-
-export function causesSentence(causes: GateCause[], overlap: boolean): string {
-  // A row can be driven by its volatility AND an event, so these need not sum
-  // to the non-PASS count. Said out loud, because on screen there was no cue at
-  // all and "17 causes for 12 rows" reads as a bug.
-  const cue = overlap ? ' (a row can have more than one)' : '';
-  return `Driven by${cue}: ${causes.map((c) => `${c.n} ${CAUSE_LABEL[c.key]}`).join('; ')}.`;
-}
-
-/** The banner's second line, before it is words. `causes` and `missing` are
- *  independently optional: a scan can be entirely readable (causes, no claim),
- *  entirely unreadable with nothing else driving it (claim, no causes), or
- *  both. Each becomes its own `data-part` element, carrying the data it was
- *  rendered from, so the tests can pin every part by EQUALITY against that
- *  data rather than by a rule over its English. */
-type GateSummary = {
-  counts: GateCounts;
-  causes: { list: GateCause[]; overlap: boolean } | null;
-  missing: { rows: number; claim: MissingReadingClaim } | null;
-};
-
-/* THE CLAIM IS A MODULE CONSTANT, and it is out here rather than inside the
- * memo on purpose. Round 2 of the structural loop measured why: with the claim
- * built inside the memo it could SEE `noReading`, and a claim that told the
- * truth at or below 25 rows and inverted above it shipped 67/67 green --
- * rendering all four of the failures listed above, in one sentence. Three
- * rounds had each moved that wall outward (n>=3, then >20, then >25) and each
- * time the next round found it one step further out.
- *
- * Out here the claim has nothing to be keyed ON: no row, no count, no scan.
- * The test imports this exact object and every render in the suite is checked
- * against it. BEING HONEST ABOUT THE RESIDUAL: TypeScript cannot stop someone
- * writing `noReading > N ? somethingElse : MISSING_READING_CLAIM` at the call
- * site, so this is not a proof. What closes it for the PRODUCT is the pair of
- * this constant and a fixture rendering more unreadable rows than the largest
- * universe can produce -- above that n there is no scan left to hide in. */
-export const MISSING_READING_CLAIM: MissingReadingClaim = Object.freeze({
-  //   side:     an unreadable row's verdict is set on the IV branch of the gate
-  //             (`hasIv ? ... : gateDisabled ? 'PASS' : 'CAUTION'`); the event
-  //             branch never sees `hasIv` at all.
-  side:        'volatility',
-  //   asserted/denied: the two arms of that one ternary. The clause renders
-  //             only where the horizon DOES gate on volatility, so the live arm
-  //             is CAUTION and PASS is the arm such a row cannot reach.
-  asserted:    'CAUTION',
-  denied:      'PASS',
-  //   combination: the gate is worstStatus(iv, event) -- worse, never better.
-  combination: 'worse',
-});
-
-export function missingReadingClause(n: number, claim: MissingReadingClaim): string {
-  const { of, travel } = COMBINATION_LABEL[claim.combination];
-  return (
-    `${n} of them ${n === 1 ? 'has' : 'have'} no volatility reading at all — ` +
-    `graded ${claim.asserted} on ${SIDE_LABEL[claim.side]} alone, never ${claim.denied} there. ` +
-    `The gate verdict above is the ${of} of that and the event window, ` +
-    `so it can be ${travel} still.`
-  );
-}
+import {
+  MISSING_READING_CLAIM, ivThresholdSentence, eventWindowSentence,
+  headSentence, causesSentence, missingReadingClause,
+  thresholdsUnavailableSentence, ivOverrideSentence, type ThresholdsAvail,
+  type GateCounts, type GateCause, type IvBand, type GateSummary,
+} from './gateSummary';
 import { worstStatus, type Status } from '@/lib/status';
 import { eventVolGateTooltip, gateDrivers, type GateDrivers } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
@@ -233,6 +69,11 @@ const COLUMNS = '24px 32px 72px minmax(0, 240px) 120px 70px 110px 80px';
  *  render and the "computed ONCE" claim held only after a scan. */
 const NO_CANDIDATES: TradeCardData[] = [];
 
+/** Every flag false: the drivers of a row that was never graded. */
+const NO_DRIVERS: GateDrivers = Object.freeze({
+  iv: false, event: false, ivMissing: false, hasIv: false, ivGated: false,
+});
+
 /* Why a row is not PASS is decided by `gateDrivers` (lib/statusTooltips.ts),
  * which the per-row tooltip calls too. It was a local enum here and a separate
  * expression there, and an adversarial round caught the two disagreeing on
@@ -259,20 +100,49 @@ export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? NO_CANDIDATES;
-  const ivThresholds = useIvThresholdsStore((s) => s.thresholds);
+  // Two selectors, never one returning a fresh object (Zustand v5 re-renders
+  // forever on that); the effective record is derived in a memo.
+  const ivFetched   = useIvThresholdsStore((s) => s.thresholds);
+  const ivOverrides = useIvThresholdsStore((s) => s.overrides);
+  const ivStatus    = useIvThresholdsStore((s) => s.status);
+  const ivError     = useIvThresholdsStore((s) => s.error);
   const eventThresholds = useEventThresholdsStore((s) => s.thresholds);
+  const evStatus        = useEventThresholdsStore((s) => s.status);
+  const evError         = useEventThresholdsStore((s) => s.error);
+  const ivThresholds = useMemo(
+    () => effectiveIvThresholds(ivFetched, ivOverrides),
+    [ivFetched, ivOverrides],
+  );
+
+  // Fetched on every mount, so a scoring_rules.yaml edit reaches this page on
+  // the next visit (subject to the backend's lru_cache on load_scoring_cfg).
+  const refetchThresholds = useCallback(() => {
+    void useIvThresholdsStore.getState().fetch();
+    void useEventThresholdsStore.getState().fetch();
+  }, []);
+  useEffect(() => { refetchThresholds(); }, [refetchThresholds]);
+
+  const avail: ThresholdsAvail =
+    ivStatus === 'failed' || evStatus === 'failed' ? 'failed'
+    : ivThresholds !== null && eventThresholds !== null ? 'ready'
+    : 'loading';
+  const availError = ivStatus === 'failed' ? ivError : evStatus === 'failed' ? evError : null;
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
   const candidateMap = useMemo(
     () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
     [candidates],
   );
 
-  const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
+  const horizonKey: ThresholdHorizon = context?.horizon?.startsWith('Intraday') ? 'Intraday'
     : context?.horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
-  // FALLBACK ONLY: the horizon's YAML window from /api/config/event-thresholds,
-  // used for results persisted before scans echoed `event_window` (below).
-  const baseWindow = getEventWindow(horizonKey, eventThresholds);
+  // The horizon's YAML window from /api/config/event-thresholds, applied only to
+  // results persisted before scans echoed `event_window` (below).
+  // null while `avail !== 'ready'`: nothing below may quote a window it does not
+  // have. That holds even when the result echoes a window: the page grades
+  // nothing until BOTH stores are in hand (decision DOCC-3-THRESHOLD-STORES-REFUSE).
+  const baseWindow = avail === 'ready' && eventThresholds !== null
+    ? getEventWindow(horizonKey, eventThresholds) : null;
   // A Step-3 override of the window (typed by hand, or restored by a search
   // profile such as SemiAnnual_* at 7/30) replaces the YAML window inside
   // score_stock()'s _rule_event. Gating here on the YAML window alone
@@ -283,8 +153,11 @@ export default function Step5Page() {
   // be edited after the scan (grading rows against a window they were never
   // scored on). Results from before the echo existed fall back to the YAML window.
   const scanEventWindow = useScanStore((s) => s.scanResult?.event_window);
-  const eventWindow = scanEventWindow ? { ...baseWindow, ...scanEventWindow } : baseWindow;
-  const { reject_days: evReject, caution_days: evCaution } = eventWindow;
+  const eventWindow = baseWindow === null ? null
+    : scanEventWindow ? { ...baseWindow, ...scanEventWindow } : baseWindow;
+  const evReject  = eventWindow?.reject_days ?? null;
+  const evCaution = eventWindow?.caution_days ?? null;
+  const ivOverride = avail === 'ready' ? ivOverrideFor(horizonKey, ivFetched, ivOverrides) : null;
 
   // The volatility figure behind each row is EITHER a true percentile
   // (`ivRank`, present only when IBKR or tastytrade answered) OR an absolute
@@ -297,6 +170,7 @@ export default function Step5Page() {
   // and any future edit reading a fourth value here would have produced a stale
   // gate with no warning at the call site.
   const ivStatusFor = useCallback((value: number, basis: IvBasis): Status => {
+    if (ivThresholds === null) return 'NO_DATA';   // never reached: gatedRows checks avail first
     const passMax = getIvPassMax(horizonKey, ivThresholds, basis);
     if (passMax === null) return 'PASS';   // Intraday: no IV gate
     if (value <= passMax) return 'PASS';
@@ -312,7 +186,10 @@ export default function Step5Page() {
   // on Swing and Position whenever no candidate carried a reading, the empty
   // page included. The gate is not disabled there; it has nothing in front of
   // it yet, which is a different statement and the one the user needs.
+  // Computed ONLY when `ready`: "IV gate disabled" must never be said about a
+  // config nobody has read.
   const gateDisabled =
+    avail === 'ready' && ivThresholds !== null &&
     getIvPassMax(horizonKey, ivThresholds, 'absolute') === null &&
     getIvPassMax(horizonKey, ivThresholds, 'rank') === null;
 
@@ -335,6 +212,11 @@ export default function Step5Page() {
     // cheap premium); only the absolute level treats 0 as missing.
     const iv = resolveIv(c?.contractDetails);
     const hasIv = iv.basis !== 'none';
+    // No thresholds in hand: no verdict on either side, and none combined.
+    if (avail !== 'ready' || evReject === null || evCaution === null) {
+      const none: Status = avail === 'failed' ? 'NO_DATA' : 'PENDING';
+      return { r, c, iv, hasIv, ivSt: none, proxStatus: none, gate: none, drivers: NO_DRIVERS };
+    }
     // Unknown IV must not be treated as better than a clean read — this page's
     // own copy states "Gate = worst of IV and event proximity," so an unknown
     // IV is downgraded to CAUTION (not NO_DATA) specifically so it always
@@ -390,7 +272,7 @@ export default function Step5Page() {
       ivStatus: ivSt, proxStatus, gate, hasIv, ivGated: !gateDisabled,
     });
     return { r, c, iv, hasIv, ivSt, proxStatus, gate, drivers };
-  }), [watchlist, candidateMap, ivStatusFor, evReject, evCaution, gateDisabled]);
+  }), [watchlist, candidateMap, ivStatusFor, evReject, evCaution, gateDisabled, avail]);
 
 
   // DERIVED FROM gatedRows rather than looping the watchlist and calling
@@ -403,7 +285,7 @@ export default function Step5Page() {
     return [...seen];
   }, [gatedRows]);
 
-  const ivBands: IvBand[] = basesPresent
+  const ivBands: IvBand[] = avail !== 'ready' || ivThresholds === null ? [] : basesPresent
     .map((b) => {
       const passMax = getIvPassMax(horizonKey, ivThresholds, b);
       if (passMax === null) return null;
@@ -436,7 +318,7 @@ export default function Step5Page() {
   // treat as a PASS." to a `parts.push` list shipped 43/43 green.
   const gateSummary = useMemo<GateSummary | null>(() => {
     const total = gatedRows.length;
-    if (total === 0) return null;
+    if (total === 0 || avail !== 'ready') return null;
     const pass = gatedRows.filter((g) => g.gate === 'PASS').length;
     const caution = gatedRows.filter((g) => g.gate === 'CAUTION').length;
     const reject = gatedRows.filter((g) => g.gate === 'REJECT').length;
@@ -450,7 +332,7 @@ export default function Step5Page() {
     // AT the gate, and a missing reading is CAUTION, which is not REJECT. The
     // banner's whole reason for existing vanished in the case it was built for.
     const count = (f: (g: (typeof gatedRows)[number]) => boolean) => gatedRows.filter(f).length;
-    // KEYS, not phrases. The words live in CAUSE_LABEL, which one test pins by
+    // KEYS, not phrases. The words live in CAUSE_LABEL (gateSummary.ts), which one test pins by
     // equality -- see THE BANNER'S CLOSED VOCABULARY above for the measurement
     // that forced this.
     const causes: GateCause[] = ([
@@ -498,7 +380,7 @@ export default function Step5Page() {
     const missing = noReading === 0 ? null : { rows: noReading, claim: MISSING_READING_CLAIM };
 
     return { counts, causes: causesPart, missing };
-  }, [gatedRows, gateDisabled]);
+  }, [gatedRows, gateDisabled, avail]);
 
   return (
     /* THE WHOLE COMPONENT IS THE CONTRACT'S REGION, not one div inside it.
@@ -512,9 +394,10 @@ export default function Step5Page() {
     <div
       className={styles.main}
       data-testid="step-5"
-      data-ev-reject={evReject}
-      data-ev-caution={evCaution}
-      data-iv-gated={String(!gateDisabled)}
+      data-avail={avail}
+      data-ev-reject={evReject ?? ''}
+      data-ev-caution={evCaution ?? ''}
+      data-iv-gated={avail === 'ready' ? String(!gateDisabled) : 'unknown'}
       data-candidates={candidates.length}
       data-horizon={horizonKey}
     >
@@ -536,6 +419,21 @@ export default function Step5Page() {
         </span></span>
         <span data-line="thresholds">
           <Text size={13} tone="secondary">
+            {avail !== 'ready' ? (
+              /* NO THRESHOLDS: this part REPLACES the three below, and quotes no
+                 number. Retry re-fetches both stores. */
+              <>
+                <span data-part="thresholds-unavailable" data-avail={avail} data-error={availError ?? ''}>
+                  {thresholdsUnavailableSentence(avail, availError)}
+                </span>
+                {avail === 'failed' && (
+                  <>
+                    {' '}
+                    <button type="button" data-part="thresholds-retry" onClick={refetchThresholds}>Retry</button>
+                  </>
+                )}
+              </>
+            ) : (<>
             {/* WHICH BRANCH, published. Round 2: reordering this ternary so a
                 GATED horizon printed "IV gate disabled for this horizon."
                 shipped 67/67 green -- the pin was an alternation over the four
@@ -551,10 +449,19 @@ export default function Step5Page() {
                 :                             'no-reading'
               }
             >{gateSentence}</span>
+            {ivOverride !== null && (
+              <>
+                {' '}
+                <span data-part="iv-override" data-override={ivOverride.value} data-yaml={ivOverride.yaml}>
+                  {ivOverrideSentence(ivOverride.value, ivOverride.yaml)}
+                </span>
+              </>
+            )}
             {' '}
-            <span data-part="event-window">{eventWindowSentence(eventWindow)}</span>
+            <span data-part="event-window">{eventWindow !== null && eventWindowSentence(eventWindow)}</span>
             {' '}
             <span data-part="gate-rule">Gate = worst of IV and event proximity.</span>
+            </>)}
           </Text>
         </span>
         {gateSummary !== null && (
@@ -660,7 +567,7 @@ export default function Step5Page() {
                 {shownIv.suffix !== '' && (
                   <Text size={10} tone="dim">{shownIv.suffix}</Text>
                 )}
-                {hasIv && (
+                {hasIv && avail === 'ready' && (
                   <div className={pageStyles.ivTrack}>
                     <div
                       className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
@@ -735,7 +642,9 @@ export default function Step5Page() {
                 // on it, the panel reached past the table's right edge, where it
                 // was cut off and summoned a horizontal scrollbar.
                 tooltipAlign="right"
-                tooltip={eventVolGateTooltip({
+                tooltip={avail !== 'ready' || evReject === null || evCaution === null
+                  ? thresholdsUnavailableSentence(avail === 'ready' ? 'loading' : avail, availError)
+                  : eventVolGateTooltip({
                   ivRank: iv.value,
                   ivBasis: iv.basis,
                   ivStatus: ivSt,

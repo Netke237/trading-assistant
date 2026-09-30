@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { AutoTradeArm } from '@/components/organisms/AutoTradeArm';
 import { useRiskStore } from '@/lib/riskStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import type { PortfolioPosition } from '@/types/domain';
@@ -876,8 +877,6 @@ describe('AutoTradeArm — O4 step 6: the caution under the buttons', () => {
 
 // ── P2-18 (plan 2026-09-25-p2-premium-stop-position-editing-plan.md) ────────
 describe('AutoTradeArm — P2-18 premium-stop caution, unbooked fire, booking wording', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { useSettingsStore } = require('@/lib/settingsStore');
   beforeEach(() => {
     act(() => {
       useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));

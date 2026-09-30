@@ -1,14 +1,24 @@
-// Fetches per-horizon event-proximity reject/caution day windows from the backend
-// at app start. Falls back to YAML-mirroring values if the fetch fails.
+// Per-horizon event-proximity reject/caution day windows, fetched from the backend
+// (/api/config/event-thresholds) — the horizons.<horizon>.event block of
+// backend/config/scoring_rules.yaml, the same reject_days/caution_days
+// score_stock()'s _rule_event grades the "event" rule with for options-mode scans.
+// (Stock-mode scans zero this rule's weight — informational-only there.)
 //
-// Single source of truth: these values must match backend/config/scoring_rules.yaml's
-// horizons.<horizon>.event block — the same reject_days/caution_days score_stock()'s
-// _rule_event uses to grade the "event" rule for options-mode scans. Fetching them
-// (instead of hardcoding a second copy here) is what keeps the Step 5 gate (options-only)
-// in sync with the gate that already shaped the candidate's score. (Stock-mode scans zero
-// this rule's weight — these numbers are informational-only there, not a live gate.)
+// THIS STORE HOLDS ONLY VALIDATED BACKEND VALUES (decision
+// DOCC-3-THRESHOLD-STORES-REFUSE-2026-09-29). There is no hardcoded fallback: a
+// failed or malformed fetch clears `thresholds` to null and sets status 'failed',
+// and every reader must then show no verdict (Step 5 grades NO_DATA). A backend
+// that now says the config is broken outranks a record fetched a minute ago.
+//
+// Pages fetch on mount (Step 5); there is no app-start bootstrap. `seq` makes
+// only the latest request write, so a slow earlier response — success or
+// failure — can never overwrite a newer one.
 import { create } from 'zustand';
 import { api } from '@/lib/api';
+
+export type ThresholdHorizon = 'Intraday' | 'Swing' | 'Position';
+export const THRESHOLD_HORIZONS: readonly ThresholdHorizon[] = ['Intraday', 'Swing', 'Position'];
+export type ThresholdsStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
 export interface HorizonEventThresholds {
   reject_days:  number;
@@ -16,35 +26,68 @@ export interface HorizonEventThresholds {
 }
 
 export interface EventThresholdsState {
-  thresholds:    Record<string, HorizonEventThresholds>;
-  loaded:        boolean;
-  fetch:         () => Promise<void>;
-  setThresholds: (t: Record<string, HorizonEventThresholds>) => void;
+  /** ONLY ever a validated backend payload. null = none in hand. */
+  thresholds: Record<ThresholdHorizon, HorizonEventThresholds> | null;
+  status:     ThresholdsStatus;
+  error:      string | null;
+  fetch:      () => Promise<void>;
 }
 
-export const FALLBACK: Record<string, HorizonEventThresholds> = {
-  Intraday: { reject_days: 1,  caution_days: 3  },
-  Swing:    { reject_days: 21, caution_days: 45 },
-  Position: { reject_days: 30, caution_days: 60 },
-};
+export function messageOf(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
+export function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** Throws Error naming the path, e.g. "Swing.caution_days: expected a number". */
+export function parseEventThresholds(raw: unknown): Record<ThresholdHorizon, HorizonEventThresholds> {
+  if (!isPlainObject(raw)) throw new Error('event thresholds: expected an object');
+  const out = {} as Record<ThresholdHorizon, HorizonEventThresholds>;
+  for (const h of THRESHOLD_HORIZONS) {
+    const block = raw[h];
+    if (!isPlainObject(block)) throw new Error(`${h}: missing or not an object`);
+    const num = (k: 'reject_days' | 'caution_days'): number => {
+      const v = block[k];
+      if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`${h}.${k}: expected a number`);
+      if (v < 0) throw new Error(`${h}.${k}: must be >= 0`);
+      return v;
+    };
+    const reject_days = num('reject_days');
+    const caution_days = num('caution_days');
+    if (reject_days > caution_days) {
+      throw new Error(`${h}: reject_days (${reject_days}) exceeds caution_days (${caution_days})`);
+    }
+    out[h] = { reject_days, caution_days };
+  }
+  return out;
+}
+
+let seq = 0;
 
 export const useEventThresholdsStore = create<EventThresholdsState>((set) => ({
-  thresholds: FALLBACK,
-  loaded:     false,
+  thresholds: null,
+  status:     'idle',
+  error:      null,
   fetch: async () => {
+    const my = ++seq;
+    set({ status: 'loading' });   // thresholds kept: the last good record stays on screen
     try {
       const data = await api.getEventThresholds();
-      set({ thresholds: data, loaded: true });
-    } catch {
-      set({ loaded: true }); // keep fallback values
+      if (my !== seq) return;
+      set({ thresholds: parseEventThresholds(data), status: 'ready', error: null });
+    } catch (e) {
+      if (my !== seq) return;
+      set({ thresholds: null, status: 'failed', error: messageOf(e) });
     }
   },
-  setThresholds: (t) => set({ thresholds: t }),
 }));
 
 export function getEventWindow(
-  horizonKey: string,
-  thresholds: Record<string, HorizonEventThresholds>,
+  horizonKey: ThresholdHorizon,
+  thresholds: Record<ThresholdHorizon, HorizonEventThresholds>,
 ): HorizonEventThresholds {
-  return thresholds[horizonKey] ?? FALLBACK[horizonKey] ?? FALLBACK.Swing;
+  return thresholds[horizonKey];
 }

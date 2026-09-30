@@ -4,7 +4,13 @@ import TradeCardContextRail from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
+import { api } from '@/lib/api';
+import { IV_SHIPPED, echoStoredThresholds } from '@/lib/testFixtures/thresholds';
 import type { TradeCardData } from '@/types/domain';
+
+// DOCC-3: the rail fetches the IV store on mount; the fetch answers with the
+// record the test set, so it re-sets the test's values rather than clearing them.
+jest.mock('@/lib/api', () => ({ api: { getIvThresholds: jest.fn(), getEventThresholds: jest.fn() } }));
 
 // The gate and QuickLook are not under test: pass-through / stub.
 jest.mock('@/components/organisms/ScreenerStepGate', () => ({
@@ -46,6 +52,8 @@ const PICKED = card({
 });
 
 beforeEach(() => {
+  (api.getIvThresholds as jest.Mock).mockReset();
+  echoStoredThresholds(api as unknown as Parameters<typeof echoStoredThresholds>[0]);
   act(() => {
     useScanStore.setState({
       scanResult: { scan_id: 's', candidates: [AUTO] } as any,
@@ -54,8 +62,9 @@ beforeEach(() => {
       context: { universe: 'SP500', direction: 'Bullish', horizon: 'Swing (7–21d)', horizonPreset: 'Swing', holdMin: 7, holdMax: 21 } as any,
     } as any);
     useIvThresholdsStore.setState({
-      thresholds: { Swing: { abs_pass_max: 40, abs_caution_max: 60, rank_pass_max: 55, rank_caution_max: 70 } },
-    } as any);
+      thresholds: { ...IV_SHIPPED, Swing: { abs_pass_max: 40, abs_caution_max: 60, rank_pass_max: 55, rank_caution_max: 70 } },
+      status: 'ready', error: null, overrides: {},
+    });
     useTradeCardUiStore.setState({ activeCard: null });
   });
 });
@@ -86,4 +95,50 @@ it('cautions on R:R while the picked contract\'s plan is pending, never the stal
   render(<TradeCardContextRail />);
   expect(screen.getByText('R:R not yet recomputed for the contract picked in Step 6.')).toBeInTheDocument();
   expect(screen.queryByText(/reward:risk is/)).not.toBeInTheDocument();
+});
+
+/* ── DOCC-3: no thresholds in hand, and the Settings override ─────────────── */
+
+const NOT_LOADED = 'IV thresholds could not be loaded from scoring_rules.yaml — the IV gate was not applied.';
+
+/** The IV item's verdict, as the row publishes it. */
+function ivStatus(): string | null {
+  return document.querySelector('[data-gate-label="IV acceptable"]')?.getAttribute('data-status') ?? null;
+}
+
+describe('R1: with no IV record the IV item is CAUTION with the named reason, never PASS', () => {
+  it.each([['Swing (7–21d)'], ['Intraday (0-2d)']])('%s', (horizon) => {
+    (api.getIvThresholds as jest.Mock).mockReset().mockReturnValue(new Promise(() => {}));
+    act(() => {
+      useScanStore.setState({ context: { ...useScanStore.getState().context, horizon } as any } as any);
+      useIvThresholdsStore.setState({ thresholds: null, status: 'failed', error: 'x' });
+      useTradeCardUiStore.setState({ activeCard: { card: PICKED, rrPending: false } });
+    });
+    render(<TradeCardContextRail />);
+    expect(screen.getByText(NOT_LOADED)).toBeInTheDocument();
+    expect(ivStatus()).toBe('CAUTION');
+    expect(screen.queryByText(/no IV gate for/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/vs\. pass/)).not.toBeInTheDocument();
+  });
+});
+
+it('R2: an active override adds the suffix, and the verdict uses the override', async () => {
+  // An ABSOLUTE reading (no rank), 38 -- above the YAML's 34, inside the override's 50.
+  const ABS = card({
+    contractDetails: { strike: 150, expiry: '2026-05-15', right: 'C', mid: 2.5, delta: 0.45, theta: -0.09, iv: 38, dte: 24 } as any,
+  });
+  act(() => {
+    useIvThresholdsStore.setState({ thresholds: IV_SHIPPED, status: 'ready', error: null, overrides: { Swing: { abs_pass_max: 50 } } });
+    useTradeCardUiStore.setState({ activeCard: { card: ABS, rrPending: false } });
+  });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText(/^IV 38(\.0)?% vs\. pass ≤50 \/ caution ≤55\. \(session override from Settings; scoring_rules\.yaml: 34\)$/))
+    .toBeInTheDocument();
+  // 38 is above the YAML's 34 (CAUTION there) and inside the override's 50.
+  expect(ivStatus()).toBe('PASS');
+});
+
+it('R3: mounting fetches the IV thresholds', () => {
+  render(<TradeCardContextRail />);
+  expect(api.getIvThresholds).toHaveBeenCalledTimes(1);
 });

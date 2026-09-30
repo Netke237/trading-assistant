@@ -2,8 +2,18 @@ import { render, screen } from '@testing-library/react';
 import Step5Page from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
-import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK, type HorizonEventThresholds } from '@/lib/eventThresholdsStore';
+import {
+  useEventThresholdsStore, type HorizonEventThresholds, type ThresholdHorizon,
+} from '@/lib/eventThresholdsStore';
 import type { TradeCardData } from '@/types/domain';
+import { api } from '@/lib/api';
+import { EVENT_SHIPPED, IV_SHIPPED, echoStoredThresholds } from '@/lib/testFixtures/thresholds';
+import { expectPageCopy } from '../testSupport/pageContract';
+
+// DOCC-3: the page fetches both stores on mount; each fetch answers with the
+// record the test set, so it re-sets the test's values rather than clearing them.
+jest.mock('@/lib/api', () => ({ api: { getIvThresholds: jest.fn(), getEventThresholds: jest.fn() } }));
+beforeEach(() => echoStoredThresholds(api as unknown as Parameters<typeof echoStoredThresholds>[0]));
 
 function makeCandidate(overrides: Partial<TradeCardData> = {}): TradeCardData {
   return {
@@ -31,7 +41,9 @@ function makeCandidate(overrides: Partial<TradeCardData> = {}): TradeCardData {
 function setup(
   nextEventDays: number,
   horizon: string,
-  thresholds: Record<string, HorizonEventThresholds> = EVENT_FALLBACK,
+  // Horizons not given keep the shipped window: a partial record would be
+  // refused by the store's parser on the mount fetch (DOCC-3).
+  thresholds: Partial<Record<ThresholdHorizon, HorizonEventThresholds>> = EVENT_SHIPPED,
   eventWindow?: { reject_days: number; caution_days: number },
   scanOverrides: Record<string, unknown> = {},
 ) {
@@ -44,8 +56,10 @@ function setup(
     // Always set, so state from one test cannot leak into the next.
     scanOverrides,
   } as any);
-  useIvThresholdsStore.setState({ thresholds: {}, loaded: true } as any);
-  useEventThresholdsStore.setState({ thresholds, loaded: true } as any);
+  useIvThresholdsStore.setState({ thresholds: IV_SHIPPED, status: 'ready', error: null, overrides: {} });
+  useEventThresholdsStore.setState({
+    thresholds: { ...EVENT_SHIPPED, ...thresholds }, status: 'ready', error: null,
+  });
 }
 
 describe('Step 5 Volatility+Events — event proximity gate follows the scan horizon', () => {
@@ -53,27 +67,29 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
   // SemiAnnual_* profiles' 7/30 replaces the YAML window), and the gate must use
   // THAT: otherwise earnings 15 days out passes the scan and is re-REJECTED here.
   it('uses the window the scan applied: 7/30 makes an event 15 days out CAUTION, not REJECT', () => {
-    setup(15, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 7, caution_days: 30 });
+    setup(15, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 7, caution_days: 30 });
     render(<Step5Page />);
     expect(screen.getByText('CAUTION')).toBeInTheDocument();
     expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
+    // ...and the header's event-window sentence quotes that same echoed window.
+    expectPageCopy();
   });
 
   it('uses the window the scan applied: 7/30 still REJECTS an event 5 days out', () => {
-    setup(5, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 7, caution_days: 30 });
+    setup(5, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 7, caution_days: 30 });
     render(<Step5Page />);
     expect(screen.getByText('REJECT')).toBeInTheDocument();
   });
 
   it('ignores live Step-3 overrides edited after the scan (the result was scored at 30/60)', () => {
-    setup(10, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 30, caution_days: 60 },
+    setup(10, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 30, caution_days: 60 },
           { event_reject_days: 7, event_caution_days: 30 });
     render(<Step5Page />);
     expect(screen.getByText('REJECT')).toBeInTheDocument();
   });
 
   it('needs no live Step-3 overrides: the window comes from the result alone', () => {
-    setup(15, 'Position (90-105d)', EVENT_FALLBACK, { reject_days: 7, caution_days: 30 }, {});
+    setup(15, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 7, caution_days: 30 }, {});
     render(<Step5Page />);
     expect(screen.getByText('CAUTION')).toBeInTheDocument();
   });
@@ -152,15 +168,15 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
     expect(screen.getByText('PASS')).toBeInTheDocument();
   });
 
-  it('gate reacts to live-fetched thresholds, not just the hardcoded FALLBACK', () => {
+  it('gate reacts to live-fetched thresholds, not just the shipped values', () => {
     // A regression here (e.g. the page silently ignoring useEventThresholdsStore
     // and reading a local constant instead) would still pass every test above,
-    // since they all seed the store with values equal to FALLBACK. Seeding a
+    // since they all seed the store with the shipped values. Seeding a
     // deliberately different window and asserting the gate follows it is what
     // actually proves the store is wired in, not just present.
     setup(7, 'Swing (5-15d)', { Swing: { reject_days: 5, caution_days: 10 } });
     render(<Step5Page />);
-    // Under FALLBACK (21/45) day 7 would be REJECT; under this seeded window it's CAUTION.
+    // Under the shipped window (21/45) day 7 would be REJECT; under this seeded window it's CAUTION.
     expect(screen.getByText('CAUTION')).toBeInTheDocument();
     expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
   });

@@ -132,3 +132,28 @@ describe('deletePortfolioPosition', () => {
     await expect(api.deletePortfolioPosition('REC-1')).rejects.toThrow('API /api/portfolio/REC-1 → 404: Position not found');
   });
 });
+
+// Step 6 sends the scan's recorded contract rules as one JSON query parameter;
+// an empty or absent rule set sends nothing (the backend reads that as the YAML).
+describe('getContracts contract_rules', () => {
+  function mockOk() {
+    const f = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [] });
+    global.fetch = f as unknown as typeof fetch;
+    return f;
+  }
+
+  it('sends the rules URL-encoded as JSON', async () => {
+    const f = mockOk();
+    await api.getContracts('XOM', 'C', { contract_rules: { min_volume: 20, max_bid_ask_spread_pct: 0.3 } });
+    const url = new URL(f.mock.calls[0][0]);
+    expect(JSON.parse(url.searchParams.get('contract_rules') as string))
+      .toEqual({ min_volume: 20, max_bid_ask_spread_pct: 0.3 });
+  });
+
+  it('sends nothing for an empty or absent rule set', async () => {
+    const f = mockOk();
+    await api.getContracts('XOM', 'C', { contract_rules: {} });
+    await api.getContracts('XOM', 'C', {});
+    for (const [u] of f.mock.calls) expect(u).not.toContain('contract_rules');
+  });
+});
