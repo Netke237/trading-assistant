@@ -79,6 +79,6 @@ del claude/clever-goldberg-ssmf4z           d4c6db1dfa66c024e98b85466d64dd5689fa
 
 - `archive/vf056m-round3-7753b743`, `archive/peaceful-ritchie-a5b-4796924`: archives, kept deliberately (ledger).
 - `claims`: the task-claim ledger. Never delete.
-- `ccr-2fe3aef8-jpt3lz`: live DOCC-4-CONFIG-HEALTH work (YAML-CONFIG-INTEGRITY slicing decision, DOCC-4 plan revisions); 7 unmerged commits at the check.
+- `ccr-2fe3aef8-jpt3lz`: DOCC-4-CONFIG-HEALTH work. It had 7 unmerged commits at the check; DOCC-4 then merged to main at `287bec9b` (before this PR), so the branch is now fully in main but touched today, like the entry below.
 - `ccr-55258cbe-hpvjcf`, `claude/amazing-planck-b4033x` (tip `311f4adb`, the OPTIONS-SHORTLIST-RANK audit's merge of REGIME-SIZING-AUDIT), `claude/practical-dirac-ebenkq` (REGIME-SIZING-AUDIT, merged in #24), `claude/options-shortlist-rank-audit` (OPTIONS-SHORTLIST-RANK, merged at `599b9da2`), `claude/pensive-cori-we2hm6`: fully merged but touched today; once their sessions are done, add them to the section 1 loop and run it.
 - `claude/q2-hardening-merged-a2wx5g`: **your call.** One commit of 2026-09-24 parallel-session launch briefs and an open-topic inventory (docs only, now historical; 1/168 lines on main).
