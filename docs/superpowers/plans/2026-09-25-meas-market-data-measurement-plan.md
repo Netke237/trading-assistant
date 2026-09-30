@@ -1,4 +1,23 @@
-# MEAS — Market-data measurement: plan (v6, v5 re-derived against main 4c52000)
+# MEAS — Market-data measurement: plan (v6 + G1 fix (a), v5 re-derived against main 4c52000)
+
+**G1 fix (a) (2026-09-30, decision `MEAS-G1-FIX-A-ROUND-6-2026-09-30`).** Plan round 5 found one
+gate-level problem (G1). Since v6, the options shortlist cap ranks before it cuts, by finalStatus →
+stockScore → contractScore (scan.py:1884-1888, clamp 50 at :1870). stockScore already grades
+`iv_rank` against `iv_rank_pass_max` / `iv_rank_caution_max` (`_rule_vol`, stock_scorer.py:911,
+keys at :950-951). So when a scan is truncated, the 50 names kept lean toward pass-band IV, and the
+cut names, which appear only as a `Shortlist cap:` reason string with no `volDetail`, lean toward
+high IV. v5's cut followed universe order and was roughly IV-neutral; v6's is not. Kenneth chose the
+narrow fix:
+- **A truncated options scan contributes no rows to any IV rule**, and each IV result lists it
+  under "not used: truncated". This covers the shared IV sample (§6), so the rank-cut proposals
+  (`iv_rank_pass_max`, `iv_rank_caution_max`, `preferred_iv_rank_max`), and the report-only IV
+  items (`max_iv_rank`, `iv_rank_threshold`, `ivAbsThreshold`). It applies to O1–O4 and A1/A2.
+- **Scope, deliberately narrow.** A truncated base stays valid for the day (§4.10), and its other
+  uses are unchanged: the floor rule reads S-scan pipeline counters, which are counted before the
+  cap; a C-pair with a truncated side was already excluded; the min_mult table is report-only
+  with the proposal fixed at "keep 0.3". Option (b), excluding a truncated base from every rule that
+  reads candidate rows, was not chosen.
+- The edits are marked **[G1a]** in §4.10, §6, §7 and §9.
 
 **What changed in v6 (2026-09-30, decision `MEAS-V6-REFRESH-ONE-ROUND-2026-09-30`).** v5 was written
 on main 91e6725e. Before the refresh, 37 commits had touched its gate code: `stock_scan.py` +419 lines,
@@ -325,6 +344,9 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
       with the flag stays valid, because the cut names are listed in `rejected`. A C-pair where
       either side is truncated is excluded from its rule: an added name could be one the cap cut on
       the other side.
+      **[G1a]** A truncated O1–O4 or A1/A2 result also contributes no rows to any IV rule (§6):
+      the cap ranks on stockScore, which grades `iv_rank`, so the kept names are an IV-censored
+      sample. The manifest's per-scan `truncated` flag is what the IV rules read.
 11. **Overrides reached the validator [v6 R5].** Every options result carries
     `contract_rules`, the contract overrides the validator applied. `effective_contract_overrides`
     (contract_validator.py:371-383) reads the same table as `validate_contract`, so the recorded
@@ -477,6 +499,13 @@ and `contractScore` ≥ the median `contractScore` of that day's base candidates
 - **Shared IV sample rules [G2].**
   - Only `row == "primary"` rows count, and only from O1–O4 and A1/A2 on valid days: the runner
     writes envelopes for these scans alone.
+  - **[G1a] Truncated scans are not used.** A scan whose manifest entry carries `truncated`
+    contributes no rows. The exclusion is by the scan's `scan_id` from the manifest, so a row that
+    was collected anyway still does not count. It is applied **before** deduplication, so a name
+    whose first scan of the day was truncated can still be counted from a later, untruncated
+    scan of the same day and horizon. Every IV result (the rank cuts, `preferred_iv_rank_max`,
+    `max_iv_rank`, and the `iv_rank_threshold` / `ivAbsThreshold` reports) lists these scans
+    under **"not used: truncated"**, with each scan's `original_count` → cap.
   - Rows are deduplicated on **(symbol, trading day, horizon, stock_basis)**, keeping the first
     scan of the day. An A-row and an O-row for the same name and day therefore both survive, and
     that pair is the ATM cross-check below.
@@ -484,7 +513,9 @@ and `contractScore` ≥ the median `contractScore` of that day's base candidates
   global key (contract_rules.yaml:69) [r4 GL-1, Kenneth]: it is computed on **both horizons
   pooled**, against `preferred_iv_abs_max`, and yields a single value. Pass/caution stay per
   horizon.
-  - Floor: ≥ 30 deduplicated **rank** rows **per horizon**, over ≥ 2 valid days.
+  - Floor: ≥ 30 deduplicated **rank** rows **per horizon**, over ≥ 2 valid days. **[G1a]** Rows
+    are counted after the truncated scans are removed, and a valid day counts toward the 2 only
+    if at least one untruncated O-scan of that horizon contributed a row.
   - Rule (quantile matching on the same rows): q = the share of rows with `detail_iv_abs` ≤ the
     absolute cut (`iv_abs_pass_max` / the caution cut / `preferred_iv_abs_max`). The proposed rank
     cut is the q-quantile of `stock_iv` (rank), rounded to the nearest 5.
@@ -492,12 +523,16 @@ and `contractScore` ≥ the median `contractScore` of that day's base candidates
   - Stated bias: `detail_iv_abs` is the picked contract's own IV, not the ATM figure the absolute
     cut judges. The (symbol, day) pairs present in both O and A rows give the true ATM absolute IV,
     and they are reported as a cross-check.
-  - The truncation count is printed next to the result.
-- **max_iv_rank 70.** Report the `iv_rank_too_high` count only.
+  - The `iv_rank_too_high` count (the names `max_iv_rank` removed before the sample) is printed
+    next to the result. **[G1a]** So is the "not used: truncated" list.
+- **max_iv_rank 70.** Report the `iv_rank_too_high` count only, from untruncated O-scans. The
+  count comes from `rejected`, which a cap does not change, but a truncated scan is still listed
+  as not used so every IV result reads the same set of scans **[G1a]**.
 - **iv_rank_threshold 50 and ivAbsThreshold 50: REPORT ONLY (Kenneth, decision (2)).** Neither
   value is proposed from these scans. A cross-sectional rule would move the line with the day's
-  volatility regime, so moving either needs a later outcome-based study. For each O-scan, and for
-  A1/A2 on the A-block day, the sheet reports:
+  volatility regime, so moving either needs a later outcome-based study. For each **untruncated**
+  O-scan, and for untruncated A1/A2 on the A-block day, the sheet reports (a truncated one is
+  listed as "not used: truncated" instead **[G1a]**):
   - **spread build rate [r3]:** candidates with a non-null `spreadType`, divided by candidates;
   - the distribution of the relevant `stock_iv` (rank for O-scans, absolute for A-scans);
   - how many names would flip side of the line at 40 / 50 / 60;
@@ -515,6 +550,9 @@ A session (any machine) that has the new `scans/<date>/` folder does the followi
    ```
    On Windows the interpreter is `.venv\Scripts\python.exe`, and `PYTHONUTF8=1` must be set:
    iv_basis_analysis.py reads the file with the platform encoding.
+   **[G1a]** Skip the envelope of any scan the manifest flags `truncated`, and note it under
+   "not used: truncated" in the day's IV section. The IV rules also filter by the manifest flag
+   (§6), so a mistaken collection does not change a result.
 2. Add one `scan-funnel.jsonl` row per scan, using PROTOCOL.md § "Derived rows".
    - Stock `direction_gate.entered = scanned − failed_history − failed_score`;
      `direction_gate.rejected = failed_direction` (measured only);
@@ -573,6 +611,8 @@ days are run and the proposals are answered.
   - [v6 R5] `contract_rules`: `{}` on a base passes; `null` on a base flags; C5 with
     `{"min_stock_score": 35}` passes; C5 with `{}` flags; C6 missing one of its four keys flags;
   - [v6 R2] `shortlist_truncated: true` flags `truncated` and excludes the pair;
+  - [G1a] `shortlist_truncated: true` on an O-base and on A1 each writes `truncated` into that
+    scan's manifest entry, keyed by its `scan_id`, and leaves the day valid;
   - the freeze tag: missing, a frozen file changed and committed, a frozen file with an
     uncommitted edit, and a non-frozen file changed, which must pass;
   - `degraded` counted as up, for both the tastytrade requirement and the IBKR refusal;
