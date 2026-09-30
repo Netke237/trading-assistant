@@ -145,12 +145,20 @@ def _rr_ratio_for_row(
 
     Returns None when there is no plan, no rows, or no row at that price — all
     of which are "unmappable" and degrade to the ladder upstream.
+
+    THE CLOSEST ROW WINS, AND A TIE IS UNMAPPABLE (P6, G1-8). This used to
+    return the FIRST row within tolerance, so rows [3.0R@197.50, 2.0R@197.502]
+    with 197.502 picked came back 3.0R. Rows at the same distance with
+    DIFFERENT ratios cannot be told apart by price, so they return None (the
+    ladder degrade) rather than a guess; equal ratios at a tie are not
+    ambiguous.
     """
     if not isinstance(exit_plan, dict):
         return None
     rows = exit_plan.get('targets')
     if not isinstance(rows, list):
         return None
+    matches: list[tuple[float, float]] = []   # (distance, ratio)
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -161,8 +169,12 @@ def _rr_ratio_for_row(
         if isinstance(price, bool) or isinstance(ratio, bool):
             continue
         if isclose(float(price), picked_row_stock_price, abs_tol=_PRICE_TOL):
-            return float(ratio)
-    return None
+            matches.append((abs(float(price) - picked_row_stock_price), float(ratio)))
+    if not matches:
+        return None
+    best = min(distance for distance, _ in matches)
+    ratios = {ratio for distance, ratio in matches if distance == best}
+    return ratios.pop() if len(ratios) == 1 else None
 
 
 def _seed_for_rr(
@@ -180,8 +192,8 @@ def _seed_for_rr(
     they are row ORDINALS whose names predate the ratios being configurable.
     """
     # The TYPE is checked, not just the truthiness, and the call site is the
-    # reason. `routers/portfolio.py` guards the config LOAD in a try/except
-    # because that endpoint persists AFTER the broker order has been placed, so
+    # reason. `services/position_writer.py` guards the config LOAD in a try/except
+    # because the position write runs AFTER the broker order has been placed, so
     # an exception there loses the record of a trade that already happened. A
     # malformed-but-loadable `rr_ratios` — a scalar or a mapping where a list
     # belongs — sails through that guard and would then raise out of the slice

@@ -87,9 +87,14 @@ async def test_patch_coerces_a_negative_resolved_tp_price_to_null(client):
     Python truthiness), never negative — so a negative value here made TP_HIT
     fire on every single tick for a Bullish position (price >= negative is
     always true) and never fire at all for a Bearish one. Now floored exactly
-    like stop/structuralStop: non-positive means unset."""
+    like stop/structuralStop: non-positive means unset.
+
+    P6 (G1-5): the price now travels WITH its method, so the floor is pinned on
+    the ladder path -- the one method for which a null price is legal. A
+    non-ladder method with a non-positive price is refused instead (below)."""
     await _add(client, rec="REC-NEGTP")
-    r = await client.patch("/api/portfolio/REC-NEGTP", json={"resolvedTpPrice": -50.0})
+    r = await client.patch("/api/portfolio/REC-NEGTP",
+                           json={"activeTpMethod": "ladder", "resolvedTpPrice": -50.0})
     assert r.status_code == 200, r.text
     assert r.json()["resolvedTpPrice"] is None
 
@@ -97,7 +102,8 @@ async def test_patch_coerces_a_negative_resolved_tp_price_to_null(client):
 @pytest.mark.asyncio
 async def test_patch_coerces_a_zero_resolved_tp_price_to_null(client):
     await _add(client, rec="REC-ZEROTP")
-    r = await client.patch("/api/portfolio/REC-ZEROTP", json={"resolvedTpPrice": 0})
+    r = await client.patch("/api/portfolio/REC-ZEROTP",
+                           json={"activeTpMethod": "ladder", "resolvedTpPrice": 0})
     assert r.status_code == 200, r.text
     assert r.json()["resolvedTpPrice"] is None
 
@@ -105,9 +111,11 @@ async def test_patch_coerces_a_zero_resolved_tp_price_to_null(client):
 @pytest.mark.asyncio
 async def test_patch_updates_resolved_tp_price_when_positive(client):
     await _add(client, rec="REC-POSTP")
-    r = await client.patch("/api/portfolio/REC-POSTP", json={"resolvedTpPrice": 210.5})
+    r = await client.patch("/api/portfolio/REC-POSTP",
+                           json={"activeTpMethod": "monte_carlo", "resolvedTpPrice": 210.5})
     assert r.status_code == 200, r.text
     assert r.json()["resolvedTpPrice"] == 210.5
+    assert r.json()["activeTpMethod"] == "monte_carlo"
 
 
 @pytest.mark.asyncio

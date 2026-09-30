@@ -7,12 +7,12 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.schemas import Direction, PickedMethod, PickedStopBasis, Horizon
+from app.schemas import Direction, PickedAt, PickedMethod, PickedStopBasis, Horizon
 from app.services.auto_trader import auto_trader, ArmedStrategy, RegimeGateConfigError
 from app.services.auto_trade_booking import book_fired_order
 from app.scoring.conviction_sizing import SizingConfigError
@@ -66,6 +66,14 @@ def _log_unbooked(symbol: str, cf: concurrent.futures.Future) -> None:
 
 
 class ArmRequest(BaseModel):
+    # P6 (G5-1, decision P6-SCOPE-2026-09-30): an unknown key is a 422, not a
+    # silent drop. Under pydantic's default `extra='ignore'` a camelCase
+    # `pickedMethod` returned 200 and armed with the pick thrown away. Every key
+    # the product's client sends (AutoTradeArm/index.tsx) is a declared field;
+    # a stale bundle sending anything else now fails at ARM, before anything is
+    # armed -- the same rollout cost `direction` and `horizon` below accepted.
+    model_config = ConfigDict(extra='forbid')
+
     broker:          Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
     symbol:          str
     option_symbol:   str
@@ -141,17 +149,16 @@ class ArmRequest(BaseModel):
     # BOTH HALVES MEASURED, because the loud half is not the dangerous one and
     # an earlier draft of this comment only stated the loud one. DECLARING a
     # camelCase field here is loud: model_dump() would emit `pickedMethod` and
-    # the dataclass raises TypeError ("unexpected keyword argument"). But a
-    # camelCase KEY arriving ON THE WIRE is SILENT -- this schema inherits
-    # pydantic's default `extra='ignore'`, so a body carrying pickedMethod /
-    # pickedRowStockPrice / ... returns 200 and arms with all five NULL.
-    # Verified by posting exactly that body.
+    # the dataclass raises TypeError ("unexpected keyword argument"). A camelCase
+    # KEY arriving ON THE WIRE was SILENT until P6 -- the schema inherited
+    # pydantic's `extra='ignore'`, so pickedMethod / pickedRowStockPrice / ...
+    # returned 200 and armed with all five NULL. `extra='forbid'` above now
+    # makes it a 422.
     #
-    # The silent half is why the frontend has a SEPARATE snake_case mapping
+    # That silence is why the frontend has a SEPARATE snake_case mapping
     # (`armPickedFieldsFrom`) instead of reusing the portfolio path's camelCase
-    # one: a mix-up there does not fail, it arms a trade whose pick was thrown
-    # away -- precisely the "gate passed, record NULL" defect c41145ba had to go
-    # back and close on the other seven send paths.
+    # one; the mapping stays, and a mix-up there is now loud rather than an arm
+    # whose pick was thrown away.
     #
     # All five are Optional and default to None, and NULL IS A REAL STATE: it
     # means nobody picked. The send gate (build step 4) already refuses an
@@ -161,10 +168,15 @@ class ArmRequest(BaseModel):
     # gt=0 on both, and the units are in the names, for the reason
     # PortfolioPositionCreate states at length: only a STOCK price may ever seed
     # resolved_tp_price, and zero is never a price.
-    picked_row_stock_price:  Optional[float]           = Field(default=None, gt=0)
-    picked_row_option_price: Optional[float]           = Field(default=None, gt=0)
+    #
+    # allow_inf_nan=False and the shared PickedAt type (P6, G1-6/G1-9) MIRROR
+    # PortfolioPositionCreate, and must: `book_fired_order` maps these five 1:1
+    # into that schema AFTER the broker order is placed, so a value only the
+    # create schema refused would place an order and then fail to book it.
+    picked_row_stock_price:  Optional[float]           = Field(default=None, gt=0, allow_inf_nan=False)
+    picked_row_option_price: Optional[float]           = Field(default=None, gt=0, allow_inf_nan=False)
     picked_stop_basis:       Optional[PickedStopBasis] = None
-    picked_at:               Optional[str]             = None
+    picked_at:               Optional[PickedAt]        = None
     # ── The regime gate's inputs, frozen at arm ─────────────────────────────
     # AUTOTRADE-GATE-INPUTS-FRESH-PER-SYMBOL-2026-09-19.
     #
