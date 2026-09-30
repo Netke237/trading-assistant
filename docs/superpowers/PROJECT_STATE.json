@@ -167,16 +167,16 @@
       "id": "DOCC-4-CONFIG-HEALTH",
       "name": "Document C plan 4 -- backend config-health surface (GET /api/config/health, boot-hash staleness, warn lines) + risk_rules.yaml comment-loss header",
       "status": "not_started",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
         "kind": "absent",
-        "pattern": "capture_boot_baseline",
-        "path": "backend/app/main.py",
-        "note": "The lifespan boot-snapshot call DOCC-4 adds to main.py (plan s2.3). Verified absent 2026-09-30. Presence only; tests/test_docc4_config_health.py will pin behaviour."
+        "pattern": "config_health.note_load",
+        "path": "backend/app/services/config_loader.py",
+        "note": "Revision 2 of the plan (after round 1): the load-record hook DOCC-4 adds to each cached loader (plan s2.2); config_loader.py carries five of them. Verified absent 2026-09-30. Presence only; tests/test_docc4_config_health.py will pin behaviour."
       },
-      "note": "2026-09-30: plan written, docs/superpowers/plans/2026-09-30-docc-4-config-health-plan.md (decision DOCC-4-5-SLICING-2026-09-30). Plan round 1 pending."
+      "note": "PLAN ROUND 1 (2026-09-30) NOT CLEAN -- 3 gate-level: (1) boot-hash staleness gives a false green after edit-then-revert (and the Settings re-baseline hid it); (2) green while scans refuse on value checks; (3) missing required non-money sections read green. Plus 10 below-gate. REVISION 2: staleness is now per-cache load records compared section-by-section with disk (replaces the boot snapshot + re-baseline; deviation from DOCC-4-5-SLICING wording flagged for Kenneth); resolve_sizing + direction_conviction value checks added; everything else unchecked is listed in a literal not_checked field (per s9.11 scoped green); all 13 findings mapped in plan s7. Plan round 2 pending. || 2026-09-30: plan written, docs/superpowers/plans/2026-09-30-docc-4-config-health-plan.md (decision DOCC-4-5-SLICING-2026-09-30). Plan round 1 pending."
     },
     {
       "id": "YAML-CONFIG-INTEGRITY",
