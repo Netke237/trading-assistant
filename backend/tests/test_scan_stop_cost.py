@@ -107,6 +107,13 @@ def _candidates(client, symbol="MSFT", *, strike_mult=1.0, dte=45, extra_patches
         stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain)))
         stack.enter_context(patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Test Co")))
         stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)))
+        # With no fundamentals calendar the scan falls back to a LIVE yfinance
+        # lookup of the symbol's next earnings/dividend dates. Offline it fails
+        # and the event rule sees none; on a networked CI runner it answered
+        # with MSFT's real earnings date (inside Swing's caution window), which
+        # moved the stock score below this fixture's relaxed floor and dropped
+        # every candidate. Pin it to "no dates", as offline.
+        stack.enter_context(patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))))
         for p in extra_patches:
             stack.enter_context(p)
         r = client.post("/api/scan", json={
