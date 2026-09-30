@@ -44,8 +44,16 @@ _THIN_NO_IV = {k: v for k, v in _THIN.items() if k != "ivRank"}
 
 
 def _scan_patches():
-    """The scan's fetchers and stock scorer, but the REAL contract validator."""
+    """The scan's fetchers and stock scorer, but the REAL contract validator.
+
+    The batch pre-fetches are pinned too. `historical_store.get_bars` falls back
+    to live providers (Alpaca, Tiingo, yfinance) on an empty test DB, and the
+    scan then prices the symbol off the REAL last close instead of the patched
+    185 -- which the no-IV cases feed into the Black-Scholes fill, so on a
+    networked CI runner the scan and /api/contracts saw different stock prices."""
     stack = ExitStack()
+    stack.enter_context(patch("app.services.historical_store.get_bars",      AsyncMock(return_value=[])))
+    stack.enter_context(patch("app.routers.scan.fetch_quotes",               return_value={}))
     stack.enter_context(patch("app.routers.scan.fetch_price_async",          AsyncMock(return_value=185.0)))
     stack.enter_context(patch("app.routers.scan.fetch_candles_async",        AsyncMock(return_value=_MOCK_CANDLES)))
     stack.enter_context(patch("app.routers.scan.fetch_option_chain_async",   AsyncMock(side_effect=lambda *a, **k: _chain())))
