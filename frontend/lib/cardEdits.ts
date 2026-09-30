@@ -40,7 +40,11 @@ export type CardEditMode = 'options' | 'stocks';
  *  `premiumStop`, `entryLimit`) are keyed by CONTRACT — `contractKeyFor`, i.e.
  *  `SYMBOL|strike|expiry|right`, the same identity `exitPlanByContract` and
  *  `estimatesByContract` use — and the two underlying-scoped maps
- *  (`invalidation`, `maxLossOverride`) by SYMBOL. That split is not cosmetic:
+ *  (`invalidation`, `maxLossOverride`) by SYMBOL. A SECOND contract-key format
+ *  also lives in those maps: when a card has no strike/expiry/right to build
+ *  from, step 7's `editKeyFor` falls back to `SYMBOL|<display label>` (e.g.
+ *  `AAPL|AAPL 190C 05/15`). Both formats start `SYMBOL|`, which is all
+ *  `clearPicksForSymbol` reads. That split is not cosmetic:
  *  an invalidation is a price level on the UNDERLYING, the same thesis
  *  whichever strike expresses it, while a premium stop or a picked target row
  *  is meaningful only against one contract's numbers. In stocks mode there is
@@ -214,7 +218,7 @@ export function writeCardEdit<F extends CardEditField>(
   if (scanId == null) return slice;
 
   const stampMatches = slice.scanId === scanId;
-  if (stampMatches && key in slice[field] && Object.is(slice[field][key], value)) {
+  if (stampMatches && hasOwn(slice[field], key) && Object.is(slice[field][key], value)) {
     return slice;
   }
   const base: CardEditSlice = stampMatches
@@ -247,10 +251,13 @@ export function clearPicksForSymbol(
   symbol: string,
   keepKey: string | null,
 ): CardEditSlice {
+  // Case-insensitive: pick keys go through contractId(), which uppercases,
+  // while `symbol` arrives raw from the candidate (G2-8).
+  const wanted = symbol.toUpperCase();
   const doomed = Object.keys(slice.picks).filter((k) => {
     if (k === keepKey) return false;
     const i = k.indexOf('|');
-    return (i === -1 ? k : k.slice(0, i)) === symbol;
+    return (i === -1 ? k : k.slice(0, i)).toUpperCase() === wanted;
   });
   if (doomed.length === 0) return slice;   // identity guard, as above
   const picks = { ...slice.picks };
@@ -285,6 +292,46 @@ export function clearPicksForSymbol(
  *  across a RELOAD — which is where "yesterday" gets in. */
 export function persistableCardEdits(slice: CardEditSlice): CardEditSlice {
   return { ...emptyCardEdits(), scanId: slice.scanId, picks: slice.picks };
+}
+
+/** Own-property test. `key in obj` walks the prototype chain, so
+ *  'constructor' and 'toString' read as present on an empty map (G2-10). */
+function hasOwn(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+const PICKED_METHODS: ReadonlySet<string> = new Set<PickedMethod>([
+  'arithmetic', 'monte_carlo', 'ladder', 'barrier_race',
+]);
+const PICKED_STOP_BASES: ReadonlySet<string> = new Set<PickedStopBasis>(['stock', 'premium']);
+
+function isPriceOrNull(v: unknown): boolean {
+  return v === null || (typeof v === 'number' && Number.isFinite(v) && v > 0);
+}
+
+/** Is a rehydrated value a real `MethodPick`? (G2-4-RESIDUAL.) Every field is
+ *  checked because every field reaches a send: `rowStockPrice` can seed
+ *  `resolved_tp_price`, and the backend refuses a non-positive or non-finite
+ *  price at `gt=0, allow_inf_nan=False` -- after the broker order on the
+ *  direct-send paths. */
+export function isValidMethodPick(value: unknown): value is MethodPick {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.method === 'string' && PICKED_METHODS.has(v.method)
+    && isPriceOrNull(v.rowStockPrice)
+    && isPriceOrNull(v.rowOptionPrice)
+    && typeof v.stopBasis === 'string' && PICKED_STOP_BASES.has(v.stopBasis)
+    && typeof v.pickedAt === 'string' && v.pickedAt.length > 0;
+}
+
+/** The persisted `picks` map with every entry that is not a real pick DROPPED.
+ *  Absent means "not picked", which the send gate refuses -- the safe failure. */
+function normalizePicks(value: unknown): Record<string, MethodPick> {
+  const out: Record<string, MethodPick> = {};
+  for (const [key, entry] of Object.entries(asRecord(value))) {
+    if (isValidMethodPick(entry)) out[key] = entry;
+  }
+  return out;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -324,18 +371,19 @@ function normalizeNumberMap(value: unknown): Record<string, number | null> {
  *  `selectCardEdits` cannot throw), and every entry in the three PRICE maps is
  *  a finite number or null.
  *
- *  WHAT IT STILL DOES NOT GUARANTEE, said plainly rather than left to be
- *  discovered: `picks` and `maxLossOverride` are SHAPE-ONLY. A stored
- *  `MethodPick` is not validated as a real pick and a stored `MaxLossOverride`
- *  is not validated as a real override. Both are objects rather than scalars,
- *  so a useful check is a schema rather than a typeof, and both are still gated
- *  by the stamp. `maxLossOverride` is the one that reaches a risk check, so it
- *  is the one to validate first if this ever stops being enough. */
+ *  `picks` is VALUE-CHECKED too (P6, G2-4-RESIDUAL): an entry that is not a
+ *  real `MethodPick` (`isValidMethodPick`) is dropped, which reads as "not
+ *  picked" and blocks the send.
+ *
+ *  WHAT IT STILL DOES NOT GUARANTEE: `maxLossOverride` is SHAPE-ONLY. It is no
+ *  longer persisted (`persistableCardEdits` writes the stamp and the picks
+ *  only), so a stored one can only come from a blob written before that
+ *  change, and it is still gated by the stamp. */
 export function normalizeCardEdits(value: unknown): CardEditSlice {
   const raw = asRecord(value);
   return {
     scanId: typeof raw.scanId === 'string' && raw.scanId.length > 0 ? raw.scanId : null,
-    picks:           asRecord(raw.picks)           as Record<string, MethodPick>,
+    picks:           normalizePicks(raw.picks),
     invalidation:    normalizeNumberMap(raw.invalidation),
     premiumStop:     normalizeNumberMap(raw.premiumStop),
     entryLimit:      normalizeNumberMap(raw.entryLimit),
@@ -368,7 +416,7 @@ export function clearCardPick(
   key: string,
 ): CardEditSlice {
   if (scanId == null || slice.scanId !== scanId) return slice;
-  if (!(key in slice.picks)) return slice;   // identity guard, as in writeCardEdit
+  if (!hasOwn(slice.picks, key)) return slice;   // identity guard, as in writeCardEdit
   const picks = { ...slice.picks };
   delete picks[key];
   return { ...slice, picks };

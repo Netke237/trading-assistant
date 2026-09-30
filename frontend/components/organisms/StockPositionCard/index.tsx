@@ -6,7 +6,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
 import { MethodPickSelector } from '@/components/molecules/MethodPickSelector';
 import type { MethodPickOption } from '@/components/molecules/MethodPickSelector';
-import type { MethodPick } from '@/types/domain';
+import type { MethodPick, PickedMethod } from '@/types/domain';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
@@ -206,6 +206,21 @@ function EditableField({
 }
 
 // ─── StockPositionCard ────────────────────────────────────────────────────────
+
+/** The refusal line for a pick the card's clear rule just removed, or null
+ *  when there is nothing specific to say (never picked, or a Ladder pick --
+ *  Ladder is always available, so it is never the one cleared). */
+export function clearedPickMessage(method: PickedMethod | null): string | null {
+  if (method === 'monte_carlo') {
+    return 'Your Monte Carlo pick was cleared because its estimate is no longer on screen — '
+      + 'run Estimate again and re-pick before submitting.';
+  }
+  if (method === 'arithmetic') {
+    return 'Your Arithmetic pick was cleared because its plan is no longer on screen — '
+      + 'run the Arithmetic plan again and re-pick before submitting.';
+  }
+  return null;
+}
 
 export function StockPositionCard({
   card,
@@ -485,8 +500,9 @@ export function StockPositionCard({
    *  any switch Arithmetic and Monte Carlo are both unavailable and a pick
    *  naming either is cleared regardless of what the transition commit decided.
    *  Ladder is the only method left, and it is available in EVERY commit. So
-   *  the two paths agree on every input, and a `pickSettled` guard written here
-   *  survived every mutation — by this codebase's standard, not a guard.
+   *  the two paths agree on every input, and a settle guard written here (the
+   *  shape of TradeCard's since-removed `pickSettled`, 42e6c6c3) survived every
+   *  mutation — by this codebase's standard, not a guard.
    *
    *  WHAT WOULD BRING IT BACK: caching `plan` or `estimate` per symbol, the way
    *  TradeCard's parent caches `exitPlanByContract`. The moment a restored plan
@@ -501,9 +517,36 @@ export function StockPositionCard({
 
   const applyMethodPickRef = useRef(applyMethodPick);
   useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
+  /** P6 (G4-1; decision P6-SCOPE-2026-09-30: a message, NOT a plan/estimate
+   *  cache). Which method the clear below just removed, so the refusal can say
+   *  "your pick was cleared" instead of the generic "choose a method".
+   *
+   *  The ordinary way here is collapse-and-reopen on Step 4: the row unmounts
+   *  this card, the remounted card starts with `plan`/`estimate` null while the
+   *  store still holds the pick, and the clear fires IN THE REMOUNTED INSTANCE
+   *  -- so local state records it in the card the user is looking at. The
+   *  clear rule itself is untouched, so the note above about adding a cache
+   *  still holds. */
+  const [clearedPickMethod, setClearedPickMethod] = useState<PickedMethod | null>(null);
+  // The note is about THIS symbol's pick. Step 4 remounts per symbol, but a
+  // caller that switches `card` on one instance must not carry it across.
+  // Declared BEFORE the clear effect so that, when a switch lands on a symbol
+  // whose own pick is cleared in the same commit, the reset runs first.
+  useEffect(() => { setClearedPickMethod(null); }, [card.symbol]);
+  const methodPickRef = useRef(methodPick);
+  useEffect(() => { methodPickRef.current = methodPick; }, [methodPick]);
   useEffect(() => {
-    if (pickedMethodGone) applyMethodPickRef.current(null);
+    if (!pickedMethodGone) return;
+    setClearedPickMethod(methodPickRef.current?.method ?? null);
+    applyMethodPickRef.current(null);
   }, [pickedMethodGone]);
+  // Any new, AVAILABLE pick retires the note. `!pickedMethodGone` is what
+  // keeps this from undoing the line above: on the mount that clears, both
+  // effects run in one commit, in declaration order, while `methodPick` still
+  // holds the pick being cleared.
+  useEffect(() => {
+    if (methodPick != null && !pickedMethodGone) setClearedPickMethod(null);
+  }, [methodPick, pickedMethodGone]);
 
   // Abort anything still in flight when the card unmounts, so a late resolve
   // cannot setState on an unmounted component.
@@ -1259,7 +1302,7 @@ export function StockPositionCard({
       </div>
       {pickMissing && (
         <Text size={11} tone="reject">
-          {MISSING_METHOD_PICK_MESSAGE}
+          {clearedPickMessage(clearedPickMethod) ?? MISSING_METHOD_PICK_MESSAGE}
         </Text>
       )}
 

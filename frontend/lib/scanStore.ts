@@ -12,10 +12,37 @@ import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsH
 import { stripLegacyIvFields, stripLegacyIvDetail } from './ivBasis';
 import type { IvBasis } from './ivBasis';
 import {
-  clearCardPick, clearPicksForSymbol, currentScanIdFor, emptyCardEdits,
+  // Aliased: the store has an ACTION named `clearCardPick` that calls this.
+  clearCardPick as clearCardPickIn, clearPicksForSymbol, currentScanIdFor, emptyCardEdits,
   normalizeCardEdits, persistableCardEdits, writeCardEdit,
 } from './cardEdits';
 import type { CardEditField, CardEditMode, CardEditSlice, CardEditValue } from './cardEdits';
+
+/** localStorage whose `setItem` cannot throw out of a `set()` (G2-12).
+ *
+ *  zustand v5's persist has no try/catch around `storage.setItem`, so a
+ *  QuotaExceededError propagated out of EVERY `set()` on this store -- including
+ *  `setCardEdit` inside a React event handler. The in-memory state had already
+ *  changed and the previous blob survives either way; what the throw added was
+ *  a crashed handler. It now warns instead. Reads and removes pass through.
+ *  `lib/stockScan.ts` keeps its own guard around `runStockScan`. */
+function quotaSafeLocalStorage(): Storage {
+  const ls = localStorage;
+  return {
+    get length() { return ls.length; },
+    clear: () => ls.clear(),
+    key: (i: number) => ls.key(i),
+    getItem: (k: string) => ls.getItem(k),
+    removeItem: (k: string) => ls.removeItem(k),
+    setItem: (k: string, v: string) => {
+      try {
+        ls.setItem(k, v);
+      } catch (e) {
+        console.warn(`[scanStore] could not persist '${k}' (storage full?); the previous save is kept`, e);
+      }
+    },
+  };
+}
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -468,7 +495,7 @@ export const useScanStore = create<ScanStoreState>()(
       clearCardPick: (mode, key) => {
         const s = get();
         const sliceKey = mode === 'options' ? 'optionsCardEdits' : 'stocksCardEdits';
-        const next = clearCardPick(s[sliceKey], currentScanIdFor(s, mode), key);
+        const next = clearCardPickIn(s[sliceKey], currentScanIdFor(s, mode), key);
         // Same early return as `setCardEdit` above, for the same reason: a
         // no-op clear must not churn a fresh top-level state. It fires from an
         // effect (the card clearing a pick whose numbers left the screen), so
@@ -538,7 +565,7 @@ export const useScanStore = create<ScanStoreState>()(
       name: 'bamendjou-scan-store',
       storage: createJSONStorage(() => {
         if (typeof window === 'undefined') return undefined as unknown as Storage;
-        return localStorage;
+        return quotaSafeLocalStorage();
       }),
       skipHydration: true,
        version: 17,
