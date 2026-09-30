@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import Step4Page from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import type { TradeCardData } from '@/types/domain';
@@ -46,6 +46,34 @@ describe('Step 4 ranking — default order is the scan rank', () => {
     const table = screen.getByRole('table');
     const order = within(table).getAllByText(/^(PASSCO|CAUTCO)$/).map((el) => el.textContent);
     expect(order).toEqual(['PASSCO', 'CAUTCO']);
+  });
+
+  // Three rows so that neither score direction reproduces the rank order
+  // (score asc = LOWCO, PASSCO, CAUTCO; desc = CAUTCO, PASSCO, LOWCO) -- the
+  // two-row case above passes a score-ASC default by coincidence -- and a
+  // sort away and back to "#" must restore it. (rank is list index + 1 and
+  // sortRows re-sorts the original list, so the rank key cannot be told
+  // apart from list order here; the backend order is pinned in
+  // backend/tests/test_shortlist.py.)
+  it('orders by rank, not by either score direction, and "#" restores it', () => {
+    useScanStore.setState({
+      scanResult: {
+        scan_id: 'REC-1', timestamp: 't', rejected: [],
+        candidates: [card('PASSCO', 'PASS', 72), card('LOWCO', 'PASS', 60), card('CAUTCO', 'CAUTION', 95)],
+      },
+      previousRun: undefined,
+      context: { direction: 'Bullish', horizon: 'Position (90–105d)' },
+    } as any);
+
+    render(<Step4Page />);
+    const order = () => within(screen.getByRole('table'))
+      .getAllByText(/^(PASSCO|LOWCO|CAUTCO)$/).map((el) => el.textContent);
+    expect(order()).toEqual(['PASSCO', 'LOWCO', 'CAUTCO']);
+
+    fireEvent.click(screen.getByRole('button', { name: /^SYM/i }));
+    expect(order()).not.toEqual(['PASSCO', 'LOWCO', 'CAUTCO']);
+    fireEvent.click(screen.getByRole('button', { name: /scan rank/i }));
+    expect(order()).toEqual(['PASSCO', 'LOWCO', 'CAUTCO']);
   });
 
   it('gives the rank header an accessible name', () => {
