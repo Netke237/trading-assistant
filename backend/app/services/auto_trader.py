@@ -1393,9 +1393,11 @@ def _sized_quantity(quantity: int, mult: float) -> int:
 
     Decision P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25 (Kenneth). It was
     `round()`, which rounds halves to EVEN (5 x 0.3 = 1.5 -> 2, but 2.5 -> 2).
-    Down matches the stock card's `int()` share count and never sizes up. The
-    1e-9 keeps a float product such as 10 x 0.7 = 6.999... from losing a
-    contract.
+    Down matches the stock card's share count (`_position_size` in
+    stock_scan.py) and never sizes up. The 1e-9 keeps a float product such as
+    10 x 0.7 = 6.999... from losing a contract. The card carries the same
+    guard since REGIME-SIZING-AUDIT r1 finding 3. Before that, its bare `int()`
+    dropped a share on exact boundaries, so "matches" was not true.
     """
     return max(1, math.floor(quantity * mult + 1e-9))
 

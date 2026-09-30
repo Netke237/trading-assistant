@@ -171,12 +171,39 @@ def test_trimmed_names_count_as_shortlist_not_residual_and_the_funnel_reconciles
 
 
 def test_the_frontend_prefix_matches_the_backend_constant():
+    """Both backend prefixes equal the ONE frontend constant, and no other
+    frontend source file spells the literal itself (so the options scan log
+    and the stock over-cap split cannot drift apart)."""
     from app.routers.stock_scan import _SHORTLIST_REASON_PREFIX, classify_stock_rejection
+    from app.routers.scan import _SHORTLIST_REASON_PREFIX as _OPTIONS_PREFIX
     import pathlib, re
 
     assert _SHORTLIST_REASON_PREFIX == _PREFIX
+    assert _OPTIONS_PREFIX == _PREFIX
     assert classify_stock_rejection(_PREFIX + " PASS score 1") == "failed_shortlist"
-    ts = (pathlib.Path(__file__).resolve().parents[2]
-          / "frontend" / "lib" / "stockShortlist.ts").read_text(encoding="utf-8")
-    m = re.search(r"STOCK_SHORTLIST_REASON_PREFIX\s*=\s*'([^']*)'", ts)
+    frontend = pathlib.Path(__file__).resolve().parents[2] / "frontend"
+    ts = (frontend / "lib" / "shortlistCap.ts").read_text(encoding="utf-8")
+    m = re.search(r"export const SHORTLIST_REASON_PREFIX\s*=\s*'([^']*)'", ts)
     assert m and m.group(1) == _PREFIX
+
+    # One source: the exact prefix text appears in NO other non-test file
+    # under app/components/lib/types -- not in code, not in a comment (a
+    # comment names the constant instead). A plain substring search, because
+    # a hand-rolled TS tokenizer missed nested templates and quote-bearing
+    # regexes (audit round 3). Not caught: a literal split by concatenation.
+    spelled = sorted(
+        f.relative_to(frontend).as_posix()
+        for d in ("app", "components", "lib", "types")
+        for f in (frontend / d).rglob("*.ts*")
+        if "__tests__" not in f.parts and f.name != "shortlistCap.ts"
+        and not re.search(r"\.(test|spec)\.tsx?$", f.name)
+        and _PREFIX in f.read_text(encoding="utf-8")
+    )
+    assert spelled == []
+    # A real import statement at the start of a line (so not a // comment).
+    imports = re.compile(
+        r"""^import\s*\{[^}]*\bSHORTLIST_REASON_PREFIX\b[^}]*\}\s*from\s*['"](?:@/lib/|\./)shortlistCap['"]""",
+        re.M)
+    for rel in ("lib/stockShortlist.ts",
+                "app/(frame)/screener/step-3-direction/scanLogTotals.ts"):
+        assert imports.search((frontend / rel).read_text(encoding="utf-8")), rel

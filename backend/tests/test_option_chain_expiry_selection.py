@@ -97,3 +97,11 @@ def test_no_floor_keeps_the_old_behaviour():
 def test_nothing_at_or_above_the_floor_returns_none():
     today = date(2026, 9, 29)
     assert _nearest_expiration_in_window(_dates(today, 150, 199), (30, 400), today, min_dte_floor=201) is None
+
+
+def test_an_expiry_exactly_at_the_floor_is_kept():
+    # The validator rejects dte < min_dte, so an expiry AT the floor is valid
+    # and must survive the filter (`>=`, not `>`).
+    today = date(2026, 9, 29)
+    dates = _dates(today, 199, 201, 263)
+    assert _nearest_expiration_in_window(dates, (30, 400), today, min_dte_floor=201) == _dates(today, 201)[0]

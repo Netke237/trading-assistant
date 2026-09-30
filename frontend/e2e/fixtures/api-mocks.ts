@@ -352,6 +352,31 @@ export async function setupApiMocks(page: Page): Promise<void> {
     });
   });
 
+  // Step 5 threshold stores (DOCC-3): no silent fallback, so a missing route
+  // leaves the IV/event gates unrendered. Values mirror scoring_rules.yaml.
+  await page.route('**/api/config/iv-thresholds', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        Intraday: { abs_pass_max: null, abs_caution_max: null, rank_pass_max: null, rank_caution_max: null },
+        Swing:    { abs_pass_max: 34, abs_caution_max: 55, rank_pass_max: 34, rank_caution_max: 55 },
+        Position: { abs_pass_max: 44, abs_caution_max: 65, rank_pass_max: 44, rank_caution_max: 65 },
+      }),
+    });
+  });
+  await page.route('**/api/config/event-thresholds', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        Intraday: { reject_days: 1,  caution_days: 3 },
+        Swing:    { reject_days: 21, caution_days: 45 },
+        Position: { reject_days: 30, caution_days: 60 },
+      }),
+    });
+  });
+
   // Health check
   await page.route('**/api/health', async (route) => {
     await route.fulfill({

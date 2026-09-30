@@ -564,9 +564,10 @@ def test_vol_sizing_floors_when_the_symbols_regime_cannot_be_measured(mocker):
 # trade's frame.
 #
 # EVERY TEST BELOW ARMS quantity=4, AND THAT IS LOAD-BEARING. `_apply_vol_sizing`
-# does `max(1, round(quantity * mult))`, so at quantity=1 the multipliers 0.30,
-# 0.65 and 1.00 ALL round to 1. At 4 they separate: 0.30 -> 1, 0.65 -> 3,
-# 1.00 -> 4.
+# does `max(1, floor(quantity * mult))` (`_sized_quantity`), so at quantity=1
+# the multipliers 0.30, 0.65 and 1.00 ALL give 1. At 4 they separate: 0.30 -> 1,
+# 0.65 -> 2, 1.00 -> 4. -20 (0.475) and -40 (0.30) still both give 1 here; see
+# test_regime_sizing_parity.py for a quantity where the opposed half separates.
 #
 # Stability is "Fragile" throughout: with the shipped
 # `require_stable_for_reject: true` the gate cannot REJECT a Fragile regime, so
@@ -618,7 +619,7 @@ def _fired_quantity(mocker, *, direction: str, conviction: float,
 def test_vol_sizing_bearish_cut_to_floor_when_its_regime_strongly_opposes(mocker):
     """A long put whose own regime reads -80 in its frame is cut to the floor.
 
-    round(4 * 0.30) = 1.
+    floor(4 * 0.30) = 1.
     """
     assert _fired_quantity(mocker, direction="Bearish", conviction=-80) == 1
 
