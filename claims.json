@@ -7,14 +7,6 @@
       "expires_at": "2026-09-30T19:52:16Z",
       "note": "plan cap fired after r3; awaiting Kenneth",
       "task": "DOCC-4-CONFIG-HEALTH"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/pensive-cori-we2hm6",
-      "claimed_at": "2026-09-30T16:52:21Z",
-      "expires_at": "2026-09-30T19:52:21Z",
-      "note": "WP-0: ledger rescue (MEAS kit, C1/C2 + watch-resend findings), stale entries closed, branch-cleanup list; audit round 3 next",
-      "task": "WP0-HOUSEKEEPING"
     }
   ]
 }
