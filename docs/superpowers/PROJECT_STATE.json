@@ -2858,6 +2858,11 @@
       "id": "REGIME-SIZING-AUDIT-MERGE-2026-09-30",
       "q": "REGIME-SIZING-AUDIT is complete on claude/practical-dirac-ebenkq (r4 CLEAN). Merge into main?",
       "a": "Kenneth, 2026-09-30: 'merge'. Direct merge to main was blocked by the session's permission policy, so it goes via a PR Kenneth merges; record written on the branch before the merge."
+    },
+    {
+      "id": "E2E-THRESHOLD-MOCKS-IN-PR24-2026-09-30",
+      "q": "Playwright @smoke is red on main since DOCC-3 (96763b2): iv-basis-rendering.spec.ts cannot find 'IV ≤ 34 → PASS' because the e2e mocks never stub /api/config/iv-thresholds or /api/config/event-thresholds, and the threshold stores no longer fall back silently. Where does the test-only fix land?",
+      "a": "Kenneth, 2026-09-30: option 1 -- push it into PR #24 (REGIME-SIZING-AUDIT). frontend/e2e/fixtures/api-mocks.ts stubs both routes with the shipped scoring_rules.yaml values; verified locally: fails without, @smoke 20 passed 2 skipped with."
     }
   ],
   "pending_kenneth": [
