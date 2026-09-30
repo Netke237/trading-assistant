@@ -7,6 +7,14 @@
       "expires_at": "2026-09-30T07:04:08Z",
       "note": "P6 package: validation, method-pick & state-tool hygiene",
       "task": "P6-VALIDATION-METHOD-PICK-HYGIENE"
+    },
+    {
+      "agent": "claude",
+      "branch": "ccr-2fe3aef8-jpt3lz",
+      "claimed_at": "2026-09-30T04:33:44Z",
+      "expires_at": "2026-09-30T07:33:44Z",
+      "note": "fallback direction to evaluate_scheduled OMM",
+      "task": "WATCH-DIRECTION-TO-EVALUATOR"
     }
   ]
 }
