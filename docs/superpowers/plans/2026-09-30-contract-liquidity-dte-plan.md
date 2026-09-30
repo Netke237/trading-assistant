@@ -37,7 +37,8 @@ watch); nothing else in scope moved.*
    Watchlist refresh). `augment.py` only mentions it in a docstring. **Auto-trade does not inherit the
    scan's grade** (corrected in r2, round 1 H2):
    - `auto_trader.maybe_fire_on_scan` (`auto_trader.py:2736`) fires the strategy the user *armed* from a
-     card, and the scan is only its trigger, not a gate.
+     card. The scan's grade is not re-checked on the armed contract, but the scan IS a gate on *when* it
+     fires: `scan.py:2036` calls it only if some candidate is PASS (corrected after plan round 5).
    - The armed contract can be a Step 6 pick.
    - The only fire-time market check, `_market_is_open` (`:418`), probes whether a *stock* price comes
      back, and one does off-hours too.
@@ -127,11 +128,18 @@ fabricated-spread rows survive.
 - **After the close and overnight:** volume keeps the day's count. Rows with volume 1–49 that main rejected
   as `volume_too_low` now pass the hard gates with a fabricated 0% spread.
 - So an evening scan and Step 6 after the close show more contracts graded on a spread nobody measured.
-- The blast radius is the scan and the Step 6 display. Auto-trade does not inherit the scan's grade
-  (§1 item 5), and its own off-hours gate is NO-LIVE-QUOTE's job.
-- This residual is listed first on NO-LIVE-QUOTE's starting list. Kenneth can order NO-LIVE-QUOTE to land
-  first if he doesn't want the window at all. The two phases have no code dependency in either direction,
-  so neither lists the other in `depends_on`.
+- **The blast radius reaches broker orders (corrected after plan round 5).** The scan's pick favours a
+  fabricated 0% spread (`scan.py:870-872`), Step 7 cards built from it can be armed regardless of contract
+  status (`AutoTradeArm/index.tsx:519`), a re-scan with any PASS candidate fires the armed order
+  (`scan.py:2036` → `maybe_fire_on_scan`) within `max_arm_age_minutes` (30), and `_market_is_open`
+  (`auto_trader.py:418`) is a price probe, not an hours test. Step 7's direct Place Limit/Market send is
+  reachable from the same cards. So after the close fix 1 can put a vol 1–49 / fabricated-spread contract
+  on a broker order.
+- **Therefore this phase does not merge to main until NO-LIVE-QUOTE has landed** (decision
+  `CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30`, Kenneth). On the branch the window reaches nobody; once
+  NO-LIVE-QUOTE's hard reject is on main the fabricated-spread rows are rejected before fix 1 matters.
+  This is an ordering constraint on the merge, not a code dependency, so neither phase lists the other in
+  `depends_on`.
 
 **Fix 1 — volume is no longer a hard reject by default (FR-25; Q1 (b)).**
 - Default `min_volume` goes from 50 to 0:
@@ -425,6 +433,10 @@ hard floor; profiles are not rewritten.
     mechanics, all five mutations killed.
   - Brief defect: the r5 brief did not tell the reviewer to report gate-level findings only, as
     audit_rule clause (1) requires; future briefs must.
+- **Plan stage CLOSED by Kenneth, 2026-09-30** (decision `CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30`):
+  build now; hold the merge until NO-LIVE-QUOTE lands. That removes round 5's only gate-level finding (the
+  exposure exists only on main); §3's residual is rewritten to say so. Code stage starts at round 6
+  (code round 1 of 3), brief restricted to gate-level findings.
 - **PROJECT_STATE mechanics.** `scripts/state.py` counts it as drift when a phase's status disagrees with
   its probe (`state.py:717-728`).
   - Today: status `not_started`, with a defect marker on `min_volume: 50\b` in `contract_rules.yaml`.

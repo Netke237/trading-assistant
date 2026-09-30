@@ -128,6 +128,10 @@ above.
    - Once `min_volume` defaults to 0, after-close rows with volume 1–49 and a fabricated 0% spread
      (`ask == 0`) pass the scan's hard gates. Main used to reject them as `volume_too_low`.
    - This plan's hard reject in the scan closes that window. Kenneth may order this phase to land first.
+   - **Decided 2026-09-30 (`CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30`):** CONTRACT-LIQUIDITY-DTE is
+     built but its merge is held until this phase lands, because the window reaches broker orders (scan
+     PASS trigger → armed Step 7 card → price-only `_market_is_open`, and Step 7 direct send). This phase's
+     hard reject must therefore cover the auto-trade fire and Step 7 send paths, not only the scan.
 
 *High*
 1. **The verification gate cannot run through `/api/contracts`.** See Step 0 above.

@@ -1495,7 +1495,7 @@
         "pattern": "min_volume: 50\\b",
         "note": "DEFECT MARKER: the shipped default hard volume floor of 50 -- vol 3 / OI 1,534 is rejected while vol 0 / OI 319 passes. Gone = fix 1 built (default 0 = off)."
       },
-      "note": "Plan docs/superpowers/plans/2026-09-30-contract-liquidity-dte-plan.md r5, NOT audited clean. Kenneth answered section 6 (decision CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30). Plan round 1: 3H/7M/6L fixed (r2). Round 2: 6H/6M/8L, all highs in the off-hours quote fix, which Kenneth split out to phase NO-LIVE-QUOTE (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30); r3 is fixes 1+2 only. Round 3: 1H/5M/5L fixed (r4), incl. an accepted after-close residual (fabricated-spread rows with volume 1-49 now pass; closed by NO-LIVE-QUOTE). Round 4: 1H/4M/7L fixed (r5). Round 5 (2026-09-30): 1 gate-level finding NOT fixed -- the after-close residual reaches auto-trade (scan.py:2036 PASS trigger, armable Step 7 cards, _market_is_open is a price probe) and Step 7 direct send; 9 below-gate items logged in plan section 7. HARD CAP reached (plan stage 5 rounds, cap 3): auditing stopped, pending Kenneth -- accept the broker-order exposure explicitly, or land NO-LIVE-QUOTE first."
+      "note": "Plan docs/superpowers/plans/2026-09-30-contract-liquidity-dte-plan.md r5, NOT audited clean. Kenneth answered section 6 (decision CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30). Plan round 1: 3H/7M/6L fixed (r2). Round 2: 6H/6M/8L, all highs in the off-hours quote fix, which Kenneth split out to phase NO-LIVE-QUOTE (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30); r3 is fixes 1+2 only. Round 3: 1H/5M/5L fixed (r4), incl. an accepted after-close residual (fabricated-spread rows with volume 1-49 now pass; closed by NO-LIVE-QUOTE). Round 4: 1H/4M/7L fixed (r5). Round 5 (2026-09-30): 1 gate-level finding NOT fixed -- the after-close residual reaches auto-trade (scan.py:2036 PASS trigger, armable Step 7 cards, _market_is_open is a price probe) and Step 7 direct send; 9 below-gate items logged in plan section 7. HARD CAP reached (plan stage 5 rounds, cap 3). Kenneth closed the plan stage (decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30): build now, MERGE HELD until NO-LIVE-QUOTE lands. Code stage starts at round 6 (code round 1 of 3)."
     },
     {
       "id": "NO-LIVE-QUOTE",
@@ -2968,6 +2968,12 @@
       "id": "CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30",
       "q": "CONTRACT-LIQUIDITY-DTE plan section 6, Q1-Q4.",
       "a": "Kenneth, 2026-09-30, all four recommendations: Q1 (b) min_volume stays as an optional hard floor, default 0 (off); a saved profile that explicitly set it keeps it as its floor. Q2 yes, one merged thin_liquidity soft flag, liquidity score unchanged. Q3 a chain row with no live bid/ask is hard-rejected as quote_stale in the scan and auto-trade; Step 6 and the Watchlist only label it 'no live quote'. Q4 leave Semi-annual as is; capping the DTE multiplier would be a separate measured task."
+    },
+    {
+      "id": "CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30",
+      "q": "Plan round 5 on CONTRACT-LIQUIDITY-DTE hit the hard cap (5 plan rounds, cap 3) with one gate-level finding: after the close, fix 1 lets a vol 1-49 contract with a fabricated 0% spread reach a broker order (scan.py:2036 PASS trigger, armable Step 7 cards, _market_is_open is a price probe, Step 7 direct send). Accept the exposure, stop and do NO-LIVE-QUOTE first, or build now and hold the merge?",
+      "a": "Kenneth, 2026-09-30: 'ok agree' to building now and holding the merge. The plan stage is closed; CONTRACT-LIQUIDITY-DTE is built and code-audited on its branch but does NOT merge to main until NO-LIVE-QUOTE has landed, so the after-close exposure never reaches main. Merge ordering only, not a code dependency: neither phase lists the other in depends_on. The plan's section 3 residual is rewritten to name the broker-order path and this hold.",
+      "by": "Kenneth 2026-09-30"
     },
     {
       "id": "CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30",
