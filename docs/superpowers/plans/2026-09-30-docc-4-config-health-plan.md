@@ -896,3 +896,19 @@ Round 3 confirmed that these hold:
 | B13 | Duplicate `watch` undefined | Replace on the same name. T17 reload |
 | B14 | Crash results memoised | Never memoised |
 | B15 | Frontend threshold copies unrecorded | §4 and `not_checked` |
+
+## 10. Round 4 (2026-09-30): CLEAN, zero gate-level findings. The plan stage is closed
+
+This round ran by decision `DOCC-4-PLAN-CAP-2026-09-30`. It was gated: only a wrong number shown to the user or put on an order, or corrupt persisted data, counted. Its target shrank to revision 4's diff (`83a9855..ab15f87`) and that diff's interactions with the rest of the plan.
+
+It verified each fix against main `96763b2`:
+- **G1:** the name is `AutoTradeService` (`auto_trader.py:2202`). The T16 mapping follows `functools`' `__module__`/`__qualname__`.
+- **G2:** each `AutoTradeService` projection matches its loader on every fallback input (`auto_trade` null, list or scalar; `max_arm_age_minutes` of `"abc"`, null, NaN or inf; missing, unparseable or undecodable file). Every stale line clears on restart. Every other loader raises, so `RAISES` is correct for them.
+- **G3:** the callers of `load_direction_conviction_min_trend` are exactly `stock_scan.py:660` (Analysis), `:1087` and `:1503`, plus `scan.py:1612`. The fire path is correctly left out.
+- **B4:** fib-pullback and pre-breakout read no money, regime or conviction check.
+- **B8:** read order. A mid-poll edit gives at most one poll's transient line.
+- **B6:** the codec matches the loaders.
+- **B7:** the shipped docs are 685, 115 and 65 nodes, far under the budget.
+- **B5, B12:** the float encoding and raw keys hold.
+
+Next: build revision 4. The code stage gets its own cap of three rounds.
