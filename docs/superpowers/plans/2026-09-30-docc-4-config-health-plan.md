@@ -31,6 +31,11 @@ compares it with the same projection of the disk file (§2.2). Both
 `DOCC-4-REV2-APPROVED-2026-09-30` (per-cache judgement, no boot snapshot,
 holder in `config_health.py`, nothing in `main.py`); §8 flags it for Kenneth.
 
+**Revision 4 (after plan round 3, NOT CLEAN, 3 gate-level).** Section §9 lists
+every round-3 finding. The mechanism is unchanged. Fixes: the class name
+(`AutoTradeService`), `AutoTradeService` projections that copy their loaders'
+catch-all `except`, and direction_conviction scopes that include Analysis.
+
 ---
 
 ## 1. What is true on main `96763b2` (verified by reading the code)
@@ -65,8 +70,8 @@ re-runs this grep. T16 pins the list.**
 | risk_rules | `config_loader.load_first_passage_cfg` | `first_passage` |
 | risk_rules | `portfolio_risk._load_config` | whole doc |
 | risk_rules | `alert_generator._load_risk_config` | whole doc |
-| risk_rules | `AutoTrader._max_arm_age_minutes` | `auto_trade` (one key) |
-| risk_rules | `AutoTrader._risk_config` | `auto_trade` |
+| risk_rules | `AutoTradeService._max_arm_age_minutes` | `auto_trade` (one key) |
+| risk_rules | `AutoTradeService._risk_config` | `auto_trade` |
 | contract_rules | `contract_validator._load_config` | whole doc |
 
 Uncached readers re-read on every call, so they are always live:
@@ -95,7 +100,7 @@ through one of those three caches or is uncached. `ArmedStrategy.portfolio_value
 is an arm-time snapshot, not config.
 
 The other **five** cached risk readers (`exit_plan`, `reprice_horizon`,
-`first_passage` and the two `AutoTrader` ones) are not cleared. None of them
+`first_passage` and the two `AutoTradeService` ones) are not cleared. None of them
 reads a key the save writes, but a hand edit to their sections that was pending
 at save time is merged into the file and still is not live.
 `scoring_rules.yaml` and `contract_rules.yaml` have no in-app writer.
@@ -138,7 +143,7 @@ the other validators through their **module attribute**
 
 **Revision 3 (round-2 findings 1, 2, 5; below-gate 6, 7).** Revision 2 recorded
 a digest inside each loader (`note_load`) and dropped records on a Settings
-save (`forget_loads`). Round 2 showed four holes in that: the two `AutoTrader`
+save (`forget_loads`). Round 2 showed four holes in that: the two `AutoTradeService`
 loaders cache a fallback and so recorded nothing; the digest failed on parsed
 YAML with mixed-type keys and silently recorded nothing; a load racing a save
 could leave an old value cached with its record forgotten; and a record taken
@@ -147,9 +152,15 @@ from judging a **copy** of what was cached. Revision 3 judges **the cached
 value itself**, at poll time. There are no records, and there is no
 `forget_loads`.
 
+**Revision 4 (round-3 findings).** The class is `AutoTradeService`
+(`auto_trader.py:2202`); revision 3 wrote `AutoTrader`, which would have been a
+`NameError` at import. Loader names are `<module>.<qualname>` with the
+package prefix dropped, for example `auto_trader.AutoTradeService._risk_config`
+(below-gate 9).
+
 **Registration.** Each of the 15 cached loaders in §1.2 is registered once, at
 import of its own module, directly after its definition (after the class body
-for the two `AutoTrader` staticmethods):
+for the two `AutoTradeService` staticmethods):
 
 ```python
 config_health.watch(
@@ -160,8 +171,10 @@ config_health.watch(
 )
 ```
 
-- `watch` stores `{loader: (file, fn, project)}` under a `threading.Lock`. It
-  never raises: a bad registration is logged and becomes a permanent `stale`
+- `watch` stores `{loader: (file, fn, project, on_unreadable)}` under a
+  `threading.Lock`. A second `watch` under the same name **replaces** the
+  entry, so `importlib.reload` of a loader module leaves the registry
+  pointing at the live wrapper (round-3 below-gate 13, T17). It never raises: a bad registration is logged and becomes a permanent `stale`
   line, "loader <name> is registered wrongly, so it cannot be judged".
 - **The loaders' bodies do not change.** They read the same file, parse it the
   same way, return the same value and raise the same exceptions. Registration
@@ -169,14 +182,36 @@ config_health.watch(
 - `project` mirrors the loader's own return expression on a parsed doc:
   - identity for the eight whole-doc loaders;
   - `doc["<section>"]` for the four `config_loader` section loaders;
-  - `(doc or {}).get("auto_trade", {})` for `AutoTrader._risk_config`;
-  - `int((doc or {}).get("auto_trade", {}).get("max_arm_age_minutes", 30))`
-    for `AutoTrader._max_arm_age_minutes`.
+  - for the two `AutoTradeService` loaders, which wrap their **whole body**,
+    read and parse included, in `except Exception` and return a fallback
+    (`auto_trader.py:3052-3072`), the projection copies the body and its
+    `try`/`except` exactly (round-3 finding 2):
+    ```python
+    def _project_risk_config(doc):          # loader: cfg.get("auto_trade", {}); except → {}
+        try:
+            return doc.get("auto_trade", {})
+        except Exception:
+            return {}
+    def _project_max_arm_age(doc):          # loader: int(cfg.get(...).get(..., 30)); except → 30
+        try:
+            return int(doc.get("auto_trade", {}).get("max_arm_age_minutes", 30))
+        except Exception:
+            return 30
+    ```
+    and they register `on_unreadable={}` and `on_unreadable=30`: the value the
+    loader itself returns when the file cannot be read or parsed. Every other
+    loader registers `on_unreadable=RAISES` (the default), because it lets
+    that exception out and `lru_cache` caches nothing.
 
-  T24 pins each projection against its real loader on the shipped files, and
-  on edited files that change the section.
+  T24 pins each projection against its real loader on the shipped files, on
+  edited files that change the section, and on the fallback inputs (below).
 
-**The comparison, on every poll (decision 9.5).** For each registered loader:
+**The comparison, on every poll (decision 9.5).** **Order (round-3 below-gate
+8): all live values are read first, then the three files.** An edit landing
+between the two reads can give one poll a stale line that the next poll clears.
+It can never give a false green for a value loaded **before** the disk read,
+because disk is read last. §5 states the one-poll window. For each registered
+loader:
 1. If `fn.cache_info().currsize == 0`, skip it. Nothing is running it, and its
    first call will read the disk. This removes revision 1's false positive for
    files nothing has loaded.
@@ -189,10 +224,16 @@ config_health.watch(
    - If that load raises (for example `_load_scoring_doc` on a refused money
      block), `lru_cache` cached nothing. The loader is skipped, and the
      refusal is already an `error` from §2.3.
-3. Compute `project(disk_doc)` from the file's memoised disk parse (§2.3).
-   - If that raises (the disk doc no longer has the section, or does not
-     parse), the loader is stale: the process runs a value that a restart
-     would not reproduce.
+3. Compute the value a restart would load, from the file's memoised disk
+   parse (§2.3). **The rule: stale unless the loader's own code, run on
+   today's disk, would produce the same value, including through its except
+   path.**
+   - Disk unreadable or unparseable: the expected value is `on_unreadable`.
+     For a `RAISES` loader, it is stale (a restart would fail, not reproduce
+     the cached value).
+   - Otherwise `project(disk_doc)`. If that raises (the section is gone), it
+     is stale for the same reason. The two `AutoTradeService` projections
+     never raise, because they carry the loader's own `except`.
 4. Compare the two with `canonical(x) == canonical(y)`. `canonical` is a small
    recursive encoder in `config_health.py`:
    - every value is tagged with its type name, so `1`, `"1"`, `True` and
@@ -200,9 +241,14 @@ config_health.watch(
    - mapping keys are encoded, then sorted by their encoding, never by the raw
      key, so `{"a": 1, True: 2}` (a YAML `yes:` key) encodes;
    - lists keep their order;
+   - floats encode as `("float", repr(x))`, never by value, so `.nan` equals
+     itself and `-0.0` differs from `0.0` (round-3 below-gate 5);
    - scalars other than `str`, `int`, `float`, `bool` and `None` (for
      example `datetime`, which `safe_load` produces) encode as `(type name,
      repr)`;
+   - it has a node budget (100 000 nodes). Shared aliases are re-expanded,
+     so an alias-heavy doc could otherwise cost exponential CPU on every poll.
+     Going over the budget raises `CanonicalError` (round-3 below-gate 7);
    - it tracks the ids of containers on the current path, so a recursive
      alias raises `CanonicalError` instead of looping.
 5. A mismatch → one `stale` entry per (file, loader):
@@ -218,12 +264,16 @@ What this catches:
 - **A cache that holds a broken doc** (for example `load_scoring_cfg` caching
   a doc that the direction_conviction check then refuses, so every scan 500s),
   after the file was fixed: stale.
-- **A cached fallback (round-2 finding 1).** `AutoTrader._risk_config` caches
-  `{}` ("risk limits disabled") when the file could not be read at first
-  fire. After the file is fixed, `{}` differs from `doc["auto_trade"]`, so it
-  is stale. `_max_arm_age_minutes` caching its fallback `30` reads stale only
-  when disk says something other than 30. That is the truth: the process runs
-  30.
+- **A cached fallback (round-2 finding 1).** `AutoTradeService._risk_config`
+  caches `{}` ("risk limits disabled") when the file could not be read at
+  first fire. After the file is fixed, `{}` differs from `doc["auto_trade"]`,
+  so it is stale. `_max_arm_age_minutes` caching its fallback `30` reads stale
+  only when disk yields something other than 30. That is the truth: the
+  process runs 30. And a valid file on which the loader itself falls back
+  (`auto_trade:` null, `max_arm_age_minutes: "abc"`, a list doc) yields the
+  same fallback through the projection. So it is **not** stale: a restart
+  would load the same thing. What those values mean is `risk_rules` contents,
+  which is in `not_checked`.
 - **Torn state.** Two loaders of one file holding different versions: at most
   one of them can match disk, so the other is reported.
 - **A cached dict changed in place by a consumer** (below-gate 6). The live
@@ -271,9 +321,10 @@ has its own caches, and a poll reaches one of them.
   "not_checked": ["money blocks other than regime_sizing: values",
                   "required non-money sections and keys (horizons.<h>.*, stock_score_thresholds, confidence_backtest, risk_rules sections)",
                   "risk_rules.yaml and contract_rules.yaml contents",
-                  "single worker assumed; only WEB_CONCURRENCY is detected"],
+                  "single worker assumed; only WEB_CONCURRENCY is detected",
+                  "copies the frontend fetched at page load (event and IV thresholds)"],
   "pid": 12345,
-  "errors":   [{"file": "scoring_rules.yaml", "path": "regime_gate", "message": "is missing — …", "blocks": "every scan, Analysis and every auto-trade fire"}],
+  "errors":   [{"file": "scoring_rules.yaml", "path": "regime_gate", "message": "is missing — …", "blocks": "stock and options scans, Analysis and every auto-trade fire"}],
   "warnings": [{"file": "scoring_rules.yaml", "path": "regime_gates", "message": "unknown top-level key, ignored — did you mean 'regime_gate'?"}],
   "stale":    [{"file": "risk_rules.yaml", "path": "exit_plan", "message": "disk differs from running config (config_loader.load_exit_plan_cfg) -- restart"}]
 }
@@ -297,7 +348,9 @@ has its own caches, and a poll reaches one of them.
     `path: ""`.
   - `scoring_rules.yaml`, when it is a mapping:
     - `money_config.money_block_errors(doc)`: new and pure, §2.5.
-      `blocks`: "every scan, Analysis and every auto-trade fire".
+      `blocks`: "stock and options scans, Analysis and every auto-trade fire"
+      (round-3 below-gate 4: `/scan/prebreakout` and `/scan/fib-pullback`
+      do not read the money blocks).
     - `conviction_sizing.resolve_sizing(doc.get("regime_sizing"))`, catching
       `SizingConfigError` → one error at `regime_sizing` carrying its
       message. This is the same call the stock scan and the fire make, so a
@@ -307,7 +360,7 @@ has its own caches, and a poll reaches one of them.
     - Regime blocks (round-1 finding 10, round-2 below-gate 1):
       - **First, once:** if `regime` is missing or not a mapping, report the
         single error `regime_block_errors(doc, HORIZONS)` gives for it, with
-        `blocks: "every scan, Analysis and every auto-trade fire"`, and stop.
+        `blocks: "stock and options scans, Analysis and every auto-trade fire"`, and stop.
         This avoids the same error three times with a too-narrow scope each.
       - **Otherwise, per horizon:** `money_config.regime_block_errors(doc,
         (h,))`, so each error's `blocks` names its scope. The scans and the
@@ -321,12 +374,17 @@ has its own caches, and a poll reaches one of them.
       all three horizons × both directions, which is what every scan calls
       today. Errors carry `.path` from the new `ConvictionConfigError`, never
       a path parsed out of the message (§2.5).
-      - `blocks` (round-2 below-gate 2): a shape or placement error from
-        `_validated_direction_conviction_blocks` → "every stock and options
-        scan". A value error at `horizons.<h>.direction_conviction.<dir>_min_trend`
-        → "<H> <Dir> stock and options scans" (for example "Swing Bullish
-        stock and options scans"), because the scans resolve only the
-        requested pair.
+      - `blocks` (round-2 below-gate 2, round-3 finding 3). The callers of
+        `load_direction_conviction_min_trend` are the stock scan
+        (`stock_scan.py:1087`, `:1503`), the options scan (`scan.py:1612`)
+        and Analysis (`_analyze_core`, `stock_scan.py:660`). Each resolves
+        only the requested pair, but each validates every block first. So:
+        - a shape or placement error from
+          `_validated_direction_conviction_blocks` → "every stock and
+          options scan, and Analysis";
+        - a value error at `horizons.<h>.direction_conviction.<dir>_min_trend`
+          → "<H> <Dir> stock and options scans and Analysis" (for example
+          "Swing Bullish stock and options scans and Analysis").
       - Message parity (round-2 below-gate 8): the value checks are called
         with the title-case `Horizon` value (`'Swing'`), which is what the
         scans pass from `req.horizon`, so the message is byte-identical to
@@ -368,7 +426,17 @@ has its own caches, and a poll reaches one of them.
 - **`report()` never raises.** An unexpected exception inside one check
   becomes an error `{file, path: "", message: "health check <name> crashed:
   <exc>"}`, and that check is left out of `checked`. The endpoint never 500s
-  over the config it reports on.
+  over the config it reports on. **A crash result is never memoised**
+  (round-3 below-gate 14): the next poll runs that check again, even on
+  unchanged bytes.
+- **Decoding (round-3 below-gate 6).** The loaders read in text mode with the
+  locale encoding (`open(...)` or `read_text()` with no `encoding=`). On
+  Kenneth's Windows machine that is cp1252 (`start-backend.bat` does not pass
+  `-X utf8`). Health reads the bytes once, hashes them for the memo, then
+  decodes with `locale.getpreferredencoding(False)`, which is the same codec
+  the loaders get. A non-ASCII value therefore parses to the same string on
+  both sides. A decode error is a file error, "cannot be decoded as <codec>",
+  like a parse error. T28 pins parity with a non-ASCII value.
 - **Memoised by content (round-1 finding 11).** Each file's parse, its
   error and warning results, and the `canonical` form of each registered
   loader's projection are cached against the sha256 of its bytes, and are
@@ -392,8 +460,12 @@ verdict.
   becomes `_warn_unknown_top_level(doc); errs = money_block_errors(doc); if errs:
   raise MoneyConfigError(errs)`. This mirrors DOCC-2's
   `regime_block_errors`/`validate_regime_block` split.
-- `money_config.unknown_top_level_keys(doc) -> list[(str_key, hint)]`: pure.
-  `_warn_unknown_top_level` uses it and keeps its once-per-process set.
+- `money_config.unknown_top_level_keys(doc) -> list[(raw_key, hint)]`: pure,
+  returning the **raw** key. `_warn_unknown_top_level` uses it, and keeps its
+  once-per-process set and its `%r` log keyed on the raw key, so today's log
+  lines stay byte-identical (`True` stays `True`, and `True` and `"True"` stay
+  two warnings). Only the health warning applies `str()`, for `path` and
+  `difflib` (round-3 below-gate 12).
 - `config_loader`:
   - **`ConvictionConfigError(ValueError)`** with `.path` (a dotted string).
     Every `raise ValueError` in `_validated_direction_conviction_blocks`,
@@ -482,7 +554,8 @@ verdict.
   constant to the same `tmp_path` and clear its `lru_cache` in setup and
   teardown.
 - An autouse fixture resets the memo and calls `cache_clear()` on every
-  registered loader after every test, so order never matters and no cache
+  registered loader **before and after** every test (round-3 below-gate 10:
+  a cache filled by an earlier test module must not decide T1), so order never matters and no cache
   pointing at a `tmp_path` outlives its test.
 
 **Tests.**
@@ -502,7 +575,7 @@ verdict.
   disk → clean. Edit `exit_plan` → stale, `path == "exit_plan"`.
 - **T6**: a comment-only edit after a load → clean.
 - **T7**: an unparseable file (tab-indented) → one error with the line number,
-  and every record for that file stale. The scoring-only checks are absent
+  and every filled loader of that file stale. The scoring-only checks are absent
   from `checked`; the other two files are still checked. An empty file → a
   "not a mapping" error.
 - **T8**: `regime_gate` removed → error `path == "regime_gate"`, the **same
@@ -534,6 +607,9 @@ verdict.
   - `{"a": 1, True: 2}` encodes, and differs from `{"a": 1, "True": 2}`;
   - `1`, `"1"`, `True` and `1.0` encode four different ways;
   - a `datetime` encodes;
+  - `float("nan")` equals itself, and `-0.0` differs from `0.0`;
+  - a doc of more than 100 000 nodes (built with shared aliases) raises
+    `CanonicalError`;
   - a self-referencing list raises `CanonicalError`.
 
   Then end to end: a scoring file with a top-level `yes:` key, loaded via
@@ -560,11 +636,21 @@ verdict.
     source must not contain `_rules` or `CONFIG_DIR`.
   - The registered names equal the §1.2 table.
 
-  So a 16th cached reader, in any module, fails the test until it is either
-  registered or allowlisted by a reviewer.
+  - **Name matching (round-3 below-gate 9):** the AST name is
+    `app.<pkg>.<module>.<qualname>`. The registry name is the same with
+    `app.<pkg>.` dropped. The test also asserts `fn.__module__ + "." +
+    fn.__qualname__` equals the AST name for every registered `fn`.
+
+  So a 16th `lru_cache`/`cache` reader, in any module, fails the test until it
+  is either registered or allowlisted by a reviewer. A hand-rolled cache (a
+  module dict, a TTL cache such as `strategy_param_store._CACHE`) is **not**
+  seen by this test. None reads the three files today, and §4 records the
+  limit.
 - **T17**: registration. Every registered `fn` has `cache_info` and
   `cache_clear`, and is the object the module exposes under that name (so a
   later re-decoration cannot leave the registry holding a dead wrapper).
+  `importlib.reload(config_loader)` → the registry holds the new wrappers, and
+  the count is still 15.
 - **T18**: Settings save, clean path. Load all eight risk loaders, then `POST
   /settings/risk` → clean.
 - **T19**: Settings save, dirty path. Load `load_exit_plan_cfg`, hand-edit
@@ -600,22 +686,31 @@ verdict.
   shipped files, and again on a copy with that loader's section edited:
   `canonical(project(parsed disk doc)) == canonical(fn())` after a
   `cache_clear()`. A projection that drifts from its loader's return
-  expression fails here.
-- **T25**: the `AutoTrader` fallbacks (round-2 finding 1).
-  `risk_rules.yaml` made unparseable → `AutoTrader._risk_config()` returns `{}`
-  → the file is fixed → stale at `auto_trade` for `AutoTrader._risk_config`.
+  expression fails here. For the two `AutoTradeService` loaders, it also runs
+  on each fallback input (round-3 finding 2): `auto_trade:` null,
+  `max_arm_age_minutes: null`, `max_arm_age_minutes: "abc"`, a top-level list
+  doc, and an unparseable file (compared with `on_unreadable`). After loading
+  on each of these, the report has **no** stale line for that loader.
+- **T25**: the `AutoTradeService` fallbacks (round-2 finding 1).
+  `risk_rules.yaml` made unparseable → `AutoTradeService._risk_config()` returns `{}`
+  → the file is fixed → stale at `auto_trade` for `AutoTradeService._risk_config`.
   Same for `_max_arm_age_minutes` with a fixed file whose value is `45` →
   stale. With a fixed file whose value is `30` → not stale, because the
   process really runs 30.
 - **T26**: a loader whose section was removed from disk after it loaded →
   stale (the projection raises).
+- **T28**: decoding. A `risk_rules.yaml` value containing `é`, loaded via
+  `load_exit_plan_cfg` → clean (health decodes with the loaders' codec).
+- **T29**: poll order. Patch the disk read to edit the file just before it
+  runs. The loader, filled from the pre-edit file, is reported stale in that
+  same poll, never green.
 - **T27**: regime scope (below-gate 1). `regime` removed → exactly one error at
-  `regime`, `blocks` "every scan, Analysis and every auto-trade fire".
+  `regime`, `blocks` "stock and options scans, Analysis and every auto-trade fire".
 - **T10** also asserts (below-gate 2, 8): the `bullish_min_trend: 150` error
-  has `blocks == "Swing Bullish stock and options scans"`, and its message
+  has `blocks == "Swing Bullish stock and options scans and Analysis"`, and its message
   equals the one `load_direction_conviction_min_trend("Bullish", "Swing")`
   raises on the same doc. The misplaced-block error has
-  `blocks == "every stock and options scan"`.
+  `blocks == "every stock and options scan, and Analysis"`.
 
 `test_risk_settings.py` and `test_risk_limits_endpoint.py` must pass unchanged.
 
@@ -652,6 +747,14 @@ verdict.
   `HORIZON_KEYS`, setting it gives a wrong "unknown key" warning (a false red,
   never a false green). Anyone adding a horizon key updates the table in the
   same commit. Extracting the keys with an AST walk is below the gate.
+- **Hand-rolled caches.** T16 sees only `lru_cache`/`cache`. A module-dict or
+  TTL cache of these three files would not be registered or checked. None
+  exists today (round-3 below-gate 9).
+- **Frontend copies (round-3 below-gate 15, inherited by DOCC-5).**
+  `eventThresholdsStore` and `ivThresholdsStore` fetch scoring_rules values
+  once at app start (`routers/config.py:31`, `:58`). After an edit and a
+  backend restart, health is green while an open tab still holds the old
+  thresholds until it reloads. Also listed in `not_checked`.
 - **`uvicorn --workers N` without `WEB_CONCURRENCY`** is not detected (§2.2).
   It is in `not_checked`, and `pid` is in the payload.
 
@@ -670,12 +773,15 @@ verdict.
    from disk, **including after an edit that was reverted** (the cache kept the
    edited values). It no longer reports "restart" for a file nothing has read
    yet.
-5. With `WEB_CONCURRENCY > 1`, health always says staleness cannot be judged.
+5. A hand edit that lands in the middle of a poll can give that one poll a
+   stale line that the next poll clears. It cannot give a false green (§2.2
+   order).
+6. With `WEB_CONCURRENCY > 1`, health always says staleness cannot be judged.
    `uvicorn --workers N` alone is not detected. The payload says so in
    `not_checked` and carries `pid`.
-6. The direction_conviction validator raises a `ValueError` subclass carrying
+7. The direction_conviction validator raises a `ValueError` subclass carrying
    `.path`. The messages are unchanged.
-7. `test_atomic_yaml.py::test_save_risk_preserves_key_order` is edited to skip
+8. `test_atomic_yaml.py::test_save_risk_preserves_key_order` is edited to skip
    the header lines (§2.6).
 
 
@@ -698,7 +804,7 @@ surface names its scope.
 - that no interleaving of a load, a `cache_clear()` and a poll can make the
   poll compare anything other than the value the cache actually holds (§2.2);
 - that each `project` in §2.2 matches its loader's return expression,
-  including the `AutoTrader` fallbacks;
+  including the `AutoTradeService` fallbacks;
 - that `canonical` cannot silently equate two different parsed values, and
   cannot fail silently;
 - that every `ValueError` → `ConvictionConfigError` change keeps each existing
@@ -739,7 +845,7 @@ cache, the `yaml.dump` round trip, the router registration, and the
 
 | # | Finding | Resolution |
 |---|---|---|
-| G1 | `AutoTrader._risk_config` / `_max_arm_age_minutes` cache a fallback, so `note_load` recorded nothing → green with risk limits off | §2.2: the live cached value is compared with a projection that mirrors the fallback. T25 |
+| G1 | `AutoTradeService._risk_config` / `_max_arm_age_minutes` cache a fallback, so `note_load` recorded nothing → green with risk limits off | §2.2: the live cached value is compared with a projection that mirrors the fallback. T25 |
 | G2 | The `json.dumps` digest fails on mixed-type keys and alias cycles → silently no record; it also merges `1`/`"1"` | §2.2 `canonical`, type-tagged, sorted by encoding, cycle-checked; failure → a stale line, never silence. T13b |
 | G3 | T16 found readers by file name in source → could not catch an unregistered one | §3 T16: AST walk of every cached function under `app/`, registry or literal allowlist |
 | G4 | `test_atomic_yaml.py::test_save_risk_preserves_key_order` breaks with the header | §2.6: that one test is edited, and it is stated. T22 |
@@ -755,10 +861,38 @@ cache, the `yaml.dump` round trip, the router registration, and the
 | B8 | Message casing differs between health and the scans | §2.3: title-case horizon, as the scans pass. T10 |
 | B9 | §2.7 stale text; `forget_loads` signature inconsistent | §2.7 rewritten; `forget_loads` gone |
 
-**Flagged for Kenneth.** Decision `DOCC-4-REV2-APPROVED-2026-09-30` approved
+**Flagged for Kenneth (still open).** Decision `DOCC-4-REV2-APPROVED-2026-09-30` approved
 "per-cache load records". Revision 3 keeps it per cache, with no boot snapshot,
 the holder in `config_health.py` and nothing in `main.py`. But it reads each
 cache's **live value** at poll time instead of a digest recorded at load time,
 because every round-2 staleness hole (G1, G2, G5, B6, B7) came from judging a
 copy. The one new runtime effect: a poll calls filled caches (a hit), and in a
 narrow race it does one real load (§5 item 2).
+
+## 9. Round 3 (2026-09-30): NOT CLEAN, 3 gate-level. Every finding and its resolution
+
+Round 3 confirmed that these hold:
+- the 15-reader table and the three-entry allowlist (AST walk);
+- only the three `risk_settings` caches are ever cleared;
+- the header facts and test line numbers;
+- the empty `__init__.py` files, so the lazy-import rule is enough;
+- live-value soundness under every load, `cache_clear()` and poll
+  interleaving.
+
+| # | Finding | Resolution |
+|---|---|---|
+| G1 | The class is `AutoTradeService`, not `AutoTrader`: `NameError` at import | Renamed everywhere. §2.2 states the name format. T16 checks `__module__`/`__qualname__` |
+| G2 | The `AutoTradeService` projections lacked the loader's catch-all `except`: a permanent "restart" a restart cannot clear | §2.2: projections copy the `try`/`except`, `on_unreadable` fallback values, and the rule "stale unless the loader's own code on today's disk gives the same value". T24 fallback inputs |
+| G3 | direction_conviction `blocks` left out Analysis (`_analyze_core`, `stock_scan.py:660`) | §2.3 scopes name Analysis. T10 |
+| B4 | "every scan" too broad for money/regime (pre-breakout and fib do not read them) | "stock and options scans, Analysis and every auto-trade fire" |
+| B5 | Float encoding unspecified (NaN, -0.0) | `("float", repr(x))`. T13b |
+| B6 | Health decoding could differ from the loaders' locale codec | §2.3 decodes with `locale.getpreferredencoding(False)`. T28 |
+| B7 | Live `canonical` could be exponential on alias-heavy docs | 100 000-node budget → a "cannot be compared" stale line. T13b |
+| B8 | Order of the live read and the disk read unspecified | Live values first, disk last. §5 item 5. T29 |
+| B9 | T16 claim overstated; name mapping unstated | §3 T16 and §4 narrowed; mapping stated |
+| B10 | Autouse reset only after each test | Before and after |
+| B11 | T7 revision-2 wording | "every filled loader" |
+| B12 | `unknown_top_level_keys` could change the existing log | Returns raw keys; `str()` only in the health warning |
+| B13 | Duplicate `watch` undefined | Replace on the same name. T17 reload |
+| B14 | Crash results memoised | Never memoised |
+| B15 | Frontend threshold copies unrecorded | §4 and `not_checked` |
