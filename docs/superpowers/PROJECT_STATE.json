@@ -2878,6 +2878,11 @@
       "id": "DOCC-4-REV2-APPROVED-2026-09-30",
       "q": "DOCC-4 plan revision 2 (after round 1, NOT CLEAN): (a) replace DOCC-4-5-SLICING's boot-snapshot + Settings re-baseline with per-cache load records compared section-by-section with disk (holder in services/config_health.py, nothing added to main.py); (b) scope of a green: refusals named in the literal not_checked list are not a false green (per s9.11), rather than widening DOCC-4 with every value/presence check.",
       "a": "Kenneth, 2026-09-30: approved both ('I am happy with both of them'). Next: plan round 2 on revision 2, in a new session."
+    },
+    {
+      "id": "DOCC-4-PLAN-CAP-2026-09-30",
+      "q": "DOCC-4-CONFIG-HEALTH plan stage hit the hard cap (3 rounds, none clean: 3 -> 6 -> 3 gate-level). Round 4, build now, or split?",
+      "a": "Kenneth, 2026-09-30, recommended option: ONE gated plan round 4 over revision 4's fixes only (round 3's G1 AutoTradeService name, G2 projections mirror the loaders' catch-all except, G3 Analysis in direction_conviction scopes, plus the B-fixes) and their interactions with already-reviewed text. Gate: a wrong number to a user or on a broker order, or corrupt persisted data; report nothing else. CLEAN -> build; NOT CLEAN -> stop and split into two plans (staleness registry; health lines + header). Precedent COMPOSITE-MOMENTUM-PLAN-CAP-2026-09-29."
     }
   ],
   "pending_kenneth": [
