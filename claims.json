@@ -2,18 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "ccr-2fe3aef8-jpt3lz",
-      "claimed_at": "2026-09-30T17:22:19Z",
-      "expires_at": "2026-09-30T20:22:19Z",
-      "note": "code r1 CLEAN; awaiting Kenneth's merge call",
-      "task": "DOCC-4-CONFIG-HEALTH"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/contract-liquidity-dte",
-      "claimed_at": "2026-09-30T17:35:09Z",
-      "expires_at": "2026-09-30T20:35:09Z",
-      "note": "plan r0 awaiting Kenneth Q1-Q4, then adversarial plan audit",
+      "claimed_at": "2026-09-30T18:03:48Z",
+      "expires_at": "2026-09-30T21:03:48Z",
+      "note": "plan r4, adversarial round 4 running",
       "task": "CONTRACT-LIQUIDITY-DTE"
     }
   ]
