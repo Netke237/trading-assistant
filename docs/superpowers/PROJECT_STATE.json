@@ -1374,7 +1374,7 @@
     {
       "id": "WATCH-DIRECTION-TO-EVALUATOR",
       "name": "A composite watch's own saved direction reaches evaluate_scheduled, so a legacy Bearish watch without trigger_def.direction judges Bearish OMM",
-      "status": "in_progress",
+      "status": "shipped_unaudited",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [
