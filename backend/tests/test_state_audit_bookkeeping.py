@@ -1156,6 +1156,8 @@ def test_a_git_log_that_raises_warns_too(repo, monkeypatch):
     ("3", None),          # a numeric string reads as its number: 2 <= 3
     (" 3 ", None),
     ("1", "drift"),       # ...and still catches an undercount
+    (3.0, None),          # json.loads gives a float for `3.0`; whole, so read
+    (1.0, "drift"),       # ...and an undercount through a float still drifts
 ])
 def test_a_numeric_string_audit_rounds_is_read_as_its_number(repo, declared, expected):
     """P6 D2. `declared = target.get("audit_rounds") or 0` then `git_max >
@@ -1174,3 +1176,15 @@ def test_a_non_numeric_audit_rounds_warns_instead_of_raising(repo, declared):
     severity, message = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
     assert severity == "warn"
     assert "not a whole number" in message
+
+
+@pytest.mark.parametrize("declared", ["three", 2.5, True, [2]])
+def test_a_non_numeric_audit_rounds_still_trips_the_hard_cap(repo, declared):
+    """P6 unit D, code round 6. The non-numeric warn returned BEFORE the hard
+    cap, so round 5 on a target that is not clean exited 0. The cap never reads
+    `declared`, so it must still fire."""
+    repo.commit("round 5: fixes")
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": declared, "audit_clean": False}]
+    severity, message = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
+    assert severity == "drift"
+    assert "HARD CAP" in message

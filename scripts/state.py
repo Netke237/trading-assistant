@@ -626,22 +626,28 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
         )
 
     # P6 D2: a hand-edited string must not become a TypeError inside the
-    # SessionStart hook. A numeric string is read as its number; anything else
-    # is reported, not compared.
+    # SessionStart hook. A whole number in any spelling JSON allows (3, 3.0,
+    # "3") is read as that number. Anything else is None: it cannot be
+    # compared, so the undercount check is skipped -- but the HARD CAP below
+    # never reads `declared` and still runs (code round 6: an early warn here
+    # turned a round-5, not-clean breach into exit 0). Only after the cap does
+    # a non-numeric count get its warning. Deliberately ONE cap check, not a
+    # copy here: STATE-PROBE-TARGET-SCOPING's verify pattern anchors on it.
     raw = target.get("audit_rounds")
+    declared: int | None
     if raw is None:
         declared = 0
-    elif isinstance(raw, int) and not isinstance(raw, bool):
+    elif isinstance(raw, bool):
+        declared = None
+    elif isinstance(raw, int):
         declared = raw
+    elif isinstance(raw, float) and raw.is_integer():
+        declared = int(raw)
     elif isinstance(raw, str) and raw.strip().isdigit():
         declared = int(raw.strip())
     else:
-        return "warn", (
-            f"Audit bookkeeping: {label} has audit_rounds={raw!r}, which is not a "
-            f"whole number, so the round count was NOT checked against git "
-            f"(this branch reaches round {git_max}). Fix the field."
-        )
-    if git_max > declared:
+        declared = None
+    if declared is not None and git_max > declared:
         return "drift", (
             f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
             f"{label} -- the active target -- declares {declared}. "
@@ -687,6 +693,12 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"moving active_phase if it is pointing at finished work. Subjects: {shown}"
         )
 
+    if declared is None:
+        return "warn", (
+            f"Audit bookkeeping: {label} has audit_rounds={raw!r}, which is not a "
+            f"whole number, so the round count was NOT checked against git "
+            f"(this branch reaches round {git_max}). Fix the field."
+        )
     return None
 
 

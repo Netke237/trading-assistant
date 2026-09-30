@@ -95,8 +95,9 @@ a green "No drift".
     flag.
 - **When it cannot look, it says so.** No resolvable base, no git, or a
   `git log` that fails prints **warn** "COULD NOT RUN" — an unchecked bill, not
-  a clean one (exit 0). A non-numeric `audit_rounds` prints a warn instead of
-  crashing the hook.
+  a clean one (exit 0). A whole-number `audit_rounds` is read in any spelling
+  (`3`, `3.0`, `"3"`); anything else is a warn instead of a crash — except that
+  the hard cap still fires as **drift**, since it never reads the count.
 - **The accepted hole** (Kenneth, `BACKLOG-DECISIONS-2026-09-25` Q3 — accepted
   and documented, not patched). The entry's name and presence are still
   hand-written in the audited file, so **renaming** an `already_shipped` entry,
