@@ -177,6 +177,16 @@ Change: use real OHLCV from `tests/fixtures/` that survives the pre-screen (with
 otherwise unchanged; if one of them now FAILS against real candidates, that is a real finding and is
 reported, not weakened. Mutation check: breaking `alternativesCount` in scan.py must fail the file.
 
+BUILD DEVIATION (recorded at build, 2026-09-30): the entry's suggested remedy does not work.
+Measured: real `tests/fixtures/AAPL_candles.json` scores 42 and is REJECTed at the stock score gate
+with `min_stock_score` 40 or 0 alike, because that gate is on the card's STATUS, not the threshold.
+Built instead with the module's own established pattern (`_process_symbol` driver below it, and
+`test_scan_endpoint.py`'s `_force_passing_stock_score` / `_no_db_leak`): `score_stock` patched to a
+PASS card with a measured trend rule, the DB pre-fetch patched out, and the chains given
+`open_interest` and a RELATIVE expiry (the hardcoded 2026-06-20 had also gone stale). The
+non-empty assertion before every loop is as planned. Mutant (`alternativesCount = 0` in scan.py)
+now fails 2 tests, up from 1.
+
 ---
 
 ## Unit C — frontend (cardEdits, scanStore, StockPositionCard, MethodPickSelector)

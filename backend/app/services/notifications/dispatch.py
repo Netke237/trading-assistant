@@ -46,16 +46,45 @@ async def dispatch(channel: str, *, _subject: str = '', **kwargs) -> bool:
     return await _safe_notify(channel, _subject=_subject, **kwargs)
 
 
-def load_notification_config() -> dict:
-    """Read the notifications block from settings.yaml."""
+def read_notification_config() -> tuple[dict, bool]:
+    """The notifications block from settings.yaml, and whether the file could be read.
+
+    P6 (decision P4B-FOLLOWUPS-2026-09-26, item 7). `readable` is False when the
+    file EXISTS but opening or parsing it failed, or its top level is not a
+    mapping -- a corrupt file, which is logged at ERROR. A MISSING file is
+    readable and empty: no channels configured, the fresh-install state.
+
+    The block itself is always a dict: a `notifications:` that is null or not a
+    mapping reads as {} (nothing enabled), the same rule a null channel block
+    follows in notify_enabled_channels.
+    """
     try:
-        if _SETTINGS_PATH.exists():
-            with open(_SETTINGS_PATH) as f:
-                cfg = yaml.safe_load(f) or {}
-                return cfg.get('notifications', {})
+        if not _SETTINGS_PATH.exists():
+            return {}, True
+        with open(_SETTINGS_PATH) as f:
+            doc = yaml.safe_load(f)
     except Exception:
-        logger.debug('Could not load notification config', exc_info=True)
-    return {}
+        logger.error('Could not read %s; notification config unavailable', _SETTINGS_PATH, exc_info=True)
+        return {}, False
+    if doc is None:
+        return {}, True
+    if not isinstance(doc, dict):
+        logger.error('%s is not a mapping (got %s); notification config unavailable',
+                     _SETTINGS_PATH, type(doc).__name__)
+        return {}, False
+    block = doc.get('notifications')
+    return (block if isinstance(block, dict) else {}), True
+
+
+def load_notification_config() -> dict:
+    """Read the notifications block from settings.yaml ({} when unavailable).
+
+    Unchanged contract for its callers (chart_alerts.py x3, notify_enabled_channels):
+    a corrupt file still reads as {}, now logged at ERROR by the reader. A caller
+    that must tell "nothing enabled" from "could not read" uses
+    read_notification_config instead.
+    """
+    return read_notification_config()[0]
 
 
 async def notify_enabled_channels(subject: str, plain_body: str, html_body: str) -> bool:
@@ -69,8 +98,14 @@ async def notify_enabled_channels(subject: str, plain_body: str, html_body: str)
     just scheduled.
     """
     cfg = load_notification_config()
-    gmail = cfg.get('gmail', {})
-    tg = cfg.get('telegram', {})
+    # A channel block that is null or not a mapping (`gmail:` with nothing under
+    # it) counts as DISABLED, and the other channel is still tried. `.get(k, {})`
+    # only covered a MISSING key: a null block raised AttributeError out of this
+    # function and Telegram was never attempted.
+    gmail = cfg.get('gmail')
+    gmail = gmail if isinstance(gmail, dict) else {}
+    tg = cfg.get('telegram')
+    tg = tg if isinstance(tg, dict) else {}
 
     delivered = False
 

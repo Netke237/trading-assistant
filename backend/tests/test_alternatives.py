@@ -9,34 +9,66 @@ _MOCK_CANDLES = [
     for i in range(30)
 ]
 
+def _expiry(days_from_today: int) -> str:
+    from datetime import date, timedelta
+    return (date.today() + timedelta(days=days_from_today)).isoformat()
+
+
+# open_interest and a RELATIVE expiry, so every contract clears
+# contract_rules.yaml's hard rejects whenever this runs (a hardcoded 2026-06-20
+# expiry had gone stale -- one of the reasons this module iterated nothing).
 _MOCK_MULTI_CHAIN = [
     {
-        "strike": 185, "expiry": "2026-06-20", "price": 4.50, "spread": 0.15,
+        "strike": 185, "expiry": _expiry(41), "price": 4.50, "spread": 0.15,
         "delta": 0.55, "theta": -0.06, "ivRank": 50, "dte": 41,
-        "right": "C", "volume": 800,
+        "right": "C", "volume": 800, "open_interest": 2000,
     },
     {
-        "strike": 190, "expiry": "2026-06-20", "price": 2.50, "spread": 0.20,
+        "strike": 190, "expiry": _expiry(41), "price": 2.50, "spread": 0.20,
         "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 41,
-        "right": "C", "volume": 500,
+        "right": "C", "volume": 500, "open_interest": 2000,
     },
     {
-        "strike": 195, "expiry": "2026-06-20", "price": 1.00, "spread": 0.10,
+        "strike": 195, "expiry": _expiry(41), "price": 1.00, "spread": 0.10,
         "delta": 0.30, "theta": -0.03, "ivRank": 60, "dte": 41,
-        "right": "C", "volume": 300,
+        "right": "C", "volume": 300, "open_interest": 2000,
     },
 ]
 
 
+def _passing_card(direction: str):
+    """P6 (B3). The flat _MOCK_CANDLES feed scores ~32 and is REJECTed at the
+    stock score gate, so every candidate loop below used to iterate an EMPTY
+    list and the module passed while checking nothing. `min_stock_score` does
+    not help -- the gate is on the card's STATUS. This module tests
+    alternatives, not stock scoring, so the card is fixed to PASS (the pattern
+    test_scan_endpoint.py's _force_passing_stock_score uses), with a MEASURED
+    trend rule so the options direction gate keeps it (P3c item 2)."""
+    from app.scoring.stock_scorer import StockScoreCard, RuleResult
+    return StockScoreCard(symbol="AAPL", direction=direction, horizon="Swing", score=80,
+                          status="PASS", rules=[RuleResult("trend", "PASS", 80, {})])
+
+
 def _enter_scan_patches(*, price=185.0, candles=_MOCK_CANDLES, chain=_MOCK_MULTI_CHAIN,
-                        company="Test Company", fund=None):
+                        company="Test Company", fund=None, direction="Bullish"):
     stack = ExitStack()
     stack.enter_context(patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=price)))
     stack.enter_context(patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=candles)))
     stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain)))
     stack.enter_context(patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value=company)))
     stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=fund)))
+    stack.enter_context(patch("app.routers.scan.score_stock", return_value=_passing_card(direction)))
+    # The DB-backed pre-fetch would otherwise serve real ingested bars/quotes for
+    # AAPL and bypass the mocks above (test_scan_endpoint.py's _no_db_leak).
+    stack.enter_context(patch("app.routers.scan.fetch_quotes", return_value={}))
+    stack.enter_context(patch("app.services.historical_store.get_bars", AsyncMock(return_value=[])))
     return stack
+
+
+def _candidates(data: dict) -> list[dict]:
+    """The candidate list, asserted NON-EMPTY: a loop over nothing proves nothing."""
+    assert data["candidates"], f"scan produced no candidates: {data.get('rejected')}"
+    return data["candidates"]
 
 
 def test_scan_produces_alternatives_with_multi_contract_chain(client):
@@ -47,7 +79,7 @@ def test_scan_produces_alternatives_with_multi_contract_chain(client):
     assert r.status_code == 200
     data = r.json()
 
-    for c in data["candidates"]:
+    for c in _candidates(data):
         assert "alternatives" in c
         assert "alternativesCount" in c
         assert c["alternativesCount"] >= 1, (
@@ -70,9 +102,9 @@ def test_scan_produces_alternatives_with_multi_contract_chain(client):
 def test_scan_single_contract_produces_no_alternatives(client):
     _MOCK_SINGLE = [
         {
-            "strike": 190, "expiry": "2026-06-20", "price": 2.50, "spread": 0.20,
+            "strike": 190, "expiry": _expiry(41), "price": 2.50, "spread": 0.20,
             "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 41,
-            "right": "C", "volume": 500,
+            "right": "C", "volume": 500, "open_interest": 2000,
         }
     ]
     with _enter_scan_patches(chain=_MOCK_SINGLE):
@@ -81,7 +113,7 @@ def test_scan_single_contract_produces_no_alternatives(client):
         })
     assert r.status_code == 200
     data = r.json()
-    for c in data["candidates"]:
+    for c in _candidates(data):
         assert c["alternativesCount"] == 0
         assert c["alternatives"] == []
 
@@ -93,7 +125,7 @@ def test_scan_bullish_alternatives_have_right_C(client):
         })
     assert r.status_code == 200
     data = r.json()
-    for c in data["candidates"]:
+    for c in _candidates(data):
         for alt in c["alternatives"]:
             assert alt["right"] == "C", f"Bullish alternative should have right=C, got {alt['right']}"
 
@@ -101,28 +133,28 @@ def test_scan_bullish_alternatives_have_right_C(client):
 def test_scan_bearish_alternatives_have_right_P(client):
     _MOCK_PUT_CHAIN = [
         {
-            "strike": 180, "expiry": "2026-06-20", "price": 4.50, "spread": 0.15,
+            "strike": 180, "expiry": _expiry(41), "price": 4.50, "spread": 0.15,
             "delta": -0.55, "theta": -0.06, "ivRank": 50, "dte": 41,
-            "right": "P", "volume": 800,
+            "right": "P", "volume": 800, "open_interest": 2000,
         },
         {
-            "strike": 175, "expiry": "2026-06-20", "price": 2.50, "spread": 0.20,
+            "strike": 175, "expiry": _expiry(41), "price": 2.50, "spread": 0.20,
             "delta": -0.45, "theta": -0.05, "ivRank": 55, "dte": 41,
-            "right": "P", "volume": 500,
+            "right": "P", "volume": 500, "open_interest": 2000,
         },
         {
-            "strike": 170, "expiry": "2026-06-20", "price": 1.00, "spread": 0.10,
+            "strike": 170, "expiry": _expiry(41), "price": 1.00, "spread": 0.10,
             "delta": -0.30, "theta": -0.03, "ivRank": 60, "dte": 41,
-            "right": "P", "volume": 300,
+            "right": "P", "volume": 300, "open_interest": 2000,
         },
     ]
-    with _enter_scan_patches(chain=_MOCK_PUT_CHAIN):
+    with _enter_scan_patches(chain=_MOCK_PUT_CHAIN, direction="Bearish"):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bearish", "horizon": "Swing", "overrides": {},
         })
     assert r.status_code == 200
     data = r.json()
-    for c in data["candidates"]:
+    for c in _candidates(data):
         for alt in c["alternatives"]:
             assert alt["right"] == "P", f"Bearish alternative should have right=P, got {alt['right']}"
 
