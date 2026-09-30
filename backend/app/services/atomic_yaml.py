@@ -74,7 +74,19 @@ def _sweep_stale_sidecars(path: Path) -> None:
             continue  # racing writer, or already gone -- never fatal
 
 
-def atomic_write_yaml(path: Path, data: dict, **dump_kwargs) -> None:
+def _check_header(header: str) -> None:
+    if header == "":
+        return
+    if not header.endswith("\n") or "\r" in header or not all(
+        line.startswith("#") for line in header.splitlines()
+    ):
+        raise ValueError(
+            "atomic_write_yaml header must be whole '#' comment lines, each "
+            f"ending in '\\n', with no '\\r' -- got {header!r}"
+        )
+
+
+def atomic_write_yaml(path: Path, data: dict, *, header: str = "", **dump_kwargs) -> None:
     """Serialise ``data`` as YAML and install it at ``path`` atomically.
 
     Readers of ``path`` see either the whole previous document or the whole
@@ -86,7 +98,13 @@ def atomic_write_yaml(path: Path, data: dict, **dump_kwargs) -> None:
     serves has its own established formatting (``sort_keys``,
     ``allow_unicode``), and normalising them here would rewrite a user's
     on-disk config wholesale on their next save.
+
+    ``header`` (DOCC-4, decision DOCC-9.3B-D1-ACCEPT-COMMENT-LOSS-2026-09-28)
+    is written above the dump in the SAME ``write_text`` call, so a partial
+    write still leaves the target untouched. It must be whole ``#`` lines; it
+    is validated before any tmp file exists.
     """
+    _check_header(header)
     path.parent.mkdir(parents=True, exist_ok=True)
     # pid + thread id: distinct for any two writers that are actually running
     # at the same time, which is the only case the sidecar must be unique for.
@@ -94,7 +112,7 @@ def atomic_write_yaml(path: Path, data: dict, **dump_kwargs) -> None:
     # thread ident, so under `uvicorn --workers N` the tid alone collides.
     tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
-        tmp.write_text(yaml.dump(data, **dump_kwargs))
+        tmp.write_text(header + yaml.dump(data, **dump_kwargs))
         # os.replace installs the SOURCE inode, so the target would otherwise
         # inherit this tmp file's umask-derived mode -- silently resetting an
         # operator's hardened 0600 settings.yaml (it holds smtp_password and

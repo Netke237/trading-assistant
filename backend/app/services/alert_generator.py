@@ -9,6 +9,7 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.config_health import config_health
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
 from app.services.audit import log_event
@@ -25,6 +26,15 @@ _CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml
 def _load_risk_config() -> dict:
     with open(_CONFIG_PATH) as f:
         return yaml.safe_load(f)
+
+
+# DOCC-4: the health poll compares this cache's live value with the file on disk.
+config_health.watch(
+    file="risk_rules.yaml",
+    loader="alert_generator._load_risk_config",
+    fn=_load_risk_config,
+    project=lambda doc: doc,
+)
 
 
 def _premium_stop_pct() -> float:

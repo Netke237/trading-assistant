@@ -8,6 +8,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Literal
 
+from app.services.config_health import config_health
+
 Status = Literal["PASS", "CAUTION", "REJECT"]
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "contract_rules.yaml"
@@ -44,6 +46,15 @@ class ContractScoreCard:
 def _load_config() -> dict:
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
+
+
+# DOCC-4: the health poll compares this cache's live value with the file on disk.
+config_health.watch(
+    file="contract_rules.yaml",
+    loader="contract_validator._load_config",
+    fn=_load_config,
+    project=lambda doc: doc,
+)
 
 
 def dte_holding_multiplier() -> float:
