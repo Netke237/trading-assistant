@@ -41,7 +41,7 @@ function headline(tier: HealthTier, r: ConfigHealthReport | null, reason: string
   if (tier === 'multiworker') {
     return 'The backend answers from several worker processes; each has its own config, and this check sees one of them.';
   }
-  if (tier === 'warning') return `Config warning: ${plural(r.warnings.length, 'unknown key')}.`;
+  if (tier === 'warning') return `Config warning: ${plural(r.warnings.length, 'warning')}.`;
   return '';
 }
 
@@ -85,8 +85,11 @@ export function ConfigHealthBanner() {
     };
   }, [poll, tick]);
 
-  const { tier, report: r } = v;
+  const { tier } = v;
   if (tier === 'checking' || tier === 'clean') return null;
+  // An aged report (rule 3) is not shown as current findings: `unknown` has
+  // no report to speak of (plan §2.4); "Last checked" still gives its time.
+  const r = tier === 'unknown' ? null : v.report;
 
   const quiet = tier === 'warning';
   const expanded = !v.collapsed;

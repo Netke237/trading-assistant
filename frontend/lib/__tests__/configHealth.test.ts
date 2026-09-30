@@ -52,6 +52,10 @@ describe('parseConfigHealth', () => {
     expect(() => parseConfigHealth({ ...clone(ERROR_REPORT), ok: true })).toThrow('contradicts');
     expect(() => parseConfigHealth({ ...clone(CLEAN_REPORT), ok: false })).toThrow('contradicts');
   });
+
+  it('P4: a green that checked nothing is refused', () => {
+    expect(() => parseConfigHealth({ ...clone(CLEAN_REPORT), checked: [] })).toThrow('nothing checked');
+  });
 });
 
 describe('tierOf', () => {

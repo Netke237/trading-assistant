@@ -30,6 +30,8 @@ export type HealthTier =
 export const POLL_INTERVAL_MS = 30_000;
 export const FETCH_TIMEOUT_MS = 10_000;
 export const MAX_REPORT_AGE_MS = 70_000;
+/** A proxy's HTML error page must not fill the headline. */
+export const MAX_REASON_CHARS = 200;
 
 function stringArray(raw: Record<string, unknown>, key: string): string[] {
   const v = raw[key];
@@ -81,6 +83,8 @@ export function parseConfigHealth(raw: unknown): ConfigHealthReport {
   };
   const clean = report.errors.length === 0 && report.warnings.length === 0 && report.stale.length === 0;
   if (report.ok !== clean) throw new Error('ok: contradicts errors/warnings/stale');
+  // A green must say what it checked; the backend's only empty `checked` is the crash shape (ok: false).
+  if (report.ok && report.checked.length === 0) throw new Error('ok: true with nothing checked');
   return report;
 }
 
@@ -98,7 +102,11 @@ export interface HealthView {
 /** Why the tier is `unknown`, or null when it is not. */
 export function unknownReason(view: HealthView): string | null {
   if (tierOf(view) !== 'unknown') return null;
-  if (view.report === null) return view.error ?? 'no report';
+  if (view.report === null) {
+    const e = (view.error ?? '').trim();
+    if (!e) return 'no details';
+    return e.length > MAX_REASON_CHARS ? `${e.slice(0, MAX_REASON_CHARS)}…` : e;
+  }
   return `last check is older than ${MAX_REPORT_AGE_MS / 1000} s`;
 }
 

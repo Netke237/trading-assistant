@@ -44,7 +44,7 @@ describe('ConfigHealthBanner', () => {
   it.each([
     ['error', ERROR_REPORT, /Config error: 1 problem in scoring_rules\.yaml\. The stock scan and every auto-trade fire are refused/],
     ['stale', STALE_REPORT, /Config changed on disk: restart the backend/],
-    ['warning', WARNING_REPORT, /Config warning: 1 unknown key\./],
+    ['warning', WARNING_REPORT, /Config warning: 1 warning\./],
   ])('B2: %s tier headline, detail and scope', async (tier, report, head) => {
     getHealth.mockResolvedValueOnce(clone(report));
     render(<ConfigHealthBanner />);
@@ -159,6 +159,34 @@ describe('ConfigHealthBanner', () => {
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
     expect(useConfigHealthStore.getState().report).not.toBeNull();   // rule 3, not rule 2
     expect(banner()).toHaveTextContent('Config health unknown: last check is older than 70 s');
+    expect(banner()).toHaveTextContent('Nothing could be checked.');
+    expect(banner()).not.toHaveTextContent('Checked:');
+  });
+
+  it('B3c: an empty failure reason falls back; a long one is cut', async () => {
+    getHealth.mockRejectedValueOnce(new Error(''));
+    render(<ConfigHealthBanner />);
+    await flush();
+    expect(banner()).toHaveTextContent('Config health unknown: no details. Retrying');
+    getHealth.mockRejectedValueOnce(new Error('<html>' + 'x'.repeat(500)));
+    await act(async () => { jest.advanceTimersByTime(30_000); });
+    await flush();
+    expect(banner()!.textContent!.length).toBeLessThan(600);
+    expect(banner()).toHaveTextContent('…');
+  });
+
+  it('B5b: a clean poll resets collapse, so the same finding returns expanded', async () => {
+    getHealth.mockResolvedValue(clone(WARNING_REPORT));
+    render(<ConfigHealthBanner />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
+    getHealth.mockResolvedValueOnce(clone(CLEAN_REPORT));
+    await act(async () => { jest.advanceTimersByTime(30_000); });
+    await flush();
+    expect(banner()).toBeNull();
+    await act(async () => { jest.advanceTimersByTime(30_000); });
+    await flush();
+    expect(banner()).toHaveTextContent('Checked:');
   });
 
   it('B7: unmount clears every interval and listener', async () => {

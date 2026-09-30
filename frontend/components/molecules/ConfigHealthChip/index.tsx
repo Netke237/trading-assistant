@@ -55,13 +55,13 @@ export function ConfigHealthChip() {
           className={[styles.chip, styles.button, tone].join(' ')}
           data-tier="clean"
           aria-expanded={open}
-          aria-haspopup="dialog"
+          aria-controls="config-health-scope"
           onClick={() => setOpen((o) => !o)}
         >
           {TIER_SHORT_LABEL.clean} · {r.checked.length} {r.checked.length === 1 ? 'check' : 'checks'}
         </button>
         {open && (
-          <div className={styles.popover} role="dialog" aria-label="Config health scope">
+          <div id="config-health-scope" className={styles.popover} role="region" aria-label="Config health scope">
             <p className={styles.heading}>Checked</p>
             <ul className={styles.list}>{r.checked.map((c) => <li key={c}>{c}</li>)}</ul>
             <p className={styles.heading}>Not checked</p>

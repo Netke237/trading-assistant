@@ -37,15 +37,15 @@ describe('ConfigHealthChip', () => {
     await flush();
     const chip = screen.getByRole('button', { name: 'Config OK · 10 checks' });
     fireEvent.click(chip);
-    const pop = screen.getByRole('dialog', { name: 'Config health scope' });
+    const pop = screen.getByRole('region', { name: 'Config health scope' });
     const items = within(pop).getAllByRole('listitem').map((li) => li.textContent);
     expect(items).toEqual([...SHIPPED_CHECKED, ...SHIPPED_NOT_CHECKED]);
     expect(pop).toHaveTextContent('Last checked');
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Config health scope' })).toBeNull();
     fireEvent.click(chip);
     fireEvent.mouseDown(document.body);
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Config health scope' })).toBeNull();
   });
 
   it('C3: an error shows "Config error"; a click re-expands a collapsed banner and focuses it', async () => {

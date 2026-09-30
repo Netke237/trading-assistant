@@ -83,7 +83,11 @@ export const useConfigHealthStore = create<ConfigHealthState>((set, get) => ({
       const pids = [...prev, report.pid].slice(-PID_WINDOW);
       const multiWorker = sawPidReturn(pids);
       const changed = prev.length > 0 && prev[prev.length - 1] !== report.pid;
+      // Collapse lasts "until the config is clean" (decision 3): a clean
+      // landing resets it, so the same finding coming back shows expanded.
+      const reset = report.ok && !multiWorker ? { collapsed: false, collapsedFingerprint: null } : {};
       set({
+        ...reset,
         report, status: 'ready', error: null, fetchedAt: at, now: at, pids, multiWorker,
         restartedAt: changed && !multiWorker ? at : multiWorker ? null : get().restartedAt,
       });
