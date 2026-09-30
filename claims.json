@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "ccr-2fe3aef8-jpt3lz",
-      "claimed_at": "2026-09-30T13:14:55Z",
-      "expires_at": "2026-09-30T16:14:55Z",
-      "note": "backend config_health surface + comment-loss header",
-      "task": "DOCC-4-CONFIG-HEALTH"
-    }
-  ]
+  "claims": []
 }
