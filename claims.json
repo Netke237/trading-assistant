@@ -15,14 +15,6 @@
       "expires_at": "2026-09-30T16:30:41Z",
       "note": "plan round 2 + build",
       "task": "DOCC-4-CONFIG-HEALTH"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/practical-dirac-ebenkq",
-      "claimed_at": "2026-09-30T13:35:28Z",
-      "expires_at": "2026-09-30T16:35:28Z",
-      "note": "PR for REGIME-SIZING audit merge",
-      "task": "REGIME-SIZING-AUDIT"
     }
   ]
 }
