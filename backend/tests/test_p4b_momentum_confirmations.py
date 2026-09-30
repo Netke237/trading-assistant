@@ -1,5 +1,7 @@
-"""P4b T6 (open_questions[61]): composite momentum confirmations compare a
-number -- the closed candle's value -- and never raise on a series."""
+"""P4b T6 (open_questions[61]), rewritten by COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD
+(plan test 18): momentum confirmations are computed from the rule's own
+candles (momentum_match), never read from a standard rule's indicator series
+-- so a series named like a momentum kind neither matches nor raises."""
 from __future__ import annotations
 
 import json
@@ -11,24 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import app.services.regime_omm as regime_omm
 from app.database import Base
 from app.models.alert import AlertRuleModel
-from app.services.composite_trigger_evaluator import _matched_confirmations, indicator_values_at
+from app.services.composite_trigger_evaluator import _matched_confirmations
+from tests.parity_harness import parity_no_real_feeds  # noqa: F401  (WATCH-RULE-BAR-PARITY: no real feeds)
 
 _TD = {"confirmations": [{"type": "momentum", "signal_kind": "rsi_cross", "min_confidence": 60}]}
 
 
-def test_indicator_values_at_reads_the_point_at_t():
-    series = {"rsi_cross": [{"time": 1, "value": 10}, {"time": 2, "value": 70}, {"time": 3, "value": 5}],
-              "gap": [{"time": 1, "value": 1}], "none_at_t": [{"time": 2, "value": None}], "bad": 7}
-    assert indicator_values_at(series, 2) == {"rsi_cross": 70}
-    assert indicator_values_at({}, 2) == {}
-
-
-@pytest.mark.parametrize("val, matched", [
-    (70, True), (60.0, True), (59.9, False), (float("nan"), False), (float("inf"), False),
-    (True, False), ([{"time": 1, "value": 99}], False), ("99", False), (None, False),
-])
-def test_momentum_matches_only_a_real_number(val, matched):
-    assert (_matched_confirmations(_TD, [], {"rsi_cross": val}) == ["rsi_cross"]) is matched
+@pytest.mark.parametrize("val", [70, 60.0, float("nan"), True, [{"time": 1, "value": 99}], "99", None])
+def test_an_indicator_value_is_never_a_momentum_reading(val):
+    """The old matcher compared indicator_values[kind]; whatever is passed where
+    that dict used to go, nothing matches and nothing raises."""
+    assert _matched_confirmations(_TD, [], None) == []
+    assert _matched_confirmations(_TD, [], {"rsi_cross": val}) == []
 
 
 async def _fire(monkeypatch, candles, closed):
@@ -61,19 +57,8 @@ def _candles(closed_value, forming_value):
 
 
 @pytest.mark.asyncio
-async def test_rule_path_reads_the_closed_candle_value(monkeypatch):
+async def test_a_leaked_standard_series_no_longer_fires_the_rule(monkeypatch):
+    """P4b T6's closed-candle value of 80 used to clear min_confidence 60 (the
+    leak, plan 1.2). It is no longer read at all."""
     c = _candles(closed_value=80, forming_value=1)
-    assert len(await _fire(monkeypatch, c, c[-2])) == 1
-
-
-@pytest.mark.asyncio
-async def test_rule_path_ignores_the_forming_value(monkeypatch):
-    c = _candles(closed_value=1, forming_value=80)
     assert await _fire(monkeypatch, c, c[-2]) == []
-
-
-def test_a_bool_never_counts_as_a_momentum_reading():
-    """True == 1 would clear a minimum of 1 without the bool guard (code round 1, finding 2)."""
-    td = {"confirmations": [{"type": "momentum", "signal_kind": "rsi_cross", "min_confidence": 1}]}
-    assert _matched_confirmations(td, [], {"rsi_cross": True}) == []
-    assert _matched_confirmations(td, [], {"rsi_cross": 1}) == ["rsi_cross"]

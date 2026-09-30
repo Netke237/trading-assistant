@@ -2,8 +2,15 @@ import { render, screen } from '@testing-library/react';
 import Step5Page from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
-import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK } from '@/lib/eventThresholdsStore';
+import { useEventThresholdsStore } from '@/lib/eventThresholdsStore';
 import type { TradeCardData } from '@/types/domain';
+import { api } from '@/lib/api';
+import { EVENT_SHIPPED, IV_SHIPPED, echoStoredThresholds } from '@/lib/testFixtures/thresholds';
+
+// DOCC-3: the page fetches both stores on mount; each fetch answers with the
+// record the test set, so it re-sets the test's values rather than clearing them.
+jest.mock('@/lib/api', () => ({ api: { getIvThresholds: jest.fn(), getEventThresholds: jest.fn() } }));
+beforeEach(() => echoStoredThresholds(api as unknown as Parameters<typeof echoStoredThresholds>[0]));
 
 /**
  * Round 2 finding 4. The IV PCTL cell guarded on `pctl != null && pctl > 0`,
@@ -45,8 +52,8 @@ function render5(ivPercentile: number | null) {
     scanResult: { candidates: [candidateWithPercentile(ivPercentile)], rejected: [], scan_id: 'x', timestamp: '' } as any,
     context: { direction: 'Bullish', horizon: 'Swing (21-45d)' } as any,
   } as any);
-  useIvThresholdsStore.setState({ thresholds: {}, loaded: true } as any);
-  useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: true } as any);
+  useIvThresholdsStore.setState({ thresholds: IV_SHIPPED, status: 'ready', error: null, overrides: {} });
+  useEventThresholdsStore.setState({ thresholds: EVENT_SHIPPED, status: 'ready', error: null });
   render(<Step5Page />);
 }
 

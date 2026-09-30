@@ -1,7 +1,11 @@
 from __future__ import annotations
+from datetime import datetime
 from enum import Enum
-from typing import Literal, Optional
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from typing import Annotated, Literal, Optional
+from pydantic import (
+    AfterValidator, AliasChoices, BaseModel, ConfigDict, Field, StringConstraints,
+    field_validator, model_validator,
+)
 
 from app.schemas.scan import (
     ContinuousScanConfig,
@@ -32,6 +36,31 @@ TpMethod = Literal['ladder', 'monte_carlo', 'exit_plan_2r', 'exit_plan_3r']
 # pricer. Three similar-sounding names, three different axes.
 PickedMethod = Literal['arithmetic', 'monte_carlo', 'ladder', 'barrier_race']
 PickedStopBasis = Literal['stock', 'premium']
+
+
+def _aware_iso_timestamp(value: str) -> str:
+    """P6 (G1-9): `pickedAt` must be a timezone-aware ISO 8601 timestamp.
+
+    The only producer is the frontend's `new Date().toISOString()`
+    (`2026-09-30T12:00:00.000Z`), which Python 3.11's fromisoformat reads as
+    UTC. Stored AS SENT -- validated, not normalised -- so the column and every
+    reader are unchanged. Naive is refused because the field exists to age a
+    pick, and a naive timestamp cannot be compared against a clock."""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError('pickedAt must be an ISO 8601 timestamp') from None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError('pickedAt must carry a timezone (e.g. a trailing Z)')
+    return value
+
+
+# Shared by PortfolioPositionCreate.pickedAt and ArmRequest.picked_at, and it
+# has to be: a fired auto-trade books through PortfolioPositionCreate AFTER its
+# broker order is placed, so a constraint only the create schema carried would
+# turn a bad arm into an order with no tracked position. Refusing it at ARM is
+# the point.
+PickedAt = Annotated[str, StringConstraints(max_length=64), AfterValidator(_aware_iso_timestamp)]
 
 # ── Sentiment / regime ──────────────────────────────────────────────────────
 
@@ -832,6 +861,13 @@ class OptionsPipeline(BaseModel):
     candidates:        int   # made it through everything, after every filter
 
 
+class EventWindow(BaseModel):
+    """The earnings/dividend proximity window the scan's event rule applied
+    (scoring_rules.yaml horizon default, replaced by any request override)."""
+    reject_days:  int
+    caution_days: int
+
+
 class DteWindow(BaseModel):
     """The contract expiry window actually enforced for a scan."""
     min_dte:    int
@@ -884,6 +920,17 @@ class ScanResult(BaseModel):
     pipeline: Optional[OptionsPipeline] = None
     direction_banner: Optional[str] = None
     dte_window: Optional[DteWindow] = None
+    # Absent on results persisted before 2026-09-29; the UI then falls back to
+    # the horizon's YAML window.
+    event_window: Optional[EventWindow] = None
+    # The contract-rule overrides this scan graded contracts with
+    # (contract_validator.effective_contract_overrides of the request's
+    # overrides, BEFORE the hold-days DTE widening, which /api/contracts
+    # re-derives from the same hold days). Step 6 sends it back to
+    # /api/contracts so its table grades with the trade cards' rules, not
+    # contract_rules.yaml's. {} = the scan overrode nothing. None = absent:
+    # a result from before 2026-09-29, or the recording failed.
+    contract_rules: Optional[dict[str, float]] = None
 
 
 class ScanSessionStatus(BaseModel):
@@ -941,7 +988,12 @@ class PortfolioPositionCreate(BaseModel):
     # Accepting 0 meant that derivation was skipped and the user's typed dollar
     # stop dropped on the floor, while every other unusable-input path on this
     # endpoint reports itself.
-    entryPrice: float = Field(alias="entry_price", gt=0)
+    #
+    # allow_inf_nan=False (P6, G1-6): `gt=0` alone ACCEPTS Infinity (inf > 0),
+    # and the row was committed before the response failed to encode it -- a
+    # stored inf behind a 500. JSON.stringify cannot emit Infinity, so only a
+    # direct API call reaches this.
+    entryPrice: float = Field(alias="entry_price", gt=0, allow_inf_nan=False)
     # ge=1, matching the PATCH path (routers/portfolio.py rejects qty < 1): a
     # zero or negative quantity is not a position, and without the floor POST
     # saved one that every P&L and exposure sum then multiplied by. Request
@@ -1015,11 +1067,13 @@ class PortfolioPositionCreate(BaseModel):
     #
     # gt=0 on both for the reason entryPrice carries it and the reason
     # alertEngine.ts:164-169 re-checks `> 0` at the far end: a `?? 0` fallback
-    # upstream can land a zero here, and zero is never a price.
-    pickedRowStockPrice: Optional[float] = Field(alias="picked_row_stock_price", default=None, gt=0)
-    pickedRowOptionPrice: Optional[float] = Field(alias="picked_row_option_price", default=None, gt=0)
+    # upstream can land a zero here, and zero is never a price. allow_inf_nan=False
+    # for entryPrice's reason: an inf here seeds resolved_tp_price=inf, and
+    # TP_HIT never fires again.
+    pickedRowStockPrice: Optional[float] = Field(alias="picked_row_stock_price", default=None, gt=0, allow_inf_nan=False)
+    pickedRowOptionPrice: Optional[float] = Field(alias="picked_row_option_price", default=None, gt=0, allow_inf_nan=False)
     pickedStopBasis: Optional[PickedStopBasis] = Field(alias="picked_stop_basis", default=None)
-    pickedAt: Optional[str] = Field(alias="picked_at", default=None)
+    pickedAt: Optional[PickedAt] = Field(alias="picked_at", default=None)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -1098,7 +1152,7 @@ class PortfolioPositionUpdate(BaseModel):
     exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
     maxLossOverride: Optional[dict] = Field(alias="max_loss_override", default=None)
     activeTpMethod: Optional[TpMethod] = Field(alias="active_tp_method", default=None)
-    resolvedTpPrice: Optional[float] = Field(alias="resolved_tp_price", default=None)
+    resolvedTpPrice: Optional[float] = Field(alias="resolved_tp_price", default=None, allow_inf_nan=False)
     resolvedTpUpdatedAt: Optional[str] = Field(alias="resolved_tp_updated_at", default=None)
     alertOverrides: Optional[dict] = Field(alias="alert_overrides", default=None)
     # Piece 4 — editable post-entry from the Portfolio drawer. Follows the same

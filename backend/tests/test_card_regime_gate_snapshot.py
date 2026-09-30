@@ -45,6 +45,7 @@ def _scan(client, **body_extra):
         stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain)))
         stack.enter_context(patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Test Co")))
         stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)))
+        stack.enter_context(patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))))
         r = client.post("/api/scan", json={
             "universe": ["MSFT"], "direction": "Bullish", "horizon": "Swing",
             "overrides": _OVERRIDES, **body_extra,

@@ -89,7 +89,7 @@ function alertTypeLabel(type: AlertType, premiumStopPct: number): string {
  *  fires on `currentPrice > 0`) but it is a real fraction, and a label that
  *  silently fell back to the live value for it would be the same class of
  *  misreport this stamp exists to end. */
-export function labelPremiumStopPct(
+function labelPremiumStopPct(
   stamped: number | null | undefined,
   liveResolved: number,
 ): number {

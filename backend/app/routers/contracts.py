@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+import math
 from typing import Literal, Optional
 
 import httpx
@@ -18,8 +20,10 @@ from app.data.market import (
     fetch_candles_async, _compute_iv_bs,
 )
 from app.data.augment import _augment, opt_float, opt_int
-from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
-from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
+from app.scoring.contract_validator import (
+    CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, validate_contract,
+)
+from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.trade_plan import build_trade_plan
 from app.scoring.structural_stop import find_structural_stop
 from app.scoring.stop_cost import compute_stop_cost
@@ -69,6 +73,40 @@ def _safe_detail(model_cls, raw):
         return None
 
 
+def _contract_rules_error(msg: str) -> HTTPException:
+    return HTTPException(
+        status_code=422,
+        detail=[{"loc": ["query", "contract_rules"], "msg": f"Value error, {msg}", "type": "value_error"}],
+    )
+
+
+def _parse_contract_rules(raw: str | None) -> dict[str, float | int]:
+    """Decode and check the `contract_rules` query parameter.
+
+    Keys validate_contract() does not read are ignored, as the scan ignores
+    them. Every key it does read must carry a finite JSON number -- stricter
+    than the scan, whose cast also takes numeric strings, but the scan's own
+    recording only ever produces finite numbers, so anything else is a
+    malformed request, and a 422 beats a table silently graded on the YAML."""
+    if raw is None or raw == "":
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, RecursionError):
+        raise _contract_rules_error("contract_rules must be a JSON object")
+    if not isinstance(parsed, dict):
+        raise _contract_rules_error("contract_rules must be a JSON object")
+    for key in CONTRACT_OVERRIDE_KEYS & parsed.keys():
+        val = parsed[key]
+        try:
+            ok = not isinstance(val, bool) and isinstance(val, (int, float)) and math.isfinite(val)
+        except OverflowError:  # an int too large for a float
+            ok = False
+        if not ok:
+            raise _contract_rules_error(f"contract_rules.{key} must be a finite number")
+    return effective_contract_overrides(parsed)
+
+
 @router.get('/contracts', response_model=list[OptionContract])
 async def get_contracts(
     symbol: str = Query(default='AAPL'),
@@ -80,11 +118,21 @@ async def get_contracts(
     max_price: float = Query(default=50.0, ge=0.5, le=500.0),
     hold_min_days: int | None = Query(default=None, ge=0),
     hold_max_days: int | None = Query(default=None, ge=0),
+    # JSON object: the scan's ScanResult.contract_rules, sent back by Step 6.
+    # Absent = contract_rules.yaml, which is what every caller got before
+    # 2026-09-29. Without it Step 6 graded a Loose-profile scan's contracts
+    # against the YAML's liquidity floor (vol 50 / OI 200) and listed the
+    # trade card's own contract as REJECT, score 0 -- or dropped it from the
+    # table entirely, all rows tying at 0 and `limit` cutting in strike order.
+    # (`max_price` and `limit` still apply, and the scan has neither, so the
+    # card's contract can still be absent here; it is no longer graded apart.)
+    contract_rules: str | None = Query(default=None),
 ) -> list[OptionContract]:
     opt_type = 'C' if right.upper() == 'C' else 'P'
 
+    rules = _parse_contract_rules(contract_rules)
     dte_bounds: tuple[int, int] | None = None
-    contract_overrides: dict | None = None
+    contract_overrides: dict | None = dict(rules) or None
     if hold_min_days is not None and hold_max_days is not None:
         if hold_max_days < hold_min_days:
             raise HTTPException(
@@ -104,12 +152,15 @@ async def get_contracts(
             # by the same DTE_WINDOW_TOLERANCE_DAYS -- see
             # widen_contract_overrides_for_dte's docstring for why the two must
             # move together, not just the hard bound.
-            contract_overrides = widen_contract_overrides_for_dte({}, dte_bounds[0], dte_bounds[1], hold_max_days)
+            # Widened ON TOP of the scan's rules, exactly as scan.py does, so a
+            # recorded min_dte/preferred_dte_* is replaced here as it was there.
+            contract_overrides = widen_contract_overrides_for_dte(dict(rules), dte_bounds[0], dte_bounds[1], hold_max_days)
 
     # 1. Fetch raw option chain
     async with httpx.AsyncClient(timeout=8) as client:
         raw_chain = await fetch_option_chain_async(
-            client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds
+            client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds,
+            min_dte_floor=widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None,
         ) or []
 
         # 2. Fetch current stock price.

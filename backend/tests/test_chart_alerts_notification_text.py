@@ -20,6 +20,7 @@ from app.routers.chart_alerts import (
     _build_notification_text, _interval_label, _composite_checklist,
     _composite_need_suffix,
 )
+from tests.parity_harness import parity_no_real_feeds  # noqa: F401  (WATCH-RULE-BAR-PARITY: no real feeds)
 
 # Telegram's HTML parse_mode only recognizes this tag allowlist -- anything else
 # (including <br> or any block tag) makes the Bot API reject the whole message
@@ -384,7 +385,7 @@ class TestCompositeNeedSuffix:
         # (1 of 3 required) that standard N_OF_M rules do surface.
         td = {'confirmations': [{'signal_kind': 'BOS'}, {'signal_kind': 'FVG'}, {'signal_kind': 'CHoCH'}],
               'min_confirmations': 1}
-        assert _composite_need_suffix(td) == ' (only needs 1 of 3 structure signals)'
+        assert _composite_need_suffix(td) == ' (only needs 1 of 3 confirmation signals)'
 
     def test_notes_strategy_threshold_below_total(self):
         td = {'strategy_confirmations': ['mean_reversion_vwap', 'mean_reversion_rsi'],
@@ -399,7 +400,7 @@ class TestCompositeNeedSuffix:
             'min_strategy_confirmations': 1,
         }
         suffix = _composite_need_suffix(td)
-        assert 'only needs 1 of 2 structure signals' in suffix
+        assert 'only needs 1 of 2 confirmation signals' in suffix
         assert 'only needs 1 of 2 strategy signals' in suffix
 
     def test_blank_when_no_confirmations_configured(self):

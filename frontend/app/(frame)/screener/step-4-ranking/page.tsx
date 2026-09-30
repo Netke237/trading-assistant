@@ -81,10 +81,11 @@ function signalLabel(s: Signal): string {
   return s === 'pos' ? 'Positive' : s === 'neg' ? 'Negative' : 'Neutral';
 }
 
-type SortKey = 'symbol' | 'rankDelta' | 'scoreDelta' | 'score' | 'stopCostPct' | 'nextEventDays';
+type SortKey = 'rank' | 'symbol' | 'rankDelta' | 'scoreDelta' | 'score' | 'stopCostPct' | 'nextEventDays';
 type SortDir = 'asc' | 'desc';
 
 const DEFAULT_SORT: Record<SortKey, SortDir> = {
+  rank:         'asc',
   symbol:       'asc',
   rankDelta:    'desc',
   scoreDelta:   'desc',
@@ -100,6 +101,12 @@ function sortRows(rows: WatchlistRow[], key: SortKey, dir: SortDir): WatchlistRo
     let av: number | string;
     let bv: number | string;
     switch (key) {
+      // The scan's own order: finalStatus (worst of stock, contract and entry
+      // quality -- NOT the stock-only status this table tints by), then stock
+      // score, then contract score. So a stock-PASS 95 whose contract is CAUTION
+      // can sit below a PASS 72. Sorting by SCORE alone mismatched the row that
+      // is auto-selected (list[0], the backend's rank 1).
+      case 'rank':          av = a.rank ?? Infinity;    bv = b.rank ?? Infinity;    break;
       case 'symbol':        av = a.symbol;              bv = b.symbol;              break;
       case 'rankDelta':     av = a.rankDelta;           bv = b.rankDelta;           break;
       case 'scoreDelta':    av = a.scoreDelta ?? 0;     bv = b.scoreDelta ?? 0;     break;
@@ -122,12 +129,15 @@ interface SortHeaderProps {
   currentKey: SortKey;
   dir: SortDir;
   onSort: (key: SortKey) => void;
+  /** Accessible name when the visible label is a symbol (the "#" rank header). */
+  ariaLabel?: string;
 }
 
-function SortHeader({ label, sortKey, currentKey, dir, onSort }: SortHeaderProps) {
+function SortHeader({ label, sortKey, currentKey, dir, onSort, ariaLabel }: SortHeaderProps) {
   const active = currentKey === sortKey;
   return (
-    <button className={styles.sortBtn} onClick={() => onSort(sortKey)}>
+    <button className={styles.sortBtn} onClick={() => onSort(sortKey)}
+            aria-label={ariaLabel} title={ariaLabel}>
       <span>{label}</span>
       <span className={active ? styles.sortIndActive : styles.sortInd}>
         {active ? (dir === 'asc' ? '▲' : '▼') : '⇅'}
@@ -140,8 +150,8 @@ export default function Step4Page() {
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
   const [candles, setCandles]     = useState<Candle[]>([]);
   const [selectedSym, setSelectedSym] = useState<string>('');
-  const [sortKey, setSortKey] = useState<SortKey>('score');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortKey, setSortKey] = useState<SortKey>('rank');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [currentPage, setCurrentPage] = useState(1);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates);
@@ -269,7 +279,10 @@ export default function Step4Page() {
             </button>
           </header>
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
-            <span aria-hidden />
+            {/* Rides in the icon column's header (no track of its own: NAME's
+                width floor is already binding at 1920px, see COLUMNS). */}
+            <SortHeader label="#"        sortKey="rank"          currentKey={sortKey} dir={sortDir} onSort={handleSort}
+                        ariaLabel="Sort by scan rank (final status, then score)" />
             <SortHeader label="SYMBOL"   sortKey="symbol"        currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <Text size={11} tone="dim">NAME</Text>
             {/* "HORIZON" is ~55px at 11px and the track is 44px, so the full word

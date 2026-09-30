@@ -236,8 +236,25 @@ _COMPOSITE_STRAT = {"__type": "composite", "primary": {"model": "any"}, "confirm
                     "min_strategy_confirmations": 1}
 
 
+# WATCH-RULE-BAR-PARITY (item 8, plan 2.2/2.3): on 1D/1W the composite readers
+# (D2 OMM, D3 HMM_daily + strategy confirmations) no longer read the chart's
+# candles -- they read the completed get_bars daily rows closed by the judged
+# candle's close, as a composite watch does. D1 (the standard rules' regime
+# snapshot) is unchanged. GET_BARS rows run to Wednesday 2026-06-10.
+from datetime import date as _date  # noqa: E402
+from tests.parity_harness import daily_rows  # noqa: E402
+
+GET_BARS = daily_rows(150, _date(2026, 6, 10), close=lambda i: 40.0 + i % 7)
+
+
+def _rows_through(last_iso: str) -> list[dict]:
+    return [r for r in GET_BARS if r["time"] <= last_iso]
+
+
 async def _run(monkeypatch, interval, candles, as_of):
     from app.routers import chart_alerts
+    from tests.parity_harness import patch_feeds
+    patch_feeds(monkeypatch, daily=GET_BARS)
     import app.services.regime_omm as regime_omm
     import app.services.regime_hmm as regime_hmm
     import app.services.composite_trigger_evaluator as cte
@@ -267,11 +284,11 @@ async def _run(monkeypatch, interval, candles, as_of):
     return seen
 
 
-def _assert_every_reader_saw(seen, expected):
+def _assert_every_reader_saw(seen, expected, composite_rows):
     assert seen["snap"] == [expected], "D1 regime snapshot"
-    assert seen["omm"] == [[c["close"] for c in expected]], "D2 composite OMM"
-    assert seen["hmm"] == [expected], "D3 HMM_daily"
-    assert seen["strat_daily"] == [expected], "D3 strategy confirmations (rsi/bb + choppy OMM)"
+    assert seen["omm"] == [[r["close"] for r in composite_rows]], "D2 composite OMM"
+    assert seen["hmm"] == [composite_rows], "D3 HMM_daily"
+    assert seen["strat_daily"] == [composite_rows], "D3 strategy confirmations (rsi/bb + choppy OMM)"
     assert seen["strat_intraday"] == [[]], "bars_intraday stays [] on 1D/1W"
 
 
@@ -279,28 +296,31 @@ def _assert_every_reader_saw(seen, expected):
 async def test_1d_mid_session_every_reader_drops_the_forming_bar(monkeypatch):
     candles = _daily(WED)
     seen = await _run(monkeypatch, "1D", candles, as_of=_ts(_ny(2026, 6, 10, 11)))
-    _assert_every_reader_saw(seen, candles[:-1])
+    # The judged candle is Tuesday's: its close closes Tuesday's row, not Wednesday's.
+    _assert_every_reader_saw(seen, candles[:-1], _rows_through("2026-06-09"))
 
 
 @pytest.mark.asyncio
 async def test_1d_after_the_close_every_reader_keeps_todays_bar(monkeypatch):
     candles = _daily(WED)
     seen = await _run(monkeypatch, "1D", candles, as_of=_ts(_ny(2026, 6, 10, 17)))
-    _assert_every_reader_saw(seen, candles)
+    # Q-E: the composite readers follow the judged candle (Tuesday), not as_of.
+    _assert_every_reader_saw(seen, candles, _rows_through("2026-06-09"))
 
 
 @pytest.mark.asyncio
 async def test_1w_mid_week_every_reader_drops_this_weeks_bar(monkeypatch):
     candles = _weekly(MON)
     seen = await _run(monkeypatch, "1W", candles, as_of=_ts(_ny(2026, 6, 10, 11)))
-    _assert_every_reader_saw(seen, candles[:-1])
+    # The judged candle is last week's: rows through its Friday (06-05), never weekly bars.
+    _assert_every_reader_saw(seen, candles[:-1], _rows_through("2026-06-05"))
 
 
 @pytest.mark.asyncio
 async def test_1w_after_fridays_close_every_reader_keeps_it(monkeypatch):
     candles = _weekly(MON)
     seen = await _run(monkeypatch, "1W", candles, as_of=_ts(_ny(2026, 6, 12, 17)))
-    _assert_every_reader_saw(seen, candles)
+    _assert_every_reader_saw(seen, candles, _rows_through("2026-06-05"))
 
 
 @pytest.mark.asyncio
@@ -317,7 +337,7 @@ async def test_as_of_is_the_fetch_time_not_the_wall_clock(monkeypatch):
     candles = _daily(WED)
     seen = await _run(monkeypatch, "1D", candles, as_of=_ts(_ny(2026, 6, 10, 15)))
     assert seen["snap"] == [candles[:-1]]
-    assert seen["hmm"] == [candles[:-1]]
+    assert seen["hmm"] == [_rows_through("2026-06-09")]
 
 
 @pytest.mark.asyncio

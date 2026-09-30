@@ -18,8 +18,9 @@ import type { ScoringHorizon } from '@/lib/horizonPresets';
  *  step 3). ONE declaration, used twice: `armAutoTrade`'s request type takes it
  *  as optional keys, and `armBookingFieldsFrom` (lib/armBookingFields.ts)
  *  returns it with every key required. A misspelled key in that mapping is
- *  therefore an excess-property error in `tsc`, which matters because the
- *  endpoint has no `extra='forbid'` and would otherwise drop it with a 200.
+ *  therefore an excess-property error in `tsc`. Since P6 the endpoint also
+ *  has `extra='forbid'`, so a key that slips past `tsc` is a 422 at arm
+ *  rather than a silent drop with a 200.
  *
  *  snake_case, like every other key on this endpoint. Nested objects
  *  (`exit_plan`, `targets`, ...) travel verbatim, as `POST /api/portfolio`
@@ -403,7 +404,9 @@ export const api = {
     symbol: string,
     right: 'C' | 'P' = 'C',
     ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number;
-            hold_min_days?: number; hold_max_days?: number },
+            hold_min_days?: number; hold_max_days?: number;
+            /** The scan's ScanResult.contract_rules. Absent = contract_rules.yaml. */
+            contract_rules?: Record<string, number> },
     signal?: AbortSignal,
   ) => get<OptionContract[]>(
     `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
@@ -413,7 +416,9 @@ export const api = {
     (ctx?.limit != null ? `&limit=${ctx.limit}` : '') +
     (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : '') +
     (ctx?.hold_min_days != null ? `&hold_min_days=${ctx.hold_min_days}` : '') +
-    (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : ''),
+    (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : '') +
+    (ctx?.contract_rules && Object.keys(ctx.contract_rules).length > 0
+      ? `&contract_rules=${encodeURIComponent(JSON.stringify(ctx.contract_rules))}` : ''),
     signal,
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
@@ -697,10 +702,9 @@ export const api = {
     /** Phase G piece 5, build step 5 (§8) — the trader's explicit method pick,
      *  captured at arm. snake_case, like every other field on this endpoint and
      *  unlike `POST /api/portfolio`'s camelCase: `ArmedStrategy(**req.model_dump())`
-     *  keys off ArmRequest's field NAMES. Sending the camelCase spelling here is
-     *  SILENT, not loud -- `ArmRequest` inherits pydantic's `extra='ignore'`, so
-     *  it returns 200 and arms with all five NULL rather than erroring. Measured,
-     *  not assumed.
+     *  keys off ArmRequest's field NAMES. Sending the camelCase spelling here
+     *  was SILENT until P6 (pydantic's `extra='ignore'`: 200, armed with all five
+     *  NULL); `ArmRequest` now has `extra='forbid'`, so it is a 422 at arm.
      *
      *  `| null` and not just optional: `armPickedFieldsFrom` (lib/cardEdits.ts)
      *  maps "no pick" to five explicit nulls rather than omitting them, since

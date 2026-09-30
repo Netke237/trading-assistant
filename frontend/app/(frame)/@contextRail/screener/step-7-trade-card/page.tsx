@@ -213,7 +213,7 @@ export default function TradeCardContextRail() {
             </Text>
             <div className={styles.checklistStack}>
               {gates.map((g) => (
-                <div key={g.label} className={styles.checklistRow}>
+                <div key={g.label} className={styles.checklistRow} data-gate-label={g.label} data-status={g.status}>
                   <StatusDot tone={g.status} size="sm" title={g.detail} />
                   <Text size={12} tone={g.status === 'CAUTION' ? 'caution' : 'secondary'}>
                     {g.label}

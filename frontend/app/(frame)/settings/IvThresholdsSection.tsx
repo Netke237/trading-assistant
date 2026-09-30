@@ -153,18 +153,20 @@ export function IvThresholdsSection() {
           />
           <Text size={12} tone="secondary">%</Text>
           {refused[h] && (
-            <Text size={11} tone="reject" data-refused={h}>
-              Not applied — enter a number from 1 to 100.
-            </Text>
+            <span data-refused={h}>
+              <Text size={11} tone="reject">Not applied — enter a number from 1 to 100.</Text>
+            </span>
           )}
         </Row>
       ))}
       {!hasRecord && (
-        <Text size={12} tone={status === 'failed' ? 'reject' : 'dim'} data-part="iv-thresholds-status">
-          {status === 'failed'
-            ? `The IV thresholds could not be loaded from scoring_rules.yaml (${error ?? 'unknown error'}). Nothing can be applied.`
-            : 'Loading the IV thresholds from scoring_rules.yaml…'}
-        </Text>
+        <span data-part="iv-thresholds-status" data-status={status}>
+          <Text size={12} tone={status === 'failed' ? 'reject' : 'dim'}>
+            {status === 'failed'
+              ? `The IV thresholds could not be loaded from scoring_rules.yaml (${error ?? 'unknown error'}). Nothing can be applied.`
+              : 'Loading the IV thresholds from scoring_rules.yaml…'}
+          </Text>
+        </span>
       )}
       <div className={styles.applyRow}>
         <button

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import os
 import concurrent.futures
 from datetime import datetime, timezone
@@ -32,7 +33,7 @@ from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ScanState, OptionsPipeline,
-    AlternativeContract, DteWindow, ScanSessionStatus,
+    AlternativeContract, DteWindow, EventWindow, ScanSessionStatus,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     SentimentData, FundamentalsOut, SCAN_RESULT_SCHEMA_VERSION,
@@ -59,13 +60,14 @@ from app.data.market import (
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.augment import _augment, opt_float, opt_int
-from app.scoring.stock_scorer import score_stock, StockScoreCard
+from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_event_window
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
+from app.scoring.contract_validator import effective_contract_overrides
 from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.contract_validator import hard_reject_delta_band
-from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
+from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
 from app.scoring.exit_plan import resolve_stock_stop, final_stop_out
@@ -153,6 +155,16 @@ def _resolve_gate(req: ScanRequest) -> dict:
         gate["rejectBelow"] = rb
     return gate
 
+
+
+# Shortlist ranking: lower sorts first. Any other status sorts after CAUTION --
+# in practice REJECT, which `_final_status` returns when entry quality is REJECT
+# and which does survive to the cap (a REJECT *contract* never does: it leaves
+# earlier as "all contracts rejected").
+_SHORTLIST_STATUS_ORDER: dict[str, int] = {"PASS": 0, "CAUTION": 1}
+# Reason prefix for candidates trimmed by the shortlist cap. The funnel's
+# `_is_shortlist` bucket and the frontend's scanLogTotals both match on it.
+_SHORTLIST_REASON_PREFIX = "Shortlist cap:"
 
 
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
@@ -375,6 +387,7 @@ async def _build_spreads(
     sem: asyncio.Semaphore,
     *,
     dte_bounds: tuple[int, int] | None = None,
+    min_dte_floor: int | None = None,
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
@@ -394,11 +407,19 @@ async def _build_spreads(
         iv=iv_rank, iv_basis=iv_basis,
         rank_threshold=iv_rank_threshold, abs_threshold=iv_abs_threshold,
     )
+    # Pin the legs to the main contract's expiry: the legs are labelled with it
+    # (`_spread_expiry` below), so re-deriving the expiry from the bounds would
+    # let any drift between the two fetches (arguments, or date.today() across
+    # midnight) put another expiry's strikes under this one's label. An explicit
+    # expiry wins in the picker; bounds + floor remain only as the fallback.
+    _leg_expiry = contract.get("expiry")
     try:
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
-                fetch_option_chain_async(client, symbol, option_type="P", dte_bounds=dte_bounds),
-                fetch_option_chain_async(client, symbol, option_type="C", dte_bounds=dte_bounds),
+                fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="P",
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
+                fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="C",
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
             )
     except Exception as exc:
         _log.debug("Spread: chain fetch failed for %s: %s", symbol, exc)
@@ -723,8 +744,12 @@ async def _process_symbol(
         return RejectedCandidate(symbol=symbol, reason=_dc["reason"])
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
+    # The fetch must only consider expiries the validator will accept, so it
+    # gets the same floor the contract hard-reject uses (widen_contract_overrides_for_dte).
+    _dte_floor = widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None
     async with sem:
-        chain = await fetch_option_chain_async(client, symbol, option_type=option_type, dte_bounds=dte_bounds)
+        chain = await fetch_option_chain_async(client, symbol, option_type=option_type,
+                                               dte_bounds=dte_bounds, min_dte_floor=_dte_floor)
 
     if not chain:
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
@@ -1197,6 +1222,7 @@ async def _process_symbol(
     _primary_sp, _alt_sp = await _build_spreads(
         symbol, direction, contract, iv_rank, client, sem,
         dte_bounds=dte_bounds,
+        min_dte_floor=_dte_floor,
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,
@@ -1674,6 +1700,36 @@ async def _execute_scan_core(
         _rs_bench = None
     _rs_misaligned: list[str] = []
 
+    # The event window score_stock will apply, echoed on the result (see
+    # effective_event_window). Never allowed to fail the scan.
+    _event_win = None
+    try:
+        _ew = effective_event_window(req.horizon, req.overrides)
+        _event_win = EventWindow(reject_days=_ew[0], caution_days=_ew[1])
+    except Exception as exc:
+        _log.warning("SCAN %s event_window unavailable: %s", scan_id, exc)
+
+    # The contract rules every symbol below is graded with (before the hold-days
+    # DTE widening, which /api/contracts re-derives from the same hold days),
+    # echoed on the result so Step 6's table grades with them too. Never
+    # allowed to fail the scan: None makes Step 6 say the rules are unknown.
+    _contract_rules = None
+    try:
+        _rules = effective_contract_overrides(req.overrides)
+        # A non-finite value ("inf", "nan" -- float() takes both) cannot be sent
+        # back: it serialises as null and /api/contracts refuses it. Record
+        # nothing instead, so Step 6 says the rules are unknown.
+        try:
+            _finite = all(math.isfinite(v) for v in _rules.values())
+        except OverflowError:  # an int too large for a float
+            _finite = False
+        if _finite:
+            _contract_rules = _rules
+        else:
+            _log.warning("SCAN %s contract_rules not recorded: non-finite value in %s", scan_id, _rules)
+    except Exception as exc:
+        _log.warning("SCAN %s contract_rules unavailable: %s", scan_id, exc)
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
@@ -1805,7 +1861,10 @@ async def _execute_scan_core(
         )
 
     # ── Shortlist cap ─────────────────────────────────────────────────────────
-    _default_max = int(_settings.get("scan", {}).get("shortlist_max_candidates", 10))
+    # Clamped like the override below: a settings value of 0 or less would
+    # otherwise slice nonsensically and now also write every candidate into
+    # `rejected` as "ranked 0 of N (cap -1)".
+    _default_max = max(1, min(50, int(_settings.get("scan", {}).get("shortlist_max_candidates", 10))))
     try:
         _overrides = req.overrides or {}
         max_candidates: int = max(1, min(50, int(
@@ -1813,8 +1872,32 @@ async def _execute_scan_core(
         )))
     except (ValueError, TypeError):
         max_candidates = _default_max
+    # Rank BEFORE cutting. `candidates` arrives in universe-file order (the
+    # order of `symbols`), so slicing it unsorted kept whichever names happened
+    # to sit early in sp500.csv and dropped higher scorers further down — a
+    # measured Semi-annual run lost PFE, CRM, GILD, HPE and SMCI that way while
+    # keeping lower-scoring names. finalStatus first (a CAUTION must never push
+    # out a PASS), then stock score, then contract score. The sort is stable,
+    # so exact ties keep universe order. It runs even when nothing is trimmed:
+    # _compute_deltas reads list position as rank, which is only meaningful
+    # once the list is ranked.
+    candidates.sort(key=lambda c: (
+        _SHORTLIST_STATUS_ORDER.get(c.finalStatus, len(_SHORTLIST_STATUS_ORDER)),
+        -c.stockScore,
+        -c.contractScore,
+    ))
     original_count: int = len(candidates)
     shortlist_truncated: bool = original_count > max_candidates
+    # Trimmed names go into `rejected` with a reason the funnel can classify
+    # (`_is_shortlist` below). Before, they vanished: neither returned nor
+    # rejected, so a user could not tell a name the cap dropped from one the
+    # scan never looked at.
+    for _rank, _c in enumerate(candidates[max_candidates:], start=max_candidates + 1):
+        rejected.append(RejectedCandidate(
+            symbol=_c.symbol,
+            reason=f"{_SHORTLIST_REASON_PREFIX} {_c.finalStatus} score {_c.stockScore} "
+                   f"contract {_c.contractScore} ranked {_rank} of {original_count} (cap {max_candidates})",
+        ))
     candidates = candidates[:max_candidates]
 
     # ── Pipeline funnel counters ───────────────────────────────────────────────
@@ -1844,7 +1927,9 @@ async def _execute_scan_core(
     def _is_no_chain(r):   return r.reason == "no option chain"
     def _is_score(r):      return r.reason.startswith("Score gate:")
     def _is_contracts(r):  return "contracts rejected" in r.reason
-    _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts, _is_direction)
+    def _is_shortlist(r):  return r.reason.startswith(_SHORTLIST_REASON_PREFIX)
+    _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts,
+                _is_direction, _is_shortlist)
 
     _pipeline = OptionsPipeline(
         scanned=len(symbols),
@@ -1917,6 +2002,8 @@ async def _execute_scan_core(
         pipeline=_pipeline,
         direction_banner=_direction_banner,
         dte_window=_dte_win,
+        event_window=_event_win,
+        contract_rules=_contract_rules,
     )
     return result
 

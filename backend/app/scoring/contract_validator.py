@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Callable, Literal
 
 Status = Literal["PASS", "CAUTION", "REJECT"]
 
@@ -299,6 +299,79 @@ def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
     return score, flags
 
 
+# Every key validate_contract() accepts in `overrides`, with the section of the
+# config it replaces and the cast applied to it. Keys not listed here are
+# ignored (ScanRequest.overrides is one free-form dict shared with the stock
+# scorer, the R/R model and the gates). ONE table, read by validate_contract()
+# and by effective_contract_overrides() below, so what a scan records as the
+# rules it applied (ScanResult.contract_rules) cannot drift from what it applied.
+_CONTRACT_OVERRIDES: dict[str, tuple[str, Callable[[Any], float | int]]] = {
+    "max_bid_ask_spread_pct": ("hard_reject", float),
+    "max_delta":              ("hard_reject", float),
+    "min_delta":              ("hard_reject", float),
+    "min_volume":             ("hard_reject", int),
+    "min_open_interest":      ("hard_reject", int),
+    "min_dte":                ("hard_reject", int),
+    "max_dte":                ("hard_reject", int),
+    "max_iv_rank":            ("hard_reject", float),
+    "max_iv_abs":             ("hard_reject", float),
+    "preferred_dte_min":      ("soft_rank",   int),
+    "preferred_dte_max":      ("soft_rank",   int),
+    "min_stock_score":        ("hard_reject", int),
+    # Below: the SOFT-RANK counterparts of the hard-reject liquidity/
+    # spread keys above. Added so a caller can move both together, the
+    # same reason `widen_contract_overrides_for_dte` (dte_window.py)
+    # sets `preferred_dte_min`/`max` to the SAME widened value as
+    # `min_dte`/`max_dte` rather than leaving them at their fixed
+    # config default: a contract already forgiven by the hard-reject
+    # check must not then take a soft-fail penalty for the same
+    # reason, or the caller's "let more through" override is silently
+    # undone by a fixed preferred-band it has no way to reach.
+    # `_score_liquidity`/`_score_spread` read these from `sr` on every
+    # call, so raising or lowering them changes both the soft flag AND
+    # the 0-100 sub-score, not merely the reject/accept boundary.
+    # ROUND 1 AUDIT FINDING: int(), not float(), matching their
+    # hard-reject siblings (min_volume/min_open_interest above) and
+    # LiquidityDetail's own `int` typing (schemas/__init__.py). A
+    # float() cast here let a fractional value (the new UI field's
+    # `step` is not enforced by its own input handler) reach the
+    # response `detail` block, where pydantic's `int` field then
+    # raised on construction -- caught and swallowed by both callers
+    # (_safe() in routers/scan.py, _safe_detail() in
+    # routers/contracts.py), silently dropping the whole
+    # liquidityDetail block from the card with no error anywhere.
+    #
+    # ROUND 2 AUDIT FINDING: plain int() truncates any override in
+    # (0, 1) -- e.g. a mistyped `0.5` -- down to 0, which then hits
+    # _score_liquidity's own "<= 0 means no preference" branch and
+    # silently DISABLES the check the caller was trying to make
+    # strict, the opposite of the value they set. `_int_pref_override`
+    # (above) floors that open interval to 1 (a strict near-zero
+    # threshold, still "> 0") instead of 0; <= 0 and >= 1 are
+    # unchanged from plain int().
+    "preferred_volume_min":     ("soft_rank", _int_pref_override),
+    "preferred_oi_min":         ("soft_rank", _int_pref_override),
+    "preferred_spread_pct_max": ("soft_rank", float),
+}
+
+CONTRACT_OVERRIDE_KEYS: frozenset[str] = frozenset(_CONTRACT_OVERRIDES)
+
+
+def effective_contract_overrides(overrides: dict | None) -> dict[str, float | int]:
+    """The contract-rule overrides validate_contract() applies for `overrides`:
+    only the keys it reads, each cast exactly as it casts them. Raises
+    ValueError/TypeError on a value the cast refuses, as validate_contract would.
+
+    A scan records this on its result (ScanResult.contract_rules) and Step 6
+    sends it back to /api/contracts, so the contracts table grades every
+    contract with the rules the trade cards were graded with."""
+    return {
+        key: _CONTRACT_OVERRIDES[key][1](val)
+        for key, val in (overrides or {}).items()
+        if key in _CONTRACT_OVERRIDES
+    }
+
+
 def _contract_id(contract: dict) -> str:
     side = "C" if contract.get("is_call", True) else "P"
     return f"{contract.get('symbol', '')}|{contract.get('strike', '')}|{contract.get('expiry', '')}|{side}"
@@ -317,64 +390,16 @@ def validate_contract(
         stock_score: Aggregate stock score from StockScoreCard (0–100).
                      Contracts are only recommended when stock_score >= 55
                      (matches the stock `pass` bar in scoring_rules.yaml).
-        overrides:   Optional dict of hard-reject parameter overrides.
+        overrides:   Optional dict of hard-reject and soft-rank overrides; the
+                     keys read are _CONTRACT_OVERRIDES' (others are ignored).
 
     Returns:
         ContractScoreCard with score, status, hard-reject reasons, soft flags,
         and score breakdown.
     """
     cfg = copy.deepcopy(_load_config())
-    ov = overrides or {}
-    if ov:
-        hr = cfg["hard_reject"]
-        sr = cfg["soft_rank"]
-        for key, val in ov.items():
-            if key == "max_bid_ask_spread_pct": hr["max_bid_ask_spread_pct"] = float(val)
-            elif key == "max_delta":            hr["max_delta"]              = float(val)
-            elif key == "min_delta":            hr["min_delta"]              = float(val)
-            elif key == "min_volume":           hr["min_volume"]             = int(val)
-            elif key == "min_open_interest":    hr["min_open_interest"]      = int(val)
-            elif key == "min_dte":              hr["min_dte"]                = int(val)
-            elif key == "max_dte":              hr["max_dte"]                = int(val)
-            elif key == "max_iv_rank":          hr["max_iv_rank"]            = float(val)
-            elif key == "max_iv_abs":           hr["max_iv_abs"]             = float(val)
-            elif key == "preferred_dte_min":    sr["preferred_dte_min"]      = int(val)
-            elif key == "preferred_dte_max":    sr["preferred_dte_max"]      = int(val)
-            elif key == "min_stock_score":      hr["min_stock_score"]        = int(val)
-            # Below: the SOFT-RANK counterparts of the hard-reject liquidity/
-            # spread keys above. Added so a caller can move both together, the
-            # same reason `widen_contract_overrides_for_dte` (dte_window.py)
-            # sets `preferred_dte_min`/`max` to the SAME widened value as
-            # `min_dte`/`max_dte` rather than leaving them at their fixed
-            # config default: a contract already forgiven by the hard-reject
-            # check must not then take a soft-fail penalty for the same
-            # reason, or the caller's "let more through" override is silently
-            # undone by a fixed preferred-band it has no way to reach.
-            # `_score_liquidity`/`_score_spread` read these from `sr` on every
-            # call, so raising or lowering them changes both the soft flag AND
-            # the 0-100 sub-score, not merely the reject/accept boundary.
-            # ROUND 1 AUDIT FINDING: int(), not float(), matching their
-            # hard-reject siblings (min_volume/min_open_interest above) and
-            # LiquidityDetail's own `int` typing (schemas/__init__.py). A
-            # float() cast here let a fractional value (the new UI field's
-            # `step` is not enforced by its own input handler) reach the
-            # response `detail` block, where pydantic's `int` field then
-            # raised on construction -- caught and swallowed by both callers
-            # (_safe() in routers/scan.py, _safe_detail() in
-            # routers/contracts.py), silently dropping the whole
-            # liquidityDetail block from the card with no error anywhere.
-            #
-            # ROUND 2 AUDIT FINDING: plain int() truncates any override in
-            # (0, 1) -- e.g. a mistyped `0.5` -- down to 0, which then hits
-            # _score_liquidity's own "<= 0 means no preference" branch and
-            # silently DISABLES the check the caller was trying to make
-            # strict, the opposite of the value they set. `_int_pref_override`
-            # below floors that open interval to 1 (a strict near-zero
-            # threshold, still "> 0") instead of 0; <= 0 and >= 1 are
-            # unchanged from plain int().
-            elif key == "preferred_volume_min":     sr["preferred_volume_min"]     = _int_pref_override(val)
-            elif key == "preferred_oi_min":         sr["preferred_oi_min"]         = _int_pref_override(val)
-            elif key == "preferred_spread_pct_max": sr["preferred_spread_pct_max"] = float(val)
+    for key, val in effective_contract_overrides(overrides).items():
+        cfg[_CONTRACT_OVERRIDES[key][0]][key] = val
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)

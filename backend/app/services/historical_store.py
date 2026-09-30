@@ -7,6 +7,15 @@ Design:
 
 Bars are written with an upsert (INSERT OR REPLACE for SQLite) so re-running the prefetch
 is always safe and idempotent.
+
+Only SETTLED daily rows are ever stored (WATCH-RULE-BAR-PARITY plan 2.10, decisions
+PARTIAL-ROW / Q-F): a row for day ``d`` is written only once ``now >= 16:00 ET on d + 2 h`` (18:00 ET).
+During session D, Alpaca and Tiingo may return D's forming bar; before this rule it was
+upserted and, because ``get_bars``' staleness test never looks at D again from D+1, stayed in
+the store for good. Rows written before the rule (``fetched_at`` earlier than their own
+settle instant, "provisional") are re-fetched once they have settled ("heal").
+``get_bars``' fetch rule itself is unchanged (Q-H): a stale symbol first read before D's
+settle stores through D-1 and D arrives with the nightly ingestion or the first call on D+1.
 """
 from __future__ import annotations
 
@@ -14,7 +23,7 @@ import asyncio
 import logging
 import os as _os
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -31,6 +40,9 @@ def _dialect_insert():
     return insert
 
 from app.database import AsyncSessionLocal
+# scheduling_tz, not market_session: market_session imports strategy_watch_scheduler, which
+# would make an import cycle with this module (plan 2.10, round 3).
+from app.services.scheduling_tz import MARKET_TZ
 from app.data.tiingo import fetch_historical_candles
 from app.models.ohlcv_daily import OhlcvDailyModel
 from app.scoring.signal_confidence import compute_confidence
@@ -53,6 +65,65 @@ _prefetch_state: dict[str, Any] = {
 }
 _prefetch_task: asyncio.Task | None = None
 
+# ── Clock + settle rule (plan 2.10) ─────────────────────────────────────────
+
+# A daily row is stored only this long after its session's 16:00 ET close: 18:00 ET, late
+# enough for Tiingo's end-of-day bar (published ~17:30 ET) when Alpaca is missing or fails
+# (decision SETTLE-2H-2026-09-29; was 30 min). Half-days (13:00 close) settle at 18:00 too.
+_SETTLE = timedelta(hours=2)
+_SESSION_CLOSE = dtime(16, 0)
+
+# One heal attempt per (symbol, provisional date) per this interval, so a halted,
+# delisted or provider-missing day costs four attempts a day, not one per call.
+_HEAL_RETRY = timedelta(hours=6)
+_heal_next_attempt: dict[tuple[str, date], datetime] = {}
+
+
+def _utcnow() -> datetime:
+    """The one clock of this module (tests patch this alone)."""
+    return datetime.now(timezone.utc)
+
+
+def _host_today() -> date:
+    """The host's calendar date, exactly what ``date.today()`` gave, read from ``_utcnow``."""
+    return _utcnow().astimezone().date()
+
+
+def _session_close(d: date) -> datetime:
+    return datetime.combine(d, _SESSION_CLOSE, tzinfo=MARKET_TZ)
+
+
+def is_settled(d: date, now: datetime) -> bool:
+    """True once day ``d``'s daily bar is final: ``now >= 16:00 ET on d + _SETTLE``."""
+    return now >= _session_close(d) + _SETTLE
+
+
+def last_settle_boundary(now: datetime | None = None) -> datetime:
+    """The latest ``close(d) + _SETTLE <= now`` over weekdays ``d`` (``now``
+    defaults to ``_utcnow()``). A daily row can enter the store only at such a
+    boundary, so a cache of get_bars rows keyed by it changes exactly when a
+    new row can exist (WATCH-RULE-BAR-PARITY 2.3). No holiday calendar: a
+    holiday's boundary simply adds no row."""
+    now = _utcnow() if now is None else now
+    d = now.astimezone(MARKET_TZ).date()
+    while d.weekday() >= 5 or not is_settled(d, now):
+        d -= timedelta(days=1)
+    return _session_close(d) + _SETTLE
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Normalise a stored ``fetched_at``: SQLite hands back the UTC wall clock naive,
+    PostgreSQL an aware value."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _is_provisional(d: date, fetched_at: datetime) -> bool:
+    """A row fetched before its own settle instant may hold a forming bar."""
+    return _as_utc(fetched_at) < _session_close(d) + _SETTLE
+
+
 # ── Trading-day helpers ───────────────────────────────────────────────────────
 
 def most_recent_trading_day() -> date:
@@ -61,7 +132,7 @@ def most_recent_trading_day() -> date:
     On weekends returns the preceding Friday. During live market hours today
     is returned (data may still be updating).
     """
-    today = date.today()
+    today = _host_today()
     weekday = today.weekday()   # 0=Mon … 6=Sun
     if weekday == 5:             # Saturday → Friday
         return today - timedelta(days=1)
@@ -84,15 +155,27 @@ def _bar_date(bar: dict) -> date:
     return date.fromisoformat(bar["time"][:10])
 
 
-async def _store_bars(symbol: str, bars: list[dict], db: AsyncSession) -> None:
-    """Upsert a list of OHLCV bar dicts for `symbol` into the DB.
+async def _store_bars(symbol: str, bars: list[dict], db: AsyncSession) -> set[date]:
+    """Upsert a list of OHLCV bar dicts for `symbol` into the DB; return the dates stored.
 
     Bars may include multi-basis fields (adj_factor, split_factor, div_cash, source);
     if absent they default to None so legacy rows keep their tiingo_legacy backfill.
+
+    Every bar whose day has not settled (``is_settled``) is dropped first, so no writer
+    (``get_bars``, ``ingestion_job``) can store a forming daily bar.
     """
     if not bars:
-        return
-    now = datetime.now(timezone.utc)
+        return set()
+    now = _utcnow()
+    settled = [b for b in bars if is_settled(_bar_date(b), now)]
+    if len(settled) != len(bars):
+        logger.debug(
+            "historical_store: %s — dropped %d unsettled bar(s) before storing",
+            symbol, len(bars) - len(settled),
+        )
+    bars = settled
+    if not bars:
+        return set()
     rows = [
         {
             "symbol":       symbol,
@@ -128,6 +211,7 @@ async def _store_bars(symbol: str, bars: list[dict], db: AsyncSession) -> None:
         },
     )
     await db.execute(stmt)
+    return {r["date"] for r in rows}
 
 
 async def _read_bars(
@@ -171,6 +255,38 @@ async def _last_stored_date(symbol: str, db: AsyncSession) -> date | None:
         .where(OhlcvDailyModel.symbol == symbol)
     )
     return result.scalar_one_or_none()
+
+
+async def _heal_date(
+    symbol: str, start: date, end: date, now: datetime, db: AsyncSession
+) -> date | None:
+    """Earliest provisional (legacy) row in ``[start, end]`` that has now settled, or None."""
+    result = await db.execute(
+        select(OhlcvDailyModel.date, OhlcvDailyModel.fetched_at)
+        .where(
+            OhlcvDailyModel.symbol == symbol,
+            OhlcvDailyModel.date >= start,
+            OhlcvDailyModel.date <= end,
+        )
+    )
+    candidates = [
+        d for d, fetched_at in result.all()
+        if fetched_at is not None and _is_provisional(d, fetched_at) and is_settled(d, now)
+    ]
+    return min(candidates) if candidates else None
+
+
+def _claim_heal_attempt(symbol: str, heal: date, now: datetime) -> bool:
+    """True (and records the attempt) unless this pair was attempted within _HEAL_RETRY."""
+    key = (symbol, heal)
+    nxt = _heal_next_attempt.get(key)
+    if nxt is not None and now < nxt:
+        return False
+    if len(_heal_next_attempt) > 4096:
+        for k in [k for k, v in _heal_next_attempt.items() if v <= now]:
+            del _heal_next_attempt[k]
+    _heal_next_attempt[key] = now + _HEAL_RETRY
+    return True
 
 
 def _yfinance_fetch(symbol: str, start: date, end: date) -> list[dict]:
@@ -219,17 +335,57 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
     """Return OHLCV bars for `symbol` from `start` to `end`.
 
     Algorithm:
-    1. Check the DB for the last stored date.
-    2. If a delta exists (DB is stale or empty), fetch via Alpaca → Tiingo → yfinance (first success wins).
-    3. Return all bars from the DB in the requested range.
-    Falls back gracefully: if all providers fail and DB has partial data, returns what's there.
+    1. Check the DB for the last stored date (fetch rule unchanged, Q-H).
+    2. Find the earliest legacy provisional row in range that has settled (heal).
+    3. Stale: fetch ``min(last+1, heal) .. end``. Not stale but healing: fetch
+       ``heal .. end + 1 day`` (the ``+1`` makes the request independent of each
+       provider's ``end`` inclusivity). Providers Alpaca → Tiingo → yfinance: first
+       success wins, where success is any non-empty list, or — when healing — the heal
+       date actually stored with a new ``fetched_at``.
+    4. Return all bars from the DB in the requested range.
+    Only settled rows are stored (``_store_bars``). Falls back gracefully: if all
+    providers fail and DB has partial data, returns what's there.
     """
     async with AsyncSessionLocal() as db:
         last = await _last_stored_date(symbol, db)
+        now = _utcnow()
 
-        fetch_needed = (last is None) or (last < min(end, _prev_trading_day()))
-        if fetch_needed:
+        stale = (last is None) or (last < min(end, _prev_trading_day()))
+        heal = await _heal_date(symbol, start, end, now, db)
+        if heal is not None and not _claim_heal_attempt(symbol, heal, now):
+            heal = None
+
+        fetch_start: date | None = None
+        fetch_end = end
+        if stale:
             fetch_start = (last + timedelta(days=1)) if last else start
+            if heal is not None:
+                fetch_start = min(fetch_start, heal)
+        elif heal is not None:
+            fetch_start, fetch_end = heal, end + timedelta(days=1)
+
+        if fetch_start is not None:
+            if heal is not None:
+                logger.info(
+                    "historical_store: healing provisional row %s for %s (fetch %s..%s)",
+                    heal, symbol, fetch_start, fetch_end,
+                )
+
+            async def _try(name: str, new_bars: list[dict]) -> bool:
+                if not new_bars:
+                    return False
+                # Nothing past the caller's `end` (the heal-only `+1` day is request slack).
+                in_range = [b for b in new_bars if _bar_date(b) <= end]
+                stored_dates = await _store_bars(symbol, in_range, db)
+                await db.commit()
+                logger.debug(
+                    "historical_store: %s stored %d bars for %s",
+                    name, len(stored_dates), symbol,
+                )
+                if heal is not None:
+                    return heal in stored_dates
+                return True
+
             stored = False
 
             # 1. Alpaca (primary)
@@ -238,16 +394,9 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
                 alpaca_client = await get_alpaca_client()
                 if alpaca_client is not None:
                     new_bars = await fetch_daily_bars_single(
-                        symbol, fetch_start, end, client=alpaca_client
+                        symbol, fetch_start, fetch_end, client=alpaca_client
                     )
-                    if new_bars:
-                        await _store_bars(symbol, new_bars, db)
-                        await db.commit()
-                        logger.debug(
-                            "historical_store: Alpaca stored %d bars for %s",
-                            len(new_bars), symbol,
-                        )
-                        stored = True
+                    stored = await _try("Alpaca", new_bars)
             except Exception as exc:
                 logger.warning("historical_store: Alpaca fetch failed for %s — %s", symbol, exc)
 
@@ -255,16 +404,9 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
             if not stored:
                 try:
                     new_bars = await asyncio.to_thread(
-                        fetch_historical_candles, symbol, fetch_start, end
+                        fetch_historical_candles, symbol, fetch_start, fetch_end
                     )
-                    if new_bars:
-                        await _store_bars(symbol, new_bars, db)
-                        await db.commit()
-                        logger.debug(
-                            "historical_store: Tiingo stored %d bars for %s",
-                            len(new_bars), symbol,
-                        )
-                        stored = True
+                    stored = await _try("Tiingo", new_bars)
                 except Exception as exc:
                     logger.warning("historical_store: Tiingo fetch failed for %s — %s", symbol, exc)
 
@@ -272,19 +414,18 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
             if not stored:
                 try:
                     new_bars = await asyncio.to_thread(
-                        _yfinance_fetch, symbol, fetch_start, end
+                        _yfinance_fetch, symbol, fetch_start, fetch_end
                     )
-                    if new_bars:
-                        await _store_bars(symbol, new_bars, db)
-                        await db.commit()
-                        logger.debug(
-                            "historical_store: yfinance stored %d bars for %s",
-                            len(new_bars), symbol,
-                        )
+                    stored = await _try("yfinance", new_bars)
                 except Exception as exc:
                     logger.warning(
                         "historical_store: yfinance fetch failed for %s — %s", symbol, exc
                     )
+            if heal is not None and not stored:
+                logger.warning(
+                    "historical_store: no provider returned provisional row %s for %s; "
+                    "next attempt after %s", heal, symbol, now + _HEAL_RETRY,
+                )
 
         return await _read_bars(symbol, start, end, db)
 

@@ -7,8 +7,10 @@ export interface StockDelta {
 
 /**
  * Build a symbol → delta map comparing the current run to the previous run.
- * Rank is the candidate's index in each run (already sorted by score desc by
- * the backend). Symbols absent from the previous run get no entry.
+ * Rank is the candidate's index in each run: the backend returns candidates
+ * ranked (status PASS before CAUTION, then score desc, then confidence desc —
+ * the order the shortlist cap cuts by). Symbols absent from the previous run
+ * get no entry.
  */
 export function computeStockDeltas(
   current: StockScanResult,

@@ -300,7 +300,8 @@ export function stockScanGateTooltip(args: {
 }
 
 // Soft-rank preferred bands mirrored from backend/config/contract_rules.yaml
-// (no live endpoint for these — same reasoning as eventThresholdsStore's FALLBACK).
+// (no live endpoint for these, so they are a hardcoded mirror -- out of DOCC-3's
+// scope, which removed the threshold stores' own fallbacks; see the DOCC-3 plan s4).
 const CONTRACT_PREFERRED = {
   dte: { min: 21, max: 60 },
   delta: { min: 0.30, max: 0.70 },

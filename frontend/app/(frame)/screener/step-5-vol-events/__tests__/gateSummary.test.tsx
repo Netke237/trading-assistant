@@ -10,21 +10,31 @@
  * (a true percentile exists only when IBKR or tastytrade answered).
  */
 import { cleanup, render, screen } from '@testing-library/react';
-import Step5Page, {
-  missingReadingClause, headSentence, causesSentence, ivThresholdSentence,
+import Step5Page from '../page';
+import {
+  missingReadingClause, headSentence, causesSentence,
   eventWindowSentence,
-  CAUSE_LABEL, MISSING_READING_CLAIM,
+  CAUSE_LABEL,
   type MissingReadingClaim, type GateCause, type GateCounts, type CauseKey, type IvBand,
-} from '../page';
+} from '../gateSummary';
 import { STATUS_LABEL } from '@/lib/status';
 import { formatIv, type IvBasis } from '@/lib/ivBasis';
 import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';
 import { worstStatus, type Status } from '@/lib/status';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
+import { useEventThresholdsStore } from '@/lib/eventThresholdsStore';
+import { api } from '@/lib/api';
+import { EVENT_SHIPPED, IV_SHIPPED, echoStoredThresholds } from '@/lib/testFixtures/thresholds';
 import {
-  useEventThresholdsStore, getEventWindow, FALLBACK as EVENT_FALLBACK,
-} from '@/lib/eventThresholdsStore';
+  banner, partsOf, expectPageCopy, gateCopy, PART_ORDER, PART_PINS, PROSE_ATTRS,
+  nodeId, claimOf, sideVerdict, SIDES, gateOf,
+} from '../testSupport/pageContract';
+
+// The page fetches both stores on mount; each fetch answers with the record the
+// test set, so it re-sets the test's values rather than clearing them.
+jest.mock('@/lib/api', () => ({ api: { getIvThresholds: jest.fn(), getEventThresholds: jest.fn() } }));
+beforeEach(() => echoStoredThresholds(api as unknown as Parameters<typeof echoStoredThresholds>[0]));
 import type { TradeCardData } from '@/types/domain';
 
 function makeCandidate(symbol: string, overrides: Partial<TradeCardData> = {}): TradeCardData {
@@ -59,16 +69,13 @@ function setup(candidates: TradeCardData[], horizon = 'Swing (5-15d)') {
   // KEY CASE AND FIELD NAMES MATTER. This fixture was written as
   // `{ swing: { iv_rank_pass_max } }`, which matches nothing: the store is keyed
   // `Swing` with `rank_pass_max` / `rank_caution_max` (lib/ivThresholdsStore.ts).
-  // getIvPassMax fell straight through to the module FALLBACK, which happens to
-  // hold the same 34/55 -- so these tests silently asserted against production
-  // defaults and would have moved with them.
-  useIvThresholdsStore.setState({
-    thresholds: {
-      Swing: { rank_pass_max: 34, rank_caution_max: 55, abs_pass_max: 34, abs_caution_max: 55 },
-    },
-    loaded: true,
-  } as any);
-  useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: true } as any);
+  // getIvPassMax fell straight through to the (since deleted, DOCC-3) module
+  // fallback, which happened to hold the same 34/55 -- so these tests silently
+  // asserted against production defaults and would have moved with them.
+  // DOCC-3: the full shipped record (Swing is exactly the 34/55 above); a
+  // partial one is now refused by the store's parser on the mount fetch.
+  useIvThresholdsStore.setState({ thresholds: IV_SHIPPED, status: 'ready', error: null, overrides: {} });
+  useEventThresholdsStore.setState({ thresholds: EVENT_SHIPPED, status: 'ready', error: null });
 }
 
 /** A candidate with no volatility reading at all — no ivRank and no absolute iv. */
@@ -85,11 +92,11 @@ afterEach(() => {
   // is false -- jest gives every test FILE its own module registry, so a
   // module-level Zustand store cannot cross files, and deleting this block
   // leaves the whole suite green. Kept because a test that forgets to call
-  // setup() should not silently inherit the previous test's scan, and restoring
-  // the real FALLBACK rather than {} so the restored state is a valid one.
+  // setup() should not silently inherit the previous test's scan. DOCC-3: the
+  // stores go back to their initial state -- nothing in hand, nothing fetched.
   useScanStore.setState({ scanResult: undefined, context: undefined } as any);
-  useIvThresholdsStore.setState({ thresholds: {}, loaded: false } as any);
-  useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: false } as any);
+  useIvThresholdsStore.setState({ thresholds: null, status: 'idle', error: null, overrides: {} });
+  useEventThresholdsStore.setState({ thresholds: null, status: 'idle', error: null });
 });
 
 describe('Step 5 banner — the gate summary says WHY, not just what', () => {
@@ -288,10 +295,9 @@ describe('ROUND 3: a horizon that does not gate on volatility never claims it cl
   // gateDriverPhrase directly. These go through Step5Page, so the argument the
   // page hands the classifier is part of what is pinned.
   //
-  // Intraday's thresholds are all null and getIvPassMax falls through to the
-  // module FALLBACK for any null it is given, so this case rests on FALLBACK
-  // rather than on the fixture. Said out loud because round 2's headline
-  // bookkeeping finding was a fixture that silently did nothing.
+  // Intraday's thresholds are all null in the fixture (IV_SHIPPED), and since
+  // DOCC-3 a null is read as "no gate" straight from the record -- there is no
+  // module fallback left for it to fall through to.
   it('does not tell an Intraday row at IV rank 95 that it is "clear on both"', () => {
     setup([
       makeCandidate('RICH', {
@@ -465,22 +471,15 @@ function expectGateCopy(rows: number) {
   expect(claimed!.rows).toBe(rows);
 }
 
-/** Thresholds for ALL THREE horizons, so nothing silently falls through to the
- *  module FALLBACK -- the trap this file's own `setup` comment documents. */
+/** Thresholds for ALL THREE horizons: a partial record would be refused by the
+ *  store's parser on the mount fetch (DOCC-3). */
 function setupHorizon(candidates: TradeCardData[], horizon: string) {
   useScanStore.setState({
     scanResult: { candidates, rejected: [], scan_id: 'x', timestamp: '' } as any,
     context: { direction: 'Bullish', horizon } as any,
   } as any);
-  useIvThresholdsStore.setState({
-    thresholds: {
-      Intraday: { abs_pass_max: null, abs_caution_max: null, rank_pass_max: null, rank_caution_max: null },
-      Swing:    { abs_pass_max: 34, abs_caution_max: 55, rank_pass_max: 34, rank_caution_max: 55 },
-      Position: { abs_pass_max: 44, abs_caution_max: 65, rank_pass_max: 44, rank_caution_max: 65 },
-    },
-    loaded: true,
-  } as any);
-  useEventThresholdsStore.setState({ thresholds: EVENT_FALLBACK, loaded: true } as any);
+  useIvThresholdsStore.setState({ thresholds: IV_SHIPPED, status: 'ready', error: null, overrides: {} });
+  useEventThresholdsStore.setState({ thresholds: EVENT_SHIPPED, status: 'ready', error: null });
 }
 
 /** A candidate carrying a real IV RANK reading. */
@@ -841,13 +840,12 @@ describe('the clause builder carries the meaning, so the prose cannot drift from
 });
 
 describe('the fixture is actually read, and Position has its own IV band', () => {
-  it('uses the INJECTED thresholds, not the module FALLBACK', () => {
-    // ROUND 2 FINDING: setupHorizon's values were byte-identical to
-    // ivThresholdsStore's FALLBACK, so `thresholds[k] ?? FALLBACK[k]` could not
-    // tell which side answered. Proven at the time, against the 38 step-5 tests
-    // that then existed (the count has grown since): making getIvPassMax /
-    // getIvCautionMax ignore the store entirely and read FALLBACK left every one
-    // of them green. These thresholds are deliberately NOT the fallback's.
+  it('uses the INJECTED thresholds, not the shipped values', () => {
+    // ROUND 2 FINDING: setupHorizon's values were byte-identical to the store's
+    // then-hardcoded fallback (deleted by DOCC-3), so a reader that ignored the
+    // store could not be told apart. Proven at the time: making getIvPassMax /
+    // getIvCautionMax read the constant left all 38 step-5 tests green. These
+    // thresholds are deliberately NOT the shipped values.
     setupHorizon([rankCandidate('AAA', 25)], 'Swing (5-15d)');
     useIvThresholdsStore.setState({
       thresholds: {
@@ -855,10 +853,10 @@ describe('the fixture is actually read, and Position has its own IV band', () =>
         Swing:    { rank_pass_max: 20, rank_caution_max: 30, abs_pass_max: 20, abs_caution_max: 30 },
         Position: { rank_pass_max: 44, rank_caution_max: 65, abs_pass_max: 44, abs_caution_max: 65 },
       },
-      loaded: true,
-    } as any);
+      status: 'ready',
+    });
     render(<Step5Page />);
-    // rank 25 is PASS under the FALLBACK (<=34) and CAUTION under the injected
+    // rank 25 is PASS under the shipped values (<=34) and CAUTION under the injected
     // band (>20, <=30). If the store is bypassed this reads "1 PASS".
     expect(banner().textContent).toContain('1 shown — 0 PASS, 1 CAUTION, 0 REJECT.');
   });

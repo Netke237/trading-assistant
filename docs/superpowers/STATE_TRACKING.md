@@ -61,6 +61,51 @@ as a phase's is wherever one is given.
 
 Stdlib only, so it runs before any venv exists.
 
+### The audit-bookkeeping probe
+
+`verify` probes test code symbols. One more check tests the **bookkeeping
+itself** — `audit_rounds` / `audit_clean` — against the only evidence git holds
+that a round ran: a commit. (`audit_bookkeeping_drift` in `scripts/state.py`.)
+It exists because three Phase A rounds once ran while the file said one, under
+a green "No drift".
+
+- **What it reads.** The highest `round N` in this branch's commit
+  **subjects** — never bodies, which are full of legitimate backward references
+  ("round 12's follow-ups"). Name rounds in subjects only for this branch's own
+  piece, merge subjects included.
+- **Against what base.** Asked of git, not the state file: `origin/main` or
+  local `main`, whichever is tighter. Commits the base already carries are out
+  of range, so merged work goes quiet on its own.
+- **Scoped to the active target.** `active_phase` names the phase (or
+  `already_shipped` entry) being audited. The span starts at the commit that
+  **introduced that entry**, so a branch carrying two pieces does not answer
+  for the earlier one's round numbers. The pointer's value scopes nothing; if
+  it resolves to no entry, the whole branch counts.
+- **The tiers.**
+  - Rounds in the subjects with **no target** counting them: **warn** below
+    round 3, **drift** at 3.
+  - A target that declares **fewer** rounds than the subjects reach: **drift**
+    (a round ran and was never written down). Declaring more is not flagged —
+    rounds can run without a commit.
+  - **The hard cap:** the subjects reach round 3+ and the target is not
+    `audit_clean`: **drift** — *stop auditing and tell Kenneth*. It counts
+    rounds continuously across a phase's stages and units, so a multi-unit
+    package keeps `audit_clean` true while its latest round was clean.
+  - It **clears** by going clean or by merging, never by an acknowledgement
+    flag.
+- **When it cannot look, it says so.** No resolvable base, no git, or a
+  `git log` that fails prints **warn** "COULD NOT RUN" — an unchecked bill, not
+  a clean one (exit 0). A whole-number `audit_rounds` is read in any spelling
+  (`3`, `3.0`, `"3"`); anything else is a warn instead of a crash — except that
+  the hard cap still fires as **drift**, since it never reads the count.
+- **The accepted hole** (Kenneth, `BACKLOG-DECISIONS-2026-09-25` Q3 — accepted
+  and documented, not patched). The entry's name and presence are still
+  hand-written in the audited file, so **renaming** an `already_shipped` entry,
+  **moving** an entry between `phases` and `already_shipped`, or **dropping and
+  restoring** it makes every older commit read as absent and resets the
+  scoping boundary to that commit — rounds before it stop counting. Don't do
+  any of the three to a piece whose rounds are still running.
+
 ## The trigger
 
 **`.claude/hooks/session-start.sh`**, registered in `.claude/settings.json`. On

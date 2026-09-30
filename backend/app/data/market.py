@@ -686,6 +686,7 @@ def fetch_price(symbol: str) -> Optional[float]:
 def _nearest_expiration_in_window(
     dates: list[str], bounds: tuple[int, int], today: date,
     *, tolerance_days: int = DTE_WINDOW_TOLERANCE_DAYS,
+    min_dte_floor: Optional[int] = None,
 ) -> Optional[str]:
     """Return the expiration date closest to the centre of [min_dte, max_dte].
 
@@ -698,12 +699,24 @@ def _nearest_expiration_in_window(
 
     Returns None if no available expiration falls inside the window or its
     tolerance margin.
+
+    `min_dte_floor` is the contract validator's hard-reject floor
+    (dte_window.widened_min_dte: never below hold_max + 1). Expiries under it
+    are dropped BEFORE the centre-nearest pick. Without this the fetch could
+    choose an expiry the validator is certain to reject as dte_too_short, and
+    because only one expiry is fetched, that rejected the whole symbol even
+    when a valid expiry was listed: a Custom 15-200d hold (window 30-400,
+    centre 215, floor 201) picked a 199d monthly; Intraday (window 1-4, floor 3)
+    picked Friday's weekly from Wednesday on.
     """
     lo, hi = bounds
     centre = (lo + hi) / 2
 
     def _dte(d: str) -> int:
         return (date.fromisoformat(d) - today).days
+
+    if min_dte_floor is not None:
+        dates = [d for d in dates if _dte(d) >= min_dte_floor]
 
     in_window = [d for d in dates if lo <= _dte(d) <= hi]
     if in_window:
@@ -720,6 +733,7 @@ def fetch_option_chain(
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
+    min_dte_floor: Optional[int] = None,
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
@@ -742,8 +756,12 @@ def fetch_option_chain(
         if expiry and expiry in dates:
             target_exp = expiry
         elif dte_bounds is not None:
-            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today)
+            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today, min_dte_floor=min_dte_floor)
             if target_exp is None:
+                # Distinguish "no listed expiry at/above the validator's floor"
+                # from a missing chain: the caller can only report "no option chain".
+                logger.info("chain %s: no expiry in DTE window %s at/above floor %s (listed: %d)",
+                          symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
             target_exp = next(
@@ -1392,6 +1410,7 @@ async def fetch_option_chain_async(
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
+    min_dte_floor: Optional[int] = None,
 ) -> list[dict]:
     """Async variant."""
     try:
@@ -1419,8 +1438,12 @@ async def fetch_option_chain_async(
         if expiry and expiry in dates:
             target_exp = expiry
         elif dte_bounds is not None:
-            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today)
+            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today, min_dte_floor=min_dte_floor)
             if target_exp is None:
+                # Distinguish "no listed expiry at/above the validator's floor"
+                # from a missing chain: the caller can only report "no option chain".
+                logger.info("chain %s: no expiry in DTE window %s at/above floor %s (listed: %d)",
+                          symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
             target_exp = next(

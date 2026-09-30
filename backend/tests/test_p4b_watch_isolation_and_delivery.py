@@ -73,7 +73,7 @@ def _composite(wid: str, **state) -> dict:
 
 def _channels(enabled: bool):
     cfg = {"gmail": {"enabled": enabled}, "telegram": {"enabled": False}}
-    return patch(f"{_EV}.load_notification_config", return_value=cfg)
+    return patch(f"{_EV}.read_notification_config", return_value=(cfg, True))
 
 
 def _fire_strategy(store, sig=None):
@@ -236,14 +236,15 @@ async def test_evaluate_all_still_commits_without_notifying():
     ({"gmail": {"enabled": True}}, True),
 ])
 def test_any_channel_enabled_reads_blocks_safely(cfg, expected):
-    with patch(f"{_EV}.load_notification_config", return_value=cfg):
+    with patch(f"{_EV}.read_notification_config", return_value=(cfg, True)):
         assert _any_channel_enabled() is expected
 
 
 def test_any_channel_enabled_is_true_when_the_reader_itself_raises():
-    # load_notification_config swallows file/parse errors ({} -> no channel);
-    # this pins only the guard for an exception escaping the reader.
-    with patch(f"{_EV}.load_notification_config", side_effect=OSError("disk")):
+    # read_notification_config reports file/parse errors as readable=False
+    # (pinned in test_p6_notification_config.py); this pins only the guard for
+    # an exception escaping the reader.
+    with patch(f"{_EV}.read_notification_config", side_effect=OSError("disk")):
         assert _any_channel_enabled() is True
 
 

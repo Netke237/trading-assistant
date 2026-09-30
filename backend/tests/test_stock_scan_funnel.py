@@ -10,13 +10,9 @@ absorbed into a bucket nobody could see.
 The invariant pinned here matches the options one:
     scanned == candidates + every drop bucket
 
-KNOWN GAP: `failed_shortlist` is never exercised with a non-zero value. Getting
-a symbol all the way through to being a candidate needs a real strategy signal
-AND a passing backtest, which means mocking `_SIGNAL_FNS` and
-`run_strategy_backtest` deeply enough that the test would mostly be asserting
-its own mocks. The identical `original_count - len(candidates)` arithmetic IS
-covered on the options side (test_scan_direction_funnel.py's cap test), so this
-is left uncovered deliberately rather than faked.
+`failed_shortlist` with a non-zero value is covered in test_stock_shortlist.py,
+which patches `_process_stock` to return finished candidates rather than
+mocking every gate deeply enough to get a real one through.
 """
 from __future__ import annotations
 
@@ -234,6 +230,7 @@ _REAL_STOCK_REASONS = [
     ("mean_reversion_multi: variants produced no valid combined levels", "failed_signal"),
     ("backtest gate: 38% win over 12 trades",             "failed_backtest"),
     ("confidence gate REJECT: 41% < 50%",                 "failed_backtest"),
+    ("Shortlist cap: PASS score 53 confidence 60% ranked 4 of 7 (cap 3)", "failed_shortlist"),
     ("unknown strategy wat",                              "other_rejected"),
 ]
 

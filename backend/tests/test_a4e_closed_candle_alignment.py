@@ -20,6 +20,7 @@ from app.models.alert import AlertHistoryModel, AlertRuleModel
 from app.services.alert_evaluator import _evaluate_condition
 from app.services.indicator_compute import compute_indicators_for_conditions
 from app.services.market_structure import compute_structure
+from tests.parity_harness import parity_no_real_feeds  # noqa: F401  (WATCH-RULE-BAR-PARITY: no real feeds)
 
 _T0 = 1_700_000_000
 _SPAN = 900  # 15min
@@ -214,6 +215,7 @@ class _OneTickQueue:
 
 
 def test_t7_ws_displays_full_list_structure_but_evaluates_on_the_closed_prefix():
+    from fastapi import WebSocketDisconnect
     from starlette.testclient import TestClient
     from app.main import app
 
@@ -225,8 +227,18 @@ def test_t7_ws_displays_full_list_structure_but_evaluates_on_the_closed_prefix()
          patch('app.routers.chart.get_stream_client') as sc:
         sc.return_value.subscribe = AsyncMock(return_value=_OneTickQueue('new-candle'))
         sc.return_value.unsubscribe = lambda *a: None
+        # Drain until the SERVER closes (the queue's second get ends the stream),
+        # never a fixed count: the handler awaits `evaluate` only AFTER sending the
+        # 4th message, and leaving this block cancels the handler, so a client that
+        # stopped at 4 raced that await and failed under CPU load (BACKEND-INTERMITTENT-TEST).
+        msgs = []
         with TestClient(app).websocket_connect('/chart/stream/AAPL?interval=15min') as ws:
-            msgs = [ws.receive_json() for _ in range(4)]  # history, structure, tick, structure
+            while True:
+                try:
+                    msgs.append(ws.receive_json())
+                except WebSocketDisconnect:
+                    break
+                assert len(msgs) <= 10, f'server never closed the stream: {msgs}'  # fail, never hang
     assert [m['type'] for m in msgs] == ['history', 'structure', 'tick', 'structure']
     full = compute_structure(candles, '15min', 'AAPL')
     assert msgs[3]['signals'] == json.loads(json.dumps(full))  # display: full list

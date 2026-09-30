@@ -7,7 +7,9 @@ import html as html_lib
 import json
 import logging
 import os
+import time
 import uuid
+from collections import OrderedDict
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -26,7 +28,9 @@ from app.services.alert_evaluator import (
     RegimeCondition, ConditionGroup, evaluate_rules, build_regime_snapshot,
     is_cooldown_passed, _STRUCTURE_LABELS,
 )
-from app.services.composite_trigger_evaluator import hmm_intraday_interval_error
+from app.services.composite_trigger_evaluator import (
+    hmm_intraday_interval_error, momentum_confirmation_error, momentum_confirmations,
+)
 from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
 from app.services.market_structure import compute_structure
@@ -202,6 +206,17 @@ def _stored_pair(row: AlertRuleModel) -> tuple:
     return (row.interval, _composite_primary_model(parsed))
 
 
+def _stored_momentum(row: AlertRuleModel) -> list | None:
+    """The stored rule's momentum confirmations (None: not a composite rule)."""
+    try:
+        parsed = json.loads(row.rule_json)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict) or parsed.get('__type') != 'composite':
+        return None
+    return momentum_confirmations(parsed)
+
+
 async def migrate_hmm_intraday_rule_intervals(session_factory=None) -> list[dict]:
     """A4f-rules (decision A4F-MIGRATE-LEGACY-RULES-TOO-2026-09-25): a composite
     HMM_intraday rule stored on '1D'/'1W' never fires -- evaluate_and_notify_for_symbol
@@ -331,6 +346,29 @@ def _interval_label(interval: str) -> str:
     return _INTERVAL_LABELS.get(chart_interval(interval), f'{interval} chart')
 
 
+def _momentum_label(c: dict) -> str:
+    """COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD: plain-language row for a momentum
+    confirmation, by direction (Q0 labels)."""
+    kind = c.get('signal_kind', '')
+    d = c.get('direction')
+    d = d.lower() if isinstance(d, str) else None
+    if kind == 'rsi_cross':
+        lvl = c.get('min_confidence', 60)
+        lo = 100 - lvl if isinstance(lvl, int) and not isinstance(lvl, bool) else '?'
+        if d == 'bullish':
+            return f'RSI crosses up through {lvl}'
+        if d == 'bearish':
+            return f'RSI crosses down through {lo}'
+        return f'RSI crosses up through {lvl} or down through {lo}'
+    if kind == 'macd_cross':
+        side = {'bullish': 'above', 'bearish': 'below'}.get(d, 'above or below')
+        return f'MACD crosses {side} its signal line'
+    if kind == 'volume_spike':
+        candle = {'bullish': 'up candle', 'bearish': 'down candle'}.get(d, 'any candle colour')
+        return f'Volume spike (at least 2x usual, {candle})'
+    return f'Momentum: {kind}'
+
+
 def _composite_checklist(td: dict, detail: dict) -> list[dict]:
     """Best-effort per-condition checklist for composite (Markov + N-of-M) rules,
     mirroring the standard-rule checklist so composite alerts get the same
@@ -338,16 +376,12 @@ def _composite_checklist(td: dict, detail: dict) -> list[dict]:
     format. The primary Markov gate is always shown as met (evaluate_scheduled
     already required it to pass before any confirmation is checked).
 
-    Matching a confirmation against describe_match()'s matched-name lists can't
-    tell apart two confirmations of the SAME signal_kind with different
-    directions -- describe_match() only returns which kind names matched, not
-    which directional variant. The shipping AlertRuleBuilder/CompositeAlertDialog
-    UI can't currently create that configuration (one direction per rule, unique
-    signal_kind checkboxes), but POST /rules accepts composite_def directly with
-    no such validation, so it's reachable. Rather than silently mislabel both
-    rows as met, flag same-kind rows with a caveat so the ambiguity is visible
-    instead of hidden -- exactly the kind of thing this whole feature exists to
-    surface, not bury.
+    COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD 3.3: describe_match() returns
+    ``matched_indexes``, so each row is marked by its own confirmation even
+    when two share a signal_kind (rsi_cross 60 and 70, BOS Bullish and
+    Bearish). A detail dict without it (older callers) falls back to matching
+    by kind name; only then can two same-kind rows with different directions
+    not be told apart, and only then are they flagged with a caveat.
     """
     primary = td.get('primary', {}) or {}
     to_state = primary.get('to_state')
@@ -356,26 +390,34 @@ def _composite_checklist(td: dict, detail: dict) -> list[dict]:
         primary_label += f" ({primary['model']} model)"
     rows = [{'label': primary_label, 'met': True}]
 
-    structure_matched = detail.get('structure_matched', [])
-    confirmations = td.get('confirmations', [])
-    # Group by signal_kind -> set of distinct directions configured for it, not
-    # just a raw count -- two confirmations of the same kind AND same direction
-    # are redundant, not ambiguous (describe_match() can't misattribute a match
-    # between them since there's nothing to distinguish). The caveat below only
-    # makes sense when a kind has genuinely different directional variants.
+    confirmations = td.get('confirmations', []) or []
+    matched_indexes = detail.get('matched_indexes')
+    by_index = isinstance(matched_indexes, list)
+    matched_names = set(detail.get('structure_matched', []) or []) | set(detail.get('momentum_matched', []) or [])
+    # Fallback only: kind -> distinct directions configured for it. Two
+    # confirmations of the same kind AND direction are redundant, not ambiguous.
     kind_directions: dict[str, set] = {}
     for c in confirmations:
-        k = c.get('signal_kind', '')
-        kind_directions.setdefault(k, set()).add(c.get('direction'))
-    for c in confirmations:
+        if isinstance(c, dict):
+            kind_directions.setdefault(c.get('signal_kind', ''), set()).add(c.get('direction'))
+    for i, c in enumerate(confirmations):
+        if not isinstance(c, dict):
+            continue
         kind = c.get('signal_kind', '')
-        base = _STRUCTURE_LABELS.get(kind, kind)
         direction = c.get('direction')
-        suffix = f'{kind}, {direction}' if direction else kind
-        label = f'{base} ({suffix})'
-        if direction and len(kind_directions.get(kind, set())) > 1:
-            label += ' [same-signal match, direction not confirmed]'
-        rows.append({'label': label, 'met': kind in structure_matched})
+        if c.get('type') == 'momentum':
+            label = _momentum_label(c)
+        else:
+            base = _STRUCTURE_LABELS.get(kind, kind)
+            suffix = f'{kind}, {direction}' if direction else kind
+            label = f'{base} ({suffix})'
+        if by_index:
+            met = i in matched_indexes
+        else:
+            met = kind in matched_names
+            if direction and len(kind_directions.get(kind, set())) > 1:
+                label += ' [same-signal match, direction not confirmed]'
+        rows.append({'label': label, 'met': met})
 
     strategy_matched = detail.get('strategy_matched', [])
     for key in td.get('strategy_confirmations', []):
@@ -387,8 +429,9 @@ def _composite_checklist(td: dict, detail: dict) -> list[dict]:
 def _composite_need_suffix(td: dict) -> str:
     """Accurate "(only needs...)" suffix for a composite rule, for use as
     _build_notification_text's need_suffix_override. Composite rules gate on
-    TWO independent thresholds (min_confirmations for structure signals,
-    min_strategy_confirmations for strategy signals) rather than the single
+    TWO independent thresholds (min_confirmations over the confirmation
+    signals -- structure and momentum, one count -- and
+    min_strategy_confirmations over strategy signals) rather than the single
     N_OF_M/OR/AND model standard rules use, so this can't reuse that generic
     derivation -- without this, the composite call site left need_suffix
     permanently blank, hiding a genuine "only 1 of 3 was ever required" gap
@@ -399,7 +442,7 @@ def _composite_need_suffix(td: dict) -> str:
     if conf_total:
         min_conf = td.get('min_confirmations', 1)
         if min_conf < conf_total:
-            parts.append(f'only needs {min_conf} of {conf_total} structure signals')
+            parts.append(f'only needs {min_conf} of {conf_total} confirmation signals')
     strat_total = len(td.get('strategy_confirmations', []))
     if strat_total:
         min_strat = td.get('min_strategy_confirmations', 1)
@@ -602,6 +645,10 @@ async def create_rule(body: AlertRuleCreate, db: AsyncSession = Depends(get_db))
         _err = hmm_intraday_interval_error(body.composite_def, interval)
         if _err:
             raise HTTPException(status_code=422, detail=_err)
+        # COMPOSITE-MOMENTUM Q10c: a momentum confirmation that could never fire.
+        _err = momentum_confirmation_error(body.composite_def)
+        if _err:
+            raise HTTPException(status_code=422, detail=_err)
         rule_json = json.dumps({"__type": "composite", **body.composite_def})
     else:
         rule_json = json.dumps(body.group.model_dump())
@@ -656,6 +703,12 @@ async def replace_rule(rule_id: str, body: AlertRuleCreate, db: AsyncSession = D
     if body.rule_type == 'composite' and body.composite_def:
         _err = hmm_intraday_interval_error(body.composite_def, interval)
         if _err and _stored_pair(row) != (interval, _composite_primary_model(body.composite_def)):
+            raise HTTPException(status_code=422, detail=_err)
+        # COMPOSITE-MOMENTUM Q10c: same exemption -- the frontend toggles
+        # `enabled` by re-sending the full rule, so a PUT that leaves the stored
+        # momentum confirmations as they are is not refused.
+        _err = momentum_confirmation_error(body.composite_def)
+        if _err and _stored_momentum(row) != momentum_confirmations(body.composite_def):
             raise HTTPException(status_code=422, detail=_err)
     row.name = body.name
     row.symbol = body.symbol.upper()
@@ -879,6 +932,104 @@ def closed_candle_structure(candles: list[dict], closed_candle: dict, interval: 
     return []
 
 
+# ── WATCH-RULE-BAR-PARITY: the composite block reads what a composite watch reads ──
+
+# 2.3: get_bars rows per (SYMBOL, settle boundary) -> (monotonic expiry, rows).
+# OMM is the default model and the chart WS evaluates on every tick, and get_bars
+# can reach the providers all day after a holiday (no holiday calendar), so the
+# daily rows are memoised for _DAILY_ROWS_TTL -- but never across a settle
+# boundary, the only instant a new daily row can enter the store.
+_DAILY_ROWS_TTL = 300.0
+_DAILY_ROWS_MEMO: dict[tuple[str, datetime], tuple[float, list[dict]]] = {}
+
+# 2.7: (symbol, interval, as_of) keys that already forced one model-series
+# refetch. evaluate_closed_candles calls the block once per catch-up candle with
+# the same as_of, so a stalled entry costs one refetch, not one per candle.
+_MODEL_REFETCHED: "OrderedDict[tuple[str, str, float | None], None]" = OrderedDict()
+_MODEL_REFETCHED_MAX = 64
+
+
+async def _composite_daily_rows(symbol: str) -> list[dict]:
+    """The completed get_bars rows a composite watch reads (730 days ending
+    today, as strategy_watch_evaluator), memoised per settle boundary. Raises
+    what get_bars raises; a failure is not memoised."""
+    from app.services.historical_store import last_settle_boundary
+
+    key = (symbol.upper(), last_settle_boundary())
+    mono = time.monotonic()
+    hit = _DAILY_ROWS_MEMO.get(key)
+    if hit is not None and mono < hit[0]:
+        return hit[1]
+    end = date.today()
+    rows = await get_bars(symbol, end - timedelta(days=730), end)
+    for k in [k for k, (exp, _) in _DAILY_ROWS_MEMO.items() if k[0] == key[0] or exp <= mono]:
+        del _DAILY_ROWS_MEMO[k]
+    _DAILY_ROWS_MEMO[key] = (mono + _DAILY_ROWS_TTL, rows)
+    return rows
+
+
+async def _composite_model_series(
+    symbol: str, interval: str, closed_candle: dict, as_of: float | None,
+) -> list[dict]:
+    """2.1 / 2.6 / 2.7: the intraday series a composite rule's HMM_intraday and
+    intraday VWAP read -- the watch's fetch (fetch_intraday_candles with
+    intraday_history_days(interval), via chart_cache so below 1h it is the
+    chart's own entry), completed at that entry's fetched_at (A4c), cut at the
+    closed candle. Staleness is judged on the RAW entry: when it holds no bar
+    at or after the closed candle, one forced refetch per (symbol, interval,
+    as_of); still none -> [] (fail closed) + WARNING. NOT on the completed
+    series: completion also subtracts the Tradier-sandbox feed lag
+    (market.intraday_feed_lag_seconds), so on 1min/5min/15min the completed
+    series legitimately ends before a candle judged at `time + span`, exactly
+    as the watch's does (code round 1 finding 1). An undatable closed candle ->
+    [] + WARNING."""
+    from app.data import chart_cache
+    from app.services.composite_trigger_evaluator import intraday_history_days
+
+    t = closed_candle.get("time")
+    if not isinstance(t, int) or isinstance(t, bool):
+        logger.warning("composite rule: cannot date closed candle %r for %s [%s]; no model series",
+                       t, symbol, interval)
+        return []
+    days = intraday_history_days(interval)
+
+    def _dated(b: dict) -> bool:
+        return isinstance(b.get("time"), int) and not isinstance(b.get("time"), bool)
+
+    def _reaches(rows: list[dict]) -> bool:
+        return any(_dated(b) and b["time"] >= t for b in rows or [])
+
+    rows, fetched_at = await chart_cache.get_intraday_with_fetched_at(
+        symbol, interval, days=days, refresh_on_close=True,
+    )
+    if not _reaches(rows):
+        key = (symbol, interval, as_of)
+        if key not in _MODEL_REFETCHED:
+            _MODEL_REFETCHED[key] = None
+            while len(_MODEL_REFETCHED) > _MODEL_REFETCHED_MAX:
+                _MODEL_REFETCHED.popitem(last=False)
+            rows, fetched_at = await chart_cache.get_intraday_with_fetched_at(
+                symbol, interval, days=days, refresh_on_close=True, max_age=0,
+            )
+    if not _reaches(rows):
+        _last = max((b["time"] for b in rows or [] if _dated(b)), default=None)
+        logger.warning(
+            "composite rule: %s [%s] model series ends at %s, before the closed candle %s; "
+            "HMM_intraday/VWAP fail closed",
+            symbol, interval, _last, t,
+        )
+        return []
+    done = completed_bars_for_interval(rows, interval, now=fetched_at)
+    return [b for b in done if _dated(b) and b["time"] <= t]
+
+
+def _primary_of(rule_json: object) -> dict:
+    """A composite definition's ``primary`` as a dict ({} when missing, null or
+    not a dict): composite_def is stored unvalidated."""
+    p = rule_json.get("primary") if isinstance(rule_json, dict) else None
+    return p if isinstance(p, dict) else {}
+
+
 async def evaluate_and_notify_for_symbol(
     symbol: str, interval: str, closed_candle: dict,
     all_candles: list[dict], signals: list[dict],
@@ -886,15 +1037,21 @@ async def evaluate_and_notify_for_symbol(
 ) -> list[dict]:
     """Load enabled rules, evaluate, persist history, enqueue notifications.
 
-    A4c: every REGIME model here (standard rules' regime conditions, composite
-    rules' OMM and HMM_intraday primaries) fits on the COMPLETED candles of an
+    A4c: standard rules' regime conditions fit on the COMPLETED candles of an
     intraday `interval` -- completeness judged at `as_of`, the wall-clock time
     `all_candles` was fetched (chart_cache.get_intraday_with_fetched_at), since
     a cached candle that was forming then stays partial. None = time.time().
-
-    A4g: on 1D/1W the same readers -- plus the composite `bars_daily` (HMM_daily
-    and the strategy confirmations) -- drop the forming daily/weekly bar
+    A4g: on 1D/1W they drop the forming daily/weekly bar
     (market_session.completed_session_bars, judged at `as_of`).
+
+    WATCH-RULE-BAR-PARITY: composite rules do not read `all_candles` for their
+    models. HMM_intraday and the intraday VWAP confirmation read the composite
+    watch's own intraday fetch (intraday_history_days), completed at that
+    entry's fetch time and cut at `closed_candle`; OMM, HMM_daily and the
+    rsi/bb/VWAP-daily confirmations read the completed get_bars daily rows on
+    every interval, cut to the sessions closed by `closed_candle`'s close
+    (composite_trigger_evaluator.daily_rows_at_candle); OMM is judged in the
+    trigger's direction (omm_direction).
 
     A4e: `signals` must come from closed_candle_structure (both callers do), i.e.
     structure computed on the candles up to `closed_candle`, not the forming bar.
@@ -990,81 +1147,91 @@ async def evaluate_and_notify_for_symbol(
                 )
 
         # ── Composite rule evaluation ─────────────────────────────────────────
+        # WATCH-RULE-BAR-PARITY: a composite rule reads what a composite watch
+        # on the same symbol and interval reads -- the watch's intraday fetch
+        # for HMM_intraday / intraday VWAP (2.1), the completed get_bars daily
+        # rows for OMM, HMM_daily and the rsi/bb/VWAP-daily confirmations on
+        # every interval (2.3), OMM in the trigger's direction (2.5) -- each
+        # cut at the judged candle so a catch-up candle reads no later bar
+        # (2.2, 2.6). `_regime_candles` serves the standard rules only.
         if composite_rows:
+            from app.data.market import normalize_interval
             from app.services.composite_trigger_evaluator import (
-                completed_daily_rows, evaluate_from_context_detailed, format_composite_reason,
-                indicator_values_at,
+                MomentumInput, _strategy_bar_type, daily_rows_at_candle, evaluate_from_context_detailed,
+                format_composite_reason, has_momentum, momentum_sustain_ignored, omm_direction,
             )
-            # P4b T6: momentum confirmations compare a number -- the closed
-            # candle's value of each series, not the series itself.
-            _composite_indicators = indicator_values_at(indicators, closed_candle.get("time"))
-            from app.services.regime_omm import compute_omm
-            _closes = [c["close"] for c in _regime_candles]
-            _omm = compute_omm(_closes) if len(_closes) >= 100 else None
-
-            # Only fetch daily bars if some composite rule actually needs them — either
-            # for strategy_confirmations, or because a rule's primary condition targets
-            # the HMM_daily model (which requires daily bars to fit against).
-            _needs_daily_bars = any(
-                _rj.get("strategy_confirmations") or _rj.get("primary", {}).get("model") == "HMM_daily"
-                for _, _rj in composite_rows
-            )
-            _bars_daily: list[dict] = []
-            if _needs_daily_bars:
-                if interval in ("1D", "1W"):
-                    # all_candles is already daily/weekly data for this rule's own
-                    # interval — reuse it instead of paying for an extra get_bars()
-                    # round-trip. A4g: its COMPLETED bars (`_regime_candles`), so
-                    # HMM_daily and the rsi/bb confirmations (require_choppy_regime
-                    # included) read what a composite watch on get_bars reads.
-                    _bars_daily = _regime_candles
+            # COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD 3.3: momentum reads the
+            # caller's candles cut at the closed candle (found by time from the
+            # end), so a catch-up candle is judged on its own prefix and the
+            # forming bar is never read. No cut -> momentum not read -> those
+            # confirmations do not match (fail closed).
+            _momentum_cut: list[dict] | None = None
+            if any(has_momentum(_rj) for _, _rj in composite_rows):
+                _ct = closed_candle.get("time")
+                for _i in range(len(all_candles or []) - 1, -1, -1):
+                    if all_candles[_i].get("time") == _ct:
+                        _momentum_cut = all_candles[:_i + 1]
+                        break
                 else:
-                    try:
-                        _end = date.today()
-                        _start = _end - timedelta(days=730)
-                        # P4b: completed sessions only, as a composite watch reads.
-                        _bars_daily = completed_daily_rows(await get_bars(symbol, _start, _end), _as_of_dt)
-                    except Exception as _exc:
-                        logger.warning("composite rule strategy-confirmation bars fetch failed for %s: %s", symbol, _exc)
-                        _bars_daily = []
+                    logger.warning("composite rule: closed candle %r not in the candle list for %s [%s]; "
+                                   "momentum confirmations not read", _ct, symbol, interval)
+            from app.services.regime_omm import compute_omm
+            _daily_iv = normalize_interval(interval) in ("daily", "weekly")
 
-            # all_candles are only genuinely intraday when the rule's own interval is
-            # intraday — chart.py's get_intraday(symbol, interval) returns daily candles
-            # for '1D'/'1W' rules, so passing them as bars_intraday would mislabel daily
-            # data as intraday to the VWAP mean-reversion check.
-            # VWAP-CONFIRMATION-LIKE-REGIME-MODELS: the VWAP confirmation reads the
-            # COMPLETED bars of the rule's interval (_regime_candles), like the HMM.
-            _bars_intraday = _regime_candles if interval not in ("1D", "1W") else []
+            # 2.3: fetched whenever composite rules exist -- OMM (trigger_values
+            # included) reads it for every fire. A failed fetch fails closed.
+            try:
+                _daily_all = await _composite_daily_rows(symbol)
+            except Exception as _exc:
+                logger.warning("composite rule daily bars fetch failed for %s: %s", symbol, _exc)
+                _daily_all = []
+            _bars_daily = daily_rows_at_candle(_daily_all, closed_candle, interval)
+            # D7: on 1D/1W the VWAP daily variant reads the same rows (as the watch).
+            _bars_vwap_daily: list[dict] | None = _bars_daily if _daily_iv else None
 
-            # D7 (Kenneth, 2026-09-26): on 1D/1W the VWAP daily variant reads the
-            # completed get_bars rows a 1D/1W composite watch reads -- never the
-            # chart's daily candles or weekly bars. Fetched once per tick, and only
-            # when some composite rule lists VWAP; a failed fetch fails closed ([]).
-            _bars_vwap_daily: list[dict] | None = None
-            if interval in ("1D", "1W") and any(
-                "mean_reversion_vwap" in (_rj.get("strategy_confirmations") or [])
+            # 2.5: OMM per direction, computed lazily inside each rule's try.
+            _omm_by_direction: dict[str, object] = {}
+
+            def _omm_for(_d: str):
+                if _d not in _omm_by_direction:
+                    _closes = [b["close"] for b in _bars_daily]
+                    _omm_by_direction[_d] = compute_omm(_closes, direction=_d) if _closes else None
+                return _omm_by_direction[_d]
+
+            # 2.1: the model series, only when some rule reads it.
+            _bars_intraday: list[dict] = []
+            if not _daily_iv and any(
+                _primary_of(_rj).get("model") == "HMM_intraday"
+                or (
+                    "mean_reversion_vwap" in (_rj.get("strategy_confirmations") or [])
+                    and _strategy_bar_type("mean_reversion_vwap", interval) == "intraday"
+                )
                 for _, _rj in composite_rows
             ):
                 try:
-                    _end = date.today()
-                    _start = _end - timedelta(days=730)
-                    _bars_vwap_daily = completed_daily_rows(await get_bars(symbol, _start, _end), _as_of_dt)
+                    _bars_intraday = await _composite_model_series(symbol, interval, closed_candle, as_of)
                 except Exception as _exc:
-                    logger.warning("composite rule VWAP daily bars fetch failed for %s: %s", symbol, _exc)
-                    _bars_vwap_daily = []
+                    logger.warning("composite rule model series fetch failed for %s [%s]: %s",
+                                   symbol, interval, _exc)
+                    _bars_intraday = []
 
             for _row, _rj in composite_rows:
                 _td = {k: v for k, v in _rj.items() if k != "__type"}
                 _direction = _td.get("direction") or "Bullish"
-                _rule_needs_daily = bool(_rj.get("strategy_confirmations")) or _rj.get("primary", {}).get("model") == "HMM_daily"
+                _has_mom = has_momentum(_td)
+                _momentum = (MomentumInput(_momentum_cut, interval, _row.id)
+                             if _has_mom and _momentum_cut is not None else None)
+                _rule_needs_daily = bool(_rj.get("strategy_confirmations")) or _primary_of(_rj).get("model") == "HMM_daily"
                 _rule_daily = _bars_daily if _rule_needs_daily else []
                 try:
+                    _omm = _omm_for(omm_direction(_td))
                     _fired, _detail = evaluate_from_context_detailed(
-                        _td, _omm, signals, _composite_indicators,
+                        _td, _omm, signals, {},
                         bars_daily=_rule_daily, bars_intraday=_bars_intraday,
                         direction=_direction, symbol=symbol,
-                        regime_bars_intraday=_regime_candles if interval not in ("1D", "1W") else None,
+                        regime_bars_intraday=None if _daily_iv else _bars_intraday,
                         interval=interval, bars_vwap_daily=_bars_vwap_daily,
+                        momentum=_momentum,
                     )
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
@@ -1072,6 +1239,9 @@ async def evaluate_and_notify_for_symbol(
 
                 _sustain_min = _td.get("sustain_minutes")
                 if isinstance(_sustain_min, (int, float)) and _sustain_min < 0:
+                    _sustain_min = 0
+                # Q7: a momentum trigger fires on the bar that meets it.
+                if momentum_sustain_ignored(_td, _row.id):
                     _sustain_min = 0
                 try:
                     _composite_state = json.loads(_row.condition_state or '{}')
@@ -1095,6 +1265,26 @@ async def evaluate_and_notify_for_symbol(
 
                 if not _fired:
                     continue
+
+                # Q4: a momentum rule fires at most once per closed candle. The
+                # chart WS path judges candles without the scheduler's claim, so
+                # the same candle can be judged twice; `composite_fired_candle`
+                # (the newest candle this rule fired on, per interval) refuses a
+                # candle of the same interval at or before it. Type-guarded:
+                # a non-int time or another interval never suppresses.
+                _fired_t = closed_candle.get("time")
+                if _has_mom:
+                    try:
+                        _fc = json.loads(_row.condition_state or '{}').get("composite_fired_candle")
+                    except (ValueError, TypeError, AttributeError):
+                        _fc = None
+                    if (isinstance(_fc, dict) and _fc.get("interval") == interval
+                            and isinstance(_fc.get("time"), int) and not isinstance(_fc.get("time"), bool)
+                            and isinstance(_fired_t, int) and not isinstance(_fired_t, bool)
+                            and _fired_t <= _fc["time"]):
+                        logger.debug('composite rule %s (%s [%s]) already fired on candle %s',
+                                     _row.id, symbol, interval, _fc["time"])
+                        continue
 
                 # Composite rules had NO cooldown gate at all — unlike standard
                 # rules (evaluate_rules() -> is_cooldown_passed internally), which
@@ -1121,7 +1311,7 @@ async def evaluate_and_notify_for_symbol(
                     )
                     continue
 
-                _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)
+                _reason = format_composite_reason(_primary_of(_td).get('to_state'), _detail)
                 _now = datetime.now().isoformat()
                 _entry = {
                     "id": uuid.uuid4().hex,
@@ -1134,6 +1324,7 @@ async def evaluate_and_notify_for_symbol(
                         "composite": True,
                         "omm_state": _omm.state if _omm else None,
                         "structure_matched": _detail["structure_matched"],
+                        "momentum_matched": _detail.get("momentum_matched", []),
                         "strategy_matched": _detail["strategy_matched"],
                     },
                     "reason": _reason,
@@ -1149,6 +1340,14 @@ async def evaluate_and_notify_for_symbol(
                 db.add(_hist)
                 if _row.last_triggered_at is not None or True:  # always update
                     _row.last_triggered_at = _now
+                if _has_mom:
+                    try:
+                        _st = json.loads(_row.condition_state or '{}')
+                        _st = _st if isinstance(_st, dict) else {}
+                    except (ValueError, TypeError):
+                        _st = {}
+                    _st["composite_fired_candle"] = {"interval": interval, "time": _fired_t}
+                    _row.condition_state = json.dumps(_st)
                 _rn = (await db.execute(select(AlertRuleModel).where(AlertRuleModel.id == _row.id))).scalar_one_or_none()
                 _rname = _rn.name if _rn else None
                 _subj, _plain, _html = _build_notification_text(

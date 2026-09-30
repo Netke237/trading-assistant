@@ -168,8 +168,12 @@ _COMPOSITE_HMM = {"__type": "composite", "primary": {"model": "HMM_intraday", "t
 _REGIME_RULE = {"logic": "AND", "conditions": [{"kind": "regime", "model": "OMM", "state": "Bull"}]}
 
 
-async def _run(monkeypatch, interval, rows, candles, as_of=None):
+async def _run(monkeypatch, interval, rows, candles, as_of=None, daily=None):
     from app.routers import chart_alerts
+    from tests.parity_harness import patch_feeds
+    # WATCH-RULE-BAR-PARITY: composite models read the watch's feeds -- the
+    # intraday fetch (stubbed to `candles`) and get_bars daily rows (`daily`).
+    patch_feeds(monkeypatch, intraday=candles, daily=daily)
     import app.services.regime_omm as regime_omm
     import app.services.regime_hmm as regime_hmm
     import app.services.composite_trigger_evaluator as cte
@@ -195,10 +199,17 @@ async def _run(monkeypatch, interval, rows, candles, as_of=None):
 
 @pytest.mark.asyncio
 async def test_u3_chart_composite_omm_and_hmm_fit_on_completed_candles(monkeypatch):
+    # WATCH-RULE-BAR-PARITY: OMM reads the completed get_bars daily closes (as a
+    # composite watch), no longer the chart's intraday candles; the HMM reads the
+    # watch's intraday fetch, completed and cut at the closed candle.
+    from datetime import date, timedelta
+    from tests.parity_harness import daily_rows
     candles = _bars(span=900)
+    daily = daily_rows(150, date.today() - timedelta(days=7), close=lambda i: 40.0 + i % 7)
     seen = await _run(monkeypatch, '15min',
-                      [_row('c1', '15min', _COMPOSITE_OMM), _row('c2', '15min', _COMPOSITE_HMM)], candles)
-    assert seen["omm"] == [[c["close"] for c in candles[:-1]]]
+                      [_row('c1', '15min', _COMPOSITE_OMM), _row('c2', '15min', _COMPOSITE_HMM)], candles,
+                      daily=daily)
+    assert seen["omm"] == [[r["close"] for r in daily]]
     assert seen["hmm"] == [candles[:-1]]
 
 
@@ -209,6 +220,8 @@ async def test_u3_vwap_confirmation_reads_completed_bars(monkeypatch):
     import app.services.regime_hmm as regime_hmm
     candles = _bars(span=900)
     from app.routers import chart_alerts
+    from tests.parity_harness import patch_feeds
+    patch_feeds(monkeypatch, intraday=candles)
     Session = await _session()
     monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
     async with Session() as db:
@@ -239,7 +252,9 @@ async def test_1d_rules_skip_the_intraday_trim(monkeypatch):
     (tests/test_a4g_forming_daily_weekly_bar.py), so this pins A4c's half at an
     instant where the two disagree: Friday 17:00 ET, last bar Friday's (00:00 ET
     stamp). A span trim would drop it (00:00 + 86400s is still ahead); A4g keeps
-    it (the session closed at 16:00)."""
+    it (the session closed at 16:00). WATCH-RULE-BAR-PARITY: the composite OMM
+    no longer reads these candles -- it reads the get_bars rows closed by the
+    judged (Thursday) candle's close, so Friday's row is not among them."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
     ny = ZoneInfo("America/New_York")
@@ -248,11 +263,15 @@ async def test_1d_rules_skip_the_intraday_trim(monkeypatch):
                 "close": 50.0, "volume": 1_000} for i in range(150)]
     candles.append({"time": fri, "open": 50.0, "high": 50.5, "low": 49.5, "close": FORMING, "volume": 1})
     fri_evening = int(datetime(2026, 6, 12, 17, tzinfo=ny).timestamp())
+    from datetime import date
+    from tests.parity_harness import daily_rows
+    daily = daily_rows(150, date(2026, 6, 12), close=lambda i: 40.0 + i % 7)
     seen = await _run(monkeypatch, '1D',
                       [_row('s1', '1D', _REGIME_RULE), _row('c1', '1D', _COMPOSITE_OMM)],
-                      candles, as_of=fri_evening)
+                      candles, as_of=fri_evening, daily=daily)
     assert seen["snap"] == [candles]
-    assert seen["omm"] == [[c["close"] for c in candles]]
+    assert daily[-1]["time"] == "2026-06-12"
+    assert seen["omm"] == [[r["close"] for r in daily[:-1]]]
 
 
 @pytest.mark.asyncio

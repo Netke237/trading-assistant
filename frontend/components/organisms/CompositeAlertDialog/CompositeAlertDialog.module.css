@@ -20,6 +20,7 @@
   background: var(--bg-surface-2); color: var(--text-primary); font-size: 16px;
 }
 .section { display: flex; flex-direction: column; gap: 16px; }
+.group { display: flex; flex-direction: column; gap: 8px; }
 .confirmList { display: flex; flex-direction: column; gap: 8px; }
 .confirmItem {
   display: flex; align-items: center; gap: 16px; padding: 12px 16px;

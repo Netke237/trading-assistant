@@ -455,6 +455,23 @@ _HISTORY_YEARS = 5
 _SCAN_SEM = asyncio.Semaphore(5)
 
 _BACKTEST_TTL = 24 * 3600  # daily — bar history doesn't change within a trading day
+# Shortlist-cap ranking (see the cap in _execute_stock_scan_core). Statuses
+# not listed sort after CAUTION; a REJECT never reaches the cap (it is dropped
+# as "REJECT score=" first), so today that is only a defensive default.
+_SHORTLIST_STATUS_ORDER = {"PASS": 0, "CAUTION": 1}
+# The frontend matches this prefix to show trimmed names as "over cap" rather
+# than as rejections (frontend/lib/stockShortlist.ts) -- change both together.
+_SHORTLIST_REASON_PREFIX = "Shortlist cap:"
+
+
+def _shortlist_rank_key(c: PositionCardOut) -> tuple:
+    return (
+        _SHORTLIST_STATUS_ORDER.get(c.stock_status, len(_SHORTLIST_STATUS_ORDER)),
+        -c.stock_score,
+        -(c.confidence if c.confidence is not None else -1),
+    )
+
+
 def classify_stock_rejection(reason: str) -> str:
     """Map a rejection reason to the StockPipeline field that counts it.
 
@@ -504,6 +521,11 @@ def classify_stock_rejection(reason: str) -> str:
     # the backtest; it belongs with it rather than among "errors".
     if reason.startswith("backtest gate:") or reason.startswith("confidence gate "):
         return "failed_backtest"
+    # Not a gate failure: a candidate that passed everything and was ranked
+    # below the cap. The pipeline counts these as original_count - kept, so
+    # this bucket only keeps them OUT of the residual (no double count).
+    if reason.startswith(_SHORTLIST_REASON_PREFIX):
+        return "failed_shortlist"
     return "other_rejected"
 
 
@@ -1566,9 +1588,36 @@ async def _execute_stock_scan_core(
         else:
             rejected.append(r)
 
+    # ── Shortlist cap ─────────────────────────────────────────────────────────
+    # Rank BEFORE cutting. `candidates` arrives in universe-file order (gather
+    # keeps input order), so slicing it straight kept whichever names come first
+    # in sp500.csv and silently dropped better setups further down. The Stocks
+    # twin of the options-path fix in scan.py's "Shortlist cap" section.
+    #
+    # Key: stock_status (PASS before CAUTION, anything else after), then
+    # stock_score descending, then backtest-derived confidence descending with
+    # an unmeasured confidence (None) after every measured one. Python's sort
+    # is stable, so an exact tie keeps universe order. Sorted even when nothing
+    # is cut: the frontend's rank deltas (computeStockDeltas) read list position.
+    candidates.sort(key=_shortlist_rank_key)
+    # No upper clamp (the options path clamps to 50): here every candidate is
+    # already fully built before the cut, so a large cap costs nothing, and
+    # clamping would silently override an explicit request or a saved schedule.
     original_count = len(candidates)
-    shortlist_truncated = original_count > req.shortlist_max_candidates
-    candidates = candidates[: req.shortlist_max_candidates]
+    _cap = req.shortlist_max_candidates
+    shortlist_truncated = original_count > _cap
+    # A trimmed name is recorded, not dropped on the floor: it goes into
+    # `rejected` so the user can see what the cap cost them. The literal prefix
+    # (not an f-string on _SHORTLIST_REASON_PREFIX) keeps it visible to
+    # test_every_stock_reason_producer_is_classified's source scan.
+    for _k, _c in enumerate(candidates[_cap:], start=_cap + 1):
+        _conf = f"{_c.confidence}%" if _c.confidence is not None else "n/a"
+        rejected.append({
+            "symbol": _c.symbol,
+            "reason": f"Shortlist cap: {_c.stock_status} score {_c.stock_score} "
+                      f"confidence {_conf} ranked {_k} of {original_count} (cap {_cap})",
+        })
+    candidates = candidates[:_cap]
 
     _direction_banner: str | None = None
     # The pipeline's `failed_direction`: a measured trend below the floor only

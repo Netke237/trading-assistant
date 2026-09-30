@@ -12,7 +12,7 @@ import {
   eventWindowSentence, thresholdsUnavailableSentence, ivOverrideSentence,
   MISSING_READING_CLAIM,
   type MissingReadingClaim, type GateCause, type GateCounts, type IvBand, type ThresholdsAvail,
-} from '../page';
+} from '../gateSummary';
 import { STATUS_LABEL, type Status } from '@/lib/status';
 import { formatIv, type IvBasis } from '@/lib/ivBasis';
 import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';
@@ -20,6 +20,7 @@ import { useIvThresholdsStore, effectiveIvThresholds, ivOverrideFor } from '@/li
 import {
   useEventThresholdsStore, getEventWindow, type ThresholdHorizon,
 } from '@/lib/eventThresholdsStore';
+import { useScanStore } from '@/lib/scanStore';
 
 /** The whole gate-summary line. BY TEST ID, not by text: the banner is three
  *  separate elements now, and `getByText` returns only the element DIRECTLY
@@ -155,7 +156,10 @@ export const PART_PINS: Record<string, (el: HTMLElement) => void> = {
     const horizon = root.getAttribute('data-horizon') as ThresholdHorizon;
     const ev = useEventThresholdsStore.getState().thresholds;
     if (ev === null) throw new Error('event-window rendered with no event record in the store');
-    const w = getEventWindow(horizon, ev);
+    // The window the scan APPLIED when the result echoes one (0b41781: a Step-3
+    // override such as SemiAnnual_*'s 7/30), else the horizon's YAML window.
+    const echoed = useScanStore.getState().scanResult?.event_window;
+    const w = echoed ? { ...getEventWindow(horizon, ev), ...echoed } : getEventWindow(horizon, ev);
 
     // 1. The sentence, by equality, over the window the gate reads.
     expect(el.textContent).toBe(eventWindowSentence(w));
