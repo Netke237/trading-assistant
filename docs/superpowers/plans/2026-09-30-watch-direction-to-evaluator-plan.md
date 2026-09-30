@@ -1,4 +1,4 @@
-# WATCH-DIRECTION-TO-EVALUATOR — plan (r0)
+# WATCH-DIRECTION-TO-EVALUATOR — plan (r1, after plan round 1)
 
 - **Phase:** `WATCH-DIRECTION-TO-EVALUATOR` (PROJECT_STATE.json). Origin: decision
   `WATCH-RULE-BAR-PARITY-Q-I-LEGACY-WATCH-DIRECTION-2026-09-28` ("drop the fallback and log it") and
@@ -23,7 +23,9 @@
    `wdir = w.get("direction", "Bullish")` and passes it to `describe_match(direction=wdir)` (the alert text's
    strategy list) and to the event, but **not** to `evaluate_scheduled`. So a watch whose `trigger_def` has no
    direction and whose own direction is Bearish **decides** Bullish (OMM and strategies) but **describes**
-   Bearish strategies.
+   Bearish strategies. The same split exists when the trigger HAS a valid direction that differs from the
+   watch's (reachable only through the API or YAML; the dialog sends one value to both, round 1 finding 1):
+   the gate decides in the trigger's direction, `describe_match` lists strategies in the watch's.
 5. The watch's `direction` is validated to Bullish/Bearish on create (`routers/composite_watch.py:50-51`);
    the store default is `"Bullish"` (`strategy_watch_store.py:119`). A hand-edited YAML can hold anything.
 6. The rule path (`chart_alerts.py:1227`, `omm_direction(_td)`) has no separate direction — out of scope,
@@ -40,13 +42,19 @@
    - Strategy gate: `direction = td.get("direction") or omm_direction(None, fallback_direction)`, i.e. a
      truthy trigger direction is used **exactly as today** (no normalisation change for existing triggers);
      only a missing/empty/None trigger direction falls back to a valid watch direction, else Bullish.
-3. `_eval_composite_watch` passes `fallback_direction=wdir`.
-4. Not touched: `describe_match` (already receives `wdir`), momentum (`momentum_match` reads each
+3. `_eval_composite_watch` passes `fallback_direction=wdir`, and computes once
+   `sdir = trigger_def.get("direction") or omm_direction(None, wdir)` — the exact expression the strategy gate
+   uses — and passes `direction=sdir` to `describe_match` (was `wdir`), so the alert's strategy list is the
+   one the gate matched (round 1 finding 1).
+4. Not touched: `describe_match` itself, momentum (`momentum_match` reads each
    confirmation's own `direction`), the rule path, the frontend.
 
 **Stated consequence.** A trigger whose own direction is present but malformed (e.g. `"bearish"`, `"Neutral"`)
 now judges OMM in the watch's direction instead of Bullish (it was never a valid value; the create path writes
-exactly Bullish/Bearish or null). The strategy gate keeps passing such a value raw, as today.
+exactly Bullish/Bearish or null). The strategy gate keeps passing such a value raw, as today, and the
+description now follows the gate (same raw value). **Stated residual:** the WatchEvent / alert stays stamped
+with the watch's own `direction` (the watch's identity, which the user chose); a trigger direction that
+contradicts it is API/YAML-only and not refused here.
 
 ## 3. Tests (each with the mutation it must kill)
 
@@ -63,6 +71,9 @@ exactly Bullish/Bearish or null). The strategy gate keeps passing such a value r
    gate ignores the fallback.
 4. Watch path: `_eval_composite_watch` on a Bearish watch whose `trigger_def` has no direction → the spy sees
    `fallback_direction="Bearish"`; a Bullish/default watch → `"Bullish"`. Mutation: caller does not pass it.
+4b. Description follows the gate: trigger `direction: "Bullish"` + watch Bearish, `mean_reversion_rsi`
+   confirmation → the `describe_match` spy sees `direction="Bullish"`; trigger without direction + watch Bearish
+   → `"Bearish"`. Mutation: pass `wdir` to `describe_match`.
 5. End-to-end OMM decision: a Bearish legacy watch whose OMM conviction clears `conviction_min` only in the
    Bearish reading fires; the same watch judged Bullish does not. Mutation: drop the fallback.
 6. Existing suites unchanged: full backend run.
@@ -70,10 +81,15 @@ exactly Bullish/Bearish or null). The strategy gate keeps passing such a value r
 ## 4. Ownership
 
 `backend/app/services/composite_trigger_evaluator.py` (`omm_direction`, `evaluate_scheduled` two lines +
-signature), `backend/app/services/strategy_watch_evaluator.py` (one call-site argument), one new test file,
+signature), `backend/app/services/strategy_watch_evaluator.py` (the `evaluate_scheduled` argument and the
+`describe_match` direction), one new test file,
 PROJECT_STATE.json (phase `verify` switched from the defect marker to a presence probe on
 `omm_direction(td, fallback_direction)`), this plan.
 
 ## 5. Loop
 
 Plan round → build + mutation checks → code round → state record → merge only with Kenneth's approval.
+
+## 6. Round dispositions
+**Round 1 (1 gate-level, accepted):** 1 → §1.4 wording, §2.3 `sdir` passed to `describe_match`, test 4b, event
+stamp stated as residual in §2.
