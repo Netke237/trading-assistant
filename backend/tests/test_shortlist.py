@@ -256,6 +256,31 @@ def test_an_exact_tie_keeps_universe_order(client):
     assert [c["symbol"] for c in body["candidates"]] == ["CCC", "AAA"]
 
 
+
+def test_an_entry_quality_reject_ranks_after_caution_and_is_the_one_cut(client):
+    # finalStatus is the worst of stock, contract and ENTRY quality; a wide
+    # spread makes entry quality REJECT, which survives to the cap. It must
+    # rank after a CAUTION (the order map's default), even with the higher
+    # score and first place in the universe.
+    spec = {"WIDE": (99, "PASS", 99, "PASS"), "CAUT": (60, "CAUTION", 75, "PASS"),
+            "GOOD": (70, "PASS", 75, "PASS")}
+    strikes = {sym: 190 + i for i, sym in enumerate(spec)}
+
+    async def _chain(_client, symbol, **_):
+        row = {**_MOCK_CHAIN[0], "strike": strikes[symbol]}
+        if symbol == "WIDE":
+            row["spread"] = 2.0  # 80% of the 2.50 mid -> "wide spread" REJECT
+        return [row]
+
+    with _enter_contract_patches(2, spec) as stack:
+        stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
+        body = _scan(client, list(spec))
+
+    assert [c["symbol"] for c in body["candidates"]] == ["GOOD", "CAUT"]
+    trimmed = [r for r in body["rejected"] if r["reason"].startswith("Shortlist cap:")]
+    assert [r["reason"] for r in trimmed] == [
+        "Shortlist cap: REJECT score 99 contract 99 ranked 3 of 3 (cap 2)"]
+
 # ── The scan passes the validator's DTE floor to the expiry pick ──────────────
 # (Lives here for the scan-level patch harness above.) Only one expiry is
 # fetched per symbol; without the floor a Custom 15-200d hold (window 30-400,

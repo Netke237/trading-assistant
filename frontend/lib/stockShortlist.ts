@@ -1,3 +1,5 @@
+import { SHORTLIST_REASON_PREFIX } from '@/lib/shortlistCap';
+
 /**
  * Stock-scan `rejected` entries that are NOT rejections.
  *
@@ -5,10 +7,10 @@
  * cuts the list at the shortlist cap. Names ranked below the cap passed every
  * gate; they are appended to `rejected` with this reason prefix so they are
  * visible, but counting them as "rejected" would misstate what the gates did.
- * Must match `_SHORTLIST_REASON_PREFIX` in backend/app/routers/stock_scan.py
- * (backend/tests/test_stock_shortlist.py reads this file to pin it).
+ * The value lives in lib/shortlistCap.ts, shared with the options scan log
+ * (backend/tests/test_stock_shortlist.py pins it against both backends).
  */
-export const STOCK_SHORTLIST_REASON_PREFIX = 'Shortlist cap:';
+export const STOCK_SHORTLIST_REASON_PREFIX = SHORTLIST_REASON_PREFIX;
 
 export interface StockRejectedEntry { symbol: string; reason: string }
 

@@ -1,7 +1,9 @@
 import type { ScanResult, RejectedEntry } from '@/lib/scanStore';
+import { SHORTLIST_REASON_PREFIX } from '@/lib/shortlistCap';
 
-/** Mirrors `_SHORTLIST_REASON_PREFIX` in backend/app/routers/scan.py. */
-export const SHORTLIST_REASON_PREFIX = 'Shortlist cap:';
+/** Mirrors `_SHORTLIST_REASON_PREFIX` in backend/app/routers/scan.py; one
+ *  source (lib/shortlistCap.ts) shared with the stock scan. */
+export { SHORTLIST_REASON_PREFIX };
 
 /**
  * The four numbers in the Step-3 SCAN LOG header, derived together.
