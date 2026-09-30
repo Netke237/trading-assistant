@@ -7,6 +7,14 @@
       "expires_at": "2026-09-30T21:47:11Z",
       "note": "DOCC-5 frame-wide TopBar config-health banner (plan phase)",
       "task": "DOCC-5-TOPBAR-BANNER"
+    },
+    {
+      "agent": "claude",
+      "branch": "ccr-3ec55775-kgawjr",
+      "claimed_at": "2026-09-30T18:49:49Z",
+      "expires_at": "2026-09-30T21:49:49Z",
+      "note": "MEAS plan v5 -> refresh staleness + adversarial rounds until clean",
+      "task": "MEAS-MARKET-DATA-MEASUREMENT"
     }
   ]
 }
