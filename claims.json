@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "claude/practical-dirac-ebenkq",
       "claimed_at": "2026-09-30T04:42:33Z",
-      "expires_at": "2026-09-30T08:03:31Z",
+      "expires_at": "2026-09-30T08:33:05Z",
       "note": "First adversarial audit of already_shipped REGIME-SIZING (shared conviction ramp, scoring/conviction_sizing.py)",
       "task": "REGIME-SIZING-AUDIT"
     }
