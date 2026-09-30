@@ -9,9 +9,19 @@ drifted apart:
 Those agree only at the endpoints. Under the config shipped at the time
 (min_mult 0.5, full_conviction_pct 40) the clamp form binds for every
 conviction from 0 to 20, so the whole bottom half of the conviction scale
-produced one identical position size, and the two paths sized the same setup
-up to 1.5x apart at conviction 20 — the scan card showing one number while
-the auto-trader executed another.
+produced one identical position size, and the two paths applied multipliers
+up to 1.5x apart at conviction 20.
+
+WHAT IS SHARED, AND WHAT IS NOT (REGIME-SIZING-AUDIT r1 finding 1). The two
+callers share this FORMULA and a round-down rule (floor with a 1e-9 guard,
+never below 1), pinned behaviourally by tests/test_regime_sizing_parity.py.
+They do NOT size the same setup: stock_scan.py sizes SHARES on the stock
+card, while the auto-trader fires OPTIONS armed from the Step 7 options card,
+and that card is not conviction-sized. So an armed quantity of 10 is shown as
+10 and may fire as fewer. An earlier version of this paragraph said the old
+code had "the scan card showing one number while the auto-trader executed
+another", which implied this module closed that gap. For options it never
+did.
 
 The ramp is the form kept, because that is what a floor is for: it rescales
 conviction onto [min_mult, 1] so every distinct conviction maps to a distinct
@@ -298,8 +308,8 @@ def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | No
     # FALSY at stock_scan.py's `account * (risk_pct or 0.01)` and fell through
     # to a hardcoded 1%, doubling a 0.5% config. P3a removed `or 0.01`, so today
     # a 0.0 multiplier sizes to the MINIMUM order instead: 1 share on the stock
-    # card (`max(1, …)`, stock_scan.py:1016) and 1 contract on the fire path
-    # (`_sized_quantity`'s `max(1, …)`, auto_trader.py:1392) — still never
+    # card (`max(1, …)` in stock_scan.py `_position_size`) and 1 contract on the fire path
+    # (`max(1, …)` in auto_trader.py `_sized_quantity`) — still never
     # zero.
     #
     # Found by cross-checking this implementation against the rival one built in
@@ -311,7 +321,7 @@ def resolve_sizing(sizing: Mapping[str, Any] | None) -> tuple[float, float] | No
     # position size, and this path always ends in an order.
     #
     # `risk_pct or 0.01` was removed by P3a; `risk_fixed if risk_fixed`
-    # (stock_scan.py:1015) remains, and is harmless here because the pct branch
+    # (stock_scan.py `_position_size`) remains, and is harmless here because the pct branch
     # is multiplied by the same `mult`.
     if not 0.0 < min_mult <= 1.0:
         # P3c (3): one message per case — the old single sentence named "above

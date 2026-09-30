@@ -1063,7 +1063,12 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     # before this point; a `risk_pct or 0.01` here used to replace a None with
     # an UNSIZED 1% and so drop the multiplier.
     dollar_risk = risk_fixed if risk_fixed else (account * risk_pct)
-    shares = max(1, int(dollar_risk / risk_per_share))
+    # The 1e-9 is the fire path's (`auto_trader._sized_quantity`): a float
+    # quotient such as 669.9999999999999 for an exact 670 must not lose a
+    # share. Without it the card rounded DIFFERENTLY from the auto-trader on
+    # exact boundaries (REGIME-SIZING-AUDIT r1 finding 3: conviction -36,
+    # account 50,000, 1%, risk/share 0.25 -> 669 where the exact figure is 670).
+    shares = max(1, int(dollar_risk / risk_per_share + 1e-9))
     return shares, round(dollar_risk, 2)
 
 

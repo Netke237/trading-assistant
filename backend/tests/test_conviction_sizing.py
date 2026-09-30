@@ -33,8 +33,13 @@ def test_auto_trader_uses_the_shared_helper():
     assert auto_trader.conviction_mult is conviction_mult
 
 
-def test_no_inlined_formula_survives_in_either_caller():
-    """The literal clamp form must not reappear in auto_trader."""
+def test_the_old_clamp_literal_has_not_reappeared_in_auto_trader():
+    """A tripwire for ONE spelling only: the literal clamp form this module
+    replaced must not reappear in auto_trader. It is not an anti-drift proof —
+    any other spelling passes it, and it never opened stock_scan.py (the old
+    name, "..._in_either_caller", claimed both; REGIME-SIZING-AUDIT r1 finding
+    6). The behavioural proof that both call sites really call the ramp is
+    tests/test_regime_sizing_parity.py."""
     src = Path("app/services/auto_trader.py").read_text()
     assert "max(min_mult" not in src, "auto_trader re-inlined the clamp form"
 
@@ -77,10 +82,12 @@ def test_there_is_no_dead_zone():
     """Every conviction step must move the multiplier — the clamp's actual bug.
 
     Under max(min_mult, conv/full) with min_mult=0.5, conviction 0..20 all
-    produced 0.5. Nothing in [0, full] may plateau.
+    produced 0.5. Nothing in [-full, full] may plateau — the NEGATIVE half
+    too, since grading headwind is the point of the 2026-09-19 two-sided ramp
+    (it was swept over [0, 40] only; REGIME-SIZING-AUDIT r1 finding 7).
     """
-    vals = [conviction_mult(c, CFG) for c in range(0, 41)]
-    assert all(b > a for a, b in zip(vals, vals[1:])), "multiplier plateaus somewhere in [0, 40]"
+    vals = [conviction_mult(c, CFG) for c in range(-40, 41)]
+    assert all(b > a for a, b in zip(vals, vals[1:])), "multiplier plateaus somewhere in [-40, 40]"
 
 
 def test_ramp_matches_hand_computed_table():
@@ -93,9 +100,28 @@ def test_ramp_matches_hand_computed_table():
         assert conviction_mult(conv, CFG) == pytest.approx(want), f"conviction {conv}"
 
 
-def test_multiplier_never_exceeds_one_or_drops_below_zero():
+def test_multiplier_stays_within_min_mult_and_one():
+    """The invariant is [min_mult, 1], not [0, 1] (the old name and bound)."""
     for conv in range(-100, 201, 7):
-        assert 0.0 <= conviction_mult(conv, CFG) <= 1.0
+        assert CFG["min_mult"] <= conviction_mult(conv, CFG) <= 1.0
+
+
+def test_the_ramp_is_symmetric_about_neutral():
+    """m(c) + m(-c) == 2 * m(0) inside the ramp: headwind and tailwind of the
+    same strength move size by the same amount."""
+    mid = conviction_mult(0, CFG)
+    for c in range(0, 41):
+        assert conviction_mult(c, CFG) + conviction_mult(-c, CFG) == pytest.approx(2 * mid)
+
+
+@pytest.mark.parametrize("lo,full", [(0.3, 40), (0.5, 20), (0.1, 75), (1.0, 40), (0.3, 100)])
+def test_endpoints_and_midpoint_hold_off_the_shipped_config(lo, full):
+    cfg = {"enabled": True, "min_mult": lo, "full_conviction_pct": full}
+    assert conviction_mult(-full, cfg) == pytest.approx(lo)
+    assert conviction_mult(-full - 5, cfg) == pytest.approx(lo)
+    assert conviction_mult(0, cfg) == pytest.approx((1 + lo) / 2)
+    assert conviction_mult(full, cfg) == pytest.approx(1.0)
+    assert conviction_mult(full + 5, cfg) == pytest.approx(1.0)
 
 
 # ── Config robustness (the two asymmetries the old pair had) ───────────────────
