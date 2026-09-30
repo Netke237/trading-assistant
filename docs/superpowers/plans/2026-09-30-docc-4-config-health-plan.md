@@ -912,3 +912,26 @@ It verified each fix against main `96763b2`:
 - **B5, B12:** the float encoding and raw keys hold.
 
 Next: build revision 4. The code stage gets its own cap of three rounds.
+
+## 11. Build and code round 1 (round 5, 2026-09-30): CLEAN, zero gate-level findings
+
+Built on revision 4 in `60b49ff` and `8124abe`.
+
+**Build deviation:** the horizons walker skips `direction_conviction` at any depth. A misplaced block is already reported as an error, so also warning about it would only add noise.
+
+**Before the round:**
+- The full backend suite passes: 4228 passed, 1 skipped.
+- Mutations m1-m15 are all killed. T13 and T29 were strengthened, and T29b was added.
+
+**The code round** was gated and reviewed the whole diff. The reviewer found:
+- **No behaviour change at any existing call site.** 480 old-vs-new direction_conviction cases gave the same return values and byte-identical messages. `validate_money_blocks` gives the same class, message and errors, and its once-per-process log is unchanged.
+- **Imports and registration hold.** `import app.main` works in a fresh interpreter, 15 loaders register and none is wrongly registered.
+- **Every projection matches its loader,** including the AutoTradeService fallbacks.
+- **Zero false greens** across 59 mutated scoring files, each run through `report()` and through the scan and fire validators.
+- **The header write** is still atomic and does not accumulate.
+
+It also noted two items below the gate, neither acted on:
+- A save and a hand-revert landing inside one poll can show green for that single poll.
+- `full_conviction_pct: 0` shows green, which matches how the scan and fire run.
+
+The code stage is closed. It waits on Kenneth to merge.
