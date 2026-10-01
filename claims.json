@@ -7,6 +7,14 @@
       "expires_at": "2026-10-01T06:41:47Z",
       "note": "apply round-6 fix, close plan stage, build runner to v6",
       "task": "MEAS-MARKET-DATA-MEASUREMENT"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/practical-rosalind-a6ad35",
+      "claimed_at": "2026-10-01T04:09:41Z",
+      "expires_at": "2026-10-01T07:09:41Z",
+      "note": "claim.py: Windows wrote ledger as 'claims.json\\r' - bytes stdin + legacy-tolerant load + test",
+      "task": "CLAIMS-WINDOWS-CRLF"
     }
   ]
 }
