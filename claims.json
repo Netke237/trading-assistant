@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/options-chain-expiry-floor",
-      "claimed_at": "2026-10-01T22:49:46Z",
-      "expires_at": "2026-10-02T01:49:46Z",
-      "note": "merge to main (Kenneth: 'Merge'); claim had expired",
-      "task": "OPTIONS-SHORTLIST-RANK-GAP3-NO-HOLD-EXPIRY"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/intelligent-allen-463f3h",
       "claimed_at": "2026-10-01T22:52:15Z",
       "expires_at": "2026-10-02T01:52:15Z",
