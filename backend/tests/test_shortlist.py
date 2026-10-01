@@ -1,6 +1,9 @@
 """Tests for shortlist cap enforcement in POST /api/scan."""
 
 from contextlib import ExitStack
+
+import pytest
+
 from unittest.mock import patch, AsyncMock
 from app.scoring.stock_scorer import StockScoreCard, RuleResult
 from app.scoring.contract_validator import ContractScoreCard, ContractScoreBreakdown
@@ -303,6 +306,28 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
         })
     assert r.status_code == 200
     assert seen and all(s == ((30, 400), 201) for s in seen), seen
+
+
+@pytest.mark.parametrize("overrides, floor", [(None, 21), ({"min_dte": 45}, 45)])
+def test_scan_without_hold_days_passes_the_validators_min_dte(client, overrides, floor):
+    """No hold days: the floor is the min_dte the validator applies (the
+    override, else the YAML's 21). The fetch used a fixed 21, so a min_dte of 45
+    fetched an expiry whose every contract was dte_too_short and the symbol
+    dropped out of the scan."""
+    seen = []
+
+    async def _chain(_client, symbol, **kw):
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        return _MOCK_CHAIN
+
+    body = {"universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing"}
+    if overrides is not None:
+        body["overrides"] = overrides
+    with _enter_shortlist_patches(10) as stack:
+        stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
+        r = client.post("/api/scan", json=body)
+    assert r.status_code == 200
+    assert seen and all(s == (None, floor) for s in seen), seen
 
 
 def test_bearish_spread_legs_use_the_main_contracts_expiry(client):

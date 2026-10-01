@@ -21,7 +21,8 @@ from app.data.market import (
 )
 from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.contract_validator import (
-    CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, validate_contract,
+    CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, effective_min_dte,
+    validate_contract,
 )
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.trade_plan import build_trade_plan
@@ -160,7 +161,10 @@ async def get_contracts(
     async with httpx.AsyncClient(timeout=8) as client:
         raw_chain = await fetch_option_chain_async(
             client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds,
-            min_dte_floor=widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None,
+            # The floor the validator applies below, so no fetched expiry is
+            # certain to be rejected as dte_too_short (scan.py does the same).
+            min_dte_floor=(widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None
+                           else effective_min_dte(rules)),
         ) or []
 
         # 2. Fetch current stock price.

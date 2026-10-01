@@ -105,3 +105,87 @@ def test_an_expiry_exactly_at_the_floor_is_kept():
     today = date(2026, 9, 29)
     dates = _dates(today, 199, 201, 263)
     assert _nearest_expiration_in_window(dates, (30, 400), today, min_dte_floor=201) == _dates(today, 201)[0]
+
+
+# ── No hold window: the pick must respect the validator's min_dte ─────────────
+#
+# With no hold days the fetch took the first expiry of 21+ days whatever the
+# contract rules said. A min_dte override of 45 then rejected every contract on
+# that expiry as dte_too_short and the symbol silently dropped out of the scan.
+
+import asyncio  # noqa: E402
+
+import app.data.market as market  # noqa: E402
+from app.data.market import _first_expiration_at_or_above, fetch_option_chain_async  # noqa: E402
+from app.scoring.contract_validator import effective_min_dte, validate_contract  # noqa: E402
+
+
+def test_no_window_pick_skips_expiries_below_a_45_day_floor():
+    today = date(2026, 9, 29)
+    dates = _dates(today, 7, 24, 31, 52, 80)
+    assert _first_expiration_at_or_above(dates, today, None) == _dates(today, 24)[0]  # the old pick
+    assert _first_expiration_at_or_above(dates, today, 45) == _dates(today, 52)[0]
+
+
+def test_no_window_pick_keeps_an_expiry_exactly_at_the_floor():
+    today = date(2026, 9, 29)
+    assert _first_expiration_at_or_above(_dates(today, 24, 45, 80), today, 45) == _dates(today, 45)[0]
+
+
+def test_no_window_pick_returns_none_when_nothing_reaches_the_floor():
+    today = date(2026, 9, 29)
+    assert _first_expiration_at_or_above(_dates(today, 7, 24, 31), today, 45) is None
+
+
+def test_effective_min_dte_is_the_override_else_the_yaml():
+    assert effective_min_dte(None) == 21
+    assert effective_min_dte({}) == 21
+    assert effective_min_dte({"min_dte": 45}) == 45
+    assert effective_min_dte({"min_dte": "45"}) == 45  # cast as validate_contract casts it
+    assert effective_min_dte({"max_delta": 0.6}) == 21
+
+
+class _FakeTradier:
+    """Answers the expirations and chains calls; records the chain expiry asked for."""
+
+    def __init__(self, dates):
+        self.dates = dates
+        self.chain_expiries = []
+
+    async def get(self, url, headers=None, params=None):
+        if url.endswith("/expirations"):
+            body = {"expirations": {"date": self.dates}}
+        else:
+            self.chain_expiries.append(params["expiration"])
+            body = {"options": {"option": [{
+                "symbol": "XOM", "option_type": "call", "strike": 110.0,
+                "bid": 2.0, "ask": 2.2, "last": 2.1, "volume": 500, "open_interest": 900,
+                "greeks": {"delta": 0.45, "theta": -0.04, "mid_iv": 0.3},
+            }]}}
+
+        class _R:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return body
+        return _R()
+
+
+def test_fetch_with_a_45_day_min_dte_returns_contracts_the_validator_accepts(monkeypatch):
+    today = date.today()
+    dates = _dates(today, 24, 52, 80)
+    monkeypatch.setattr(market, "_tradier_base", lambda: "https://sandbox.tradier.test")
+    monkeypatch.setattr(market, "_headers", lambda *a, **k: {})
+    monkeypatch.setitem(market._expirations_cache, "XOM", (dates, today.isoformat()))
+    fake = _FakeTradier(dates)
+
+    rules = {"min_dte": 45}
+    chain = asyncio.run(fetch_option_chain_async(
+        fake, "XOM", option_type="C", min_dte_floor=effective_min_dte(rules)))
+
+    assert fake.chain_expiries == [_dates(today, 52)[0]]
+    assert chain, "the fetch returned no contracts"
+    assert all(c["dte"] >= 45 for c in chain)
+    card = validate_contract({**chain[0], "symbol": "XOM"}, 80, overrides=rules)
+    assert "dte_too_short" not in card.reject_reasons

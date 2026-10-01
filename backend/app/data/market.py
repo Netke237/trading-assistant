@@ -728,6 +728,28 @@ def _nearest_expiration_in_window(
     return min(near, key=lambda d: abs(_dte(d) - centre))
 
 
+# The no-hold-window fallback floor when a caller passes none; it equals
+# contract_rules.yaml's hard_reject.min_dte default.
+_DEFAULT_MIN_DTE_FLOOR = 21
+
+
+def _first_expiration_at_or_above(
+    dates: list[str], today: date, min_dte_floor: Optional[int],
+) -> Optional[str]:
+    """The nearest listed expiry at or above `min_dte_floor` days (21 when None).
+
+    Used when no hold window is set. The floor must be the contract validator's
+    min_dte (contract_validator.effective_min_dte), not a fixed 21: a min_dte
+    override of 45 used to fetch the first 21+ day expiry, every contract of
+    which was then rejected as dte_too_short, dropping the symbol from the scan.
+    """
+    floor = _DEFAULT_MIN_DTE_FLOOR if min_dte_floor is None else min_dte_floor
+    return next(
+        (d for d in sorted(dates) if (date.fromisoformat(d) - today).days >= floor),
+        None,
+    )
+
+
 def fetch_option_chain(
     symbol: str,
     expiry: Optional[str] = None,
@@ -764,11 +786,10 @@ def fetch_option_chain(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
-                None,
-            )
+            target_exp = _first_expiration_at_or_above(dates, _today, min_dte_floor)
             if target_exp is None:
+                logger.info("chain %s: no expiry at/above floor %s (listed: %d)",
+                          symbol, min_dte_floor, len(dates))
                 return []
 
         chain_resp = httpx.get(
@@ -1446,11 +1467,10 @@ async def fetch_option_chain_async(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
-                None,
-            )
+            target_exp = _first_expiration_at_or_above(dates, _today, min_dte_floor)
             if target_exp is None:
+                logger.info("chain %s: no expiry at/above floor %s (listed: %d)",
+                          symbol, min_dte_floor, len(dates))
                 return []
 
         chain_resp = await client.get(

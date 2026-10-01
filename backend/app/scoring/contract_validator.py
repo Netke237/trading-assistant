@@ -383,6 +383,20 @@ def effective_contract_overrides(overrides: dict | None) -> dict[str, float | in
     }
 
 
+def effective_min_dte(overrides: dict | None) -> int:
+    """The `min_dte` hard-reject floor validate_contract() applies for
+    `overrides`: the override when present, else contract_rules.yaml's.
+
+    The chain fetch takes this as its expiry floor when no hold window is set,
+    so it never fetches an expiry every contract of which is then rejected as
+    dte_too_short (a min_dte override of 45 used to fetch the first 21+ day
+    expiry and drop the symbol). With a hold window the scan passes
+    dte_window.widened_min_dte instead, which is what replaces min_dte there.
+    """
+    return int(effective_contract_overrides(overrides).get(
+        "min_dte", _load_config()["hard_reject"]["min_dte"]))
+
+
 def _contract_id(contract: dict) -> str:
     side = "C" if contract.get("is_call", True) else "P"
     return f"{contract.get('symbol', '')}|{contract.get('strike', '')}|{contract.get('expiry', '')}|{side}"
