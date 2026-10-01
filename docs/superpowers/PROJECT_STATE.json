@@ -1537,7 +1537,7 @@
       "id": "WATCH-RESEND-HEAD-OF-LINE",
       "name": "A queued watch alert a channel always rejects no longer blocks the alerts behind it (skip on proof); per-channel delivery; queued alerts expire on re-enable",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "plan": "docs/superpowers/plans/2026-10-01-watch-resend-head-of-line-plan.md",
@@ -1547,7 +1547,7 @@
         "pattern": "def _drain_watch\\(",
         "note": "BUILT once the per-watch drain (plan 2.4) exists; it replaces _resend_watch's return-at-first-failure."
       },
-      "note": "2026-10-01: claimed on claude/youthful-carson-82x23x (restarted from main 863f95a). Decision WATCH-RESEND-HEAD-OF-LINE-2026-10-01. Plan v1 written; NEXT: plan round 1."
+      "note": "2026-10-01 PLAN ROUND 1 NOT CLEAN (fresh reviewer on v1): 8 gate -- expiry missed composite_watch.py's PATCH and named a nonexistent router file; drain must re-read the store after _collect's _write_effective writes; cap evicted before the drain; post-outage 429 could abandon a good head; PATCH/run race; any() over a dict; evaluator patch points moved (tests would hit real config/sends); probing unbounded under a Telegram outage. 9 below-gate. ALL addressed in plan v2 ([R1-n] tags); v2 also replaces round-1's 'qualified failure' idea (deadlocks when the stuck alert is the only traffic) with probe + retry + two proven runs. NEXT: plan round 2. || 2026-10-01: claimed on claude/youthful-carson-82x23x (restarted from main 863f95a). Decision WATCH-RESEND-HEAD-OF-LINE-2026-10-01. Plan v1 written; NEXT: plan round 1."
     }
   ],
   "already_shipped": [
