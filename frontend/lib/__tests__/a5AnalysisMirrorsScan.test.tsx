@@ -152,7 +152,7 @@ describe('T-F3 — persist migration v16 → v17', () => {
   it('persists the request next to its result', () => {
     act(() => useScanStore.getState().setStockScanResult(RESULT('P') as never, { strategy: 'z' } as never));
     const stored = JSON.parse(localStorage.getItem('bamendjou-scan-store') ?? '{}');
-    expect(stored.version).toBe(17);
+    expect(stored.version).toBe(18);
     expect(stored.state.stockScanRequest).toEqual({ strategy: 'z' });
     localStorage.clear();
   });

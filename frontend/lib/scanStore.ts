@@ -251,6 +251,13 @@ function stripLegacyIvFromScanResult(value: unknown): unknown {
   };
 }
 
+/** v18: a persisted options result graded with Step 3's min_stock_score as
+ *  the contract floor (see the migrate branch). */
+function hasStepThreeMinScore(value: unknown): boolean {
+  return isRecord(value) && isRecord(value.contract_rules)
+    && 'min_stock_score' in value.contract_rules;
+}
+
 function normalizePersistedScanResult(value: unknown): unknown {
   if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
   return {
@@ -581,7 +588,7 @@ export const useScanStore = create<ScanStoreState>()(
         return quotaSafeLocalStorage();
       }),
       skipHydration: true,
-       version: 17,
+       version: 18,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -722,6 +729,23 @@ export const useScanStore = create<ScanStoreState>()(
           // reads as "use current settings, and say so" -- StoreHydration may
           // then attach the backend's record when its scan_id matches.
           s = { ...s, stockScanRequest: null };
+        }
+        if (version < 18) {
+          // Open question #57. Before the options resolver stripped Step 3's
+          // stocks-only "Min stock score", an options scan posted it and the
+          // backend graded contracts with it IN PLACE OF contract_rules.yaml's
+          // floor (55), recording it in `contract_rules`. Step 6 sends that
+          // record back to /api/contracts, so a restored blob keeps grading on
+          // the Step-3 value until the user rescans.
+          //
+          // Dropped, not edited. Removing just the key would make Step 6 grade
+          // at 55 while the Step 4/7 cards from the same result were graded at
+          // the Step-3 value -- two floors on one screen with nothing saying
+          // so. Same "clear the result" shape as setContext's context change.
+          // No current writer records the key, so this touches only old blobs.
+          if (hasStepThreeMinScore(s.scanResult)) {
+            s = { ...s, scanResult: null, optionsScanAt: null };
+          }
         }
         return s;
       },
