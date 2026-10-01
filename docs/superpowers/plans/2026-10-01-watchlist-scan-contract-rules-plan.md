@@ -1,4 +1,4 @@
-# WATCHLIST-SCAN-CONTRACT-RULES — plan (r8; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; all addressed below)
+# WATCHLIST-SCAN-CONTRACT-RULES — plan (r9; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; all addressed below)
 
 - **Phase:** `WATCHLIST-SCAN-CONTRACT-RULES` (PROJECT_STATE.json), deferred by `STEP6-SCAN-CONTRACT-RULES`.
 - **Branch:** `claude/youthful-carson-82x23x` (off main at the DOCC-5 merge).
@@ -166,12 +166,18 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      strikes], ...gradingToCtx(grading) }` (an empty `contract_rules` is dropped from the URL by `api.ts`). A group
      with no grading sends `{ expiry, strikes }`. `strikes` disables `limit` and `max_price` server-side.
    - `refreshContracts`' `useCallback` depends on `[watchedIds, grading]`, so a grading change refetches.
-   - Results are kept per group, keyed by the group key PLUS the sorted strike set that request carried,
-     and only from the latest non-aborted refresh (an abort or a new refresh discards older results). Each
-     stored id is matched only against the result of a request that included its strike, using today's
-     exact match and then the trunc fallback above. An id whose group has no settled result of that kind
-     yet (first mount, a newly starred expiry/grading, a strike newly joining a group, mid-refresh after an
-     abort) is a `missing` row with `reason: 'loading'`. With the `strikes` filter two groups rarely
+   - Kept results: a list of settled group results `{ groupKey, strikes: Set<number>, outcome: rows |
+     'rejected' }`, where `groupKey` is (symbol, right, expiry, gradingKey). Nothing is discarded when a
+     refresh STARTS: the last settled set stays on screen while a refresh is in flight (today's behaviour,
+     `page.tsx:113-116` replaces `contracts` only on success). When a non-aborted refresh settles, its
+     results REPLACE the kept list atomically (an aborted refresh changes nothing). The zero-ids and
+     zero-groups paths clear the list.
+   - Matching an id: among kept results with the id's `groupKey` whose `strikes` CONTAINS the id's
+     (trunc) strike — a superset request counts, so unstarring a sibling does not blank a row — use the
+     first; `rejected` -> `fetch_failed`; rows -> today's exact-id match then the trunc fallback, else
+     `not_listed`. No such kept result (first mount, a newly starred expiry/grading, a strike newly joining
+     a group before a request carrying it settles) -> `missing` with `reason: 'loading'`. A row is thus
+     never graded from a request that lacked its strike, and never flashes Loading on Refresh or unstar. With the `strikes` filter two groups rarely
      return the same row, so this is defensive, and it covers residual 6's shared 187/187.5 id.
    - Rows become a discriminated union (round 2 S2), exported from the page module for tests:
      `type WatchedContractRow = { kind: 'live'; contract: OptionContract }
@@ -185,6 +191,10 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        hours; also, accepted, an expiry equal to today already delisted after the close).
      - Notes: loading -> "Loading…"; expired -> "Expired"; not_listed -> "Not in the current chain"; fetch_failed -> "Could
        not load the chain — retry"; invalid -> "Unreadable contract id".
+     - Status: `loading` rows use `PENDING` (the domain Status for in-flight); other missing/invalid rows
+       use `NO_DATA`.
+     - Expired is classified inside `refreshContracts` (a page left open past midnight reclassifies on the
+       next refresh; accepted).
      - The YAML marker (2.3.7) is shown on live rows only; a missing/invalid row's tooltip is its note.
      - `invalid` rows render exactly like `missing` rows (star with working unstar, status `NO_DATA`, dash
        cells, sort last, counted in tab and header) except the label is the raw id and the symbol cell is
@@ -192,7 +202,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        the user delete a junk id the server keeps re-supplying.
      - Missing rows render the label (`contractLabel` from the id parts), status `NO_DATA`, dashes in every
        market cell, no `DTEProgressBar`, a plain-text tooltip with the note, and the star (unstar works).
-     - Sort: missing rows always last, in both directions and for every sort key; live rows sort as today.
+     - Sort: missing and invalid rows always last, in both directions and for every sort key, ordered
+       among themselves by their position in `watchedIds` (stable across renders); live rows sort as today.
      - `ivColumnLabel(ivBasesOf(...))` receives live contracts only.
      - Offline: the page's single `offline` flag is today shared by both tabs (`page.tsx:62`, set by
        `refreshWatchlist` and `refreshContracts`), so a contracts success hides a stocks failure and vice
@@ -308,7 +319,8 @@ so the existing no-price 503 can never stand in for the new one:
    `expiry` given + a chain of another expiry -> 200 `[]`; `expiry` given WITH `hold_min_days=45&
    hold_max_days=60` (so main would compute non-None bounds) -> the fetch's kwargs have
    `dte_bounds is None` and `min_dte_floor` absent or None, while the response still shows
-   `breakdown.dteDetail.preferred_min == 80` (grading widened; multiplier patched as in 6f); no `expiry` + empty chain -> 200 `[]` (unchanged). `strikes=187,` and `187, 190`
+   `breakdown.dteDetail.preferred_min == 80` (grading widened; multiplier patched as in 6f); unlisted `expiry` whose fallback chain is also empty -> 503 (documented cause); no `expiry` + empty
+   chain -> 200 `[]` (unchanged). `strikes=187,` and `187, 190`
    parse.
 6e. scan.py's recording check goes through `is_finite_rule_value` (existing scan contract-rules tests
    stay green; one added for a huge int recorded as None, as today).
@@ -352,7 +364,10 @@ Frontend:
     e. Missing rows: before the group's `getContracts` mock resolves, the row shows "Loading…" and NOT
        "Not in the current chain"; after it resolves without the id -> "Not in the current chain";
        starring a second strike into an existing group shows that row "Loading…" until a request carrying
-       its strike resolves; a past expiry ->
+       its strike resolves, while the FIRST row keeps showing its score (not Loading) with the new request
+       held pending; likewise clicking Refresh with the mock held pending keeps every live row's score;
+       unstarring one of two strikes in a group keeps the other row live (superset match); a group whose
+       request rejected shows "Could not load the chain — retry", not Loading; a past expiry ->
        "Expired"; a rejected group -> "Could not load the chain — retry" while another group's rows stay
        visible; dash cells; missing rows sort last under score, price and dte in both directions; a past
        expiry makes no `getContracts` call.
@@ -362,7 +377,8 @@ Frontend:
        `api.removeWatchedContract(rawId)`.
     g. Every star expired or invalid -> no `getContracts` call and no offline banner. One group rejecting
        -> rows show `fetch_failed`, no banner; all groups rejecting -> banner (contracts-only text); a slow group fetch that rejects
-       AFTER `ids` is cleared to `[]` -> no banner; a contracts success does not
+       AFTER `ids` is cleared to `[]` -> no banner; unstarring the last valid star while one expired star
+       remains (zero-groups path) -> the button reads "Refresh" (not "Refreshing…") and no banner; a contracts success does not
        clear a stocks failure.
     Clock: every Watchlist and `contractGrading` test with a dated id pins the clock
     (`jest.useFakeTimers().setSystemTime(new Date('2026-10-01T15:00:00'))`) or builds expiries relative to
