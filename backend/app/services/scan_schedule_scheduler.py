@@ -137,6 +137,13 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                     from app.schemas import ScanRequest, ScanResult
                     from app.routers.scan import _execute_scan_core
                     req = ScanRequest.model_validate(entry["resolved_request"])
+                    # Step 3's min_stock_score is stocks-only, but entries saved
+                    # before the options resolver stripped it (open question #57)
+                    # still carry it, and contract_validator would apply it as
+                    # the contract hard-reject floor. Entries are replayed as
+                    # stored, so drop it here rather than in contract_validator,
+                    # whose direct callers set it on purpose.
+                    req.overrides.pop("min_stock_score", None)
                     previous_result = (
                         ScanResult.model_validate_json(previous_row.result_json)
                         if previous_row and previous_row.result_json else None

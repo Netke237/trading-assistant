@@ -334,7 +334,7 @@ def test_bearish_extension_that_rounds_to_zero_is_dropped():
 
 
 def test_bearish_rung_rounding_up_to_one_cent_is_kept():
-    # 0.005 rounds to 0.01 (positive): the post-rounding test must not drop it.
+    # 0.006 rounds to 0.01 (positive): the post-rounding test must not drop it.
     assert _build_target_ladder(entry=1.0, stop=1.2, direction="Bearish", primary=0.006,
                                 extensions=[], fallback_mult=2.0) == [0.01]
 
