@@ -1,4 +1,4 @@
-# WATCHLIST-SCAN-CONTRACT-RULES — plan (r4; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; all addressed below)
+# WATCHLIST-SCAN-CONTRACT-RULES — plan (r5; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; all addressed below)
 
 - **Phase:** `WATCHLIST-SCAN-CONTRACT-RULES` (PROJECT_STATE.json), deferred by `STEP6-SCAN-CONTRACT-RULES`.
 - **Branch:** `claude/youthful-carson-82x23x` (off main at the DOCC-5 merge).
@@ -24,9 +24,9 @@
 3. `watchedContractsStore` (persist key `bamendjou-watched-contracts-v1`, version 2) holds `ids: string[]`.
    `syncFromBackend` replaces `ids` from `GET /api/watched-contracts` (`list[str]`).
 4. Backend `watched_contracts` table: `id`, `contract_id` (unique), `created_at`. `POST` takes `{contract_id}`,
-   is idempotent, and leaves an existing row alone. `DELETE /{contract_id:path}` is idempotent. Tables come
-   from `create_all()`, which does not add columns to an existing table, so a new column needs an Alembic
-   migration. The single head is `f3d5c81b0a47`.
+   is idempotent, and leaves an existing row alone. `DELETE /{contract_id:path}` is idempotent. Live DBs are
+   Alembic-managed; tests and ad-hoc bootstraps use `create_all()` (`database.py:33-35`), which does not add
+   columns to an existing table, so a new column needs an Alembic migration. The single head is `f3d5c81b0a47`.
 5. Watchlist (`watchlist/page.tsx:99-127`) makes one `api.getContracts(sym, right, undefined, signal)` per
    (symbol, right) and matches each stored id against the flat result. This is the **defect marker**.
    An id it cannot match is silently dropped (`:183-199`). Three things make a star vanish today: the
@@ -76,28 +76,37 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      for a row that already exists with NULL or stale grading (round 2 S1).
    - The finite-number check is ONE helper, `is_finite_rule_value(val) -> bool` in
      `app/scoring/contract_validator.py` (not bool, int/float, `math.isfinite`, OverflowError -> False),
-     used by `_parse_contract_rules`, the POST validator, and scan.py's recording check (`scan.py:1720-1724`,
-     today a third copy), so the three cannot drift (a POST 422 would roll the star back).
+     used by `_parse_contract_rules`, the POST validator, and scan.py's recording check (`scan.py:1719-1725`,
+     today a third copy), so the three cannot drift (a POST 422 would silently degrade the star to YAML
+     grading).
    - `GET /api/watched-contracts` keeps returning `list[str]` (no change to its shape).
    - `GET /api/contracts` gains two optional parameters, both absent = today's behaviour exactly:
      - `expiry: str | None`, forwarded to `fetch_option_chain_async(expiry=...)`. When given, the response
        keeps only rows whose `expiry` equals it (the fetch falls back to the window/default expiry when the
        date is not listed, e.g. expired; those rows are not the star's).
      - `strikes: str | None`, a comma-separated list of integer strikes (422 if any item is not an int;
-       an empty string `strikes=` is treated as absent).
+       items are stripped of spaces and empty items dropped, so `187,` and `187, 190` parse; a list that is
+       empty after that, including `strikes=`, is treated as absent).
        When given, rows are filtered to those strikes AFTER scoring, and neither `max_price` nor `limit`
        is applied: the caller asked for specific contracts, so nothing may cut them (round 2 B1: SPY/TSLA
        list >100 strikes per expiry, and a hard-rejected star ties at 0 and was cut in strike order).
      Grading is unchanged by either: the same hold-widened overrides apply, so the score equals what the
      call without them gives for that contract when it lands on the same expiry (pinned by test 6c).
+     - When `expiry` is given and the raw chain comes back empty (Tradier outage/timeout, which
+       `fetch_option_chain_async` swallows into `[]`, or no quoted strike at all), respond 503 "Option chain
+       unavailable for <symbol> <expiry>", so the client can tell "could not load" from "loaded, contract
+       not in it" (round 4 S5). A non-empty chain of a DIFFERENT expiry (requested date not listed) filters
+       to `[]` with 200, as before. Absent `expiry` = unchanged (empty chain -> 200 `[]`).
    - New `GET /api/watched-contracts/detail` returns `list[{contract_id, grading | null}]` in `created_at`
      order. A stored grading that no longer validates (hand-edited DB) is served as `null`, never a 500.
 
 ### 2.3 Frontend
 
 1. `types/domain.ts`: export `ContractGrading`.
-2. `lib/api.ts`: `addWatchedContract(id, grading?)` sends `grading` only when given;
-   `getWatchedContractsDetail()`; `getContracts` ctx gains `expiry?: string` and `strikes?: number[]`.
+2. `lib/api.ts`: `addWatchedContract(id, grading?: ContractGrading | null)` puts `grading` in the body
+   whenever it is `!== undefined` (so an explicit `null` is sent as `"grading": null`, absent = no key);
+   `getWatchedContractsDetail()`; `getContracts` ctx gains `expiry?: string` (sent URL-encoded as
+   `&expiry=`) and `strikes?: number[]` (sent as `&strikes=187,190`; omitted when empty).
 3. `watchedContractsStore`: new persisted `grading: Record<string, ContractGrading>`. `version` 2 -> 3;
    `migrate` v<3 sets `grading: {}` and keeps `ids` (the two existing identity-passthrough migrate tests
    are rewritten accordingly). `add(id, grading?)` records grading when given, INCLUDING when the id is
@@ -121,14 +130,16 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
    hold or nulls, `stockScoreBySymbol[symbol] ?? 70`), derives that symbol's `getContracts` ctx FROM it
    through one pure helper `gradingToCtx(g)` in `lib/contractGrading.ts` (null contract_rules / null hold
    -> the field OMITTED, i.e. `undefined`, exactly what Step 6 sends today, so the two existing
-   `toBeUndefined()` tests stay green),
+   `toBeUndefined()` tests stay green; `{}` is passed THROUGH as `{}`, as Step 6 sends it today and
+   `contractRules.test.tsx:55-61` expects — `api.ts:420` drops an empty object from the URL),
    and keeps the gradings in local state `gradingBySymbol` set together with the fetched rows. The row's
    `<ContractStar grading={gradingBySymbol[symbol]}>` therefore stars with exactly the inputs that graded
    the row on screen, even if `scanResult` is replaced while Step 6 is mounted (round 2 N4).
 6. Watchlist `refreshContracts`:
    - Each id is parsed up front by `parseContractId(id)` in `lib/contractGrading.ts`: exactly 4 `|` parts,
-     right `C`/`P`, ISO `YYYY-MM-DD` expiry, finite strike. An id that fails is a `missing` row with
-     `reason: 'invalid_id'` and is never sent, so one bad id cannot 422 its siblings' group. The strike sent
+     a non-empty upper-case symbol (`/^[A-Z][A-Z0-9.\-]*$/`), right `C`/`P`, ISO `YYYY-MM-DD` expiry,
+     finite strike. An id that fails is a `missing` row with
+     kind `invalid` and is never sent, so one bad id cannot 422 its siblings' group. The strike sent
      is `Math.trunc(parseFloat(strike))`, matching market.py's `int()`, de-duplicated per group; matching a
      result row uses the same trunc rule (replacing today's `Math.round` fallback) plus today's exact-id
      match first.
@@ -136,30 +147,42 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      any fetch.
    - Group the rest by `(symbol, right, expiry, gradingKey)`, where `gradingKey` is a stable stringify of
      `gradingToCtx(grading)` with `stock_score` null normalised to 70 (so `{}`/`null` rules and
-     `null`/`70` score, which send equivalent requests, share a key), '' for none. One `getContracts` per group, with ctx `{ expiry, strikes: [the group's starred
-     strikes], stock_score, hold_min_days, hold_max_days, contract_rules (only when non-empty) }`. A group
+     `null`/`70` score, which send equivalent requests, share a key; empty `contract_rules` dropped from
+     the key); a grading that yields the same request as none (all null, or only `stock_score` 70) gets
+     '', the no-grading key.
+   - In the `/detail`-failure fallback the local grading is re-checked client-side (`isValidGrading`: finite
+     numbers, hold both-or-neither with max >= min, stock_score int 0-100); an invalid entry is treated as
+     no grading. One `getContracts` per group, with ctx `{ expiry, strikes: [the group's starred
+     strikes], ...gradingToCtx(grading) }` (an empty `contract_rules` is dropped from the URL by `api.ts`). A group
      with no grading sends `{ expiry, strikes }`. `strikes` disables `limit` and `max_price` server-side.
    - `refreshContracts`' `useCallback` depends on `[watchedIds, grading]`, so a grading change refetches.
    - Results are kept per group. Each stored id is matched only against its own group's result, using
-     today's exact match and then today's strike-rounding fallback. The same contract can be returned by two
-     groups, so a flat match would pick the wrong grade.
+     today's exact match and then the trunc fallback above. With the `strikes` filter two groups rarely
+     return the same row, so this is defensive, and it covers residual 6's shared 187/187.5 id.
    - Rows become a discriminated union (round 2 S2), exported from the page module for tests:
      `type WatchedContractRow = { kind: 'live'; contract: OptionContract }
-       | { kind: 'missing'; id; symbol; strike; expiry; right; reason: 'expired' | 'not_listed' | 'fetch_failed' | 'invalid_id' }`.
+       | { kind: 'missing'; id; symbol; strike; expiry; right; reason: 'expired' | 'not_listed' | 'fetch_failed' }
+       | { kind: 'invalid'; id }` — an unreadable id renders its raw id as the label (no `contractLabel`).
      The page exports only the TYPE (erased; Next's page-export check is unaffected); every runtime helper
      (parse, classify, sort comparator, gradingToCtx) lives in `lib/contractGrading.ts`.
-     - `reason`: `invalid_id` / `expired` as above (no fetch); `fetch_failed` when the group's `allSettled`
-       entry rejected; `not_listed` for a fulfilled group without the id (e.g. a strike Tradier skipped for
-       no bid/ask/last outside hours; also, accepted, an expiry equal to today already delisted after the
-       close).
-     - Notes: expired -> "Expired"; not_listed -> "Not in the current chain"; fetch_failed -> "Could not
-       load the chain — retry"; invalid_id -> "Unreadable contract id".
+     - `reason`: `expired` as above (no fetch); `fetch_failed` when the group's `allSettled` entry rejected
+       (network, 422, the no-price 503, or the new empty-chain 503); `not_listed` for a fulfilled group
+       without the id (the chain loaded but has no quoted row for that strike — e.g. no bid/ask/last outside
+       hours; also, accepted, an expiry equal to today already delisted after the close).
+     - Notes: expired -> "Expired"; not_listed -> "No quote in the current chain"; fetch_failed -> "Could
+       not load the chain — retry"; invalid -> "Unreadable contract id".
+     - The YAML marker (2.3.7) is shown on live rows only; a missing/invalid row's tooltip is its note.
      - Missing rows render the label (`contractLabel` from the id parts), status `NO_DATA`, dashes in every
        market cell, no `DTEProgressBar`, a plain-text tooltip with the note, and the star (unstar works).
      - Sort: missing rows always last, in both directions and for every sort key; live rows sort as today.
      - `ivColumnLabel(ivBasesOf(...))` receives live contracts only.
-     - `offline`: CHANGE from today (where `Promise.all` set it on any failure): set only when every fetched
-       group rejected; partial failures show per-row `fetch_failed` instead.
+     - Offline: the page's single `offline` flag is today shared by both tabs (`page.tsx:62`, set by
+       `refreshWatchlist` and `refreshContracts`), so a contracts success hides a stocks failure and vice
+       versa. The contracts tab gets its own `contractsOffline` state; `offline` stays the Stocks tab's.
+       `contractsOffline` is true only when at least one group was fetched and every fetched group rejected;
+       with zero groups (all stars expired/invalid) it is false. CHANGE from today, where `Promise.all` set
+       it on any failure: partial failures show per-row `fetch_failed` instead. The banner shows when
+       either flag is set, with today's text.
      - The tab count and header count include missing rows (every star is a row).
 7. Watchlist Contracts tab: a row whose grading is absent or has `contract_rules === null` shows a dim
    caution note in its status tooltip / a small marker: "Graded on contract_rules.yaml — starred before the
@@ -173,6 +196,13 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
   (same market data, same YAML). Starred contracts no longer vanish from the tab: each is listed live, or
   as Expired / Not in the current chain / Could not load.
 - Old stars (and stars whose scan recorded no rules) still grade on the YAML, now marked as such.
+- Intended, stated (round 4 S4): a star's saved hold days set its DTE floor (`widened_min_dte(lo,
+  hold_max) = max(lo-10, hold_max+1)`) and preferred band, while its DTE falls every day. So a star turns
+  REJECT `dte_too_short` once its DTE drops below the floor (and loses DTE-fit points on the way), long
+  before expiry. Example: Position 45-60 d, multiplier 2.0 -> window 90-120, floor 80; a contract starred at
+  90 DTE is REJECT about 10 days later. That is what the scan and Step 6 would say about that contract for
+  that holding plan today (it no longer leaves room for the hold), so it is the honest answer; the YAML-only
+  path's fixed 21-day floor hid it. Pinned by test 6f.
 - The Watchlist asks for the star's own expiry and strikes only, with no limit or price cap. One chain
   request per (symbol, right, expiry, grading) group instead of per (symbol, right): more requests when a
   user stars several expiries of one name. The response is smaller (only the starred strikes).
@@ -209,8 +239,8 @@ fixture (`:387-470`):
 3b. POST with an unknown rule key -> 201 and the key is not stored.
 4. 422 on: non-finite/bool rule value, hold max < min, only one hold bound, stock_score 101. *Kills a missing
    validator.*
-4b. Numeric-string rule value (`"5"`), bool (`true`) and a huge int (`1e400` as an int literal) -> 422,
-   not 500. *Kills lax pydantic coercion and the OverflowError path.*
+4b. Numeric-string rule value (`"5"`), bool (`true`) and a huge int (a 400-digit integer literal in the
+   raw JSON body, which Python parses as an int that overflows float) -> 422, not 500. *Kills lax pydantic coercion and the OverflowError path.*
 5. Hand-written invalid grading in the row -> `/detail` serves null, 200. *Kills a 500 on bad rows.*
 5b. The explicit-null clear path (which assigns Python None) leaves SQL NULL: a raw `grading IS NULL`
    query finds the row. *Kills JSON-null storage (`none_as_null` missing).*
@@ -229,6 +259,10 @@ fixture (`:387-470`):
 6d. `strikes`: a 150-row chain where every row scores the same and the starred strike is last in strike
    order, priced above `max_price` -> returned. Non-int item -> 422; `strikes=` -> same as absent.
    *Kills `limit`/`max_price` still applying.*
+6f. DTE decay: a stubbed contract at DTE 79 with hold 45-60 and multiplier 2.0 -> REJECT with
+   `dte_too_short`; the same at DTE 95 -> not DTE-rejected. *Pins 2.4's stated behaviour.*
+6g. `expiry` given + empty raw chain -> 503; `expiry` given + a chain of another expiry -> 200 `[]`;
+   no `expiry` + empty chain -> 200 `[]` (unchanged). `strikes=187,` and `187, 190` parse.
 6e. scan.py's recording check goes through `is_finite_rule_value` (existing scan contract-rules tests
    stay green; one added for a huge int recorded as None, as today).
 
@@ -242,6 +276,11 @@ Frontend:
    unstar whose DELETE rejects -> the id AND its grading are restored (*kills a grading-less rollback*);
    POST rejecting `new Error('API /api/watched-contracts → 422: …')` -> retried with `null`, the id stays,
    `grading[id]` is gone; retry also rejecting -> removed; POST rejecting 500 -> removed.
+8c. `lib/__tests__/api.test.ts` (existing file, its `global.fetch` convention): `addWatchedContract(id,
+   null)` body has `"grading":null`; omitted -> no `grading` key; `getContracts` with
+   `{expiry:'2026-12-18', strikes:[187,190]}` -> URL has `expiry=2026-12-18` and `strikes=187%2C190`
+   (pinned exactly to what the helper emits); `strikes: []` -> no `strikes` param.
+   *Kills dropping strikes/null on the wire, which would silently restore limit/max_price.*
 8b. `lib/__tests__/apiError.test.ts`: `statusOf` on the api message shapes; existing directOrder tests stay
    green. `lib/__tests__/contractGrading.test.ts`: `parseContractId` (valid, 3 parts, bad strike, bad
    expiry, `187.0` -> trunc 187), `gradingToCtx` null mapping, gradingKey normalisation, the comparator
@@ -264,8 +303,15 @@ Frontend:
        "Expired"; a rejected group -> "Could not load the chain — retry" while another group's rows stay
        visible; dash cells; missing rows sort last under score, price and dte in both directions; a past
        expiry makes no `getContracts` call.
-    f. A malformed id (`AAPL|abc|2026-12-18|C`) next to a valid star on the same symbol/right/expiry ->
-       "Unreadable contract id" row, the valid row live, `strikes` holds only the valid strike.
+    f. A malformed id (`AAPL|abc|<expiry>|C`) next to a valid star on the same symbol/right/expiry ->
+       an invalid row labelled with the raw id and "Unreadable contract id", the valid row live, `strikes`
+       holds only the valid strike.
+    g. Every star expired or invalid -> no `getContracts` call and no offline banner. One group rejecting
+       -> rows show `fetch_failed`, no banner; all groups rejecting -> banner; a contracts success does not
+       clear a stocks failure.
+    Clock: every Watchlist and `contractGrading` test with a dated id pins the clock
+    (`jest.useFakeTimers().setSystemTime(new Date('2026-10-01T15:00:00'))`) or builds expiries relative to
+    `Date.now()`, so no test starts failing when a literal date passes.
 
 Gates: `npm run typecheck`, Jest full, backend pytest full, `python3 scripts/state.py` exit 0.
 Deploy note (in the merge record): run `alembic upgrade head` (dev `sqlite+aiosqlite:///./dev.db` and prod)
