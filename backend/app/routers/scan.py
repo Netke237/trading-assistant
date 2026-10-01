@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import os
 import concurrent.futures
 from datetime import datetime, timezone
@@ -64,7 +63,7 @@ from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_even
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
-from app.scoring.contract_validator import effective_contract_overrides, effective_dte_limits
+from app.scoring.contract_validator import effective_contract_overrides, effective_dte_limits, is_finite_rule_value
 from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
@@ -1726,11 +1725,7 @@ async def _execute_scan_core(
         # A non-finite value ("inf", "nan" -- float() takes both) cannot be sent
         # back: it serialises as null and /api/contracts refuses it. Record
         # nothing instead, so Step 6 says the rules are unknown.
-        try:
-            _finite = all(math.isfinite(v) for v in _rules.values())
-        except OverflowError:  # an int too large for a float
-            _finite = False
-        if _finite:
+        if all(is_finite_rule_value(v) for v in _rules.values()):
             _contract_rules = _rules
         else:
             _log.warning("SCAN %s contract_rules not recorded: non-finite value in %s", scan_id, _rules)

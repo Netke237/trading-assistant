@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import yaml
 from dataclasses import dataclass, field
 from datetime import date
@@ -366,6 +367,23 @@ _CONTRACT_OVERRIDES: dict[str, tuple[str, Callable[[Any], float | int]]] = {
 }
 
 CONTRACT_OVERRIDE_KEYS: frozenset[str] = frozenset(_CONTRACT_OVERRIDES)
+
+
+def is_finite_rule_value(val: Any) -> bool:
+    """True for a contract-rule value that can be recorded, sent back and
+    applied: a real int/float (not a bool) that is finite as a float.
+
+    The ONE check behind _parse_contract_rules (GET /api/contracts), the
+    watched-contracts grading validator (POST /api/watched-contracts) and the
+    scan's recording of ScanResult.contract_rules. If the three drifted, a
+    scan could record rules that a star's POST then refuses, silently
+    degrading the star to YAML grading."""
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return False
+    try:
+        return math.isfinite(val)
+    except OverflowError:  # an int too large for a float
+        return False
 
 
 def effective_contract_overrides(overrides: dict | None) -> dict[str, float | int]:

@@ -121,6 +121,19 @@ def test_a_non_finite_rule_is_not_recorded(client):
     assert r.json()["contract_rules"] is None
 
 
+def test_a_huge_int_rule_is_not_recorded(client):
+    """int() keeps 10**400 an int, which overflows float: the shared
+    is_finite_rule_value check refuses it, as /api/contracts and the
+    watched-contracts POST would."""
+    with _scan_patches():
+        r = client.post("/api/scan", json={
+            "universe": ["XOM"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {**_LOOSE, "min_volume": 10 ** 400},
+        })
+    assert r.status_code == 200
+    assert r.json()["contract_rules"] is None
+
+
 def test_scan_without_contract_overrides_records_an_empty_rule_set(client):
     with _scan_patches():
         r = client.post("/api/scan", json={
