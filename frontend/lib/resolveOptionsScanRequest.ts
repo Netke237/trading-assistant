@@ -113,6 +113,11 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
           // harmless, because stock_scorer ignores keys it does not know, but
           // it meant the Step-3 value was being posted to a place nothing read.
           regime_headwind_caution_pct: _rhc, regime_headwind_reject_pct: _rhr,
+          // Stocks-mode only (its Step-3 hint says the Options scan does not
+          // read it). Forwarded, contract_validator's _CONTRACT_OVERRIDES took
+          // it as the contract hard-reject floor in place of
+          // contract_rules.yaml's 55 (open question #57).
+          min_stock_score: _mss,
           ...scoreOnlyOverrides } = scanOverrides;
   const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: ctx.shortlistMaxCandidates };
 

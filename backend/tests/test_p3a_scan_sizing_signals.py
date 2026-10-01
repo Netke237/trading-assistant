@@ -319,6 +319,26 @@ def test_bearish_ladder_with_a_positive_fallback_is_unchanged():
                                 extensions=[], fallback_mult=2.0) == [90.0]
 
 
+def test_bearish_primary_that_rounds_to_zero_is_dropped_not_kept():
+    """Open question #49: _valid tested `value <= 0` BEFORE rounding, so a
+    positive rung under 0.005 rounded to 0.0 and was kept. As targets[0] that is
+    a short with NO take-profit (backtesting.py skips a falsy tp). It must be
+    dropped like any other non-positive rung, so the fallback takes over."""
+    assert _build_target_ladder(entry=1.0, stop=1.2, direction="Bearish", primary=0.004,
+                                extensions=[], fallback_mult=2.0) == [0.6]
+
+
+def test_bearish_extension_that_rounds_to_zero_is_dropped():
+    assert _build_target_ladder(entry=1.0, stop=1.2, direction="Bearish", primary=0.5,
+                                extensions=[0.003], fallback_mult=2.0) == [0.5]
+
+
+def test_bearish_rung_rounding_up_to_one_cent_is_kept():
+    # 0.005 rounds to 0.01 (positive): the post-rounding test must not drop it.
+    assert _build_target_ladder(entry=1.0, stop=1.2, direction="Bearish", primary=0.006,
+                                extensions=[], fallback_mult=2.0) == [0.01]
+
+
 def test_pullback_ema_bearish_signal_is_none_when_no_positive_target_exists():
     """The public path: a signal function turns the empty ladder into no signal
     (its `if not targets: return None`), never a negative tp for the backtest."""
