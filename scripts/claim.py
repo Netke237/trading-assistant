@@ -107,9 +107,17 @@ def load(commit: str | None) -> dict:
     if blob is None:
         raise GitError(f"{FILE} missing from claims commit {commit[:8]}; {repair}")
     try:
-        return json.loads(git("cat-file", "blob", blob).stdout)
-    except ValueError as e:
-        raise GitError(f"{FILE} in claims commit {commit[:8]} is not valid JSON ({e}); {repair}")
+        data = json.loads(git("cat-file", "blob", blob).stdout)
+        claims = data["claims"]
+        assert isinstance(claims, list)
+        for c in claims:
+            for k in ("task", "branch", "claimed_at", "expires_at"):
+                assert isinstance(c[k], str)
+            parse(c["claimed_at"]), parse(c["expires_at"])
+    except (ValueError, KeyError, TypeError, AssertionError) as e:
+        raise GitError(f"{FILE} in claims commit {commit[:8]} is not a valid "
+                       f"ledger ({type(e).__name__}: {e}); {repair}")
+    return data
 
 
 def write(parent: str | None, data: dict, message: str) -> bool:
@@ -117,6 +125,11 @@ def write(parent: str | None, data: dict, message: str) -> bool:
     body = json.dumps(data, indent=2, sort_keys=True) + "\n"
     blob = git("hash-object", "-w", "--stdin", input=body).stdout.strip()
     tree = git("mktree", input=f"100644 blob {blob}\t{FILE}\n").stdout.strip()
+    # Last line of defence: never push a tree whose only entry is not exactly
+    # claims.json (any newline translation would make readers see no ledger).
+    names = git("ls-tree", "-z", "--name-only", tree).stdout
+    if names != FILE + "\0":
+        raise GitError(f"refusing to push a claims tree named {names!r}")
     # A fixed identity keeps personal names/emails out of the ledger and works
     # in containers with no user.name configured.
     env = {**os.environ,
@@ -181,7 +194,7 @@ def cmd_list(a) -> int:
         return 0 if a.quiet else 1
     try:
         data = load(head)
-    except GitError as e:
+    except (GitError, subprocess.TimeoutExpired) as e:
         print(f"[claims] ledger unreadable ({str(e).splitlines()[0][:200]})")
         return 0 if a.quiet else 1
     at = now()
@@ -269,6 +282,13 @@ def cmd_release(a) -> int:
 
 
 def main() -> int:
+    # A Windows OEM console (cp437/cp850/cp932) cannot encode the em dashes in
+    # --help and in the output; replace them rather than die mid-command.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except AttributeError:
+            pass
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
 
@@ -293,13 +313,6 @@ def main() -> int:
         q.add_argument("--ttl", type=float, default=DEFAULT_TTL_H, help="hours until expiry")
 
     a = ap.parse_args()
-    # A Windows console (cp437/cp1252) cannot encode the em dashes printed
-    # below; replace them rather than die mid-command.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(errors="replace")
-        except AttributeError:
-            pass
     try:
         if a.cmd in (None, "list"):
             if a.cmd is None:

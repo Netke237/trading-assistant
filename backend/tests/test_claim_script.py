@@ -6,8 +6,9 @@ text-mode stdin rewrites "\\n" as "\\r\\n". `git mktree` therefore got
 "...\\tclaims.json\\r\\n" and named the ledger file "claims.json\\r". load()
 asked for "claims.json", found nothing and returned an empty ledger, so
 `list` and `renew` reported no claims, and the next write from any session
-dropped every claim. Six such commits reached origin/claims on 2026-09-30
-(0346cdc5 .. 028fae17); 9e4470de then erased CONTRACT-LIQUIDITY-DTE.
+dropped every claim. Eight such commits reached origin/claims by 2026-10-01
+(0346cdc5 .. 028fae17, 4aaebf0d, 08f2e50b); 9e4470de then erased
+CONTRACT-LIQUIDITY-DTE, and 08f2e50b / 8cff5f72 three more live claims.
 
 The tests drive a REAL temporary bare remote rather than mocking subprocess,
 because the bug was in the bytes that reached git. scripts/ is not a package,
@@ -37,6 +38,10 @@ def _run(*args: str, cwd: Path, input: bytes | None = None) -> str:
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
     """A work repo whose `origin` is an empty bare repo; cwd is the work repo."""
+    # Keep the script's git calls inside the temp repos, whatever the caller's env.
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "CLAIMS_REMOTE"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(_mod, "REMOTE", "origin")
     # CI runners have no user.name/user.email; commit-tree needs an identity.
     for who in ("AUTHOR", "COMMITTER"):
         monkeypatch.setenv(f"GIT_{who}_NAME", "test")
@@ -117,7 +122,7 @@ def test_write_survives_windows_text_mode_newline_translation(repo, monkeypatch)
     real_run = subprocess.run
 
     def windows_run(*args, **kwargs):
-        if kwargs.get("text") and isinstance(kwargs.get("input"), str):
+        if isinstance(kwargs.get("input"), str):  # str stdin == text mode
             kwargs["input"] = kwargs["input"].replace("\n", "\r\n")
         return real_run(*args, **kwargs)
 
@@ -139,8 +144,45 @@ def _push_tree(repo: Path, name: str, body: bytes) -> None:
 
 def test_load_raises_giterror_on_invalid_json(repo):
     _push_tree(repo, "claims.json", b'{"claims": [')
-    with pytest.raises(_mod.GitError, match="not valid JSON"):
+    with pytest.raises(_mod.GitError, match="not a valid ledger"):
         _mod.load(_mod.fetch())
+
+
+def test_load_refuses_a_directory_named_like_the_ledger(repo):
+    remote = repo / "remote.git"
+    blob = _run("hash-object", "-w", "--stdin", cwd=remote, input=b"{}\n").strip()
+    sub = _run("mktree", cwd=remote, input=f"100644 blob {blob}\tx\n".encode()).strip()
+    tree = _run("mktree", cwd=remote, input=f"040000 tree {sub}\tclaims.json\n".encode()).strip()
+    commit = _run("commit-tree", tree, "-m", "x", cwd=remote).strip()
+    _run("update-ref", "refs/heads/claims", commit, cwd=remote)
+    with pytest.raises(_mod.GitError, match="claims.json missing"):
+        _mod.load(_mod.fetch())
+
+
+@pytest.mark.parametrize("body", [b"{}", b"null", b"[]", b'{"claims": {}}',
+                                  b'{"claims": [{"task": "x"}]}',
+                                  b'{"claims": [{"task": "x", "branch": "b", '
+                                  b'"claimed_at": "yesterday", "expires_at": "2099-01-01T00:00:00Z"}]}'])
+def test_load_refuses_a_ledger_of_the_wrong_shape(repo, body):
+    """{} used to read as "no claims", so the next take erased the ledger."""
+    _push_tree(repo, "claims.json", body)
+    with pytest.raises(_mod.GitError, match="not a valid ledger"):
+        _mod.load(_mod.fetch())
+
+
+def test_write_refuses_a_tree_not_named_exactly_claims_json(repo, monkeypatch):
+    """Whatever mangles mktree's stdin next, write() must not push the result."""
+    real_run = subprocess.run
+
+    def crlf_mktree(cmd, *args, **kwargs):
+        if cmd[:2] == ["git", "mktree"]:
+            kwargs["input"] = kwargs["input"].replace(b"\n", b"\r\n")
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(_mod.subprocess, "run", crlf_mktree)
+    with pytest.raises(_mod.GitError, match="refusing to push"):
+        _mod.write(None, {"claims": []}, "x")
+    assert _run("ls-remote", "../remote.git", cwd=repo / "work") == ""
 
 
 def test_load_ignores_names_that_only_look_like_the_ledger(repo):
