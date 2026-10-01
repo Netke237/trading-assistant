@@ -3,6 +3,18 @@
 Evidence, not prose. Everything here is written by a script and read by a human
 deciding whether to move a number.
 
+## MEAS measurement days
+
+- `PROTOCOL.md`: the run-book for Kenneth's market-hours measurement days.
+- `run_measurement_day.py`: the runner that sends the exact bodies, checks every safety rule,
+  and writes `scans/<date>/` with a `manifest.json`.
+- `protocol-requests/*.json`: the eight base request bodies. The counterfactual bodies are
+  derived from these by the runner.
+- `RESULTS-SHEET.md`: one section per day, the proposal table, and the reading rules fixed in
+  advance.
+
+Plan: `../plans/2026-09-25-meas-market-data-measurement-plan.md`.
+
 ## `iv-basis-samples.jsonl`
 
 Produced by `backend/scripts/iv_basis_analysis.py`. One JSON object per
