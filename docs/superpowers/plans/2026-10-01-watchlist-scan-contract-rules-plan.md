@@ -1,4 +1,4 @@
-# WATCHLIST-SCAN-CONTRACT-RULES — plan (r10; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; round 9 NOT clean 0B/1S/7N; all addressed below)
+# WATCHLIST-SCAN-CONTRACT-RULES — plan (r11; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; round 9 NOT clean 0B/1S/7N; round 10 NOT clean 0B/1S/11N; all addressed below)
 
 - **Phase:** `WATCHLIST-SCAN-CONTRACT-RULES` (PROJECT_STATE.json), deferred by `STEP6-SCAN-CONTRACT-RULES`.
 - **Branch:** `claude/youthful-carson-82x23x` (off main at the DOCC-5 merge).
@@ -17,7 +17,7 @@
    honours an explicit `expiry` argument when that date is listed, but `/api/contracts` never passes one.
    Stored rules are a DELTA on the live `contract_rules.yaml` (`scan.py:1718` records only overridden keys;
    `validate_contract` applies them on a fresh `_load_config()`, `contract_validator.py:411-413`).
-2. Step 6 (`step-6-contracts/page.tsx:116-160`) sends `stock_score` = the candidate's `stockScore ?? 70`, the
+2. Step 6 (`step-6-contracts/page.tsx:116-160`; `loadContracts` itself is 123-160) sends `stock_score` = the candidate's `stockScore ?? 70`, the
    scan's own `contract_rules` (`scanResult.contract_rules ?? undefined`), hold days from
    `sanitizeHoldDays(context.holdMin, context.holdMax)` (only when both are non-null), plus `limit`/`max_price` from settings.
    `ContractStar` (`:263`) stores only the id.
@@ -31,7 +31,8 @@
    (symbol, right) and matches each stored id against the flat result. This is the **defect marker**.
    An id it cannot match is silently dropped (`:183-199`). Three things make a star vanish today: the
    default `limit` 10; the default `max_price` 50 (Step 6 sends the user's `maxContractPrice`); and the
-   single-expiry fetch, whose window-centre expiry moves with today's date, so a star's fixed expiry stops
+   single-expiry fetch (the Watchlist sends no hold days, so it gets the first expiry >= 21 days out),
+   whose expiry moves with today's date, so a star's fixed expiry stops
    being fetched within days to weeks.
 
 ## 2. Design
@@ -81,11 +82,13 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      grading).
    - `GET /api/watched-contracts` keeps returning `list[str]` (no change to its shape).
    - `GET /api/contracts` gains two optional parameters, both absent = today's behaviour exactly:
-     - `expiry: str | None`, forwarded as the keyword `expiry=` to `fetch_option_chain_async` only when given
+     - `expiry: str | None` (an empty `expiry=` is treated as absent; `api.ts` sends it only when truthy),
+       forwarded as the keyword `expiry=` to `fetch_option_chain_async` only when given
        (absent -> the call is made exactly as today, without an `expiry` kwarg). When given, the response
        keeps only rows whose `expiry` equals it (the fetch falls back to the window/default expiry when the
        date is not listed, e.g. expired; those rows are not the star's).
      - `strikes: str | None`, a comma-separated list of integer strikes (422 if any item is not an int;
+       with `strikes` given, the router returns EVERY filtered row — no `results[:limit]` at the end either;
        items are stripped of spaces and empty items dropped, so `187,` and `187, 190` parse; a list that is
        empty after that, including `strikes=`, is treated as absent).
        When given, rows are filtered to those strikes AFTER scoring, and neither `max_price` nor `limit`
@@ -124,11 +127,13 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
    together, through `api.getWatchedContractsDetail()` (not raw `fetch`, so tests mock one module). If
    `/detail` fails, it falls back to `api.getWatchedContracts()` (`api.ts:589`, today's
    `GET /api/watched-contracts`, replacing the store's raw `fetch`) for ids and keeps the local
-   grading for ids that are still present. It calls `set` only when ids or grading differ structurally,
+   grading for ids that are still present. If both fail, state is kept (no `set`), as today's `catch {}`.
+   A `/detail` row with `grading: null` is omitted from the `grading` map (no null-valued keys). It calls `set` only when ids or grading differ structurally,
    so a no-op sync does not refire the Watchlist fetch. `partialize` persists both fields.
 4. `ContractStar`: optional `grading?: ContractGrading` prop, passed to `add` and `api.addWatchedContract`.
    Unstar captures `prev = grading[id]` before `remove`, and a failed DELETE rolls back with
-   `add(id, prev)`, so the grading survives. POST failure: on a 422 with grading, retry once WITHOUT
+   `add(id, prev)`, so the grading survives (the id returns at the END of `ids`, so its missing-row
+   position may change; accepted). POST failure: on a 422 with grading, retry once WITHOUT
    grading (the star then exists, honestly marked YAML-graded) and `console.warn`; any other failure rolls
    back with `remove`, as today. The 422 retry is `addWatchedContract(id, null)` (explicit null = clear any
    stale server grading) together with store `clearGrading(id)` (drops `grading[id]` locally); if the retry
@@ -175,8 +180,10 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
    - Matching an id: among kept results with the id's `groupKey` whose `strikes` CONTAINS the id's
      (trunc) strike — a superset request counts, so unstarring a sibling does not blank a row — use that
      result (at most one exists per groupKey, since a settled refresh replaces the whole list; "first" is
-     defensive); `rejected` -> `fetch_failed`; rows -> today's exact-id match then the trunc fallback, else
-     `not_listed`. No such kept result (first mount, a newly starred expiry/grading, a strike newly joining
+     defensive); `rejected` -> `fetch_failed`; rows -> today's exact-id match then the trunc fallback (a fallback-matched live row carries
+     `{ ...contract, id: storedId }`, as today at `page.tsx:195-196`, so `ContractStar.isWatched` is true
+     and a click unstars rather than adds), else `not_listed`. Ids are de-duplicated first, as today's
+     `seen` set (`page.tsx:179-184`), so a duplicated local id cannot collide on a React key. No such kept result (first mount, a newly starred expiry/grading, a strike newly joining
      a group before a request carrying it settles) -> `missing` with `reason: 'loading'`. A row is thus
      never graded from a request that lacked its strike, and never flashes Loading on Refresh or unstar. With the `strikes` filter two groups rarely
      return the same row, so this is defensive, and it covers residual 6's shared 187/187.5 id.
@@ -222,11 +229,13 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        a contracts-only failure (`contractsOffline` and not `offline`) says "Could not load option chains —
        retry" instead of "Backend not running"; `offline` keeps today's text. CHANGE from today, where `Promise.all` set
        it on any failure: partial failures show per-row `fetch_failed` instead. The banner shows when
-       either flag is set, with the text chosen above.
+       either flag is set, with the text chosen above; the contracts-only text shows only while the
+       Contracts tab is active (the banner sits in the shared header, `page.tsx:273-275`).
      - The tab count and header count include missing rows (every star is a row).
 7. Watchlist Contracts tab: a row whose grading is absent or has `contract_rules === null` shows a dim
-   caution note in its status tooltip / a small marker: "Graded on contract_rules.yaml — starred before the
-   scan's rules were saved (or the scan recorded none)". A row with recorded rules shows no marker. The tab
+   caution marker: a visible dim `<Text size={10} tone="caution">` element under the contract label whose
+   text is "Graded on contract_rules.yaml — starred before the scan's rules were saved (or the scan
+   recorded none)". Test 10c queries it with `getByText`. A row with recorded rules shows no marker. The tab
    header shows no global note.
 
 ### 2.4 Behaviour changes (stated)
@@ -257,6 +266,9 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
 1. A contract starred on a device whose POST failed is rolled back, as today. No retry queue.
 2. Stars made before this ships (backend row NULL; local v2 data migrates to `grading: {}`) stay
    grading-less, marked as YAML-graded, until unstarred and re-starred from Step 6.
+3a. The Watchlist's mount-time `syncFromBackend` can overwrite `ids`/`grading` before a just-clicked
+   Step-6 POST commits, dropping the star and its grading locally until the next sync. Pre-existing for
+   ids; now it reaches grading too.
 3. DELETE and POST are fired without awaiting each other; a fast unstar/re-star can reach the server out of
    order, leaving no row or the old grading. Pre-existing for ids; now it can also carry a stale grading.
 4. Stored rules are a delta on the YAML in force at viewing time, as everywhere else; an edit to
@@ -307,7 +319,10 @@ so the existing no-price 503 can never stand in for the new one:
    equal the no-strikes call's. *Main case kills e.g. skipping `widen_contract_overrides_for_dte` on the
    new path; the variant kills filtering strikes before the ATM Black-Scholes inversion.*
 6d. `strikes`: a 150-row chain where every row scores the same and the starred strike is last in strike
-   order, priced above `max_price` -> returned. Non-int item -> 422; `strikes=` -> same as absent.
+   order, priced above `max_price` -> returned; and `strikes=` the LAST 12 strikes in strike order (all
+   tied, some above `max_price`) -> all 12 returned (kills a `results[:limit]` left after the filter, which
+   the single-strike case cannot see). Non-int item -> 422; `strikes=` -> same as absent; `expiry=` -> same
+   as absent.
    *Kills `limit`/`max_price` still applying.*
 6f. DTE decay, through the endpoint: `monkeypatch.setattr("app.routers.contracts.dte_holding_multiplier",
    lambda: 2.0)` (the router imports it by name and passes it uncalled; patching the float or the
@@ -362,7 +377,9 @@ Frontend:
     b. Two stars on the same symbol/right with different gradings -> two calls; each row shows its own
        group's score even when both groups return the same contract id. *Kills flat matching.*
     c. A star with no grading -> called with `{ expiry, strikes }` and no
-       contract_rules, and the YAML marker is shown; a star with rules shows no marker.
+       contract_rules, and the YAML marker is shown (`getByText('Graded on contract_rules.yaml', {exact:
+       false})`); a star with rules shows no marker. A legacy `AAPL|187.0|<expiry>|C` star matched by the
+       trunc fallback renders starred (`aria-pressed="true"`) and clicking it calls `removeWatchedContract`.
     d. Two stars, same symbol/right/grading, different expiries -> two calls, both rows shown.
     e. Missing rows: before the group's `getContracts` mock resolves, the row shows "Loading…" and NOT
        "Not in the current chain"; after it resolves without the id -> "Not in the current chain";
