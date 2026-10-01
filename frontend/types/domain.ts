@@ -781,6 +781,20 @@ export interface OptionContract {
   breakdown?: ContractScoreBreakdown;
 }
 
+/** The grading inputs Step 6 sent to `/api/contracts` for a row when it was
+ *  starred, stored with the star so the Watchlist grades it the same way
+ *  (WATCHLIST-SCAN-CONTRACT-RULES). Both rule forms are deltas on the live
+ *  contract_rules.yaml: `{}` = the scan overrode nothing, `null` = the scan's
+ *  rules are unknown (older result / unrecordable). */
+export interface ContractGrading {
+  contract_rules: Record<string, number> | null;
+  /** Both set or both null. */
+  hold_min_days:  number | null;
+  hold_max_days:  number | null;
+  /** 0-100 int; null -> the backend default 70. */
+  stock_score:    number | null;
+}
+
 export function contractId(symbol: string, strike: number, expiry: string, right: OptionRight): string {
   return `${symbol.toUpperCase()}|${strike}|${expiry}|${right}`;
 }

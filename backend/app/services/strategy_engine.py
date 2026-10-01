@@ -304,6 +304,11 @@ def _build_target_ladder(
         if min_rung_r > 0 and sign * (value - floor) < 0:
             return None
         rounded = round(value, 2)
+        # Positivity is re-tested AFTER rounding: a bearish rung in (0, 0.005)
+        # rounds to 0.0, and as targets[0] that is a short with no take-profit
+        # (backtesting.py skips a falsy tp) -- open question #49.
+        if rounded <= 0:
+            return None
         # A rung that rounds onto (or behind) entry is dropped rather than
         # nudged: _entry_side needs a strict inequality, and a one-cent target
         # would be worse than letting the next rung or the fallback take over.

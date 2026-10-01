@@ -157,3 +157,49 @@ describe('getContracts contract_rules', () => {
     for (const [u] of f.mock.calls) expect(u).not.toContain('contract_rules');
   });
 });
+
+describe('watched contracts — grading on the wire (WATCHLIST-SCAN-CONTRACT-RULES)', () => {
+  function mockOk(body: unknown = []) {
+    const f = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body });
+    global.fetch = f as unknown as typeof fetch;
+    return f;
+  }
+  const bodyOf = (f: jest.Mock) => JSON.parse(f.mock.calls[0][1].body as string);
+
+  it('addWatchedContract(id, null) sends "grading": null (clears a stale server grading)', async () => {
+    const f = mockOk({ contract_id: 'X' });
+    await api.addWatchedContract('XOM|190|2026-12-18|C', null);
+    expect(bodyOf(f)).toEqual({ contract_id: 'XOM|190|2026-12-18|C', grading: null });
+    expect(f.mock.calls[0][1].body).toContain('"grading":null');
+  });
+
+  it('addWatchedContract(id) sends no grading key', async () => {
+    const f = mockOk({ contract_id: 'X' });
+    await api.addWatchedContract('XOM|190|2026-12-18|C');
+    expect(bodyOf(f)).toEqual({ contract_id: 'XOM|190|2026-12-18|C' });
+    expect('grading' in bodyOf(f)).toBe(false);
+  });
+
+  it('addWatchedContract(id, g) sends the grading', async () => {
+    const f = mockOk({ contract_id: 'X' });
+    const g = { contract_rules: {}, hold_min_days: 20, hold_max_days: 25, stock_score: 72 };
+    await api.addWatchedContract('XOM|190|2026-12-18|C', g);
+    expect(bodyOf(f).grading).toEqual(g);
+  });
+
+  it('getContracts sends expiry and strikes exactly as the backend parses them', async () => {
+    const f = mockOk();
+    await api.getContracts('XOM', 'C', { expiry: '2026-12-18', strikes: [187, 190] });
+    const u = f.mock.calls[0][0] as string;
+    expect(u).toContain('&expiry=2026-12-18');
+    expect(u).toContain('&strikes=187%2C190');
+  });
+
+  it('getContracts omits an empty strike list and an absent expiry', async () => {
+    const f = mockOk();
+    await api.getContracts('XOM', 'C', { strikes: [] });
+    const u = f.mock.calls[0][0] as string;
+    expect(u).not.toContain('strikes');
+    expect(u).not.toContain('expiry');
+  });
+});

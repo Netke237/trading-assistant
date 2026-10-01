@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Step6Page from '../page';
 import { api } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
+import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import type { TradeCardData } from '@/types/domain';
 
 jest.mock('next/navigation', () => ({
@@ -10,7 +11,8 @@ jest.mock('next/navigation', () => ({
 }));
 
 jest.mock('@/lib/api', () => ({
-  api: { getContracts: jest.fn() },
+  // ContractStar calls `.catch` on addWatchedContract.
+  api: { getContracts: jest.fn(), addWatchedContract: jest.fn().mockResolvedValue({ contract_id: 'x' }) },
 }));
 
 const getContracts = api.getContracts as jest.Mock;
@@ -76,5 +78,59 @@ describe('Step 6 grades contracts with the rules the scan applied', () => {
     await waitFor(() => expect(getContracts).toHaveBeenCalled());
     expect(getContracts.mock.calls[0][2].contract_rules).toBeUndefined();
     expect(screen.getByText(/has no recorded contract rules/)).toBeInTheDocument();
+  });
+});
+
+describe('a star records the grading its row was fetched with (WATCHLIST-SCAN-CONTRACT-RULES)', () => {
+  const ROW = {
+    id: 'XOM|190|2026-12-18|C', symbol: 'XOM', strike: 190, expiry: '2026-12-18', right: 'C',
+    dte: 40, dteTotal: 40, price: 2.5, delta: 0.45, theta: -0.05, ivRank: 40, iv: 30, ivPercentile: 40,
+    spread: 0.1, volume: 100, score: 72, contractConfidence: 'PASS',
+  };
+
+  beforeEach(() => {
+    getContracts.mockReset();
+    getContracts.mockResolvedValue([ROW]);
+    (api.addWatchedContract as jest.Mock).mockClear();
+    useWatchedContractsStore.setState({ ids: [], grading: {} });
+  });
+
+  const clickStar = async () => {
+    const star = await screen.findByRole('button', { name: 'Add contract to watchlist' });
+    fireEvent.click(star);
+  };
+
+  it('stores exactly the grading getContracts was called with', async () => {
+    setup(LOOSE);
+    render(<Step6Page />);
+    await clickStar();
+    const ctx = getContracts.mock.calls[0][2];
+    const want = {
+      contract_rules: ctx.contract_rules, hold_min_days: ctx.hold_min_days,
+      hold_max_days: ctx.hold_max_days, stock_score: ctx.stock_score,
+    };
+    expect(want).toEqual({ contract_rules: LOOSE, hold_min_days: 5, hold_max_days: 20, stock_score: 80 });
+    expect(useWatchedContractsStore.getState().grading[ROW.id]).toEqual(want);
+    expect(api.addWatchedContract).toHaveBeenCalledWith(ROW.id, want);
+  });
+
+  it('records unknown rules as null (the request omitted them)', async () => {
+    setup(undefined);
+    render(<Step6Page />);
+    await clickStar();
+    expect(getContracts.mock.calls[0][2].contract_rules).toBeUndefined();
+    expect(useWatchedContractsStore.getState().grading[ROW.id]?.contract_rules).toBeNull();
+  });
+
+  it('keeps the fetch-time grading after scanResult is replaced without a refetch', async () => {
+    setup(LOOSE);
+    render(<Step6Page />);
+    await screen.findByRole('button', { name: 'Add contract to watchlist' });
+    const prev = useScanStore.getState().scanResult!;
+    // Same `candidates` reference: the load effect keyed on rawCandidates does not refetch.
+    act(() => { useScanStore.setState({ scanResult: { ...prev, contract_rules: { min_volume: 999 } } as any }); });
+    await clickStar();
+    expect(getContracts).toHaveBeenCalledTimes(1);
+    expect(useWatchedContractsStore.getState().grading[ROW.id]?.contract_rules).toEqual(LOOSE);
   });
 });

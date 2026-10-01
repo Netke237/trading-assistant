@@ -10,9 +10,10 @@ import { ContractStar } from '@/components/atoms/ContractStar';
 import { contractScoreTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
+import { buildGrading, gradingToCtx } from '@/lib/contractGrading';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { contractLabel, type OptionContract, type TradeCardData } from '@/types/domain';
+import { contractLabel, type ContractGrading, type OptionContract, type TradeCardData } from '@/types/domain';
 import { resolveIv, formatIv, ivSortValue, ivColumnLabel, ivBasesOf } from '@/lib/ivBasis';
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
@@ -89,6 +90,10 @@ function spreadBadge(candidate: TradeCardData): string | null {
 export default function Step6Page() {
   const router = useRouter();
   const [localContractsBySymbol, setLocalContractsBySymbol] = useState<Record<string, OptionContract[]>>({});
+  // The grading each symbol's rows were fetched with, set together with them,
+  // so a star records exactly the inputs that graded the row on screen even if
+  // scanResult is replaced while Step 6 is mounted.
+  const [gradingBySymbol, setGradingBySymbol] = useState<Record<string, ContractGrading>>({});
   const [expanded, setExpanded] = useState<string>('');
   const [pick, setPick]         = useState<string>('');
   const [sortKey, setSortKey]   = useState<SortKey>('score');
@@ -127,23 +132,26 @@ export default function Step6Page() {
     const hold = context?.holdMin != null && context?.holdMax != null
       ? sanitizeHoldDays(context.holdMin, context.holdMax)
       : undefined;
+    // The request is derived FROM the grading the stars will store, so the
+    // two cannot drift (WATCHLIST-SCAN-CONTRACT-RULES).
+    const gradings = candidates.map((c) =>
+      buildGrading(contractRules, hold, stockScoreBySymbol[c.symbol] ?? 70));
     try {
       const results = await Promise.all(
-        candidates.map((c) => api.getContracts(c.symbol, right, {
-          stock_score:   stockScoreBySymbol[c.symbol] ?? 70,
+        candidates.map((c, i) => api.getContracts(c.symbol, right, {
+          ...gradingToCtx(gradings[i]),
           direction:     context?.direction ?? 'Bullish',
           horizon:       context?.horizon ?? 'swing',
           limit:         maxContractsPerChain,
           max_price:     maxContractPrice,
-          hold_min_days: hold?.hold_min_days,
-          hold_max_days: hold?.hold_max_days,
-          contract_rules: contractRules,
         }, signal))
       );
       if (signal?.aborted) return;
       const bySymbol: Record<string, OptionContract[]> = {};
-      candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; });
+      const gradingMap: Record<string, ContractGrading> = {};
+      candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; gradingMap[c.symbol] = gradings[i]!; });
       setLocalContractsBySymbol(bySymbol);
+      setGradingBySymbol(gradingMap);
       setContractsBySymbol(bySymbol);
       const firstSymbol = candidates[0]?.symbol ?? '';
       const storedPick = pickedContracts[firstSymbol];
@@ -260,7 +268,7 @@ export default function Step6Page() {
                   }}
                   className={extra?.className}
                 >
-                  <ContractStar contractId={c.id} size="sm" />
+                  <ContractStar contractId={c.id} grading={gradingBySymbol[candidate.symbol]} size="sm" />
                   <Data size={13} weight={500}>{contractLabel(c)}</Data>
                   <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
                   <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
