@@ -2,19 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/practical-rosalind-a6ad35",
-      "claimed_at": "2026-10-01T04:09:41Z",
-      "expires_at": "2026-10-01T07:09:41Z",
-      "note": "claim.py: Windows wrote ledger as 'claims.json\\r' - bytes stdin + legacy-tolerant load + test",
-      "task": "CLAIMS-WINDOWS-CRLF"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/youthful-carson-82x23x",
-      "claimed_at": "2026-10-01T04:10:34Z",
-      "expires_at": "2026-10-01T08:08:43Z",
-      "note": "store scan contract_rules + hold days with each contract star; Watchlist grades with them",
-      "task": "WATCHLIST-SCAN-CONTRACT-RULES"
+      "branch": "claude/yaml-config-integrity-audit",
+      "claimed_at": "2026-10-01T10:48:07Z",
+      "expires_at": "2026-10-01T13:48:07Z",
+      "note": "whole-phase adversarial audit to close audit_clean",
+      "task": "YAML-CONFIG-INTEGRITY-AUDIT"
     }
   ]
 }
