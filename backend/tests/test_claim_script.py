@@ -16,6 +16,7 @@ so the module is loaded via importlib, matching test_state_audit_bookkeeping.py.
 from __future__ import annotations
 
 import importlib.util
+import argparse
 import json
 import subprocess
 from pathlib import Path
@@ -36,6 +37,10 @@ def _run(*args: str, cwd: Path, input: bytes | None = None) -> str:
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
     """A work repo whose `origin` is an empty bare repo; cwd is the work repo."""
+    # CI runners have no user.name/user.email; commit-tree needs an identity.
+    for who in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{who}_NAME", "test")
+        monkeypatch.setenv(f"GIT_{who}_EMAIL", "test@localhost")
     _run("init", "-q", "--bare", "remote.git", cwd=tmp_path)
     work = tmp_path / "work"
     work.mkdir()
@@ -103,3 +108,49 @@ def test_load_refuses_a_ledger_commit_without_the_file(repo):
 
     with pytest.raises(_mod.GitError, match="claims.json missing"):
         _mod.load(_mod.fetch())
+
+
+def test_write_survives_windows_text_mode_newline_translation(repo, monkeypatch):
+    """Linux CI does no newline translation, so emulate Windows: any str stdin
+    handed to subprocess in text mode gets "\\n" -> "\\r\\n". The unfixed git()
+    (text=True) then produced "claims.json\\r"; bytes stdin is untouched."""
+    real_run = subprocess.run
+
+    def windows_run(*args, **kwargs):
+        if kwargs.get("text") and isinstance(kwargs.get("input"), str):
+            kwargs["input"] = kwargs["input"].replace("\n", "\r\n")
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(_mod.subprocess, "run", windows_run)
+    assert _mod.write(None, {"claims": [_claim("TASK-A", "feat-a")]}, "a")
+    monkeypatch.setattr(_mod.subprocess, "run", real_run)
+
+    assert _tree_names(repo) == ["claims.json"]
+    assert [c["task"] for c in _mod.load(_mod.fetch())["claims"]] == ["TASK-A"]
+
+
+def _push_tree(repo: Path, name: str, body: bytes) -> None:
+    remote = repo / "remote.git"
+    blob = _run("hash-object", "-w", "--stdin", cwd=remote, input=body).strip()
+    tree = _run("mktree", cwd=remote, input=f"100644 blob {blob}\t{name}\n".encode()).strip()
+    commit = _run("commit-tree", tree, "-m", "x", cwd=remote).strip()
+    _run("update-ref", "refs/heads/claims", commit, cwd=remote)
+
+
+def test_load_raises_giterror_on_invalid_json(repo):
+    _push_tree(repo, "claims.json", b'{"claims": [')
+    with pytest.raises(_mod.GitError, match="not valid JSON"):
+        _mod.load(_mod.fetch())
+
+
+def test_load_ignores_names_that_only_look_like_the_ledger(repo):
+    _push_tree(repo, " claims.json", b'{"claims": []}\n')
+    with pytest.raises(_mod.GitError, match="claims.json missing"):
+        _mod.load(_mod.fetch())
+
+
+@pytest.mark.parametrize("quiet,code", [(True, 0), (False, 1)])
+def test_list_reports_an_unreadable_ledger_instead_of_crashing(repo, capsys, quiet, code):
+    _push_tree(repo, "claims.json", b"not json")
+    assert _mod.cmd_list(argparse.Namespace(quiet=quiet)) == code
+    assert "ledger unreadable" in capsys.readouterr().out

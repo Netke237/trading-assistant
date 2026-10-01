@@ -92,18 +92,24 @@ def fetch() -> str | None:
 def load(commit: str | None) -> dict:
     if commit is None:
         return {"claims": []}
-    p = git("show", f"{commit}:{FILE}", check=False)
-    if p.returncode != 0:
-        # An unfixed Windows client names the file "claims.json\r"; read it
-        # anyway. Never treat an unreadable ledger as empty: the next write
-        # would then erase every other session's claims.
-        entries = git("ls-tree", "-z", commit).stdout.split("\0")
-        blob = next((e.split()[2] for e in entries
-                     if "\t" in e and e.split("\t", 1)[1].strip() == FILE), None)
-        if blob is None:
-            raise GitError(f"{FILE} missing from claims commit {commit[:8]}")
-        p = git("cat-file", "blob", blob)
-    return json.loads(p.stdout)
+    # An unfixed Windows client names the file "claims.json\r"; read it
+    # anyway. Never treat an unreadable ledger as empty: the next write would
+    # then erase every other session's claims.
+    repair = (f"repair by hand: re-commit the newest readable {FILE} from "
+              f"`git log {REMOTE}/{BRANCH}` on top of {commit[:8]} and push")
+    blob = None
+    for e in git("ls-tree", "-z", commit).stdout.split("\0"):
+        meta, sep, name = e.partition("\t")
+        if sep and name in (FILE, FILE + "\r") and meta.split()[1] == "blob":
+            blob = meta.split()[2]
+            if name == FILE:
+                break
+    if blob is None:
+        raise GitError(f"{FILE} missing from claims commit {commit[:8]}; {repair}")
+    try:
+        return json.loads(git("cat-file", "blob", blob).stdout)
+    except ValueError as e:
+        raise GitError(f"{FILE} in claims commit {commit[:8]} is not valid JSON ({e}); {repair}")
 
 
 def write(parent: str | None, data: dict, message: str) -> bool:
@@ -173,8 +179,13 @@ def cmd_list(a) -> int:
     except (GitError, subprocess.TimeoutExpired) as e:
         print(f"[claims] could not read claims ({str(e).splitlines()[0][:120]})")
         return 0 if a.quiet else 1
+    try:
+        data = load(head)
+    except GitError as e:
+        print(f"[claims] ledger unreadable ({str(e).splitlines()[0][:200]})")
+        return 0 if a.quiet else 1
     at = now()
-    claims = sorted(active(load(head).get("claims", []), at), key=lambda c: c["claimed_at"])
+    claims = sorted(active(data.get("claims", []), at), key=lambda c: c["claimed_at"])
     if not claims:
         if not a.quiet:
             print("[claims] no active claims")
@@ -282,6 +293,13 @@ def main() -> int:
         q.add_argument("--ttl", type=float, default=DEFAULT_TTL_H, help="hours until expiry")
 
     a = ap.parse_args()
+    # A Windows console (cp437/cp1252) cannot encode the em dashes printed
+    # below; replace them rather than die mid-command.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except AttributeError:
+            pass
     try:
         if a.cmd in (None, "list"):
             if a.cmd is None:
