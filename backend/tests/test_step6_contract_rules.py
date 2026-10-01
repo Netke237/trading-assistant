@@ -215,3 +215,24 @@ def test_unknown_keys_are_ignored_as_the_scan_ignores_them(client):
     r = _get_contracts(client, 80, {**_LOOSE, "event_reject_days": "whatever"})
     assert r.status_code == 200
     assert r.json()[0]["contractConfidence"] != "REJECT"
+
+
+@pytest.mark.parametrize("rules, limits", [(None, (21, 21, 60, 90)), ({"min_dte": 45, "max_dte": 60}, (45, 21, 60, 60))])
+def test_without_hold_days_the_fetch_uses_the_rules_dte_limits(client, rules, limits):
+    """Step 6's fetch, like the scan's, must pick within the min_dte/max_dte
+    (and nearest the preferred DTE band) it then grades with, or every row
+    comes back dte_too_short or dte_too_long."""
+    seen = []
+
+    async def _fetch(*_a, **kw):
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
+        return _chain()
+
+    url = "/api/contracts?symbol=XOM&right=C&stock_score=80&direction=Bullish"
+    if rules is not None:
+        url += "&contract_rules=" + quote(json.dumps(rules))
+    with _contracts_patches() as stack:
+        stack.enter_context(patch("app.routers.contracts.fetch_option_chain_async", side_effect=_fetch))
+        r = client.get(url)
+    assert r.status_code == 200, r.text
+    assert seen == [(None, None, limits)]

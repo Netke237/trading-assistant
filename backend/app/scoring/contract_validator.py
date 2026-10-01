@@ -401,6 +401,28 @@ def effective_contract_overrides(overrides: dict | None) -> dict[str, float | in
     }
 
 
+def effective_dte_limits(overrides: dict | None) -> tuple[int, int, int, int]:
+    """(min_dte, preferred_dte_min, preferred_dte_max, max_dte) as
+    validate_contract() applies them for `overrides`: each the override when
+    present, else contract_rules.yaml's, cast as validate_contract casts it.
+
+    The chain fetch picks its one expiry from these when no hold window is set
+    (market._pick_expiration_without_window). It used to take the first 21+ day
+    expiry whatever the rules said, so a min_dte override of 45 fetched an
+    expiry every contract of which was rejected as dte_too_short and the symbol
+    dropped out of the scan. With a hold window the scan uses
+    dte_window.widened_min_dte and the window instead, which replace these.
+    """
+    cfg = _load_config()
+    eff = effective_contract_overrides(overrides)
+    return (
+        int(eff.get("min_dte", cfg["hard_reject"]["min_dte"])),
+        int(eff.get("preferred_dte_min", cfg["soft_rank"]["preferred_dte_min"])),
+        int(eff.get("preferred_dte_max", cfg["soft_rank"]["preferred_dte_max"])),
+        int(eff.get("max_dte", cfg["hard_reject"]["max_dte"])),
+    )
+
+
 def _contract_id(contract: dict) -> str:
     side = "C" if contract.get("is_call", True) else "P"
     return f"{contract.get('symbol', '')}|{contract.get('strike', '')}|{contract.get('expiry', '')}|{side}"
