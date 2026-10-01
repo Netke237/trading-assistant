@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/bold-ride-7nf8wj",
-      "claimed_at": "2026-10-01T03:41:47Z",
-      "expires_at": "2026-10-01T08:07:16Z",
-      "note": "apply round-6 fix, close plan stage, build runner to v6",
-      "task": "MEAS-MARKET-DATA-MEASUREMENT"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/practical-rosalind-a6ad35",
       "claimed_at": "2026-10-01T04:09:41Z",
       "expires_at": "2026-10-01T07:09:41Z",
