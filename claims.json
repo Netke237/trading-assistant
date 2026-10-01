@@ -7,14 +7,6 @@
       "expires_at": "2026-10-01T06:41:47Z",
       "note": "apply round-6 fix, close plan stage, build runner to v6",
       "task": "MEAS-MARKET-DATA-MEASUREMENT"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/docc-5-topbar-banner",
-      "claimed_at": "2026-10-01T03:42:28Z",
-      "expires_at": "2026-10-01T06:42:28Z",
-      "note": "DOCC-5 merge to main (Kenneth: 'Merge')",
-      "task": "DOCC-5-TOPBAR-BANNER"
     }
   ]
 }
