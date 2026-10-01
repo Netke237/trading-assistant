@@ -309,9 +309,9 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
 
 
 @pytest.mark.parametrize("overrides, limits", [
-    (None, (21, 21, 90)),
-    ({"min_dte": 45}, (45, 21, 90)),
-    ({"min_dte": "45", "max_dte": 60}, (45, 21, 60)),
+    (None, (21, 21, 60, 90)),
+    ({"min_dte": 45}, (45, 21, 60, 90)),
+    ({"min_dte": "45", "max_dte": 60}, (45, 21, 60, 60)),
 ])
 def test_scan_without_hold_days_passes_the_validators_dte_limits(client, overrides, limits):
     """No hold days: the fetch picks within the min_dte/max_dte the validator
@@ -375,9 +375,9 @@ def test_bearish_spread_legs_without_hold_days_get_the_same_dte_limits(client):
         })
     assert r.status_code == 200
     main, legs = seen[0], seen[1:]
-    assert main == (None, None, (45, 21, 90))
+    assert main == (None, None, (45, 21, 60, 90))
     assert r.json()["candidates"], r.json()["rejected"]
-    assert legs == [("2027-06-18", None, (45, 21, 90))] * 2, seen
+    assert legs == [("2027-06-18", None, (45, 21, 60, 90))] * 2, seen
 
 
 # ── The scan echoes the event window its scorer applied ──────────────────────

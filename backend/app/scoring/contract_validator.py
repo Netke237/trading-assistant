@@ -383,10 +383,10 @@ def effective_contract_overrides(overrides: dict | None) -> dict[str, float | in
     }
 
 
-def effective_dte_limits(overrides: dict | None) -> tuple[int, int, int]:
-    """(min_dte, preferred_dte_min, max_dte) as validate_contract() applies them
-    for `overrides`: each the override when present, else contract_rules.yaml's,
-    cast as validate_contract casts it.
+def effective_dte_limits(overrides: dict | None) -> tuple[int, int, int, int]:
+    """(min_dte, preferred_dte_min, preferred_dte_max, max_dte) as
+    validate_contract() applies them for `overrides`: each the override when
+    present, else contract_rules.yaml's, cast as validate_contract casts it.
 
     The chain fetch picks its one expiry from these when no hold window is set
     (market._pick_expiration_without_window). It used to take the first 21+ day
@@ -400,6 +400,7 @@ def effective_dte_limits(overrides: dict | None) -> tuple[int, int, int]:
     return (
         int(eff.get("min_dte", cfg["hard_reject"]["min_dte"])),
         int(eff.get("preferred_dte_min", cfg["soft_rank"]["preferred_dte_min"])),
+        int(eff.get("preferred_dte_max", cfg["soft_rank"]["preferred_dte_max"])),
         int(eff.get("max_dte", cfg["hard_reject"]["max_dte"])),
     )
 

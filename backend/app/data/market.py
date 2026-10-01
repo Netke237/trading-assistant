@@ -735,18 +735,22 @@ _DEFAULT_MIN_DTE_FLOOR = 21
 
 
 def _pick_expiration_without_window(
-    dates: list[str], today: date, dte_limits: Optional[tuple[int, int, int]],
+    dates: list[str], today: date, dte_limits: Optional[tuple[int, int, int, int]],
 ) -> Optional[str]:
     """The expiry to fetch when no hold window is set.
 
-    `dte_limits` is (min_dte, preferred_dte_min, max_dte) as the contract
-    validator applies them (contract_validator.effective_dte_limits). Only
-    expiries inside [min_dte, max_dte] can yield a contract the validator
+    `dte_limits` is (min_dte, preferred_dte_min, preferred_dte_max, max_dte) as
+    the contract validator applies them (contract_validator.effective_dte_limits).
+    Only expiries inside [min_dte, max_dte] can yield a contract the validator
     accepts, so nothing outside it is picked (None when nothing is listed
-    there). Inside it, the nearest expiry at or above preferred_dte_min wins --
-    the DTE sub-score penalises anything shorter, and with the shipped rules
-    (21 / 21 / 90) this is the old "first expiry of 21+ days" -- else the
-    nearest one.
+    there). Among those, the one closest to the preferred band the DTE
+    sub-score rewards wins, the shorter on a tie -- so the nearest expiry
+    inside the band when there is one.
+
+    With the shipped rules (21, 21-60, 90) that is the old "first expiry of
+    21+ days" whenever that expiry is at most 90 days out; when it is further
+    (only longer expiries listed) the old pick was certain to be rejected as
+    dte_too_long and nothing is fetched instead.
 
     A fixed 21 used to be the floor whatever the rules said: a min_dte override
     of 45 fetched the first 21+ day expiry, every contract of which was then
@@ -761,10 +765,14 @@ def _pick_expiration_without_window(
     ordered = sorted(dates)
     if dte_limits is None:
         return next((d for d in ordered if _dte(d) >= _DEFAULT_MIN_DTE_FLOOR), None)
-    lo, preferred, hi = dte_limits
+    lo, pref_lo, pref_hi, hi = dte_limits
+
+    def _off_band(d: str) -> int:
+        n = _dte(d)
+        return pref_lo - n if n < pref_lo else max(0, n - pref_hi)
+
     in_range = [d for d in ordered if lo <= _dte(d) <= hi]
-    return next((d for d in in_range if _dte(d) >= preferred),
-                in_range[0] if in_range else None)
+    return min(in_range, key=_off_band) if in_range else None  # min() keeps the first (shorter) on a tie
 
 
 def fetch_option_chain(
@@ -773,7 +781,7 @@ def fetch_option_chain(
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
-    dte_limits: Optional[tuple[int, int, int]] = None,
+    dte_limits: Optional[tuple[int, int, int, int]] = None,
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
@@ -807,7 +815,7 @@ def fetch_option_chain(
             target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
                 logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
-                          symbol, dte_limits, len(dates))
+                          symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
         chain_resp = httpx.get(
@@ -1450,7 +1458,7 @@ async def fetch_option_chain_async(
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
-    dte_limits: Optional[tuple[int, int, int]] = None,
+    dte_limits: Optional[tuple[int, int, int, int]] = None,
 ) -> list[dict]:
     """Async variant."""
     try:
@@ -1489,7 +1497,7 @@ async def fetch_option_chain_async(
             target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
                 logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
-                          symbol, dte_limits, len(dates))
+                          symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
         chain_resp = await client.get(

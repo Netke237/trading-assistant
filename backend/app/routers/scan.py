@@ -388,7 +388,7 @@ async def _build_spreads(
     *,
     dte_bounds: tuple[int, int] | None = None,
     min_dte_floor: int | None = None,
-    dte_limits: tuple[int, int, int] | None = None,
+    dte_limits: tuple[int, int, int, int] | None = None,
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
