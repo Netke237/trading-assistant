@@ -7,6 +7,14 @@
       "expires_at": "2026-10-01T22:53:28Z",
       "note": "no-hold-days chain fetch uses validator min_dte as expiry floor (shortlist audit gap 3)",
       "task": "OPTIONS-SHORTLIST-RANK-GAP3-NO-HOLD-EXPIRY"
+    },
+    {
+      "agent": "claude",
+      "branch": "ccr-c5e6e95c-hykudj",
+      "claimed_at": "2026-10-01T20:05:54Z",
+      "expires_at": "2026-10-01T23:05:54Z",
+      "note": "scanStore migration drops persisted options scanResult graded with Step-3 min_stock_score",
+      "task": "OPTIONS-STALE-SCANRESULT-MIN-STOCK-SCORE"
     }
   ]
 }
