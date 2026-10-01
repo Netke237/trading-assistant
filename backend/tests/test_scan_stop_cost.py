@@ -48,18 +48,8 @@ _HORIZON = "Swing"
 # validator's default 55 and every contract is rejected before a card is ever
 # built. Relaxing the CONTRACT gate leaves the gate under test untouched: the
 # stop cost is computed from candles, strike, dte, premium and IV, none of
-# which this override moves. The scan no longer accepts `min_stock_score` as a
-# request override (ScanRequest._drop_stock_mode_min_score), so the floor is
-# relaxed in the validator's loaded config instead.
-_MIN_STOCK_SCORE = 40
-
-
-def _relaxed_contract_cfg() -> dict:
-    import copy
-    import app.scoring.contract_validator as cv
-    cfg = copy.deepcopy(cv._load_config())
-    cfg["hard_reject"]["min_stock_score"] = _MIN_STOCK_SCORE
-    return cfg
+# which this override moves.
+_OVERRIDES = {"min_stock_score": 40}
 
 
 def _candles(symbol: str) -> list[dict]:
@@ -124,12 +114,11 @@ def _candidates(client, symbol="MSFT", *, strike_mult=1.0, dte=45, extra_patches
         # moved the stock score below this fixture's relaxed floor and dropped
         # every candidate. Pin it to "no dates", as offline.
         stack.enter_context(patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))))
-        stack.enter_context(patch("app.scoring.contract_validator._load_config",
-                                  return_value=_relaxed_contract_cfg()))
         for p in extra_patches:
             stack.enter_context(p)
         r = client.post("/api/scan", json={
-            "universe": [symbol], "direction": "Bullish", "horizon": _HORIZON,
+            "universe": [symbol], "direction": "Bullish",
+            "horizon": _HORIZON, "overrides": _OVERRIDES,
         })
     assert r.status_code == 200, r.text
     cands = r.json()["candidates"]
