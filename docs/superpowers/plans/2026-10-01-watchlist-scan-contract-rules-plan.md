@@ -1,4 +1,4 @@
-# WATCHLIST-SCAN-CONTRACT-RULES — plan (r11; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; round 9 NOT clean 0B/1S/7N; round 10 NOT clean 0B/1S/11N; all addressed below)
+# WATCHLIST-SCAN-CONTRACT-RULES — plan (r12; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; round 9 NOT clean 0B/1S/7N; round 10 NOT clean 0B/1S/11N; round 11 NOT clean 0B/1S/13N; all addressed below)
 
 - **Phase:** `WATCHLIST-SCAN-CONTRACT-RULES` (PROJECT_STATE.json), deferred by `STEP6-SCAN-CONTRACT-RULES`.
 - **Branch:** `claude/youthful-carson-82x23x` (off main at the DOCC-5 merge).
@@ -17,7 +17,7 @@
    honours an explicit `expiry` argument when that date is listed, but `/api/contracts` never passes one.
    Stored rules are a DELTA on the live `contract_rules.yaml` (`scan.py:1718` records only overridden keys;
    `validate_contract` applies them on a fresh `_load_config()`, `contract_validator.py:411-413`).
-2. Step 6 (`step-6-contracts/page.tsx:116-160`; `loadContracts` itself is 123-160) sends `stock_score` = the candidate's `stockScore ?? 70`, the
+2. Step 6 (`step-6-contracts/page.tsx:116-160`; `loadContracts` itself is 122-160) sends `stock_score` = the candidate's `stockScore ?? 70`, the
    scan's own `contract_rules` (`scanResult.contract_rules ?? undefined`), hold days from
    `sanitizeHoldDays(context.holdMin, context.holdMax)` (only when both are non-null), plus `limit`/`max_price` from settings.
    `ContractStar` (`:263`) stores only the id.
@@ -58,6 +58,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
 1. Model: `grading = Column(JSON(none_as_null=True), nullable=True)` on `WatchedContractModel`
    (`none_as_null` so a Python None is SQL NULL, not JSON `null`). Nullable, no default, no backfill.
    NULL = starred before this change, or starred without grading; a real state, not a missing value.
+   The stored value is `grading.model_dump()` after unknown rule keys are dropped (not the raw request
+   dict); test 1's "verbatim" means equal to that dump.
 2. Migration `<new>_add_grading_to_watched_contracts.py`: `down_revision = 'f3d5c81b0a47'`, adds the column,
    and the downgrade drops it. The docstring repeats the create_all point (adding the column to the model
    without the migration makes every GET on a live DB 500).
@@ -102,8 +104,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        hold-day DTE bounds are still computed and still widen the GRADING overrides exactly as today; only
        the fetch's expiry choice ignores them.
      - When `expiry` is given and the raw chain comes back empty, respond 503 with detail starting
-       "Option chain unavailable for <symbol> <expiry>". The check sits immediately after the chain fetch,
-       before the existing no-price check. Causes: a Tradier outage/timeout (swallowed into `[]`), an
+       "Option chain unavailable for <symbol> <expiry>". The check sits inside the `async with` block, right after
+       `fetch_option_chain_async` and before `fetch_price_async`. Causes: a Tradier outage/timeout (swallowed into `[]`), an
        expirations list with no expiry >= 21 days, or a listed E with zero quoted strikes (accepted: that
        case shows "Could not load the chain — retry" though the chain technically loaded). Absent `expiry`
        = unchanged (empty chain -> 200 `[]`).
@@ -142,7 +144,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
    exported with `statusOf(e): number | null`; `directOrder.ts` imports it back (behaviour unchanged).
 5. Step 6: `loadContracts` builds each symbol's `ContractGrading` (contract_rules `?? null`, sanitized
    hold or nulls, `stockScoreBySymbol[symbol] ?? 70`), derives that symbol's `getContracts` ctx FROM it
-   through one pure helper `gradingToCtx(g)` in `lib/contractGrading.ts` (null contract_rules / null hold
+   through one pure helper `gradingToCtx(g)` in `lib/contractGrading.ts`, spread alongside Step 6's
+   unchanged `direction`, `horizon`, `limit: maxContractsPerChain` and `max_price: maxContractPrice` (null contract_rules / null hold
    -> the field OMITTED, i.e. `undefined`, exactly what Step 6 sends today, so the two existing
    `toBeUndefined()` tests stay green; `{}` is passed THROUGH as `{}`, as Step 6 sends it today and
    `contractRules.test.tsx:55-61` expects — `api.ts:420` drops an empty object from the URL),
@@ -165,16 +168,17 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      `null`/`70` score, which send equivalent requests, share a key; empty `contract_rules` dropped from
      the key); a grading that yields the same request as none (all null, or only `stock_score` 70) gets
      '', the no-grading key.
-   - In the `/detail`-failure fallback the local grading is re-checked client-side (`isValidGrading`: finite
-     numbers, hold both-or-neither with max >= min, stock_score int 0-100); an invalid entry is treated as
-     no grading, and so shows the YAML marker. One `getContracts` per group, with ctx `{ expiry, strikes: [the group's starred
+   - Every grading is checked client-side before use (`isValidGrading`: rule values finite numbers, hold
+     days non-negative INTEGERS both-or-neither with max >= min, stock_score int 0-100) — always, since the
+     store records no fallback flag; server-served gradings pass it, so this only bites a corrupt local
+     entry. An invalid entry is treated as no grading, and so shows the YAML marker. One `getContracts` per group, with ctx `{ expiry, strikes: [the group's starred
      strikes], ...gradingToCtx(<the first member's grading, in watchedIds order>) }` (an empty `contract_rules` is dropped from the URL by `api.ts`). A group
      with no grading sends `{ expiry, strikes }`. `strikes` disables `limit` and `max_price` server-side.
    - `refreshContracts`' `useCallback` depends on `[watchedIds, grading]`, so a grading change refetches.
    - Kept results: a list of settled group results `{ groupKey, strikes: Set<number>, outcome: rows |
      'rejected' }`, where `groupKey` is (symbol, right, expiry, gradingKey). Nothing is discarded when a
      refresh STARTS: the last settled set stays on screen while a refresh is in flight (today's behaviour,
-     `page.tsx:113-116` replaces `contracts` only on success). When a non-aborted refresh settles, its
+     `page.tsx:117-120` replaces `contracts` only on success). When a non-aborted refresh settles, its
      results REPLACE the kept list atomically (an aborted refresh changes nothing). The zero-ids and
      zero-groups paths clear the list.
    - Matching an id: among kept results with the id's `groupKey` whose `strikes` CONTAINS the id's
@@ -234,8 +238,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      - The tab count and header count include missing rows (every star is a row).
 7. Watchlist Contracts tab: a row whose grading is absent or has `contract_rules === null` shows a dim
    caution marker: a visible dim `<Text size={10} tone="caution">` element under the contract label whose
-   text is "Graded on contract_rules.yaml — starred before the scan's rules were saved (or the scan
-   recorded none)". Test 10c queries it with `getByText`. A row with recorded rules shows no marker. The tab
+   text is "Graded on contract_rules.yaml — the scan's rules were not recorded with this star". (Covers
+   old stars, scans that recorded none, the 422-retry path and an invalid local grading.) Test 10c queries it with `getByText`. A row with recorded rules shows no marker. The tab
    header shows no global note.
 
 ### 2.4 Behaviour changes (stated)
@@ -276,7 +280,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
    no marker. A full config snapshot was rejected as out of proportion.
 5. Step 6's own `max_price`/`limit` cut (STEP6 deferred item 3) is unchanged.
 6. Pre-existing: `market.py` truncates strikes with `int()` and the id is built from it, so 187 and 187.5
-   share an id; a starred `…|187|…` can resolve to either. Not introduced here; logged.
+   share an id; market.py's final de-duplication on id (`:1575-1576`) keeps the first in Tradier's chain
+   order, so a starred `…|187|…` resolves to whichever of the two comes first. Not introduced here; logged.
 7. Residual 3's stale-grading half is mostly closed by the POST overwrite; the no-row half remains.
 
 ## 3. Tests (each with the mutation it must kill)
@@ -287,7 +292,10 @@ starts schedulers), its own in-memory aiosqlite engine (StaticPool) with `Watche
 .create`, and `test_app.dependency_overrides[get_db]` — the shape of `tests/conftest.py`'s `client`
 fixture (`:387-470`). Contracts-endpoint tests (6b-6g) extend `tests/test_step6_contract_rules.py`'s
 harness, which already stubs the chain and `fetch_price_async`; every 6b-6g case stubs the price at 185.0,
-so the existing no-price 503 can never stand in for the new one:
+so the existing no-price 503 can never stand in for the new one. The watched-contracts harness also
+registers `test_app.add_exception_handler(RequestValidationError, request_validation_handler)` (imported
+from `app.main`, `main.py:341-379`): pydantic echoes the offending input into a 422 body, and a NaN in it
+makes Starlette's `allow_nan=False` JSON encoder raise -> 500 without that handler:
 1. POST with grading -> `/detail` returns it verbatim. *Kills: not storing grading.*
 2. POST without grading -> `/detail` grading null; `GET /api/watched-contracts` still `list[str]`. *Kills:
    breaking the old shape.*
@@ -295,15 +303,18 @@ so the existing no-price 503 can never stand in for the new one:
    leaves it; a fourth with explicit `"grading": null` clears it (`/detail` null). *Kills keep-first,
    wipe-on-absent, and ignore-explicit-null.*
 3b. POST with an unknown rule key -> 201 and the key is not stored.
-4. 422 on: non-finite/bool rule value, hold max < min, only one hold bound, stock_score 101. *Kills a missing
-   validator.*
+4. 422 on: non-finite/bool rule value, hold max < min, only one hold bound, stock_score 101. NaN/Infinity
+   cases are sent as raw JSON text (`content='{"contract_id":…,"grading":{"contract_rules":{"min_volume":
+   NaN}}}'`, `content-type: application/json`), since httpx's `json=` refuses NaN. *Kills a missing
+   validator.* 4c. The same NaN body against a bare app WITHOUT the handler -> 500, pinning why the
+   harness (and production) need it.
 4b. Numeric-string rule value (`"5"`), bool (`true`) and a huge int (a 400-digit integer literal in the
    raw JSON body, which Python parses as an int that overflows float) -> 422, not 500. *Kills lax pydantic coercion and the OverflowError path.*
 5. Hand-written invalid grading in the row -> `/detail` serves null, 200. *Kills a 500 on bad rows.*
 5b. The explicit-null clear path (which assigns Python None) leaves SQL NULL: a raw `grading IS NULL`
    query finds the row. *Kills JSON-null storage (`none_as_null` missing).*
 6. Migration: `down_revision == 'f3d5c81b0a47'`, and applying `upgrade()` via
-   `Operations.context(MigrationContext.configure(conn))` (the `tests/test_journal.py:384-423` pattern) on a
+   `Operations.context(MigrationContext.configure(conn))` (the `tests/test_journal.py:382-423` pattern) on a
    sqlite DB where the OLD `watched_contracts` table was created by raw DDL (not from the current model,
    which already has `grading`) adds `grading`; `downgrade()` removes it.
    *Kills a migration that does not add the column.*
@@ -312,13 +323,14 @@ so the existing no-price 503 can never stand in for the new one:
    *Kills not forwarding / not filtering.*
 6c. Parity: stubbed chain (fewer than 10 rows, all priced under $50, so the call without `strikes` is not
    cut by `limit`/`max_price`) where E is the window's expiry; hold days (20, 25) as the existing test at
-   `test_step6_contract_rules.py:176` (so the widened band 30-60 differs from the YAML's 21-60 for a 45-DTE
+   `test_step6_contract_rules.py:177` (so the widened band 30-60 differs from the YAML's 21-60 for a 45-DTE
    stub); the same rules/stock_score called once without `expiry`/`strikes` and once with
    `expiry=E&strikes=<all>` -> identical `score` and `contractConfidence` per id. Variant with
    `_THIN_NO_IV`-style rows (no vendor IV) and `strikes=` one NON-ATM strike -> that row's `iv` and `score`
    equal the no-strikes call's. *Main case kills e.g. skipping `widen_contract_overrides_for_dte` on the
    new path; the variant kills filtering strikes before the ATM Black-Scholes inversion.*
-6d. `strikes`: a 150-row chain where every row scores the same and the starred strike is last in strike
+6d. `strikes`: a 150-row chain where every row scores the same (rows priced above `max_price` keep
+   `spread/mid` constant by scaling `spread` with price) and the starred strike is last in strike
    order, priced above `max_price` -> returned; and `strikes=` the LAST 12 strikes in strike order (all
    tied, some above `max_price`) -> all 12 returned (kills a `results[:limit]` left after the filter, which
    the single-strike case cannot see). Non-int item -> 422; `strikes=` -> same as absent; `expiry=` -> same
@@ -407,9 +419,10 @@ Frontend:
        AFTER `ids` is cleared to `[]` -> no banner; unstarring the last valid star while one expired star
        remains (zero-groups path) -> the button reads "Refresh" (not "Refreshing…") and no banner; a contracts success does not
        clear a stocks failure.
-    Clock: every Watchlist and `contractGrading` test with a dated id pins the clock
-    (`jest.useFakeTimers().setSystemTime(new Date('2026-10-01T15:00:00'))`) or builds expiries relative to
-    `Date.now()`, so no test starts failing when a literal date passes.
+    Clock: every Watchlist and `contractGrading` test with a dated id builds expiries relative to
+    `Date.now()` (preferred: no fake timers, so RTL's `findBy`/`waitFor` behave normally); only a test
+    that needs an exact date boundary pins the clock with `jest.useFakeTimers({ advanceTimers: true })
+    .setSystemTime(...)`. No test may start failing when a literal date passes.
 
 Gates: `npm run typecheck`, Jest full, backend pytest full, `python3 scripts/state.py` exit 0.
 Deploy note (in the merge record): run `alembic upgrade head` (dev `sqlite+aiosqlite:///./dev.db` and prod)
