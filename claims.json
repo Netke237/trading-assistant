@@ -7,6 +7,14 @@
       "expires_at": "2026-10-02T01:42:38Z",
       "note": "Q55: a channel-rejected message blocks the watch's later alerts (stop hits included) in _resend_watch",
       "task": "WATCH-RESEND-HEAD-OF-LINE"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/sharp-wozniak-6xb8pq",
+      "claimed_at": "2026-10-01T22:45:09Z",
+      "expires_at": "2026-10-02T01:45:09Z",
+      "note": "one adversarial round on practical-rosalind diff, then merge",
+      "task": "CLAIMS-WINDOWS-CRLF"
     }
   ]
 }
