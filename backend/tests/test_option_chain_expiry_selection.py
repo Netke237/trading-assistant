@@ -115,6 +115,8 @@ def test_an_expiry_exactly_at_the_floor_is_kept():
 
 import asyncio  # noqa: E402
 
+import pytest  # noqa: E402
+
 import app.data.market as market  # noqa: E402
 from app.data.market import (  # noqa: E402
     _DEFAULT_MIN_DTE_FLOOR, _pick_expiration_without_window, fetch_option_chain, fetch_option_chain_async,
@@ -186,6 +188,15 @@ def test_shipped_rules_pick_what_the_old_fixed_21_picked():
 def test_no_window_pick_does_not_trust_the_listing_order():
     dates = list(reversed(_dates(_TODAY, 7, 24, 52, 80)))
     assert _pick_expiration_without_window(dates, _TODAY, (45, 21, 60, 90)) == _dates(_TODAY, 52)[0]
+
+
+def test_a_malformed_listing_entry_fails_only_the_rules_path():
+    # The legacy (no rules) pick stops at the first 21+ day expiry, as the old
+    # code did; with rules every entry is parsed and the bad one raises.
+    dates = _dates(_TODAY, 31) + ["zzzz-bad"]
+    assert _pick_expiration_without_window(dates, _TODAY, None) == _dates(_TODAY, 31)[0]
+    with pytest.raises(ValueError):
+        _pick_expiration_without_window(dates, _TODAY, (21, 21, 60, 90))
 
 
 def test_default_floor_is_the_yaml_min_dte():

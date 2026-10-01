@@ -314,10 +314,10 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
     ({"min_dte": "45", "max_dte": 60}, (45, 21, 60, 60)),
 ])
 def test_scan_without_hold_days_passes_the_validators_dte_limits(client, overrides, limits):
-    """No hold days: the fetch picks within the min_dte/max_dte and nearest the
-    preferred DTE band the validator applies (the overrides, else the YAML). It used a fixed 21, so a min_dte of
-    45 fetched an expiry whose every contract was dte_too_short and the symbol
-    dropped out of the scan."""
+    """No hold days: the fetch picks within the min_dte/max_dte and nearest
+    the preferred DTE band the validator applies (the overrides, else the
+    YAML). It used a fixed 21, so a min_dte of 45 fetched an expiry whose
+    every contract was dte_too_short and the symbol dropped out of the scan."""
     seen = []
 
     async def _chain(_client, symbol, **kw):
