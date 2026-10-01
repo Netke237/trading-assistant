@@ -113,6 +113,12 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
           // harmless, because stock_scorer ignores keys it does not know, but
           // it meant the Step-3 value was being posted to a place nothing read.
           regime_headwind_caution_pct: _rhc, regime_headwind_reject_pct: _rhr,
+          // Step-3 "Min stock score" is a STOCKS-mode drop line (its hint
+          // says the Options scan does not read it). But `min_stock_score` is
+          // also a contract_validator override key (_CONTRACT_OVERRIDES,
+          // hard_reject), so posting it here silently replaced
+          // contract_rules.yaml's contract floor (55) with the Step-3 value.
+          min_stock_score: _mss,
           ...scoreOnlyOverrides } = scanOverrides;
   const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: ctx.shortlistMaxCandidates };
 
