@@ -51,8 +51,14 @@ class GitError(RuntimeError):
 
 def git(*args: str, input: str | None = None, check: bool = True,
         env: dict | None = None) -> subprocess.CompletedProcess:
-    p = subprocess.run(["git", *args], input=input, capture_output=True,
-                       text=True, env=env, timeout=60)
+    # Bytes in, bytes out. With text=True, Windows rewrites "\n" as "\r\n" on
+    # stdin, so mktree names the file "claims.json\r" and every reader then
+    # sees an empty ledger (and the next write drops everybody's claims).
+    p = subprocess.run(["git", *args],
+                       input=None if input is None else input.encode("utf-8"),
+                       capture_output=True, env=env, timeout=60)
+    p.stdout = p.stdout.decode("utf-8", "replace")
+    p.stderr = p.stderr.decode("utf-8", "replace")
     if check and p.returncode != 0:
         raise GitError(f"git {' '.join(args)}: {p.stderr.strip()}")
     return p
@@ -88,7 +94,15 @@ def load(commit: str | None) -> dict:
         return {"claims": []}
     p = git("show", f"{commit}:{FILE}", check=False)
     if p.returncode != 0:
-        return {"claims": []}
+        # An unfixed Windows client names the file "claims.json\r"; read it
+        # anyway. Never treat an unreadable ledger as empty: the next write
+        # would then erase every other session's claims.
+        entries = git("ls-tree", "-z", commit).stdout.split("\0")
+        blob = next((e.split()[2] for e in entries
+                     if "\t" in e and e.split("\t", 1)[1].strip() == FILE), None)
+        if blob is None:
+            raise GitError(f"{FILE} missing from claims commit {commit[:8]}")
+        p = git("cat-file", "blob", blob)
     return json.loads(p.stdout)
 
 
