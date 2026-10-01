@@ -21,9 +21,17 @@ set PYTHONUTF8=1
 
 ## Step 0 — once, before day 1: the freeze tag
 
-1. Pick the `main` commit you will measure on. Every day runs on this one commit.
-2. `git checkout main` and `git pull`, then tag it: `git tag meas-freeze-1`.
+1. **The MEAS build must be merged to `main` first.** The runner and the bodies live on `main` from
+   then on. Tagging a commit without them leaves you with no runner.
+2. `git checkout main` and `git pull`, then tag that commit: `git tag meas-freeze-1`. Every day
+   runs on this one commit.
 3. Restart the backend (`start-backend.bat`) so it runs the tagged code.
+
+**On every later day, put yourself back on the tag before anything else:**
+`git switch --detach meas-freeze-1`, then restart the backend. `main` moves almost every day, so
+staying on `main` would fail the freeze check. Switching to the tag is the normal start of a day.
+It is different from the forbidden move below, which is running `git checkout` on files to make
+the runner's mismatch go away. After the last day, `git switch main`.
 
 The runner stops if `backend/app/` (except `backend/app/data/sp500.csv`) or `scoring_rules.yaml` /
 `contract_rules.yaml` differ from the tag, including uncommitted edits. If it does, **do not run
@@ -36,7 +44,8 @@ rewrite **during** a block invalidates that block (see the checklist).
 
 - [ ] A normal US trading day: **not a weekend, not an NYSE half-day** (the runner cannot know
       half-days).
-- [ ] You are on the freeze tag. After any `git checkout` or `git pull`, restart the backend.
+- [ ] You are on the freeze tag (`git switch --detach meas-freeze-1`). After any switch,
+      checkout or pull, restart the backend.
       The runner sees config, but not which code the running backend loaded.
 - [ ] Backend running, with **one** worker.
 - [ ] **IBKR gateway stopped.** Its IV ranks override tastytrade's, and a day must use one rank
@@ -76,12 +85,20 @@ At the start and the end it records:
 Output goes to `docs/superpowers/measurements/scans/<date>/`, with a `manifest.json` that lists
 every scan, its `scan_id` and its flags.
 
-**If it stops:** read the message. A stop before O1 leaves no folder, so fix the cause and rerun.
-A stop mid-run keeps the folder: for a second attempt the same day, use `--run-tag run2`.
+**If it stops:** read the message.
+- A stop in the pre-checks, before it prints the `NOTE:` line, leaves no folder. Fix the cause and
+  rerun the same command.
+- A stop after that keeps the folder, marks it `day_invalid: core_block_not_completed`, and never
+  overwrites it. For a second attempt the same day, add `--run-tag run2`, if it is still before
+  13:15 ET.
+- O1 itself must start by 13:15 ET. If the pre-checks run past that, the runner stops.
 
 **The day counts only if** it has all eight base scans, none flagged `state:`, `INVALID:` or
-`late_for_comparison`, and the manifest has no `day_invalid`, `INVALID:config_changed_during_run`,
-`INVALID:backend_restarted` or `INVALID:universe_changed_during_run`.
+`late_for_comparison`, and the manifest has no `day_invalid` (an unfinished core block always writes
+one),
+`INVALID:config_changed_during_run`, `INVALID:backend_restarted` or
+`INVALID:universe_changed_during_run`. A `snapshot_failed:core_end` flag means only the end-of-run
+context (data sources, regime) is missing. The validity checks ran before it.
 
 ## Step 3 — A-block, one day only: make a credentials copy without tastytrade
 
@@ -109,6 +126,9 @@ come from Tradier.
 
 ## Step 5 — the A-block (A1, A2)
 
+The backend now occupies the step-4 window, so open a **second** cmd window for the runner. Set
+`PY` and `PYTHONUTF8` again there, as at the top of this page.
+
 ```
 %PY% docs\superpowers\measurements\run_measurement_day.py ivabs
 ```
@@ -134,7 +154,7 @@ Close that cmd window. Open a **new** one and run `start-backend.bat`. Then:
 %PY% docs\superpowers\measurements\run_measurement_day.py restore-check
 ```
 
-It requires tastytrade to be up again.
+Use the same `--run-tag` as `core` and `ivabs`, if they had one. It requires tastytrade to be up again.
 
 ## Step 7 — delete the copy
 

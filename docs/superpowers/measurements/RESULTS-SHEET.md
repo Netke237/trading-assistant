@@ -44,7 +44,7 @@ Pre-freeze, Position parameters for Swing, no C- or A-scans. Regime: conviction 
 
 - Freeze tag / commit:
 - Valid day? (plan §5) yes / no — why:
-- Manifest flags / `day_invalid`:
+- Manifest flags / `day_invalid` (incl. `core_block_not_completed`) / `snapshot_failed`:
 - Day regime (position `/api/regime` at start): conviction_pct · omm.state · omm.stability · VIX · regime_direction
 - `strategy_params.yaml` sha256 (start):
 - `sp500.csv` sha256 (core start / end); differs from the other days? [U1]

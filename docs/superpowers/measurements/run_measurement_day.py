@@ -254,16 +254,16 @@ def check_config_health_start(ctx) -> dict:
     return {"at": stamp(ctx), "ok": True, "pid": h.get("pid"), "stale": []}
 
 
-def check_config_health_end(ctx, m: dict, start: dict, label: str) -> None:
+def check_config_health_end(ctx, m: dict, start: dict, label: str, flags: list) -> None:
     """§4.3: a measured file gone stale, or a different backend pid, invalidates the block."""
     h = config_health(ctx)
     bad = stale_measured(h)
     m[f"config_health_{label}"] = {"at": stamp(ctx), "ok": h.get("ok"), "pid": h.get("pid"),
                                    "stale": [s.get("file") or "" for s in h.get("stale") or []]}
     if bad:
-        m["flags"].append(f"INVALID:config_changed_during_run(health:{','.join(bad)})")
+        flags.append(f"INVALID:config_changed_during_run(health:{','.join(bad)})")
     if h.get("pid") != start.get("pid"):
-        m["flags"].append(f"INVALID:backend_restarted({start.get('pid')}->{h.get('pid')})")
+        flags.append(f"INVALID:backend_restarted({start.get('pid')}->{h.get('pid')})")
 
 
 def config_files(repo: Path) -> list[Path]:
@@ -278,14 +278,6 @@ def config_state(repo: Path) -> dict:
 def universe_sha256(repo: Path) -> str | None:
     p = repo / UNIVERSE_FILE
     return hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
-
-
-def check_universe_end(ctx, m: dict, start_sha: str | None, label: str) -> None:
-    """§4.0: the SP500 universe rewritten during a block changes what the scans read."""
-    end = universe_sha256(ctx.repo)
-    m[f"universe_sha256_{label}"] = end
-    if end != start_sha:
-        m["flags"].append(f"INVALID:universe_changed_during_run({label})")
 
 
 def tracked_config_names(repo: Path) -> set[str]:
@@ -356,7 +348,9 @@ def c6_override_not_applied(result: dict) -> bool:
     if "volume_too_low" in reasons or "open_interest_too_low" in reasons:
         return True
     for c in result.get("candidates") or []:
-        ld = ((c.get("contractBreakdown") or {}).get("liquidityDetail") or {})
+        ld = (c.get("contractBreakdown") or {}).get("liquidityDetail")
+        if not ld:
+            continue   # dropped by _safe(): no evidence either way (counted in the manifest)
         if ld.get("preferred_volume_min") != 0 or ld.get("preferred_oi_min") != 0:
             return True
     return False
@@ -524,8 +518,12 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
             else:
                 write_json(folder / f"{name}.envelope.json", {"request": body, "result": result})
                 rec["envelope_file"] = f"{name}.envelope.json"
-    if scan_id == "C6" and c6_override_not_applied(result):
-        rec["flags"].append("override_not_applied:liquidity")
+    if scan_id == "C6":
+        rec["no_liquidity_detail"] = sum(
+            1 for c in result.get("candidates") or []
+            if not (c.get("contractBreakdown") or {}).get("liquidityDetail"))
+        if c6_override_not_applied(result):
+            rec["flags"].append("override_not_applied:liquidity")
 
     if scan_id in BASE_IDS and _hm(ctx.clock.et()) > CORE_DONE_BY:
         rec["flags"].append("late_for_comparison")
@@ -553,15 +551,29 @@ def mark_pair(m: dict, rec: dict) -> None:
     rec["pair_excluded"] = reasons
 
 
-def _finish(ctx, m: dict, folder: Path, label: str) -> None:
-    snapshot(ctx, folder, label)
+def end_checks(ctx, m: dict, folder: Path, label: str, config_base: str, health: dict,
+               universe_start: str | None, flags: list) -> None:
+    """End of a block (§4.0, §4.3). The LOCAL checks run first and the network ones after,
+    and the context snapshot runs LAST, as a flag on failure: a failing GET must never
+    skip the checks that decide validity (code round 1, gate-level). Any exception here
+    still ends the block uncompleted, which the callers record as invalid."""
     m[f"config_{label}"] = config_state(ctx.repo)
-    before, after = m["config_start"]["sha256"], m[f"config_{label}"]["sha256"]
+    before, after = m[config_base]["sha256"], m[f"config_{label}"]["sha256"]
     changed = sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n))
     m.setdefault("config_changed", {})[label] = changed
     bad = [n for n in changed if n in RUN_INVARIANT_CONFIG]
     if bad:
-        m["flags"].append(f"INVALID:config_changed_during_run({label}:{','.join(bad)})")
+        flags.append(f"INVALID:config_changed_during_run({label}:{','.join(bad)})")
+    end = universe_sha256(ctx.repo)
+    m[f"universe_sha256_{label}"] = end
+    if end != universe_start:
+        flags.append(f"INVALID:universe_changed_during_run({label})")
+    check_config_health_end(ctx, m, health, label, flags)
+    try:
+        snapshot(ctx, folder, label)
+    except Stop as e:
+        flags.append(f"snapshot_failed:{label}")
+        print(f"WARNING: end snapshot failed ({e}) -- recorded as a flag; the checks above ran.", flush=True)
     m[f"{label}_at"] = stamp(ctx)
 
 
@@ -604,10 +616,13 @@ def cmd_core(ctx) -> None:
     if tasty == "degraded":
         m["flags"].append("tastytrade_degraded_at_start")
     ctx.save_manifest(m)
-    m["config_copied"] = copy_config(ctx.repo, folder / "config-start")
-    snapshot(ctx, folder, "start")
     print("NOTE: every POST /api/scan replaces the app's 'last scan' and its rank deltas.", flush=True)
     try:
+        m["config_copied"] = copy_config(ctx.repo, folder / "config-start")
+        snapshot(ctx, folder, "start")
+        # §4.6: O1 itself must start by 13:15 ET -- the pre-checks above take time.
+        if _hm(ctx.clock.et()) > CORE_START_LATEST:
+            raise Stop(f"it is {ctx.clock.et():%H:%M} ET after the pre-checks; O1 must start by 13:15 ET.")
         skipping_c = False
         for i, scan in enumerate(DAY_SCANS):
             if scan[0].startswith("C"):
@@ -620,15 +635,14 @@ def cmd_core(ctx) -> None:
                     print(f"[{stamp(ctx)['et']}] {scan[0]} skipped: bases projected past 14:50 ET", flush=True)
                     continue
             run_scan(ctx, m, folder, scan)
-        _finish(ctx, m, folder, "core_end")
-        check_config_health_end(ctx, m, health, "core_end")
-        check_universe_end(ctx, m, m["universe_sha256_core_start"], "core_end")
+        end_checks(ctx, m, folder, "core_end", "config_start", health,
+                   m["universe_sha256_core_start"], m["flags"])
         m["status"] = "core_complete"
-    except Stop as e:
-        m["status"] = f"stopped: {e}"
-        raise
-    except Exception as e:   # never leave a crashed run reading "running"
-        m["status"] = f"crashed: {e!r}"
+    except BaseException as e:   # Stop, a crash, Ctrl+C: never leave "running" behind
+        kind = "stopped" if isinstance(e, Stop) else "interrupted" if isinstance(e, KeyboardInterrupt) else "crashed"
+        m["status"] = f"{kind}: {e if isinstance(e, Stop) else repr(e)}"
+        # The end checks did not all run, so nothing proves the day valid (§5).
+        m["day_invalid"] = sorted(set(m.get("day_invalid", [])) | {"core_block_not_completed"})
         raise
     finally:
         ctx.save_manifest(m)
@@ -664,19 +678,21 @@ def cmd_ivabs(ctx) -> None:
     health = check_config_health_start(ctx)
     m["config_health_ivabs_start"] = health
     m["universe_sha256_ivabs_start"] = universe_sha256(ctx.repo)
+    # The A-block is judged against ITS OWN start: a strategy adopt between core and the
+    # A-block must not cost the A-block (code round 1, below-gate 5).
+    m["config_ivabs_start"] = config_state(ctx.repo)
     m["ivabs_sources"] = {"tastytrade": tasty, "ibkr": ibkr, "tradier": tradier}
-    snapshot(ctx, folder, "ivabs_start")
+    # Block-level flags of the A-block are ITS flags, never the day's: a config edit or a
+    # restart after core ended does not touch the core scans (§5 day validity).
+    m["ivabs_flags"] = []
+    m["ivabs_usable"] = False
+    ctx.save_manifest(m)
     try:
+        snapshot(ctx, folder, "ivabs_start")
         for scan in IVABS_SCANS:
             run_scan(ctx, m, folder, scan)
-        n_flags = len(m["flags"])
-        _finish(ctx, m, folder, "ivabs_end")
-        check_config_health_end(ctx, m, health, "ivabs_end")
-        check_universe_end(ctx, m, m["universe_sha256_ivabs_start"], "ivabs_end")
-        # Block-level flags of the A-block are ITS flags, not the day's: a config edit or
-        # a restart after core ended does not touch the core scans (§5 day validity).
-        m["ivabs_flags"] = m["flags"][n_flags:]
-        del m["flags"][n_flags:]
+        end_checks(ctx, m, folder, "ivabs_end", "config_ivabs_start", health,
+                   m["universe_sha256_ivabs_start"], m["ivabs_flags"])
         # §5: one A-block feeds the report -- the first USABLE one. A truncated or
         # flagged A-scan, or a block-level INVALID, makes this one unusable, so a
         # later day may repeat it (round-6 below-gate: a truncated A-scan must not
@@ -686,11 +702,11 @@ def cmd_ivabs(ctx) -> None:
         m["ivabs_usable"] = not why
         m["ivabs_unusable_because"] = why
         m["status"] = "ivabs_complete"
-    except Stop as e:
-        m["status"] = f"ivabs stopped: {e}"
-        raise
-    except Exception as e:   # never leave a crashed run reading "running"
-        m["status"] = f"ivabs crashed: {e!r}"
+    except BaseException as e:   # Stop, a crash, Ctrl+C: the A-block is not usable
+        kind = "stopped" if isinstance(e, Stop) else "interrupted" if isinstance(e, KeyboardInterrupt) else "crashed"
+        m["status"] = f"ivabs {kind}: {e if isinstance(e, Stop) else repr(e)}"
+        m["ivabs_usable"] = False
+        m["ivabs_unusable_because"] = [f"ivabs_block_not_completed"]
         raise
     finally:
         ctx.save_manifest(m)

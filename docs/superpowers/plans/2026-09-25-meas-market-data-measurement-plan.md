@@ -61,8 +61,22 @@ cheap, and choices the plan left open:
   the probe would be permanent drift. The probe is `kind: absent` on `RESULTS-SHEET.md`, pattern
   `^MEAS-ALL-PROPOSALS-ANSWERED$`, a line written only once every proposal has Kenneth's answer.
   The runner's guards are pinned by the §9 scratch tests, as before.
-- **B9** A non-`Stop` exception inside a block sets the manifest status to `crashed: …` instead of
-  leaving it at `running` (round-4 below-gate item).
+- **B9** A non-`Stop` exception inside a block, or Ctrl+C, sets the manifest status to `crashed: …`
+  or `interrupted: …` instead of leaving it at `running` (round-4 below-gate item).
+- **B10 (code round 1, gate-level fix).** The end of a block runs the local checks (config
+  hashes, universe hash) first, then config health and pid, and the context snapshot **last**. A
+  failed end snapshot is the flag `snapshot_failed:<block>`, not a stop. Any exit from `core`
+  before `core_complete` (a stop, crash or Ctrl+C, including inside these end checks) writes
+  `day_invalid: core_block_not_completed`, so a day whose end checks did not all run can never
+  pass §5. Any such exit from `ivabs` leaves `ivabs_usable: false`.
+- **B11 (code round 1, below-gate).**
+  - The start copy and snapshot run inside the block.
+  - O1's own start time is checked against 13:15 ET, not only the command's start time.
+  - The A-block's config is compared against `config_ivabs_start`, its own start.
+  - C6's secondary liquidity check skips a candidate with no `liquidityDetail` and counts it
+    under `no_liquidity_detail`.
+  - PROTOCOL.md now says: merge, then tag; be on the tag on later days; use a second window for
+    `ivabs`; pass the same `--run-tag` to `restore-check`.
 
 **What changed in v6 (2026-09-30, decision `MEAS-V6-REFRESH-ONE-ROUND-2026-09-30`).** v5 was written
 on main 91e6725e. Before the refresh, 37 commits had touched its gate code: `stock_scan.py` +419 lines,
