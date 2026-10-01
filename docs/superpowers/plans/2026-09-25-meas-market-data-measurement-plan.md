@@ -515,7 +515,8 @@ and `contractScore` ≥ the median `contractScore` of that day's base candidates
   horizon.
   - Floor: ≥ 30 deduplicated **rank** rows **per horizon**, over ≥ 2 valid days. **[G1a]** Rows
     are counted after the truncated scans are removed, and a valid day counts toward the 2 only
-    if at least one untruncated O-scan of that horizon contributed a row.
+    if at least one untruncated O-scan of that horizon contributed a deduplicated rank row
+    (`stock_basis == "rank"`) **[G1a, round-6 fix]**.
   - Rule (quantile matching on the same rows): q = the share of rows with `detail_iv_abs` ≤ the
     absolute cut (`iv_abs_pass_max` / the caution cut / `preferred_iv_abs_max`). The proposed rank
     cut is the q-quantile of `stock_iv` (rank), rounded to the nearest 5.
