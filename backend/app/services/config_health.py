@@ -58,13 +58,18 @@ CHECK_REGIME = "regime blocks (intraday, swing, position)"
 CHECK_CONVICTION = "direction_conviction: position and values"
 CHECK_TOP_LEVEL = "top-level families"
 CHECK_HORIZONS = "horizons tree: unknown keys"
+CHECK_SCORING_KEYS = "stock_score_thresholds, confidence_backtest, entry_quality: unknown keys"
 CHECK_RISK_PARSES = "risk_rules.yaml parses"
+CHECK_RISK_KEYS = "risk_rules.yaml: unknown keys"
 CHECK_CONTRACT_PARSES = "contract_rules.yaml parses"
+CHECK_CONTRACT_KEYS = "contract_rules.yaml: unknown keys"
+CHECK_DUPLICATES = "duplicate keys"
 CHECK_STALENESS = "running config vs disk"
 
 CHECK_ORDER = (
     CHECK_SCORING_PARSES, CHECK_MONEY, CHECK_SIZING, CHECK_REGIME, CHECK_CONVICTION,
-    CHECK_TOP_LEVEL, CHECK_HORIZONS, CHECK_RISK_PARSES, CHECK_CONTRACT_PARSES,
+    CHECK_TOP_LEVEL, CHECK_HORIZONS, CHECK_SCORING_KEYS, CHECK_RISK_PARSES,
+    CHECK_RISK_KEYS, CHECK_CONTRACT_PARSES, CHECK_CONTRACT_KEYS, CHECK_DUPLICATES,
     CHECK_STALENESS,
 )
 _PARSE_CHECK = {
@@ -77,9 +82,10 @@ _PARSE_CHECK = {
 # plan §4 records each item and where it goes.
 NOT_CHECKED = (
     "money blocks other than regime_sizing: values",
-    "required non-money sections and keys (horizons.<h>.*, stock_score_thresholds, "
-    "confidence_backtest, risk_rules sections)",
-    "risk_rules.yaml and contract_rules.yaml contents",
+    "missing keys outside the money blocks -- a deleted key runs on the code default "
+    "(horizons.<h>.*, stock_score_thresholds, confidence_backtest, entry_quality, "
+    "risk_rules.yaml, contract_rules.yaml)",
+    "risk_rules.yaml and contract_rules.yaml values",
     "single worker assumed; only WEB_CONCURRENCY is detected",
     "copies the frontend fetched at page load (event and IV thresholds)",
 )
@@ -131,6 +137,63 @@ HORIZON_KEYS: dict = {
         "iv_abs_compressed_caution", "iv_abs_pass_max", "iv_abs_caution_max",
         "iv_rank_compressed_caution", "iv_rank_pass_max", "iv_rank_caution_max")},
     "stop_premium": {"pass_max_fraction": None},
+}
+
+# The same closed, warn-only spec (DOCC-9.8) for the rest of the three files:
+# a misspelled key is never read, so its consumer runs on the code default
+# (YAML-CONFIG-INTEGRITY whole-phase audit, finding 1). Built from the shipped
+# files plus every key a consumer reads that they omit (none today). Anyone
+# adding a key a consumer reads adds it here in the same commit.
+_BT_HORIZON = {k: None for k in (
+    "n_days", "atr_mult_target", "atr_mult_stop", "atr_period", "history_years",
+    "min_samples")}
+SCORING_OTHER_KEYS: dict = {
+    "stock_score_thresholds": {"pass": None, "caution": None},
+    "confidence_backtest": {h: _BT_HORIZON for h in _HORIZONS},
+    "entry_quality": {k: None for k in (
+        "spread_tolerance_pct", "max_slippage_pct", "min_premium")},
+}
+RISK_KEYS: dict = {
+    "portfolio": {k: None for k in (
+        "max_total_exposure_pct", "max_concurrent_positions", "max_daily_recommendations",
+        "max_same_symbol_positions", "min_portfolio_value", "portfolio_value",
+        "max_single_position_pct", "max_single_stock_position_pct",
+        "max_total_stock_exposure_pct", "max_loss_per_trade_pct")},
+    "sizing": {"max_contracts_per_trade": None},
+    "reward_risk": {k: None for k in (
+        "bullish_target_pct", "bearish_target_pct", "bullish_invalidation_pct",
+        "bearish_invalidation_pct", "premium_stop_pct", "target_t1_pct", "target_t2_pct",
+        "target_t3_pct")},
+    "exit_plan": {
+        "stop": {"atr_multiplier": None},
+        "target": {"rr_ratios": None, "structural_snap": {"atr_multiplier": None}},
+    },
+    "first_passage": {k: None for k in (
+        "max_drift_pct", "n_paths", "sigma_floor", "sigma_ceiling")},
+    "auto_trade": {k: None for k in (
+        "max_arm_age_minutes", "max_daily_loss_pct", "premium_stop_pct",
+        "regime_monitor_interval_minutes", "regime_flip_sustain_minutes",
+        "gap_threshold_pct")},
+    "reprice_horizon": {
+        "source": None,
+        "fallback_days": {k: None for k in (
+            "Intraday", "Swing", "Position", "Quarterly", "SemiAnnual", "Annual")},
+        "custom": {"rule": None, "fraction": None},
+        "clamp": {"min_days": None, "max_fraction_of_dte": None},
+    },
+}
+CONTRACT_KEYS: dict = {
+    "contract_score_thresholds": {"pass": None, "caution": None},
+    "dte_holding_multiplier": None,
+    "hard_reject": {k: None for k in (
+        "min_volume", "min_open_interest", "max_bid_ask_spread_pct", "min_delta",
+        "max_delta", "min_dte", "max_dte", "max_iv_abs", "max_iv_rank",
+        "max_soft_fail_count", "min_stock_score")},
+    "soft_rank": {k: None for k in (
+        "preferred_volume_min", "preferred_oi_min", "preferred_spread_pct_max",
+        "preferred_delta_min", "preferred_delta_max", "preferred_dte_min",
+        "preferred_dte_max", "preferred_iv_abs_max", "preferred_iv_rank_max")},
+    "weights": {k: None for k in ("liquidity", "spread", "delta", "dte", "iv_rank")},
 }
 
 CANONICAL_NODE_BUDGET = 100_000
@@ -404,20 +467,27 @@ class ConfigHealth:
             return r
         r.checked.append(_PARSE_CHECK[file])
         if file == "scoring_rules.yaml":
-            for check, fn in ((CHECK_MONEY, _check_money), (CHECK_SIZING, _check_sizing),
-                              (CHECK_REGIME, _check_regime), (CHECK_CONVICTION, _check_conviction),
-                              (CHECK_TOP_LEVEL, _check_top_level),
-                              (CHECK_HORIZONS, _check_horizons)):
-                try:
-                    ran = fn(doc, r)
-                except Exception as exc:
-                    logger.exception("config_health: check %s crashed", check)
-                    r.crashed = True
-                    r.errors.append({"file": file, "path": "", "blocks": "",
-                                     "message": f"health check {check} crashed: {exc!r}"})
-                    continue
-                if ran is not False:
-                    r.checked.append(check)
+            checks = ((CHECK_MONEY, _check_money), (CHECK_SIZING, _check_sizing),
+                      (CHECK_REGIME, _check_regime), (CHECK_CONVICTION, _check_conviction),
+                      (CHECK_TOP_LEVEL, _check_top_level),
+                      (CHECK_HORIZONS, _check_horizons),
+                      (CHECK_SCORING_KEYS, _check_scoring_other))
+        elif file == "risk_rules.yaml":
+            checks = ((CHECK_RISK_KEYS, _check_risk_keys),)
+        else:
+            checks = ((CHECK_CONTRACT_KEYS, _check_contract_keys),)
+        checks += ((CHECK_DUPLICATES, lambda _doc, res: _check_duplicates(file, text, res)),)
+        for check, fn in checks:
+            try:
+                ran = fn(doc, r)
+            except Exception as exc:
+                logger.exception("config_health: check %s crashed", check)
+                r.crashed = True
+                r.errors.append({"file": file, "path": "", "blocks": "",
+                                 "message": f"health check {check} crashed: {exc!r}"})
+                continue
+            if ran is not False:
+                r.checked.append(check)
         return r
 
 
@@ -497,32 +567,98 @@ def _check_horizons(doc: dict, r: _FileResult) -> bool:
 
 
 def _walk_horizon(node: dict, spec: dict, path: str, r: _FileResult) -> None:
+    # direction_conviction is skipped at any depth: its own validator reports
+    # it, as an error.
+    _walk_closed(node, spec, path, r, "scoring_rules.yaml", skip="direction_conviction")
+
+
+def _walk_closed(node: dict, spec: dict, path: str, r: _FileResult, file: str,
+                 skip: str | None = None) -> None:
     # Recurses only where the spec has a subtree, so its depth is the spec's
     # and a recursive alias cannot loop it.
     for key, value in node.items():
         name = str(key)
-        sub = f"{path}.{name}"
-        if name == "direction_conviction":
-            continue    # at any depth: its own validator reports it, as an error
+        sub = f"{path}.{name}" if path else name
+        if name == skip:
+            continue
         if name not in spec:
-            r.warnings.append(_warning(sub, "unknown key, never read", name, spec))
+            r.warnings.append(_warning(sub, "unknown key, never read", name, spec, file))
             continue
         child = spec[name]
         if child is None:
             if isinstance(value, dict):
-                r.warnings.append(_warning(sub, "is a mapping where a single value is expected"))
+                r.warnings.append(_warning(sub, "is a mapping where a single value is expected",
+                                           file=file))
         elif not isinstance(value, dict):
-            r.warnings.append(_warning(sub, "is a single value where a mapping is expected"))
+            r.warnings.append(_warning(sub, "is a single value where a mapping is expected",
+                                       file=file))
         else:
-            _walk_horizon(value, child, sub, r)
+            _walk_closed(value, child, sub, r, file, skip)
 
 
-def _warning(path: str, message: str, name: str | None = None, siblings=()) -> dict:
+def _check_scoring_other(doc: dict, r: _FileResult) -> None:
+    # Only the families this spec owns; the top-level check covers the rest.
+    for family, spec in SCORING_OTHER_KEYS.items():
+        node = doc.get(family)
+        if node is None:
+            continue
+        if not isinstance(node, dict):
+            r.warnings.append(_warning(family, "is a single value where a mapping is expected"))
+        else:
+            _walk_closed(node, spec, family, r, "scoring_rules.yaml")
+
+
+def _check_risk_keys(doc: dict, r: _FileResult) -> None:
+    _walk_closed(doc, RISK_KEYS, "", r, "risk_rules.yaml")
+
+
+def _check_contract_keys(doc: dict, r: _FileResult) -> None:
+    _walk_closed(doc, CONTRACT_KEYS, "", r, "contract_rules.yaml")
+
+
+def _check_duplicates(file: str, text: str, r: _FileResult) -> None:
+    """A key written twice in one mapping: yaml.safe_load keeps the LAST copy
+    and drops the other without a word, so neither the loaders nor any check
+    on the parsed doc can see it (whole-phase audit, finding 2). Walks the
+    composed node tree. `<<` merge keys are not duplicates: a key that
+    overrides a merged one is the anchor pattern working as intended."""
+    root = yaml.compose(text, Loader=yaml.SafeLoader)
+    seen: set[int] = set()
+    stack: list[tuple[Any, str]] = [(root, "")]
+    while stack:
+        node, path = stack.pop()
+        if node is None or id(node) in seen:
+            continue    # an alias revisits a node; a recursive one would loop
+        seen.add(id(node))
+        if isinstance(node, yaml.MappingNode):
+            first: dict[str, int] = {}
+            for key_node, value_node in node.value:
+                if key_node.tag == "tag:yaml.org,2002:merge":
+                    stack.append((value_node, path))
+                    continue
+                name = str(key_node.value) if isinstance(key_node, yaml.ScalarNode) else "?"
+                sub = f"{path}.{name}" if path else name
+                line = key_node.start_mark.line + 1
+                if name in first:
+                    r.warnings.append({
+                        "file": file, "path": sub,
+                        "message": f"duplicate key: line {first[name]} is ignored, "
+                                   f"line {line} is used"})
+                else:
+                    first[name] = line
+                stack.append((value_node, sub))
+        elif isinstance(node, yaml.SequenceNode):
+            for i, item in enumerate(node.value):
+                stack.append((item, f"{path}[{i}]"))
+
+
+def _warning(path: str, message: str, name: str | None = None, siblings=(),
+             file: str = "scoring_rules.yaml") -> dict:
     hint = ""
     if name is not None:
         close = difflib.get_close_matches(name, sorted(str(s) for s in siblings), n=1)
         hint = f" — did you mean {close[0]!r}?" if close else ""
-    return {"file": "scoring_rules.yaml", "path": path, "message": f"{message}{hint}"}
+    return {"file": file, "path": path, "message": f"{message}{hint}"}
 
 
 config_health = ConfigHealth()

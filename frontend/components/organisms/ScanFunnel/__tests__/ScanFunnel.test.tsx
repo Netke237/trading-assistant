@@ -194,3 +194,41 @@ describe('ScanFunnel — P3a direction stage, measured vs no data', () => {
     expect(screen.getByText('−3 no conviction')).toBeInTheDocument();
   });
 });
+
+/**
+ * Options mode, open_questions 27 and 53: an UNMEASURED trend is removed right
+ * after the pre-screen, before the chain fetch, so it comes off there — not
+ * under the later Direction conviction stage, which would show those names as
+ * having passed chain and contracts. The measured-below-floor stage names the
+ * floor this scan applied.
+ */
+describe('ScanFunnel — options direction gate, measured vs no data', () => {
+  it('takes unmeasured names off right after the pre-screen, and reconciles', () => {
+    // 518 − 10 − 237 − 4 no data − 15 − (200+47) − 1 direction = 4.
+    render(<ScanFunnel mode="options" pipeline={pipeline({
+      failed_direction_unmeasured: 4, failed_direction: 1, no_chain: 15,
+      failed_score: 200, failed_contracts: 47, candidates: 4,
+    })} />);
+    const shown = screen.getAllByText(/^\d+$/).map((el) => Number(el.textContent));
+    expect(shown).toEqual([518, 508, 271, 267, 252, 5, 4, 4]);
+    const row = screen.getByText('Trend measurement (direction gate)').parentElement!;
+    expect(row).toHaveTextContent(/267−4 no data$/);
+  });
+
+  it('hides the no-data stage when nothing was unmeasured, or the count is absent', () => {
+    render(<ScanFunnel mode="options" pipeline={pipeline({ failed_direction: 5, candidates: 0 })} />);
+    expect(screen.queryByText('Trend measurement (direction gate)')).not.toBeInTheDocument();
+  });
+
+  it('names the floor this scan applied on the Direction conviction stage', () => {
+    render(<ScanFunnel mode="options" pipeline={pipeline({
+      failed_direction: 5, direction_min_trend: 40, candidates: 0,
+    })} />);
+    expect(screen.getByText('−5 no conviction (trend < 40)')).toBeInTheDocument();
+  });
+
+  it('says plain "no conviction" when the result carries no floor', () => {
+    render(<ScanFunnel mode="options" pipeline={pipeline({ failed_direction: 5, candidates: 0 })} />);
+    expect(screen.getByText('−5 no conviction')).toBeInTheDocument();
+  });
+});

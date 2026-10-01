@@ -126,6 +126,7 @@ def _accounted(pipeline: dict) -> int:
         + pipeline["failed_score"]
         + pipeline["failed_contracts"]
         + pipeline["failed_direction"]
+        + pipeline["failed_direction_unmeasured"]
         + pipeline["failed_shortlist"]
         + pipeline["other_rejected"]
     )
@@ -241,7 +242,8 @@ _REAL_REASONS = [
     ("regime data unavailable: no completed 15-min bars for X", "failed_data"),
     ("regime data unavailable: no completed 15-min bars for X (fetch failed: boom)", "failed_data"),
     # P3c item 2: literal lives in stock_scan._direction_conviction_drop.
-    ("direction_conviction_unmeasured: no trend measurement for Bullish Swing", "failed_direction"),
+    # Its own bucket (open_questions[53]): removed before the chain fetch.
+    ("direction_conviction_unmeasured: no trend measurement for Bullish Swing", "failed_direction_unmeasured"),
 ]
 
 
