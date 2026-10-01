@@ -23,14 +23,6 @@
       "expires_at": "2026-10-01T07:10:34Z",
       "note": "store scan contract_rules + hold days with each contract star; Watchlist grades with them",
       "task": "WATCHLIST-SCAN-CONTRACT-RULES"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/intelligent-allen-463f3h",
-      "claimed_at": "2026-10-01T04:16:43Z",
-      "expires_at": "2026-10-01T07:16:43Z",
-      "note": "direction-conviction gate: open_questions 26/27/53/47/54 (unmeasured semantics, options visibility, funnel stage, stale comments, fixture)",
-      "task": "DCG-SEMANTICS-VISIBILITY"
     }
   ]
 }
