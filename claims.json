@@ -2,11 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "ccr-2fe3aef8-jpt3lz",
-      "claimed_at": "2026-09-30T21:52:11Z",
-      "expires_at": "2026-10-01T01:33:11Z",
-      "note": "DOCC-5 build (plan r2 CLEAN)",
-      "task": "DOCC-5-TOPBAR-BANNER"
+      "branch": "claude/bold-ride-7nf8wj",
+      "claimed_at": "2026-10-01T03:41:47Z",
+      "expires_at": "2026-10-01T06:41:47Z",
+      "note": "apply round-6 fix, close plan stage, build runner to v6",
+      "task": "MEAS-MARKET-DATA-MEASUREMENT"
     }
   ]
 }
