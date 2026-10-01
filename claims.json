@@ -39,6 +39,14 @@
       "expires_at": "2026-10-02T01:52:18Z",
       "note": "adversarial audit rounds until clean",
       "task": "STATE-PROBE-NULL-POINTER"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/intelligent-allen-463f3h",
+      "claimed_at": "2026-10-01T22:52:21Z",
+      "expires_at": "2026-10-02T01:52:21Z",
+      "note": "adversarial audit rounds until clean",
+      "task": "STATE-PROBE-TARGET-SCOPING"
     }
   ]
 }
