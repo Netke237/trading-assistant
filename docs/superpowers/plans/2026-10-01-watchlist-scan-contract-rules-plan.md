@@ -1,4 +1,4 @@
-# WATCHLIST-SCAN-CONTRACT-RULES — plan (r9; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; all addressed below)
+# WATCHLIST-SCAN-CONTRACT-RULES — plan (r10; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; round 9 NOT clean 0B/1S/7N; all addressed below)
 
 - **Phase:** `WATCHLIST-SCAN-CONTRACT-RULES` (PROJECT_STATE.json), deferred by `STEP6-SCAN-CONTRACT-RULES`.
 - **Branch:** `claude/youthful-carson-82x23x` (off main at the DOCC-5 merge).
@@ -163,7 +163,7 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
    - In the `/detail`-failure fallback the local grading is re-checked client-side (`isValidGrading`: finite
      numbers, hold both-or-neither with max >= min, stock_score int 0-100); an invalid entry is treated as
      no grading, and so shows the YAML marker. One `getContracts` per group, with ctx `{ expiry, strikes: [the group's starred
-     strikes], ...gradingToCtx(grading) }` (an empty `contract_rules` is dropped from the URL by `api.ts`). A group
+     strikes], ...gradingToCtx(<the first member's grading, in watchedIds order>) }` (an empty `contract_rules` is dropped from the URL by `api.ts`). A group
      with no grading sends `{ expiry, strikes }`. `strikes` disables `limit` and `max_price` server-side.
    - `refreshContracts`' `useCallback` depends on `[watchedIds, grading]`, so a grading change refetches.
    - Kept results: a list of settled group results `{ groupKey, strikes: Set<number>, outcome: rows |
@@ -173,8 +173,9 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      results REPLACE the kept list atomically (an aborted refresh changes nothing). The zero-ids and
      zero-groups paths clear the list.
    - Matching an id: among kept results with the id's `groupKey` whose `strikes` CONTAINS the id's
-     (trunc) strike — a superset request counts, so unstarring a sibling does not blank a row — use the
-     first; `rejected` -> `fetch_failed`; rows -> today's exact-id match then the trunc fallback, else
+     (trunc) strike — a superset request counts, so unstarring a sibling does not blank a row — use that
+     result (at most one exists per groupKey, since a settled refresh replaces the whole list; "first" is
+     defensive); `rejected` -> `fetch_failed`; rows -> today's exact-id match then the trunc fallback, else
      `not_listed`. No such kept result (first mount, a newly starred expiry/grading, a strike newly joining
      a group before a request carrying it settles) -> `missing` with `reason: 'loading'`. A row is thus
      never graded from a request that lacked its strike, and never flashes Loading on Refresh or unstar. With the `strikes` filter two groups rarely
@@ -200,7 +201,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        cells, sort last, counted in tab and header) except the label is the raw id and the symbol cell is
        "—". The star is what lets
        the user delete a junk id the server keeps re-supplying.
-     - Missing rows render the label (`contractLabel` from the id parts), status `NO_DATA`, dashes in every
+     - Missing rows render the label (`contractLabel` from the id parts), status `PENDING` for
+       `reason: 'loading'`, else `NO_DATA`, dashes in every
        market cell, no `DTEProgressBar`, a plain-text tooltip with the note, and the star (unstar works).
      - Sort: missing and invalid rows always last, in both directions and for every sort key, ordered
        among themselves by their position in `watchedIds` (stable across renders); live rows sort as today.
@@ -343,7 +345,8 @@ Frontend:
 8b. `lib/__tests__/apiError.test.ts`: `statusOf` on the api message shapes; existing directOrder tests stay
    green. `lib/__tests__/contractGrading.test.ts`: `parseContractId` (valid, 3 parts, bad strike incl.
    `187abc`, bad expiry, lowercase symbol, `187.0` -> trunc 187), `gradingToCtx` null mapping, gradingKey normalisation, the comparator
-   (missing last both directions).
+   (missing last both directions; two missing rows in `watchedIds` order [B, A] stay [B, A] under score and
+   price, both directions).
 9. Step 6 page test (extends `contractRules.test.tsx`; its `api` mock gains
    `addWatchedContract: jest.fn().mockResolvedValue({ contract_id: '…' })` — ContractStar calls `.catch` on
    it):
@@ -363,11 +366,18 @@ Frontend:
     d. Two stars, same symbol/right/grading, different expiries -> two calls, both rows shown.
     e. Missing rows: before the group's `getContracts` mock resolves, the row shows "Loading…" and NOT
        "Not in the current chain"; after it resolves without the id -> "Not in the current chain";
-       starring a second strike into an existing group shows that row "Loading…" until a request carrying
+       starring a second strike into an existing group (via
+       `act(() => useWatchedContractsStore.getState().add(id2, g))`; the page has no add control) shows that row "Loading…" until a request carrying
        its strike resolves, while the FIRST row keeps showing its score (not Loading) with the new request
        held pending; likewise clicking Refresh with the mock held pending keeps every live row's score;
-       unstarring one of two strikes in a group keeps the other row live (superset match); a group whose
-       request rejected shows "Could not load the chain — retry", not Loading; a past expiry ->
+       unstarring one of two strikes in a group, with the NEXT `getContracts` set to
+       `mockReturnValueOnce(new Promise(() => {}))` (never settles), keeps the other row's score shown and
+       no "Loading…" (superset match; an exact-strike-set match would blank it); a group whose first request
+       rejected shows "Could not load the chain — retry", and after clicking Refresh with the next call held
+       pending it STILL shows that, not "Loading…"; the loading row has `data-status="PENDING"` and a
+       not-listed row `data-status="NO_DATA"` (TableRow publishes `data-status`); an aborted refresh R1
+       held pending, superseded by R2 (unstar a sibling) which resolves, then R1 resolving late with a
+       different score -> R2's score stays; a past expiry ->
        "Expired"; a rejected group -> "Could not load the chain — retry" while another group's rows stay
        visible; dash cells; missing rows sort last under score, price and dte in both directions; a past
        expiry makes no `getContracts` call.
