@@ -17,8 +17,8 @@ thing with the backend's interpreter (Windows: backend\\.venv\\Scripts\\python.e
     (restart the backend normally -- PROTOCOL.md step 6)
     python run_measurement_day.py restore-check
 
-Every safety or validity breach STOPS the run with a message and records it in
-manifest.json. Nothing here decides a threshold: see RESULTS-SHEET.md.
+A safety breach STOPS the run with a message; a validity problem is FLAGGED on
+the scan or the day. Both are recorded in manifest.json. Nothing here decides a threshold: see RESULTS-SHEET.md.
 """
 from __future__ import annotations
 
@@ -70,8 +70,22 @@ IVABS_SCANS = [
 ]
 BASE_IDS = {"O1", "O2", "O3", "O4", "S1", "S2", "S3", "S4"}
 # Only these feed the IV sample store (plan §6): C-scans admit names under lowered gates.
+# A TRUNCATED one gets no envelope [G1a]: the cap ranks on stockScore, which grades
+# iv_rank, so its kept names are an IV-censored sample.
 ENVELOPE_IDS = {"O1", "O2", "O3", "O4", "A1", "A2"}
 IV_MISMATCH_MAX_SHARE = 0.20
+# Each C-scan's base: a pair is excluded from its rule if either side is unusable (§4.10, §4.11).
+PAIR_BASE = {"C1": "O1", "C5": "O1", "C6": "O1", "C1b": "O2", "C5b": "O2"}
+# [v6 R5] ScanResult.contract_rules: exactly the contract overrides the validator
+# applied (contract_validator.effective_contract_overrides). No body sends a contract
+# key, so bases, C1/C1b and the A-scans must show {}.
+_LIQUIDITY_ZERO = {"min_volume": 0, "min_open_interest": 0, "preferred_volume_min": 0, "preferred_oi_min": 0}
+EXPECTED_CONTRACT_RULES = {
+    "O1": {}, "O2": {}, "O3": {}, "O4": {}, "A1": {}, "A2": {}, "C1": {}, "C1b": {},
+    "C5": {"min_stock_score": 35}, "C5b": {"min_stock_score": 35},
+    "C6": _LIQUIDITY_ZERO,
+}
+SHORTLIST_REASON_PREFIX = "Shortlist cap:"   # routers/scan.py and routers/stock_scan.py
 
 # The daily OMM does not depend on `horizon`, so one pinned call is enough.
 REGIME_URLS = {
@@ -82,17 +96,18 @@ REGIME_URLS = {
 GATED_CONFIG = ("scoring_rules.yaml", "contract_rules.yaml")
 # Kenneth's decision MEAS-PLAN-CAP-DECISIONS-2026-09-25 (1): every day runs on one
 # tagged post-P3a commit; these paths must equal the tag in the working tree.
+# [v6 R1] ALL of backend/app/, not a list of modules: the gate logic spans
+# config_loader (the floor resolver), conviction_sizing, money_config, dte_window,
+# spread_builder and the stock_scan helpers scan.py imports -- a list is how v5
+# missed them. strategy_params.yaml is NOT frozen (adopt/tuning rewrite it); its
+# sha256 is recorded and S-scan rules pool only same-hash days (plan §5).
+# EXCEPT backend/app/data/sp500.csv, the one tracked non-.py file there: the S&P
+# liquidity update (sp500_update_service, daily cron or manual trigger) rewrites it
+# at runtime, so freezing it would refuse every day after day 1. Its sha256 is
+# recorded at the start and end of each block instead (plan §4.0).
 DEFAULT_FREEZE_TAG = "meas-freeze-1"
-FROZEN_PATHS = (
-    "backend/app/routers/scan.py",
-    "backend/app/routers/stock_scan.py",
-    "backend/app/scoring/stock_scorer.py",
-    "backend/app/scoring/contract_validator.py",
-    "backend/app/scoring/signal_confidence.py",
-    "backend/app/services/strategy_engine.py",
-    "backend/app/services/strategy_backtest.py",
-    "backend/app/data/market.py",
-) + tuple(f"backend/config/{n}" for n in GATED_CONFIG)
+UNIVERSE_FILE = "backend/app/data/sp500.csv"
+FROZEN_PATHS = ("backend/app", f":!{UNIVERSE_FILE}") + tuple(f"backend/config/{n}" for n in GATED_CONFIG)
 # A data source that is serving: the data-sources router downgrades a connected
 # probe to 'degraded' under a tripped circuit (plan §4.4).
 UP = ("connected", "degraded")
@@ -199,12 +214,56 @@ def check_auto_trade_disarmed(ctx) -> None:
                    "Disarm it in the app, then re-run with a new --run-tag.")
 
 
-def check_no_enabled_schedules(ctx) -> None:
-    """§4.2: a scheduled scan inside the window competes for the same data sources."""
+def check_no_enabled_schedules(ctx) -> dict:
+    """§4.2: a scheduled scan inside the window competes for the same data sources.
+    Returns a SUMMARY for the manifest, never the entries: they are the content of the
+    gitignored scan_schedule.yaml, which must not enter the day folder (§4.3, G1)."""
     entries = get_json(ctx.base, "/api/scan-schedule")
     enabled = [e.get("id") or e.get("name") for e in entries if e.get("enabled")]
     if enabled:
         raise Stop(f"scan schedule entries are enabled: {enabled}. Disable them for the run.")
+    return {"entries": len(entries), "enabled": []}
+
+
+def config_health(ctx) -> dict:
+    """[v6 R6] GET /api/config/health: each loader's live cached value vs the file on disk."""
+    return get_json(ctx.base, "/api/config/health")
+
+
+def stale_measured(health: dict) -> list[str]:
+    """Stale lines that name a measured file. A line with no file ("cannot be judged":
+    a wrongly registered loader, several workers) could hide one, so it counts too."""
+    out = []
+    for s in health.get("stale") or []:
+        f = s.get("file") or ""
+        if f in GATED_CONFIG or f == "":
+            out.append(f or f"(unjudged: {s.get('message', '')[:120]})")
+    return out
+
+
+def check_config_health_start(ctx) -> dict:
+    """§4.3: before the first scan of a block, the running config must be the disk config."""
+    h = config_health(ctx)
+    if h.get("ok") is not True:
+        problems = [x.get("message") for k in ("errors", "warnings", "stale") for x in h.get(k) or []]
+        raise Stop("GET /api/config/health is not ok -- show this to a Claude session before "
+                   f"running (restart the backend after any config edit):\n  " + "\n  ".join(
+                       str(p) for p in problems or ["ok is not true"]))
+    if h.get("pid") is None:
+        raise Stop("GET /api/config/health returned no pid -- cannot detect a backend restart.")
+    return {"at": stamp(ctx), "ok": True, "pid": h.get("pid"), "stale": []}
+
+
+def check_config_health_end(ctx, m: dict, start: dict, label: str) -> None:
+    """§4.3: a measured file gone stale, or a different backend pid, invalidates the block."""
+    h = config_health(ctx)
+    bad = stale_measured(h)
+    m[f"config_health_{label}"] = {"at": stamp(ctx), "ok": h.get("ok"), "pid": h.get("pid"),
+                                   "stale": [s.get("file") or "" for s in h.get("stale") or []]}
+    if bad:
+        m["flags"].append(f"INVALID:config_changed_during_run(health:{','.join(bad)})")
+    if h.get("pid") != start.get("pid"):
+        m["flags"].append(f"INVALID:backend_restarted({start.get('pid')}->{h.get('pid')})")
 
 
 def config_files(repo: Path) -> list[Path]:
@@ -214,6 +273,19 @@ def config_files(repo: Path) -> list[Path]:
 
 def config_state(repo: Path) -> dict:
     return {"sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in config_files(repo)}}
+
+
+def universe_sha256(repo: Path) -> str | None:
+    p = repo / UNIVERSE_FILE
+    return hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
+
+
+def check_universe_end(ctx, m: dict, start_sha: str | None, label: str) -> None:
+    """§4.0: the SP500 universe rewritten during a block changes what the scans read."""
+    end = universe_sha256(ctx.repo)
+    m[f"universe_sha256_{label}"] = end
+    if end != start_sha:
+        m["flags"].append(f"INVALID:universe_changed_during_run({label})")
 
 
 def tracked_config_names(repo: Path) -> set[str]:
@@ -288,6 +360,38 @@ def c6_override_not_applied(result: dict) -> bool:
         if ld.get("preferred_volume_min") != 0 or ld.get("preferred_oi_min") != 0:
             return True
     return False
+
+
+def contract_rules_flag(scan_id: str, result: dict) -> str | None:
+    """§4.11 [v6 R5]: the overrides the validator applied must be exactly the expected ones.
+    Values arrive as floats (dict[str, float]); 35 == 35.0, so dict equality holds."""
+    expected = EXPECTED_CONTRACT_RULES.get(scan_id)
+    if expected is None:
+        return None
+    got = result.get("contract_rules")
+    if not isinstance(got, dict) or got != expected:
+        return f"override_not_applied:{scan_id}"
+    return None
+
+
+def shortlist_cap_used(result: dict) -> int | None:
+    """The cap the BACKEND applied, read from a 'Shortlist cap: ... (cap N)' reason --
+    not the body value, which the options path clamps to 50."""
+    for r in result.get("rejected") or []:
+        reason = (r or {}).get("reason") or ""
+        if reason.startswith(SHORTLIST_REASON_PREFIX) and "(cap " in reason:
+            try:
+                return int(reason.rsplit("(cap ", 1)[1].rstrip(")").strip())
+            except ValueError:
+                return None
+    return None
+
+
+UNUSABLE_PREFIXES = ("state:", "INVALID:", "override_not_applied", "truncated")
+
+
+def unusable_flags(rec: dict) -> list[str]:
+    return [f for f in rec.get("flags", []) if f.startswith(UNUSABLE_PREFIXES)]
 
 
 def completeness_flags(endpoint: str, result: dict) -> list[str]:
@@ -367,8 +471,11 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
     scan_id, endpoint, base_file, change = scan
     check_window_before_scan(ctx, scan_id)
     if endpoint == OPT:
+        # §4.1: read right before EVERY options POST -- nothing may run between them.
         check_auto_trade_disarmed(ctx)
-    body = build_body(base_file, change)
+        body = build_body(base_file, change)
+    else:
+        body = build_body(base_file, change)
     raw_body = json.dumps(body, ensure_ascii=False).encode("utf-8")
     name = f"{scan_id}-{base_file}"
     write_bytes(folder / f"{name}.request.json", raw_body)
@@ -386,18 +493,22 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
     rec["end_utc_s"] = ctx.clock.utc().timestamp()
     result = json.loads(raw.decode("utf-8"))
     rec["flags"].extend(completeness_flags(endpoint, result))
-    if scan_id in BASE_IDS and any(f.startswith(("state:", "INVALID:")) for f in rec["flags"]):
-        m["day_invalid"] = sorted(set(m.get("day_invalid", [])) | {scan_id})
     rec["scan_id"] = result.get("scan_id")
     rec["candidates"] = len(result.get("candidates") or [])
 
-    rec["shortlist_truncated"] = result.get("shortlist_truncated")
-    if result.get("shortlist_truncated"):
-        rec["flags"].append("shortlist_truncated")
+    # §4.10 [v6 R2, G1a]: the cap ranks before it cuts. A truncated base stays valid for
+    # the day; a truncated scan feeds no IV rule and excludes its C-pair. The IV rules
+    # read THIS per-scan field (keyed by scan_id).
+    rec["truncated"] = bool(result.get("shortlist_truncated"))
+    if rec["truncated"]:
+        rec["flags"].append("truncated")
+        rec["original_count"] = result.get("original_count")
+        rec["cap"] = shortlist_cap_used(result)
     if endpoint == OPT:
-        if scan_id in ENVELOPE_IDS:
-            write_json(folder / f"{name}.envelope.json", {"request": body, "result": result})
-            rec["envelope_file"] = f"{name}.envelope.json"
+        flag = contract_rules_flag(scan_id, result)
+        rec["contract_rules"] = result.get("contract_rules")
+        if flag:
+            rec["flags"].append(flag)
         bases = iv_bases(result)
         rec["iv_basis_counts"] = {str(b): bases.count(b) for b in sorted(set(bases), key=str)}
         if scan_id.startswith("A"):
@@ -406,6 +517,13 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
                 rec["flags"].append("INVALID:percentile_source_still_on")
         elif bases and sum(b != "rank" for b in bases) / len(bases) > IV_MISMATCH_MAX_SHARE:
             rec["flags"].append("iv_source_mismatch")
+        if scan_id in ENVELOPE_IDS:
+            if rec["truncated"]:
+                rec["envelope_file"] = None
+                rec["envelope_skipped"] = "truncated"
+            else:
+                write_json(folder / f"{name}.envelope.json", {"request": body, "result": result})
+                rec["envelope_file"] = f"{name}.envelope.json"
     if scan_id == "C6" and c6_override_not_applied(result):
         rec["flags"].append("override_not_applied:liquidity")
 
@@ -413,9 +531,26 @@ def run_scan(ctx, m: dict, folder: Path, scan) -> None:
         rec["flags"].append("late_for_comparison")
     if _hm(ctx.clock.et()) > ALL_DONE_BY:
         rec["flags"].append("finished_after_1555_ET")
+    # A base scan that is incomplete makes the DAY invalid (§4.10); truncation does not.
+    if scan_id in BASE_IDS and any(f.startswith(("state:", "INVALID:")) for f in rec["flags"]):
+        m["day_invalid"] = sorted(set(m.get("day_invalid", [])) | {scan_id})
+    if scan_id in PAIR_BASE:
+        mark_pair(m, rec)
     ctx.save_manifest(m)
     print(f"    -> {rec['candidates']} candidates, scan_id {rec['scan_id']}, flags {rec['flags'] or '-'}",
           flush=True)
+
+
+def mark_pair(m: dict, rec: dict) -> None:
+    """§4.10/§4.11: a C-pair with either side unusable (incomplete, INVALID, truncated,
+    override not applied) is excluded from its rule. Recorded on the C-scan."""
+    base = next((s for s in m["scans"] if s["id"] == PAIR_BASE[rec["id"]] and "skipped" not in s), None)
+    reasons = [f"{rec['id']}:{f}" for f in unusable_flags(rec)]
+    if base is None:
+        reasons.append(f"{PAIR_BASE[rec['id']]}:missing")
+    else:
+        reasons += [f"{base['id']}:{f}" for f in unusable_flags(base)]
+    rec["pair_excluded"] = reasons
 
 
 def _finish(ctx, m: dict, folder: Path, label: str) -> None:
@@ -443,8 +578,9 @@ def cmd_core(ctx) -> None:
         raise Stop(f"{folder} already exists -- never overwritten. Use --run-tag <new tag> for a rerun.")
 
     freeze = check_freeze(ctx)
-    check_no_enabled_schedules(ctx)
+    schedule = check_no_enabled_schedules(ctx)
     check_auto_trade_disarmed(ctx)
+    health = check_config_health_start(ctx)
     tasty = source_status(ctx, "tastytrade")
     if tasty not in UP:
         raise Stop(f"tastytrade (IV rank source) is {tasty!r}, not up -- the rank "
@@ -455,10 +591,16 @@ def cmd_core(ctx) -> None:
                    "tastytrade's, and a day must use one rank vendor.")
 
     folder.mkdir(parents=True)
+    cfg = config_state(ctx.repo)
     m = {"protocol": "docs/superpowers/measurements/PROTOCOL.md", "base_url": ctx.base,
          "git_head": git(ctx.repo, "rev-parse", "HEAD"), "freeze": freeze, "started_at": stamp(ctx),
-         "config_start": config_state(ctx.repo), "regime_urls": REGIME_URLS,
-         "scans": [], "flags": [], "status": "running"}
+         "config_start": cfg,
+         # §5 [v6 R1]: S-scan rules pool only days with the same start hash.
+         "strategy_params_sha256": cfg["sha256"].get("strategy_params.yaml"),
+         # §4.0: not frozen; shown next to the per-day rates when it differs between days.
+         "universe_sha256_core_start": universe_sha256(ctx.repo),
+         "config_health_core_start": health, "scan_schedule": schedule,
+         "regime_urls": REGIME_URLS, "scans": [], "flags": [], "status": "running"}
     if tasty == "degraded":
         m["flags"].append("tastytrade_degraded_at_start")
     ctx.save_manifest(m)
@@ -479,9 +621,14 @@ def cmd_core(ctx) -> None:
                     continue
             run_scan(ctx, m, folder, scan)
         _finish(ctx, m, folder, "core_end")
+        check_config_health_end(ctx, m, health, "core_end")
+        check_universe_end(ctx, m, m["universe_sha256_core_start"], "core_end")
         m["status"] = "core_complete"
     except Stop as e:
         m["status"] = f"stopped: {e}"
+        raise
+    except Exception as e:   # never leave a crashed run reading "running"
+        m["status"] = f"crashed: {e!r}"
         raise
     finally:
         ctx.save_manifest(m)
@@ -498,6 +645,7 @@ def cmd_ivabs(ctx) -> None:
     if any(s["id"].startswith("A") for s in m["scans"]):
         raise Stop("A-scans already recorded for this run -- never overwritten. Use a new --run-tag.")
     freeze = check_freeze(ctx)
+    check_no_enabled_schedules(ctx)
     if freeze != m.get("freeze"):
         raise Stop(f"freeze {freeze} differs from the core run's {m.get('freeze')}.")
     tasty = source_status(ctx, "tastytrade")
@@ -512,18 +660,43 @@ def cmd_ivabs(ctx) -> None:
         raise Stop(f"tradier (option chains) is {tradier!r} -- BAMENDJOU_CREDS_PATH probably points at a "
                    "missing or wrong file, which loads EMPTY credentials. Check the path (PROTOCOL.md step 4).")
     check_auto_trade_disarmed(ctx)
+    # The A-block runs after a restart, so it reads its OWN start pid (§4.3).
+    health = check_config_health_start(ctx)
+    m["config_health_ivabs_start"] = health
+    m["universe_sha256_ivabs_start"] = universe_sha256(ctx.repo)
     m["ivabs_sources"] = {"tastytrade": tasty, "ibkr": ibkr, "tradier": tradier}
     snapshot(ctx, folder, "ivabs_start")
     try:
         for scan in IVABS_SCANS:
             run_scan(ctx, m, folder, scan)
+        n_flags = len(m["flags"])
         _finish(ctx, m, folder, "ivabs_end")
+        check_config_health_end(ctx, m, health, "ivabs_end")
+        check_universe_end(ctx, m, m["universe_sha256_ivabs_start"], "ivabs_end")
+        # Block-level flags of the A-block are ITS flags, not the day's: a config edit or
+        # a restart after core ended does not touch the core scans (§5 day validity).
+        m["ivabs_flags"] = m["flags"][n_flags:]
+        del m["flags"][n_flags:]
+        # §5: one A-block feeds the report -- the first USABLE one. A truncated or
+        # flagged A-scan, or a block-level INVALID, makes this one unusable, so a
+        # later day may repeat it (round-6 below-gate: a truncated A-scan must not
+        # use up the single A-block).
+        why = [f"{s['id']}:{f}" for s in m["scans"] if s["id"].startswith("A")
+               for f in unusable_flags(s)] + [f for f in m["ivabs_flags"] if f.startswith("INVALID:")]
+        m["ivabs_usable"] = not why
+        m["ivabs_unusable_because"] = why
         m["status"] = "ivabs_complete"
     except Stop as e:
         m["status"] = f"ivabs stopped: {e}"
         raise
+    except Exception as e:   # never leave a crashed run reading "running"
+        m["status"] = f"ivabs crashed: {e!r}"
+        raise
     finally:
         ctx.save_manifest(m)
+    if not m.get("ivabs_usable"):
+        print(f"A-block NOT usable ({', '.join(m['ivabs_unusable_because'])}): it may be repeated on a "
+              "later valid day (PROTOCOL.md step 5).")
     print("A-scans done. Next: PROTOCOL.md step 6 (restart normally) and restore-check.")
 
 

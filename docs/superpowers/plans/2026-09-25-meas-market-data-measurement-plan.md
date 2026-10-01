@@ -19,6 +19,51 @@ narrow fix:
   reads candidate rows, was not chosen.
 - The edits are marked **[G1a]** in §4.10, §6, §7 and §9.
 
+**Universe-file fix (2026-10-01, reported by Kenneth from a parallel round-5 run on
+`ccr-3ec55775-kgawjr`) [U1].** R1 froze all of `backend/app/`, which includes
+`backend/app/data/sp500.csv`, the only non-`.py` file git tracks there. The app rewrites it at
+runtime: `services/sp500_update_service.py:15` sets the path and `:140` does
+`os.replace(tmp_path, _CSV_PATH)`, from the daily cron (`services/sp500_scheduler.py:44-47`, when
+`sp500_schedule.yaml` enables it) or the manual trigger (`routers/ingestion.py:178-181`). It is the
+SP500 universe the scans read (`data/universe_presets.py:48`). One liquidity update after day 1
+would make the runner refuse every later day, and since §4.0 forbids suggesting `git checkout` and
+§5 pools only days on the same tag commit, the plan could never reach two valid days. (Round 5 had
+logged it below the gate as "an S&P update makes the run stop"; it blocks the protocol.) Fix, marked
+**[U1]** in §4.0, §5 and §9:
+- the frozen paths are `backend/app/` minus that file (pathspec `':!backend/app/data/sp500.csv'`);
+- its sha256 is recorded at the start and end of each block; a change during a block flags
+  `INVALID:universe_changed_during_run`;
+- a hash that differs **between** days is shown next to the per-day rates. It does not exclude a
+  day: every rule computes its rate within one day.
+
+**Build notes (2026-10-01, runner build) [B].** Folded in from the round-6 below-gate list where
+cheap, and choices the plan left open:
+- **B1** A truncated O1–O4/A1/A2 scan gets **no envelope file** (`envelope_file: null`,
+  `envelope_skipped: "truncated"`), so §7 step 1 cannot collect it by mistake. The raw result is
+  still saved.
+- **B2** The manifest records the cap the backend **applied** (`cap`, parsed from a
+  `Shortlist cap: … (cap N)` reason), not the body value, plus `original_count`.
+- **B3** Each C-scan carries `pair_excluded`: the unusable flags (`state:`, `INVALID:`,
+  `override_not_applied`, `truncated`) on it or on its base. Empty means the pair counts.
+- **B4** A truncated or flagged A-scan, or an `INVALID:` on the A-block itself, sets
+  `ivabs_usable: false`. That A-block does not use up the single A-block: it may be repeated on a
+  later valid day (§5). The A-block's own block-level flags go to `ivabs_flags`, never to the
+  day's `flags`, so a restart or edit after `core` ended cannot invalidate the core day.
+- **B5** `/api/scan-schedule` is recorded as a summary (`entries`, `enabled`) only: the entries
+  are the content of the gitignored `scan_schedule.yaml` (§4.3).
+- **B6** A config-health `stale` line with no file ("cannot be judged") counts as a measured file
+  at the end of a block.
+- **B7** The `iv_rank_too_high` count is the number of names whose reject reason contains
+  `iv_rank_too_high`; the IV results print their row counts per direction; `stockScore` grades
+  `iv_rank` against the pass/caution cuts on the rank basis only (the G1a header's wording).
+- **B8** §8's `kind: present` probe on the runner cannot be used: `scripts/state.py` reads a found
+  pattern as "built", and this phase stays `in_progress` until the days are run and answered, so
+  the probe would be permanent drift. The probe is `kind: absent` on `RESULTS-SHEET.md`, pattern
+  `^MEAS-ALL-PROPOSALS-ANSWERED$`, a line written only once every proposal has Kenneth's answer.
+  The runner's guards are pinned by the §9 scratch tests, as before.
+- **B9** A non-`Stop` exception inside a block sets the manifest status to `crashed: …` instead of
+  leaving it at `running` (round-4 below-gate item).
+
 **What changed in v6 (2026-09-30, decision `MEAS-V6-REFRESH-ONE-ROUND-2026-09-30`).** v5 was written
 on main 91e6725e. Before the refresh, 37 commits had touched its gate code: `stock_scan.py` +419 lines,
 `scan.py` +259, `contract_validator.py` +142. Kenneth chose to refresh v5 and give it **one** confirmation
@@ -151,7 +196,7 @@ it does not fix it.
 | `min_volume` 50 / `min_open_interest` 200 | C6: hard floors **and** the soft preferred bands at 0 | report only |
 | `regime_sizing.min_mult` 0.3 | Per-candidate `sentiment.conviction_pct` / `stability` on stock results (what `_process_stock` sizes with) and on options results (built around scan.py:655-672). **[v6 R7]** The options card is not conviction-sized, so this is what the auto-trader's ramp would read, not a card size. Candidates with no sentiment are tabulated separately (`sizing_basis` `floor:unmeasured`). The market `/api/regime` is used only to classify the day. | table, keep 0.3 |
 | `iv_rank_pass_max` / `iv_rank_caution_max` per horizon, `preferred_iv_rank_max` 55 | Rank-basis **primary** rows from O1–O4 | proposal |
-| `max_iv_rank` 70 (hard ceiling) | Not measurable from survivors. Only the `iv_rank_too_high` truncation count is reported. | report only |
+| `max_iv_rank` 70 (hard ceiling) | Not measurable from survivors. Only the `iv_rank_too_high` reject count is reported (names whose reason contains it) [B7]. | report only |
 | `iv_rank_threshold` 50 (rank-basis credit/debit line) | `stock_iv` of rank-basis primary rows from O1–O4: the ATM figure `choose_primary` compares (scan.py:406-407, `choose_primary`; spread_builder.py:96) | **report only** (Kenneth, decision (2)) |
 | `ivAbsThreshold` 50 (absolute-basis credit/debit line) | `stock_iv` of **A1/A2** primary rows with `stock_basis == "absolute"` (percentile source OFF). The O-row `detail_iv_abs` is reported only as a labelled proxy (it is the picked contract's own IV, not the ATM figure). | **report only** (Kenneth, decision (2)) |
 
@@ -243,13 +288,18 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
      `git diff --name-only <tag> -- <frozen paths>` must be empty, which covers uncommitted edits
      too.
    - The frozen paths are [v6 R1]:
-     - **all of `backend/app/`**, the whole directory rather than a list of modules. The gate
+     - **all of `backend/app/` except `backend/app/data/sp500.csv` [U1]** (pathspec
+       `':!backend/app/data/sp500.csv'`), the whole directory rather than a list of modules. The gate
        logic now spans `routers/scan.py`, `routers/stock_scan.py`, `scoring/*`, `services/config_loader.py`
        (the floor resolver), `scoring/conviction_sizing.py`, `services/money_config.py`,
        `dte_window.py`, `spread_builder.py`, `data/market.py` and the strategy services. A list is how
        v5 missed several of these;
      - the thresholds under measurement: `backend/config/scoring_rules.yaml` and
        `backend/config/contract_rules.yaml`. This replaces v3's "equal to HEAD".
+   - **[U1]** `backend/app/data/sp500.csv` is **not** frozen: the S&P liquidity update rewrites
+     it at runtime. Its sha256 is recorded at the start and end of each block
+     (`universe_sha256_<block>_start/_end`); a change during a block flags
+     `INVALID:universe_changed_during_run`.
    - `strategy_params.yaml` is **not** frozen, because strategy adopts and tuning rewrite it at
      runtime. Its sha256 is recorded in each day's manifest, and S-scan rules pool only days with the
      same hash (§5).
@@ -366,7 +416,9 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
   - all eight base scans O1–O4 and S1–S4 ran on the freeze tag;
   - none of them is INVALID or `late_for_comparison`;
   - the manifest has no `day_invalid`, no `INVALID:config_changed_during_run` and no
-    `INVALID:backend_restarted` [v6 R6].
+    `INVALID:backend_restarted` [v6 R6], and no `INVALID:universe_changed_during_run` [U1].
+- **[U1]** A universe (`sp500.csv`) hash that differs between valid days does not exclude a day:
+  every rule computes its rate within one day. The hash is shown next to the per-day rates.
 - At least **two valid days**, on different calendar days and the same tag commit.
 - **[v6 R1]** Rules that read S-scans (the floor rule, the S-scan "would clear" counts) pool only
   days whose start `strategy_params.yaml` sha256 is the same. If the valid days do not share a hash,
@@ -606,6 +658,9 @@ days are run and the proposals are answered.
 - every stop and flag in §4, including:
   - [v6 R1] a change to a `backend/app/` file outside v5's eight modules (for example
     `services/config_loader.py`) must stop the run;
+  - [U1] `backend/app/data/sp500.csv` different from the tag (committed and uncommitted) must
+    pass the freeze check with its hash recorded; a change during a block flags
+    `INVALID:universe_changed_during_run`;
   - [v6 R6] config health: `ok: false` at start stops the run; `stale` naming a measured file stops
     it at start and flags INVALID at end; a `pid` change flags `INVALID:backend_restarted`;
     `stale` naming only `risk_rules.yaml` is recorded, not flagged;
