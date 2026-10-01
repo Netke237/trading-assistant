@@ -10,10 +10,16 @@
     },
     {
       "agent": "claude",
-      "branch": "main",
-      "claimed_at": "2026-10-01T19:34:24Z",
-      "expires_at": "2026-10-01T22:34:24Z",
+      "branch": "claude/sharp-wozniak-6xb8pq",
+      "claimed_at": "2026-10-01T19:35:20Z",
+      "expires_at": "2026-10-01T22:35:20Z",
       "note": "PROJECT_STATE.json ledger cleanup: REGIME-SIZING clean + 3 old pending_kenneth items",
+      "previous": [
+        {
+          "branch": "main",
+          "claimed_at": "2026-10-01T19:34:24Z"
+        }
+      ],
       "task": "LEDGER-CLEANUP-2026-10-01"
     }
   ]
