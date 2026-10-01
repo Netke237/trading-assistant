@@ -36,6 +36,50 @@ describe('watchedContractsStore — migrate', () => {
   it('v3 is kept as is', () => {
     expect(migrateWatchedContracts({ ids: [A], grading: { [A]: G } }, 3)).toEqual({ ids: [A], grading: { [A]: G } });
   });
+
+  it('a non-object or array grading, and non-string or empty ids, are repaired', () => {
+    expect(migrateWatchedContracts({ ids: [A, 7, '', null], grading: [G] }, 3)).toEqual({ ids: [A], grading: {} });
+  });
+});
+
+describe('watchedContractsStore — rehydrate repairs hand-corrupted v3 storage', () => {
+  // persist() calls migrate only when the stored version differs, so a v3
+  // blob is repaired by the merge option or not at all.
+  it.each([
+    ['null', null],
+    ['an array', [G]],
+    ['a string', 'x'],
+  ])('grading %s rehydrates as {}', async (_label, bad) => {
+    localStorage.setItem(WATCHED_CONTRACTS_STORAGE_KEY, JSON.stringify({
+      state: { ids: [A], grading: bad }, version: 3,
+    }));
+    await useWatchedContractsStore.persist.rehydrate();
+    expect(useWatchedContractsStore.getState().grading).toEqual({});
+    expect(useWatchedContractsStore.getState().ids).toEqual([A]);
+    useWatchedContractsStore.getState().add(B, G);
+    expect(useWatchedContractsStore.getState().grading).toEqual({ [B]: G });
+  });
+
+  it('non-string or empty ids are dropped; a non-array ids rehydrates as []', async () => {
+    localStorage.setItem(WATCHED_CONTRACTS_STORAGE_KEY, JSON.stringify({
+      state: { ids: [A, 7, '', null, B], grading: { [A]: G } }, version: 3,
+    }));
+    await useWatchedContractsStore.persist.rehydrate();
+    expect(useWatchedContractsStore.getState().ids).toEqual([A, B]);
+    expect(useWatchedContractsStore.getState().grading).toEqual({ [A]: G });
+    localStorage.setItem(WATCHED_CONTRACTS_STORAGE_KEY, JSON.stringify({
+      state: { ids: 'oops', grading: {} }, version: 3,
+    }));
+    await useWatchedContractsStore.persist.rehydrate();
+    expect(useWatchedContractsStore.getState().ids).toEqual([]);
+  });
+
+  it('nothing stored leaves the current state alone', async () => {
+    useWatchedContractsStore.setState({ ids: [A], grading: { [A]: G } });
+    await useWatchedContractsStore.persist.rehydrate();
+    expect(useWatchedContractsStore.getState().ids).toEqual([A]);
+    expect(useWatchedContractsStore.getState().grading).toEqual({ [A]: G });
+  });
 });
 
 describe('watchedContractsStore — add / remove / clearGrading', () => {
@@ -103,6 +147,15 @@ describe('watchedContractsStore — syncFromBackend', () => {
     expect(useWatchedContractsStore.getState().grading).toEqual({ [A]: G });
     mockApi.getWatchedContractsDetail.mockRejectedValue(new Error('down'));
     mockApi.getWatchedContracts.mockResolvedValue([A, B]);
+    await useWatchedContractsStore.getState().syncFromBackend();
+    expect(useWatchedContractsStore.getState().ids).toEqual([A, B]);
+    expect(useWatchedContractsStore.getState().grading).toEqual({ [A]: G });
+  });
+
+  it('the fallback keeps only non-empty string ids', async () => {
+    useWatchedContractsStore.setState({ ids: [A], grading: { [A]: G } });
+    mockApi.getWatchedContractsDetail.mockRejectedValue(new Error('down'));
+    mockApi.getWatchedContracts.mockResolvedValue([A, 7, '', null, { id: B }, B] as unknown as string[]);
     await useWatchedContractsStore.getState().syncFromBackend();
     expect(useWatchedContractsStore.getState().ids).toEqual([A, B]);
     expect(useWatchedContractsStore.getState().grading).toEqual({ [A]: G });

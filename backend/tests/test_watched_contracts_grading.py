@@ -10,6 +10,7 @@ does not import watched_contracts, so Base.metadata.create_all would miss it.
 """
 
 import asyncio
+import json
 import importlib.util
 from pathlib import Path
 
@@ -115,6 +116,11 @@ def test_unknown_rule_keys_are_dropped(wc):
     g = {**_G, "contract_rules": {**_G["contract_rules"], "event_reject_days": 7}}
     assert wc.post("/api/watched-contracts", json={"contract_id": _ID, "grading": g}).status_code == 201
     assert _detail(wc)[0]["grading"] == _G
+    # The column itself, not just /detail: a read-side filter would pass above.
+    (stored,), = _raw(wc, "SELECT grading FROM watched_contracts")
+    stored = json.loads(stored) if isinstance(stored, str) else stored
+    assert "event_reject_days" not in stored["contract_rules"]
+    assert stored == _G
 
 
 # ── 4: invalid grading is a 422 ───────────────────────────────────────────────

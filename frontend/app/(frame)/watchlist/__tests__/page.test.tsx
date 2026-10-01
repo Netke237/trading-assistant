@@ -362,6 +362,44 @@ describe('WatchlistPage — Contracts tab grades each star with its own grading'
     expect(screen.getByText('junk')).toBeInTheDocument();
   });
 
+  it('a raised banner clears when every remaining star is expired or unreadable', async () => {
+    // Starts with the banner ON, so the zero-groups early return's reset is
+    // what turns it off (the test above starts with it off).
+    seed([A]);
+    getContracts.mockRejectedValue(new Error('API /api/contracts → 503: x'));
+    await openContracts();
+    await waitFor(() => expect(screen.getByText(BANNER)).toBeInTheDocument());
+    await act(async () => { useWatchedContractsStore.setState({ ids: [`AAPL|200|${PAST}|C`, 'junk'], grading: {} }); });
+    expect(screen.queryByText(BANNER)).toBeNull();
+    expect(getContracts).toHaveBeenCalledTimes(1);
+  });
+
+  it('a grading-only change (same ids) refetches with the new grading', async () => {
+    seed([A], { [A]: G });
+    getContracts.mockImplementation((sym: string, right: string, ctx: { expiry: string; stock_score: number }) =>
+      Promise.resolve([oc(A, ctx.stock_score === 72 ? 11 : 22)]));
+    await openContracts();
+    await waitFor(() => expect(within(rowOf(A)).getByText('11')).toBeInTheDocument());
+    const ids = useWatchedContractsStore.getState().ids;
+    await act(async () => { useWatchedContractsStore.setState({ grading: { [A]: G2 } }); });
+    expect(useWatchedContractsStore.getState().ids).toBe(ids);   // ids untouched: only `grading` can trigger it
+    await waitFor(() => expect(within(rowOf(A)).getByText('22')).toBeInTheDocument());
+    expect(getContracts).toHaveBeenLastCalledWith('AAPL', 'C', expect.objectContaining({ stock_score: 55 }), expect.anything());
+  });
+
+  it('the chain banner shows on the Contracts tab only', async () => {
+    seed([A]);
+    getContracts.mockRejectedValue(new Error('API /api/contracts → 503: x'));
+    await openContracts();
+    await waitFor(() => expect(screen.getByText(BANNER)).toBeInTheDocument());
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Stocks/ })); });
+    expect(screen.queryByText(BANNER)).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Composite/ })); });
+    expect(screen.queryByText(BANNER)).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Contracts/ })); });
+    expect(screen.getByText(BANNER)).toBeInTheDocument();
+  });
+
   it('the banner shows only when every fetched group failed', async () => {
     seed([A, `MSFT|400|${E}|P`]);
     getContracts.mockRejectedValue(new Error('API /api/contracts → 503: x'));

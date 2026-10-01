@@ -33,14 +33,25 @@ interface WatchedContractsState {
 
 type Persisted = Pick<WatchedContractsState, 'ids' | 'grading'>;
 
+function isId(x: unknown): x is string {
+  return typeof x === 'string' && x !== '';
+}
+
+/** Repairs a stored blob: ids kept only as non-empty strings, grading only as
+ *  a plain object. Shared by migrate and merge, since persist() calls migrate
+ *  only when the stored version differs and a hand-edited v3 blob skips it. */
+function sanitizePersisted(persisted: unknown): Persisted {
+  const p = (persisted ?? {}) as { ids?: unknown; grading?: unknown };
+  const ids = Array.isArray(p.ids) ? p.ids.filter(isId) : [];
+  const g = p.grading;
+  const grading = g && typeof g === 'object' && !Array.isArray(g) ? (g as Record<string, ContractGrading>) : {};
+  return { ids, grading };
+}
+
 export function migrateWatchedContracts(persisted: unknown, version: number): Persisted {
-  const p = (persisted ?? {}) as Partial<Persisted>;
-  const ids = Array.isArray(p.ids) ? p.ids : [];
-  if (version < 3) {
-    // v1/v2 → v3: ids unchanged; stars made before gradings existed have none.
-    return { ids, grading: {} };
-  }
-  return { ids, grading: p.grading && typeof p.grading === 'object' ? p.grading : {} };
+  const { ids, grading } = sanitizePersisted(persisted);
+  // v1/v2 → v3: ids unchanged; stars made before gradings existed have none.
+  return { ids, grading: version < 3 ? {} : grading };
 }
 
 function withoutKey<T>(rec: Record<string, T>, key: string): Record<string, T> {
@@ -88,7 +99,7 @@ export const useWatchedContractsStore = create<WatchedContractsState>()(
         try {
           const rows = await api.getWatchedContractsDetail();
           if (!Array.isArray(rows)) throw new Error('bad /detail');
-          ids = rows.map((r) => r?.contract_id).filter((x): x is string => typeof x === 'string' && x !== '');
+          ids = rows.map((r) => r?.contract_id).filter(isId);
           grading = {};
           for (const r of rows) {
             if (r?.contract_id && r.grading != null) grading[r.contract_id] = r.grading;
@@ -99,7 +110,7 @@ export const useWatchedContractsStore = create<WatchedContractsState>()(
           try {
             const raw = await api.getWatchedContracts();
             if (!Array.isArray(raw)) return;
-            ids = raw.filter(Boolean);
+            ids = (raw as unknown[]).filter(isId);
           } catch {
             return;  // both failed: keep state
           }
@@ -123,6 +134,9 @@ export const useWatchedContractsStore = create<WatchedContractsState>()(
       partialize: (state) => ({ ids: state.ids, grading: state.grading }),
       version: 3,
       migrate: (persisted, version) => migrateWatchedContracts(persisted, version) as unknown as WatchedContractsState,
+      // Nothing stored (persisted undefined) leaves the current state alone.
+      merge: (persisted, current) =>
+        persisted && typeof persisted === 'object' ? { ...current, ...sanitizePersisted(persisted) } : current,
     }
   )
 );

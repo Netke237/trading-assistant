@@ -147,7 +147,8 @@ def test_twelve_tied_strikes_are_all_returned(client):
     assert sorted(c["strike"] for c in r.json()) == last12
 
 
-@pytest.mark.parametrize("bad", ["185,abc", "185,-5", "185,+5", "1_85", "185.0"])
+@pytest.mark.parametrize("bad", ["185,abc", "185,-5", "185,+5", "1_85", "185.0", "1" * 10, "1" * 4301],
+                         ids=["abc", "neg", "plus", "underscore", "float", "10-digits", "4301-digits"])
 def test_a_non_int_strike_is_a_422(client, bad):
     r, _ = _get(client, [_row(185)], "&strikes=" + bad.replace("+", "%2B"))
     assert r.status_code == 422
