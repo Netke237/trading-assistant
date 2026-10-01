@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "claude/bold-ride-7nf8wj",
       "claimed_at": "2026-10-01T03:41:47Z",
-      "expires_at": "2026-10-01T07:44:25Z",
+      "expires_at": "2026-10-01T08:07:16Z",
       "note": "apply round-6 fix, close plan stage, build runner to v6",
       "task": "MEAS-MARKET-DATA-MEASUREMENT"
     },
