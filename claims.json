@@ -15,6 +15,14 @@
       "expires_at": "2026-10-01T07:09:41Z",
       "note": "claim.py: Windows wrote ledger as 'claims.json\\r' - bytes stdin + legacy-tolerant load + test",
       "task": "CLAIMS-WINDOWS-CRLF"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/youthful-carson-82x23x",
+      "claimed_at": "2026-10-01T04:10:34Z",
+      "expires_at": "2026-10-01T07:10:34Z",
+      "note": "store scan contract_rules + hold days with each contract star; Watchlist grades with them",
+      "task": "WATCHLIST-SCAN-CONTRACT-RULES"
     }
   ]
 }
