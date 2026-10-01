@@ -169,6 +169,48 @@ async def test_run_scheduled_entry_options_dispatches_to_core_and_records_succes
 
 
 @pytest.mark.asyncio
+async def test_run_scheduled_entry_options_drops_leaked_min_stock_score(monkeypatch):
+    """Open question #57: before the frontend fix, an options entry's stored
+    resolved_request could carry Step 3's stocks-only min_stock_score in
+    `overrides`, where contract_validator took it as the contract hard-reject
+    floor in place of contract_rules.yaml's. Entries are replayed as stored, so
+    the scheduler drops it; every other override still reaches the core."""
+    from app.services.scan_schedule_store import scan_schedule_store
+    from app.services import scan_schedule_scheduler as sss
+    from tests.conftest import _TestSession
+    import app.database as dbmod
+
+    entry = _options_entry_body(resolved_request={
+        "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+        "overrides": {"min_stock_score": 40, "min_volume": 10},
+    })
+    entry["id"] = "leak-1"
+    scan_schedule_store.upsert(entry)
+    monkeypatch.setattr(dbmod, "AsyncSessionLocal", _TestSession)
+
+    seen = []
+
+    async def _fake_core(req, db, previous_result=None):
+        seen.append(req)
+        raise RuntimeError("stop here")
+
+    async def _quiet(*a, **k):
+        return None
+
+    monkeypatch.setattr("app.routers.scan._execute_scan_core", _fake_core)
+    monkeypatch.setattr(sss, "_notify_scan_schedule_error", _quiet)
+    try:
+        await sss._run_scheduled_entry("leak-1")
+        assert len(seen) == 1
+        assert "min_stock_score" not in seen[0].overrides
+        assert seen[0].overrides["min_volume"] == 10
+        # The stored entry is not rewritten.
+        assert scan_schedule_store.get("leak-1")["resolved_request"]["overrides"]["min_stock_score"] == 40
+    finally:
+        scan_schedule_store.delete("leak-1")
+
+
+@pytest.mark.asyncio
 async def test_run_scheduled_entry_deleted_mid_flight_logs_and_returns():
     from app.services import scan_schedule_scheduler as sss
     # Entry was never created — must log+return, not raise.
