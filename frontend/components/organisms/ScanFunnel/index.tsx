@@ -174,13 +174,23 @@ export function ScanFunnel({ mode, pipeline }: Props) {
 
   const p = pipeline as OptionsPipeline;
   const failedDirection = dropped(p.failed_direction);
+  // Names whose trend was UNMEASURED are removed right after the pre-screen,
+  // before the chain fetch (routers/scan.py _process_symbol), so they come off
+  // there — counting them under the later Direction stage showed them as
+  // having passed chain and contracts.
+  const failedDirectionUnmeasured = dropped(p.failed_direction_unmeasured);
   const failedShortlist = dropped(p.failed_shortlist);
   const otherRejected   = dropped(p.other_rejected);
+  // The floor THIS scan applied, read from the result (not a config fetch).
+  const noConvictionLabel = typeof p.direction_min_trend === 'number'
+    ? `no conviction (trend < ${p.direction_min_trend})`
+    : 'no conviction';
   // Unattributed off the top — see UnattributedNote.
   const afterErrors     = p.scanned - otherRejected;
   const afterData       = afterErrors - p.failed_data;
   const afterPreScreen  = afterData - p.failed_pre_screen;
-  const afterChain      = afterPreScreen - p.no_chain;
+  const afterMeasured   = afterPreScreen - failedDirectionUnmeasured;
+  const afterChain      = afterMeasured - p.no_chain;
   const afterScored     = afterChain - p.failed_score - p.failed_contracts;
   const afterDirection  = afterScored - failedDirection;
   return (
@@ -202,10 +212,13 @@ export function ScanFunnel({ mode, pipeline }: Props) {
       <UnattributedNote wide count={otherRejected} />
       <Stage wide label="Data / Filters (data/price/cap)" count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
       <Stage wide label="Pre-screen (setup score)"        count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
+      {failedDirectionUnmeasured > 0 && (
+        <Stage wide label="Trend measurement (direction gate)" count={afterMeasured} rejected={failedDirectionUnmeasured} rejectedLabel="no data" total={p.scanned} />
+      )}
       <Stage wide label="Option chain (DTE window)"       count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />
       <Stage wide label="Score + contracts (final + rules)" count={afterScored} rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
       {failedDirection > 0 && (
-        <Stage wide label="Direction conviction" count={afterDirection} rejected={failedDirection} rejectedLabel="no conviction" total={p.scanned} />
+        <Stage wide label="Direction conviction" count={afterDirection} rejected={failedDirection} rejectedLabel={noConvictionLabel} total={p.scanned} />
       )}
       {failedShortlist > 0 && (
         <Stage wide label="Shortlist cap" count={afterDirection - failedShortlist} rejected={failedShortlist} rejectedLabel="over cap" total={p.scanned} />
