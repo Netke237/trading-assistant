@@ -429,6 +429,9 @@ day has no pair for that gate. The day stays valid; the C rules only count days 
 - **Valid day:**
   - all eight base scans O1–O4 and S1–S4 ran on the freeze tag;
   - none of them is INVALID or `late_for_comparison`;
+  - **[R8]** the manifest's `core_status` is `core_complete` (the runner writes it only after the
+    end-of-block checks pass; the A-block never overwrites it). `running` means the process died
+    without unwinding (window closed, power loss) before the end checks ran: the day is invalid;
   - the manifest has no `day_invalid`, no `INVALID:config_changed_during_run` and no
     `INVALID:backend_restarted` [v6 R6], and no `INVALID:universe_changed_during_run` [U1].
 - **[U1]** A universe (`sp500.csv`) hash that differs between valid days does not exclude a day:

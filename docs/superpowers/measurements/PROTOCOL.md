@@ -94,8 +94,9 @@ every scan, its `scan_id` and its flags.
 - O1 itself must start by 13:15 ET. If the pre-checks run past that, the runner stops.
 
 **The day counts only if** it has all eight base scans, none flagged `state:`, `INVALID:` or
-`late_for_comparison`, and the manifest has no `day_invalid` (an unfinished core block always writes
-one),
+`late_for_comparison`, the manifest's `core_status` is `core_complete` (a manifest still reading
+`running` means the run was killed before its end checks: the day does **not** count), and the
+manifest has no `day_invalid` (an unfinished core block always writes one),
 `INVALID:config_changed_during_run`, `INVALID:backend_restarted` or
 `INVALID:universe_changed_during_run`. A `snapshot_failed:core_end` flag means only the end-of-run
 context (data sources, regime) is missing. The validity checks ran before it.

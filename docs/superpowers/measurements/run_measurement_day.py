@@ -612,7 +612,8 @@ def cmd_core(ctx) -> None:
          # §4.0: not frozen; shown next to the per-day rates when it differs between days.
          "universe_sha256_core_start": universe_sha256(ctx.repo),
          "config_health_core_start": health, "scan_schedule": schedule,
-         "regime_urls": REGIME_URLS, "scans": [], "flags": [], "status": "running"}
+         "regime_urls": REGIME_URLS, "scans": [], "flags": [], "status": "running",
+         "core_status": "running"}
     if tasty == "degraded":
         m["flags"].append("tastytrade_degraded_at_start")
     ctx.save_manifest(m)
@@ -638,9 +639,13 @@ def cmd_core(ctx) -> None:
         end_checks(ctx, m, folder, "core_end", "config_start", health,
                    m["universe_sha256_core_start"], m["flags"])
         m["status"] = "core_complete"
+        # core_status is never touched by ivabs (which overwrites status); §5 validity keys on it,
+        # so a process killed without unwinding (window closed, power loss) leaves "running" = invalid.
+        m["core_status"] = "core_complete"
     except BaseException as e:   # Stop, a crash, Ctrl+C: never leave "running" behind
         kind = "stopped" if isinstance(e, Stop) else "interrupted" if isinstance(e, KeyboardInterrupt) else "crashed"
         m["status"] = f"{kind}: {e if isinstance(e, Stop) else repr(e)}"
+        m["core_status"] = m["status"]
         # The end checks did not all run, so nothing proves the day valid (§5).
         m["day_invalid"] = sorted(set(m.get("day_invalid", [])) | {"core_block_not_completed"})
         raise
