@@ -743,9 +743,12 @@ def _pick_expiration_without_window(
     the contract validator applies them (contract_validator.effective_dte_limits).
     Only expiries inside [min_dte, max_dte] can yield a contract the validator
     accepts, so nothing outside it is picked (None when nothing is listed
-    there). Among those, the one closest to the preferred band the DTE
-    sub-score rewards wins, the shorter on a tie -- so the nearest expiry
-    inside the band when there is one.
+    there). Among those, the one with the smallest distance to the preferred
+    band [preferred_dte_min, preferred_dte_max] wins, the shorter on a tie --
+    so the shortest expiry inside the band when there is one, which keeps the
+    old pick. This does NOT maximise the DTE sub-score (_score_dte peaks at the
+    band's centre and is 0 at its edges); it only stays out of the hard-reject
+    range and as close to the band as the listing allows.
 
     With the shipped rules (21, 21-60, 90) that is the old "first expiry of
     21+ days" whenever that expiry is at most 90 days out; when it is further
@@ -757,7 +760,8 @@ def _pick_expiration_without_window(
     rejected as dte_too_short, dropping the symbol from the scan.
 
     dte_limits=None keeps that old pick (first expiry of 21+ days) for callers
-    that pass no rules.
+    that pass no rules. Either way every listed date is parsed, so one
+    malformed entry fails the whole fetch (the caller's except returns []).
     """
     def _dte(d: str) -> int:
         return (date.fromisoformat(d) - today).days
@@ -765,6 +769,8 @@ def _pick_expiration_without_window(
     ordered = sorted(dates)
     if dte_limits is None:
         return next((d for d in ordered if _dte(d) >= _DEFAULT_MIN_DTE_FLOOR), None)
+    # An inverted band (preferred min above max) gives odd distances, but the
+    # validator then scores every DTE 0, so which in-range expiry wins is moot.
     lo, pref_lo, pref_hi, hi = dte_limits
 
     def _off_band(d: str) -> int:

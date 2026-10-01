@@ -151,8 +151,8 @@ def test_no_window_pick_returns_none_when_nothing_is_in_range():
 
 
 def test_lowering_min_dte_still_prefers_the_preferred_band():
-    # min_dte 5 lets a weekly pass the hard check, but the DTE sub-score
-    # penalises anything under preferred_dte_min 21: the old 21+ pick stays.
+    # min_dte 5 lets a weekly pass the hard check; the pick still keeps the
+    # old 21+ choice, the shortest expiry inside the preferred band.
     assert _pick((5, 21, 60, 90), 6, 13, 24, 52) == _dates(_TODAY, 24)[0]
     # Nothing in the band is in range: the in-range expiry closest to it, not
     # the shortest (which scores worst and decays fastest).
@@ -164,6 +164,9 @@ def test_no_window_pick_respects_preferred_dte_max():
     assert _pick((21, 40, 45, 90), 39, 80) == _dates(_TODAY, 39)[0]
     # Equally far either side: the shorter one.
     assert _pick((21, 40, 45, 90), 35, 50) == _dates(_TODAY, 35)[0]
+    # ... whatever order the listing comes in.
+    assert _pick_expiration_without_window(
+        list(reversed(_dates(_TODAY, 35, 50))), _TODAY, (21, 40, 45, 90)) == _dates(_TODAY, 35)[0]
 
 
 def test_no_window_pick_takes_the_nearest_expiry_inside_the_band():

@@ -749,7 +749,7 @@ async def _process_symbol(
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
     # The fetch must only consider expiries the validator will accept, so it
     # gets the same floor the contract hard-reject uses (widen_contract_overrides_for_dte);
-    # with no hold window, the min_dte/max_dte the validator applies below.
+    # with no hold window, the validator's min_dte/max_dte and preferred DTE band.
     _dte_floor = widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None
     _dte_limits = effective_dte_limits(overrides) if dte_bounds is None else None
     async with sem:

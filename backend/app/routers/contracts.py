@@ -162,9 +162,10 @@ async def get_contracts(
         raw_chain = await fetch_option_chain_async(
             client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds,
             min_dte_floor=widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None,
-            # No hold window: pick within the min_dte/max_dte the table is graded
-            # with below, as scan.py does, so the fetched expiry is not certain
-            # to be rejected as dte_too_short or dte_too_long.
+            # No hold window: pick within the min_dte/max_dte (and nearest the
+            # preferred DTE band) the table is graded with below, as scan.py
+            # does, so the fetched expiry is not certain to be rejected as
+            # dte_too_short or dte_too_long.
             dte_limits=effective_dte_limits(rules) if dte_bounds is None else None,
         ) or []
 

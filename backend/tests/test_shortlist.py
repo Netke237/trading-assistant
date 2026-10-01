@@ -295,7 +295,7 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
     seen = []
 
     async def _chain(_client, symbol, **kw):
-        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
         return _MOCK_CHAIN
 
     with _enter_shortlist_patches(10) as stack:
@@ -305,7 +305,7 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
             "hold_min_days": 15, "hold_max_days": 200,
         })
     assert r.status_code == 200
-    assert seen and all(s == ((30, 400), 201) for s in seen), seen
+    assert seen and all(s == ((30, 400), 201, None) for s in seen), seen  # hold window: no dte_limits
 
 
 @pytest.mark.parametrize("overrides, limits", [
@@ -314,8 +314,8 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
     ({"min_dte": "45", "max_dte": 60}, (45, 21, 60, 60)),
 ])
 def test_scan_without_hold_days_passes_the_validators_dte_limits(client, overrides, limits):
-    """No hold days: the fetch picks within the min_dte/max_dte the validator
-    applies (the overrides, else the YAML). It used a fixed 21, so a min_dte of
+    """No hold days: the fetch picks within the min_dte/max_dte and nearest the
+    preferred DTE band the validator applies (the overrides, else the YAML). It used a fixed 21, so a min_dte of
     45 fetched an expiry whose every contract was dte_too_short and the symbol
     dropped out of the scan."""
     seen = []
@@ -341,7 +341,7 @@ def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
     seen = []
 
     async def _chain(_client, symbol, **kw):
-        seen.append((kw.get("expiry"), kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        seen.append((kw.get("expiry"), kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
         return [{**_MOCK_CHAIN[0], "right": kw.get("option_type", "C"),
                  "strike": s, "expiry": "2027-06-18"} for s in (180, 185, 190, 195)]
 
@@ -353,10 +353,10 @@ def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
         })
     assert r.status_code == 200
     main, legs = seen[0], seen[1:]
-    assert main == (None, (30, 400), 201)
+    assert main == (None, (30, 400), 201, None)
     assert r.json()["candidates"], r.json()["rejected"]  # else nothing below is exercised
     assert len(legs) == 2, seen
-    assert all(e == "2027-06-18" and b == (30, 400) and f == 201 for e, b, f in legs), seen
+    assert all(e == "2027-06-18" and b == (30, 400) and f == 201 and lim is None for e, b, f, lim in legs), seen
 
 
 def test_bearish_spread_legs_without_hold_days_get_the_same_dte_limits(client):

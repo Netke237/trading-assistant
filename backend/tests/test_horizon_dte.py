@@ -427,7 +427,7 @@ def test_get_contracts_passes_the_validator_floor_to_the_expiry_pick(monkeypatch
     hold is window (30, 400) at multiplier 2, floor 201: the fetch must be told."""
     calls = []
     async def _fake_fetch(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None, dte_limits=None):
-        calls.append((dte_bounds, min_dte_floor))
+        calls.append((dte_bounds, min_dte_floor, dte_limits))
         return []
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_fetch)
     async def _fake_price(client, symbol):
@@ -436,4 +436,4 @@ def test_get_contracts_passes_the_validator_floor_to_the_expiry_pick(monkeypatch
     client = TestClient(app)
     client.get("/api/contracts", params={"symbol": "AAPL", "right": "C",
                                           "hold_min_days": 15, "hold_max_days": 200})
-    assert calls == [((30, 400), 201)]
+    assert calls == [((30, 400), 201, None)]  # hold window: no dte_limits
