@@ -69,6 +69,19 @@ it('a 422 whose retry also fails removes the star', async () => {
   expect(mockApi.addWatchedContract).toHaveBeenCalledTimes(2);
 });
 
+it('a 422 after the user already unstarred is not retried', async () => {
+  let reject422!: (e: Error) => void;
+  mockApi.addWatchedContract.mockReturnValueOnce(new Promise((_, rej) => { reject422 = rej; }));
+  mockApi.removeWatchedContract.mockResolvedValue(undefined);
+  render(<ContractStar contractId={ID} grading={G} />);
+  click();
+  click();
+  expect(state().ids).toEqual([]);
+  await act(async () => { reject422(new Error('API /api/watched-contracts → 422: grading: bad')); });
+  expect(mockApi.addWatchedContract).toHaveBeenCalledTimes(1);
+  expect(state().ids).toEqual([]);
+});
+
 it('any other POST failure removes the star without a retry', async () => {
   mockApi.addWatchedContract.mockRejectedValue(new Error('API /api/watched-contracts → 500'));
   render(<ContractStar contractId={ID} grading={G} />);

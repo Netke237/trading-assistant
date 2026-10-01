@@ -121,9 +121,19 @@ def _wide_chain():
     return rows
 
 
+def _assert_all_150_tie(client, chain):
+    """Every row scores the same, so a leftover [:limit] would cut in strike
+    order. Asked through `strikes` itself: `limit` caps at 100 and would hide
+    the last 50."""
+    every = ",".join(str(100 + i) for i in range(150))
+    rows = _get(client, chain, f"&expiry={_E}&strikes={every}")[0].json()
+    assert len(rows) == 150
+    assert len({c["score"] for c in rows}) == 1
+
+
 def test_a_starred_strike_last_in_order_and_above_max_price_is_returned(client):
     chain = _wide_chain()
-    assert len({(_get(client, chain, "")[0].json()[0]["score"])}) == 1
+    _assert_all_150_tie(client, chain)
     r, _ = _get(client, chain, f"&expiry={_E}&strikes=249")
     assert r.status_code == 200
     assert [c["strike"] for c in r.json()] == [249]
@@ -131,15 +141,15 @@ def test_a_starred_strike_last_in_order_and_above_max_price_is_returned(client):
 
 def test_twelve_tied_strikes_are_all_returned(client):
     chain = _wide_chain()
-    scores = {c["score"] for c in _get(client, chain, "&limit=100&max_price=500")[0].json()}
-    assert len(scores) == 1  # all tied, so a leftover [:limit] would cut in strike order
+    _assert_all_150_tie(client, chain)
     last12 = list(range(238, 250))
     r, _ = _get(client, chain, f"&expiry={_E}&strikes=" + ",".join(map(str, last12)))
     assert sorted(c["strike"] for c in r.json()) == last12
 
 
-def test_a_non_int_strike_is_a_422(client):
-    r, _ = _get(client, [_row(185)], "&strikes=185,abc")
+@pytest.mark.parametrize("bad", ["185,abc", "185,-5", "185,+5", "1_85", "185.0"])
+def test_a_non_int_strike_is_a_422(client, bad):
+    r, _ = _get(client, [_row(185)], "&strikes=" + bad.replace("+", "%2B"))
     assert r.status_code == 422
     assert r.json()["detail"][0]["loc"] == ["query", "strikes"]
 

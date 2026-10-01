@@ -105,20 +105,20 @@ def _parse_contract_rules(raw: str | None) -> dict[str, float | int]:
 def _parse_strikes(raw: str | None) -> set[int] | None:
     """`strikes=187,190` -> {187, 190}. Items are stripped and empty items
     dropped (`187,` and `187, 190` parse); a list empty after that, `strikes=`
-    included, is absent (None). A non-integer item is a 422."""
+    included, is absent (None). Any item that is not plain digits is a 422
+    (int() alone would also take "-5", "+5" and "1_000")."""
     if raw is None:
         return None
     items = [p.strip() for p in raw.split(",")]
     items = [p for p in items if p]
     if not items:
         return None
-    try:
-        return {int(p) for p in items}
-    except ValueError:
+    if not all(p.isascii() and p.isdigit() for p in items):
         raise HTTPException(
             status_code=422,
             detail=[{"loc": ["query", "strikes"], "msg": "Value error, strikes must be comma-separated integers", "type": "value_error"}],
         )
+    return {int(p) for p in items}
 
 
 @router.get('/contracts', response_model=list[OptionContract])

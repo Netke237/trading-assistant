@@ -56,6 +56,9 @@ export function ContractStar({ contractId, grading, size = 'md', className }: Co
               // The server refused the grading: keep the star, honestly
               // YAML-graded. Explicit null also clears any stale server grading.
               console.warn('ContractStar: grading refused, starring without it', err);
+              // Unstarred while the first POST was in flight: a retry could
+              // land after that DELETE and bring the server row back.
+              if (!useWatchedContractsStore.getState().isWatched(contractId)) return;
               clearGrading(contractId);
               api.addWatchedContract(contractId, null).catch(() => { remove(contractId); });
               return;
