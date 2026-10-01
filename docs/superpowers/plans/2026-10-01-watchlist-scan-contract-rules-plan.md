@@ -1,4 +1,4 @@
-# WATCHLIST-SCAN-CONTRACT-RULES — plan (r12; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; round 9 NOT clean 0B/1S/7N; round 10 NOT clean 0B/1S/11N; round 11 NOT clean 0B/1S/13N; all addressed below)
+# WATCHLIST-SCAN-CONTRACT-RULES — plan (r13; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; round 7 NOT clean 0B/2S/5N; round 8 NOT clean 0B/1S/6N; round 9 NOT clean 0B/1S/7N; round 10 NOT clean 0B/1S/11N; round 11 NOT clean 0B/1S/13N; round 12 NOT clean 0B/2S/7N; all addressed below)
 
 - **Phase:** `WATCHLIST-SCAN-CONTRACT-RULES` (PROJECT_STATE.json), deferred by `STEP6-SCAN-CONTRACT-RULES`.
 - **Branch:** `claude/youthful-carson-82x23x` (off main at the DOCC-5 merge).
@@ -212,7 +212,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        cells, sort last, counted in tab and header) except the label is the raw id and the symbol cell is
        "—". The star is what lets
        the user delete a junk id the server keeps re-supplying.
-     - Missing rows render the label (`contractLabel` from the id parts), status `PENDING` for
+     - Missing rows render the label (`contractLabel` from the id parts, using the id's strike as parsed
+       by `parseFloat`, so `187.5` reads "187.5C"), status `PENDING` for
        `reason: 'loading'`, else `NO_DATA`, dashes in every
        market cell, no `DTEProgressBar`, a plain-text tooltip with the note, and the star (unstar works).
      - Sort: missing and invalid rows always last, in both directions and for every sort key, ordered
@@ -280,8 +281,11 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
    no marker. A full config snapshot was rejected as out of proportion.
 5. Step 6's own `max_price`/`limit` cut (STEP6 deferred item 3) is unchanged.
 6. Pre-existing: `market.py` truncates strikes with `int()` and the id is built from it, so 187 and 187.5
-   share an id; market.py's final de-duplication on id (`:1575-1576`) keeps the first in Tradier's chain
+   share an id; market.py's final de-duplication on id (`:1584-1585`) keeps the first in Tradier's chain
    order, so a starred `…|187|…` resolves to whichever of the two comes first. Not introduced here; logged.
+8. The client classifies `expired` by local date while the server's fallback uses `date.today()`; in a
+   timezone away from the server's, a just-expired star can show "Not in the current chain" for a few
+   hours instead of "Expired". Accepted.
 7. Residual 3's stale-grading half is mostly closed by the POST overwrite; the no-row half remains.
 
 ## 3. Tests (each with the mutation it must kill)
@@ -289,9 +293,12 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
 Backend `tests/test_watched_contracts_grading.py` — no watched-contracts router test exists today. It
 builds a minimal `FastAPI()` with only the `watched_contracts` router (not `app.main:app`, whose lifespan
 starts schedulers), its own in-memory aiosqlite engine (StaticPool) with `WatchedContractModel.__table__
-.create`, and `test_app.dependency_overrides[get_db]` — the shape of `tests/conftest.py`'s `client`
+.create` (required: `app/models/__init__.py` does not import `watched_contracts`, so
+`Base.metadata.create_all` would not create the table), and `test_app.dependency_overrides[get_db]` — the shape of `tests/conftest.py`'s `client`
 fixture (`:387-470`). Contracts-endpoint tests (6b-6g) extend `tests/test_step6_contract_rules.py`'s
-harness, which already stubs the chain and `fetch_price_async`; every 6b-6g case stubs the price at 185.0,
+harness, which already stubs the chain and `fetch_price_async` — via a variant of `_contracts_patches()`
+(`:72-76`, which returns only an `ExitStack`) that also returns the chain `AsyncMock`, so 6b/6g can read
+its `call_args`; every 6b-6g case stubs the price at 185.0,
 so the existing no-price 503 can never stand in for the new one. The watched-contracts harness also
 registers `test_app.add_exception_handler(RequestValidationError, request_validation_handler)` (imported
 from `app.main`, `main.py:341-379`): pydantic echoes the offending input into a 422 body, and a NaN in it
@@ -306,8 +313,9 @@ makes Starlette's `allow_nan=False` JSON encoder raise -> 500 without that handl
 4. 422 on: non-finite/bool rule value, hold max < min, only one hold bound, stock_score 101. NaN/Infinity
    cases are sent as raw JSON text (`content='{"contract_id":…,"grading":{"contract_rules":{"min_volume":
    NaN}}}'`, `content-type: application/json`), since httpx's `json=` refuses NaN. *Kills a missing
-   validator.* 4c. The same NaN body against a bare app WITHOUT the handler -> 500, pinning why the
-   harness (and production) need it.
+   validator.* 4c. The same NaN body against a bare app WITHOUT the handler, via
+   `TestClient(bare_app, raise_server_exceptions=False)` -> 500, pinning why the harness (and production)
+   need it (the default TestClient / ASGITransport re-raise the encoder's ValueError instead).
 4b. Numeric-string rule value (`"5"`), bool (`true`) and a huge int (a 400-digit integer literal in the
    raw JSON body, which Python parses as an int that overflows float) -> 422, not 500. *Kills lax pydantic coercion and the OverflowError path.*
 5. Hand-written invalid grading in the row -> `/detail` serves null, 200. *Kills a 500 on bad rows.*
@@ -383,7 +391,9 @@ Frontend:
    carries the fetch-time grading. *Kills drift between the two.*
 10. Watchlist page test (extends `__tests__/page.test.tsx`; its `api` mock gains
     `getWatchedContractsDetail` resolving to the ids/grading the test set, `getWatchedContracts` for the
-    fallback, and `removeWatchedContract: jest.fn().mockResolvedValue(undefined)` for 10f; `beforeEach` resets `{ ids: [], grading: {} }`):
+    fallback, and `removeWatchedContract: jest.fn().mockResolvedValue(undefined)` for 10f; `beforeEach` resets `{ ids: [], grading: {} }`.
+    The page defaults to the Stocks tab (`page.tsx:54`): every contracts case clicks the Contracts tab
+    first; 10g's "contracts success does not clear a stocks failure" checks the Stocks tab):
     a. A starred id with grading -> `getContracts` is called with that ctx (expiry, contract_rules, hold
        days, stock_score, strikes). *Kills the defect marker staying.*
     b. Two stars on the same symbol/right with different gradings -> two calls; each row shows its own
@@ -417,7 +427,10 @@ Frontend:
     g. Every star expired or invalid -> no `getContracts` call and no offline banner. One group rejecting
        -> rows show `fetch_failed`, no banner; all groups rejecting -> banner (contracts-only text); a slow group fetch that rejects
        AFTER `ids` is cleared to `[]` -> no banner; unstarring the last valid star while one expired star
-       remains (zero-groups path) -> the button reads "Refresh" (not "Refreshing…") and no banner; a contracts success does not
+       remains (zero-groups path), with the valid group's `getContracts` held as a deferred that rejects
+       AFTER the unstar -> the button reads "Refresh" (not "Refreshing…") and, once the deferred rejects,
+       no banner; the zero-ids case likewise asserts the button reads "Refresh" while its slow fetch is
+       still pending; a contracts success does not
        clear a stocks failure.
     Clock: every Watchlist and `contractGrading` test with a dated id builds expiries relative to
     `Date.now()` (preferred: no fake timers, so RTL's `findBy`/`waitFor` behave normally); only a test
