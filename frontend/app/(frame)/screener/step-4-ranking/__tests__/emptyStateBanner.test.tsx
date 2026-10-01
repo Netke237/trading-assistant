@@ -17,9 +17,11 @@ jest.mock('@/lib/api', () => ({
   api: { getCandles: jest.fn().mockResolvedValue([]) },
 }));
 
+// The backend's current form (routers/scan.py, the stock scan's wording):
+// counts and the floor, not a cause.
 const BANNER =
-  'No confirmed bearish setups in this universe. All candidates were removed — '
-  + 'market structure does not support short-side entries.';
+  'No bearish candidates survived. The direction-conviction gate removed 5 of 5 '
+  + '(trend below 40).';
 
 function setScanResult(result: ScanResult | null) {
   useScanStore.setState({ scanResult: result ?? undefined, previousRun: undefined });

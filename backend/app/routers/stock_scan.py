@@ -298,7 +298,7 @@ def _direction_conviction_drop(symbol: str, card, min_trend: float | None,
     # which is how Intraday is excused rather than by naming it here.
     # The FLOOR must stay identical to the options gate in routers/scan.py —
     # both read the same resolver, which is what keeps them in step. The
-    # unmeasured check below is stock-scan only (see its note).
+    # unmeasured check below is shared too (see its note).
     if min_trend is None:
         return None
     # A trend rule with nothing to measure (too few bars for its MA, no
@@ -308,8 +308,10 @@ def _direction_conviction_drop(symbol: str, card, min_trend: float | None,
     # method and passed on another. It is now removed as UNMEASURED, under its
     # own reason and funnel bucket (decisions Q11 and
     # P3A-UNMEASURED-TREND-REMOVE-2026-09-25). A card with no trend rule at all
-    # is the same case: nothing was measured. The options gate in
-    # routers/scan.py reads an int (`stockBreakdown.trend`) and cannot see this.
+    # is the same case: nothing was measured. The options scan runs this same
+    # helper in scan._process_symbol (P3c item 2), on the pre-screen card and
+    # before the chain fetch, acting only on the unmeasured verdict; its
+    # post-gather floor then reads `stockBreakdown.trend` as a real reading.
     _trend = next((r for r in card.rules if r.name == "trend"), None)
     if _trend is None or not getattr(_trend, "measured", True):
         return {"symbol": symbol,

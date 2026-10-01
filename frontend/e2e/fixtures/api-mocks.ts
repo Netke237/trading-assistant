@@ -159,6 +159,29 @@ export const MOCK_SCAN_CANDIDATE = {
   finalStatus: 'PASS',
 };
 
+/** A clean DOCC-4 health report (exported for docc5-config-health.spec.ts). */
+export const CONFIG_HEALTH_CLEAN = {
+  ok: true,
+  checked: [
+    'scoring_rules.yaml parses', 'money blocks: presence, spelling, enabled', 'regime_sizing values',
+    'regime blocks (intraday, swing, position)', 'direction_conviction: position and values',
+    'top-level families', 'horizons tree: unknown keys', 'risk_rules.yaml parses',
+    'contract_rules.yaml parses', 'running config vs disk',
+  ],
+  not_checked: [
+    'money blocks other than regime_sizing: values',
+    'required non-money sections and keys (horizons.<h>.*, stock_score_thresholds, '
+      + 'confidence_backtest, risk_rules sections)',
+    'risk_rules.yaml and contract_rules.yaml contents',
+    'single worker assumed; only WEB_CONCURRENCY is detected',
+    'copies the frontend fetched at page load (event and IV thresholds)',
+  ],
+  pid: 4242,
+  errors: [] as unknown[],
+  warnings: [] as unknown[],
+  stale: [] as unknown[],
+};
+
 export async function setupApiMocks(page: Page): Promise<void> {
   // Candles - serve from pinned fixtures
   const symbols = ['AAPL', 'MSFT', 'NVDA', 'SPY'];
@@ -374,6 +397,17 @@ export async function setupApiMocks(page: Page): Promise<void> {
         Swing:    { reject_days: 21, caution_days: 45 },
         Position: { reject_days: 30, caution_days: 60 },
       }),
+    });
+  });
+
+  // DOCC-5 config health (DOCC-4's GET /api/config/health): a clean report,
+  // so the TopBar chip reads "Config OK" and no banner takes a grid row.
+  // Mirrors backend/app/services/config_health.py CHECK_ORDER / NOT_CHECKED.
+  await page.route('**/api/config/health', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(CONFIG_HEALTH_CLEAN),
     });
   });
 

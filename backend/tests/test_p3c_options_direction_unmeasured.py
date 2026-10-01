@@ -155,7 +155,8 @@ def test_relative_strength_benchmark_fetch_none_removes_the_name_unmeasured(clie
     assert body["candidates"] == []
     assert body["rejected"][0]["reason"].startswith(_UNMEASURED)
     assert score.call_count == 1
-    assert body["pipeline"]["failed_direction"] == 1
+    assert body["pipeline"]["failed_direction_unmeasured"] == 1
+    assert body["pipeline"]["failed_direction"] == 0
 
 
 def test_relative_strength_benchmark_helper_raising_does_not_fail_the_scan(client, caplog):
@@ -178,14 +179,20 @@ def _unmeasured(sym: str) -> RejectedCandidate:
     return RejectedCandidate(symbol=sym, reason=f"{_UNMEASURED} no trend measurement for Bullish Swing")
 
 
-def test_funnel_counts_unmeasured_under_direction_and_no_banner_when_one_survives(client):
+def test_funnel_counts_unmeasured_apart_from_measured_and_no_banner_when_one_survives(client):
+    """open_questions[53]: an unmeasured name is removed before the chain fetch,
+    so it has its own bucket rather than failed_direction (which the funnel
+    places after chain and contracts). The floor applied travels with it
+    (open_questions[27], options half)."""
     body = _funnel_run(client, {
         "AAA": _unmeasured("AAA"),
         "BBB": _card("BBB", 10, "Bullish"),    # measured, below the Swing floor
         "CCC": _card("CCC", 90, "Bullish"),    # kept
     }, direction="Bullish", horizon="Swing")
     p = body["pipeline"]
-    assert p["failed_direction"] == 2
+    assert p["failed_direction"] == 1
+    assert p["failed_direction_unmeasured"] == 1
+    assert p["direction_min_trend"] == scan.load_direction_conviction_min_trend("Bullish", "Swing")
     assert p["other_rejected"] == 0
     assert p["candidates"] == 1
     assert not body["direction_banner"]
@@ -207,7 +214,8 @@ def test_banner_is_the_stock_form_when_the_gate_removed_everything(client):
 def test_all_unmeasured_scan_shows_the_banner(client):
     body = _funnel_run(client, {"AAA": _unmeasured("AAA"), "BBB": _unmeasured("BBB")},
                        direction="Bullish", horizon="Swing")
-    assert body["pipeline"]["failed_direction"] == 2
+    assert body["pipeline"]["failed_direction_unmeasured"] == 2
+    assert body["pipeline"]["failed_direction"] == 0
     assert "removed 2 of 2" in body["direction_banner"]
 
 
@@ -225,3 +233,12 @@ def test_anti_drift_the_helpers_are_the_stock_scans():
     assert scan._direction_conviction_drop is stock_scan._direction_conviction_drop
     assert scan._rs_benchmark_candles is stock_scan._rs_benchmark_candles
     assert scan._aligned_benchmark is stock_scan._aligned_benchmark
+
+
+def test_exempt_horizon_reports_no_floor(client):
+    """Intraday is exempt: the pipeline carries no floor, so the funnel cannot
+    print a threshold the scan never applied."""
+    body = _funnel_run(client, {"CCC": _card("CCC", 90, "Bullish")},
+                       direction="Bullish", horizon="Intraday")
+    assert body["pipeline"]["direction_min_trend"] is None
+    assert body["pipeline"]["failed_direction_unmeasured"] == 0

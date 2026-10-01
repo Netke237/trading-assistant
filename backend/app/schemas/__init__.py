@@ -858,6 +858,16 @@ class OptionsPipeline(BaseModel):
     # None-vs-0 distinction is what keeps that cheaper choice honest.
     failed_direction:  Optional[int] = None  # removed by the direction-conviction gate
     failed_shortlist:  Optional[int] = None  # trimmed by the shortlist cap (see original_count)
+    # The direction gate's "no data" removals (trend UNMEASURED), counted apart
+    # from failed_direction (a measured trend below the floor), as
+    # StockPipeline does. Removed right after the pre-screen, before the chain
+    # fetch -- so the funnel places this stage there, not beside
+    # failed_direction. None = a result stored before the field existed, whose
+    # failed_direction still includes these.
+    failed_direction_unmeasured: Optional[int] = None
+    # The direction-conviction floor THIS scan applied; None = exempt horizon
+    # (or a result stored before the field existed).
+    direction_min_trend: Optional[float] = None
     candidates:        int   # made it through everything, after every filter
 
 

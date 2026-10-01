@@ -104,8 +104,10 @@ was verified against the code at 4c52000. Sections that changed are marked **[v6
   the floor changes only the first, so the floor rule's rate counts measured removals over measured
   entrants. Two details:
   - The stock pipeline has separate `failed_direction` and `failed_direction_unmeasured` counters.
-  - The options `failed_direction` counter **adds both together** (scan.py:1837-1842), so options
-    rows are split by the reason prefix (§6, §7).
+  - The options `failed_direction` counter **added both together** until DCG-SEMANTICS-VISIBILITY
+    (main 1c06098, 2026-10-01); since then it counts measured only, with a separate
+    `failed_direction_unmeasured`. Options rows are split by the reason prefix (§6, §7), which is
+    correct on either version.
 - **R4 Position bodies follow today's defaults.** ec712489 aligned `PARAM_DEFAULTS_POSITION` with
   `scoring_rules.yaml`: `additive_adx_pass` went from 20 to 25. The 09-18 Position bodies carry the
   drifted 20. v6 Position bodies use 25, and the check becomes "Position override values equal
@@ -629,7 +631,8 @@ A session (any machine) that has the new `scans/<date>/` folder does the followi
      `direction_gate.unmeasured = failed_direction_unmeasured` [v6 R3].
    - Options direction rows: `rejected` counts the reasons starting `direction_conviction:`, and
      `unmeasured` counts those starting `direction_conviction_unmeasured:`. Never read the
-     `failed_direction` counter for options, because it adds the two together [v6 R3].
+     `failed_direction` counter for options: it added the two together before DCG-SEMANTICS-VISIBILITY
+     (2026-10-01), so the prefix split is the one rule valid on every tag [v6 R3].
    - Score-gate causes come from each score-gate reject's breakdown:
      - confidence below `confidence_reject_below`. A `breakdown.confidence` of **0 reads as
        "0 or None"** [r3]: the scorer writes 0 for a missing confidence (stock_scorer.py:1183-1185),
