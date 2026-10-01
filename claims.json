@@ -11,14 +11,6 @@
     {
       "agent": "claude",
       "branch": "claude/focused-wright-rh1oy6",
-      "claimed_at": "2026-10-01T19:09:50Z",
-      "expires_at": "2026-10-01T22:13:40Z",
-      "note": "strip min_stock_score from options-scan overrides (open question #57)",
-      "task": "Q57-MIN-STOCK-SCORE-OPTIONS-LEAK"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/focused-wright-rh1oy6",
       "claimed_at": "2026-10-01T19:09:53Z",
       "expires_at": "2026-10-01T22:13:40Z",
       "note": "_build_target_ladder: test rung validity after rounding (open question #49)",
