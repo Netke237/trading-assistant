@@ -1519,9 +1519,9 @@
     {
       "id": "DCG-SEMANTICS-VISIBILITY",
       "name": "Direction-conviction gate: semantics and visibility -- options funnel counts unmeasured trends apart (failed_direction_unmeasured, a stage after the pre-screen) and prints the floor applied (direction_min_trend); stale stock_scan.py comments; stale banner fixture (former open_questions 26, 27, 47, 53, 54)",
-      "status": "shipped_unaudited",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "status": "shipped",
+      "audit_rounds": 1,
+      "audit_clean": true,
       "depends_on": [
         "P3C-SCAN-SIZING-LEFTOVERS"
       ],
@@ -1531,7 +1531,7 @@
         "pattern": "def _is_direction_unmeasured",
         "note": "Presence only. Behavioural pins: tests/test_p3c_options_direction_unmeasured.py (funnel split, floor carried, Intraday reports no floor), tests/test_scan_direction_funnel.py (the unmeasured reason lands in failed_direction_unmeasured; scanned == every bucket), ScanFunnel.test.tsx ('options direction gate, measured vs no data')."
       },
-      "note": "BUILT 2026-10-01 on claude/intelligent-allen-463f3h. Backend: OptionsPipeline gains failed_direction_unmeasured + direction_min_trend (both Optional, None on a stored result that predates them -- no schema-version bump, display counters only, as for failed_direction); routers/scan.py splits _is_direction into measured ('direction_conviction:') and unmeasured ('direction_conviction_unmeasured:') predicates, both in the residual's bucket list; the banner still counts both. Frontend: lib/scanStore.ts type; ScanFunnel options mode subtracts unmeasured right after the pre-screen (shown only when > 0) and labels the Direction conviction stage with the floor. A stored result from before keeps its unmeasured names inside failed_direction (shown under Direction conviction, as before)."
+      "note": "CODE ROUND 1 (fresh subagent, bmad adversarial, 49e7171): CLEAN -- zero gate-level findings (the two direction predicates cannot overlap and both sit in the residual's bucket list, so scanned == every bucket; funnel order matches the real gate order; the floor shown is the one passed to _process_symbol and the post-gather gate, None on an exempt horizon; banner count unchanged; stored results without the new fields load and reconcile as before; OptionsPipeline has one constructor and its only frontend readers are ScanFunnel and scanLogTotals (.scanned)). NOT MERGED -- awaiting Kenneth's merge decision. || BUILT 2026-10-01 on claude/intelligent-allen-463f3h. Backend: OptionsPipeline gains failed_direction_unmeasured + direction_min_trend (both Optional, None on a stored result that predates them -- no schema-version bump, display counters only, as for failed_direction); routers/scan.py splits _is_direction into measured ('direction_conviction:') and unmeasured ('direction_conviction_unmeasured:') predicates, both in the residual's bucket list; the banner still counts both. Frontend: lib/scanStore.ts type; ScanFunnel options mode subtracts unmeasured right after the pre-screen (shown only when > 0) and labels the Direction conviction stage with the floor. A stored result from before keeps its unmeasured names inside failed_direction (shown under Direction conviction, as before)."
     }
   ],
   "already_shipped": [
