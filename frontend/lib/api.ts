@@ -1,6 +1,7 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
-              PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride } from '@/types/domain';
+              PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
+              ContractGrading } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -406,7 +407,11 @@ export const api = {
     ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number;
             hold_min_days?: number; hold_max_days?: number;
             /** The scan's ScanResult.contract_rules. Absent = contract_rules.yaml. */
-            contract_rules?: Record<string, number> },
+            contract_rules?: Record<string, number>;
+            /** One expiry's chain, filtered to it (the Watchlist's starred expiry). */
+            expiry?: string;
+            /** Only these strikes; the backend then applies neither `limit` nor `max_price`. */
+            strikes?: number[] },
     signal?: AbortSignal,
   ) => get<OptionContract[]>(
     `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
@@ -418,7 +423,9 @@ export const api = {
     (ctx?.hold_min_days != null ? `&hold_min_days=${ctx.hold_min_days}` : '') +
     (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : '') +
     (ctx?.contract_rules && Object.keys(ctx.contract_rules).length > 0
-      ? `&contract_rules=${encodeURIComponent(JSON.stringify(ctx.contract_rules))}` : ''),
+      ? `&contract_rules=${encodeURIComponent(JSON.stringify(ctx.contract_rules))}` : '') +
+    (ctx?.expiry ? `&expiry=${encodeURIComponent(ctx.expiry)}` : '') +
+    (ctx?.strikes && ctx.strikes.length > 0 ? `&strikes=${encodeURIComponent(ctx.strikes.join(','))}` : ''),
     signal,
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
@@ -587,7 +594,13 @@ export const api = {
   addWatchlist:    (symbol: string) => post<{ symbol: string }>('/api/watchlist', { symbol }),
   removeWatchlist: (symbol: string) => del(`/api/watchlist/${encodeURIComponent(symbol)}`),
   getWatchedContracts:    () => get<string[]>('/api/watched-contracts'),
-  addWatchedContract:     (contractId: string) => post<{ contract_id: string }>('/api/watched-contracts', { contract_id: contractId }),
+  getWatchedContractsDetail: () =>
+    get<{ contract_id: string; grading: ContractGrading | null }[]>('/api/watched-contracts/detail'),
+  /** `grading` undefined = no key (the server keeps an existing row's grading);
+   *  `null` = sent as `"grading": null` (clears it); an object stores/overwrites. */
+  addWatchedContract:     (contractId: string, grading?: ContractGrading | null) =>
+    post<{ contract_id: string }>('/api/watched-contracts',
+      grading !== undefined ? { contract_id: contractId, grading } : { contract_id: contractId }),
   removeWatchedContract:  (contractId: string) => del(`/api/watched-contracts/${encodeURIComponent(contractId)}`),
   postScan: (
     universe: string[],

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import math
 from typing import Literal, Optional
 
 import httpx
@@ -21,7 +20,8 @@ from app.data.market import (
 )
 from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.contract_validator import (
-    CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, validate_contract,
+    CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, is_finite_rule_value,
+    validate_contract,
 )
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.trade_plan import build_trade_plan
@@ -97,14 +97,30 @@ def _parse_contract_rules(raw: str | None) -> dict[str, float | int]:
     if not isinstance(parsed, dict):
         raise _contract_rules_error("contract_rules must be a JSON object")
     for key in CONTRACT_OVERRIDE_KEYS & parsed.keys():
-        val = parsed[key]
-        try:
-            ok = not isinstance(val, bool) and isinstance(val, (int, float)) and math.isfinite(val)
-        except OverflowError:  # an int too large for a float
-            ok = False
-        if not ok:
+        if not is_finite_rule_value(parsed[key]):
             raise _contract_rules_error(f"contract_rules.{key} must be a finite number")
     return effective_contract_overrides(parsed)
+
+
+def _parse_strikes(raw: str | None) -> set[int] | None:
+    """`strikes=187,190` -> {187, 190}. Items are stripped and empty items
+    dropped (`187,` and `187, 190` parse); a list empty after that, `strikes=`
+    included, is absent (None). Any item that is not plain digits is a 422
+    (int() alone would also take "-5", "+5" and "1_000"). So is an item longer
+    than 9 digits: no strike is that large, and int() raises ValueError past
+    4300 digits, which was a 500."""
+    if raw is None:
+        return None
+    items = [p.strip() for p in raw.split(",")]
+    items = [p for p in items if p]
+    if not items:
+        return None
+    if not all(p.isascii() and p.isdigit() and len(p) <= 9 for p in items):
+        raise HTTPException(
+            status_code=422,
+            detail=[{"loc": ["query", "strikes"], "msg": "Value error, strikes must be comma-separated integers", "type": "value_error"}],
+        )
+    return {int(p) for p in items}
 
 
 @router.get('/contracts', response_model=list[OptionContract])
@@ -127,10 +143,22 @@ async def get_contracts(
     # (`max_price` and `limit` still apply, and the scan has neither, so the
     # card's contract can still be absent here; it is no longer graded apart.)
     contract_rules: str | None = Query(default=None),
+    # The Watchlist asks for a starred contract's own expiry and strikes
+    # (WATCHLIST-SCAN-CONTRACT-RULES). Both absent = the behaviour above,
+    # exactly. `expiry`: fetch that expiry's chain and keep only its rows.
+    # `strikes`: comma-separated integer strikes; keep only those, and apply
+    # neither `max_price` nor `limit` -- the caller asked for specific
+    # contracts, so nothing may cut them (a 150-strike chain ties a
+    # hard-rejected star at 0 and `limit` cut it in strike order). Grading is
+    # unchanged by either: the same hold-widened overrides apply.
+    expiry: str | None = Query(default=None),
+    strikes: str | None = Query(default=None),
 ) -> list[OptionContract]:
     opt_type = 'C' if right.upper() == 'C' else 'P'
 
     rules = _parse_contract_rules(contract_rules)
+    expiry = expiry or None
+    strike_set = _parse_strikes(strikes)
     dte_bounds: tuple[int, int] | None = None
     contract_overrides: dict | None = dict(rules) or None
     if hold_min_days is not None and hold_max_days is not None:
@@ -158,10 +186,28 @@ async def get_contracts(
 
     # 1. Fetch raw option chain
     async with httpx.AsyncClient(timeout=8) as client:
-        raw_chain = await fetch_option_chain_async(
-            client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds,
-            min_dte_floor=widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None,
-        ) or []
+        if expiry is None:
+            raw_chain = await fetch_option_chain_async(
+                client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds,
+                min_dte_floor=widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None,
+            ) or []
+        else:
+            # The caller's expiry, not the hold-days window's: a listed E is
+            # fetched, an unlisted one (expired / delisted) falls back to the
+            # plain first-expiry->=21-days chain, filtered to [] below. The
+            # hold-day bounds above still widen the GRADING overrides.
+            raw_chain = await fetch_option_chain_async(
+                client, symbol.upper(), option_type=opt_type, expiry=expiry, dte_bounds=None,
+            ) or []
+            if not raw_chain:
+                # An empty chain for an asked-for expiry is a Tradier outage /
+                # timeout (swallowed into []), an expirations list with nothing
+                # >= 21 days, or a listed E with no quoted strikes. Say so: a
+                # 200 [] would read as "not in the chain" for every star.
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Option chain unavailable for {symbol.upper()} {expiry}. Try again shortly.",
+                )
 
         # 2. Fetch current stock price.
         price: float = await fetch_price_async(client, symbol.upper()) or 0.0
@@ -233,12 +279,14 @@ async def get_contracts(
         # 3. Augment with computed fields (bid/ask/delta/iv_rank)
         augmented = _augment(c, stock_price=price)
 
-        # 4. Filter by max option price (ask or mid if ask is 0)
-        ask = float(augmented.get("ask") or 0)
-        if ask <= 0:
-            ask = float(augmented.get("price") or 0)
-        if ask > max_price:
-            continue
+        # 4. Filter by max option price (ask or mid if ask is 0) -- not when
+        # specific strikes were asked for.
+        if strike_set is None:
+            ask = float(augmented.get("ask") or 0)
+            if ask <= 0:
+                ask = float(augmented.get("price") or 0)
+            if ask > max_price:
+                continue
 
         # 5. Score the contract
         score_card = validate_contract(augmented, stock_score, overrides=contract_overrides)
@@ -287,6 +335,13 @@ async def get_contracts(
 
     # 7. Sort by score descending (stable — preserves input order for ties)
     results.sort(key=lambda x: x.score, reverse=True)
+
+    # Filtered AFTER scoring: the ATM Black-Scholes fill above reads the whole
+    # chain, so a non-ATM star's IV (and score) match the unfiltered call's.
+    if expiry is not None:
+        results = [r for r in results if r.expiry == expiry]
+    if strike_set is not None:
+        return [r for r in results if r.strike in strike_set]
 
     # 8. Return top limit contracts
     return results[:limit]
