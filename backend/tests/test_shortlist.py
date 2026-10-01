@@ -308,16 +308,20 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
     assert seen and all(s == ((30, 400), 201) for s in seen), seen
 
 
-@pytest.mark.parametrize("overrides, floor", [(None, 21), ({"min_dte": 45}, 45)])
-def test_scan_without_hold_days_passes_the_validators_min_dte(client, overrides, floor):
-    """No hold days: the floor is the min_dte the validator applies (the
-    override, else the YAML's 21). The fetch used a fixed 21, so a min_dte of 45
-    fetched an expiry whose every contract was dte_too_short and the symbol
+@pytest.mark.parametrize("overrides, limits", [
+    (None, (21, 21, 90)),
+    ({"min_dte": 45}, (45, 21, 90)),
+    ({"min_dte": "45", "max_dte": 60}, (45, 21, 60)),
+])
+def test_scan_without_hold_days_passes_the_validators_dte_limits(client, overrides, limits):
+    """No hold days: the fetch picks within the min_dte/max_dte the validator
+    applies (the overrides, else the YAML). It used a fixed 21, so a min_dte of
+    45 fetched an expiry whose every contract was dte_too_short and the symbol
     dropped out of the scan."""
     seen = []
 
     async def _chain(_client, symbol, **kw):
-        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
         return _MOCK_CHAIN
 
     body = {"universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing"}
@@ -327,7 +331,7 @@ def test_scan_without_hold_days_passes_the_validators_min_dte(client, overrides,
         stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
         r = client.post("/api/scan", json=body)
     assert r.status_code == 200
-    assert seen and all(s == (None, floor) for s in seen), seen
+    assert seen and all(s == (None, None, limits) for s in seen), seen
 
 
 def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
@@ -353,6 +357,27 @@ def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
     assert r.json()["candidates"], r.json()["rejected"]  # else nothing below is exercised
     assert len(legs) == 2, seen
     assert all(e == "2027-06-18" and b == (30, 400) and f == 201 for e, b, f in legs), seen
+
+
+def test_bearish_spread_legs_without_hold_days_get_the_same_dte_limits(client):
+    seen = []
+
+    async def _chain(_client, symbol, **kw):
+        seen.append((kw.get("expiry"), kw.get("dte_bounds"), kw.get("dte_limits")))
+        return [{**_MOCK_CHAIN[0], "right": kw.get("option_type", "C"),
+                 "strike": s, "expiry": "2027-06-18"} for s in (180, 185, 190, 195)]
+
+    with _enter_shortlist_patches(10) as stack:
+        stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bearish", "horizon": "Swing",
+            "overrides": {"min_dte": 45},
+        })
+    assert r.status_code == 200
+    main, legs = seen[0], seen[1:]
+    assert main == (None, None, (45, 21, 90))
+    assert r.json()["candidates"], r.json()["rejected"]
+    assert legs == [("2027-06-18", None, (45, 21, 90))] * 2, seen
 
 
 # ── The scan echoes the event window its scorer applied ──────────────────────

@@ -728,26 +728,43 @@ def _nearest_expiration_in_window(
     return min(near, key=lambda d: abs(_dte(d) - centre))
 
 
-# The no-hold-window fallback floor when a caller passes none; it equals
-# contract_rules.yaml's hard_reject.min_dte default.
+# The no-window pick when a caller passes no limits: the first expiry at or
+# above this many days. Pinned to contract_rules.yaml's hard_reject.min_dte by
+# tests/test_option_chain_expiry_selection.py.
 _DEFAULT_MIN_DTE_FLOOR = 21
 
 
-def _first_expiration_at_or_above(
-    dates: list[str], today: date, min_dte_floor: Optional[int],
+def _pick_expiration_without_window(
+    dates: list[str], today: date, dte_limits: Optional[tuple[int, int, int]],
 ) -> Optional[str]:
-    """The nearest listed expiry at or above `min_dte_floor` days (21 when None).
+    """The expiry to fetch when no hold window is set.
 
-    Used when no hold window is set. The floor must be the contract validator's
-    min_dte (contract_validator.effective_min_dte), not a fixed 21: a min_dte
-    override of 45 used to fetch the first 21+ day expiry, every contract of
-    which was then rejected as dte_too_short, dropping the symbol from the scan.
+    `dte_limits` is (min_dte, preferred_dte_min, max_dte) as the contract
+    validator applies them (contract_validator.effective_dte_limits). Only
+    expiries inside [min_dte, max_dte] can yield a contract the validator
+    accepts, so nothing outside it is picked (None when nothing is listed
+    there). Inside it, the nearest expiry at or above preferred_dte_min wins --
+    the DTE sub-score penalises anything shorter, and with the shipped rules
+    (21 / 21 / 90) this is the old "first expiry of 21+ days" -- else the
+    nearest one.
+
+    A fixed 21 used to be the floor whatever the rules said: a min_dte override
+    of 45 fetched the first 21+ day expiry, every contract of which was then
+    rejected as dte_too_short, dropping the symbol from the scan.
+
+    dte_limits=None keeps that old pick (first expiry of 21+ days) for callers
+    that pass no rules.
     """
-    floor = _DEFAULT_MIN_DTE_FLOOR if min_dte_floor is None else min_dte_floor
-    return next(
-        (d for d in sorted(dates) if (date.fromisoformat(d) - today).days >= floor),
-        None,
-    )
+    def _dte(d: str) -> int:
+        return (date.fromisoformat(d) - today).days
+
+    ordered = sorted(dates)
+    if dte_limits is None:
+        return next((d for d in ordered if _dte(d) >= _DEFAULT_MIN_DTE_FLOOR), None)
+    lo, preferred, hi = dte_limits
+    in_range = [d for d in ordered if lo <= _dte(d) <= hi]
+    return next((d for d in in_range if _dte(d) >= preferred),
+                in_range[0] if in_range else None)
 
 
 def fetch_option_chain(
@@ -756,6 +773,7 @@ def fetch_option_chain(
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
+    dte_limits: Optional[tuple[int, int, int]] = None,
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
@@ -786,10 +804,10 @@ def fetch_option_chain(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = _first_expiration_at_or_above(dates, _today, min_dte_floor)
+            target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
-                logger.info("chain %s: no expiry at/above floor %s (listed: %d)",
-                          symbol, min_dte_floor, len(dates))
+                logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
+                          symbol, dte_limits, len(dates))
                 return []
 
         chain_resp = httpx.get(
@@ -1432,6 +1450,7 @@ async def fetch_option_chain_async(
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
+    dte_limits: Optional[tuple[int, int, int]] = None,
 ) -> list[dict]:
     """Async variant."""
     try:
@@ -1467,10 +1486,10 @@ async def fetch_option_chain_async(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = _first_expiration_at_or_above(dates, _today, min_dte_floor)
+            target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
-                logger.info("chain %s: no expiry at/above floor %s (listed: %d)",
-                          symbol, min_dte_floor, len(dates))
+                logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
+                          symbol, dte_limits, len(dates))
                 return []
 
         chain_resp = await client.get(

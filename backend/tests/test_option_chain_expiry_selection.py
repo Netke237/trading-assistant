@@ -107,7 +107,7 @@ def test_an_expiry_exactly_at_the_floor_is_kept():
     assert _nearest_expiration_in_window(dates, (30, 400), today, min_dte_floor=201) == _dates(today, 201)[0]
 
 
-# ── No hold window: the pick must respect the validator's min_dte ─────────────
+# ── No hold window: the pick must respect the validator's DTE limits ────────
 #
 # With no hold days the fetch took the first expiry of 21+ days whatever the
 # contract rules said. A min_dte override of 45 then rejected every contract on
@@ -116,33 +116,72 @@ def test_an_expiry_exactly_at_the_floor_is_kept():
 import asyncio  # noqa: E402
 
 import app.data.market as market  # noqa: E402
-from app.data.market import _first_expiration_at_or_above, fetch_option_chain_async  # noqa: E402
-from app.scoring.contract_validator import effective_min_dte, validate_contract  # noqa: E402
+from app.data.market import (  # noqa: E402
+    _DEFAULT_MIN_DTE_FLOOR, _pick_expiration_without_window, fetch_option_chain, fetch_option_chain_async,
+)
+from app.scoring.contract_validator import _load_config, effective_dte_limits, validate_contract  # noqa: E402
+
+_TODAY = date(2026, 9, 29)
 
 
-def test_no_window_pick_skips_expiries_below_a_45_day_floor():
-    today = date(2026, 9, 29)
-    dates = _dates(today, 7, 24, 31, 52, 80)
-    assert _first_expiration_at_or_above(dates, today, None) == _dates(today, 24)[0]  # the old pick
-    assert _first_expiration_at_or_above(dates, today, 45) == _dates(today, 52)[0]
+def _pick(limits, *dtes):
+    return _pick_expiration_without_window(_dates(_TODAY, *dtes), _TODAY, limits)
 
 
-def test_no_window_pick_keeps_an_expiry_exactly_at_the_floor():
-    today = date(2026, 9, 29)
-    assert _first_expiration_at_or_above(_dates(today, 24, 45, 80), today, 45) == _dates(today, 45)[0]
+def test_no_window_pick_skips_expiries_below_a_45_day_min_dte():
+    assert _pick(None, 7, 24, 31, 52, 80) == _dates(_TODAY, 24)[0]  # the old pick
+    assert _pick((45, 21, 90), 7, 24, 31, 52, 80) == _dates(_TODAY, 52)[0]
 
 
-def test_no_window_pick_returns_none_when_nothing_reaches_the_floor():
-    today = date(2026, 9, 29)
-    assert _first_expiration_at_or_above(_dates(today, 7, 24, 31), today, 45) is None
+def test_no_window_pick_keeps_an_expiry_exactly_at_min_dte():
+    assert _pick((45, 21, 90), 24, 45, 80) == _dates(_TODAY, 45)[0]
 
 
-def test_effective_min_dte_is_the_override_else_the_yaml():
-    assert effective_min_dte(None) == 21
-    assert effective_min_dte({}) == 21
-    assert effective_min_dte({"min_dte": 45}) == 45
-    assert effective_min_dte({"min_dte": "45"}) == 45  # cast as validate_contract casts it
-    assert effective_min_dte({"max_delta": 0.6}) == 21
+def test_no_window_pick_never_goes_above_max_dte():
+    # min_dte 85 against the YAML max_dte 90: the first expiry >= 85 is 108,
+    # every contract of which the validator rejects as dte_too_long.
+    assert _pick((85, 21, 90), 80, 108, 171) is None
+    assert _pick((45, 21, 50), 24, 52) is None
+    assert _pick((45, 21, 90), 24, 90, 108) == _dates(_TODAY, 90)[0]  # exactly at max_dte is kept
+
+
+def test_no_window_pick_returns_none_when_nothing_is_in_range():
+    assert _pick((45, 21, 90), 7, 24, 31) is None
+    assert _pick((45, 21, 90)) is None
+
+
+def test_lowering_min_dte_still_prefers_the_preferred_band():
+    # min_dte 5 lets a weekly pass the hard check, but the DTE sub-score
+    # penalises anything under preferred_dte_min 21: the old 21+ pick stays.
+    assert _pick((5, 21, 90), 6, 13, 24, 52) == _dates(_TODAY, 24)[0]
+    # Nothing at or above the preferred floor in range: the nearest valid one.
+    assert _pick((5, 21, 20), 6, 13, 24) == _dates(_TODAY, 6)[0]
+
+
+def test_shipped_rules_pick_what_the_old_fixed_21_picked():
+    limits = effective_dte_limits(None)
+    for dtes in [(7, 24, 31), (3, 21, 49), (10, 20, 22), (1, 2)]:
+        assert _pick(limits, *dtes) == _pick(None, *dtes), dtes
+
+
+def test_no_window_pick_does_not_trust_the_listing_order():
+    dates = list(reversed(_dates(_TODAY, 7, 24, 52, 80)))
+    assert _pick_expiration_without_window(dates, _TODAY, (45, 21, 90)) == _dates(_TODAY, 52)[0]
+
+
+def test_default_floor_is_the_yaml_min_dte():
+    assert _DEFAULT_MIN_DTE_FLOOR == _load_config()["hard_reject"]["min_dte"]
+
+
+def test_effective_dte_limits_are_the_overrides_else_the_yaml():
+    cfg = _load_config()
+    yaml = (cfg["hard_reject"]["min_dte"], cfg["soft_rank"]["preferred_dte_min"], cfg["hard_reject"]["max_dte"])
+    assert effective_dte_limits(None) == yaml == (21, 21, 90)
+    assert effective_dte_limits({}) == yaml
+    assert effective_dte_limits({"max_delta": 0.6}) == yaml
+    assert effective_dte_limits({"min_dte": 45}) == (45, 21, 90)
+    assert effective_dte_limits({"min_dte": "45", "max_dte": 60.9}) == (45, 21, 60)  # cast as validate_contract casts
+    assert effective_dte_limits({"preferred_dte_min": 30}) == (21, 30, 90)
 
 
 class _FakeTradier:
@@ -152,7 +191,7 @@ class _FakeTradier:
         self.dates = dates
         self.chain_expiries = []
 
-    async def get(self, url, headers=None, params=None):
+    def get(self, url, headers=None, params=None, **_):
         if url.endswith("/expirations"):
             body = {"expirations": {"date": self.dates}}
         else:
@@ -172,20 +211,47 @@ class _FakeTradier:
         return _R()
 
 
-def test_fetch_with_a_45_day_min_dte_returns_contracts_the_validator_accepts(monkeypatch):
-    today = date.today()
-    dates = _dates(today, 24, 52, 80)
+class _AsyncFakeTradier(_FakeTradier):
+    async def get(self, url, headers=None, params=None, **_):
+        return _FakeTradier.get(self, url, headers=headers, params=params)
+
+
+def _patch_tradier(monkeypatch):
     monkeypatch.setattr(market, "_tradier_base", lambda: "https://sandbox.tradier.test")
     monkeypatch.setattr(market, "_headers", lambda *a, **k: {})
+
+
+def test_async_fetch_with_a_45_day_min_dte_returns_contracts_the_validator_accepts(monkeypatch):
+    today = date.today()
+    dates = _dates(today, 24, 52, 80)
+    _patch_tradier(monkeypatch)
     monkeypatch.setitem(market._expirations_cache, "XOM", (dates, today.isoformat()))
-    fake = _FakeTradier(dates)
+    fake = _AsyncFakeTradier(dates)
 
     rules = {"min_dte": 45}
     chain = asyncio.run(fetch_option_chain_async(
-        fake, "XOM", option_type="C", min_dte_floor=effective_min_dte(rules)))
+        fake, "XOM", option_type="C", dte_limits=effective_dte_limits(rules)))
 
     assert fake.chain_expiries == [_dates(today, 52)[0]]
     assert chain, "the fetch returned no contracts"
-    assert all(c["dte"] >= 45 for c in chain)
     card = validate_contract({**chain[0], "symbol": "XOM"}, 80, overrides=rules)
-    assert "dte_too_short" not in card.reject_reasons
+    assert not {"dte_too_short", "dte_too_long"} & set(card.reject_reasons), card.reject_reasons
+
+
+def test_async_fetch_asks_for_no_chain_when_no_expiry_is_in_range(monkeypatch):
+    today = date.today()
+    dates = _dates(today, 24, 108)
+    _patch_tradier(monkeypatch)
+    monkeypatch.setitem(market._expirations_cache, "XOM", (dates, today.isoformat()))
+    fake = _AsyncFakeTradier(dates)
+    assert asyncio.run(fetch_option_chain_async(fake, "XOM", dte_limits=(45, 21, 90))) == []
+    assert fake.chain_expiries == []
+
+
+def test_sync_fetch_uses_the_same_no_window_pick(monkeypatch):
+    today = date.today()
+    fake = _FakeTradier(_dates(today, 24, 52, 80))
+    _patch_tradier(monkeypatch)
+    monkeypatch.setattr(market.httpx, "get", fake.get)
+    assert fetch_option_chain("XOM", dte_limits=(45, 21, 90))
+    assert fake.chain_expiries == [_dates(today, 52)[0]]

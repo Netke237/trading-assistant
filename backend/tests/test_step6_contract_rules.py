@@ -204,14 +204,14 @@ def test_unknown_keys_are_ignored_as_the_scan_ignores_them(client):
     assert r.json()[0]["contractConfidence"] != "REJECT"
 
 
-@pytest.mark.parametrize("rules, floor", [(None, 21), ({"min_dte": 45}, 45)])
-def test_without_hold_days_the_fetch_floor_is_the_rules_min_dte(client, rules, floor):
-    """Step 6's fetch, like the scan's, must not pick an expiry below the
-    min_dte it then grades with, or every row comes back dte_too_short."""
+@pytest.mark.parametrize("rules, limits", [(None, (21, 21, 90)), ({"min_dte": 45, "max_dte": 60}, (45, 21, 60))])
+def test_without_hold_days_the_fetch_uses_the_rules_dte_limits(client, rules, limits):
+    """Step 6's fetch, like the scan's, must pick within the min_dte/max_dte it
+    then grades with, or every row comes back dte_too_short or dte_too_long."""
     seen = []
 
     async def _fetch(*_a, **kw):
-        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
         return _chain()
 
     url = "/api/contracts?symbol=XOM&right=C&stock_score=80&direction=Bullish"
@@ -221,4 +221,4 @@ def test_without_hold_days_the_fetch_floor_is_the_rules_min_dte(client, rules, f
         stack.enter_context(patch("app.routers.contracts.fetch_option_chain_async", side_effect=_fetch))
         r = client.get(url)
     assert r.status_code == 200, r.text
-    assert seen == [(None, floor)]
+    assert seen == [(None, None, limits)]
