@@ -776,6 +776,21 @@ class ScanRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _drop_stock_mode_min_score(self) -> "ScanRequest":
+        """Step 3's "Min stock score" is a Stocks-mode drop line
+        (StockScanRequest.min_stock_score). It is also a contract_validator
+        override key, so an options body that carries it in `overrides`
+        replaces contract_rules.yaml's contract floor (55). The frontend
+        stopped sending it in options scans, but schedule entries persist a
+        resolved request and rewrite it only on a profile re-save. Without this
+        guard, old entries (or any direct POST) keep grading on the Step-3
+        value."""
+        ov = self.overrides
+        if isinstance(ov, dict) and "min_stock_score" in ov:
+            self.overrides = {k: v for k, v in ov.items() if k != "min_stock_score"}
+        return self
+
+    @model_validator(mode="after")
     def _seed_pre_split_iv_knobs(self) -> "ScanRequest":
         """A pre-split request means its single knob for the chains it actually saw.
 

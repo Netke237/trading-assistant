@@ -104,7 +104,12 @@ def _parse_contract_rules(raw: str | None) -> dict[str, float | int]:
             ok = False
         if not ok:
             raise _contract_rules_error(f"contract_rules.{key} must be a finite number")
-    return effective_contract_overrides(parsed)
+    rules = effective_contract_overrides(parsed)
+    # The scan no longer applies or records `min_stock_score`
+    # (ScanRequest._drop_stock_mode_min_score). A scan result persisted
+    # before that change still carries it, and Step 6 sends it back here.
+    rules.pop("min_stock_score", None)
+    return rules
 
 
 @router.get('/contracts', response_model=list[OptionContract])

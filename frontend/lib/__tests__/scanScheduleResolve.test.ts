@@ -121,6 +121,13 @@ describe('resolveProfileToScanRequest — error cases', () => {
       .toThrow(/no strategy selected/);
   });
 
+  it('does not carry the Stocks-mode min_stock_score into an options request', () => {
+    // A contract_validator override key: carried in `overrides`, it would
+    // replace contract_rules.yaml's contract floor on every scheduled run.
+    const req = resolveProfileToScanRequest(baseProfile({ scanOverrides: { min_stock_score: 40 } }));
+    expect(req.overrides).not.toHaveProperty('min_stock_score');
+  });
+
   it('throws for an options-mode profile missing fundamentalsGate/spreads', () => {
     expect(() => resolveProfileToScanRequest(baseProfile({
       scanSettings: { confidenceGate: { ...DEFAULT_CONFIDENCE_GATE } },

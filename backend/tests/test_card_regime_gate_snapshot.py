@@ -25,7 +25,7 @@ from app.routers.scan import _regime_gate_snapshot
 from app.schemas import TradeCardData
 from app.services.config_loader import load_scoring_cfg
 
-from tests.test_scan_stop_cost import _OVERRIDES, _candles, _contract
+from tests.test_scan_stop_cost import _candles, _contract, _relaxed_contract_cfg
 
 
 def _scan(client, **body_extra):
@@ -46,9 +46,11 @@ def _scan(client, **body_extra):
         stack.enter_context(patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Test Co")))
         stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)))
         stack.enter_context(patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))))
+        stack.enter_context(patch("app.scoring.contract_validator._load_config",
+                                  return_value=_relaxed_contract_cfg()))
         r = client.post("/api/scan", json={
             "universe": ["MSFT"], "direction": "Bullish", "horizon": "Swing",
-            "overrides": _OVERRIDES, **body_extra,
+            **body_extra,
         })
     assert r.status_code == 200, r.text
     cands = r.json()["candidates"]
