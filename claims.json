@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/options-chain-expiry-floor",
+      "claimed_at": "2026-10-01T19:53:28Z",
+      "expires_at": "2026-10-01T22:53:28Z",
+      "note": "no-hold-days chain fetch uses validator min_dte as expiry floor (shortlist audit gap 3)",
+      "task": "OPTIONS-SHORTLIST-RANK-GAP3-NO-HOLD-EXPIRY"
+    }
+  ]
 }
