@@ -3487,6 +3487,164 @@
     }
   },
   "open_questions_note": "Ordered by the 2026-09-08 triage: B2's three fresh follow-ups first (raised by the rounds that just ran, deliberately NOT archived), then the FIVE decisions Kenneth owes an answer to, then six small v2-sized build items, then three measurement-only items. Bucket A (dead) moved to `closed_questions`; bucket E (round records) to `archived_round_records`. 32 entries in, 17 live out.",
+  "task_backlog": {
+    "_note": "2026-10-01: the open questions, deferred phase items and the one in-progress phase clustered into claimable tasks (Kenneth: 'Yes go'). owner 'agent' = any session may claim it via scripts/claim.py; owner 'kenneth' = blocked on his decision or his machine. The entries in open_questions stay where they are -- this is an index over them, not a copy; close a task here AND move its questions to closed_questions when it ships audit-clean. Recommended order: the first three.",
+    "items": [
+      {
+        "id": "WATCH-RESEND-HEAD-OF-LINE",
+        "owner": "agent",
+        "covers": [
+          "open_questions: RESCUED 2026-09-30 ... WATCH-UNDELIVERED-EVENT-RESEND (_resend_watch head-of-line)"
+        ],
+        "summary": "A message a channel always rejects blocks its watch's later alerts, stop hits included (_resend_watch returns at the first failed send).",
+        "weight": "high"
+      },
+      {
+        "id": "STEP3-PARAM-REACH",
+        "owner": "agent",
+        "covers": [
+          "open_questions: Step-3 'Min option volume'/'Min open interest' = 0 do not reach validate_contract",
+          "open_questions: min_stock_score unreachable from the Step-3 panel",
+          "STEP6-SCAN-CONTRACT-RULES deferred (2)(3)(4)"
+        ],
+        "summary": "Step-3 values that silently do not reach the backend; restored-scan defaults; /api/contracts max_price/limit dropping the card's contract.",
+        "weight": "high"
+      },
+      {
+        "id": "MACD-EMA-LAG",
+        "owner": "agent",
+        "covers": [
+          "open_questions: standard-rule MACD is lagged (indicator_compute._ema_values)"
+        ],
+        "summary": "_ema_values stores result[i] before folding values[i] and zero-pads warm-up; standard alert rules' macd/macd_signal are wrong.",
+        "weight": "med-high"
+      },
+      {
+        "id": "POSITION-WRITER-O4-CLEANUP",
+        "owner": "agent",
+        "covers": [
+          "open_questions: the ten LOGGED BY O4 STEP 1..6 entries"
+        ],
+        "summary": "Expose judged_size on RiskCheckResult (fixes the reconstructed clamp and the |STOCK contract clamp), the unlocked snapshot race, wrong-side stop channel, test gaps incl. the real network call, unpinned rollbacks.",
+        "weight": "med"
+      },
+      {
+        "id": "AUTOTRADE-FIRE-HYGIENE",
+        "owner": "agent",
+        "covers": [
+          "open_questions: P3c auto_trader docstrings",
+          "open_questions: P3c run_scan maybe_fire_on_scan cancellation gap",
+          "open_questions: P6 unit A ArmRequest.entry_premium unbounded"
+        ],
+        "summary": "Scan-triggered fire cancellation gap, stale docstrings, allow_inf_nan=False on entry_premium.",
+        "weight": "med"
+      },
+      {
+        "id": "BROKER-ERROR-CLASSIFY",
+        "owner": "agent",
+        "covers": [
+          "open_questions: P1b-i plan s8 broker adapters ValueError/502 detail",
+          "open_questions: P1b-i finding 12 orphan APPROVE audit event",
+          "open_questions: P1B2 save-unconfirmed note 'Not found yet' forever"
+        ],
+        "summary": "Adapter post-submit parse errors -> RuntimeError, 502 detail says 4xx vs transport, log_approval skips a missing position, optional Dismiss.",
+        "weight": "low-med"
+      },
+      {
+        "id": "UI-LABEL-TRUTH",
+        "owner": "agent",
+        "covers": [
+          "open_questions: BANNER vs TOOLTIP 'Driven by'",
+          "open_questions: A4 MarketSentiment avg_regime_duration strides shown as days"
+        ],
+        "summary": "Two labels that state something false on screen.",
+        "weight": "low-med"
+      },
+      {
+        "id": "WATCHLIST-RULES-FOLLOWUPS",
+        "owner": "agent",
+        "covers": [
+          "WATCHLIST-SCAN-CONTRACT-RULES logged-not-fixed lists (code r13, r14)"
+        ],
+        "summary": ">9-digit strike taints its group, >4300-digit strikes 500 not 422, untested refresh dep and banners, sanitizer depth.",
+        "weight": "low"
+      },
+      {
+        "id": "HESTON-HYGIENE",
+        "owner": "agent",
+        "covers": [
+          "open_questions: boundary-log rounds, GIL costing comment, TIMEOUT-DELETE-INNER thin-chain, F1/F2 entries"
+        ],
+        "summary": "Surviving mutants, wrong comments (46 vs 47 evals, 3.14 vs 3.11), shared mutable cache result, except-Exception warnings trap, no-arbitrage floor, silent accepted fits. The rr_ratio overpricing entry stays separate (Kenneth's call).",
+        "weight": "low"
+      },
+      {
+        "id": "TOOLING-ROBUSTNESS",
+        "owner": "agent",
+        "covers": [
+          "open_questions: P6 unit D state.py isdigit",
+          "open_questions: Q3B alias-chain RecursionError"
+        ],
+        "summary": "str.isdecimal in state.py; catch/limit deep YAML alias recursion.",
+        "weight": "low"
+      },
+      {
+        "id": "MEAS-MARKET-DATA-MEASUREMENT",
+        "owner": "kenneth",
+        "covers": [
+          "phase MEAS-MARKET-DATA-MEASUREMENT",
+          "open_questions: 2026-09-19 six-scan reading, RESCUED measurement entries, Phase A percentile seeds, ivAbsThreshold"
+        ],
+        "summary": "Run >= 2 valid market-hours days per docs/superpowers/measurements/PROTOCOL.md; thresholds are proposed only after.",
+        "weight": "-"
+      },
+      {
+        "id": "BAR-SOURCE-ALIGNMENT",
+        "owner": "kenneth",
+        "covers": [
+          "open_questions: P3c check-script entries (2)",
+          "open_questions: A4g live-provider conventions, A4g round 2 items (3)(4)(5)(9)(10)",
+          "open_questions: scan-vs-fire bar-window END, relative_strength residual, WATCH-RULE-BAR-PARITY settled-day fetch"
+        ],
+        "summary": "Needs Kenneth's run of backend/scripts/p3c_data_checks.py and live provider access before any fix.",
+        "weight": "-"
+      },
+      {
+        "id": "STOP-SEMANTICS",
+        "owner": "kenneth",
+        "covers": [
+          "open_questions: short stock pct stop fires on a fall",
+          "open_questions: sub-cent premium stop",
+          "open_questions: COMPOSITE-WATCH-KEYERROR silent phase moves",
+          "round_13_followups (sub-cent)"
+        ],
+        "summary": "Behaviour decisions owed by Kenneth.",
+        "weight": "-"
+      },
+      {
+        "id": "TEST-SUITE-DECISIONS",
+        "owner": "kenneth",
+        "covers": [
+          "open_questions: ws-g-happy-path-mocked.spec.ts test.fixme",
+          "open_questions: Phase A RANK-basis e2e",
+          "open_questions: uncaptured intermittent backend test"
+        ],
+        "summary": "Rewrite or delete the fixme spec; whether RANK basis needs e2e; residue of the intermittent test.",
+        "weight": "-"
+      },
+      {
+        "id": "HOUSEKEEPING",
+        "owner": "kenneth",
+        "covers": [
+          "open_questions: WP0 branch cleanup list",
+          "open_questions: RESCUED order-booking-safety C1/C2",
+          "already_shipped STATE-PROBE-* (3, unaudited, parked)"
+        ],
+        "summary": "Run the branch delete loop; check whether C1/C2 apply to main; decide the parked STATE-PROBE rounds.",
+        "weight": "-"
+      }
+    ]
+  },
   "phase_g_step1_followups": {
     "_note": "Adversarial round 1 against Phase G build step 1 (6c15d338 + 51028e52), 2026-09-14. ZERO GATE-LEVEL FINDINGS -- the loop ended at one round per audit_rule v2. Twelve below-gate findings. THREE WERE FIXED IN-BRANCH because they sit inside step 1's own surface and because two of them made a comment in that same code FALSE (see phase G's note and decision PHASE-G-STEP1-AUDIT-2026-09-14). The nine below are LOGGED AGAINST MAIN, NOT FIXED. Items 7 and 8 are scheduled work, not open questions.",
     "items": []
