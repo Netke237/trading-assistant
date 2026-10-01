@@ -1,4 +1,4 @@
-# WATCHLIST-SCAN-CONTRACT-RULES — plan (r6; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; all addressed below)
+# WATCHLIST-SCAN-CONTRACT-RULES — plan (r7; round 1 NOT clean 1B/4S/9N; round 2 NOT clean 1B/4S/10N; round 3 NOT clean 0B/2S/10N; round 4 NOT clean 0B/6S/12N; round 5 NOT clean 0B/4S/9N; round 6 NOT clean 0B/1S/13N; all addressed below)
 
 - **Phase:** `WATCHLIST-SCAN-CONTRACT-RULES` (PROJECT_STATE.json), deferred by `STEP6-SCAN-CONTRACT-RULES`.
 - **Branch:** `claude/youthful-carson-82x23x` (off main at the DOCC-5 merge).
@@ -16,7 +16,7 @@
    expiry nearest the centre of today's DTE window; without them, the first expiry >= 21 days out. It
    honours an explicit `expiry` argument when that date is listed, but `/api/contracts` never passes one.
    Stored rules are a DELTA on the live `contract_rules.yaml` (`scan.py:1718` records only overridden keys;
-   `validate_contract` applies them on a fresh `_load_config()`, `contract_validator.py:418-420`).
+   `validate_contract` applies them on a fresh `_load_config()`, `contract_validator.py:411-413`).
 2. Step 6 (`step-6-contracts/page.tsx:116-160`) sends `stock_score` = the candidate's `stockScore ?? 70`, the
    scan's own `contract_rules` (`scanResult.contract_rules ?? undefined`), hold days from
    `sanitizeHoldDays(context.holdMin, context.holdMax)` (only when both are non-null), plus `limit`/`max_price` from settings.
@@ -81,7 +81,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      grading).
    - `GET /api/watched-contracts` keeps returning `list[str]` (no change to its shape).
    - `GET /api/contracts` gains two optional parameters, both absent = today's behaviour exactly:
-     - `expiry: str | None`, forwarded to `fetch_option_chain_async(expiry=...)`. When given, the response
+     - `expiry: str | None`, forwarded as the keyword `expiry=` to `fetch_option_chain_async` only when given
+       (absent -> the call is made exactly as today, without an `expiry` kwarg). When given, the response
        keeps only rows whose `expiry` equals it (the fetch falls back to the window/default expiry when the
        date is not listed, e.g. expired; those rows are not the star's).
      - `strikes: str | None`, a comma-separated list of integer strikes (422 if any item is not an int;
@@ -145,7 +146,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
 6. Watchlist `refreshContracts`:
    - Each id is parsed up front by `parseContractId(id)` in `lib/contractGrading.ts`: exactly 4 `|` parts,
      a non-empty upper-case symbol (`/^[A-Z][A-Z0-9.\-]*$/`), right `C`/`P`, ISO `YYYY-MM-DD` expiry,
-     finite strike (the expiry is checked by regex only; an impossible date like `2026-02-30` passes and
+     a strike matching `/^\d+(\.\d+)?$/` (so `187abc` fails; `parseFloat` alone would accept it) (the expiry
+     is checked by regex only; an impossible date like `2026-02-30` passes and
      lands as `not_listed`, accepted). An id that fails becomes an `invalid` row and is never sent, so one bad id cannot 422 its siblings' group. The strike sent
      is `Math.trunc(parseFloat(strike))`, matching market.py's `int()`, de-duplicated per group; matching a
      result row uses the same trunc rule (replacing today's `Math.round` fallback) plus today's exact-id
@@ -159,7 +161,7 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
      '', the no-grading key.
    - In the `/detail`-failure fallback the local grading is re-checked client-side (`isValidGrading`: finite
      numbers, hold both-or-neither with max >= min, stock_score int 0-100); an invalid entry is treated as
-     no grading. One `getContracts` per group, with ctx `{ expiry, strikes: [the group's starred
+     no grading, and so shows the YAML marker. One `getContracts` per group, with ctx `{ expiry, strikes: [the group's starred
      strikes], ...gradingToCtx(grading) }` (an empty `contract_rules` is dropped from the URL by `api.ts`). A group
      with no grading sends `{ expiry, strikes }`. `strikes` disables `limit` and `max_price` server-side.
    - `refreshContracts`' `useCallback` depends on `[watchedIds, grading]`, so a grading change refetches.
@@ -180,7 +182,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        not load the chain — retry"; invalid -> "Unreadable contract id".
      - The YAML marker (2.3.7) is shown on live rows only; a missing/invalid row's tooltip is its note.
      - `invalid` rows render exactly like `missing` rows (star with working unstar, status `NO_DATA`, dash
-       cells, sort last, counted in tab and header) except the label is the raw id. The star is what lets
+       cells, sort last, counted in tab and header) except the label is the raw id and the symbol cell is
+       "—". The star is what lets
        the user delete a junk id the server keeps re-supplying.
      - Missing rows render the label (`contractLabel` from the id parts), status `NO_DATA`, dashes in every
        market cell, no `DTEProgressBar`, a plain-text tooltip with the note, and the star (unstar works).
@@ -190,8 +193,13 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
        `refreshWatchlist` and `refreshContracts`), so a contracts success hides a stocks failure and vice
        versa. The contracts tab gets its own `contractsOffline` state; `offline` stays the Stocks tab's.
        `contractsOffline` is true only when at least one group was fetched and every fetched group rejected;
-       with zero groups (all stars expired/invalid) it is false, and the zero-ids early return
-       (`page.tsx:100`) also sets it false, so the banner cannot stick after the last unstar. CHANGE from today, where `Promise.all` set
+       with zero groups (all stars expired/invalid) it is false. The abort of the previous in-flight fetch
+       (`contractsAbortRef.current?.abort()`, today at `page.tsx:102`) moves ABOVE the zero-ids early return
+       (`:100`), and that return also sets `contractsOffline` false and `refreshingContracts` false, so a
+       slow fetch rejecting after the last unstar is discarded as aborted and cannot raise the banner. The
+       same applies to the zero-groups path (all expired/invalid): abort first, then no fetch. Banner text:
+       a contracts-only failure (`contractsOffline` and not `offline`) says "Could not load option chains —
+       retry" instead of "Backend not running"; `offline` keeps today's text. CHANGE from today, where `Promise.all` set
        it on any failure: partial failures show per-row `fetch_failed` instead. The banner shows when
        either flag is set, with today's text.
      - The tab count and header count include missing rows (every star is a row).
@@ -213,7 +221,8 @@ them (residual 2.5.4). The contract's expiry is not part of `ContractGrading`: i
   hold_max) = max(lo-10, hold_max+1)`) and preferred band, while its DTE falls every day. So a star turns
   REJECT `dte_too_short` once its DTE drops below the floor (and loses DTE-fit points on the way), long
   before expiry. Example: Quarterly preset (hold 45-60 d), multiplier 2.0 -> window 90-120, floor 80; a
-  contract starred at 90 DTE is REJECT 11 days later (at DTE 79; DTE 80 still passes). That is what the scan and Step 6 would say about that contract for
+  contract starred at 90 DTE is REJECT 11 days later (at DTE 79; at DTE 80 it is not hard-rejected,
+  though its DTE sub-score is already 0). That is what the scan and Step 6 would say about that contract for
   that holding plan today (it no longer leaves room for the hold), so it is the honest answer; the YAML-only
   path's fixed 21-day floor hid it. Pinned by test 6f.
 - The Watchlist asks for the star's own expiry and strikes only, with no limit or price cap. One chain
@@ -269,13 +278,19 @@ so the existing no-price 503 can never stand in for the new one:
    `fetch_option_chain_async`; rows of another expiry are filtered out; absent `expiry` = unchanged call.
    *Kills not forwarding / not filtering.*
 6c. Parity: stubbed chain (fewer than 10 rows, all priced under $50, so the call without `strikes` is not
-   cut by `limit`/`max_price`) where E is the window's expiry; the same hold days/rules/stock_score called
-   once without `expiry`/`strikes` and once with `expiry=E&strikes=<all>` -> identical `score` and
-   `contractConfidence` per id. *Kills e.g. skipping `widen_contract_overrides_for_dte` on the new path.*
+   cut by `limit`/`max_price`) where E is the window's expiry; hold days (20, 25) as the existing test at
+   `test_step6_contract_rules.py:176` (so the widened band 30-60 differs from the YAML's 21-60 for a 45-DTE
+   stub); the same rules/stock_score called once without `expiry`/`strikes` and once with
+   `expiry=E&strikes=<all>` -> identical `score` and `contractConfidence` per id. Variant with
+   `_THIN_NO_IV`-style rows (no vendor IV) and `strikes=` one NON-ATM strike -> that row's `iv` and `score`
+   equal the no-strikes call's. *Kills filtering strikes before the ATM Black-Scholes inversion.* *Kills e.g. skipping `widen_contract_overrides_for_dte` on the new path.*
 6d. `strikes`: a 150-row chain where every row scores the same and the starred strike is last in strike
    order, priced above `max_price` -> returned. Non-int item -> 422; `strikes=` -> same as absent.
    *Kills `limit`/`max_price` still applying.*
-6f. DTE decay, through the endpoint: monkeypatch `dte_holding_multiplier` to 2.0; stub one contract that
+6f. DTE decay, through the endpoint: `monkeypatch.setattr("app.routers.contracts.dte_holding_multiplier",
+   lambda: 2.0)` (the router imports it by name and passes it uncalled; patching the float or the
+   validator's name does nothing); the stub's `expiry` is `date.today() + timedelta(days=79)` (resp. 95) and
+   the query's `expiry=E` equals it — the validator derives DTE from `expiry`, not the stub's `dte` field; stub one contract that
    passes every other check (liquidity, spread, delta, IV) and the price; call
    `/api/contracts?expiry=E&hold_min_days=45&hold_max_days=60&strikes=K`. At DTE 79: `contractConfidence ==
    'REJECT'` and `breakdown.dteDetail.preferred_min == 80`. At DTE 95, all else identical:
@@ -293,7 +308,7 @@ Frontend:
    to ids and keeps the surviving local grading — including after `persist.rehydrate()` from v3 storage
    (the store has `skipHydration`); `toggle` no longer exists; `add` on an existing id updates grading;
    a structurally identical sync does not call `set`.
-8. `ContractStar` test: click with grading -> `api.addWatchedContract(id, grading)` and the store holds it;
+8. `components/atoms/ContractStar/__tests__/ContractStar.test.tsx` (new; none exists): click with grading -> `api.addWatchedContract(id, grading)` and the store holds it;
    unstar whose DELETE rejects -> the id AND its grading are restored (*kills a grading-less rollback*);
    POST rejecting `new Error('API /api/watched-contracts → 422: …')` -> retried with `null`, the id stays,
    `grading[id]` is gone; retry also rejecting -> removed; POST rejecting 500 -> removed.
@@ -303,8 +318,8 @@ Frontend:
    (pinned exactly to what the helper emits); `strikes: []` -> no `strikes` param.
    *Kills dropping strikes/null on the wire, which would silently restore limit/max_price.*
 8b. `lib/__tests__/apiError.test.ts`: `statusOf` on the api message shapes; existing directOrder tests stay
-   green. `lib/__tests__/contractGrading.test.ts`: `parseContractId` (valid, 3 parts, bad strike, bad
-   expiry, `187.0` -> trunc 187), `gradingToCtx` null mapping, gradingKey normalisation, the comparator
+   green. `lib/__tests__/contractGrading.test.ts`: `parseContractId` (valid, 3 parts, bad strike incl.
+   `187abc`, bad expiry, lowercase symbol, `187.0` -> trunc 187), `gradingToCtx` null mapping, gradingKey normalisation, the comparator
    (missing last both directions).
 9. Step 6 page test (extends `contractRules.test.tsx`; its `api` mock gains `addWatchedContract`):
    clicking the row star stores grading equal to the ctx `getContracts` was called with (contract_rules,
@@ -312,8 +327,8 @@ Frontend:
    `candidates` reference, so the load effect keyed on `rawCandidates` does not refetch), the star still
    carries the fetch-time grading. *Kills drift between the two.*
 10. Watchlist page test (extends `__tests__/page.test.tsx`; its `api` mock gains
-    `getWatchedContractsDetail` resolving to the ids/grading the test set, and `getWatchedContracts` for
-    the fallback; `beforeEach` resets `{ ids: [], grading: {} }`):
+    `getWatchedContractsDetail` resolving to the ids/grading the test set, `getWatchedContracts` for the
+    fallback, and `removeWatchedContract: jest.fn().mockResolvedValue(undefined)` for 10f; `beforeEach` resets `{ ids: [], grading: {} }`):
     a. A starred id with grading -> `getContracts` is called with that ctx (expiry, contract_rules, hold
        days, stock_score, strikes). *Kills the defect marker staying.*
     b. Two stars on the same symbol/right with different gradings -> two calls; each row shows its own
@@ -330,7 +345,8 @@ Frontend:
        holds only the valid strike; clicking the invalid row's star calls
        `api.removeWatchedContract(rawId)`.
     g. Every star expired or invalid -> no `getContracts` call and no offline banner. One group rejecting
-       -> rows show `fetch_failed`, no banner; all groups rejecting -> banner; a contracts success does not
+       -> rows show `fetch_failed`, no banner; all groups rejecting -> banner (contracts-only text); a slow group fetch that rejects
+       AFTER `ids` is cleared to `[]` -> no banner; a contracts success does not
        clear a stocks failure.
     Clock: every Watchlist and `contractGrading` test with a dated id pins the clock
     (`jest.useFakeTimers().setSystemTime(new Date('2026-10-01T15:00:00'))`) or builds expiries relative to
