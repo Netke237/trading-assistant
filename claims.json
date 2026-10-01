@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/yaml-config-integrity-audit",
-      "claimed_at": "2026-10-01T10:48:07Z",
-      "expires_at": "2026-10-01T13:48:07Z",
-      "note": "whole-phase adversarial audit to close audit_clean",
-      "task": "YAML-CONFIG-INTEGRITY-AUDIT"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/sharp-wozniak-6xb8pq",
       "claimed_at": "2026-10-01T11:07:36Z",
       "expires_at": "2026-10-01T14:07:36Z",
@@ -20,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/youthful-carson-82x23x",
       "claimed_at": "2026-10-01T11:08:00Z",
-      "expires_at": "2026-10-01T16:20:29Z",
+      "expires_at": "2026-10-01T16:55:43Z",
       "note": "plan r12 awaiting round 12; store scan grading with contract stars",
       "task": "WATCHLIST-SCAN-CONTRACT-RULES"
     }
