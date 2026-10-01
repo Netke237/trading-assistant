@@ -6,7 +6,7 @@
 .bar {
   grid-area: topbar;
   display: grid;
-  grid-template-columns: auto 1fr auto auto auto auto;
+  grid-template-columns: auto 1fr auto auto auto auto auto;
   align-items: center;
   gap: var(--space-4);
   height: var(--frame-topbar-h);
