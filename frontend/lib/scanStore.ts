@@ -99,6 +99,13 @@ export interface OptionsPipeline {
   // counter is absent rather than rendering a zero it cannot vouch for.
   failed_direction?: number;
   failed_shortlist?: number;
+  // The direction gate's "no data" removals (trend unmeasured), dropped right
+  // after the pre-screen and before the chain fetch — apart from
+  // failed_direction, a measured trend below the floor. Absent on a result
+  // stored before it existed (its failed_direction then includes them).
+  failed_direction_unmeasured?: number;
+  /** The direction-conviction floor this scan applied; null/absent = exempt. */
+  direction_min_trend?: number | null;
   candidates:        number;
 }
 

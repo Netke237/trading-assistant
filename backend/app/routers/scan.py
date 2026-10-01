@@ -1834,12 +1834,18 @@ async def _execute_scan_core(
                 _kept.append(_c)
         candidates = _kept
 
-    # Both direction-gate reasons -- measured below the floor, and unmeasured
-    # (removed in _process_symbol) -- count as this gate's removals, for the
-    # banner and for the funnel's `failed_direction` alike.
+    # Two funnel buckets for the one gate, as the stock scan keeps them:
+    # `failed_direction` is a MEASURED trend below the floor (removed above,
+    # after scoring); `failed_direction_unmeasured` is "no data" (removed in
+    # _process_symbol, right after the pre-screen and BEFORE the chain fetch,
+    # so the funnel must not show those names as having passed chain and
+    # contracts). "direction_conviction:" does not match the unmeasured
+    # prefix. The BANNER counts both, since both are this gate's removals.
     def _is_direction(r):
-        return r.reason.startswith(("direction_conviction:", "direction_conviction_unmeasured:"))
-    _dir_removed = sum(1 for r in rejected if _is_direction(r))
+        return r.reason.startswith("direction_conviction:")
+    def _is_direction_unmeasured(r):
+        return r.reason.startswith("direction_conviction_unmeasured:")
+    _dir_removed = sum(1 for r in rejected if _is_direction(r) or _is_direction_unmeasured(r))
 
     # Compose direction banner: shown when candidates all score CAUTION, or when
     # nothing survived and the direction gate removed some. The stock scan's
@@ -1928,8 +1934,8 @@ async def _execute_scan_core(
     def _is_score(r):      return r.reason.startswith("Score gate:")
     def _is_contracts(r):  return "contracts rejected" in r.reason
     def _is_shortlist(r):  return r.reason.startswith(_SHORTLIST_REASON_PREFIX)
-    _buckets = (_is_data, _is_pre_screen, _is_no_chain, _is_score, _is_contracts,
-                _is_direction, _is_shortlist)
+    _buckets = (_is_data, _is_pre_screen, _is_direction_unmeasured, _is_no_chain,
+                _is_score, _is_contracts, _is_direction, _is_shortlist)
 
     _pipeline = OptionsPipeline(
         scanned=len(symbols),
@@ -1939,13 +1945,16 @@ async def _execute_scan_core(
         failed_score=sum(1 for r in rejected if _is_score(r)),
         failed_contracts=sum(1 for r in rejected if _is_contracts(r)),
         other_rejected=sum(1 for r in rejected if not any(f(r) for f in _buckets)),
-        failed_direction=_dir_removed,
+        failed_direction=sum(1 for r in rejected if _is_direction(r)),
+        failed_direction_unmeasured=sum(1 for r in rejected if _is_direction_unmeasured(r)),
+        direction_min_trend=_min_trend,
         failed_shortlist=original_count - len(candidates),
         candidates=len(candidates),
     )
     _log.info(
-        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
+        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d direction_unmeasured=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
         scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
+        _pipeline.failed_direction_unmeasured,
         _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts,
         _pipeline.failed_direction, _pipeline.failed_shortlist, _pipeline.other_rejected,
         _pipeline.candidates,
