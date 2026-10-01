@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "claude/youthful-carson-82x23x",
       "claimed_at": "2026-10-01T11:08:00Z",
-      "expires_at": "2026-10-01T21:33:17Z",
+      "expires_at": "2026-10-01T21:46:18Z",
       "note": "code round 1 CLEAN; next: fix nits 1-7, code round 2 on delta, then merge",
       "task": "WATCHLIST-SCAN-CONTRACT-RULES"
     }
