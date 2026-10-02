@@ -23,14 +23,6 @@
       "expires_at": "2026-10-02T10:32:37Z",
       "note": "Step-3 values not reaching backend; restored-scan defaults; /api/contracts max_price/limit dropping card contract",
       "task": "STEP3-PARAM-REACH"
-    },
-    {
-      "agent": "claude",
-      "branch": "ccr-5fdfa0ea-jyqf7y",
-      "claimed_at": "2026-10-02T07:44:13Z",
-      "expires_at": "2026-10-02T10:44:13Z",
-      "note": "record Kenneth's 3 stop-semantics decisions (Q0/Q1/Q3) in PROJECT_STATE",
-      "task": "STOP-SEMANTICS"
     }
   ]
 }
