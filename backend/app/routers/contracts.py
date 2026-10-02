@@ -20,7 +20,8 @@ from app.data.market import (
 )
 from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.contract_validator import (
-    CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, is_finite_rule_value,
+    CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, effective_dte_limits,
+    is_finite_rule_value,
     validate_contract,
 )
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
@@ -190,6 +191,11 @@ async def get_contracts(
             raw_chain = await fetch_option_chain_async(
                 client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds,
                 min_dte_floor=widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None,
+                # No hold window: pick within the min_dte/max_dte (and nearest the
+                # preferred DTE band) the table is graded with below, as scan.py
+                # does, so the fetched expiry is not certain to be rejected as
+                # dte_too_short or dte_too_long.
+                dte_limits=effective_dte_limits(rules) if dte_bounds is None else None,
             ) or []
         else:
             # The caller's expiry, not the hold-days window's: a listed E is
