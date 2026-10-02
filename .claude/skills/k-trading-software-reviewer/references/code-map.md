@@ -4,6 +4,34 @@ This map was accurate when written. **Verify every path before relying on it** (
 and scan `backend/app/scoring/` and `backend/app/services/` for files not listed here — new
 gates and sizing logic get added often. Line numbers are never given on purpose: find them.
 
+## Coverage inventory
+
+The list rule 8 is checked against: every tracked source and config file that can decide a
+trade, one row each. Run from the repo root:
+
+```bash
+git ls-files backend/app backend/config frontend/app frontend/components frontend/lib frontend/types \
+  | grep -E '\.(py|ts|tsx|yaml|yml|json)$' \
+  | grep -vE '(__tests__/|\.test\.|\.spec\.|/tests?/|/fixtures/|__mocks__/)' \
+  | while read -r f; do
+      case "$f" in
+        *local_credentials.yaml|*/settings.yaml|*credential*.yaml|*credential*.json|*/.env*)
+          printf 'CREDENTIAL\t-\t%s\n' "$f" ;;   # never opened: row "not reviewed: credentials"
+        *) printf 'FILE\t%s\t%s\n' "$(wc -l < "$f")" "$f" ;;
+      esac
+    done > /tmp/trading_review_inventory.tsv
+# credential files are often untracked: list them by name only, never cat them
+ls backend/config/settings.yaml backend/config/local_credentials.yaml backend/.env* 2>/dev/null \
+  | sed 's/^/CREDENTIAL\t-\t/' >> /tmp/trading_review_inventory.tsv
+awk -F'\t' '$1=="FILE"{n++; l+=$2} $1=="CREDENTIAL"{c++} END{print n" files / "l" lines; "c+0" credential files"}' \
+  /tmp/trading_review_inventory.tsv
+```
+
+The count is what the scope question quotes ("<n> files / <n> lines"). Record `git rev-parse
+--short HEAD` and `git status --short` in the report so a later PARTIAL continuation can tell
+which files changed. Files the area table below names take that table's area by default; every
+other file goes through triage (SKILL.md step 2).
+
 ## Code
 
 | Area | Start here |
