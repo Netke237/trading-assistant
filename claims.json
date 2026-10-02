@@ -1,0 +1,12 @@
+{
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/intelligent-allen-463f3h",
+      "claimed_at": "2026-10-02T06:19:28Z",
+      "expires_at": "2026-10-02T09:19:28Z",
+      "note": "#54: apply X1 fix (frontend never writes capped rungs back for typed edits) + 1 review (Kenneth: a)",
+      "task": "STOCK-POSITION-RESIZE"
+    }
+  ]
+}
