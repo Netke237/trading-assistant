@@ -28,9 +28,16 @@ function todayIso(): string {
 
 export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
   const held = position.contracts ?? 1;
-  const [qty, setQty] = useState<number>(held);
+  // null until the user edits the quantity: a full close stays full.
+  const [qtyInput, setQty] = useState<number | null>(null);
   const [exitPrice, setExitPrice] = useState<number>(position.currentPrice || position.entryPrice);
   const [exitDate, setExitDate] = useState<string>(todayIso());
+  // The row can change under an open dialog (a close-404 re-save, a resized
+  // qty edit, a sync poll), so the quantity is derived from what is held NOW
+  // on every render -- never a stale size beside '(of N)' (open question 54,
+  // C1). Untouched, it follows the row (a full close stays a full close); a
+  // size the user typed is capped at the held size and never raised.
+  const qty = qtyInput == null ? held : Math.min(qtyInput, held);
 
   // Short *stock* positions profit when price falls — flip the delta's sign for
   // those. Options are never flipped: 'Bearish' on an option position just labels

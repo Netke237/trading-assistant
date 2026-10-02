@@ -593,7 +593,7 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
 async function patchPosition(
   recId: string,
   payload: Record<string, unknown>,
-): Promise<{ ok: boolean; detail?: string; adjustedQty?: number }> {
+): Promise<{ ok: boolean; detail?: string; adjustedQty?: number; targets?: TargetLevel[]; contracts?: number }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, {
       method: 'PATCH',
@@ -602,8 +602,14 @@ async function patchPosition(
     });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
-      const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
-      return typeof adjustedQty === 'number' ? { ok: true, adjustedQty } : { ok: true };
+      // `qty` is the size the server stores (PortfolioPositionSchema.qty).
+      const { adjustedQty, targets, qty } = body as { adjustedQty?: number; targets?: unknown; qty?: unknown };
+      return {
+        ok: true,
+        ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
+        ...(Array.isArray(targets) ? { targets: targets as TargetLevel[] } : {}),
+        ...(typeof qty === 'number' ? { contracts: qty } : {}),
+      };
     }
     const body = await res.json().catch(() => ({}));
     return { ok: false, detail: errorDetail(body, res.status) };
@@ -619,6 +625,8 @@ type PendingPatch = {
   payload: Record<string, unknown>;
   symbol: string;
   contract: string;
+  /** `_rungEditSeq` for this recId when this payload was last merged. */
+  rungSeq: number;
 };
 
 // Debounces `updatePosition` edits per recId so rapid keystrokes in the drawer
@@ -626,6 +634,13 @@ type PendingPatch = {
 // state) — timers are not serializable Zustand state, and this is purely
 // network-scheduling plumbing, not UI state.
 const _pendingPatches = new Map<string, PendingPatch>();
+
+// Counts, per recId, the edits that touch the rungs or the size (`targets` or
+// `qty`). The backend caps stored rungs at the held qty on such a PATCH (open
+// question 54), so its response carries the rungs it stored -- adopted only
+// when no later rung/size edit exists, pending OR in flight; a later one gets
+// its own capped response.
+const _rungEditSeq = new Map<string, number>();
 
 // Tracks the in-flight PATCH request for a recId, from the moment it leaves
 // `_pendingPatches` (debounce fired) until its response settles. Two jobs:
@@ -671,6 +686,11 @@ async function _flushOne(recId: string): Promise<void> {
       void usePortfolioStore.getState().syncFromBackend(true);
       return;
     }
+    // The rungs the backend stored (capped at the held qty, open question 54),
+    // considered only for the latest rung/size edit -- see `_rungEditSeq`.
+    const serverRungs = ('targets' in entry.payload || 'qty' in entry.payload)
+      && (_rungEditSeq.get(recId) ?? 0) === entry.rungSeq
+      ? result.targets : undefined;
     if (result.adjustedQty != null) {
       // The backend's exposure gate approved the qty increase at a SMALLER size
       // than requested (mirrors addPosition's own adjustedQty handling above).
@@ -679,9 +699,14 @@ async function _flushOne(recId: string): Promise<void> {
       // with no explanation — same failure mode Step 4 below prevents for an
       // in-flight edit, but this is a resolved edit the poll would otherwise
       // still be free to overwrite without warning.
+      // The server resized the row, so its rungs (scaled to the booked size,
+      // open question 54) replace the local ones -- the one case where stored
+      // rungs are written back, because the user did not type this size.
       usePortfolioStore.setState((s) => ({
         positions: s.positions.map((p) =>
-          p.recId === recId ? { ...p, contracts: result.adjustedQty } : p
+          p.recId === recId
+            ? { ...p, contracts: result.adjustedQty, ...(serverRungs ? { targets: serverRungs } : {}) }
+            : p
         ),
         lastSyncError: {
           symbol: entry.symbol,
@@ -690,6 +715,27 @@ async function _flushOne(recId: string): Promise<void> {
           at: Date.now(),
         },
       }));
+    } else if (serverRungs && Array.isArray(entry.payload.targets)) {
+      // No resize: the rungs on screen are what the user TYPED, and are never
+      // overwritten with the capped ones -- a rung edit can be over-planned
+      // mid-typing (60/50 of 100 before rung 2 is changed), and writing the
+      // cap back made the next keystroke build on it (open question 54, X1).
+      // Every rung/size edit sends the local rungs, so the next one heals an
+      // intermediate cap. Only SAY what was stored, when it differs from what
+      // was sent, against the size the server holds.
+      const sells = (ts: TargetLevel[]) => JSON.stringify(ts.map((t) => t.contractsToSell ?? null));
+      if (sells(entry.payload.targets as TargetLevel[]) !== sells(serverRungs)) {
+        const held = result.contracts;
+        usePortfolioStore.setState({
+          lastSyncError: {
+            symbol: entry.symbol,
+            contract: entry.contract,
+            detail: `Sell targets plan to sell more than the ${held ?? ''}${held != null ? ' ' : ''}held — `
+              + 'saved scaled down to fit until you change them.',
+            at: Date.now(),
+          },
+        });
+      }
     }
   };
 
@@ -709,8 +755,10 @@ function scheduleRemotePositionPatch(
   const existing = _pendingPatches.get(recId);
   if (existing) clearTimeout(existing.timer);
   const merged = { ...(existing?.payload ?? {}), ...payload };
+  if ('targets' in payload || 'qty' in payload) _rungEditSeq.set(recId, (_rungEditSeq.get(recId) ?? 0) + 1);
+  const rungSeq = _rungEditSeq.get(recId) ?? 0;
   const timer = setTimeout(() => { void _flushOne(recId); }, REMOTE_PATCH_DEBOUNCE_MS);
-  _pendingPatches.set(recId, { timer, payload: merged, symbol, contract });
+  _pendingPatches.set(recId, { timer, payload: merged, symbol, contract, rungSeq });
 }
 
 /** Sends a pending debounced edit immediately instead of waiting out the
@@ -1063,7 +1111,17 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           };
         });
         if (target) {
-          const payload = toUpdatePayload(flooredPatch);
+          // A size edit carries the row's current rungs (open question 54):
+          // the backend caps stored rungs at the stored qty, so an
+          // intermediate size typed on the way to the final one (6 while
+          // typing 60) can cap them -- resending the local rungs with the
+          // next size keystroke restores them. The local rungs are never
+          // overwritten with a cap (see _flushOne).
+          const sendPatch: Partial<PortfolioPosition> =
+            'contracts' in flooredPatch && !('targets' in flooredPatch) && Array.isArray(target.targets)
+              ? { ...flooredPatch, targets: target.targets }
+              : flooredPatch;
+          const payload = toUpdatePayload(sendPatch);
           if (payload) scheduleRemotePositionPatch(target.recId, target.symbol, target.contract, payload);
         }
       },
