@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "ccr-5fdfa0ea-jyqf7y",
       "claimed_at": "2026-10-02T12:29:29Z",
-      "expires_at": "2026-10-02T15:29:29Z",
+      "expires_at": "2026-10-02T15:58:53Z",
       "note": "plan v4 (apply round-3 18 findings) then build + code audit loop",
       "task": "STOP-SEMANTICS"
     },
