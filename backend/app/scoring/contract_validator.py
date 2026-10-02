@@ -100,9 +100,19 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     except (ValueError, TypeError):
         dte = 0
 
-    # volume == 0 is Tradier's off-hours sentinel (resets daily before market open).
-    # When OI is adequate, skip the volume gate — OI is the real liquidity proxy.
-    if volume < hr["min_volume"] and not (volume == 0 and oi >= hr["min_open_interest"]):
+    # min_volume is an OPTIONAL hard floor, 0 = off (CONTRACT-LIQUIDITY-DTE,
+    # PRD FR-25 makes volume a soft rule; it is scored under _score_liquidity).
+    # The `> 0` guard changes nothing for integer volumes -- it states the
+    # "0 = off" meaning in code.
+    # For an explicit floor, volume == 0 is still exempt when OI is adequate:
+    # Tradier's volume is session-to-date and reads 0 before the open, and
+    # without a live-quote signal (phase NO-LIVE-QUOTE) that cannot be told
+    # apart from "no trades". OI is the real liquidity proxy there.
+    if (
+        hr["min_volume"] > 0
+        and volume < hr["min_volume"]
+        and not (volume == 0 and oi >= hr["min_open_interest"])
+    ):
         reasons.append("volume_too_low")
     if oi < hr["min_open_interest"]:
         reasons.append("open_interest_too_low")
@@ -179,10 +189,16 @@ def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
     oi_score = 100 if pref_oi_min <= 0 else min(100, int(oi / pref_oi_min * 60))
     score = (vol_score + oi_score) // 2
 
-    if pref_volume_min > 0 and volume < pref_volume_min:
-        flags.append("low_volume")
-    if pref_oi_min > 0 and oi < pref_oi_min:
-        flags.append("low_open_interest")
+    # ONE soft flag for the liquidity axis (CONTRACT-LIQUIDITY-DTE fix 2):
+    # volume and open interest below preference together cost one slot of
+    # max_soft_fail_count, not two. The old pair (low_volume +
+    # low_open_interest) let one thin axis plus any single further flag reject
+    # a long-dated contract. detail["liquidity"] still carries volume, OI and
+    # both preferred minimums, so which side is thin stays visible.
+    if (pref_volume_min > 0 and volume < pref_volume_min) or (
+        pref_oi_min > 0 and oi < pref_oi_min
+    ):
+        flags.append("thin_liquidity")
     return score, oi_score, flags
 
 

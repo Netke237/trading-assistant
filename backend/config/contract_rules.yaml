@@ -15,7 +15,9 @@ dte_holding_multiplier: 2.0
 
 # Hard-reject rules (FR-24) — any one triggers REJECT, score = 0
 hard_reject:
-  min_volume: 50                # contracts per day — below this = illiquid
+  min_volume: 0                 # optional hard floor on session-to-date volume; 0 = off
+                                # (FR-25 treats volume as soft — see soft_rank.preferred_volume_min).
+                                # A floor above 0 still exempts volume 0 when OI >= min_open_interest.
   min_open_interest: 200        # open interest — below this = illiquid
   max_bid_ask_spread_pct: 0.20  # spread / mid-price — above this = too wide
   min_delta: 0.20               # absolute delta — below this = too far OTM
@@ -47,7 +49,8 @@ hard_reject:
 # Soft-rank rules (FR-25) — penalise score but do not block
 soft_rank:
   preferred_volume_min: 200          # below this = soft penalty
-  preferred_oi_min: 1000             # below this = soft penalty
+  preferred_oi_min: 1000             # below this = soft penalty. Volume and OI below preference
+                                      # together raise ONE soft flag (thin_liquidity), not two.
   preferred_spread_pct_max: 0.08     # above this = soft penalty
   preferred_delta_min: 0.30          # below this = soft penalty (edge of golden zone)
   preferred_delta_max: 0.70          # above this = soft penalty

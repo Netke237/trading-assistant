@@ -265,3 +265,122 @@ def test_score_card_detail_present_even_on_hard_reject():
 def test_hard_reject_delta_band_reads_from_config():
     from app.scoring.contract_validator import hard_reject_delta_band
     assert hard_reject_delta_band() == (0.20, 0.85)
+
+
+# ── CONTRACT-LIQUIDITY-DTE: volume is soft by default, one liquidity flag ─────
+# Fix 1: hard_reject.min_volume defaults to 0 (off) -- PRD FR-25 lists volume
+# as a SOFT rule. An explicit floor above 0 still rejects, and still exempts
+# volume 0 when OI clears min_open_interest. Fix 2: volume and OI below
+# preference raise ONE soft flag, thin_liquidity, instead of low_volume +
+# low_open_interest. Every test starts from _contract_with_expiry(40) (4.9%
+# spread, delta 0.45, absolute IV 30, vol 500, OI 2000), overrides only the
+# fields it is about, and asserts the EXACT soft_flags list.
+
+def _liq(**overrides):
+    return _contract_with_expiry(40, **overrides)
+
+
+def test_aapl_315c_liquidity_shape_passes_hard_gates_at_default_config():
+    """vol 3 / OI 1,534 / spread 1.2% (AAPL 315C 2027-04-16, 2026-09-30) was
+    a volume_too_low hard reject at the old default of 50 while vol 0 / OI 319
+    passed. At the default floor (0 = off) it clears every hard gate."""
+    card = validate_contract(
+        _liq(volume=3, open_interest=1534, bid=2.00, ask=2.025), stock_score=70,
+    )
+    assert card.reject_reasons == []
+    assert card.soft_flags == ["thin_liquidity"]
+
+
+def test_zero_and_small_volume_grade_identically_at_default_floor():
+    """The inconsistency fix 1 removes: vol 0 and vol 3 differ only in the
+    volume figure, so at the default floor they get the same hard reasons and
+    the same soft flags. Scores are not compared -- int(3/200*60) == 0 makes
+    them equal only by truncation."""
+    card_0 = validate_contract(_liq(volume=0, open_interest=1534), stock_score=70)
+    card_3 = validate_contract(_liq(volume=3, open_interest=1534), stock_score=70)
+    assert card_0.reject_reasons == card_3.reject_reasons == []
+    assert card_0.soft_flags == card_3.soft_flags == ["thin_liquidity"]
+
+
+def test_explicit_min_volume_floor_rejects_small_volume():
+    card = validate_contract(
+        _liq(volume=3, open_interest=1534), stock_score=70, overrides={"min_volume": 50},
+    )
+    assert card.reject_reasons == ["volume_too_low"]
+
+
+def test_explicit_min_volume_floor_keeps_zero_volume_exemption():
+    """Volume 0 with OI >= min_open_interest stays exempt under an explicit
+    floor: before the open Tradier reports 0 and, without a live-quote signal
+    (phase NO-LIVE-QUOTE), that cannot be told apart from no trades."""
+    card = validate_contract(
+        _liq(volume=0, open_interest=1534), stock_score=70, overrides={"min_volume": 50},
+    )
+    assert "volume_too_low" not in card.reject_reasons
+    assert card.reject_reasons == []
+
+
+def test_zero_volume_exemption_keeps_its_oi_clause():
+    """The exemption is 'volume 0 AND OI adequate'. With OI 150 (< 200) an
+    explicit floor rejects on both axes -- kills a mutant that drops the OI
+    clause from the exemption."""
+    card = validate_contract(
+        _liq(volume=0, open_interest=150), stock_score=70, overrides={"min_volume": 50},
+    )
+    assert "volume_too_low" in card.reject_reasons
+    assert "open_interest_too_low" in card.reject_reasons
+
+
+@pytest.mark.parametrize("volume", [0, 3, 500])
+def test_open_interest_floor_still_hard_rejects(volume):
+    """min_open_interest (200) stays a liquidity hard gate whatever the volume."""
+    card = validate_contract(_liq(volume=volume, open_interest=150), stock_score=70)
+    assert "open_interest_too_low" in card.reject_reasons
+    assert "volume_too_low" not in card.reject_reasons
+
+
+@pytest.mark.parametrize("volume,oi", [
+    (100, 500),   # both below preference (200 / 1000)
+    (100, 2000),  # only volume below preference
+    (500, 500),   # only OI below preference
+])
+def test_thin_liquidity_raised_exactly_once(volume, oi):
+    card = validate_contract(_liq(volume=volume, open_interest=oi), stock_score=70)
+    assert card.soft_flags == ["thin_liquidity"]
+    assert "low_volume" not in card.soft_flags
+    assert "low_open_interest" not in card.soft_flags
+
+
+@pytest.mark.parametrize("volume,oi", [(200, 1000), (500, 2000)])
+def test_no_liquidity_flag_at_or_above_preference(volume, oi):
+    card = validate_contract(_liq(volume=volume, open_interest=oi), stock_score=70)
+    assert card.soft_flags == []
+
+
+def test_thin_liquidity_costs_one_soft_slot():
+    """vol 100 (< 200) AND OI 500 (in [200, 1000)): both liquidity
+    sub-conditions below preference, one slot. With an elevated spread
+    (~9.5%, in (8%, 20%)) that is two flags, under max_soft_fail_count 3.
+    Only reject_reasons is asserted: this contract's weighted score is 44,
+    below caution 45, so its status is REJECT by score with no reasons."""
+    card = validate_contract(
+        _liq(volume=100, open_interest=500, bid=1.00, ask=1.10), stock_score=70,
+    )
+    assert card.soft_flags == ["thin_liquidity", "spread_elevated"]
+    assert card.reject_reasons == []
+
+
+def test_thin_liquidity_plus_two_more_flags_hits_soft_fail_cap():
+    card = validate_contract(
+        _liq(volume=100, open_interest=500, bid=1.00, ask=1.10, delta=0.25), stock_score=70,
+    )
+    assert card.soft_flags == ["thin_liquidity", "spread_elevated", "delta_outside_preferred"]
+    assert "too_many_soft_failures" in card.reject_reasons
+
+
+def test_liquidity_score_arithmetic_unchanged():
+    """vol 100 / OI 500 against 200 / 1000: int(100/200*60)=30 and
+    int(500/1000*60)=30, averaged -> 30. Fix 2 merges flags only; this pins
+    the score so a change to the arithmetic cannot ride along."""
+    card = validate_contract(_liq(volume=100, open_interest=500), stock_score=70)
+    assert card.breakdown.liquidity_score == 30

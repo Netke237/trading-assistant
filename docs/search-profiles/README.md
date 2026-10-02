@@ -20,7 +20,8 @@ A Stocks profile is saved from Stocks mode.
   copy of the old request (Custom 15-200) until you open the profile in the
   app and click Update, which re-syncs the entry; the import script cannot do
   that for you.
-- `SemiAnnual_Restrictive_*`: min volume 50 (the Baseline floor) instead of
+- `SemiAnnual_Restrictive_*`: an explicit min volume of 50 (the Baseline floor
+  is now 0, off — see the 2026-10-02 change below) instead of
   200, because a single ~200-DTE strike rarely trades 200 contracts a day.
   That is a judgement from the measured Baseline Semi-annual run (3 of 518
   candidates, with 101 contract rejects mostly on liquidity and spread), not a
@@ -55,6 +56,21 @@ A Stocks profile is saved from Stocks mode.
   (Friday's weekly sat below the DTE floor of 3). That was the same backend
   bug; no profile value changed for it.
 
+## Change of 2026-10-02 (CONTRACT-LIQUIDITY-DTE)
+
+- The app's default `min_volume` (Step 3 "Min option volume") is now **0 =
+  off**: PRD FR-25 treats volume as a soft rule, scored by
+  `preferred_volume_min`. Baseline profiles carry no `min_volume`, so they
+  follow the new default.
+- `*_Loose_*` (all 6): `min_volume` 20 → 0. At 20 every Loose profile would
+  have been *stricter* on volume than its Baseline.
+- `*_Restrictive_*` keep their explicit floors (200, or 50 for SemiAnnual):
+  a profile that sets `min_volume` keeps it as a hard floor.
+- Volume and open interest below their preferred minimums now count as ONE
+  soft miss (`thin_liquidity`), not two (`low_volume` + `low_open_interest`).
+- Profiles already imported into the browser are not touched; re-import or
+  edit them to pick up the new Loose value.
+
 The original design rationale and tier numbers are in the
 `docs/superpowers/scratchpad` history for branch
 `claude/options-scan-liquidity-profiles` (merged to `main` at `ab705ea7`) —
@@ -68,7 +84,8 @@ this folder holds the *output*, not the design discussion.
 - `search-profiles-export.json` — the raw `bamendjou:search-profiles`
   localStorage payload. Originally a real save; the 2026-09-29 corrections
   were applied to it by script (renamed profiles; each edited profile's
-  `updatedAt` is a 2026-09-29 timestamp, untouched ones keep 2026-09-15), in
+  `updatedAt` is a 2026-09-29 timestamp, untouched ones keep 2026-09-15;
+  the six `Loose` profiles edited on 2026-10-02 carry that date), in
   the same shape the app writes.
 - `import-search-profiles.js` — the same JSON embedded in a paste-into-
   DevTools-console script (see below).
@@ -122,7 +139,7 @@ Not unconditionally. Two concrete dependencies:
    fundamentals gate, shortlist cap, spreads), and loading any profile writes
    those into Settings, where they stay after the scan. `Restrictive`/`Loose`
    bake in fixed values (0.08/200/1000, except `SemiAnnual_Restrictive` at
-   0.08/50/1000; and 0.30/20/75) — if the app's own defaults change later, these two tiers
+   0.08/50/1000; and 0.30/0/75) — if the app's own defaults change later, these two tiers
    won't auto-rescale relative to the new baseline; they'd need to be
    re-derived and re-saved.
 
