@@ -20,7 +20,6 @@
   z-index: 100;
   background: var(--bg-surface);
   border-left: 1px solid var(--border-strong);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
   animation: slideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
@@ -39,8 +38,7 @@
   position: fixed;
   inset: 0;
   top: var(--frame-topbar-h, 48px);
-  background: rgba(10, 14, 23, 0.55);
-  backdrop-filter: blur(2px);
+  background: color-mix(in srgb, var(--bg-base) 60%, transparent);
   z-index: 99;
 }
 
@@ -60,10 +58,11 @@
   justify-content: space-between;
 }
 
-.titleArea {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .headerActions {
@@ -157,17 +156,24 @@
   align-items: center;
 }
 
-.searchIcon {
+.clearBtn {
   position: absolute;
-  left: 10px;
-  font-size: 13px;
+  right: 8px;
+  background: transparent;
+  border: none;
   color: var(--text-dim);
-  pointer-events: none;
+  cursor: pointer;
+}
+
+.notFound {
+  margin-top: var(--space-2);
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .searchInput {
   width: 100%;
-  padding: 7px 10px 7px 30px;
+  padding: 7px 28px 7px 10px;
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -229,9 +235,31 @@
   font-size: 10px;
 }
 
+.breakdownKey {
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
 .breakdownVal {
   font-family: var(--font-mono, monospace);
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.breakdownWeakest {
+  border: 1px solid color-mix(in srgb, var(--reject) 40%, transparent);
+}
+
+.detailKey {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.detailRaw {
+  margin-top: 3px;
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+  word-break: break-word;
 }
 
 /* Scrollable Content */
@@ -291,8 +319,7 @@
 }
 
 .bottleneckBtn:hover {
-  background: var(--caution);
-  color: #000;
+  background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
 }
 
 /* Tree Section */
@@ -455,10 +482,23 @@
   color: var(--text-primary);
 }
 
-.subRuleCountArea {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.subRuleCount {
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono, monospace);
+  color: var(--reject);
+}
+
+.stageNote {
+  font-size: 10px;
+  color: var(--caution);
+  line-height: 1.35;
+}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .subRuleExplanation {
@@ -542,4 +582,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.survivorChips {
+  display: flex;
+  gap: 4px;
 }

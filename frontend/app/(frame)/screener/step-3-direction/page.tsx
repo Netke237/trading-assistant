@@ -13,19 +13,17 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
-import type { RejectedEntry } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { PipelineInspector } from '@/components/organisms/PipelineInspector';
-import { scanLogTotals, SHORTLIST_REASON_PREFIX } from './scanLogTotals';
+import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
-import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 import {
   HORIZON_PRESETS, presetByKey, previewDteWindow, horizonDisplayString,
-  resolveParamsHorizon, type HorizonKey, type ScoringHorizon,
+  resolveParamsHorizon, type HorizonKey,
 } from '@/lib/horizonPresets';
 import { PARAM_DEFAULTS_PER_HORIZON, type ParamDefaults } from '@/lib/executionParamDefaults';
 
@@ -916,12 +914,47 @@ export default function Step3Page() {
 
       {screenerMode !== 'stocks' && (totalScanned > 0 || rejectedLog.length > 0) && (
         <div className={formStyles.logSection}>
+          <div className={formStyles.logHeader}>
+            <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
+            <div className={formStyles.logStats}>
+              {totalScanned > 0 && (
+                <>
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="dim">Scanned</Text>
+                    <span className={formStyles.badge}>{totalScanned}</span>
+                  </span>
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="pass">Passed</Text>
+                    <span className={`${formStyles.badge} ${formStyles.badgePass}`}>{totalPassed}</span>
+                  </span>
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="reject">Rejected</Text>
+                    <span className={`${formStyles.badge} ${formStyles.badgeReject}`}>{totalRejected}</span>
+                  </span>
+                  {totalTrimmed > 0 && (
+                    <span className={formStyles.logStat}>
+                      <Text size={11} tone="caution">Over cap</Text>
+                      <span className={formStyles.badge}>{totalTrimmed}</span>
+                    </span>
+                  )}
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="dim">DTE</Text>
+                    <Text size={11} tone="secondary">
+                      {enforcedDte ? `${enforcedDte.min_dte}–${enforcedDte.max_dte}d` : '—'}
+                    </Text>
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
           <PipelineInspector
             isDrawer={false}
             isOpen={true}
             pipeline={shownResult?.pipeline}
             rejected={rejectedLog}
             survivors={shownResult?.candidates?.map((c) => c.symbol) ?? []}
+            contractRules={shownResult?.contract_rules}
+            dteWindow={shownResult?.dte_window}
           />
         </div>
       )}

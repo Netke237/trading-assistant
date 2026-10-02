@@ -159,6 +159,8 @@ export default function Step4Page() {
   const candidates = useScanStore((s) => s.scanResult?.candidates);
   const pipeline = useScanStore((s) => s.scanResult?.pipeline);
   const rejected = useScanStore((s) => s.scanResult?.rejected);
+  const contractRules = useScanStore((s) => s.scanResult?.contract_rules);
+  const dteWindow = useScanStore((s) => s.scanResult?.dte_window);
   const directionBanner = useScanStore((s) => s.scanResult?.direction_banner);
   const previousRun = useScanStore((s) => s.previousRun);
   const context = useScanStore((s) => s.context);
@@ -216,21 +218,30 @@ export default function Step4Page() {
     setCurrentPage(1);
   }
 
+  // The inspector's survivors and the button's count both come from the scan
+  // result, so the button agrees with the drawer's own "Filtered" badge.
+  const candidateSymbols = candidates?.map((c) => c.symbol) ?? [];
+  const filteredCount = Math.max(0,
+    (pipeline?.scanned ?? (rejected?.length ?? 0) + candidateSymbols.length) - candidateSymbols.length);
+
   if (!selected) {
     const hasRun = candidates !== undefined;
-    const droppedCount = pipeline ? pipeline.scanned - (candidates?.length ?? 0) : (rejected?.length || 0);
     return (
       <div className={styles.main}>
         <div className={styles.stepHeader}>
           <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
           <Title as="h1" size={24}>Stock Ranking</Title>
         </div>
+        {/* Rendered HERE as well as in the populated branch below, because the
+            empty table is exactly the case the banner exists to explain: when
+            the direction-conviction gate strips every candidate, this early
+            return is the only branch that runs, and the banner was unreachable. */}
         {directionBanner && (
           <div className={styles.directionBanner}>
             <Text size={12} tone="caution">{directionBanner}</Text>
           </div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+        <div className={styles.emptyState}>
           <Text size={13} tone="dim">
             {hasRun ? 'No candidates matched the current scan criteria.' : 'Run a scan to see ranked candidates.'}
           </Text>
@@ -240,7 +251,7 @@ export default function Step4Page() {
               className={styles.inspectBtn}
               onClick={() => setInspectorOpen(true)}
             >
-              🔍 Filter Breakdown ({droppedCount} Filtered)
+              Filter Breakdown ({filteredCount} Filtered)
             </button>
           )}
         </div>
@@ -250,7 +261,9 @@ export default function Step4Page() {
           onClose={() => setInspectorOpen(false)}
           pipeline={pipeline}
           rejected={rejected}
-          survivors={[]}
+          survivors={candidateSymbols}
+          contractRules={contractRules}
+          dteWindow={dteWindow}
         />
       </div>
     );
@@ -293,7 +306,7 @@ export default function Step4Page() {
               onClick={() => setInspectorOpen(true)}
               title="Open Pipeline Root-Cause Inspector"
             >
-              🔍 Filter Breakdown ({pipeline ? pipeline.scanned - watchlist.length : (rejected?.length || 0)} Filtered)
+              Filter Breakdown ({filteredCount} Filtered)
             </button>
             <Link href="/validation" className={styles.exportBtn}>
               Validation
@@ -491,7 +504,9 @@ export default function Step4Page() {
         onClose={() => setInspectorOpen(false)}
         pipeline={pipeline}
         rejected={rejected}
-        survivors={watchlist.map((w) => w.symbol)}
+        survivors={candidateSymbols}
+        contractRules={contractRules}
+        dteWindow={dteWindow}
       />
     </div>
   );

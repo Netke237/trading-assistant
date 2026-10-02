@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PipelineInspector } from '../index';
 import type { OptionsPipeline, RejectedEntry } from '@/lib/scanStore';
 
@@ -34,8 +34,8 @@ describe('PipelineInspector Component', () => {
       />
     );
 
-    expect(screen.getByText('Pipeline Root-Cause Inspector')).toBeInTheDocument();
-    expect(screen.getByText('Adjust in Step 3 →')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Pipeline Root-Cause Inspector' })).toBeInTheDocument();
+    expect(screen.getByText('Review in Step 3 →')).toBeInTheDocument();
 
     const closeBtn = screen.getByLabelText('Close inspector');
     expect(closeBtn).toBeInTheDocument();
@@ -72,7 +72,8 @@ describe('PipelineInspector Component', () => {
     );
 
     expect(screen.queryByLabelText('Close inspector')).not.toBeInTheDocument();
-    expect(screen.queryByText('Adjust in Step 3 →')).not.toBeInTheDocument();
+    expect(screen.queryByText('Review in Step 3 →')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('518 Scanned')).toBeInTheDocument();
   });
 
@@ -92,7 +93,33 @@ describe('PipelineInspector Component', () => {
 
     expect(screen.getByText('NVDA')).toBeInTheDocument();
     expect(screen.getByText('REJECTED')).toBeInTheDocument();
-    expect(screen.getByText(/Option Contract Rules/i)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Stage: Score Gate & Contract Rules');
+    expect(screen.getByText(/Spread Too Wide, Low Liquidity/)).toBeInTheDocument();
+  });
+
+  it('says a symbol was not part of the scan instead of showing nothing', () => {
+    render(<PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer={false} />);
+    fireEvent.change(screen.getByPlaceholderText('Search symbol (e.g. NVDA, AAPL)...'), { target: { value: 'zzzz' } });
+    expect(screen.getByText('ZZZZ was not part of this scan.')).toBeInTheDocument();
+  });
+
+  it('shows no bottleneck card when nothing was dropped', () => {
+    render(
+      <PipelineInspector
+        pipeline={{ scanned: 1, failed_data: 0, failed_pre_screen: 0, no_chain: 0, failed_score: 0, failed_contracts: 0, candidates: 1 }}
+        rejected={[]}
+        survivors={['MSFT']}
+        isDrawer={false}
+      />
+    );
+    expect(screen.queryByText(/Primary bottleneck/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a dash, not an estimate, when a stage has no per-symbol reasons', () => {
+    render(<PipelineInspector pipeline={mockPipeline} rejected={[]} survivors={['MSFT']} isDrawer={false} />);
+    // pre-screen (277) is the bottleneck and opens by default
+    expect(screen.getByText(/Per-rule breakdown unavailable/)).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 
   it('identifies primary bottleneck stage', () => {
@@ -106,10 +133,10 @@ describe('PipelineInspector Component', () => {
       />
     );
 
-    expect(screen.getByText(/PRIMARY BOTTLENECK: Pre-Screen Setup Score/i)).toBeInTheDocument();
+    expect(screen.getByText(/Primary bottleneck: Pre-Screen Setup Score/i)).toBeInTheDocument();
   });
 
-  it('toggles plaintext ASCII tree view and copies to clipboard', () => {
+  it('toggles plaintext ASCII tree view and copies to clipboard', async () => {
     Object.assign(navigator, {
       clipboard: {
         writeText: jest.fn().mockImplementation(() => Promise.resolve()),
@@ -131,8 +158,19 @@ describe('PipelineInspector Component', () => {
     expect(screen.getByText(/Universe \(518\)/i)).toBeInTheDocument();
 
     const copyBtn = screen.getByTitle('Copy formatted ASCII tree');
-    fireEvent.click(copyBtn);
+    await act(async () => { fireEvent.click(copyBtn); });
     expect(navigator.clipboard.writeText).toHaveBeenCalled();
+    expect(copyBtn).toHaveTextContent('Copied');
+  });
+
+  it('reports a failed copy instead of claiming success', async () => {
+    Object.assign(navigator, {
+      clipboard: { writeText: jest.fn().mockImplementation(() => Promise.reject(new Error('denied'))) },
+    });
+    render(<PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer={false} />);
+    const copyBtn = screen.getByTitle('Copy formatted ASCII tree');
+    await act(async () => { fireEvent.click(copyBtn); });
+    expect(copyBtn).toHaveTextContent('Copy failed');
   });
 
   it('expands ticker chips and searches ticker on chip click', () => {
@@ -146,6 +184,7 @@ describe('PipelineInspector Component', () => {
       />
     );
 
+    fireEvent.click(screen.getByText('1. Data & Universe Filters'));
     const viewChipsBtns = screen.getAllByText(/View 1 Tickers/i);
     fireEvent.click(viewChipsBtns[0]);
 

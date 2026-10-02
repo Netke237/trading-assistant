@@ -1,25 +1,42 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useId } from 'react';
 import Link from 'next/link';
 import type { OptionsPipeline, RejectedEntry } from '@/lib/scanStore';
-import { parsePipelineDiagnostics } from '@/lib/parsePipelineDiagnostics';
+import type { DteWindow } from '@/types/domain';
+import { parsePipelineDiagnostics, type DiagnosticStage } from '@/lib/parsePipelineDiagnostics';
 import styles from './PipelineInspector.module.css';
 
 interface PipelineInspectorProps {
   pipeline?: OptionsPipeline;
   rejected?: RejectedEntry[];
   survivors?: string[];
+  /** `ScanResult.contract_rules` — labels show a threshold only when the scan recorded it. */
+  contractRules?: Record<string, number> | null;
+  dteWindow?: DteWindow;
   isOpen?: boolean;
   onClose?: () => void;
   isDrawer?: boolean;
   defaultSearch?: string;
 }
 
+type CopyState = 'idle' | 'copied' | 'failed';
+
+const EMPTY_REJECTED: RejectedEntry[] = [];
+const EMPTY_SURVIVORS: string[] = [];
+
+function initialExpanded(stages: DiagnosticStage[]): Record<string, boolean> {
+  const init: Record<string, boolean> = {};
+  for (const s of stages) if (s.isBottleneck) init[s.id] = true;
+  return init;
+}
+
 export function PipelineInspector({
   pipeline,
-  rejected = [],
-  survivors = [],
+  rejected = EMPTY_REJECTED,
+  survivors = EMPTY_SURVIVORS,
+  contractRules,
+  dteWindow,
   isOpen = true,
   onClose,
   isDrawer = true,
@@ -27,73 +44,118 @@ export function PipelineInspector({
 }: PipelineInspectorProps) {
   const [searchQuery, setSearchQuery] = useState(defaultSearch);
   const [viewMode, setViewMode] = useState<'tree' | 'ascii'>('tree');
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<CopyState>('idle');
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Close drawer on Escape key press
+  // Parents build `survivors` with a fresh `.map()` each render; keying on its
+  // contents keeps the report (and the expansion reset below) stable until the
+  // scan actually changes.
+  const survivorsKey = survivors.join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableSurvivors = useMemo(() => survivors, [survivorsKey]);
+  const report = useMemo(
+    () => parsePipelineDiagnostics(pipeline, rejected, stableSurvivors, { contractRules, dteWindow }),
+    [pipeline, rejected, stableSurvivors, contractRules, dteWindow],
+  );
+
+  // Re-derived whenever a new report arrives, so a re-run scan does not keep
+  // the previous run's expansion.
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>(() => initialExpanded(report.stages));
+  const [expandedChips, setExpandedChips] = useState<Record<string, boolean>>({});
+  const firstReport = useRef(report);
   useEffect(() => {
-    if (!isDrawer || !isOpen || !onClose) return;
+    if (firstReport.current === report) return;
+    firstReport.current = report;
+    setExpandedStages(initialExpanded(report.stages));
+    setExpandedChips({});
+  }, [report]);
+
+  // Held in a ref so a parent passing an inline arrow does not re-run the
+  // focus effect below on every render (which would yank focus to the search).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  // Drawer: Escape closes, Tab stays inside, focus moves in on open and back
+  // to the opener on close.
+  useEffect(() => {
+    if (!isDrawer || !isOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
+    searchRef.current?.focus();
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        onClose?.();
+        onCloseRef.current?.();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawer, isOpen, onClose]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      opener?.focus?.();
+    };
+  }, [isDrawer, isOpen]);
 
-  // Compute diagnostics
-  const report = useMemo(
-    () => parsePipelineDiagnostics(pipeline, rejected, survivors),
-    [pipeline, rejected, survivors],
-  );
-
-  // Expanded stages state: default open the bottleneck and pre-screen
-  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    for (const s of report.stages) {
-      if (s.isBottleneck || s.droppedCount > 0) {
-        init[s.id] = true;
-      }
-    }
-    return init;
-  });
-
-  // Expanded ticker chips state
-  const [expandedChips, setExpandedChips] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const t = setTimeout(() => setCopyState('idle'), 2000);
+    return () => clearTimeout(t);
+  }, [copyState]);
 
   function toggleStage(id: string) {
     setExpandedStages((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  function toggleChips(subId: string) {
-    setExpandedChips((prev) => ({ ...prev, [subId]: !prev[subId] }));
+  function toggleChips(key: string) {
+    setExpandedChips((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  function handleCopyTree() {
-    if (navigator?.clipboard) {
-      navigator.clipboard.writeText(report.asciiTree);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  async function handleCopyTree() {
+    try {
+      if (!navigator?.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(report.asciiTree);
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
     }
   }
 
-  // Active searched symbol
+  const trimmedQuery = searchQuery.trim();
   const searchedResult = useMemo(
-    () => (searchQuery ? report.lookupSymbol(searchQuery) : null),
-    [searchQuery, report],
+    () => (trimmedQuery ? report.lookupSymbol(trimmedQuery) : null),
+    [trimmedQuery, report],
   );
 
   if (!isOpen) return null;
 
+  const copyLabel = copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy Tree';
+  const bottleneck = report.primaryBottleneck;
+
   const content = (
-    <div className={isDrawer ? styles.drawer : styles.container}>
-      {/* Header */}
+    <div
+      ref={dialogRef}
+      className={isDrawer ? styles.drawer : styles.container}
+      role={isDrawer ? 'dialog' : 'region'}
+      aria-modal={isDrawer ? true : undefined}
+      aria-labelledby={titleId}
+    >
       <div className={styles.header}>
         <div className={styles.headerTop}>
-          <div className={styles.titleArea}>
-            <span style={{ fontSize: '15px' }}>🔍</span>
-            <span style={{ fontSize: '13px', fontWeight: 600 }}>Pipeline Root-Cause Inspector</span>
-          </div>
+          <h2 id={titleId} className={styles.title}>Pipeline Root-Cause Inspector</h2>
           <div className={styles.headerActions}>
             <button
               type="button"
@@ -101,7 +163,7 @@ export function PipelineInspector({
               onClick={handleCopyTree}
               title="Copy formatted ASCII tree"
             >
-              {copied ? '✓ Copied' : '📋 Copy Tree'}
+              {copyLabel}
             </button>
             {isDrawer && onClose && (
               <button
@@ -125,38 +187,37 @@ export function PipelineInspector({
         </div>
       </div>
 
-      {/* Symbol Search */}
       <div className={styles.searchSection}>
         <div className={styles.searchInputWrapper}>
-          <span className={styles.searchIcon}>🔍</span>
           <input
+            ref={searchRef}
             type="text"
             className={styles.searchInput}
             placeholder="Search symbol (e.g. NVDA, AAPL)..."
+            aria-label="Look up a symbol in this scan"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
             <button
               type="button"
+              className={styles.clearBtn}
               onClick={() => setSearchQuery('')}
-              style={{
-                position: 'absolute',
-                right: '8px',
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-dim)',
-                cursor: 'pointer',
-              }}
+              aria-label="Clear search"
             >
               ✕
             </button>
           )}
         </div>
 
-        {/* Live Symbol Lookup Result Card */}
+        {trimmedQuery && !searchedResult && (
+          <div className={styles.notFound} role="status">
+            {trimmedQuery.toUpperCase()} was not part of this scan.
+          </div>
+        )}
+
         {searchedResult && (
-          <div className={styles.symbolResultCard}>
+          <div className={styles.symbolResultCard} role="status">
             <div className={styles.symbolResultTop}>
               <span className={styles.symbolName}>{searchedResult.symbol}</span>
               <span
@@ -169,29 +230,28 @@ export function PipelineInspector({
             </div>
             <div className={styles.symbolDetails}>
               <div>
-                <strong>Stage:</strong> {searchedResult.stageName}
+                <span className={styles.detailKey}>Stage:</span> {searchedResult.stageName}
               </div>
               <div>
-                <strong>Reason:</strong> {searchedResult.primaryReason}
+                <span className={styles.detailKey}>Rule:</span> {searchedResult.primaryReason}
               </div>
               {searchedResult.detailedReason !== searchedResult.primaryReason && (
-                <div style={{ marginTop: '3px', color: 'var(--text-dim)' }}>
-                  <em>{searchedResult.detailedReason}</em>
-                </div>
+                <div className={styles.detailRaw}>{searchedResult.detailedReason}</div>
               )}
             </div>
 
             {searchedResult.breakdown && (
               <div className={styles.breakdownGrid}>
                 {Object.entries(searchedResult.breakdown).map(([k, v]) => (
-                  <div key={k} className={styles.breakdownItem}>
-                    <span style={{ color: 'var(--text-dim)', textTransform: 'uppercase' }}>{k}</span>
-                    <span
-                      className={styles.breakdownVal}
-                      style={{ color: v >= 55 ? 'var(--pass)' : v >= 35 ? 'var(--caution)' : 'var(--reject)' }}
-                    >
-                      {v}
-                    </span>
+                  <div
+                    key={k}
+                    className={`${styles.breakdownItem} ${
+                      k === searchedResult.weakestComponent ? styles.breakdownWeakest : ''
+                    }`}
+                    title={k === searchedResult.weakestComponent ? 'Lowest-scoring component' : undefined}
+                  >
+                    <span className={styles.breakdownKey}>{k}</span>
+                    <span className={styles.breakdownVal}>{v}</span>
                   </div>
                 ))}
               </div>
@@ -200,38 +260,33 @@ export function PipelineInspector({
         )}
       </div>
 
-      {/* Main Content */}
       <div className={styles.content}>
-        {/* Primary Bottleneck Card */}
-        {report.primaryBottleneck && (
+        {bottleneck && (
           <div className={styles.bottleneckCard}>
             <div className={styles.bottleneckTitle}>
-              <span>⚠️</span>
-              <span>PRIMARY BOTTLENECK: {report.primaryBottleneck.stageTitle}</span>
+              Primary bottleneck: {bottleneck.stageTitle}
             </div>
-            <div className={styles.bottleneckDesc}>{report.primaryBottleneck.insight}</div>
+            <div className={styles.bottleneckDesc}>{bottleneck.insight}</div>
             <div className={styles.bottleneckTip}>
-              <strong>Remedy:</strong> {report.primaryBottleneck.suggestedAction}
+              <span className={styles.detailKey}>Where to look:</span> {bottleneck.suggestedAction}
             </div>
             {isDrawer && (
-              <Link href="/screener/step-3-direction" className={styles.bottleneckBtn}>
-                Adjust in Step 3 →
+              <Link href={bottleneck.adjustHref} className={styles.bottleneckBtn}>
+                {bottleneck.adjustLabel} →
               </Link>
             )}
           </div>
         )}
 
-        {/* Tree Section */}
         <div className={styles.treeSection}>
           <div className={styles.treeHeader}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              DROP-OFF HIERARCHY
-            </span>
+            <span className={styles.sectionLabel}>DROP-OFF HIERARCHY</span>
             <div className={styles.treeViewToggle}>
               <button
                 type="button"
                 className={`${styles.viewModeBtn} ${viewMode === 'tree' ? styles.viewModeActive : ''}`}
                 onClick={() => setViewMode('tree')}
+                aria-pressed={viewMode === 'tree'}
               >
                 Interactive
               </button>
@@ -239,6 +294,7 @@ export function PipelineInspector({
                 type="button"
                 className={`${styles.viewModeBtn} ${viewMode === 'ascii' ? styles.viewModeActive : ''}`}
                 onClick={() => setViewMode('ascii')}
+                aria-pressed={viewMode === 'ascii'}
               >
                 Plaintext Tree
               </button>
@@ -249,13 +305,8 @@ export function PipelineInspector({
             <pre className={styles.asciiTreeBox}>{report.asciiTree}</pre>
           ) : (
             <div className={styles.treeContainer}>
-              {/* Root node */}
-              <div className={styles.rootNode}>
-                <span>🌐</span>
-                <span>Universe ({report.scanned} Total)</span>
-              </div>
+              <div className={styles.rootNode}>Universe ({report.scanned} Total)</div>
 
-              {/* Stages */}
               {report.stages.map((stage, idx) => {
                 const isExpanded = !!expandedStages[stage.id];
                 return (
@@ -269,39 +320,44 @@ export function PipelineInspector({
                       onClick={() => toggleStage(stage.id)}
                       aria-expanded={isExpanded}
                     >
-                      <div className={styles.stageTitleArea}>
-                        <span className={`${styles.stageChevron} ${isExpanded ? styles.stageChevronOpen : ''}`}>
+                      <span className={styles.stageTitleArea}>
+                        <span className={`${styles.stageChevron} ${isExpanded ? styles.stageChevronOpen : ''}`} aria-hidden>
                           ▶
                         </span>
                         <span className={styles.stageTitle}>
                           {idx + 1}. {stage.title}
                         </span>
-                      </div>
-                      <div className={styles.stageBadges}>
+                      </span>
+                      <span className={styles.stageBadges}>
                         <span className={`${styles.badge} ${styles.badgeReject}`}>−{stage.droppedCount}</span>
                         <span className={styles.badge}>{stage.pctOfTotal}%</span>
+                        <span className={styles.badge}>Left {stage.remainingCount}</span>
                         {stage.isBottleneck && (
                           <span className={`${styles.badge} ${styles.badgeBottleneck}`}>Bottleneck</span>
                         )}
-                      </div>
+                      </span>
                     </button>
 
                     {isExpanded && (
                       <div className={styles.stageBody}>
                         <div className={styles.stageRuleSummary}>{stage.ruleSummary}</div>
+                        {stage.note && <div className={styles.stageNote}>{stage.note}</div>}
+
+                        {stage.subRules.length === 0 && stage.droppedCount === 0 && (
+                          <div className={styles.subRuleExplanation}>Nothing dropped at this stage.</div>
+                        )}
 
                         <div className={styles.subRuleList}>
                           {stage.subRules.map((sub) => {
-                            const showChips = !!expandedChips[sub.id];
+                            const chipKey = `${stage.id}/${sub.id}`;
+                            const showChips = !!expandedChips[chipKey];
                             return (
                               <div key={sub.id} className={styles.subRuleItem}>
                                 <div className={styles.subRuleHeader}>
                                   <span className={styles.subRuleLabel}>{sub.label}</span>
-                                  <div className={styles.subRuleCountArea}>
-                                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--reject)' }}>
-                                      −{sub.count}
-                                    </span>
-                                  </div>
+                                  <span className={styles.subRuleCount}>
+                                    {sub.count === null ? '—' : `−${sub.count}`}
+                                  </span>
                                 </div>
                                 <div className={styles.subRuleExplanation}>{sub.ruleExplanation}</div>
 
@@ -310,7 +366,8 @@ export function PipelineInspector({
                                     <button
                                       type="button"
                                       className={styles.tickerChipsToggle}
-                                      onClick={() => toggleChips(sub.id)}
+                                      onClick={() => toggleChips(chipKey)}
+                                      aria-expanded={showChips}
                                     >
                                       {showChips ? 'Hide Tickers ▲' : `View ${sub.symbols.length} Tickers ▼`}
                                     </button>
@@ -341,16 +398,12 @@ export function PipelineInspector({
                 );
               })}
 
-              {/* Survivor Final Node */}
               <div className={styles.survivorCard}>
                 <div className={styles.survivorTitle}>
-                  <span>✓</span>
-                  <span>
-                    Final Survivors: {report.candidatesCount} Candidate{report.candidatesCount !== 1 ? 's' : ''}
-                  </span>
+                  Final Survivors: {report.candidatesCount} Candidate{report.candidatesCount !== 1 ? 's' : ''}
                 </div>
                 {survivors.length > 0 && (
-                  <div style={{ display: 'flex', gap: '4px' }}>
+                  <div className={styles.survivorChips}>
                     {survivors.slice(0, 5).map((s) => (
                       <span key={s} className={`${styles.badge} ${styles.badgePass}`}>
                         {s}

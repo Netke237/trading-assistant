@@ -1,236 +1,243 @@
-import { parsePipelineDiagnostics } from '../parsePipelineDiagnostics';
+import { parsePipelineDiagnostics, classifyReason, contractCodes, weakestComponent } from '../parsePipelineDiagnostics';
 import type { OptionsPipeline, RejectedEntry } from '../scanStore';
 
-describe('parsePipelineDiagnostics engine', () => {
-  const mockPipeline: OptionsPipeline = {
-    scanned: 500,
-    failed_data: 20,
-    failed_pre_screen: 250,
-    no_chain: 150,
-    failed_score: 50,
-    failed_contracts: 28,
-    candidates: 2,
-  };
+// Every reason string below is copied from what the backend emits —
+// backend/app/routers/scan.py (RejectedCandidate reasons and the `_is_*`
+// bucket predicates) and backend/app/scoring/contract_validator.py (reject
+// codes). If a producer is reworded, these must change with it.
 
-  const mockRejected: RejectedEntry[] = [
-    { symbol: 'PENNY', reason: 'price filter ($2.10 < $15.00 min)' },
-    { symbol: 'TINY', reason: 'cap filter ($1.2B < $5.0B min)' },
-    { symbol: 'NODATA', reason: 'no market data' },
-    {
-      symbol: 'BADTREND',
-      reason: 'Pre-screen: score 28 rejected',
-      breakdown: { trend: 20, pullback: 60, trigger: 70, event: 80, regime: 90 },
-    },
-    {
-      symbol: 'BADEVENT',
-      reason: 'Pre-screen: score 30 rejected',
-      breakdown: { trend: 70, pullback: 60, trigger: 70, event: 15, regime: 90 },
-    },
-    { symbol: 'NOOPT', reason: 'no option chain' },
-    { symbol: 'NOSTRIKE', reason: 'empty strike matrix' },
-    {
-      symbol: 'NVDA',
-      reason: 'contracts rejected: spread_too_wide(14), volume_too_low(8)',
-    },
-    {
-      symbol: 'TSLA',
-      reason: 'contracts rejected: delta_too_low(6)',
-    },
-    {
-      symbol: 'HIGHIV',
-      reason: 'contracts rejected: iv_too_high(5)',
-    },
-    {
-      symbol: 'LOWCONV',
-      reason: 'direction_conviction below threshold',
-    },
-    {
-      symbol: 'OVERCAP',
-      reason: 'shortlist cap reached',
-    },
-  ];
+const REJECTED: RejectedEntry[] = [
+  { symbol: 'PENNY', reason: 'price filter ($2.10 < $15.00 min)' },
+  { symbol: 'TINY', reason: 'cap filter ($1.2B < $5.0B min)' },
+  { symbol: 'NODATA', reason: 'no market data' },
+  { symbol: 'NOREG', reason: 'regime data unavailable: no 15-min bars' },
+  { symbol: 'WTREND', reason: 'Pre-screen: score 28 rejected', breakdown: { trend: 20, pullback: 60, trigger: 70, event: 80, vol: 90 } },
+  { symbol: 'WVOL', reason: 'Pre-screen: score 31 rejected', breakdown: { trend: 70, pullback: 60, trigger: 70, event: 80, vol: 10 } },
+  { symbol: 'ALLHI', reason: 'Pre-screen: score 33 rejected', breakdown: { trend: 60, pullback: 58, trigger: 70, event: 80, vol: 90 } },
+  { symbol: 'NOBD', reason: 'Pre-screen: score 20 rejected' },
+  { symbol: 'UNMEAS', reason: 'direction_conviction_unmeasured: trend not measured (Bullish/Swing)' },
+  { symbol: 'NOOPT', reason: 'no option chain' },
+  { symbol: 'SG', reason: 'Score gate: score 30 rejected', breakdown: { trend: 40, pullback: 30, trigger: 50, event: 60, vol: 20 } },
+  { symbol: 'NVDA', reason: 'contracts rejected: spread_too_wide(14), volume_too_low(8)' },
+  { symbol: 'IVONLY', reason: 'contracts rejected: iv_too_high(9)' },
+  { symbol: 'LOWSC', reason: 'contracts rejected: contract_score_below_caution(4); best contract score 30 < caution 40' },
+  { symbol: 'BARE', reason: 'all contracts rejected' },
+  { symbol: 'DIR1', reason: 'direction_conviction: trend 20 < 40 (Bearish/Position)' },
+  { symbol: 'DIR2', reason: 'direction_conviction: trend 25 < 40 (Bearish/Position)' },
+  { symbol: 'DIR3', reason: 'direction_conviction: trend 30 < 40 (Bearish/Position)' },
+  { symbol: 'CAPPED', reason: 'Shortlist cap: PASS score 61 below the top 10' },
+  { symbol: 'ERR', reason: '' },
+];
 
-  it('correctly aggregates stage counts and calculates percentage shares', () => {
-    const report = parsePipelineDiagnostics(mockPipeline, mockRejected, ['AAPL', 'MSFT']);
+const PIPELINE: OptionsPipeline = {
+  scanned: 22,
+  failed_data: 4,
+  failed_pre_screen: 4,
+  failed_direction_unmeasured: 1,
+  no_chain: 1,
+  failed_score: 1,
+  failed_contracts: 4,
+  failed_direction: 3,
+  failed_shortlist: 1,
+  other_rejected: 1,
+  candidates: 2,
+};
 
-    expect(report.scanned).toBe(500);
-    expect(report.candidatesCount).toBe(2);
-    expect(report.totalDropped).toBe(498);
+const SURVIVORS = ['AAPL', 'MSFT'];
 
-    // Stage 1: Data & Universe Filters
-    const stage1 = report.stages.find((s) => s.id === 'data-filters');
-    expect(stage1).toBeDefined();
-    expect(stage1?.droppedCount).toBe(20);
-    expect(stage1?.allSymbols).toContain('PENNY');
-    expect(stage1?.allSymbols).toContain('TINY');
-    expect(stage1?.allSymbols).toContain('NODATA');
+function stage(report: ReturnType<typeof parsePipelineDiagnostics>, id: string) {
+  const s = report.stages.find((x) => x.id === id);
+  if (!s) throw new Error(`stage ${id} missing`);
+  return s;
+}
 
-    // Stage 2: Pre-Screen Setup Score
-    const stage2 = report.stages.find((s) => s.id === 'pre-screen');
-    expect(stage2).toBeDefined();
-    expect(stage2?.droppedCount).toBe(250);
-    expect(stage2?.allSymbols).toContain('BADTREND');
-    expect(stage2?.allSymbols).toContain('BADEVENT');
+function sub(report: ReturnType<typeof parsePipelineDiagnostics>, stageId: string, subId: string) {
+  return stage(report, stageId).subRules.find((r) => r.id === subId);
+}
 
-    // Stage 3: Option Chain Window
-    const stage3 = report.stages.find((s) => s.id === 'chain-window');
-    expect(stage3).toBeDefined();
-    expect(stage3?.droppedCount).toBe(150);
-    expect(stage3?.allSymbols).toContain('NOOPT');
-    expect(stage3?.allSymbols).toContain('NOSTRIKE');
-
-    // Stage 4: Contract Rules
-    const stage4 = report.stages.find((s) => s.id === 'contract-rules');
-    expect(stage4).toBeDefined();
-    expect(stage4?.allSymbols).toContain('NVDA');
-    expect(stage4?.allSymbols).toContain('TSLA');
-    expect(stage4?.allSymbols).toContain('HIGHIV');
+describe('classifyReason', () => {
+  it('maps every backend reason to the stage its counter belongs to', () => {
+    const byStage = Object.fromEntries(REJECTED.map((r) => [r.symbol, classifyReason(r).stage]));
+    expect(byStage).toEqual({
+      PENNY: 'data-filters', TINY: 'data-filters', NODATA: 'data-filters', NOREG: 'data-filters',
+      WTREND: 'pre-screen', WVOL: 'pre-screen', ALLHI: 'pre-screen', NOBD: 'pre-screen', UNMEAS: 'pre-screen',
+      NOOPT: 'chain-window',
+      SG: 'contract-rules', NVDA: 'contract-rules', IVONLY: 'contract-rules', LOWSC: 'contract-rules', BARE: 'contract-rules',
+      DIR1: 'direction-shortlist', DIR2: 'direction-shortlist', DIR3: 'direction-shortlist',
+      CAPPED: 'direction-shortlist', ERR: 'direction-shortlist',
+    });
   });
 
-  it('identifies the primary bottleneck stage correctly', () => {
-    const report = parsePipelineDiagnostics(mockPipeline, mockRejected, ['AAPL', 'MSFT']);
-    // Pre-screen dropped 250 out of 500, which is the largest drop
-    expect(report.primaryBottleneck.stageId).toBe('pre-screen');
-    expect(report.primaryBottleneck.droppedCount).toBe(250);
-    expect(report.primaryBottleneck.insight).toContain('setup score gate rejected');
+  it('does not count an IV-only or score-only contract reject as a spread reject', () => {
+    expect(classifyReason(REJECTED.find((r) => r.symbol === 'IVONLY')!).subRules).toEqual(['iv']);
+    expect(classifyReason(REJECTED.find((r) => r.symbol === 'LOWSC')!).subRules).toEqual(['low-score']);
+    expect(classifyReason(REJECTED.find((r) => r.symbol === 'BARE')!).subRules).toEqual(['other-contract']);
+    expect(classifyReason({ symbol: 'X', reason: 'contracts rejected: dte_too_short(3), brand_new_code(1)' }).subRules)
+      .toEqual(['dte', 'other-contract']);
   });
 
-  it('identifies chain-window bottleneck when chain drops the most', () => {
-    const chainHeavyPipeline: OptionsPipeline = {
-      scanned: 300,
-      failed_data: 10,
-      failed_pre_screen: 20,
-      no_chain: 200,
-      failed_score: 10,
-      failed_contracts: 10,
-      candidates: 50,
-    };
-    const report = parsePipelineDiagnostics(chainHeavyPipeline, [], ['AAPL']);
-    expect(report.primaryBottleneck.stageId).toBe('chain-window');
-    expect(report.primaryBottleneck.droppedCount).toBe(200);
-    expect(report.primaryBottleneck.insight).toContain('DTE holding horizon eliminated');
-    expect(report.primaryBottleneck.suggestedAction).toContain('Widen DTE window');
+  it('separates an unmeasured trend from a measured one below the floor', () => {
+    expect(classifyReason(REJECTED.find((r) => r.symbol === 'UNMEAS')!).subRules).toEqual(['trend-unmeasured']);
+    expect(classifyReason(REJECTED.find((r) => r.symbol === 'DIR1')!).subRules).toEqual(['direction']);
+  });
+});
+
+describe('helpers', () => {
+  it('contractCodes reads codes before the "; best contract score" suffix only', () => {
+    expect(contractCodes('contracts rejected: spread_too_wide(14), volume_too_low(8)')).toEqual(['spread_too_wide', 'volume_too_low']);
+    expect(contractCodes('contracts rejected: contract_score_below_caution(4); best contract score 30 < caution 40'))
+      .toEqual(['contract_score_below_caution']);
+    expect(contractCodes('all contracts rejected')).toEqual([]);
   });
 
-  it('identifies contract-rules bottleneck when contract scoring drops the most', () => {
-    const contractHeavyPipeline: OptionsPipeline = {
-      scanned: 200,
-      failed_data: 5,
-      failed_pre_screen: 10,
-      no_chain: 15,
-      failed_score: 90,
-      failed_contracts: 50,
-      candidates: 30,
-    };
-    const report = parsePipelineDiagnostics(contractHeavyPipeline, [], ['AAPL']);
-    expect(report.primaryBottleneck.stageId).toBe('contract-rules');
-    expect(report.primaryBottleneck.droppedCount).toBe(140);
-    expect(report.primaryBottleneck.insight).toContain('Contract liquidity and spread rules');
+  it('weakestComponent names the lowest key, including vol, with no threshold', () => {
+    expect(weakestComponent({ trend: 70, vol: 10 })).toBe('vol');
+    expect(weakestComponent({ trend: 60, pullback: 58 })).toBe('pullback');
+    expect(weakestComponent({ trend: 30, pullback: 30 })).toBe('trend');
+    expect(weakestComponent(undefined)).toBeUndefined();
+  });
+});
+
+describe('parsePipelineDiagnostics', () => {
+  const report = parsePipelineDiagnostics(PIPELINE, REJECTED, SURVIVORS);
+
+  it('stage drops plus survivors account for the whole universe', () => {
+    expect(report.scanned).toBe(22);
+    expect(report.totalDropped).toBe(20);
+    const dropped = report.stages.reduce((n, s) => n + s.droppedCount, 0);
+    expect(dropped + report.candidatesCount).toBe(report.scanned);
+    expect(report.stages[report.stages.length - 1].remainingCount).toBe(report.candidatesCount);
   });
 
-  it('identifies data-filters bottleneck when data filters drop the most', () => {
-    const dataHeavyPipeline: OptionsPipeline = {
-      scanned: 100,
-      failed_data: 80,
-      failed_pre_screen: 5,
-      no_chain: 5,
-      failed_score: 2,
-      failed_contracts: 1,
-      candidates: 7,
-    };
-    const report = parsePipelineDiagnostics(dataHeavyPipeline, [], ['AAPL']);
-    expect(report.primaryBottleneck.stageId).toBe('data-filters');
-    expect(report.primaryBottleneck.droppedCount).toBe(80);
-    expect(report.primaryBottleneck.insight).toContain('Universe and data filters eliminated');
+  it('takes stage counts from the backend counters', () => {
+    expect(stage(report, 'data-filters').droppedCount).toBe(4);
+    expect(stage(report, 'pre-screen').droppedCount).toBe(5);         // 4 pre-screen + 1 unmeasured
+    expect(stage(report, 'chain-window').droppedCount).toBe(1);
+    expect(stage(report, 'contract-rules').droppedCount).toBe(5);     // 1 score gate + 4 contracts
+    expect(stage(report, 'direction-shortlist').droppedCount).toBe(5); // 3 direction + 1 cap + 1 other
   });
 
-  it('performs accurate symbol diagnosis lookup for survivor and rejected tickers', () => {
-    const report = parsePipelineDiagnostics(mockPipeline, mockRejected, ['AAPL', 'MSFT']);
+  it('subtracts the unmeasured-trend drops before the chain stage', () => {
+    expect(stage(report, 'pre-screen').remainingCount).toBe(22 - 4 - 5);
+  });
 
-    // Survivor lookup
-    const survivor = report.lookupSymbol('AAPL');
-    expect(survivor).not.toBeNull();
-    expect(survivor?.status).toBe('SURVIVOR');
-    expect(survivor?.stageName).toBe('Passed All Gates');
+  it('attributes pre-screen rejects to their weakest component, including vol, never defaulting to trend', () => {
+    expect(sub(report, 'pre-screen', 'weak-trend')?.symbols).toEqual(['WTREND']);
+    expect(sub(report, 'pre-screen', 'weak-vol')?.symbols).toEqual(['WVOL']);
+    expect(sub(report, 'pre-screen', 'weak-pullback')?.symbols).toEqual(['ALLHI']);
+    expect(sub(report, 'pre-screen', 'no-breakdown')?.symbols).toEqual(['NOBD']);
+    expect(sub(report, 'pre-screen', 'trend-unmeasured')?.symbols).toEqual(['UNMEAS']);
+    expect(sub(report, 'pre-screen', 'weak-regime')).toBeUndefined();
+  });
 
-    // Case insensitivity
-    const msft = report.lookupSymbol('msft');
-    expect(msft?.status).toBe('SURVIVOR');
+  it('lists score-gate and every contract rule symbol where it belongs', () => {
+    expect(sub(report, 'contract-rules', 'score-gate')?.symbols).toEqual(['SG']);
+    expect(sub(report, 'contract-rules', 'spread')?.symbols).toEqual(['NVDA']);
+    expect(sub(report, 'contract-rules', 'liquidity')?.symbols).toEqual(['NVDA']);
+    expect(sub(report, 'contract-rules', 'iv')?.symbols).toEqual(['IVONLY']);
+    expect(sub(report, 'contract-rules', 'low-score')?.symbols).toEqual(['LOWSC']);
+    expect(sub(report, 'contract-rules', 'other-contract')?.symbols).toEqual(['BARE']);
+    expect(stage(report, 'contract-rules').note).toMatch(/overlap/);
+  });
 
-    // Rejected lookup with breakdown
-    const badTrend = report.lookupSymbol('BADTREND');
-    expect(badTrend).not.toBeNull();
-    expect(badTrend?.status).toBe('REJECTED');
-    expect(badTrend?.stageName).toBe('Pre-Screen Setup Score');
-    expect(badTrend?.breakdown?.trend).toBe(20);
+  it('names the stage that dropped most as the bottleneck, including the direction stage', () => {
+    const r = parsePipelineDiagnostics(
+      { scanned: 10, failed_data: 0, failed_pre_screen: 0, no_chain: 0, failed_score: 1, failed_contracts: 2,
+        failed_direction: 6, failed_shortlist: 0, failed_direction_unmeasured: 0, other_rejected: 0, candidates: 1 },
+      [
+        { symbol: 'IVONLY', reason: 'contracts rejected: iv_too_high(9)' },
+        { symbol: 'LOWSC', reason: 'contracts rejected: contract_score_below_caution(4)' },
+        { symbol: 'SG', reason: 'Score gate: score 30 rejected' },
+        ...['A', 'B', 'C', 'D', 'E', 'F'].map((s) => ({ symbol: s, reason: 'direction_conviction: trend 20 < 40 (Bearish/Swing)' })),
+      ],
+      ['WIN'],
+    );
+    expect(r.primaryBottleneck?.stageId).toBe('direction-shortlist');
+    expect(r.primaryBottleneck?.droppedCount).toBe(6);
+    expect(r.primaryBottleneck?.insight).toContain('Direction Conviction (6)');
+  });
 
-    // Contract rejected lookup
-    const nvda = report.lookupSymbol('NVDA');
-    expect(nvda).not.toBeNull();
-    expect(nvda?.status).toBe('REJECTED');
-    expect(nvda?.stageName).toBe('Option Contract Rules');
-    expect(nvda?.detailedReason).toContain('spread_too_wide(14)');
+  it('names no bottleneck when nothing was dropped', () => {
+    const r = parsePipelineDiagnostics(
+      { scanned: 2, failed_data: 0, failed_pre_screen: 0, no_chain: 0, failed_score: 0, failed_contracts: 0, candidates: 2 },
+      [],
+      ['A', 'B'],
+    );
+    expect(r.primaryBottleneck).toBeNull();
+    expect(r.stages.every((s) => !s.isBottleneck)).toBe(true);
+    expect(r.asciiTree).not.toContain('PRIMARY BOTTLENECK');
+  });
 
-    // Direction conviction lookup
-    const lowConv = report.lookupSymbol('LOWCONV');
-    expect(lowConv).not.toBeNull();
-    expect(lowConv?.status).toBe('REJECTED');
-    expect(lowConv?.stageName).toBe('Direction Conviction');
+  it('never invents sub-rule counts when per-symbol reasons are missing', () => {
+    const r = parsePipelineDiagnostics(
+      { scanned: 500, failed_data: 0, failed_pre_screen: 300, no_chain: 0, failed_score: 0, failed_contracts: 0, candidates: 200 },
+      [],
+      [],
+    );
+    const pre = stage(r, 'pre-screen');
+    expect(pre.droppedCount).toBe(300);
+    for (const s of pre.subRules) expect(s.count).toBeNull();
+    expect(pre.note).toMatch(/breakdown unavailable/i);
+    expect(r.asciiTree).toContain(': —');
+  });
 
-    // Shortlist lookup
-    const overCap = report.lookupSymbol('OVERCAP');
-    expect(overCap).not.toBeNull();
-    expect(overCap?.status).toBe('REJECTED');
-    expect(overCap?.stageName).toBe('Shortlist Allocation');
+  it('does not double-count unmeasured trends on a result stored before that counter existed', () => {
+    const r = parsePipelineDiagnostics(
+      // failed_direction already includes the unmeasured one; no separate counter
+      { scanned: 5, failed_data: 0, failed_pre_screen: 0, no_chain: 0, failed_score: 0, failed_contracts: 0,
+        failed_direction: 2, candidates: 3 },
+      [
+        { symbol: 'U', reason: 'direction_conviction_unmeasured: trend not measured' },
+        { symbol: 'D', reason: 'direction_conviction: trend 10 < 40' },
+      ],
+      ['A', 'B', 'C'],
+    );
+    expect(r.stages.reduce((n, s) => n + s.droppedCount, 0)).toBe(2);
+  });
 
-    // Non-existent symbol
-    const unknown = report.lookupSymbol('UNKNOWN');
-    expect(unknown).toBeNull();
+  it('shows a threshold in a label only when the scan recorded it', () => {
+    expect(sub(report, 'contract-rules', 'spread')?.label).toBe('Spread Too Wide');
+    expect(sub(report, 'contract-rules', 'spread')?.ruleExplanation).toContain('contract_rules.yaml');
+    const withRules = parsePipelineDiagnostics(PIPELINE, [...REJECTED, { symbol: 'DLT', reason: 'contracts rejected: delta_too_low_far_otm(5)' }], SURVIVORS, {
+      contractRules: { max_bid_ask_spread_pct: 0.2, min_open_interest: 200, min_delta: 0.2, max_delta: 0.85 },
+      dteWindow: { min_dte: 30, max_dte: 60, multiplier: 1 },
+    });
+    expect(sub(withRules, 'contract-rules', 'spread')?.label).toBe('Spread Too Wide (> 20% of mid)');
+    expect(sub(withRules, 'contract-rules', 'liquidity')?.label).toBe('Low Liquidity (OI < 200)');
+    expect(sub(withRules, 'contract-rules', 'delta')?.label).toBe('Delta Outside Range (outside 0.2–0.85)');
+    expect(sub(withRules, 'chain-window', 'no-chain')?.label).toBe('No Option Chain Returned (30–60d)');
+    // the old literals that disagreed with contract_rules.yaml are gone
+    expect(withRules.asciiTree).not.toMatch(/15%|OI < 500|0\.30/);
+  });
 
-    // Empty or whitespace query
-    expect(report.lookupSymbol('')).toBeNull();
+  it('looks up survivors, every rejected stage, and unknown symbols', () => {
+    expect(report.lookupSymbol('aapl')?.status).toBe('SURVIVOR');
+    expect(report.lookupSymbol('SG')?.stageName).toBe('Score Gate & Contract Rules');
+    expect(report.lookupSymbol('NOREG')?.stageName).toBe('Data & Universe Filters');
+    expect(report.lookupSymbol('UNMEAS')?.primaryReason).toBe('Trend Unmeasured (direction gate, no data)');
+    expect(report.lookupSymbol('NVDA')?.primaryReason).toBe('Spread Too Wide, Low Liquidity');
+    expect(report.lookupSymbol('CAPPED')?.primaryReason).toBe('Shortlist Cap');
+    expect(report.lookupSymbol('WVOL')?.weakestComponent).toBe('vol');
+    expect(report.lookupSymbol('ERR')?.detailedReason).toBe('(no reason recorded)');
+    expect(report.lookupSymbol('ZZZZ')).toBeNull();
     expect(report.lookupSymbol('   ')).toBeNull();
   });
 
-  it('generates a clean ASCII tree with primary bottleneck indicator', () => {
-    const report = parsePipelineDiagnostics(mockPipeline, mockRejected, ['AAPL', 'MSFT']);
-    expect(report.asciiTree).toContain('Universe (500)');
-    expect(report.asciiTree).toContain('Pre-Screen Setup Score');
-    expect(report.asciiTree).toContain('<-- [PRIMARY BOTTLENECK]');
-    expect(report.asciiTree).toContain('Final Candidates: 2 Survivors');
-  });
-
-  it('handles empty / zero-data gracefully without NaN', () => {
-    const report = parsePipelineDiagnostics(undefined, [], []);
-    expect(report.scanned).toBe(0);
-    expect(report.candidatesCount).toBe(0);
-    expect(report.totalDropped).toBe(0);
-    for (const stage of report.stages) {
-      expect(Number.isNaN(stage.pctOfTotal)).toBe(false);
-      for (const sub of stage.subRules) {
-        expect(Number.isNaN(sub.pctOfStage)).toBe(false);
-        expect(Number.isNaN(sub.pctOfTotal)).toBe(false);
+  it('handles no data without NaN', () => {
+    const r = parsePipelineDiagnostics(undefined, [], []);
+    expect(r.scanned).toBe(0);
+    expect(r.primaryBottleneck).toBeNull();
+    for (const s of r.stages) {
+      expect(Number.isNaN(s.pctOfTotal)).toBe(false);
+      for (const x of s.subRules) {
+        expect(Number.isNaN(x.pctOfStage ?? 0)).toBe(false);
+        expect(Number.isNaN(x.pctOfTotal ?? 0)).toBe(false);
       }
     }
   });
 
-  it('dynamically computes sub-rule percentages when symbols are present vs fallback ratios when empty', () => {
-    // 1. With symbols present
-    const reportWithSymbols = parsePipelineDiagnostics(mockPipeline, mockRejected, ['AAPL', 'MSFT']);
-    const stage1 = reportWithSymbols.stages.find((s) => s.id === 'data-filters')!;
-    const priceSub = stage1.subRules.find((r) => r.id === 'price-filter')!;
-    // priceRejects has 1 symbol ('PENNY'), stage1 droppedCount is 20, scanned is 500
-    expect(priceSub.count).toBe(1);
-    expect(priceSub.pctOfStage).toBe(Math.round((1 / 20) * 100)); // 5%
-    expect(priceSub.pctOfTotal).toBe(Math.round((1 / 500) * 100)); // 0%
-
-    // 2. Without symbols present (fallback to estimated ratios)
-    const reportWithoutSymbols = parsePipelineDiagnostics(mockPipeline, [], ['AAPL', 'MSFT']);
-    const fallbackStage1 = reportWithoutSymbols.stages.find((s) => s.id === 'data-filters')!;
-    const fallbackPriceSub = fallbackStage1.subRules.find((r) => r.id === 'price-filter')!;
-    // Fallback ratio for price filter is 0.6 of stage1Count (20 * 0.6 = 12)
-    expect(fallbackPriceSub.count).toBe(12);
-    expect(fallbackPriceSub.pctOfStage).toBe(Math.round((12 / 20) * 100)); // 60%
-    expect(fallbackPriceSub.pctOfTotal).toBe(Math.round((12 / 500) * 100)); // 2%
+  it('survives undefined counters on a partial pipeline object', () => {
+    const r = parsePipelineDiagnostics({ scanned: 3 } as unknown as OptionsPipeline, [], ['A']);
+    for (const s of r.stages) expect(Number.isFinite(s.droppedCount)).toBe(true);
   });
 });

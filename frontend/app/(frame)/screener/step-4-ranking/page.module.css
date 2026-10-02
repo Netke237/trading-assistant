@@ -390,3 +390,10 @@
   flex-shrink: 0;
 }
 .chartBtn:hover { opacity: 1; }
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
