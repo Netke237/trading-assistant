@@ -1096,8 +1096,12 @@ export interface RiskLimits {
   maxDailyRecommendations: number;    // e.g. 5
   portfolioValue: number;             // user's total portfolio value in $
   /** Max acceptable $ loss at the exit-plan pipeline's final stop, as a
-   *  fraction of portfolioValue (e.g. 0.0375 = 3.75%). Warning-only — never
-   *  auto-clamps contract count. See docs/superpowers/plans/
+   *  fraction of portfolioValue (e.g. 0.0375 = 3.75%). The stop-based check
+   *  is warning-only and never auto-clamps. It ALSO caps option premium
+   *  (review fix #4, D5): an option order has no protective order, so the
+   *  effective single-position cap is min(maxSingleTradeExposurePct, this),
+   *  enforced server-side in `check_position_risk` and mirrored in
+   *  `checkTradeRisk`. See docs/superpowers/plans/
    *  2026-08-26-exit-plan-pipeline.md Feature C. */
   maxLossPerTradePct: number;
   /** STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): the STOCK caps, on

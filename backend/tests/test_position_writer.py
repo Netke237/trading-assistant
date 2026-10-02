@@ -219,17 +219,18 @@ async def _create_in_own_session(maker, body):
 
 @pytest.mark.asyncio
 async def test_p1a_13_two_creates_that_breach_the_total_cap_together_judge_in_turn(FileSession):
-    """Seeded 18% of 100k; each create is 4% (1 x 40.00 x 100), so each alone
-    totals 22% (fits 25%) and both together 26%."""
+    """Seeded 18.9% of 100k; each create is 3.5% (1 x 35.00 x 100, inside the
+    3.75% option premium cap, review fix #4 / D5), so each alone totals 22.4%
+    (fits 25%) and both together 25.9%."""
     async with FileSession() as db:
         db.add(PortfolioPositionModel(
             rec_id="REC-SEED", symbol="ZZZ", contract="ZZZ|1|2027-01-15|C",
-            direction="Bullish", entry_price=60.0, qty=3, entry_date="2026-07-17"))
+            direction="Bullish", entry_price=63.0, qty=3, entry_date="2026-07-17"))
         await db.commit()
     a = _body(recId="REC-A", symbol="AAA", contract="AAA|50|2027-01-15|C",
-              entryPrice=40.0, qty=1, portfolioValue=100_000)
+              entryPrice=35.0, qty=1, portfolioValue=100_000)
     b = _body(recId="REC-B", symbol="BBB", contract="BBB|50|2027-01-15|C",
-              entryPrice=40.0, qty=1, portfolioValue=100_000)
+              entryPrice=35.0, qty=1, portfolioValue=100_000)
     with _barrier_commit():
         results = await asyncio.gather(
             _create_in_own_session(FileSession, a), _create_in_own_session(FileSession, b))
@@ -239,8 +240,8 @@ async def test_p1a_13_two_creates_that_breach_the_total_cap_together_judge_in_tu
 
 @pytest.mark.asyncio
 async def test_p1a_13b_a_same_contract_race_answers_409_never_422(FileSession):
-    a = _body(recId="REC-A", entryPrice=40.0, qty=1, portfolioValue=100_000)
-    b = _body(recId="REC-B", entryPrice=40.0, qty=1, portfolioValue=100_000)
+    a = _body(recId="REC-A", entryPrice=35.0, qty=1, portfolioValue=100_000)
+    b = _body(recId="REC-B", entryPrice=35.0, qty=1, portfolioValue=100_000)
     with _barrier_commit():
         results = await asyncio.gather(
             _create_in_own_session(FileSession, a), _create_in_own_session(FileSession, b))

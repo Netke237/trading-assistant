@@ -560,7 +560,14 @@ export function checkTradeRisk(
     approved = false;
   }
 
-  if (singleExposure > limits.maxSingleTradeExposurePct) {
+  // Review fix #4 (decision D5): this check runs on the options basket only,
+  // and an option order carries no protective order, so its worst-case loss is
+  // the whole premium. `maxLossPerTradePct` therefore caps premium as well, and
+  // the effective cap is the smaller of the two. Both limits and
+  // `singleExposure` are fractions of portfolio value (0.05 = 5%). Mirrors
+  // backend `portfolio_risk.check_position_risk`; stocks never reach here.
+  const maxSingleOption = Math.min(limits.maxSingleTradeExposurePct, limits.maxLossPerTradePct);
+  if (singleExposure > maxSingleOption) {
     reasons.push('single_trade_exposure_too_high');
     approved = false;
   }

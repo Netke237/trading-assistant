@@ -82,10 +82,11 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
 
   it('names the symbol with the largest loss at stop across the basket, not the first one pinned', () => {
     // Both cards share the same mid (50) and 1 contract, so
-    // capitalAtRisk/exposure is identical and at the maxSingleTradeExposurePct
-    // boundary (5000/100000 = 5%, not > 0.05) for both — the only gate either
-    // trips is max_loss_per_trade_exceeded, isolating exactly the behavior
-    // under test. They differ only in the exit-plan stop's contract price,
+    // capitalAtRisk/exposure is identical for both: 5000/100000 = 5%. That is
+    // within maxSingleTradeExposurePct but above the 3.75% option premium cap
+    // (min with maxLossPerTradePct, review fix #4 / D5), so BOTH cards also
+    // trip single_trade_exposure_too_high; that is asserted below and is not
+    // what is under test. They differ only in the exit-plan stop's contract price,
     // which is what makes AAA's and BBB's loss at stop differ. AAA is pinned
     // first in the basket — the detail line must still name BBB, the worse
     // of the two, not the first match in insertion order.
@@ -114,7 +115,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
 
     render(<SendToBrokerDialog cards={[aaa, bbb]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick(), BBB: pick() }} onClose={noop} onSubmit={noop} />);
 
-    expect(screen.queryByText('Single trade exposure too high')).not.toBeInTheDocument();
+    expect(screen.getByText('Single trade exposure too high')).toBeInTheDocument();
     expect(screen.getByText(/Max loss at stop \(BBB\) ≈ \$4,900 \(limit \$3,750\)/)).toBeInTheDocument();
     expect(screen.queryByText(/Max loss at stop \(AAA\)/)).not.toBeInTheDocument();
   });
@@ -149,7 +150,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
     // (50 - 1) * 100 * 1 = $4,900, which exceeds the $3,750 ACCOUNT-DEFAULT
     // limit — without the override this would show a warning and force a
     // second "Submit" click. A $5,000 override raises the limit above the
-    // $4,900 loss, so the dialog must read straight through as clean.
+    // $4,900 loss, so the stop warning must go away.
     const bbb = makeCard({ symbol: 'BBB' });
 
     const { rerender } = render(
@@ -168,7 +169,10 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
         onSubmit={noop}
       />,
     );
-    expect(screen.getByText('Within risk limits.')).toBeInTheDocument();
+    // The $5,000 premium (5%) still exceeds the 3.75% option premium cap
+    // (review fix #4 / D5), so the dialog is not "clean" any more; what the
+    // override must still do is clear the stop-based warning.
+    expect(screen.getByText('Single trade exposure too high')).toBeInTheDocument();
     expect(screen.queryByText(/Max loss at stop \(BBB\)/)).not.toBeInTheDocument();
   });
 });

@@ -1297,7 +1297,7 @@ function RiskForm() {
       </Row>
       <Row
         label="Max loss per trade"
-        hint="Warning-only — checked against the exit-plan pipeline's final stop, repriced to a contract price. Overridable per-position in the Portfolio editor."
+        hint="Caps the premium of one OPTION trade (a long option with no protective order can lose all of it), so the effective option cap is the smaller of this and Max single trade exposure. Also checked against the exit-plan pipeline's final stop, repriced to a contract price; that stop check can be overridden per-position in the Portfolio editor."
         defaultValue="3.75%"
       >
         <input
