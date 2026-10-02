@@ -16,7 +16,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
-import { contextFromScanRequest } from '@/lib/scanContextFromResult';
+import { contextFromScanRequest, resultMatchesContext } from '@/lib/scanContextFromResult';
 import { api } from '@/lib/api';
 
 // Backend timestamps are real UTC-offset ISO strings (e.g. "...T18:32:10+00:00",
@@ -52,7 +52,10 @@ export function StoreHydration() {
       if (!scanResult) {
         try {
           const last = await api.getLastScan();
-          if (last) {
+          // STEP3-PARAM-REACH: not under a persisted context it was not
+          // produced for (direction, preset or hold days changed since --
+          // setContext cleared the result then, for exactly this reason).
+          if (last && resultMatchesContext(last.request_context, useScanStore.getState().context)) {
             setScanResult(last);
             setScanState('COMPLETED', toLocalWallClock(last.timestamp));
           }

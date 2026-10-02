@@ -82,7 +82,49 @@ describe('Step 6 always lists the card\'s own contract', () => {
       ctx.strikes ? Promise.reject(new Error('503')) : Promise.resolve([OTHER]));
     setup();
     render(<Step6Page />);
+    await waitFor(() => expect(getContracts).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(useScanStore.getState().contractsBySymbol.XOM).toHaveLength(1));
     expect(screen.queryByText(/Backend not running/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/outside filters/)).not.toBeInTheDocument();
+  });
+
+  /** The contract label in the row right after the "A — RECOMMENDED" label. */
+  const recommendedLabel = () => {
+    const label = screen.queryByText('A — RECOMMENDED');
+    return label?.parentElement?.nextElementSibling?.textContent ?? null;
+  };
+
+  it('the rescued row is marked and never Recommended, even when it scores highest', async () => {
+    const CARD_TOP = { ...CARD_ROW, score: 95 };
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      Promise.resolve(ctx.strikes ? [CARD_TOP] : [OTHER]));
+    setup();
+    render(<Step6Page />);
+    expect(await screen.findByText(/outside filters/)).toBeInTheDocument();
+    expect(recommendedLabel()).toMatch(/185C/);
+    expect(recommendedLabel()).not.toMatch(/190C/);
+  });
+
+  it('every row over the cap → no Recommended row, the card contract listed in the chain', async () => {
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      Promise.resolve(ctx.strikes ? [CARD_ROW] : []));
+    setup();
+    render(<Step6Page />);
+    expect(await screen.findByText(/outside filters/)).toBeInTheDocument();
+    expect(screen.queryByText('A — RECOMMENDED')).not.toBeInTheDocument();
+    expect(screen.getByText('B — FULL CHAIN')).toBeInTheDocument();
+  });
+
+  it('the table is on screen before the rescue answers', async () => {
+    let release: (v: unknown) => void = () => {};
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      ctx.strikes ? new Promise((r) => { release = r; }) : Promise.resolve([OTHER]));
+    setup();
+    render(<Step6Page />);
+    expect(await screen.findByText(/185C/)).toBeInTheDocument();
+    expect(getContracts).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/190C/)).not.toBeInTheDocument();
+    release([CARD_ROW]);
+    expect(await screen.findByText(/190C/)).toBeInTheDocument();
   });
 });

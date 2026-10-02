@@ -9,7 +9,8 @@
  */
 import '@testing-library/jest-dom';
 import { render, waitFor } from '@testing-library/react';
-import { contextFromScanRequest } from '@/lib/scanContextFromResult';
+import { contextFromScanRequest, resultMatchesContext } from '@/lib/scanContextFromResult';
+import { NAMED_UNIVERSES } from '@/lib/universeStore';
 import { rrOverridesForPlan } from '@/lib/tradeCardOverride';
 import { missingCardContracts, withCardContract } from '@/lib/step6CardContract';
 import { useScanStore } from '@/lib/scanStore';
@@ -44,19 +45,22 @@ describe('contextFromScanRequest', () => {
     });
   });
 
-  it('a list of symbols (Custom or Watchlist) is Custom', () => {
-    expect(contextFromScanRequest({ ...RC, universe: ['AAPL', 'MSFT'] })?.universe).toBe('Custom');
-    expect(contextFromScanRequest({ ...RC, universe: ['AAPL'] })?.universe).toBe('Custom');
-    expect(contextFromScanRequest({ ...RC, universe: [] })?.universe).toBe('Custom');
+  // Never 'Custom': the Stocks scan posts [context.universe], and a ticker
+  // called "Custom" would be scanned (round 1 BLOCKING).
+  it('a list of symbols (Custom or Watchlist) gets the null-context default, SP500', () => {
+    expect(contextFromScanRequest({ ...RC, universe: ['AAPL', 'MSFT'] })?.universe).toBe('SP500');
+    expect(contextFromScanRequest({ ...RC, universe: ['AAPL'] })?.universe).toBe('SP500');
+    expect(contextFromScanRequest({ ...RC, universe: [] })?.universe).toBe('SP500');
+    expect(contextFromScanRequest({ ...RC, universe: ['Custom'] })?.universe).toBe('SP500');
   });
 
   it('a named sector universe keeps its name', () => {
     expect(contextFromScanRequest({ ...RC, universe: ['SECTOR:XLE'] })?.universe).toBe('SECTOR:XLE');
   });
 
-  it('an unknown or absent preset key with hold days is Custom', () => {
-    expect(contextFromScanRequest({ ...RC, horizon_preset: 'Weekly' })?.horizonPreset).toBe('Custom');
-    expect(contextFromScanRequest({ ...RC, horizon_preset: null })?.horizonPreset).toBe('Custom');
+  it('a Custom preset keeps its own hold days', () => {
+    expect(contextFromScanRequest({ ...RC, horizon_preset: 'Custom', hold_min_days: 30, hold_max_days: 70 }))
+      .toMatchObject({ horizonPreset: 'Custom', holdMin: 30, holdMax: 70, horizon: 'Position (30–70d)' });
   });
 
   it.each([
@@ -68,8 +72,39 @@ describe('contextFromScanRequest', () => {
     ['negative hold days', { ...RC, hold_min_days: -1 }],
     ['unknown direction', { ...RC, direction: 'Neutral' }],
     ['unknown scoring horizon', { ...RC, horizon: 'Quarterly' }],
+    ['unknown preset key', { ...RC, horizon_preset: 'Weekly' }],
+    ['no preset key', { ...RC, horizon_preset: null }],
   ])('%s → null (context left as it is)', (_label, rc) => {
     expect(contextFromScanRequest(rc as never)).toBeNull();
+  });
+});
+
+describe('resultMatchesContext', () => {
+  const CTX = { direction: 'Bearish', horizonPreset: 'Quarterly', holdMin: 45, holdMax: 60 } as const;
+
+  it('matches when direction, preset and hold days agree', () => {
+    expect(resultMatchesContext(RC, CTX)).toBe(true);
+  });
+
+  it.each([
+    ['direction', { ...CTX, direction: 'Bullish' }],
+    ['preset', { ...CTX, horizonPreset: 'SemiAnnual' }],
+    ['min hold', { ...CTX, holdMin: 40 }],
+    ['max hold', { ...CTX, holdMax: 61 }],
+  ])('a different %s does not match', (_l, ctx) => {
+    expect(resultMatchesContext(RC, ctx as never)).toBe(false);
+  });
+
+  it('no record, or no context, cannot be checked and counts as matching', () => {
+    expect(resultMatchesContext(null, CTX)).toBe(true);
+    expect(resultMatchesContext(undefined, CTX)).toBe(true);
+    expect(resultMatchesContext(RC, null)).toBe(true);
+  });
+
+  it('every named universe restores under its own name', () => {
+    for (const u of NAMED_UNIVERSES) {
+      expect(contextFromScanRequest({ ...RC, universe: [u] })?.universe).toBe(u);
+    }
   });
 });
 
@@ -177,10 +212,28 @@ describe('StoreHydration restores the context of a recovered options result', ()
     expect(useScanStore.getState().context).toBeNull();
   });
 
-  it('a persisted context is never overwritten', async () => {
+  // Round 1 SHOULD-FIX: setContext cleared the result when Step 3 changed,
+  // so a reload must not bring that result back under the new context.
+  it('a persisted context the result was not produced for → the result is not restored', async () => {
     const ctx = { universe: 'DOW30', direction: 'Bullish', horizon: 'Swing (5–15d)',
       horizonPreset: 'Swing', holdMin: 5, holdMax: 15 };
     await hydrate(RESULT(RC), ctx);
+    expect(useScanStore.getState().scanResult).toBeNull();
     expect(useScanStore.getState().context).toEqual(ctx);
+  });
+
+  it('a persisted context the result matches → restored, context untouched', async () => {
+    const ctx = { universe: 'DOW30', direction: 'Bearish', horizon: 'Position (45–60d)',
+      horizonPreset: 'Quarterly', holdMin: 45, holdMax: 60 };
+    await hydrate(RESULT(RC), ctx);
+    expect(useScanStore.getState().scanResult?.scan_id).toBe('S');
+    expect(useScanStore.getState().context).toEqual(ctx);
+  });
+
+  it('a result from before the record is restored under any persisted context, as before', async () => {
+    const ctx = { universe: 'SP500', direction: 'Bullish', horizon: 'Swing (5–15d)',
+      horizonPreset: 'Swing', holdMin: 5, holdMax: 15 };
+    await hydrate(RESULT(undefined), ctx);
+    expect(useScanStore.getState().scanResult?.scan_id).toBe('S');
   });
 });

@@ -26,6 +26,18 @@ export type Universe =
   | 'SECTOR:XLU'
   | 'SECTOR:XLE';
 
+/** Every Universe a scan posts BY NAME (RunScanButton sends `[pick]`).
+ *  'Custom' and 'Watchlist' post their symbols instead. The check below
+ *  fails the typecheck when a new Universe is added here but not listed. */
+export const NAMED_UNIVERSES = [
+  'SP500', 'NDX100', 'DOW30', 'SPY',
+  'SECTOR:XLK', 'SECTOR:XLC', 'SECTOR:XLY', 'SECTOR:XLI', 'SECTOR:XLF', 'SECTOR:XLP',
+  'SECTOR:XLV', 'SECTOR:XLB', 'SECTOR:XLRE', 'SECTOR:XLU', 'SECTOR:XLE',
+] as const satisfies readonly Universe[];
+type UnlistedNamedUniverse = Exclude<Universe, 'Custom' | 'Watchlist' | typeof NAMED_UNIVERSES[number]>;
+const _everyNamedUniverseListed: [UnlistedNamedUniverse] extends [never] ? true : never = true;
+void _everyNamedUniverseListed;
+
 export type CapUnit = 'M' | 'B';
 
 interface UniverseState {
