@@ -317,11 +317,14 @@ def test_unknown_kind_and_bad_rows_are_false():
 # ── test 6: standard rules unchanged ─────────────────────────────────────────
 
 # MACD-EMA-LAG deliberately changed 'macd'/'macd_signal' (tests/test_macd_ema_lag.py
-# pins them); every other standard indicator stays pinned on main's output.
+# pins them). ALERT-INDICATOR-ID-MAP also includes the EMA seed bar, as drawn
+# by the frontend; all other readings stay pinned on main's output.
 _STANDARD_NAMES = ["ema", "ema9", "ema50", "sma", "sma50", "rsi", "atr",
                    "bb_upper", "bb_lower", "bb_mid", "vwap", "volume", "close"]
-# Pinned on main's indicator_compute before MACD-EMA-LAG (same list, same output).
-_GOLDEN_SHA = "44eb35e07f3080defb457e052ba76c030b5c0a30917ad7551d9dacc768486b6d"
+# Re-pinned against unmodified main b036a368: the previous hash no longer
+# matched that baseline. The EMA seed-only normalization below must match
+# the actual pre-ALERT-INDICATOR-ID-MAP output, not a stale historical pin.
+_GOLDEN_SHA = "2d19fee4e444a7c8740742913961f10e6f07c1a9c45ae067f80324eba9653451"
 
 
 def _golden_payload():
@@ -340,8 +343,16 @@ def _golden_payload():
     return json.dumps(out, sort_keys=True)
 
 
-def test_standard_rule_indicators_byte_for_byte_unchanged():
-    assert hashlib.sha256(_golden_payload().encode()).hexdigest() == _GOLDEN_SHA
+def test_standard_rule_indicators_unchanged_except_ema_seed_bar():
+    output = json.loads(_golden_payload())
+    # Keep the pre-change baseline checksum: only the intentional warm-up change
+    # is normalized. Any changed value after the seed (or any other indicator)
+    # must still fail the pre-change baseline regression pin.
+    for name, period in [('ema', 20), ('ema9', 9), ('ema50', 50)]:
+        assert output[name][period - 1]['value'] is not None
+        assert all(p['value'] is None for p in output[name][:period - 1])
+        output[name][period - 1]['value'] = None
+    assert hashlib.sha256(json.dumps(output, sort_keys=True).encode()).hexdigest() == _GOLDEN_SHA
 
 
 # ── test 7: the indicator_values leak is gone ────────────────────────────────
