@@ -15,14 +15,6 @@
       "expires_at": "2026-10-02T07:54:28Z",
       "note": "split into 3 (Kenneth); piece 1 skip-on-proof, drop stuck head at once",
       "task": "WATCH-RESEND-HEAD-OF-LINE"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/sharp-wozniak-6xb8pq",
-      "claimed_at": "2026-10-02T04:59:08Z",
-      "expires_at": "2026-10-02T07:59:08Z",
-      "note": "copy CONTRACT-LIQUIDITY-DTE/NO-LIVE-QUOTE ledger records to main (no code)",
-      "task": "LEDGER-RESCUE-CONTRACT-LIQUIDITY-DTE"
     }
   ]
 }
