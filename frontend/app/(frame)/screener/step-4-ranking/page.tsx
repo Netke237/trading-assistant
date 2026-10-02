@@ -26,6 +26,7 @@ import { api } from '@/lib/api';
 import { exportToXlsx } from '@/lib/export';
 import { useScanStore } from '@/lib/scanStore';
 import { cardToRow } from './cardToRow';
+import { PipelineInspector } from '@/components/organisms/PipelineInspector';
 import { trendDetailText, pullbackDetailText, triggerDetailText, eventDetailText, volDetailText } from '@/components/organisms/TradeCard';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { rankingStopCost } from '@/lib/risk';
@@ -153,8 +154,13 @@ export default function Step4Page() {
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates);
+  const pipeline = useScanStore((s) => s.scanResult?.pipeline);
+  const rejected = useScanStore((s) => s.scanResult?.rejected);
+  const contractRules = useScanStore((s) => s.scanResult?.contract_rules);
+  const dteWindow = useScanStore((s) => s.scanResult?.dte_window);
   const directionBanner = useScanStore((s) => s.scanResult?.direction_banner);
   const previousRun = useScanStore((s) => s.previousRun);
   const context = useScanStore((s) => s.context);
@@ -212,6 +218,12 @@ export default function Step4Page() {
     setCurrentPage(1);
   }
 
+  // The inspector's survivors and the button's count both come from the scan
+  // result, so the button agrees with the drawer's own "Not Ranked" badge.
+  const candidateSymbols = candidates?.map((c) => c.symbol) ?? [];
+  const filteredCount = Math.max(0,
+    (pipeline?.scanned ?? (rejected?.length ?? 0) + candidateSymbols.length) - candidateSymbols.length);
+
   if (!selected) {
     const hasRun = candidates !== undefined;
     return (
@@ -229,9 +241,30 @@ export default function Step4Page() {
             <Text size={12} tone="caution">{directionBanner}</Text>
           </div>
         )}
-        <Text size={13} tone="dim">
-          {hasRun ? 'No candidates matched the current scan criteria.' : 'Run a scan to see ranked candidates.'}
-        </Text>
+        <div className={styles.emptyState}>
+          <Text size={13} tone="dim">
+            {hasRun ? 'No candidates matched the current scan criteria.' : 'Run a scan to see ranked candidates.'}
+          </Text>
+          {hasRun && (
+            <button
+              type="button"
+              className={styles.inspectBtn}
+              onClick={() => setInspectorOpen(true)}
+            >
+              Filter Breakdown ({filteredCount} Not Ranked)
+            </button>
+          )}
+        </div>
+        <PipelineInspector
+          isDrawer
+          isOpen={inspectorOpen}
+          onClose={() => setInspectorOpen(false)}
+          pipeline={pipeline}
+          rejected={rejected}
+          survivors={candidateSymbols}
+          contractRules={contractRules}
+          dteWindow={dteWindow}
+        />
       </div>
     );
   }
@@ -242,7 +275,7 @@ export default function Step4Page() {
   const WEIGHTS = HORIZON_WEIGHTS[horizonKey];
 
   const contributions = COMPONENTS.map((c) => {
-    const raw    = selected.breakdown[c.key] ?? 0;
+    const raw    = selected.breakdown?.[c.key] ?? 0;
     const weight = WEIGHTS[c.key] ?? 0;
     const points = (raw * weight) / 100;
     return { ...c, raw, weight, points, signal: signalFor(raw) };
@@ -267,6 +300,14 @@ export default function Step4Page() {
           <header className={styles.panelHeader}>
             <Text size={13} weight={600}>Candidates</Text>
             <Text size={11} tone="secondary">{watchlist.length} ranked</Text>
+            <button
+              type="button"
+              className={styles.inspectBtn}
+              onClick={() => setInspectorOpen(true)}
+              title="Open Pipeline Root-Cause Inspector"
+            >
+              Filter Breakdown ({filteredCount} Not Ranked)
+            </button>
             <Link href="/validation" className={styles.exportBtn}>
               Validation
             </Link>
@@ -278,6 +319,7 @@ export default function Step4Page() {
               Export .xlsx
             </button>
           </header>
+
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             {/* Rides in the icon column's header (no track of its own: NAME's
                 width floor is already binding at 1920px, see COLUMNS). */}
@@ -455,6 +497,17 @@ export default function Step4Page() {
           </article>
         ))}
       </div>
+
+      <PipelineInspector
+        isDrawer
+        isOpen={inspectorOpen}
+        onClose={() => setInspectorOpen(false)}
+        pipeline={pipeline}
+        rejected={rejected}
+        survivors={candidateSymbols}
+        contractRules={contractRules}
+        dteWindow={dteWindow}
+      />
     </div>
   );
 }
