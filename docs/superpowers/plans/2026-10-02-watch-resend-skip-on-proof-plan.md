@@ -1,4 +1,4 @@
-# WATCH-RESEND-HEAD-OF-LINE, piece 1: skip on proof — plan (v3; round 3 NOT clean 0B/2S/10N, round 4 NOT clean 0B/1S/10N, all addressed)
+# WATCH-RESEND-HEAD-OF-LINE, piece 1: skip on proof — plan (v4; rounds 3/4/5 NOT clean: 0B/2S/10N, 0B/1S/10N, 0B/2S/10N; all addressed; v4 not reviewed)
 
 - **Phase:** `WATCH-RESEND-HEAD-OF-LINE`, now piece 1 of 3 (decision `WATCH-RESEND-SPLIT-2026-10-02`).
   Pieces 2 (`WATCH-RESEND-EXPIRY-ON-REENABLE`) and 3 (`WATCH-RESEND-PER-CHANNEL`) are separate phases,
@@ -91,7 +91,8 @@ rule, :746-748).
    - Probe FAILED → write the queue if it changed (counters, malformed drops), stop this watch. Nothing is
      dropped (an outage, or a second undeliverable alert right behind — see 4.1).
 4. Eligible and NOTHING valid behind `h` (nothing at all, or only malformed entries, all dropped in step
-   3) → write the queue if it changed, stop, and report the watch as PROBE-READY for this run (2.3). The
+   3) → write the queue if it changed, stop, and report the watch as PROBE-READY for this run (2.3) —
+   only when `count_failures` is True (an unreadable-config run never probes, step 3 included). The
    stored queue is then exactly `[h]`, so `_effective_view` never sees a malformed tail.
 
 Every entry is sent at most once per run.
@@ -99,7 +100,7 @@ Every entry is sent at most once per run.
 ### 2.3 A fresh event as the probe (in `_deliver_or_queue`)
 
 `_resend_pending` returns `{watch_id: failures}` for the probe-ready watches (2.2 step 4; never for a
-disabled watch or when `any_channel` is False). In `_deliver_or_queue`, for a transition `t` with
+disabled watch, when `any_channel` is False, or when `count_failures` is False). In `_deliver_or_queue`, for a transition `t` with
 `t.watch_id in probe_ready and len(t.pending) == 1` (the length check is defensive: a probe-ready watch's
 stored queue is always `[h]`), the ERROR line's `<n>` being `probe_ready[t.watch_id]`:
 
@@ -110,8 +111,14 @@ stored queue is always `[h]`), the ERROR line's `<n>` being `probe_ready[t.watch
 
 A watch is probe-ready only from step 4, so a watch whose probe (an older queued entry) failed this run
 is NOT probe-ready: its fresh transition is queued unsent behind `[h, P]`, as today. The 2.3 branch and
-each `_deliver_or_queue` call in `evaluate_and_notify` get a per-watch `try`/ERROR log, so a failure
-there cannot stop later watches' alerts (Q17).
+each `_deliver_or_queue` call in `evaluate_and_notify` get a per-watch `try`/ERROR log — the `try`
+wraps each call in `evaluate_and_notify`'s loop — so a failure there cannot stop later watches' alerts
+(Q17). An exception after a delivered fresh send but before `_commit` leaves the event neither committed
+nor queued, so a later run can fire it again (the same window class as residual 4.1-2).
+
+The drop ERROR line (2.2 and 2.3) is exactly `"strategy-watch: undeliverable alert dropped for %s after
+%d failed runs; a later alert was delivered: %s"` with the watch id, the head's failures and the DROPPED
+HEAD's `event.reason`; tests match on `"undeliverable alert dropped for <id>"`.
 
 Without this, a stop hit firing behind a stuck head would wait a full poll (4 h by default) to become the
 probe. Any other transition behind a non-empty queue is queued unsent, exactly as today.
@@ -126,9 +133,12 @@ probe. Any other transition behind a non-empty queue is queued unsent, exactly a
 
 ## 3. Files
 
-- `backend/app/services/strategy_watch_evaluator.py` (constants `_FAILURE_SPACING`,
-  `_UNDELIVERABLE_AFTER`, helper `_utcnow`, counter helpers, `_resend_watch` returns probe-ready,
-  `_resend_pending` collects it, `_deliver_or_queue` takes it, `evaluate_and_notify` wires it).
+- `backend/app/services/strategy_watch_evaluator.py`: constants `_FAILURE_SPACING`,
+  `_UNDELIVERABLE_AFTER`; helpers `_utcnow()`, `_channel_status()`, counter helpers;
+  `_resend_watch(w, any_channel, count_failures) -> int | None` (failures when probe-ready);
+  `_resend_pending(any_channel, count_failures=True) -> dict[str, int]` (so `evaluate_all`'s
+  `_resend_pending(any_channel=False)` call at :604 stays valid); `_deliver_or_queue(t, any_channel,
+  probe_ready)`; `evaluate_and_notify` wires them.
 - New `backend/tests/test_watch_resend_skip_on_proof.py`. Existing resend tests stay unchanged and must
   still pass (`test_watch_undelivered_resend.py`, `test_p4b_watch_isolation_and_delivery.py`,
   `test_composite_watch_keyerror.py`, `test_strategy_watch_evaluator.py`, `test_strategy_watch_router.py`):
@@ -152,7 +162,8 @@ probe. Any other transition behind a non-empty queue is queued unsent, exactly a
 1. Two undeliverable alerts in a row: the probe (the second) fails too, which reads as an outage; the
    watch stays blocked. Using another watch's delivery as proof would go beyond the decision's "the next
    alert"; logged as open question WATCH-RESEND-TWO-STUCK-IN-A-ROW for Kenneth (round 2 rated it gate).
-2. A crash (or failed write) between a delivered probe and the drop write: the next run sends `h` again
+2. A crash (or a failed write followed by a restart — the real store changes memory before saving,
+   `strategy_watch_store.py:266-272`) between a delivered probe and the drop write: the next run sends `h` again
    and then the probe again — a duplicate, out of order. This is the existing one-sent-but-unwritten window.
 3. A send that timed out client-side may have delivered; it counts as failed (pre-existing).
 4. Gmail SMTP has no timeout (pre-existing, `gmail.py`); a hung Gmail send blocks the run as today.
@@ -164,10 +175,17 @@ probe. Any other transition behind a non-empty queue is queued unsent, exactly a
 ## 5. Tests (`backend/tests/test_watch_resend_skip_on_proof.py`)
 
 Harness: the in-memory `_Store` and the `_Env` harness of `test_watch_undelivered_resend.py` (:26-55,
-:105-136), which patches `{_EV}.read_notification_config` — so `_channel_status` runs for real and
-`_any_channel_enabled` is NOT patched; `{_EV}.notify_enabled_channels` patched with a fake that decides
+:105-136), imported (`from tests.test_watch_undelivered_resend import _Store, _Env, _sw, _entry, _ARMED`;
+that file is not modified). `_Env.run` patches `read_notification_config` with a fixed `(cfg, True)`, so
+the new file defines `class _CfgEnv(_Env)` with a `cfg_reader` attribute (`{"return_value": ...}` or
+`{"side_effect": ...}`) whose `run` re-enters the same patch stack with
+`patch(f"{_EV}.read_notification_config", **self.cfg_reader)` — so `_channel_status` runs for real,
+including its raising branch, and `_any_channel_enabled` is NOT patched. Entries get distinct `reason`s
+(`_entry` builds `"AAPL <event_type>"`, so pass reasons explicitly); `{_EV}.notify_enabled_channels` patched with a fake that decides
 and counts on the event's REASON line in the body (head and probe can share a subject); `{_EV}._utcnow`
-patched; `_collect` patched where a test needs a fresh transition. Test 1 is also run on the real YAML
+patched. A fresh transition comes from the REAL `_collect` through `_Env` (the head's `new_state` armed
+with `stop_price` above `env.close`, as test_1 at :137), never a patched `_collect` — a patched one would
+hand `_queue` a stale `t.pending` without this run's counters. Test 1 is also run on the real YAML
 store REBUILT from disk before each run (`StrategyWatchStore(path=path)`, the pattern at
 `test_watch_undelivered_resend.py:322-335`), which catches an in-place change that was never written.
 
@@ -179,22 +197,26 @@ store REBUILT from disk before each run (`StrategyWatchStore(path=path)`, the pa
    counted → probe. *Kills `>=` → `>` and off-by-one.*
 2b. Stored failures 3, this run inside the spacing → still probes. *Kills "probe only when this run's
    failure counted".*
-2c. `read_notification_config` returning `({}, False)` for 3 spaced runs, and separately raising → failures
-   stay 0, no probe sent (only the head's send per run); a `last_failure_at` in the future counts as
-   absent.
+2c. Unreadable config, each case run twice (`cfg_reader` returning `({}, False)`, and raising):
+   (a) stored failures 0, 3 spaced runs → failures stay 0;
+   (b) stored failures 3, `last_failure_at` > 1 h earlier, queue `[h, P]`, fake delivering everything but
+       h → exactly one notify call (h), P not sent, nothing dropped, failures still 3;
+   (c) same head alone plus a fresh stop hit → exactly one notify call, the fresh event queued unsent,
+       queue `[h, fresh]`. *Kills probe-ready / probing on an unreadable run and readable=True on a raise.*
 3. Spacing: three runs within 10 minutes → failures 1; a run at +61 min → 2. *Kills spacing removed.*
 4. Outage: every send fails for 6 spaced runs → failures reach 6, probes from run 3 fail, nothing dropped,
    committed state unchanged, order intact. *Kills dropping on a failed probe.*
 5. After the drop, the walk continues: head poison, behind it A then B; A delivers as probe, B delivered
    in the same run, in order; queue empty.
-6. Head drop then a NEW stuck head: behind the poison, entry P2 that also always fails → probe P2 fails →
+6. Two stuck in a row, nothing dropped: behind the poison, entry P2 that also always fails → probe P2 fails →
    nothing dropped (residual 4.1-1 pinned as behaviour).
 7. Fresh event as the probe: head alone with failures 3 (stored), run with a fresh stop hit → head send
    fails, the stop hit is sent unlabelled (no "Delayed"), delivered → head dropped, state = the stop hit's
    new_state, no queue. Fresh probe failing → queued behind the head, head counters as written. *Kills
    the 4-hour delay (2.3) and a Delayed label on the fresh probe.*
 8. Head alone, eligible, no fresh event → only the head is sent; nothing dropped.
-9. Malformed entry behind an eligible head is dropped and the following one is probed. `[h, P, M]` with P
+9. Malformed entry (a non-dict `new_state`, e.g. `"x"`) behind an eligible head is dropped and the
+   following one is probed. `[h, P, M]` with P
    failing → M is not reached and stays (dropped when a walk reaches it); `[h, M]` with M malformed → M dropped and WRITTEN even though counters did not
    change, the watch is probe-ready, the stored queue is `[h]`, and this run's `_collect` evaluates the
    watch (no "skipped" ERROR).
@@ -202,8 +224,9 @@ store REBUILT from disk before each run (`StrategyWatchStore(path=path)`, the pa
    calls (h, P), the fresh event never sent, queue `[h, P, fresh]`, nothing dropped, committed unchanged.
    *Kills probe-ready on any eligible head.*
 10. Old-shape entries (no counters) and malformed counters (`"x"`, `-1`, `true`, unparseable
-    `last_failure_at`, naive datetime) behave as 2.1 says.
-11. Each entry sent at most once per run: count `notify_enabled_channels` calls per subject in test 1's
+    `last_failure_at`, naive datetime) behave as 2.1 says; a stored `last_failure_at` = now + 2 h on a
+    readable run → the head's failure counts (failures + 1).
+11. Each entry sent at most once per run: count `notify_enabled_channels` calls per REASON in test 1's
     run 3 and test 5.
 12. `any_channel` False: an eligible head is committed unsent, no probe.
 13. `_Store.raise_on(id, pred)` with `pred` matching only the drop write (`update_state` raises; `_write`
@@ -212,6 +235,7 @@ store REBUILT from disk before each run (`StrategyWatchStore(path=path)`, the pa
     h, P in that order.
 14. Counters survive `_queue` appends and `_write_effective` on a single-entry queue (the head is also the
     tail); a head evicted by the cap takes its counters with it and the new head starts at 0.
-15. A `_deliver_or_queue` raising for one watch → later watches' transitions are still delivered.
+15. `{_EV}._deliver_or_queue` patched with a wrapper that raises for one `watch_id` and calls the real one
+    otherwise → later watches' transitions are still delivered.
 
 Gates: backend pytest full; `python3 scripts/state.py` exit 0.
