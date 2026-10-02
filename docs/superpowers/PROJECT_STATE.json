@@ -1602,8 +1602,8 @@
     {
       "id": "WATCH-RESEND-EXPIRY-ON-REENABLE",
       "name": "Piece 2 of 3: queued watch alerts older than a max age are dropped when the watch is re-enabled (strategy and composite routes)",
-      "status": "not_started",
-      "audit_rounds": 0,
+      "status": "in_progress",
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
@@ -1612,7 +1612,8 @@
         "pattern": "^_REENABLE_MAX_AGE = ",
         "note": "BUILT once the max-age constant exists."
       },
-      "note": "Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 section 2.8 and its round-1/2 findings (R1-1, R1-5, R1-13). Own plan, three plan rounds."
+      "note": "2026-10-02 PLAN ROUND 2 CLEAN on the v1->v2 delta (1fb51cf), fresh reviewer: 0 gate-level findings (one below-gate caveat: an exact == IDLE check would fail on the real store because update_state merges _fresh_state; test 2 runs on _Store). Plan stage closed; build test-first, code stage starts at round 3 = code round 1 of 3. Branch claude/infallible-hertz-c2c2d9. || 2026-10-02 PLAN ROUND 1 NOT CLEAN on v1 (05aa964), fresh reviewer: 0 blocking / 1 should-fix: S1 test 2 built with _e's default IDLE for both entries would not kill 'commit the first dropped' -- fixed in v2 (7 d -> _ARMED, 6 d -> IDLE). || 2026-10-02 PLAN v1: set_enabled_and_expire(store, id, enabled) in the evaluator under _run_lock(); only a disabled->enabled change drops the leading entries with fired_at older than 5 days (unparseable/non-dict -> expired, naive = UTC), commits the last dropped new_state, expiry write before set_enabled and raising (never enabled with stale alerts saved); both PATCH routes return expired_alerts. Max age 5 calendar days confirmed by Kenneth (decision WATCH-RESEND-REENABLE-MAX-AGE-2026-10-02). || Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 section 2.8 and its round-1/2 findings (R1-1, R1-5, R1-13). Own plan, three plan rounds.",
+      "plan": "docs/superpowers/plans/2026-10-02-watch-resend-expiry-on-reenable-plan.md"
     },
     {
       "id": "WATCH-RESEND-PER-CHANNEL",
@@ -3147,6 +3148,11 @@
       "id": "WATCH-RESEND-P1-BUILD-FROM-V4-2026-10-02",
       "q": "WATCH-RESEND-HEAD-OF-LINE piece 1 used its three plan rounds (3-5) without a clean one (0B/2S, 0B/1S, 0B/2S; all test or wording findings, design unchanged since v1). Build from v4, one more plan round, or park?",
       "a": "Kenneth, 2026-10-02: BUILD FROM V4 -- the plan stage closes by decision (as for WATCHLIST-SCAN-CONTRACT-RULES); build test-first, then code rounds until one is clean (code stage has its own cap of three). state.py keeps reporting the round cap as drift until a code round comes back clean."
+    },
+    {
+      "id": "WATCH-RESEND-REENABLE-MAX-AGE-2026-10-02",
+      "q": "WATCH-RESEND-EXPIRY-ON-REENABLE: when a paused watch is re-enabled, queued alerts older than how long are dropped instead of sent as Delayed?",
+      "a": "Kenneth, 2026-10-02: 5 calendar days (_REENABLE_MAX_AGE = timedelta(days=5) in strategy_watch_evaluator.py; his value to change)."
     }
   ],
   "pending_kenneth": [
