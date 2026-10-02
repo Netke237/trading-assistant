@@ -21,6 +21,10 @@ interface CandidateNavProps {
   onSelect:      (symbol: string) => void;
   onTogglePin:   () => void;
   onRemovePin:   (symbol: string) => void;
+  /** The active candidate may not be pinned (e.g. an earnings veto). An
+   *  already-pinned candidate can still be un-pinned. */
+  pinDisabled?:  boolean;
+  pinDisabledReason?: string;
 }
 
 export function CandidateNav({
@@ -32,6 +36,8 @@ export function CandidateNav({
   onSelect,
   onTogglePin,
   onRemovePin,
+  pinDisabled = false,
+  pinDisabledReason,
 }: CandidateNavProps) {
   const idx     = symbols.indexOf(activeSymbol);
   const atFirst = idx <= 0;
@@ -73,7 +79,8 @@ export function CandidateNav({
           className={`${styles.pinBtn} ${pinned ? styles.pinBtnOn : ''}`}
           onClick={onTogglePin}
           aria-pressed={pinned}
-          title={pinned ? 'Remove from basket' : 'Pin to basket'}
+          disabled={pinDisabled && !pinned}
+          title={pinned ? 'Remove from basket' : pinDisabled && pinDisabledReason ? pinDisabledReason : 'Pin to basket'}
         >
           {pinned ? '★ Pinned' : '☆ Pin to basket'}
         </button>

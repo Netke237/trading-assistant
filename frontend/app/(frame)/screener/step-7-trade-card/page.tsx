@@ -50,6 +50,10 @@ import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
 
+/** Fix #3 (review). The reason shown beside the disabled send controls when
+ *  the backend vetoed the card (earnings inside the scan's reject window). */
+const EARNINGS_VETO_MESSAGE = 'Earnings inside the reject window — no send';
+
 function nowISOLocal(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -1082,6 +1086,8 @@ export default function Step7Page() {
   async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
+    // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
+    if (card.earningsVeto === true) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
     // `disabled` protects the button and this protects the ORDER -- anything
     // that reaches this function by another route inherits the refusal.
@@ -1267,13 +1273,21 @@ export default function Step7Page() {
 
   const marketBlocked = directOrderBlock('MKT', selectedBroker);
 
+  // Fix #3 (review, High). The backend sets `earningsVeto` when earnings fall
+  // inside the scan's reject window (and forces finalStatus REJECT). Strictly
+  // `=== true`: absent/false leaves every send path as it was.
+  const earningsVeto = effectiveCard?.earningsVeto === true;
+
   const idx = symbols.indexOf(active);
 
   const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
   const goNext = () => { if (idx >= 0 && idx < symbols.length - 1) setActive(symbols[idx + 1]!); };
 
-  const togglePin = () =>
+  const togglePin = () => {
+    // Fix #3 (review). A vetoed card never enters the basket (un-pinning is fine).
+    if (earningsVeto && !basket.includes(active)) return;
     setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
+  };
   const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
 
   const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
@@ -1399,6 +1413,8 @@ export default function Step7Page() {
         onSelect={setActive}
         onTogglePin={togglePin}
         onRemovePin={removePin}
+        pinDisabled={earningsVeto}
+        pinDisabledReason={EARNINGS_VETO_MESSAGE}
       />
 
       {cards.length === 0 && (
@@ -1512,9 +1528,10 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto}
                   title={
-                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
                   }
@@ -1525,10 +1542,11 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || marketBlocked != null}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || marketBlocked != null}
                   title={
                     // The broker refusal wins: filling a field cannot cure it.
                     marketBlocked != null ? marketBlocked
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
@@ -1537,6 +1555,14 @@ export default function Step7Page() {
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
               </div>
+              {/* Fix #3 (review). Said, not merely disabled; independent of the
+                * stop / pick refusals below for the same reason they are
+                * independent of each other. */}
+              {earningsVeto && (
+                <Text size={11} tone="reject">
+                  {EARNINGS_VETO_MESSAGE}
+                </Text>
+              )}
               {!planReady && (
                 <Text size={11} tone="caution">
                   Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
@@ -1566,7 +1592,7 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
-              {planReady && (
+              {planReady && !earningsVeto && (
                 <AutoTradeArm
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all

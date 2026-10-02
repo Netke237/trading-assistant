@@ -142,3 +142,72 @@ it('R3: mounting fetches the IV thresholds', () => {
   render(<TradeCardContextRail />);
   expect(api.getIvThresholds).toHaveBeenCalledTimes(1);
 });
+
+/* ── Fix #3 (review): the earnings gate reads the SCAN's window ───────────── */
+
+const EARNINGS_LABEL = 'Earnings outside reject window';
+
+/** The earnings row's verdict, as the row publishes it. */
+function earningsStatus(): string | null {
+  return document.querySelector(`[data-gate-label="${EARNINGS_LABEL}"], [data-gate-label="Earnings date"]`)
+    ?.getAttribute('data-status') ?? null;
+}
+
+function scanWith(eventWindow: { reject_days: number; caution_days: number } | undefined) {
+  act(() => {
+    useScanStore.setState({
+      scanResult: { scan_id: 's', candidates: [AUTO], event_window: eventWindow } as any,
+    } as any);
+  });
+}
+
+function publish(over: Partial<TradeCardData>) {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: card(over), rrPending: false } }); });
+}
+
+describe('earnings gate uses the scan-echoed window, not a fixed 7/3 days', () => {
+  it('judges earnings against the scan window (21/45): 10d is REJECT, 30d is CAUTION, 60d is PASS', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+
+    publish({ nextEventDays: 10 });
+    const first = render(<TradeCardContextRail />);
+    // Under the old fixed 7/3 window 10d was a PASS.
+    expect(screen.getByText(EARNINGS_LABEL)).toBeInTheDocument();
+    expect(screen.queryByText('Earnings > 7d away')).not.toBeInTheDocument();
+    expect(earningsStatus()).toBe('REJECT');
+    expect(screen.getByText("Next event in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    first.unmount();
+
+    publish({ nextEventDays: 30 });
+    const second = render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('CAUTION');
+    expect(screen.getByText("Next event in 30d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    second.unmount();
+
+    publish({ nextEventDays: 60 });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('PASS');
+    expect(screen.getByText("Next event in 60d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+  });
+
+  it('shows CAUTION, naming a re-run, when the scan echoed no window', () => {
+    scanWith(undefined);
+    publish({ nextEventDays: 30 });
+    render(<TradeCardContextRail />);
+    // 30d would be PASS under 7/3; with no window in hand it is never PASS.
+    expect(screen.getByText(EARNINGS_LABEL)).toBeInTheDocument();
+    expect(earningsStatus()).toBe('CAUTION');
+    expect(screen.getByText('Next event in 30d — this scan carried no event window; re-run the scan.')).toBeInTheDocument();
+  });
+
+  it('shows CAUTION "Earnings date" when the earnings date is unknown', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    publish({ nextEventDays: null, earningsUnknown: true });
+    render(<TradeCardContextRail />);
+    expect(screen.getByText('Earnings date')).toBeInTheDocument();
+    expect(earningsStatus()).toBe('CAUTION');
+    expect(screen.getByText('No earnings date on file — check the calendar before sending.')).toBeInTheDocument();
+    // No days figure, so no window-based gate beside it.
+    expect(screen.queryByText(EARNINGS_LABEL)).not.toBeInTheDocument();
+  });
+});
