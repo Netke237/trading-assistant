@@ -1,4 +1,4 @@
-# WATCH-RESEND-EXPIRY-ON-REENABLE (piece 2 of 3) — plan v1 (not yet reviewed)
+# WATCH-RESEND-EXPIRY-ON-REENABLE (piece 2 of 3) — plan v2 (round 1: 0 blocking / 1 should-fix, fixed; v2 not reviewed)
 
 - **Phase:** `WATCH-RESEND-EXPIRY-ON-REENABLE` (decision `WATCH-RESEND-SPLIT-2026-10-02`).
 - **Starting material:** combined plan `2026-10-01-watch-resend-head-of-line-plan.md` v2 §2.8 and its
@@ -107,8 +107,9 @@ Clock: `_utcnow` patched to `T0`; entries built with `fired_at = T0 - age`.
 1. Disabled watch, pending `[6 d, 4 d]`, enable → returns 1; pending = `[4 d entry]` byte-identical
    (its `failures`/`last_failure_at` kept); committed = the 6 d entry's `new_state`; watch enabled;
    one WARNING naming the watch and the dropped reason.
-2. All old `[7 d, 6 d]` → returns 2; no `pending_events`; stored state = the 6 d entry's `new_state`
-   (= the effective state before). Fails on main (no function) and on "commit the first dropped".
+2. All old `[7 d, 6 d]` with DIFFERENT new_states (7 d → `_ARMED`, 6 d → `IDLE`) → returns 2; no
+   `pending_events`; stored state = the 6 d entry's `IDLE` (= the effective state before). Fails on main
+   (no function) and on "commit the first dropped" (which would store `_ARMED`). [r1 S1]
 3. Boundary: exactly 5 d → kept; 5 d + 1 s → dropped. Kills `<` → `<=`.
 4. Already enabled, old entries, PATCH enabled=true → returns 0, queue untouched, no state write.
    Kills "expire on every enable".
