@@ -15,6 +15,14 @@
       "expires_at": "2026-10-02T07:54:28Z",
       "note": "split into 3 (Kenneth); piece 1 skip-on-proof, drop stuck head at once",
       "task": "WATCH-RESEND-HEAD-OF-LINE"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/sharp-wozniak-6xb8pq",
+      "claimed_at": "2026-10-02T04:59:05Z",
+      "expires_at": "2026-10-02T07:59:05Z",
+      "note": "audit + merge claude/practical-rosalind-a6ad35 (claim.py CRLF ledger fix)",
+      "task": "CLAIMS-WINDOWS-CRLF"
     }
   ]
 }
