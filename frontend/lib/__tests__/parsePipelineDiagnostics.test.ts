@@ -270,7 +270,7 @@ describe('parsePipelineDiagnostics — current results', () => {
 
   it('shows a threshold in a label only for the rule the scan recorded it for', () => {
     expect(sub(report, 'contract-rules', 'spread')?.label).toBe('Spread Too Wide');
-    expect(sub(report, 'contract-rules', 'spread')?.ruleExplanation).toContain('contract_rules.yaml');
+    expect(sub(report, 'contract-rules', 'spread')?.ruleExplanation).toMatch(/not recorded/);   // no contract_rules on this result
     const extra: RejectedEntry[] = [
       { symbol: 'DLT', reason: 'contracts rejected: delta_too_low_far_otm(5)' },
       { symbol: 'OI', reason: 'contracts rejected: open_interest_too_low(5)' },
@@ -413,10 +413,48 @@ describe('parsePipelineDiagnostics — round-2 regressions', () => {
 
   it('does not call a 0 trend a measured weakness — it is also the insufficient-data value', () => {
     const entry = { symbol: 'NEWIPO', reason: 'Pre-screen: score 15 rejected', breakdown: PRE_BD({ trend: 0 }) };
-    expect(classifyReason(entry).subRules).toEqual(['zero-trend']);
+    expect(classifyReason(entry).subRules).toEqual(['ambiguous-trend']);
     const r = parsePipelineDiagnostics({ ...ZERO, scanned: 2, failed_pre_screen: 1, candidates: 1 }, [entry], ['A']);
-    expect(sub(r, 'pre-screen', 'zero-trend')?.label).toBe('Trend Scored 0 (failing or unmeasured)');
+    expect(sub(r, 'pre-screen', 'ambiguous-trend')?.label).toBe('Trend at a Placeholder Score (failing or unmeasured)');
     expect(r.primaryBottleneck?.suggestedAction).toMatch(/price history/);
+  });
+
+  it('treats the relative-strength trend placeholder (50, no benchmark) as ambiguous too', () => {
+    const entry = { symbol: 'NOBENCH', reason: 'Pre-screen: score 60 rejected',
+      breakdown: PRE_BD({ trend: 50, pullback: 70, trigger: 80, event: 90 }) };
+    expect(classifyReason(entry).subRules).toEqual(['ambiguous-trend']);
+  });
+
+  it('does not highlight a vol placeholder as the weakest reading in a score-gate lookup', () => {
+    const r = parsePipelineDiagnostics(undefined,
+      [{ symbol: 'NOIV', reason: 'Score gate: score 30 rejected', breakdown: { trend: 60, pullback: 55, trigger: 70, event: 80, vol: 50 } }], []);
+    expect(r.lookupSymbol('NOIV')?.weakestComponent).toBeUndefined();
+  });
+
+  it('says a threshold is unknown when the scan did not record its rules, and YAML only when it recorded none', () => {
+    const e = [{ symbol: 'X', reason: 'contracts rejected: spread_too_wide(3)' }];
+    const unknown = parsePipelineDiagnostics(undefined, e, [], { contractRules: null });
+    expect(sub(unknown, 'contract-rules', 'spread')?.ruleExplanation).toMatch(/not recorded/);
+    const yaml = parsePipelineDiagnostics(undefined, e, [], { contractRules: {} });
+    expect(sub(yaml, 'contract-rules', 'spread')?.ruleExplanation).toMatch(/contract_rules\.yaml/);
+  });
+
+  it('points every Step-3-controllable contract cause at Step 3', () => {
+    const cases: Array<[string, RegExp]> = [
+      ['delta_too_low_far_otm', /minimum delta/],
+      ['dte_too_short', /horizon/],
+      ['too_many_soft_failures', /Preferred/],
+      ['contract_score_below_caution', /Preferred/],
+    ];
+    for (const [code, re] of cases) {
+      const r = parsePipelineDiagnostics(undefined,
+        ['X', 'Y'].map((s) => ({ symbol: s, reason: `contracts rejected: ${code}(3)` })), ['A']);
+      expect(r.primaryBottleneck?.adjustHref).toBe('/screener/step-3-direction');
+      expect(r.primaryBottleneck?.suggestedAction).toMatch(re);
+    }
+    const iv = parsePipelineDiagnostics(undefined,
+      ['X', 'Y'].map((s) => ({ symbol: s, reason: 'contracts rejected: iv_too_high(3)' })), ['A']);
+    expect(iv.primaryBottleneck?.adjustHref).toBeNull();
   });
 
   it('says confidence can cap the score gate but not the pre-screen', () => {

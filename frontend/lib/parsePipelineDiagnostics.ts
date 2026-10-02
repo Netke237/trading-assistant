@@ -124,8 +124,17 @@ export function weakestComponent(bd?: Record<string, number>, excludeVol = false
   return keys.reduce((best, k) => (bd[k] < bd[best] ? k : best));
 }
 
-/** Components whose score 0 is also the scorer's "insufficient data" value. */
-const ZERO_AMBIGUOUS = ['trend', 'pullback'];
+/** Scores the scorer also returns as an "unmeasured" placeholder, so the
+ *  breakdown (which carries no `measured` flag) cannot tell a real reading
+ *  from a missing one: trend/pullback 0 on insufficient history, trend 50
+ *  from the relative-strength method with no benchmark, vol 50 with no IV. */
+const PLACEHOLDER_SCORES: Record<string, number[]> = { trend: [0, 50], pullback: [0], vol: [50] };
+
+export function isPlaceholderScore(component: string, score: number): boolean {
+  return (PLACEHOLDER_SCORES[component] ?? []).includes(score);
+}
+
+const AMBIGUOUS_COMPONENTS = ['trend', 'pullback'];
 
 /** Contract-validator reject code → sub-rule id (one per threshold). */
 const CONTRACT_CODE_RULE: Record<string, string> = {
@@ -166,12 +175,10 @@ export function classifyReason(entry: RejectedEntry): Classified {
   if (reason.startsWith('Pre-screen:')) {
     const weak = weakestComponent(entry.breakdown, true);
     if (!weak) return { stage: 'pre-screen', subRules: ['no-breakdown'] };
-    // The scorer returns trend/pullback 0 both for a real failure and for
-    // insufficient history (stock_scorer `insufficient_data`), and the
-    // breakdown carries no `measured` flag — so a 0 there is not attributed
-    // as a measured weakness.
-    if (ZERO_AMBIGUOUS.includes(weak) && entry.breakdown![weak] === 0) {
-      return { stage: 'pre-screen', subRules: [`zero-${weak}`] };
+    // A weakest component sitting at an unmeasured-placeholder value is not
+    // attributed as a measured weakness (see PLACEHOLDER_SCORES).
+    if (isPlaceholderScore(weak, entry.breakdown![weak])) {
+      return { stage: 'pre-screen', subRules: [`ambiguous-${weak}`] };
     }
     return { stage: 'pre-screen', subRules: [`weak-${weak}`] };
   }
@@ -212,6 +219,11 @@ const SCORE_GATE_CAVEAT = 'REJECT comes from the score band or from a demote-onl
 
 function contractSubRuleDefs(rules: Record<string, number> | null | undefined): SubRuleDef[] {
   // One sub-rule per threshold, so a label's threshold is the one its symbols failed.
+  // `{}` (or an object without the key) means the scan overrode nothing, so
+  // the YAML applied; null/undefined means the scan did not record its rules
+  // (recording failed, or a result older than the field), so the threshold
+  // that judged the contracts is unknown.
+  const recorded = rules !== null && rules !== undefined;
   const thresholdRule = (
     id: string, base: string, key: string, render: (v: number) => string, what: string,
   ): SubRuleDef => {
@@ -221,12 +233,14 @@ function contractSubRuleDefs(rules: Record<string, number> | null | undefined): 
       label: v !== undefined ? `${base} (${render(v)})` : base,
       explanation: `${what} ${v !== undefined
         ? 'Threshold: the Step-3 override this scan recorded.'
-        : `Threshold: contract_rules.yaml \`${key}\` (no Step-3 override recorded for this scan).`}`,
+        : recorded
+          ? `Threshold: contract_rules.yaml \`${key}\` (this scan recorded no Step-3 override for it).`
+          : 'Threshold not recorded for this scan.'}`,
     };
   };
   return [
     { id: 'score-gate', label: 'Score Gate (re-scored with IV)',
-      explanation: `Re-scored once the chain supplied IV, and the status was REJECT. ${SCORE_GATE_CAVEAT}` },
+      explanation: `Re-scored after the chain fetch (with IV when the chain supplied one; otherwise vol stays a placeholder), and the status was REJECT. ${SCORE_GATE_CAVEAT}` },
     thresholdRule('min-stock-score', 'Stock Score Below Contract Minimum', 'min_stock_score',
       (v) => `< ${fmtNum(v)}`, 'Every contract was rejected because the stock score is below the minimum the contract rules require.'),
     thresholdRule('spread', 'Spread Too Wide', 'max_bid_ask_spread_pct',
@@ -254,9 +268,21 @@ function contractSubRuleDefs(rules: Record<string, number> | null | undefined): 
   ];
 }
 
-/** Contract sub-rules whose threshold Step 3 exposes for options scans
- *  (PARAM_DEFS, section 'options'). Anything else lives only in YAML. */
-const STEP3_CONTRACT_RULES = new Set(['spread', 'volume', 'oi', 'delta-high']);
+/** Contract sub-rules Step 3 can move for an options scan, and how. The
+ *  hard thresholds are PARAM_DEFS (section 'options'); DTE follows the
+ *  horizon/hold window; soft failures and the contract score follow the
+ *  Preferred floors. Everything else (min stock score, IV ceilings, unnamed)
+ *  lives only in contract_rules.yaml. */
+const STEP3_CONTRACT_ADVICE: Record<string, string> = {
+  spread: 'the bid-ask spread ceiling',
+  volume: 'the minimum option volume',
+  oi: 'the minimum open interest',
+  'delta-low': 'the minimum delta',
+  'delta-high': 'the maximum delta',
+  dte: 'the horizon / hold window (the DTE limits follow it)',
+  'soft-failures': 'the Preferred volume / open-interest / spread floors (each missed floor is a soft failure)',
+  'low-score': 'the Preferred volume / open-interest / spread floors (they drive the contract score)',
+};
 
 // ── Report ──────────────────────────────────────────────────────────────────
 
@@ -391,10 +417,10 @@ export function parsePipelineDiagnostics(
       label: `Lowest Weighted Component: ${COMPONENT_LABELS[k]}`,
       explanation: `Status REJECT at the pre-screen, and ${COMPONENT_LABELS[k]} was the lowest of the weighted components — a pointer, not the rule that fired. ${PRE_SCREEN_CAVEAT}`,
     })),
-    ...ZERO_AMBIGUOUS.filter((k) => listed('pre-screen', `zero-${k}`) > 0).map((k) => ({
-      id: `zero-${k}`,
-      label: `${COMPONENT_LABELS[k]} Scored 0 (failing or unmeasured)`,
-      explanation: `${COMPONENT_LABELS[k]} was the lowest component at 0 — which the scorer returns both for a genuine failure and for too little price history to measure it. The breakdown cannot tell which.`,
+    ...AMBIGUOUS_COMPONENTS.filter((k) => listed('pre-screen', `ambiguous-${k}`) > 0).map((k) => ({
+      id: `ambiguous-${k}`,
+      label: `${COMPONENT_LABELS[k]} at a Placeholder Score (failing or unmeasured)`,
+      explanation: `${COMPONENT_LABELS[k]} was the lowest component, at a value (${PLACEHOLDER_SCORES[k].join(' or ')}) the scorer also returns when it cannot measure it — too little price history, or no benchmark. The breakdown cannot tell which.`,
     })),
     { id: 'no-breakdown', label: 'Rejected (no component breakdown recorded)',
       explanation: 'Status REJECT at the pre-screen; the scan did not record a component breakdown for these symbols.' },
@@ -522,16 +548,16 @@ export function parsePipelineDiagnostics(
       case 'pre-screen':
         suggestedAction = top?.id === 'trend-unmeasured'
           ? 'Unmeasured trends are missing bars or benchmark data, not a setting.'
-          : top?.id.startsWith('zero-')
-            ? 'A component scored 0 — check whether these symbols have enough price history before changing any parameter.'
+          : top?.id.startsWith('ambiguous-')
+            ? 'The weakest component sits at a placeholder score — check these symbols\' price history and the benchmark before changing any parameter.'
             : 'Look up a few rejected symbols: a weak weighted component points at its Step-3 scoring parameters; a high score that was still rejected points at a gate cap (regime, fundamentals).';
         break;
       case 'chain-window':
         suggestedAction = `Review the horizon / hold window in Step 3${dteText ? ` (this scan's DTE window was ${dteText})` : ''}, and check the options data source.`;
         break;
       case 'contract-rules':
-        if (top && STEP3_CONTRACT_RULES.has(top.id)) {
-          suggestedAction = `The largest cause is a contract rule Step 3's Execution Parameters can change (${top.label}).`;
+        if (top && STEP3_CONTRACT_ADVICE[top.id]) {
+          suggestedAction = `The largest cause is ${top.label}; in Step 3 it follows ${STEP3_CONTRACT_ADVICE[top.id]}.`;
         } else if (top?.id === 'score-gate') {
           suggestedAction = 'Look up a few rejected symbols: a weak weighted component points at its Step-3 scoring parameters; a high score that was still rejected points at a gate cap (regime, fundamentals, confidence).';
         } else {
@@ -611,7 +637,11 @@ export function parsePipelineDiagnostics(
       primaryReason: c.subRules.map((s) => subLabel.get(`${c.stage}/${s}`) ?? s).join(', '),
       detailedReason: item.reason || '(no reason recorded)',
       breakdown: item.breakdown,
-      weakestComponent: weakestComponent(item.breakdown, c.stage === 'pre-screen'),
+      weakestComponent: (() => {
+        const w = weakestComponent(item.breakdown, c.stage === 'pre-screen');
+        // Do not highlight a placeholder value as the weakest reading.
+        return w && !isPlaceholderScore(w, item.breakdown![w]) ? w : undefined;
+      })(),
     };
   }
 
