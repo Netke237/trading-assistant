@@ -1,4 +1,4 @@
-# WATCH-RESEND-HEAD-OF-LINE, piece 1: skip on proof — plan (v2; round 3 NOT clean 0B/2S/10N, all addressed)
+# WATCH-RESEND-HEAD-OF-LINE, piece 1: skip on proof — plan (v3; round 3 NOT clean 0B/2S/10N, round 4 NOT clean 0B/1S/10N, all addressed)
 
 - **Phase:** `WATCH-RESEND-HEAD-OF-LINE`, now piece 1 of 3 (decision `WATCH-RESEND-SPLIT-2026-10-02`).
   Pieces 2 (`WATCH-RESEND-EXPIRY-ON-REENABLE`) and 3 (`WATCH-RESEND-PER-CHANNEL`) are separate phases,
@@ -31,8 +31,8 @@
 5. `_queue` (:195-206) appends and evicts the oldest above `_QUEUE_CAP = 20`, copying older entries as
    they are (extra keys survive). `_write_effective` (:142-151) rewrites only the newest entry's
    `new_state` and keeps its other keys.
-6. The scheduler polls every `poll_hours` (default 4 h, `strategy_watch_scheduler.py:73`); a manual
-   `/evaluate` runs the same `evaluate_and_notify`.
+6. The scheduler polls every `poll_hours` (default 4 h, `strategy_watch_scheduler.py:73`) while the market
+   is open, or once at end of day in EOD mode; a manual `/evaluate` runs the same `evaluate_and_notify`.
 
 **The defect:** a queued alert that delivery always rejects (all channels fail on that message, every run)
 stays at the head forever, and every later alert of that watch, stop hits included, waits behind it.
@@ -57,8 +57,14 @@ Nothing run-local is stored.
 
 No failure counts on a run whose notification config is unreadable (`read_notification_config` reports
 not readable, or raises): that run is a known outage, and counting there would make every watch's head
-eligible together after recovery. `evaluate_and_notify` computes `count_failures` once per run from the
-same read `_any_channel_enabled` already makes.
+eligible together after recovery. Implementation: a new `_channel_status() -> tuple[bool, bool]`
+(any_channel, readable) holds today's body of `_any_channel_enabled` and makes the ONE
+`read_notification_config()` call per run; readable is False when the reader reports unreadable OR raises
+(any_channel is True in both, as today). `_any_channel_enabled()` becomes `return _channel_status()[0]`,
+so its bool contract and its tests (`test_p6_notification_config.py:107-116`,
+`test_p4b_watch_isolation_and_delivery.py:238-248`) are unchanged. `evaluate_and_notify` calls
+`_channel_status()` once and passes `count_failures = readable` down. On a run with `count_failures` False
+no probe is sent either (a known outage cannot prove anything).
 
 Time comes from one helper `_utcnow() -> datetime` (aware UTC) so tests can patch it.
 
@@ -92,8 +98,10 @@ Every entry is sent at most once per run.
 
 ### 2.3 A fresh event as the probe (in `_deliver_or_queue`)
 
-`_resend_pending` returns the set of probe-ready watch ids (2.2 step 4). In `_deliver_or_queue`, for a
-transition `t` whose watch is probe-ready and whose `t.pending` is exactly that one head:
+`_resend_pending` returns `{watch_id: failures}` for the probe-ready watches (2.2 step 4; never for a
+disabled watch or when `any_channel` is False). In `_deliver_or_queue`, for a transition `t` with
+`t.watch_id in probe_ready and len(t.pending) == 1` (the length check is defensive: a probe-ready watch's
+stored queue is always `[h]`), the ERROR line's `<n>` being `probe_ready[t.watch_id]`:
 
 - send `t.event` now (not labelled Delayed — it fired this run);
 - delivered → drop the head (same ERROR line) and `_commit(t)` (writes `t.new_state` with no queue;
@@ -111,8 +119,8 @@ probe. Any other transition behind a non-empty queue is queued unsent, exactly a
 ### 2.4 Unchanged
 
 - `any_channel` False (nothing enabled) and `evaluate_all`: queues committed unsent, counters ignored.
-- Unreadable config: `_any_channel_enabled` is True, every send fails, counters may count, probes fail —
-  nothing is dropped (a probe must DELIVER to drop anything).
+- Unreadable config: `any_channel` is True (as today), every send fails, no failure counts and no probe is
+  sent (2.1) — nothing is dropped.
 - `_queue`'s cap, disabled watches (not resent, keep everything), `notify_enabled_channels`, dispatch,
   routers, frontend.
 
@@ -144,18 +152,24 @@ probe. Any other transition behind a non-empty queue is queued unsent, exactly a
 1. Two undeliverable alerts in a row: the probe (the second) fails too, which reads as an outage; the
    watch stays blocked. Using another watch's delivery as proof would go beyond the decision's "the next
    alert"; logged as open question WATCH-RESEND-TWO-STUCK-IN-A-ROW for Kenneth (round 2 rated it gate).
-4. A crash between a delivered probe and the drop write: the next run sends `h` again after the probe —
-   out of order, and the probe is sent twice. This is the existing one-sent-but-unwritten window.
-2. A send that timed out client-side may have delivered; it counts as failed (pre-existing).
-3. Gmail SMTP has no timeout (pre-existing, `gmail.py`); a hung Gmail send blocks the run as today.
+2. A crash (or failed write) between a delivered probe and the drop write: the next run sends `h` again
+   and then the probe again — a duplicate, out of order. This is the existing one-sent-but-unwritten window.
+3. A send that timed out client-side may have delivered; it counts as failed (pre-existing).
+4. Gmail SMTP has no timeout (pre-existing, `gmail.py`); a hung Gmail send blocks the run as today.
+5. `notify_enabled_channels` re-reads settings.yaml on every send (`dispatch.py:100`). A Settings save
+   landing mid-run can make the head's send read a partial file and the probe's a good one; an
+   already-eligible head is then dropped. Close to the accepted cost (it needs 3 spaced counted failures
+   first).
 
 ## 5. Tests (`backend/tests/test_watch_resend_skip_on_proof.py`)
 
-Harness: the in-memory `_Store` of `test_watch_undelivered_resend.py` (:26-55, deepcopy) for most tests,
-and test 1 ALSO on the real YAML store (its `list_watches` is a shallow copy, which catches in-place
-mutation); `{_EV}.notify_enabled_channels` patched with a fake that decides and counts on the event's
-REASON line in the body (head and probe can share a subject), `{_EV}._utcnow` patched, `{_EV}._any_channel_enabled` patched True,
-`_collect` patched where a test needs a fresh transition.
+Harness: the in-memory `_Store` and the `_Env` harness of `test_watch_undelivered_resend.py` (:26-55,
+:105-136), which patches `{_EV}.read_notification_config` — so `_channel_status` runs for real and
+`_any_channel_enabled` is NOT patched; `{_EV}.notify_enabled_channels` patched with a fake that decides
+and counts on the event's REASON line in the body (head and probe can share a subject); `{_EV}._utcnow`
+patched; `_collect` patched where a test needs a fresh transition. Test 1 is also run on the real YAML
+store REBUILT from disk before each run (`StrategyWatchStore(path=path)`, the pattern at
+`test_watch_undelivered_resend.py:322-335`), which catches an in-place change that was never written.
 
 1. Poison head + a queued entry behind it, delivery otherwise up: runs at t0, t0+1h, t0+2h → failures 1,
    2, 3; run 3 probes, probe delivered → head dropped, ERROR logged, committed = probe's new_state, queue
@@ -165,8 +179,9 @@ REASON line in the body (head and probe can share a subject), `{_EV}._utcnow` pa
    counted → probe. *Kills `>=` → `>` and off-by-one.*
 2b. Stored failures 3, this run inside the spacing → still probes. *Kills "probe only when this run's
    failure counted".*
-2c. Unreadable config for 3 spaced runs → failures stay 0 (and nothing sent is delivered); a `last_failure_at`
-   in the future counts as absent.
+2c. `read_notification_config` returning `({}, False)` for 3 spaced runs, and separately raising → failures
+   stay 0, no probe sent (only the head's send per run); a `last_failure_at` in the future counts as
+   absent.
 3. Spacing: three runs within 10 minutes → failures 1; a run at +61 min → 2. *Kills spacing removed.*
 4. Outage: every send fails for 6 spaced runs → failures reach 6, probes from run 3 fail, nothing dropped,
    committed state unchanged, order intact. *Kills dropping on a failed probe.*
@@ -181,19 +196,22 @@ REASON line in the body (head and probe can share a subject), `{_EV}._utcnow` pa
 8. Head alone, eligible, no fresh event → only the head is sent; nothing dropped.
 9. Malformed entry behind an eligible head is dropped and the following one is probed. `[h, P, M]` with P
    failing → M is not reached and stays (dropped when a walk reaches it); `[h, M]` with M malformed → M dropped and WRITTEN even though counters did not
-   change, the watch is probe-ready, the stored queue is `[h]`, and the next run evaluates the watch.
+   change, the watch is probe-ready, the stored queue is `[h]`, and this run's `_collect` evaluates the
+   watch (no "skipped" ERROR).
 9b. Eligible head, probe P that always fails, and a fresh stop hit in the same run → exactly two notify
    calls (h, P), the fresh event never sent, queue `[h, P, fresh]`, nothing dropped, committed unchanged.
-   *Kills probe-ready on any eligible head / the length check dropped.*
+   *Kills probe-ready on any eligible head.*
 10. Old-shape entries (no counters) and malformed counters (`"x"`, `-1`, `true`, unparseable
     `last_failure_at`, naive datetime) behave as 2.1 says.
 11. Each entry sent at most once per run: count `notify_enabled_channels` calls per subject in test 1's
     run 3 and test 5.
 12. `any_channel` False: an eligible head is committed unsent, no probe.
 13. `_Store.raise_on(id, pred)` with `pred` matching only the drop write (`update_state` raises; `_write`
-    swallows it) → the rest of the run continues; the next run re-sends at most the one entry.
+    swallows it), queue `[h, P]`, P delivered as probe → the rest of the run continues (other watches
+    sent); the next run sends exactly h (fails) then P again (residual 4.1-2): 2 notify calls, reasons
+    h, P in that order.
+14. Counters survive `_queue` appends and `_write_effective` on a single-entry queue (the head is also the
+    tail); a head evicted by the cap takes its counters with it and the new head starts at 0.
 15. A `_deliver_or_queue` raising for one watch → later watches' transitions are still delivered.
-14. Counters survive `_queue` appends, the cap eviction of OTHER entries, and `_write_effective` on a
-    single-entry queue (the head is also the tail).
 
 Gates: backend pytest full; `python3 scripts/state.py` exit 0.
