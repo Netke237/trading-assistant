@@ -59,6 +59,10 @@ older builder or by hand; the mapping Kenneth asked for is kept.
   edit/duplicate, extra option whenever the stored name is not OFFERED at this interval
   (daily `vwap`), `vol` never fired anywhere, golden-pin gap covered, `need` mirrors `or 1`
   exactly (no clamp), validation keyed on `rule_type != 'composite'`.
+- Plan r5: 0 blocking, 1 should-fix, 3 nits — all applied (v6): grandfather map built from
+  the id-assigned `conditions` state (id-less legacy rows), extra option / Save block keyed
+  on the CURRENT value at the CURRENT interval (chart interval switched while open), toast
+  residual and "unchanged" bullet widened/qualified, over-count N_OF_M noted.
 
 ## Design
 
@@ -127,9 +131,10 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
 - Seeding from `editRule`/`duplicateFrom`: stored names are NOT rewritten. A rewrite on
   a rename-only edit would change `rule_json` (so `replace_rule` wipes `condition_state`,
   i.e. in-progress sustain clocks) and could trip the duplicate check against another rule.
-  A condition's name changes only when the user picks a new option. When the stored raw
-  name is not among the options OFFERED for this interval (not a catalog value at all, or
-  `vwap` on 1D/1W), the select gets one extra option for it, value = the raw name:
+  A condition's name changes only when the user picks a new option. When the condition's
+  CURRENT name is not among the options OFFERED at the builder's CURRENT interval (not a
+  catalog value at all, or `vwap` on 1D/1W), the select gets one extra option for it,
+  value = the raw name:
   - `vwap` on 1D/1W: enabled, label `VWAP (daily, unanchored)`;
   - mappable (`EMA(20)`, `ema-20`, `VOL(default)`): enabled, label
     `"<catalog label> (stored as <raw>)"`;
@@ -153,9 +158,17 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
 - `handleSave` validation runs AFTER the existing `Name is required` check and before the
   collision check, per indicator condition (numbered by position, 1-based):
   - canonical → OK;
+  - `vwap` while the builder's interval is 1D/1W (not offered there) is treated like an
+    unsupported name for this check only: allowed when grandfathered, else blocked with
+    `Condition N: VWAP is not offered on 1D/1W`. This covers the chart builder, whose
+    `interval` follows the live chart (no `editRule`), when the chart is switched to 1D
+    after `vwap` was picked;
   - else, **editing** (`editRule`) and the condition is grandfathered: the builder captures
     at mount a `Map<id, rawIndicator>` of the seeded conditions whose `kind === 'indicator'`
-    ONLY (a seeded price/structure/regime row switched to Indicator is not in it, so its
+    ONLY, built from the `conditions` STATE value (the id-assigned array — the seed step
+    gives an id-less stored condition a fresh `makeId()`, so the map must read those same
+    ids): `const [seededIndicators] = useState(() => new Map(conditions.filter(...).map(c => [c.id, c.indicator])))`
+    declared right after the `conditions` `useState` (the `nOfMThreshold` pattern) (a seeded price/structure/regime row switched to Indicator is not in it, so its
     `''` is blocked); a condition is grandfathered when its `id` is in the map AND its
     current `indicator` is identical to the mapped value → allowed (mirrors the backend PUT exemption); the rule keeps its visible
     warning. Per CONDITION, not per name: on a legacy rule with `''`, a newly added `''`
@@ -233,7 +246,9 @@ in the Alerts page.
   - `ok < need`: `Never fires: unsupported indicator <names> — edit the rule to pick one`;
   - else: `Never met: unsupported indicator <names> — the rule fires on its other
     conditions only`.
-  `<names>` = each distinct raw name quoted, comma-separated; `''` renders as `(none)`. Tone caution, under the rule name like the unsaved line.
+  `<names>` = each distinct raw name quoted, comma-separated; `''` renders as `(none)`.
+  Accepted imprecision: a legacy N_OF_M row whose stored threshold exceeds its condition
+  count always shows "Never fires" here — true, though the cause is the threshold too. Tone caution, under the rule name like the unsaved line.
 - The conditions summary renders supported names through `indicatorLabel` (`EMA 20 > 100`
   rather than `ema20 > 100`). Backend reason/notification strings keep the raw name
   (unchanged).
@@ -268,8 +283,10 @@ indicator line as unmet.
     WS path pushes `alert_triggered`; when the scheduler judges the bar first (the intraday
     WS path does not use `_claim_candles_to_evaluate`, so the two race), the fire is
     persisted and notified (Gmail/Telegram) but the open chart shows no toast and the local
-    history/`last_triggered_at` are not updated until a reload. Chart-id rules always
-    toasted in the browser before. Not fixed here. A rule that exists only in this browser (never accepted by the
+    history/`last_triggered_at` are not updated until a reload. This applies to any
+    intraday rule with an indicator condition that the browser previously fired: chart-id
+    rules, and OR / N_OF_M rules mixing a label indicator with a price or regime condition
+    (the browser fired them on the other leg). Not fixed here. A rule that exists only in this browser (never accepted by the
   server — already shown as "Not saved to server") is no longer judged anywhere for its
   indicator conditions; its existing unsaved line already says it is not server-held.
 
@@ -285,7 +302,7 @@ Name this in the merge commit / state record so Kenneth can review his rules:
   `sma-<ts>`, ...) are unsupported and STOP firing; they show the warning.
 - existing daily (1D/1W) `VWAP(default)` rules fire against an UNANCHORED running-total
   VWAP whose value depends on the loaded window; the builder no longer offers daily VWAP.
-- unchanged: label rules the backend already matched (`EMA(20)`, `RSI(14)`, `SMA(20)`, ...).
+- unchanged: indicator-only label rules the backend already matched (`EMA(20)`, `RSI(14)`, `SMA(20)`, ...).
 - canonically duplicate pairs (`ema-20 > 100` and `ema20 > 100` on the same symbol and
   interval) now both fire on the same bar: two notifications. The builder's duplicate
   check stops new pairs; existing ones remain until the user deletes one.
@@ -336,7 +353,9 @@ Frontend (Jest):
   seeded PRICE condition to Indicator without picking blocks Save; `vwap` is offered at
   `5min` and not at `1D`; a seeded `indicator: null` renders the placeholder and an
   unchanged save sends `null` back; opening Edit on rule B while A's builder is open shows
-  B's conditions; Edit A then Duplicate A remounts (name gets "(copy)"); a 1D rule seeded
+  B's conditions; editing a rule seeded with an id-LESS `macd-1712345` condition and only
+  renaming it saves; picking `vwap` at 5min in the chart builder then switching the chart
+  to 1D blocks Save; Edit A then Duplicate A remounts (name gets "(copy)"); a 1D rule seeded
   with `vwap` shows the enabled "VWAP (daily, unanchored)" option selected.
 - `conditionsEqual`: `ema-20 > 100` equals `ema20 > 100`; `addRule` refuses that duplicate;
   editing rule A (`EMA(20) > 100`) to rename it while rule B (`ema20 > 100`) exists
