@@ -48,6 +48,11 @@ older builder or by hand; the mapping Kenneth asked for is kept.
   grandfathering, edit collision only for collisions the edit introduces, threshold-aware
   warning, split rollout note, scheduler-fire toast regression named, malformed legacy
   rows hardened in `_deserialize_rule` / compute, PUT-divergence residual named, wording.
+- Plan r3: 0 blocking, 4 should-fix, 3 nits — all applied (v4): sustain test asserts the
+  raw name survives, N_OF_M `need` uses the backend's `or 1`, `vwap` offered on intraday
+  only (daily VWAP is an unanchored running total), grandfather map holds seeded
+  INDICATOR conditions only, builder keyed per rule, non-string names rendered as
+  `(none)`, `activeIndicators` dropped from the alert effect's deps.
 
 ## Design
 
@@ -106,7 +111,11 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
 
 - The indicator `<select>` offers `ALERT_INDICATOR_OPTIONS` (fixed, independent of the
   chart's active indicators — a rule must not depend on what is drawn) and writes the
-  canonical value. The `useChartStore().activeIndicators` read goes.
+  canonical value. Exception: `vwap` is offered only when the builder's interval is
+  intraday — on 1D/1W `_calc_vwap` keeps its unanchored running total (a function of how
+  many bars were loaded, per its own docstring), so a new daily VWAP rule is not offered.
+  `vwap` stays a supported name on every interval for the API and existing rules (see the
+  rollout note). The `useChartStore().activeIndicators` read goes.
 - Seeding from `editRule`/`duplicateFrom`: stored names are NOT rewritten. A rewrite on
   a rename-only edit would change `rule_json` (so `replace_rule` wipes `condition_state`,
   i.e. in-progress sustain clocks) and could trip the duplicate check against another rule.
@@ -117,6 +126,14 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
     `"<catalog label> (stored as <raw>)"`;
   - unsupported (`macd-1712345`, `BB(20,2)`): disabled, label `"<raw> — unsupported"`;
   - `''`: no extra option, the existing `Select...` placeholder (value `''`) shows.
+  - non-string (`null`, `[]`, missing — malformed legacy rows): rendered as `''` (the
+    placeholder shows, no extra option); the condition object itself is left untouched, so
+    an unchanged save stays multiset-equal on the server. `indicatorLabel` and the Alerts
+    summary render a non-string as `(none)`.
+- The Alerts page renders the builder with
+  `key={editingRule?.id ?? duplicatingRule?.id ?? 'new'}`, so opening another rule remounts
+  it: the seed state and the grandfather map are always the opened rule's (all builder state
+  comes from `useState` initialisers).
 - Duplicate detection: `conditionsEqual` (used by the builder's edit collision check and by
   `addRule`) compares indicator conditions by `canonicalIndicator(name) ?? name`, so
   `ema-20 > 100` and `ema20 > 100` are the same condition. Today two such rules can coexist
@@ -126,9 +143,11 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
 - `handleSave` validation runs AFTER the existing `Name is required` check and before the
   collision check, per indicator condition (numbered by position, 1-based):
   - canonical → OK;
-  - else, **editing** (`editRule`) and the condition is grandfathered: its `id` is one of the
-    ids the builder seeded from `editRule` AND its current `indicator` equals the name it was
-    seeded with → allowed (mirrors the backend PUT exemption); the rule keeps its visible
+  - else, **editing** (`editRule`) and the condition is grandfathered: the builder captures
+    at mount a `Map<id, rawIndicator>` of the seeded conditions whose `kind === 'indicator'`
+    ONLY (a seeded price/structure/regime row switched to Indicator is not in it, so its
+    `''` is blocked); a condition is grandfathered when its `id` is in the map AND its
+    current `indicator` is identical to the mapped value → allowed (mirrors the backend PUT exemption); the rule keeps its visible
     warning. Per CONDITION, not per name: on a legacy rule with `''`, a newly added `''`
     condition (fresh id) is blocked. The seeded ids are captured once at mount (the seed
     step already assigns an id to an id-less stored condition, and the kind-switch keeps
@@ -194,7 +213,8 @@ in the Alerts page.
   mirror `unsupportedIndicators(...)`, so it is right for local-only and freshly edited
   rules and cannot go stale in the persisted store. Let `ok` = number of conditions that
   are not unsupported indicators and `need` = all conditions for AND, 1 for OR,
-  `n_of_m_threshold ?? 1` for N_OF_M (the evaluator's own fallback). When any condition is
+  `Math.max(1, n_of_m_threshold || 1)` for N_OF_M (the backend evaluator's `or 1`, which
+  turns a stored legacy 0 into 1; the backend is the only judge of these rules). When any condition is
   unsupported:
   - `ok < need`: `Never fires: unsupported indicator <names> — edit the rule to pick one`;
   - else: `Never met: unsupported indicator <names> — the rule fires on its other
@@ -219,7 +239,8 @@ as structure: an OR rule firing in the browser on its price condition would reco
 indicator line as unmet.
 
 - `ChartWorkspace` stops building indicator points for alerts: `getIndicatorPoints` (its only
-  caller is the alert evaluation) is deleted and `evaluateRules` gets `{}`. The engine's
+  caller is the alert evaluation) is deleted, `evaluateRules` gets `{}`, and
+  `activeIndicators` leaves that effect's dependency list. The engine's
   indicator branch stays (its tests run at `1D`, a path production never takes); a comment
   marks it as reachable only from tests and 1D/1W callers, which today are none.
 - Behaviour changes, named:
@@ -246,6 +267,8 @@ Name this in the merge commit / state record so Kenneth can review his rules:
   `rsi-14`, `vol` on 1D/1W.
 - move from browser to backend on intraday and change period semantics: chart-id rules
   (were judged at the chart's current period, now the fixed alias period).
+- existing daily (1D/1W) `VWAP(default)` rules fire against an UNANCHORED running-total
+  VWAP whose value depends on the loaded window; the builder no longer offers daily VWAP.
 - unchanged: label rules the backend already matched (`EMA(20)`, `RSI(14)`, `SMA(20)`, ...).
 - canonically duplicate pairs (`ema-20 > 100` and `ema20 > 100` on the same symbol and
   interval) now both fire on the same bar: two notifications. The builder's duplicate
@@ -277,7 +300,8 @@ directly — POST now refuses them.
 - 422 detail is the plain text (no "validation error for" banner).
 - Sustain: POST a rule with `EMA(20)` (conditions carrying ids, as the builder sends), set
   its `condition_state` in the DB, PUT the identical body with a new name → `condition_state`
-  kept (pins that nothing rewrites the name server-side). Pre-existing, unchanged: a stored
+  kept, and GET after the POST and after the PUT both return `indicator == "EMA(20)"`
+  verbatim (pins that nothing rewrites the name server-side). Pre-existing, unchanged: a stored
   condition WITHOUT an id gets one at builder seed time, so a rename of such a rule still
   changes `rule_json` and resets sustain.
 - PUT multiset: legacy `''` rule + a second `''` condition → 422; legacy rule PUT with the
@@ -291,7 +315,11 @@ Frontend (Jest):
   editing a legacy `'macd-1712345'` rule shows the disabled unsupported option and saves
   (grandfathered); duplicating it is blocked; no extra option for `''` (placeholder only);
   on a legacy rule holding `''`, adding a second empty indicator condition blocks Save;
-  Save with an empty name reports `Name is required` first.
+  Save with an empty name reports `Name is required` first; on a legacy rule, switching a
+  seeded PRICE condition to Indicator without picking blocks Save; `vwap` is offered at
+  `5min` and not at `1D`; a seeded `indicator: null` renders the placeholder and an
+  unchanged save sends `null` back; opening Edit on rule B while A's builder is open shows
+  B's conditions.
 - `conditionsEqual`: `ema-20 > 100` equals `ema20 > 100`; `addRule` refuses that duplicate;
   editing rule A (`EMA(20) > 100`) to rename it while rule B (`ema20 > 100`) exists
   SUCCEEDS (the duplicate pre-existed); editing a third rule C (`close > 5`) to
@@ -304,7 +332,8 @@ Frontend (Jest):
 - Alerts page: AND rule with an unsupported indicator → "Never fires…"; OR rule with a
   supported price condition → "Never met…"; OR rule whose conditions are all unsupported →
   "Never fires…"; N_OF_M 2-of-2 with one unsupported → "Never fires…"; N_OF_M 1-of-2 →
-  "Never met…"; two distinct names both listed; a clean rule shows nothing; summary renders
+  "Never met…"; N_OF_M with a stored threshold 0 and one (only) unsupported condition →
+  "Never fires…"; two distinct names both listed; a clean rule shows nothing; summary renders
   `EMA 20 > 100`.
 - Existing builder / chartAlertEngine / alerts tests updated where they assumed chart-id
   options.
