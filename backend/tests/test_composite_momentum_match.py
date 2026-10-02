@@ -137,11 +137,12 @@ def test_volume_spike_ratio_edge():
 # ── test 2: MACD from a correct EMA ──────────────────────────────────────────
 
 def test_macd_spike_on_the_last_bar_crosses_on_that_bar():
-    """Mutation: reuse the lagged _ema_values (it does not fold the current bar
-    in, so a last-bar spike cannot move the line on that bar)."""
+    """Mutation: a lagged EMA (one that does not fold the current bar in, so a
+    last-bar spike cannot move the line on that bar). MACD-EMA-LAG: the
+    standard-rule _calc_macd now reads the same bars the same way."""
     assert mm(MACD_UP, "macd_cross", "Bullish") is True
-    lagged = ic._calc_macd([b["close"] for b in MACD_UP], [b["time"] for b in MACD_UP], 12, 26, 9)
-    assert not (lagged["macd"][-2] <= lagged["signal"][-2] and lagged["macd"][-1] > lagged["signal"][-1])
+    std = ic._calc_macd([b["close"] for b in MACD_UP], [b["time"] for b in MACD_UP], 12, 26, 9)
+    assert std["macd"][-2] <= std["signal"][-2] and std["macd"][-1] > std["signal"][-1]
 
 
 def test_ema_seeded_is_the_textbook_ema():
@@ -315,10 +316,12 @@ def test_unknown_kind_and_bad_rows_are_false():
 
 # ── test 6: standard rules unchanged ─────────────────────────────────────────
 
-_STANDARD_NAMES = ["ema", "ema9", "ema50", "sma", "sma50", "rsi", "macd", "macd_signal", "atr",
+# MACD-EMA-LAG deliberately changed 'macd'/'macd_signal' (tests/test_macd_ema_lag.py
+# pins them); every other standard indicator stays pinned on main's output.
+_STANDARD_NAMES = ["ema", "ema9", "ema50", "sma", "sma50", "rsi", "atr",
                    "bb_upper", "bb_lower", "bb_mid", "vwap", "volume", "close"]
-# Pinned on main's indicator_compute (these functions are unchanged by this build).
-_GOLDEN_SHA = "8de19a4ad8d4bb355ebe6b2812ace8b65b12196fca0da7193208f164518ac098"
+# Pinned on main's indicator_compute before MACD-EMA-LAG (same list, same output).
+_GOLDEN_SHA = "44eb35e07f3080defb457e052ba76c030b5c0a30917ad7551d9dacc768486b6d"
 
 
 def _golden_payload():
