@@ -36,7 +36,7 @@
   - Dynamic percentage and count calculation for all 5 stages: Data & Filters, Pre-Screen Setup Score, Option Chain Window, Contract Scoring & Hard Rules, Final Candidates.
   - `lookupSymbol(ticker: string): SymbolDiagnosticResult | null`
 
-- [ ] **Step 1: Write the failing unit tests for parsePipelineDiagnostics**
+- [x] **Step 1: Write the failing unit tests for parsePipelineDiagnostics**
 
 Create `frontend/lib/__tests__/parsePipelineDiagnostics.test.ts`:
 ```typescript
@@ -180,12 +180,12 @@ describe('parsePipelineDiagnostics engine', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm --prefix frontend run test -- --testPathPattern=parsePipelineDiagnostics`
 Expected: FAIL with missing file or type mismatch.
 
-- [ ] **Step 3: Update parsePipelineDiagnostics.ts with robust dynamic calculations**
+- [x] **Step 3: Update parsePipelineDiagnostics.ts with robust dynamic calculations**
 
 In `frontend/lib/parsePipelineDiagnostics.ts`, ensure dynamic calculation of sub-rule percentage shares and contract reason parsing:
 ```typescript
@@ -652,12 +652,12 @@ export function parsePipelineDiagnostics(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm --prefix frontend run test -- --testPathPattern=parsePipelineDiagnostics`
 Expected: PASS (all 5 test cases passing).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/lib/parsePipelineDiagnostics.ts frontend/lib/__tests__/parsePipelineDiagnostics.test.ts
@@ -689,7 +689,7 @@ git commit -m "feat: enhance diagnostic parser engine with dynamic metrics and s
   - Ticker chip cloud with click-to-search interaction.
   - Plaintext ASCII tree view toggle with 1-click clipboard copy.
 
-- [ ] **Step 1: Write test for dual mode and keyboard Escape**
+- [x] **Step 1: Write test for dual mode and keyboard Escape**
 
 Update `frontend/components/organisms/PipelineInspector/__tests__/PipelineInspector.test.tsx`:
 ```typescript
@@ -834,24 +834,24 @@ describe('PipelineInspector Component', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm --prefix frontend run test -- --testPathPattern=PipelineInspector`
 Expected: FAIL on newly added chip click test or close button selector.
 
-- [ ] **Step 3: Update PipelineInspector component and styles**
+- [x] **Step 3: Update PipelineInspector component and styles**
 
 In `frontend/components/organisms/PipelineInspector/index.tsx`:
 - Handle Escape key to close drawer when `isDrawer === true`.
 - Contextualise the bottleneck action: If `isDrawer`, display `<Link href="/screener/step-3-direction" className={styles.bottleneckBtn}>Adjust in Step 3 →</Link>`. If `!isDrawer`, omit link (or display parameter anchor hint).
 - Ensure styling in `PipelineInspector.module.css` adheres strictly to design tokens (`--bg-surface`, `--bg-surface-2`, `--border-subtle`, `--radius-md`, `--space-3`, `--space-4`, no box-shadows).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm --prefix frontend run test -- --testPathPattern=PipelineInspector`
 Expected: PASS (all 6 test cases passing).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/components/organisms/PipelineInspector/
@@ -875,7 +875,7 @@ git commit -m "feat: refine PipelineInspector with dual inline/drawer modes and 
   - Complete replacement of legacy `ScanLogSection` and `ScanFunnel` in Step 3 with the structured root-cause diagnostic inspector.
   - Elimination of dead code: remove `StockRejectGroup`, `BreakdownRow`, and raw `OTHER` text dumps.
 
-- [ ] **Step 1: Write unit test for Step 3 PipelineInspector integration**
+- [x] **Step 1: Write unit test for Step 3 PipelineInspector integration**
 
 Create `frontend/app/(frame)/screener/step-3-direction/__tests__/step3PipelineInspector.test.tsx`:
 ```typescript
@@ -927,12 +927,12 @@ describe('Step 3 Direction Page — PipelineInspector Integration', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm --prefix frontend run test -- --testPathPattern=step3PipelineInspector`
 Expected: FAIL before updating `step-3-direction/page.tsx`.
 
-- [ ] **Step 3: Replace legacy ScanLogSection in step-3-direction/page.tsx**
+- [x] **Step 3: Replace legacy ScanLogSection in step-3-direction/page.tsx**
 
 In `frontend/app/(frame)/screener/step-3-direction/page.tsx`:
 1. Import `PipelineInspector`:
@@ -1003,14 +1003,14 @@ With:
 ```
 3. Remove unused `ScanLogSection`, `StockRejectGroup`, and `BreakdownRow` functions (lines 52–165) to eliminate dead code and bundle size.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm --prefix frontend run test -- --testPathPattern=step3PipelineInspector`
 Expected: PASS.
 Run: `npm --prefix frontend run test -- --testPathPattern=scanLog`
 Expected: PASS (existing totals tests still pass).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/app/\(frame\)/screener/step-3-direction/
@@ -1033,7 +1033,7 @@ git commit -m "feat: replace Step 3 legacy ScanLog with inline PipelineInspector
 - Produces:
   - Verified drawer invocation in Step 4 when 0 candidates survive and when candidates > 0.
 
-- [ ] **Step 1: Write integration test for Step 4 ranking drawer**
+- [x] **Step 1: Write integration test for Step 4 ranking drawer**
 
 Create `frontend/app/(frame)/screener/step-4-ranking/__tests__/rankingPipelineInspector.test.tsx`:
 ```typescript
@@ -1116,17 +1116,17 @@ describe('Step 4 Ranking Page — PipelineInspector Drawer Integration', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it passes**
+- [x] **Step 2: Run test to verify it passes**
 
 Run: `npm --prefix frontend run test -- --testPathPattern=rankingPipelineInspector`
 Expected: PASS.
 
-- [ ] **Step 3: Verify clean CSS tokens and styling**
+- [x] **Step 3: Verify clean CSS tokens and styling**
 
 In `frontend/app/(frame)/screener/step-4-ranking/page.module.css`:
 Ensure `.inspectBtn` uses token colors `var(--caution)`, `var(--radius-sm)`, `var(--space-3)`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/app/\(frame\)/screener/step-4-ranking/
@@ -1140,24 +1140,24 @@ git commit -m "feat: verify Step 4 ranking filter breakdown drawer integration"
 **Files:**
 - Audit & Verify entire repository
 
-- [ ] **Step 1: Run TypeScript typecheck**
+- [x] **Step 1: Run TypeScript typecheck**
 
 Run: `npm --prefix frontend run typecheck`
 Expected: Exit 0 with zero errors.
 
-- [ ] **Step 2: Run full Jest test suite for screener and components**
+- [x] **Step 2: Run full Jest test suite for screener and components**
 
 Run: `npm --prefix frontend run test -- --testPathPattern="(PipelineInspector|ranking|step-3|scanLog)"`
 Expected: All suites green (0 failures).
 
-- [ ] **Step 3: Run project state and claims audit**
+- [x] **Step 3: Run project state and claims audit**
 
 Run: `python scripts/state.py`
 Expected: "No drift: every declared status matches the code."
 Run: `python scripts/claim.py list`
 Expected: Ledger clean.
 
-- [ ] **Step 4: Final commit of test suites and state**
+- [x] **Step 4: Final commit of test suites and state**
 
 ```bash
 git status
