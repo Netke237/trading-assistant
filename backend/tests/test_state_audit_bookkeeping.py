@@ -534,9 +534,8 @@ def test_the_scoped_base_is_the_commit_that_introduced_the_entry(repo):
     repo.write_state(one, "Build piece one")
     repo.commit("round 1: fixes on piece one")
 
-    # Piece one stays in the file with its round counted: since G3, rounds
-    # before the boundary narrow away only when the piece they belonged to
-    # still answers for them.
+    # Piece one stays in the file with its round counted, as an honest file
+    # would have it.
     two = _piece_state("piece two", [{"name": "piece one", "audit_rounds": 1},
                                      {"name": "piece two", "audit_rounds": 0}])
     repo.write_state(two, "Record piece one; open piece two")
@@ -1290,58 +1289,11 @@ def _piece_one_then_open_piece_two(repo, one_declared, one_clean, rounds=4):
     return two
 
 
-def test_g3_opening_a_new_piece_does_not_silence_the_previous_undercount(repo):
-    """G3. Narrowing only ever checked the NEWEST piece, so committing a new
-    entry and pointing at it dropped the previous piece's rounds from every
-    check: four run, one declared, No drift."""
-    two = _piece_one_then_open_piece_two(repo, one_declared=1, one_clean=True)
-    severity, message = _mod.audit_bookkeeping_drift(two)
-    assert severity == "drift"
-    assert "'piece one'" in message and "reaches round 4" in message
-
-
-def test_g3_opening_a_new_piece_does_not_silence_the_previous_cap(repo):
-    """G3, the cap half: four rounds honestly counted, none clean."""
-    two = _piece_one_then_open_piece_two(repo, one_declared=4, one_clean=False)
-    severity, message = _mod.audit_bookkeeping_drift(two)
-    assert severity == "drift"
-    assert "HARD CAP" in message and "'piece one'" in message
-
-
 def test_g3_an_honest_previous_piece_still_narrows(repo):
-    """The two-piece fix (REVIVAL round 1 finding 2) must survive G3."""
+    """The two-piece fix (REVIVAL round 1 finding 2) must survive the ancestry walk."""
     two = _piece_one_then_open_piece_two(repo, one_declared=4, one_clean=True)
     assert _mod._target_scoped_base("origin/main", two) != "origin/main"
     assert _mod.audit_bookkeeping_drift(two) is None
-
-
-def test_g3_a_previous_piece_older_than_the_branch_is_held_to_its_count(repo):
-    """The previous piece's entry predates the branch (this task's own shape:
-    fixing work already on main). Its span starts at the base."""
-    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
-    repo.write_state(one, "Open piece one")
-    repo.set_origin_main("HEAD")
-    for n in (1, 2, 3):
-        repo.commit(f"round {n}: fixes on piece one")
-    two = _piece_state("piece two", [
-        {"name": "piece one", "audit_rounds": 1, "audit_clean": True},
-        {"name": "piece two", "audit_rounds": 0},
-    ])
-    repo.write_state(two, "Open piece two")
-    assert _mod.audit_bookkeeping_drift(two)[0] == "drift"
-
-
-def test_g3_unphased_rounds_then_an_entry_that_counts_them_is_silent(repo):
-    """Rounds run with the pointer null, then the entry is written with their
-    count. Nothing narrows (the earlier span resolved to nothing), so the new
-    entry answers for them -- and, being honest, passes."""
-    for n in (1, 2):
-        repo.commit(f"plan round {n}")
-    honest = _piece_state("piece", [{"name": "piece", "audit_rounds": 2, "audit_clean": True}])
-    repo.write_state(honest, "Record the piece at 2")
-    assert _mod.audit_bookkeeping_drift(honest) is None
-    lying = _piece_state("piece", [{"name": "piece", "audit_rounds": 1, "audit_clean": True}])
-    assert _mod.audit_bookkeeping_drift(lying)[0] == "drift"
 
 
 @pytest.mark.parametrize("clean", ["false", "true", 1, None])
@@ -1370,20 +1322,6 @@ def test_a_superscript_digit_audit_rounds_warns_instead_of_raising(repo, declare
     phases = [{"id": "A", "name": "Phase A", "audit_rounds": declared, "audit_clean": True}]
     severity, _ = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
     assert severity == "warn"
-
-
-def test_the_target_scoping_probe_dies_when_the_g3_check_is_reverted(repo):
-    real_root = Path(__file__).parent.parent.parent
-    state = json.loads((real_root / STATE_REL).read_text(encoding="utf-8"))
-    entry = next(i for i in state["already_shipped"]
-                 if i["name"].startswith("STATE-PROBE-TARGET-SCOPING"))
-    src = (real_root / entry["verify"]["path"]).read_text(encoding="utf-8")
-    reverted = src.replace(
-        "if not _earlier_rounds_accounted(base_ref, boundary, state, rel):\n        return base_ref",
-        "pass",
-    )
-    assert reverted != src
-    assert not re.search(entry["verify"]["pattern"], reverted, re.M)
 
 
 # --- STATE-PROBE-FIXES round 3 findings (decision STATE-PROBE-FIXES-ROUND-4-2026-10-02)

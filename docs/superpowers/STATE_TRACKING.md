@@ -85,16 +85,13 @@ a green "No drift".
   branch carrying two pieces does not answer for the earlier one's round
   numbers. The pointer's value scopes nothing; if it resolves to no entry, the
   whole branch counts.
-- **The earlier piece is still checked.** Rounds before that commit are
-  dropped only if the piece the pointer named just before it still answers
-  for them in the current file: count at least their highest round and, from
-  round 3, `audit_clean: true`. If it does not, nothing is dropped: the
-  active target answers for those rounds too, and its warning carries a note
-  naming the earlier piece. It clears honestly either way — record the count
-  on the earlier piece (narrowing resumes), or, if the rounds were really the
-  new piece's, record them there. Opening a new piece never clears an earlier
-  undercount on its own. The same applies when the earlier rounds had no
-  target at all.
+- **Known open hole (G3, not fixed).** Narrowing drops every round before the
+  active entry's introducing commit, and nothing else checks them: committing
+  a new entry and pointing `active_phase` at it silences the previous piece's
+  undercount and its hard cap. Two attempted fixes (STATE-PROBE-FIXES rounds 3
+  and 4) each failed review, so it was taken back out; see the
+  STATE-PROBE-TARGET-SCOPING record in PROJECT_STATE.json. Until it is fixed,
+  record a piece's rounds BEFORE opening the next one on the same branch.
 - **Round notation also read:** `clean after 7 rounds` (number before the
   plural word), `rounds 1, 2 and 3`, `round #3`, `audit_r3`.
 - **The tiers.**
