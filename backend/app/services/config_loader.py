@@ -446,6 +446,21 @@ _RR_OVERRIDE_CAPS = {
 }
 
 
+def effective_rr_overrides(overrides: dict | None) -> dict[str, float]:
+    """The rr_* keys of `overrides` that merge_reward_risk_overrides applies,
+    as floats, keyed by their override names (rr_bullish_target_pct ...).
+
+    Same validation as merge_reward_risk_overrides (None skipped, invalid
+    raises ValueError), so what a scan records is exactly what it priced with.
+    """
+    out: dict[str, float] = {}
+    merged = merge_reward_risk_overrides(overrides)
+    for override_key, cfg_key in _RR_OVERRIDE_KEY_MAP.items():
+        if overrides and overrides.get(override_key) is not None:
+            out[override_key] = float(merged[cfg_key])
+    return out
+
+
 def merge_reward_risk_overrides(overrides: dict | None) -> dict:
     """Return risk_rules.yaml's reward_risk block with any per-request rr_*
     overrides applied on top.

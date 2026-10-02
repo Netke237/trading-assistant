@@ -101,6 +101,16 @@ export default function Step1RegimePage() {
     });
   }, [setRegime, setRegimeDirection, setCombinedRegime, markov]);
 
+  // The verdict follows the context's direction, not only the moment the
+  // regime fetch resolved: StoreHydration can restore a scan's context
+  // (STEP3-PARAM-REACH) AFTER that, and a Bearish restore would otherwise
+  // leave a Bullish verdict on the Step-1 REJECT gate and the Step-7 rail.
+  const direction = context?.direction ?? 'Bullish';
+  useEffect(() => {
+    if (!regime) return;
+    setCombinedRegime(alignmentVerdict(direction, descriptorFromState(regime.omm?.state ?? '')));
+  }, [direction, regime, setCombinedRegime]);
+
   useEffect(() => {
     fetchRegime();
 
