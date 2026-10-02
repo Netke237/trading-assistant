@@ -2,43 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/youthful-carson-82x23x",
-      "claimed_at": "2026-10-01T22:42:38Z",
-      "expires_at": "2026-10-02T01:42:38Z",
-      "note": "Q55: a channel-rejected message blocks the watch's later alerts (stop hits included) in _resend_watch",
-      "task": "WATCH-RESEND-HEAD-OF-LINE"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/sharp-wozniak-6xb8pq",
-      "claimed_at": "2026-10-01T22:45:09Z",
-      "expires_at": "2026-10-02T01:54:29Z",
-      "note": "one adversarial round on practical-rosalind diff, then merge",
-      "task": "CLAIMS-WINDOWS-CRLF"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/intelligent-allen-463f3h",
-      "claimed_at": "2026-10-01T22:52:15Z",
-      "expires_at": "2026-10-02T02:04:16Z",
-      "note": "adversarial audit rounds until clean",
-      "task": "STATE-PROBE-REVIVAL"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/intelligent-allen-463f3h",
-      "claimed_at": "2026-10-01T22:52:18Z",
-      "expires_at": "2026-10-02T02:04:16Z",
-      "note": "adversarial audit rounds until clean",
-      "task": "STATE-PROBE-NULL-POINTER"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/intelligent-allen-463f3h",
-      "claimed_at": "2026-10-01T22:52:21Z",
-      "expires_at": "2026-10-02T02:04:16Z",
-      "note": "adversarial audit rounds until clean",
-      "task": "STATE-PROBE-TARGET-SCOPING"
+      "claimed_at": "2026-10-02T04:24:52Z",
+      "expires_at": "2026-10-02T07:24:52Z",
+      "note": "#54 risk-check shrink: targets + close drawer",
+      "task": "STOCK-POSITION-RESIZE"
     }
   ]
 }
