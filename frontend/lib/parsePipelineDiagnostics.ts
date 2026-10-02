@@ -203,11 +203,12 @@ export function parsePipelineDiagnostics(
         return { count, pctOfStage, pctOfTotal };
       });
     }
-    // Fallback: estimate from ratios, last entry gets remainder
+    // Fallback: estimate from ratios, each entry capped to remaining budget, last gets remainder
     let allocated = 0;
     return entries.map((e, i) => {
       const isLast = i === entries.length - 1;
-      const count = isLast ? Math.max(0, stageTotal - allocated) : Math.round(stageTotal * e.fallbackRatio);
+      const remaining = Math.max(0, stageTotal - allocated);
+      const count = isLast ? remaining : Math.min(Math.round(stageTotal * e.fallbackRatio), remaining);
       allocated += count;
       const pctOfStage = stageTotal > 0 ? Math.round((count / stageTotal) * 100) : 0;
       const pctOfTotal = totalUniverse > 0 ? Math.round((count / totalUniverse) * 100) : 0;
@@ -428,7 +429,7 @@ export function parsePipelineDiagnostics(
 
   // Construct asciiTree
   const stage5Line = stage5Count > 0
-    ? `\n│\n├── [−${stage5Count}] Direction / Shortlist / Other (Left: ${leftAfterStage4 - stage5Count})\n│   ${directionCount > 0 ? `├── Direction Conviction: ${directionCount}\n│   ` : ''}${shortlistCount > 0 ? `├── Shortlist Cap: ${shortlistCount}\n│   ` : ''}${unmeasuredCount > 0 ? `├── Direction Unmeasured: ${unmeasuredCount}\n│   ` : ''}${otherCount > 0 ? `└── Other: ${otherCount}` : ''}`
+    ? `\n│\n├── [−${stage5Count}] Direction / Shortlist / Other (Left: ${Math.max(0, leftAfterStage4 - stage5Count)})\n│   ${directionCount > 0 ? `├── Direction Conviction: ${directionCount}\n│   ` : ''}${shortlistCount > 0 ? `├── Shortlist Cap: ${shortlistCount}\n│   ` : ''}${unmeasuredCount > 0 ? `├── Direction Unmeasured: ${unmeasuredCount}\n│   ` : ''}${otherCount > 0 ? `└── Other: ${otherCount}` : ''}`
     : '';
 
   const asciiTree = `Universe (${scanned})
