@@ -1535,19 +1535,51 @@
     },
     {
       "id": "WATCH-RESEND-HEAD-OF-LINE",
-      "name": "A queued watch alert a channel always rejects no longer blocks the alerts behind it (skip on proof); per-channel delivery; queued alerts expire on re-enable",
+      "name": "Piece 1 of 3: a queued watch alert that keeps failing no longer blocks the alerts behind it (skip on proof, drop at once)",
       "status": "in_progress",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
-      "plan": "docs/superpowers/plans/2026-10-01-watch-resend-head-of-line-plan.md",
+      "plan": "docs/superpowers/plans/2026-10-02-watch-resend-skip-on-proof-plan.md",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/strategy_watch_evaluator.py",
-        "pattern": "def _drain_watch\\(",
-        "note": "BUILT once the per-watch drain (plan 2.4) exists; it replaces _resend_watch's return-at-first-failure."
+        "pattern": "^_UNDELIVERABLE_AFTER = 3",
+        "note": "BUILT once the skip-on-proof constant exists (plan 2.2)."
       },
-      "note": "2026-10-01 PLAN ROUND 2 NOT CLEAN (fresh reviewer on v2 at e14d2d5): 6 gate -- (1) the run breaker counts failed stuck heads, so 3 stuck watches early in the list trip Telegram for the whole run and a healthy watch's stop hit never reaches it; (2) two undeliverable entries in a row still block (a failed probe = outage); (3) proven increments are unspaced and the immediate retry is where a post-recovery 429 lands, so a good head can still be abandoned; (4) keeping the head alive after proof delivers it late, after newer alerts -- out of order beyond the one admitted case, against WATCH-RESEND-QUEUE-2026-09-27 and the decision's literal reading; (5) test migration incomplete (MagicMock-store tests break on append+re-read, env-dependent rewritten tests, router fixture reload); (6) targets undefined on an unreadable config. 11 below-gate (sent-but-unwritten guarantee around the probe, gmail SMTP has no timeout, guard fixture swallowed by _safe_notify, clock rules, malformed non-head entries, tests 14/18 unbuildable, cap on unreadable config, immediate-retry duplicates on a client-side timeout, token-less enabled Telegram regression, drain isolation). One plan round left before the per-stage cap. STOPPED FOR KENNETH: recommend splitting the batch. || 2026-10-01 PLAN ROUND 1 NOT CLEAN (fresh reviewer on v1): 8 gate -- expiry missed composite_watch.py's PATCH and named a nonexistent router file; drain must re-read the store after _collect's _write_effective writes; cap evicted before the drain; post-outage 429 could abandon a good head; PATCH/run race; any() over a dict; evaluator patch points moved (tests would hit real config/sends); probing unbounded under a Telegram outage. 9 below-gate. ALL addressed in plan v2 ([R1-n] tags); v2 also replaces round-1's 'qualified failure' idea (deadlocks when the stuck alert is the only traffic) with probe + retry + two proven runs. NEXT: plan round 2. || 2026-10-01: claimed on claude/youthful-carson-82x23x (restarted from main 863f95a). Decision WATCH-RESEND-HEAD-OF-LINE-2026-10-01. Plan v1 written; NEXT: plan round 1."
+      "note": "2026-10-02 SPLIT BY KENNETH (decision WATCH-RESEND-SPLIT-2026-10-02): this phase is now piece 1 only (skip on proof, single delivered result, drop the stuck alert at once). Pieces 2 and 3 are WATCH-RESEND-EXPIRY-ON-REENABLE and WATCH-RESEND-PER-CHANNEL. The combined plan (2026-10-01-watch-resend-head-of-line-plan.md v2) is superseded by docs/superpowers/plans/2026-10-02-watch-resend-skip-on-proof-plan.md v1 (not yet reviewed). Rounds 1-2 were on the combined plan; Kenneth gave this piece three fresh plan rounds, so the per-stage cap falls after round 5. || 2026-10-01 PLAN ROUND 2 NOT CLEAN (fresh reviewer on v2 at e14d2d5): 6 gate -- (1) the run breaker counts failed stuck heads, so 3 stuck watches early in the list trip Telegram for the whole run and a healthy watch's stop hit never reaches it; (2) two undeliverable entries in a row still block (a failed probe = outage); (3) proven increments are unspaced and the immediate retry is where a post-recovery 429 lands, so a good head can still be abandoned; (4) keeping the head alive after proof delivers it late, after newer alerts -- out of order beyond the one admitted case, against WATCH-RESEND-QUEUE-2026-09-27 and the decision's literal reading; (5) test migration incomplete (MagicMock-store tests break on append+re-read, env-dependent rewritten tests, router fixture reload); (6) targets undefined on an unreadable config. 11 below-gate (sent-but-unwritten guarantee around the probe, gmail SMTP has no timeout, guard fixture swallowed by _safe_notify, clock rules, malformed non-head entries, tests 14/18 unbuildable, cap on unreadable config, immediate-retry duplicates on a client-side timeout, token-less enabled Telegram regression, drain isolation). One plan round left before the per-stage cap. STOPPED FOR KENNETH: recommend splitting the batch. || 2026-10-01 PLAN ROUND 1 NOT CLEAN (fresh reviewer on v1): 8 gate -- expiry missed composite_watch.py's PATCH and named a nonexistent router file; drain must re-read the store after _collect's _write_effective writes; cap evicted before the drain; post-outage 429 could abandon a good head; PATCH/run race; any() over a dict; evaluator patch points moved (tests would hit real config/sends); probing unbounded under a Telegram outage. 9 below-gate. ALL addressed in plan v2 ([R1-n] tags); v2 also replaces round-1's 'qualified failure' idea (deadlocks when the stuck alert is the only traffic) with probe + retry + two proven runs. NEXT: plan round 2. || 2026-10-01: claimed on claude/youthful-carson-82x23x (restarted from main 863f95a). Decision WATCH-RESEND-HEAD-OF-LINE-2026-10-01. Plan v1 written; NEXT: plan round 1."
+    },
+    {
+      "id": "WATCH-RESEND-EXPIRY-ON-REENABLE",
+      "name": "Piece 2 of 3: queued watch alerts older than a max age are dropped when the watch is re-enabled (strategy and composite routes)",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/strategy_watch_evaluator.py",
+        "pattern": "^_REENABLE_MAX_AGE = ",
+        "note": "BUILT once the max-age constant exists."
+      },
+      "note": "Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 section 2.8 and its round-1/2 findings (R1-1, R1-5, R1-13). Own plan, three plan rounds."
+    },
+    {
+      "id": "WATCH-RESEND-PER-CHANNEL",
+      "name": "Piece 3 of 3: watch alert delivery tracked per channel (dispatch reports each channel's result and why a send failed)",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "WATCH-RESEND-HEAD-OF-LINE"
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/notifications/dispatch.py",
+        "pattern": "def notify_channels\\(",
+        "note": "BUILT once dispatch exposes per-channel results."
+      },
+      "note": "Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 sections 2.1-2.3, 2.6 and round-2 findings 1-3, 5-6. Own plan, three plan rounds."
     }
   ],
   "already_shipped": [
@@ -3039,6 +3071,11 @@
       "id": "WATCH-RESEND-HEAD-OF-LINE-2026-10-01",
       "q": "WATCH-RESEND-HEAD-OF-LINE (open question RESCUED 2026-09-30, _resend_watch head-of-line): how does a queued watch alert that keeps failing stop blocking the alerts behind it (skip on proof / attempt cap / age cap / leave)? And does the task also take the two side points (expiry of queued alerts on re-enable; per-channel partial delivery)?",
       "a": "Kenneth, 2026-10-01: SKIP ON PROOF -- when the oldest queued alert fails, try the next; if the next delivers on that channel the oldest is declared undeliverable there (ERROR log), only after it has failed on 3 runs; an outage drops nothing. YES to both side points: expiry on re-enable, and per-channel partial delivery (dispatch.py reports each channel). WATCH-RESEND-QUEUE-2026-09-27 (in order, oldest first) stays the rule otherwise. Plan: docs/superpowers/plans/2026-10-01-watch-resend-head-of-line-plan.md."
+    },
+    {
+      "id": "WATCH-RESEND-SPLIT-2026-10-02",
+      "q": "WATCH-RESEND-HEAD-OF-LINE after plan round 2 NOT clean (6 gate): split the batch? And once a later alert of the watch has got through, keep retrying the stuck oldest alert or drop it?",
+      "a": "Kenneth, 2026-10-02: SPLIT IN 3, each planned, audited (its own three plan rounds) and merged on its own: (1) WATCH-RESEND-HEAD-OF-LINE = skip on proof with today's single delivered/not-delivered result; (2) WATCH-RESEND-EXPIRY-ON-REENABLE = expiry of queued alerts on re-enable, strategy and composite routes; (3) WATCH-RESEND-PER-CHANNEL = per-channel delivery (dispatch reports each channel's result). DROP AT ONCE: in a run where the stuck alert has failed on 3 runs at least an hour apart and the next alert then gets through, the stuck one is dropped there and logged at ERROR; no retry, nothing ever delivered out of order. Accepted cost: a stuck alert that would have gone through later is lost."
     }
   ],
   "pending_kenneth": [
