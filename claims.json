@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "ccr-5fdfa0ea-jyqf7y",
-      "claimed_at": "2026-10-02T12:06:22Z",
-      "expires_at": "2026-10-02T15:06:22Z",
-      "note": "plan v1 audit loop: direction-aware short stock pct stop; sub-cent premium stop refused at save",
-      "task": "STOP-SEMANTICS"
-    },
-    {
-      "agent": "claude",
       "branch": "ccr-5c724df1-2zfbux",
       "claimed_at": "2026-10-02T12:12:57Z",
       "expires_at": "2026-10-02T15:12:57Z",
