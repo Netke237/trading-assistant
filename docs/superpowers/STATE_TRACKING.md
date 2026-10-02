@@ -88,10 +88,15 @@ a green "No drift".
 - **The earlier piece is still checked.** Rounds before that commit are
   dropped only if the piece the pointer named just before it still answers
   for them in the current file: count at least their highest round and, from
-  round 3, `audit_clean: true`. If it does not, that piece is reported by
-  name (undercount or hard cap) — opening a new piece never clears an earlier
-  one. If the earlier rounds had no target at all, nothing is dropped and the
-  active target answers for them.
+  round 3, `audit_clean: true`. If it does not, nothing is dropped: the
+  active target answers for those rounds too, and its warning carries a note
+  naming the earlier piece. It clears honestly either way — record the count
+  on the earlier piece (narrowing resumes), or, if the rounds were really the
+  new piece's, record them there. Opening a new piece never clears an earlier
+  undercount on its own. The same applies when the earlier rounds had no
+  target at all.
+- **Round notation also read:** `clean after 7 rounds` (number before the
+  plural word), `rounds 1, 2 and 3`, `round #3`, `audit_r3`.
 - **The tiers.**
   - Rounds in the subjects with **no target** counting them: **warn** below
     round 3, **drift** at 3.

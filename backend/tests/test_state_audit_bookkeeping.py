@@ -1384,3 +1384,58 @@ def test_the_target_scoping_probe_dies_when_the_g3_check_is_reverted(repo):
     )
     assert reverted != src
     assert not re.search(entry["verify"]["pattern"], reverted, re.M)
+
+
+# --- STATE-PROBE-FIXES round 3 findings (decision STATE-PROBE-FIXES-ROUND-4-2026-10-02)
+
+@pytest.mark.parametrize("subject, expected", [
+    ("Merge Phase A: the contract iv field, clean after 7 rounds", 7),
+    ("rounds 1, 2 and 3", 3),
+    ("round #3 fixes", 3),
+    ("audit_r3 done", 3),
+])
+def test_f2_a_count_before_the_word_and_other_lists_are_read(repo, subject, expected):
+    """F2. "clean after 7 rounds" (the Phase A/B/C/E merge subjects) was not
+    read, so an entry declaring 1 against it rendered No drift."""
+    repo.commit(subject)
+    assert _mod._round_numbers_in_branch_subjects("origin/main")[0] == expected
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": 1, "audit_clean": True}]
+    assert _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))[0] == "drift"
+
+
+def test_f2_a_singular_round_after_another_number_is_not_a_count(repo):
+    repo.commit("Phase G step 3 round 2")
+    assert _mod._round_numbers_in_branch_subjects("origin/main")[0] == 2
+
+
+def test_f1_a_round_named_in_the_opening_commit_does_not_stick_to_the_previous_piece(repo):
+    """F1. The commit that opens piece B named B's pending round 1 in its
+    subject (real shape: "DOCC-4-CONFIG-HEALTH: plan + phase registered (plan
+    round 1 pending)"). It sat in A's span, so honest A at 0 drew a banner that
+    cleared only by writing a false A=1. B now answers for it, honestly."""
+    repo.write_state(_piece_state("A", [{"name": "A", "audit_rounds": 0}]), "open A")
+    repo.commit("build A")
+    repo.write_state(_piece_state("B", [{"name": "A", "audit_rounds": 0},
+                                        {"name": "B", "audit_rounds": 0}]),
+                     "B: plan + phase registered (plan round 1 pending)")
+    repo.commit("B plan round 1 clean")
+    honest = _piece_state("B", [{"name": "A", "audit_rounds": 0},
+                                {"name": "B", "audit_rounds": 1, "audit_clean": True}])
+    repo.write_state(honest, "record B")
+    assert _mod.audit_bookkeeping_drift(honest) is None
+
+
+def test_f1_plan_rounds_under_a_stale_pointer_are_clearable_on_the_new_piece(repo):
+    """F1, second shape: the pointer stayed on finished A while B's plan
+    rounds ran, then B was registered with its honest count."""
+    repo.write_state(_piece_state("A", [{"name": "A", "audit_rounds": 0}]), "open A")
+    repo.commit("A round 1")
+    repo.commit("A round 2 clean")
+    repo.write_state(_piece_state("A", [{"name": "A", "audit_rounds": 2, "audit_clean": True}]),
+                     "record A")
+    for n in (1, 2, 3):
+        repo.commit(f"B plan r{n}")
+    honest = _piece_state("B", [{"name": "A", "audit_rounds": 2, "audit_clean": True},
+                                {"name": "B", "audit_rounds": 3, "audit_clean": True}])
+    repo.write_state(honest, "register B")
+    assert _mod.audit_bookkeeping_drift(honest) is None

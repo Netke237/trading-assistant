@@ -142,11 +142,15 @@ _GIT_FAILED = object()
 # under-counted against "X r1..r4" rendered "No drift". Every number in a range
 # counts, so the highest is the range's end. `rN` is lower-case only: upper-case
 # R1-R9 is how plans number requirements. A false match is a false ALARM, the
-# direction this probe accepts; a missed one is silence.
+# direction this probe accepts; a missed one is silence. Round 3 finding F2
+# added the count written BEFORE the word -- "clean after 7 rounds", the Phase
+# A/B/C/E merge subjects -- plus "rounds 1, 2 and 3", "round #3" and "audit_r3".
+# Plural only there: "step 3 round 2" names round 2, not 3.
 _ROUND_RE = re.compile(
-    r"(?:\b(?i:rounds?)[\s-]*|\br)\d+"
-    r"(?:\s*(?:-|–|\.\.|\+|/|&|\band\b|\bto\b)\s*(?:r|(?i:round)[\s-]*)?\d+)*"
+    r"(?:\b(?i:rounds?)[\s#-]*|(?<![A-Za-z0-9])r)\d+"
+    r"(?:\s*(?:-|–|\.\.|\+|/|&|,|\band\b|\bto\b)\s*(?:r|(?i:round)[\s#-]*)?\d+)*"
     r"(?![\w])"
+    r"|\b\d+\s+(?i:rounds)\b"
 )
 
 
@@ -589,11 +593,17 @@ def _earlier_span_verdict(base_ref: str, boundary: str, state: dict,
 
     Not accounted means the caller does not narrow, so the active target
     answers for the whole branch: a false ALARM at worst, never silence. When
-    the previous piece itself is what fails (undercount or cap), `problem`
-    names it, because the active target's banner would prescribe recording a
-    number on the wrong entry. A span whose pointer resolved to nothing, or
-    whose piece is no longer in the file, has no one else to name; the active
-    target answers for it, and if it counts those rounds that is honest.
+    the previous piece itself is what fails (undercount or cap), `problem` is
+    a NOTE naming it, appended to whatever the active target reports -- never
+    a banner of its own. Round 3 finding F1: a banner of its own charged the
+    previous piece with rounds that were really the new piece's (a round
+    number in the subject of the commit that opens the new piece, or the new
+    piece's plan rounds run under a stale pointer), and the pointer that did
+    the charging is history nobody can edit, so it cleared only by writing a
+    false count or merging. Answering through the active target leaves both
+    honest routes open: record the count on the previous piece (the span is
+    then accounted and narrowing resumes), or, if the rounds were the new
+    piece's, record them there.
     """
     # Ends: each step's `start` is an introducing commit found among the
     # ancestors of `end^`, so it is strictly older than `end`, and the walk
@@ -627,19 +637,20 @@ def _earlier_span_verdict(base_ref: str, boundary: str, state: dict,
             label = f"'{prev[1]}'"
             if declared is None or declared < span_max:
                 return False, (
-                    f"Audit bookkeeping: {label} -- the target BEFORE the current "
-                    f"one -- declares {entry.get('audit_rounds')!r} round(s), but "
-                    f"its span of this branch reaches round {span_max}. Opening a "
-                    f"new piece does not clear an earlier undercount; record the "
-                    f"count on {label}. Subjects: {shown}"
+                    f"The rounds before the active target was opened count against "
+                    f"it, because {label}, the target before it, declares "
+                    f"{entry.get('audit_rounds')!r} round(s) while its span of this "
+                    f"branch reaches round {span_max}. If they were {label}'s "
+                    f"rounds, record the count there. Subjects: {shown}"
                 )
             if span_max >= UNPHASED_FAIL_ROUND and entry.get("audit_clean") is not True:
                 return False, (
-                    f"Audit bookkeeping: {label} -- the target BEFORE the current "
-                    f"one -- ran to round {span_max} on this branch, NONE of them "
-                    f"clean. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND}: STOP "
-                    f"AUDITING AND TELL KENNETH. Opening a new piece does not clear "
-                    f"it; going clean or merging does. Subjects: {shown}"
+                    f"The rounds before the active target was opened count against "
+                    f"it, because {label}, the target before it, ran to round "
+                    f"{span_max} on this branch, NONE of them clean -- audit_rule's "
+                    f"HARD CAP is {UNPHASED_FAIL_ROUND}: STOP AUDITING AND TELL "
+                    f"KENNETH. Opening a new piece does not clear that; {label} "
+                    f"going clean, or merging, does. Subjects: {shown}"
                 )
         if start == base_ref:
             return True, None
@@ -648,8 +659,8 @@ def _earlier_span_verdict(base_ref: str, boundary: str, state: dict,
 
 
 def _earlier_span_problem(base_ref: str, state: dict) -> str | None:
-    """The previous piece's own failure, if narrowing to the active target
-    would have dropped it (G3). Recomputes the boundary the way
+    """The NOTE naming the previous piece, when narrowing was refused because
+    of its undercount or cap (G3; see `_earlier_span_verdict`). Recomputes the boundary the way
     `_target_scoped_base` does; it only runs when the branch carries rounds."""
     identity = _target_identity(state)
     if identity is None:
@@ -788,10 +799,10 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     git_max, subjects = evidence
     shown = "; ".join(subjects[:3])
 
-    # G3: a previous piece that narrowing dropped speaks for itself, by name.
+    # G3: when narrowing was refused because the previous piece failed, the
+    # active target answers for its rounds and this note names that piece.
     earlier = _earlier_span_problem(base_ref, state)
-    if earlier is not None:
-        return "drift", earlier
+    note = f" ALSO: {earlier}" if earlier else ""
 
     target, label = _pointer_target(state)
 
@@ -839,7 +850,7 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
         return "drift", (
             f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
             f"{label} -- the active target -- declares {declared}. "
-            f"A round ran and was never written down — subjects: {shown}"
+            f"A round ran and was never written down — subjects: {shown}{note}"
         )
 
     # THE HARD CAP ON THE RESOLVED PATH. It used to live only in the `target is
@@ -881,14 +892,14 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"{git_max}. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND}: STOP AUDITING "
             f"AND TELL KENNETH -- that is evidence the batch is too big to audit, not "
             f"that it needs another round. Clears by going clean, by merging, or by "
-            f"moving active_phase if it is pointing at finished work. Subjects: {shown}"
+            f"moving active_phase if it is pointing at finished work. Subjects: {shown}{note}"
         )
 
     if declared is None:
         return "warn", (
             f"Audit bookkeeping: {label} has audit_rounds={raw!r}, which is not a "
             f"whole number, so the round count was NOT checked against git "
-            f"(this branch reaches round {git_max}). Fix the field."
+            f"(this branch reaches round {git_max}). Fix the field.{note}"
         )
     return None
 
