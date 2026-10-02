@@ -1,0 +1,36 @@
+{
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "ccr-5c724df1-2zfbux",
+      "claimed_at": "2026-10-02T12:12:57Z",
+      "expires_at": "2026-10-02T15:12:57Z",
+      "note": "built f6bfdf6; merging main + adversarial code audit loop",
+      "task": "STEP3-PARAM-REACH"
+    },
+    {
+      "agent": "claude",
+      "branch": "ccr-5fdfa0ea-jyqf7y",
+      "claimed_at": "2026-10-02T12:29:29Z",
+      "expires_at": "2026-10-02T15:29:29Z",
+      "note": "plan v4 (apply round-3 18 findings) then build + code audit loop",
+      "task": "STOP-SEMANTICS"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/affectionate-vaughan-37b961",
+      "claimed_at": "2026-10-02T12:30:04Z",
+      "expires_at": "2026-10-02T15:30:04Z",
+      "note": "round 3 not clean, awaiting Kenneth",
+      "task": "STATE-PROBE-FIXES"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/infallible-hertz-c2c2d9",
+      "claimed_at": "2026-10-02T12:31:16Z",
+      "expires_at": "2026-10-02T15:31:16Z",
+      "note": "piece 2: full backend suite on Mini PC before merge",
+      "task": "WATCH-RESEND-EXPIRY-ON-REENABLE"
+    }
+  ]
+}
