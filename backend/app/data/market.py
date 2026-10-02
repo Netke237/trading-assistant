@@ -728,12 +728,66 @@ def _nearest_expiration_in_window(
     return min(near, key=lambda d: abs(_dte(d) - centre))
 
 
+# The no-window pick when a caller passes no limits: the first expiry at or
+# above this many days. Pinned to contract_rules.yaml's hard_reject.min_dte by
+# tests/test_option_chain_expiry_selection.py.
+_DEFAULT_MIN_DTE_FLOOR = 21
+
+
+def _pick_expiration_without_window(
+    dates: list[str], today: date, dte_limits: Optional[tuple[int, int, int, int]],
+) -> Optional[str]:
+    """The expiry to fetch when no hold window is set.
+
+    `dte_limits` is (min_dte, preferred_dte_min, preferred_dte_max, max_dte) as
+    the contract validator applies them (contract_validator.effective_dte_limits).
+    Only expiries inside [min_dte, max_dte] can yield a contract the validator
+    accepts, so nothing outside it is picked (None when nothing is listed
+    there). Among those, the one with the smallest distance to the preferred
+    band [preferred_dte_min, preferred_dte_max] wins, the shorter on a tie --
+    so the shortest expiry inside the band when there is one. This does NOT maximise the DTE sub-score (_score_dte peaks at the
+    band's centre and is 0 at its edges); it only stays out of the hard-reject
+    range and as close to the band as the listing allows.
+
+    With the shipped rules (21, 21-60, 90) that is the old "first expiry of
+    21+ days" whenever that expiry is at most 90 days out; when it is further
+    (only longer expiries listed) the old pick was certain to be rejected as
+    dte_too_long and nothing is fetched instead.
+
+    A fixed 21 used to be the floor whatever the rules said: a min_dte override
+    of 45 fetched the first 21+ day expiry, every contract of which was then
+    rejected as dte_too_short, dropping the symbol from the scan.
+
+    dte_limits=None keeps that old pick (first expiry of 21+ days, now taken in
+    date order rather than listing order) for callers that pass no rules; it
+    stops there, as before. With dte_limits set every listed date is parsed, so
+    one malformed entry fails the whole fetch (the caller's except returns []).
+    """
+    def _dte(d: str) -> int:
+        return (date.fromisoformat(d) - today).days
+
+    ordered = sorted(dates)
+    if dte_limits is None:
+        return next((d for d in ordered if _dte(d) >= _DEFAULT_MIN_DTE_FLOOR), None)
+    # An inverted band (preferred min above max) gives odd distances, but the
+    # validator then scores every DTE 0, so which in-range expiry wins is moot.
+    lo, pref_lo, pref_hi, hi = dte_limits
+
+    def _off_band(d: str) -> int:
+        n = _dte(d)
+        return pref_lo - n if n < pref_lo else max(0, n - pref_hi)
+
+    in_range = [d for d in ordered if lo <= _dte(d) <= hi]
+    return min(in_range, key=_off_band) if in_range else None  # min() keeps the first (shorter) on a tie
+
+
 def fetch_option_chain(
     symbol: str,
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
+    dte_limits: Optional[tuple[int, int, int, int]] = None,
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
@@ -764,11 +818,10 @@ def fetch_option_chain(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
-                None,
-            )
+            target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
+                logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
+                          symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
         chain_resp = httpx.get(
@@ -1411,6 +1464,7 @@ async def fetch_option_chain_async(
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
+    dte_limits: Optional[tuple[int, int, int, int]] = None,
 ) -> list[dict]:
     """Async variant."""
     try:
@@ -1446,11 +1500,10 @@ async def fetch_option_chain_async(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
-                None,
-            )
+            target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
+                logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
+                          symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
         chain_resp = await client.get(

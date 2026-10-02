@@ -63,7 +63,7 @@ from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_even
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
-from app.scoring.contract_validator import effective_contract_overrides, is_finite_rule_value
+from app.scoring.contract_validator import effective_contract_overrides, effective_dte_limits, is_finite_rule_value
 from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
@@ -387,6 +387,7 @@ async def _build_spreads(
     *,
     dte_bounds: tuple[int, int] | None = None,
     min_dte_floor: int | None = None,
+    dte_limits: tuple[int, int, int, int] | None = None,
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
@@ -416,9 +417,11 @@ async def _build_spreads(
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
                 fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="P",
-                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor,
+                                         dte_limits=dte_limits),
                 fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="C",
-                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor,
+                                         dte_limits=dte_limits),
             )
     except Exception as exc:
         _log.debug("Spread: chain fetch failed for %s: %s", symbol, exc)
@@ -744,11 +747,14 @@ async def _process_symbol(
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
     # The fetch must only consider expiries the validator will accept, so it
-    # gets the same floor the contract hard-reject uses (widen_contract_overrides_for_dte).
+    # gets the same floor the contract hard-reject uses (widen_contract_overrides_for_dte);
+    # with no hold window, the validator's min_dte/max_dte and preferred DTE band.
     _dte_floor = widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None
+    _dte_limits = effective_dte_limits(overrides) if dte_bounds is None else None
     async with sem:
         chain = await fetch_option_chain_async(client, symbol, option_type=option_type,
-                                               dte_bounds=dte_bounds, min_dte_floor=_dte_floor)
+                                               dte_bounds=dte_bounds, min_dte_floor=_dte_floor,
+                                               dte_limits=_dte_limits)
 
     if not chain:
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
@@ -1222,6 +1228,7 @@ async def _process_symbol(
         symbol, direction, contract, iv_rank, client, sem,
         dte_bounds=dte_bounds,
         min_dte_floor=_dte_floor,
+        dte_limits=_dte_limits,
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,
