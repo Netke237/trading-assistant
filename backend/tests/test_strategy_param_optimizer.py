@@ -34,7 +34,7 @@ def test_optimize_strategy_sync_does_not_rerun_backtest_for_is_return(monkeypatc
 
     call_count = {"n": 0}
 
-    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0):
+    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0, **kwargs):
         call_count["n"] += 1
         return BacktestResult(
             strategy=strategy, direction=direction, n_trades=15, win_rate=0.6,
@@ -47,8 +47,7 @@ def test_optimize_strategy_sync_does_not_rerun_backtest_for_is_return(monkeypatc
 
     bars = _synth_bars(400)
     basket_bars = {"AAPL": bars}
-    # test_months=4 (~123 days) clears the OOS section's >=100-bar minimum so
-    # both the train and OOS backtest calls actually execute.
+    # calendar-day synthetic bars; the warm-up path is covered on trading-day bars in test_walk_forward_warmup.py
     folds = build_folds(date(2020, 1, 1), date(2021, 1, 1), train_months=6, test_months=4)
     assert folds, "fixture must produce at least one fold"
 

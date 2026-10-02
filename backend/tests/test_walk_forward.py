@@ -272,7 +272,7 @@ def test_train_fold_breaks_sharpe_tie_toward_grid_center(monkeypatch):
             self.sharpe = sharpe
             self.n_trades = 5
 
-    def _stub_backtest(train_bars, *, strategy, direction, params):
+    def _stub_backtest(train_bars, *, strategy, direction, params, **kwargs):
         return _StubResult(sharpe=1.0)  # identical Sharpe for every combo
 
     monkeypatch.setattr(wf_mod, "run_strategy_backtest", _stub_backtest)
@@ -302,7 +302,7 @@ def test_train_fold_lets_a_clear_edge_winner_through(monkeypatch):
             self.sharpe = sharpe
             self.n_trades = 5
 
-    def _stub_backtest(train_bars, *, strategy, direction, params):
+    def _stub_backtest(train_bars, *, strategy, direction, params, **kwargs):
         # Edge value (10) is far better than everything else -> should still win.
         sharpe = 2.0 if params["ema_period"] == 10 else 1.0
         return _StubResult(sharpe=sharpe)
@@ -336,7 +336,7 @@ def test_train_fold_returns_params_and_results_tuple(monkeypatch):
     from app.services.walk_forward import train_fold, Fold
     from app.services.strategy_backtest import BacktestResult
 
-    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0):
+    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0, **kwargs):
         return BacktestResult(
             strategy=strategy, direction=direction, n_trades=15, win_rate=0.6,
             total_return_pct=10.0, max_drawdown_pct=-5.0, expectancy=0.4,
@@ -370,7 +370,7 @@ def test_train_fold_picks_highest_sharpe_and_stashes_its_result(monkeypatch):
     import app.services.walk_forward as wf_module
     from app.services.walk_forward import train_fold, Fold
 
-    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0):
+    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0, **kwargs):
         from app.services.strategy_backtest import BacktestResult
         ema = (params or {}).get("ema_period", 50)
         sharpe = 1.5 if ema == 20 else 0.3  # ema_period=20 is the clear winner

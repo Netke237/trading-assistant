@@ -8,7 +8,7 @@ from typing import Callable
 
 from app.services.walk_forward import (
     apply_costs, consensus, consistency, degradation_pct,
-    build_folds, train_fold, _slice_bars,
+    build_folds, train_fold, slice_with_warmup, MIN_SCORED_BARS,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,11 +122,14 @@ def _optimize_strategy_sync(
         # OOS: score the test window with winner params, net of costs
         test_returns: list[float] = []
         for sym, bars in basket_bars.items():
-            test_bars = _slice_bars(bars, fold.test_start, fold.test_end)
-            if len(test_bars) >= 100:  # matches IS guard and backtest engine's internal minimum
+            test_bars, n_scored = slice_with_warmup(bars, fold.test_start, fold.test_end)
+            # Fix #2: judge the fold on bars INSIDE it (>= MIN_SCORED_BARS); the
+            # warm-up prefix only primes indicators and can place no entry.
+            if n_scored >= MIN_SCORED_BARS and len(test_bars) >= 100:
                 try:
                     res = run_strategy_backtest(
-                        test_bars, strategy=strategy, direction=direction, params=winner
+                        test_bars, strategy=strategy, direction=direction, params=winner,
+                        entry_start=fold.test_start,
                     )
                     # Only include windows where the strategy actually traded.
                     # Applying cost drag to a zero-trade window injects a false
@@ -188,7 +191,7 @@ def _optimize_strategy_sync(
         "total_return": walk_forward_return,
         "max_drawdown": round(min(all_drawdowns), 4) if all_drawdowns else 0.0,
         # Divide by symbols that actually contributed (not total basket) so min_trades
-        # threshold is not diluted by symbols skipped by the 100-bar OOS guard.
+        # threshold is not diluted by symbols skipped by the MIN_SCORED_BARS guard.
         "n_trades": round(total_n_trades / max(len(contributing_symbols), 1)),
     }
 
