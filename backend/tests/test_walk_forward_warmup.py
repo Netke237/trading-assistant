@@ -34,15 +34,55 @@ def test_trading_day_test_fold_is_short_but_scored_with_warmup():
     assert window[WARMUP_BARS - 1]["_date"] < f.test_start
 
 
-def test_entry_start_blocks_entries_before_it():
-    from app.services.strategy_backtest import run_strategy_backtest
+def test_entry_start_blocks_entries_before_it(monkeypatch):
+    """Strict: fails if entry_start is ignored. Spies on backtesting.Backtest.run
+    (no production API change) to read the real trades' EntryTime."""
     import json
     from pathlib import Path
+
+    import pandas as pd
+    from backtesting import Backtest
+
+    from app.services.strategy_backtest import run_strategy_backtest
+
     bars = json.loads((Path(__file__).parent / "fixtures" / "SPY_candles.json").read_text())
     cut = date.fromisoformat(str(bars[180]["time"])[:10])
+
+    entry_times = []
+    orig_run = Backtest.run
+
+    def spy(self, *a, **kw):
+        stats = orig_run(self, *a, **kw)
+        entry_times.append(list(stats["_trades"]["EntryTime"]))
+        return stats
+
+    monkeypatch.setattr(Backtest, "run", spy)
+
     full = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
     late = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish", entry_start=cut)
-    assert late.n_trades <= full.n_trades
+
+    full_entries, late_entries = entry_times
+    # Without the cutoff the strategy does trade before `cut` ...
+    assert any(t < pd.Timestamp(cut) for t in full_entries)
+    # ... with it, no entry is placed before `cut`.
+    assert late_entries and all(t >= pd.Timestamp(cut) for t in late_entries)
+    assert late.n_trades < full.n_trades
+
+
+def test_entry_start_with_tz_aware_bar_times():
+    """A naive cutoff compared with a tz-aware equity index raised TypeError."""
+    import json
+    from pathlib import Path
+
+    from app.services.strategy_backtest import run_strategy_backtest
+
+    bars = json.loads((Path(__file__).parent / "fixtures" / "SPY_candles.json").read_text())
+    tz_bars = [{**b, "time": str(b["time"])[:10] + "T00:00:00+00:00"} for b in bars]
+    cut = date.fromisoformat(str(bars[180]["time"])[:10])
+    res = run_strategy_backtest(tz_bars, strategy="pullback_ema", direction="Bullish", entry_start=cut)
+    assert res.summary_text != "entry_start needs dated bars"
+    assert "tz" not in res.summary_text.lower() and "compare" not in res.summary_text.lower()
+    assert res.n_trades > 0
 
 
 def test_oos_backtest_runs_on_trading_day_folds(monkeypatch):

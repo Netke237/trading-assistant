@@ -187,7 +187,12 @@ def run_strategy_backtest(
     if entry_start is not None:
         # Score only the fold itself; the warm-up prefix is flat (no entries).
         eq = stats["_equity_curve"]["Equity"]
-        eq = eq[eq.index >= pd.Timestamp(entry_start)]
+        # tz-aware bar times (e.g. "...T00:00:00+00:00") make a naive cutoff raise
+        # TypeError on comparison, which train_fold's broad except would swallow.
+        cutoff = pd.Timestamp(entry_start)
+        if getattr(eq.index, "tz", None) is not None:
+            cutoff = cutoff.tz_localize(eq.index.tz)
+        eq = eq[eq.index >= cutoff]
         total_ret, max_dd, sharpe = _window_stats(eq)
 
     # Use real per-trade returns (stats['_trades']['ReturnPct']) rather than deriving
