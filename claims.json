@@ -2,34 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/affectionate-vaughan-37b961",
-      "claimed_at": "2026-10-02T06:28:01Z",
-      "expires_at": "2026-10-02T09:28:01Z",
-      "note": "REVIVAL+NULL-POINTER+TARGET-SCOPING audit fixes",
-      "task": "STATE-PROBE-FIXES"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/infallible-hertz-c2c2d9",
-      "claimed_at": "2026-10-02T06:28:12Z",
-      "expires_at": "2026-10-02T09:28:12Z",
-      "note": "piece 2: drop queued watch alerts older than max age on re-enable",
-      "task": "WATCH-RESEND-EXPIRY-ON-REENABLE"
-    },
-    {
-      "agent": "claude",
-      "branch": "ccr-5c724df1-2zfbux",
-      "claimed_at": "2026-10-02T07:17:11Z",
-      "expires_at": "2026-10-02T10:32:37Z",
-      "note": "Step-3 values not reaching backend; restored-scan defaults; /api/contracts max_price/limit dropping card contract",
-      "task": "STEP3-PARAM-REACH"
-    },
-    {
-      "agent": "claude",
       "branch": "ccr-5fdfa0ea-jyqf7y",
-      "claimed_at": "2026-10-02T07:47:26Z",
-      "expires_at": "2026-10-02T10:47:26Z",
-      "note": "build (a) direction-aware short stock pct stop, (b) reject sub-cent premium stop at save",
+      "claimed_at": "2026-10-02T12:06:22Z",
+      "expires_at": "2026-10-02T15:06:22Z",
+      "note": "plan v1 audit loop: direction-aware short stock pct stop; sub-cent premium stop refused at save",
       "task": "STOP-SEMANTICS"
     }
   ]
