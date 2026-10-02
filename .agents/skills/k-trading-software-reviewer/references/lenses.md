@@ -1,7 +1,7 @@
 # The panel's lenses
 
 Each lens is a list of questions, not a checklist of verdicts. Answer the ones that apply,
-with `file:line` evidence. Skip what doesn't apply silently.
+with `file:line` evidence. A lens question that doesn't apply needs no answer — this is about questions, not files; every file still gets its coverage status (SKILL.md rule 8).
 
 ## The Trader
 

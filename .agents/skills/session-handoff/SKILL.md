@@ -13,11 +13,11 @@ This is a **context-handoff artifact**, not a status report. The audience is a f
 
 1. **Review the full conversation**, not just the last few turns. Handoffs miss things when they only summarize recent context.
 2. **Pull state from these sources (in order):**
-   - Plan files referenced this session (look for a `.Codex/plans/` directory relative to the project root if a plan was mentioned).
-   - TodoWrite state — any in-progress or pending tasks. (Codex only — skip if this environment has no TodoWrite tool.)
-   - Background processes started with `run_in_background` — shell/task IDs are load-bearing for the next agent. (Codex only — skip if this environment has no persistent shell.)
+   - Plan files referenced this session (look for a `.claude/plans/` directory relative to the project root if a plan was mentioned).
+   - TodoWrite state — any in-progress or pending tasks. (Claude Code only — skip if this environment has no TodoWrite tool.)
+   - Background processes started with `run_in_background` — shell/task IDs are load-bearing for the next agent. (Claude Code only — skip if this environment has no persistent shell.)
    - Files created or modified this session — you know what you touched; don't grep to re-discover.
-   - Memory files written or updated (locate the Codex config/memory directory for this project rather than assuming a fixed path — it varies by machine and environment).
+   - Memory files written or updated (locate the Claude config/memory directory for this project rather than assuming a fixed path — it varies by machine and environment).
    - Unresolved questions — things you asked the user that never got a clear answer, or things the user asked that got deflected.
 3. **Do NOT audit the filesystem.** This is synthesis of what happened in THIS session. No `git log`, no broad `Glob` sweeps. If you didn't touch it this session, it doesn't belong here.
 4. **Produce the output in chat.** Do not write a file. Do not update memory. Chat-only.
