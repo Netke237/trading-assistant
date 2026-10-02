@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "ccr-5fdfa0ea-jyqf7y",
-      "claimed_at": "2026-10-02T17:02:12Z",
-      "expires_at": "2026-10-02T20:02:12Z",
-      "note": "code audit loop on the v4 build",
-      "task": "STOP-SEMANTICS"
-    },
-    {
-      "agent": "claude",
       "branch": "gemini/pipeline-root-cause-inspector",
       "claimed_at": "2026-10-02T17:09:30Z",
       "expires_at": "2026-10-02T20:09:30Z",
