@@ -174,6 +174,7 @@ async def test_2c_unreadable_config_counts_nothing_and_never_probes(reader):
     env = _CfgEnv(store, n, cfg_reader=reader)
     assert [e.event_type for e in await env.run()] == ["exit_stop"]
     assert n.reasons() == ["RZ-head"] and store.kinds("a") == ["entry", "exit_stop"]
+    assert _head(store)["failures"] == 3 and _head(store)["last_failure_at"] == old
 
 
 @pytest.mark.asyncio
@@ -272,8 +273,12 @@ async def test_9_malformed_behind_eligible_head_is_dropped_and_next_probed():
 @pytest.mark.asyncio
 async def test_9_failed_probe_leaves_an_unreached_malformed_entry():
     store = _Store([_sw("a", pending=[_e("RZ-head", failures=2), _e("RZ-P"), _malformed()])])
-    await _CfgEnv(store, _Notify(fail={"RZ-head", "RZ-P"})).run()
-    assert len(store.pending("a")) == 3
+    n = _Notify(fail={"RZ-head", "RZ-P"})
+    await _CfgEnv(store, n).run()
+    assert n.reasons() == ["RZ-head", "RZ-P"]
+    pend = store.pending("a")
+    assert [p["event"].get("reason") for p in pend] == ["RZ-head", "RZ-P", None]
+    assert pend[0]["failures"] == 3 and pend[2]["new_state"] == "x"
 
 
 @pytest.mark.asyncio
@@ -304,24 +309,34 @@ async def test_9b_failed_older_probe_keeps_the_fresh_event_unsent():
 @pytest.mark.parametrize("failures,last,expect", [
     ("x", None, 1), (-1, None, 1), (True, None, 1), (2, "garbage", 3),
     (2, "2026-10-01T13:30:00", 2),                            # naive = UTC, 30 min ago: not counted
+    (2, "2026-10-01T12:00:00", 3),                            # naive = UTC, 2 h ago: counted
     (2, (T0 + timedelta(hours=2)).isoformat(), 3),            # future = absent: counted
 ])
 @pytest.mark.asyncio
-async def test_10_malformed_and_odd_counter_values(failures, last, expect):
+async def test_10_malformed_and_odd_counter_values(failures, last, expect, caplog):
     extra = {"failures": failures}
     if last is not None:
         extra["last_failure_at"] = last
     store = _Store([_sw("a", pending=[_e("RZ-head", **extra)])])
-    await _CfgEnv(store, _Notify(fail={"RZ-head"})).run()
+    with caplog.at_level(logging.ERROR, logger=_EV):
+        await _CfgEnv(store, _Notify(fail={"RZ-head"})).run()
     assert _head(store)["failures"] == expect
+    assert "resend for a failed" not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_11_each_entry_sent_at_most_once_per_run():
-    store = _Store([_sw("a", pending=[_e("RZ-head", failures=2), _e("RZ-A"), _e("RZ-B")])])
-    n = _Notify(fail={"RZ-head"})
-    await _CfgEnv(store, n).run()
-    assert sorted(n.reasons()) == sorted(set(n.reasons()))
+async def test_11_defensive_length_check_queues_the_fresh_event_unsent():
+    store = _Store([_sw("a")])
+    t = ev_mod._Transition(event=ev_mod.WatchEvent(
+        watch_id="a", symbol="AAPL", strategy_key="pullback_ema", event_type="exit_stop",
+        direction="Bullish", entry=100.0, stop=101.0, target=110.0, rr_ratio=None, close=100.0,
+        reason="RZ-fresh"), watch_id="a", new_state=dict(IDLE), committed={"phase": "armed"},
+        pending=[_e("RZ-head", failures=3), _e("RZ-P")])
+    n = _Notify()
+    with patch(f"{_EV}.strategy_watch_store", store), \
+            patch(f"{_EV}.notify_enabled_channels", n.mock):
+        await ev_mod._deliver_or_queue(t, True, {"a": 3})
+    assert n.sent == [] and _reasons_pending(store) == ["RZ-head", "RZ-P", "RZ-fresh"]
 
 
 @pytest.mark.asyncio

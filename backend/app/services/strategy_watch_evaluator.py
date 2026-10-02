@@ -711,7 +711,8 @@ def _format_event(ev: WatchEvent, delayed_since: str | None = None) -> tuple[str
 
 def _any_channel_enabled() -> bool:
     """True when at least one notification channel is enabled (D3). See
-    _channel_status, which holds the rule."""
+    _channel_status, which holds the rule; kept for its callers' and tests'
+    bool contract (evaluate_and_notify reads _channel_status directly)."""
     return _channel_status()[0]
 
 
@@ -906,8 +907,11 @@ async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = N
     Undelivered with a channel enabled: the event is stored with the watch and
     re-sent, labelled delayed, on the next run -- even if its condition no
     longer holds. No channel enabled at all: nothing could ever deliver, so the
-    state is committed as before. Returns every event fired THIS run,
-    delivered or not (re-sent delayed events are not included)."""
+    state is committed as before. Skip on proof: a queued head that has failed
+    _UNDELIVERABLE_AFTER spaced runs is dropped (ERROR) as soon as the next alert
+    of its watch is delivered -- an older queued one, or this run's fresh event.
+    Returns every event fired THIS run, delivered or not (re-sent delayed
+    events are not included)."""
     async with _run_lock():
         any_channel, readable = _channel_status()
         probe_ready = await _resend_pending(any_channel, count_failures=readable)
