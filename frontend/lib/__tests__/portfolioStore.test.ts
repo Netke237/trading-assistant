@@ -1614,7 +1614,9 @@ describe('portfolioStore', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
       const [, init] = (global.fetch as jest.Mock).mock.calls[0];
       // portfolioValue: 50000 is set on useRiskStore in the outer beforeEach.
-      expect(JSON.parse(init.body)).toEqual({ qty: 3, portfolioValue: 50000 });
+      // A size edit also carries the row's rungs (open question 54, X1), so a
+      // cap from an intermediate size is healed by the next size keystroke.
+      expect(JSON.parse(init.body)).toEqual({ qty: 3, portfolioValue: 50000, targets: pos.targets });
     });
 
     it('does not call the backend for a patch with no persistable fields', async () => {
@@ -1739,6 +1741,7 @@ describe('portfolioStore', () => {
         // The backend caps the targets-only edit at the 150 held: 90/100 -> 71/79.
         return new Promise((resolve) => {
           resolveSecond = () => resolve(jsonResponse({
+            qty: 150,
             targets: [{ stockPrice: 55, contractsToSell: 71 }, { stockPrice: 60, contractsToSell: 79 }],
           }));
         });
@@ -1767,19 +1770,21 @@ describe('portfolioStore', () => {
       expect(mid.targets.map((t) => t.contractsToSell)).toEqual([90, 100]);
 
       await act(async () => { resolveSecond(); await jest.advanceTimersByTimeAsync(0); });
-      // ... and PATCH 2's capped response is what the row ends on.
+      // ... nor by PATCH 2's capped response: what the user typed stays on
+      // screen (X1), and the notice says it was stored scaled down.
       const end = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-INFLIGHT')!;
-      expect(end.targets.map((t) => t.contractsToSell)).toEqual([71, 79]);
-      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('Sell targets scaled down');
+      expect(end.targets.map((t) => t.contractsToSell)).toEqual([90, 100]);
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('more than the 150 held');
     });
 
-    it('adopts capped rungs from a targets-only PATCH and says so', async () => {
+    it('keeps typed rungs when the server caps a targets-only PATCH, and says so', async () => {
       const { result } = renderHook(() => usePortfolioStore());
       const pos = makePosition({ recId: 'REC-PATCH-CAP', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 5, targets: [] });
       act(() => {
         usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
       });
       (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
+        qty: 5,
         targets: [{ stockPrice: 55, contractsToSell: 3 }, { stockPrice: 60, contractsToSell: 2 }],
       }));
       act(() => {
@@ -1790,8 +1795,75 @@ describe('portfolioStore', () => {
       await act(async () => { await jest.advanceTimersByTimeAsync(600); });
 
       const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-CAP')!;
-      expect(updated.targets.map((t) => t.contractsToSell)).toEqual([3, 2]);
-      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('Sell targets scaled down to the 5 held');
+      expect(updated.targets.map((t) => t.contractsToSell)).toEqual([4, 4]);
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('more than the 5 held');
+    });
+
+    it('X1: a rung typed mid-edit is not overwritten by the cap, so the next keystroke is saved as typed', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-X1-RUNG', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100,
+        targets: [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }],
+      });
+      act(() => { usePortfolioStore.setState({ positions: [pos], lastSyncError: null }); });
+      const bodies: Record<string, unknown>[] = [];
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        // The backend caps 60/50 of 100 to 55/45; 60/40 fits and is stored as sent.
+        const sent = body.targets as { contractsToSell: number }[];
+        const sum = sent.reduce((a, t) => a + t.contractsToSell, 0);
+        const stored = sum > 100 ? [{ stockPrice: 55, contractsToSell: 55 }, { stockPrice: 60, contractsToSell: 45 }] : sent;
+        return Promise.resolve(jsonResponse({ qty: 100, targets: stored }));
+      });
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          targets: [{ stockPrice: 55, contractsToSell: 60 }, { stockPrice: 60, contractsToSell: 50 }],
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });   // pause: PATCH 1 settles
+      const mid = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-X1-RUNG')!;
+      expect(mid.targets.map((t) => t.contractsToSell)).toEqual([60, 50]);   // not 55/45
+
+      // The drawer builds the next keystroke from the store: rung 2 -> 40.
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          targets: mid.targets.map((t, i) => (i === 1 ? { ...t, contractsToSell: 40 } : t)),
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });
+      expect((bodies[1].targets as { contractsToSell: number }[]).map((t) => t.contractsToSell)).toEqual([60, 40]);
+    });
+
+    it('X1: an intermediate size that capped the rungs is healed by the next size keystroke', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-X1-QTY', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 60,
+        targets: [{ stockPrice: 55, contractsToSell: 30 }, { stockPrice: 60, contractsToSell: 30 }],
+      });
+      act(() => { usePortfolioStore.setState({ positions: [pos], lastSyncError: null }); });
+      const bodies: Record<string, unknown>[] = [];
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        const stored = body.qty === 6
+          ? [{ stockPrice: 55, contractsToSell: 3 }, { stockPrice: 60, contractsToSell: 3 }]
+          : body.targets;
+        return Promise.resolve(jsonResponse({ qty: body.qty, targets: stored }));
+      });
+
+      // Retyping 60: the field passes through 6, and a pause lets that PATCH settle.
+      act(() => { result.current.updatePosition('AAA|STOCK', { contracts: 6 }); });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });
+      const mid = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-X1-QTY')!;
+      expect(mid.targets.map((t) => t.contractsToSell)).toEqual([30, 30]);   // the cap is not written back
+
+      act(() => { result.current.updatePosition('AAA|STOCK', { contracts: 60 }); });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });
+      // The final size edit resends the local rungs, so the server stores 30/30 again.
+      expect(bodies[1]).toMatchObject({ qty: 60 });
+      expect((bodies[1].targets as { contractsToSell: number }[]).map((t) => t.contractsToSell)).toEqual([30, 30]);
     });
 
     it('raises no notice when the stored rungs match the local ones', async () => {
