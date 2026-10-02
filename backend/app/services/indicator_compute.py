@@ -49,7 +49,7 @@ def compute_indicators_for_conditions(candles: list[dict], conditions: list) -> 
         elif lower in ('macd', 'macd_line'):
             macd_data = _calc_macd(closes, times, 12, 26, 9)
             result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(macd_data['times'], macd_data['macd'])]
-        elif lower in ('macd_signal'):
+        elif lower == 'macd_signal':
             macd_data = _calc_macd(closes, times, 12, 26, 9)
             result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(macd_data['times'], macd_data['signal'])]
         elif lower in ('atr', 'atr(14)'):
@@ -128,24 +128,21 @@ def _calc_rsi(closes: list[float], times: list[str], period: int = 14) -> list[d
 
 
 def _calc_macd(closes: list[float], times: list[str], fast: int, slow: int, signal: int) -> dict:
-    ema_fast = _ema_values(closes, fast)
-    ema_slow = _ema_values(closes, slow)
-    macd_line = [f - s for f, s in zip(ema_fast, ema_slow)]
-    signal_line = _ema_values(macd_line, signal)
-    histogram = [m - s for m, s in zip(macd_line, signal_line)]
+    """MACD on the textbook EMA (_ema_seeded), as the frontend calcMACD draws it:
+    None until both EMAs are seeded (index slow-1), the signal line None until
+    `signal` MACD values exist. MACD-EMA-LAG: this used the lagged, zero-padded
+    _ema_values, so the line equalled the price during warm-up and every value
+    trailed the bar it was stamped on by one bar."""
+    n = len(closes)
+    ema_fast = _ema_seeded(closes, fast)
+    ema_slow = _ema_seeded(closes, slow)
+    macd_line: list[float | None] = [
+        None if f is None or s is None else f - s for f, s in zip(ema_fast, ema_slow)
+    ]
+    start = next((i for i, m in enumerate(macd_line) if m is not None), n)
+    signal_line: list[float | None] = [None] * start + _ema_seeded(macd_line[start:], signal)
+    histogram = [None if m is None or s is None else m - s for m, s in zip(macd_line, signal_line)]
     return {'times': times, 'macd': macd_line, 'signal': signal_line, 'histogram': histogram}
-
-
-def _ema_values(values: list[float], period: int) -> list[float]:
-    result = [0.0] * len(values)
-    if len(values) < period:
-        return result
-    multiplier = 2 / (period + 1)
-    ema = sum(values[:period]) / period
-    for i in range(period, len(values)):
-        result[i] = ema
-        ema = (values[i] - ema) * multiplier + ema
-    return result
 
 
 def _calc_atr(highs: list[float], lows: list[float], closes: list[float], times: list[str], period: int = 14) -> list[dict]:
@@ -227,9 +224,9 @@ def _calc_vwap(highs: list[float], lows: list[float], closes: list[float], volum
 
 # ── COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD: composite 'momentum' confirmations ──
 # Plan: docs/superpowers/plans/2026-09-29-composite-momentum-confirmations-plan.md
-# (Q1-Q3, Q6, Q11). Additions only: _calc_rsi / _calc_macd / _ema_values and
-# compute_indicators_for_conditions stay byte-for-byte unchanged (standard
-# rules keep their behaviour; the lagged _ema_values is logged separately, Q9).
+# (Q1-Q3, Q6, Q11). Additions only: _calc_rsi is unchanged by this build. The
+# lagged _ema_values logged at Q9 is gone: MACD-EMA-LAG moved _calc_macd onto
+# _ema_seeded and made the 'macd_signal' dispatch an exact match.
 # momentum_match judges the LAST bar of what it is given, on both the rule and
 # the watch path, so the two cannot disagree on the same bars.
 _momentum_logger = logging.getLogger(__name__)

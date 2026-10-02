@@ -438,6 +438,10 @@ def test_an_entry_older_than_the_branch_gets_no_narrowing(repo):
         {"name": "piece two", "audit_rounds": 0},
     ])
     repo.write_state(both, "Open both pieces")
+    # The entry must PREDATE the range, so main moves past the commit that
+    # introduced it. (Without this the branch introduces it, and since G2 that
+    # commit is found by its parents, so it is a boundary like any other.)
+    repo.set_origin_main("HEAD")
     repo.commit("round 4: fixes on piece one")
     repo.write_state(_piece_state("piece two", [
         {"name": "piece one", "audit_rounds": 4, "audit_clean": True},
@@ -467,17 +471,18 @@ def test_recording_a_count_cannot_move_the_boundary(repo):
     Whatever the file claims, the span under judgement must not shrink."""
     piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
     repo.write_state(piece, "Open the piece")
+    opened = repo.git("rev-parse", "HEAD")
     for n in (1, 2, 3, 4, 5):
         repo.write_state(
             _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}]),
             f"Close round {n}'s findings",
         )
-    # Nothing in range predates the entry, so there is no boundary to find and
-    # the range stays whole -- which is the point: no count can shrink it.
+    # The boundary is the commit that opened the piece, whatever is declared --
+    # which is the point: no count can move it.
     for declared in (0, 1, 2, 3, 4):
         state = _piece_state("the piece", [{"name": "the piece", "audit_rounds": declared,
                                             "audit_clean": True}])
-        assert _mod._target_scoped_base("origin/main", state) == "origin/main", declared
+        assert _mod._target_scoped_base("origin/main", state) == opened, declared
         severity, message = _mod.audit_bookkeeping_drift(state)
         assert severity == "drift", f"declared {declared} went silent"
         assert "reach round 5" in message
@@ -529,7 +534,10 @@ def test_the_scoped_base_is_the_commit_that_introduced_the_entry(repo):
     repo.write_state(one, "Build piece one")
     repo.commit("round 1: fixes on piece one")
 
-    two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
+    # Piece one stays in the file with its round counted, as an honest file
+    # would have it.
+    two = _piece_state("piece two", [{"name": "piece one", "audit_rounds": 1},
+                                     {"name": "piece two", "audit_rounds": 0}])
     repo.write_state(two, "Record piece one; open piece two")
     opened = repo.git("rev-parse", "HEAD")
 
@@ -591,7 +599,10 @@ def test_exhausting_the_scan_window_does_not_widen_back_to_the_full_range(repo, 
     repo.write_state(one, "Build piece one")
     repo.commit("round 4: fixes on piece one")
 
-    two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
+    two = _piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": 4, "audit_clean": True},
+        {"name": "piece two", "audit_rounds": 0},
+    ])
     repo.write_state(two, "Open piece two")
     repo.write_state(two, "Touch the state file again")
     repo.write_state(two, "And once more")
@@ -632,7 +643,10 @@ def test_scoping_degrades_to_the_full_range_when_state_is_outside_root(repo, mon
     one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
     repo.write_state(one, "Open piece one")
     repo.commit("round 3: fixes on piece one")
-    two = _piece_state("piece two", [{"name": "piece two", "audit_rounds": 0}])
+    two = _piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": 3, "audit_clean": True},
+        {"name": "piece two", "audit_rounds": 0},
+    ])
     repo.write_state(two, "Record piece one; open piece two")
 
     assert _mod._target_scoped_base("origin/main", two) != "origin/main", (
@@ -903,9 +917,10 @@ def test_the_target_scoping_entrys_probe_tracks_BOTH_halves(repo):
 
     assert re.search(pattern, src, re.M), "the entry's probe does not match the real file"
 
-    # Revert 1: the ABSENT branch stops backing up to the introducing commit.
+    # Revert 1: the introducing commit stops being found by its parents.
     no_boundary = src.replace(
-        "return boundary if boundary is not None else base_ref", "return sha"
+        "if all(rounds_at(p) is _TARGET_ABSENT for p in parents):\n            return sha",
+        "pass",
     )
     assert no_boundary != src
     assert not re.search(pattern, no_boundary, re.M), (
@@ -914,7 +929,8 @@ def test_the_target_scoping_entrys_probe_tracks_BOTH_halves(repo):
 
     # Revert 2: the resolved-path cap stops firing.
     no_cap = src.replace(
-        'if git_max >= UNPHASED_FAIL_ROUND and not target.get("audit_clean"):', "if False:"
+        'if git_max >= UNPHASED_FAIL_ROUND and target.get("audit_clean") is not True:',
+        "if False:"
     )
     assert no_cap != src
     assert not re.search(pattern, no_cap, re.M), (
@@ -1188,3 +1204,176 @@ def test_a_non_numeric_audit_rounds_still_trips_the_hard_cap(repo, declared):
     severity, message = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
     assert severity == "drift"
     assert "HARD CAP" in message
+
+
+# --- STATE-PROBE-FIXES (decision STATE-PROBE-FIXES-GO-2026-10-02) -----------
+#
+# TARGET-SCOPING round 2's four gate-level findings. Each was a path to "No
+# drift" on an undercount.
+
+@pytest.mark.parametrize("subject, expected", [
+    ("REGIME-SIZING-AUDIT r1..r4", 4),
+    ("YAML-CONFIG-INTEGRITY audit r4: warn on keys", 4),
+    ("CLAIMS r2+r4 clean", 4),
+    ("COMPOSITE: plan r4 (round-3 findings)", 4),
+    ("plan round-4 findings", 4),
+    ("rounds 3-4 fixes", 4),
+    ("rounds 2 to 4", 4),
+    ("Round 4 clean", 4),
+])
+def test_g1_every_round_notation_this_repo_writes_is_read(repo, subject, expected):
+    """G1. The old pattern read only "round N"; 57 of the last 300 subjects
+    carried their round number some other way, and an entry declaring 0
+    against "X r1..r4" rendered No drift with the cap silent."""
+    repo.commit(subject)
+    assert _mod._round_numbers_in_branch_subjects("origin/main")[0] == expected
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": 0, "audit_clean": False}]
+    severity, message = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
+    assert severity == "drift" and f"reach round {expected}" in message
+
+
+@pytest.mark.parametrize("subject", [
+    "MEAS plan v6: re-derived (R1-R9)",     # upper-case R is a requirement id
+    "FR-28 alternatives",
+    "work around 5 edge cases",
+    "round-trip the payload",
+    "round 2 -- 2 findings fixed",          # reads 2, not a range to anything
+])
+def test_g1_things_that_are_not_round_numbers_are_not_read_as_higher_ones(repo, subject):
+    repo.commit(subject)
+    evidence = _mod._round_numbers_in_branch_subjects("origin/main")
+    assert evidence is None or evidence[0] <= 2
+
+
+def test_g2_merging_a_later_dated_sibling_does_not_empty_the_window(repo, monkeypatch):
+    """G2. The boundary walk followed `git log`'s DATE order: a merged sibling
+    whose later-dated state-file commit lacks the entry was walked first, read
+    as ABSENT, and the commit walked before it -- the merge -- became the
+    boundary. Window empty, four rounds against one declared, silent."""
+    repo.write_state(_piece_state(None, []), "Record the decision")
+    repo.git("branch", "sibling")
+    piece = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 0}])
+    repo.write_state(piece, "Open the piece")
+    for n in (1, 2, 3, 4):
+        repo.commit(f"round {n}: fixes on the piece")
+
+    repo.git("checkout", "-q", "sibling")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2035-01-01T00:00:00")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2035-01-01T00:00:00")
+    repo.write_state(_piece_state(None, [{"name": "other", "audit_rounds": 0}]),
+                     "Sibling records other work")
+    repo.git("checkout", "-q", "feature")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2035-01-02T00:00:00")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2035-01-02T00:00:00")
+    repo.git("merge", "-q", "--no-ff", "--no-commit", "-X", "ours", "sibling")
+    lying = _piece_state("the piece", [{"name": "the piece", "audit_rounds": 1,
+                                        "audit_clean": True}])
+    repo.write_state(lying, "Merge sibling; record the piece at 1")
+    assert len(repo.git("rev-list", "--parents", "-n1", "HEAD").split()) == 3, "not a merge"
+
+    severity, message = _mod.audit_bookkeeping_drift(lying)
+    assert severity == "drift"
+    assert "reach round 4" in message
+
+
+def _piece_one_then_open_piece_two(repo, one_declared, one_clean, rounds=4):
+    one = _piece_state("piece one", [{"name": "piece one", "audit_rounds": 0}])
+    repo.write_state(one, "Open piece one")
+    for n in range(1, rounds + 1):
+        repo.commit(f"round {n}: fixes on piece one")
+    two = _piece_state("piece two", [
+        {"name": "piece one", "audit_rounds": one_declared, "audit_clean": one_clean},
+        {"name": "piece two", "audit_rounds": 0},
+    ])
+    repo.write_state(two, "Record piece one; open piece two")
+    return two
+
+
+def test_g3_an_honest_previous_piece_still_narrows(repo):
+    """The two-piece fix (REVIVAL round 1 finding 2) must survive the ancestry walk."""
+    two = _piece_one_then_open_piece_two(repo, one_declared=4, one_clean=True)
+    assert _mod._target_scoped_base("origin/main", two) != "origin/main"
+    assert _mod.audit_bookkeeping_drift(two) is None
+
+
+@pytest.mark.parametrize("clean", ["false", "true", 1, None])
+def test_g4_only_a_real_true_is_clean_for_the_cap(repo, clean):
+    """G4. The string "false" is truthy: the cap went off and the table said
+    "clean after N"."""
+    repo.commit("round 3: fixes")
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": 3, "audit_clean": clean}]
+    severity, message = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
+    assert severity == "drift" and "HARD CAP" in message
+
+
+def test_g4_main_lists_a_string_false_as_unaudited(repo, monkeypatch, capsys):
+    state = _renderable()
+    state["phases"][0]["audit_clean"] = "false"
+    state["already_shipped"] = [{"name": "item", "audit_rounds": 2, "audit_clean": "false"}]
+    _, out = _run_main(repo, monkeypatch, capsys, state)
+    assert "Phase A (Phase A)" in out and "Shipped: item" in out
+
+
+@pytest.mark.parametrize("declared", ["²", "³"])
+def test_a_superscript_digit_audit_rounds_warns_instead_of_raising(repo, declared):
+    """isdigit() is True for superscripts and int() raises on them -- a
+    traceback in the SessionStart hook (P6 UNIT D round 7)."""
+    repo.commit("round 2: fixes")
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": declared, "audit_clean": True}]
+    severity, _ = _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))
+    assert severity == "warn"
+
+
+# --- STATE-PROBE-FIXES round 3 findings (decision STATE-PROBE-FIXES-ROUND-4-2026-10-02)
+
+@pytest.mark.parametrize("subject, expected", [
+    ("Merge Phase A: the contract iv field, clean after 7 rounds", 7),
+    ("rounds 1, 2 and 3", 3),
+    ("round #3 fixes", 3),
+    ("audit_r3 done", 3),
+])
+def test_f2_a_count_before_the_word_and_other_lists_are_read(repo, subject, expected):
+    """F2. "clean after 7 rounds" (the Phase A/B/C/E merge subjects) was not
+    read, so an entry declaring 1 against it rendered No drift."""
+    repo.commit(subject)
+    assert _mod._round_numbers_in_branch_subjects("origin/main")[0] == expected
+    phases = [{"id": "A", "name": "Phase A", "audit_rounds": 1, "audit_clean": True}]
+    assert _mod.audit_bookkeeping_drift(_state(active="A", phases=phases))[0] == "drift"
+
+
+def test_f2_a_singular_round_after_another_number_is_not_a_count(repo):
+    repo.commit("Phase G step 3 round 2")
+    assert _mod._round_numbers_in_branch_subjects("origin/main")[0] == 2
+
+
+def test_f1_a_round_named_in_the_opening_commit_does_not_stick_to_the_previous_piece(repo):
+    """F1. The commit that opens piece B named B's pending round 1 in its
+    subject (real shape: "DOCC-4-CONFIG-HEALTH: plan + phase registered (plan
+    round 1 pending)"). It sat in A's span, so honest A at 0 drew a banner that
+    cleared only by writing a false A=1. B now answers for it, honestly."""
+    repo.write_state(_piece_state("A", [{"name": "A", "audit_rounds": 0}]), "open A")
+    repo.commit("build A")
+    repo.write_state(_piece_state("B", [{"name": "A", "audit_rounds": 0},
+                                        {"name": "B", "audit_rounds": 0}]),
+                     "B: plan + phase registered (plan round 1 pending)")
+    repo.commit("B plan round 1 clean")
+    honest = _piece_state("B", [{"name": "A", "audit_rounds": 0},
+                                {"name": "B", "audit_rounds": 1, "audit_clean": True}])
+    repo.write_state(honest, "record B")
+    assert _mod.audit_bookkeeping_drift(honest) is None
+
+
+def test_f1_plan_rounds_under_a_stale_pointer_are_clearable_on_the_new_piece(repo):
+    """F1, second shape: the pointer stayed on finished A while B's plan
+    rounds ran, then B was registered with its honest count."""
+    repo.write_state(_piece_state("A", [{"name": "A", "audit_rounds": 0}]), "open A")
+    repo.commit("A round 1")
+    repo.commit("A round 2 clean")
+    repo.write_state(_piece_state("A", [{"name": "A", "audit_rounds": 2, "audit_clean": True}]),
+                     "record A")
+    for n in (1, 2, 3):
+        repo.commit(f"B plan r{n}")
+    honest = _piece_state("B", [{"name": "A", "audit_rounds": 2, "audit_clean": True},
+                                {"name": "B", "audit_rounds": 3, "audit_clean": True}])
+    repo.write_state(honest, "register B")
+    assert _mod.audit_bookkeeping_drift(honest) is None

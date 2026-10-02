@@ -69,8 +69,10 @@ that a round ran: a commit. (`audit_bookkeeping_drift` in `scripts/state.py`.)
 It exists because three Phase A rounds once ran while the file said one, under
 a green "No drift".
 
-- **What it reads.** The highest `round N` in this branch's commit
-  **subjects** — never bodies, which are full of legitimate backward references
+- **What it reads.** The highest round number in this branch's commit
+  **subjects**, in any notation the repo uses — `round 3`, `round-3`,
+  `rounds 6-7`, `r3`, `r1..r4`, `r2+r3` (lower-case `r` only; `R1` is a
+  requirement id) — never bodies, which are full of legitimate backward references
   ("round 12's follow-ups"). Name rounds in subjects only for this branch's own
   piece, merge subjects included.
 - **Against what base.** Asked of git, not the state file: `origin/main` or
@@ -78,17 +80,29 @@ a green "No drift".
   of range, so merged work goes quiet on its own.
 - **Scoped to the active target.** `active_phase` names the phase (or
   `already_shipped` entry) being audited. The span starts at the commit that
-  **introduced that entry**, so a branch carrying two pieces does not answer
-  for the earlier one's round numbers. The pointer's value scopes nothing; if
-  it resolves to no entry, the whole branch counts.
+  **introduced that entry** — found by its parents (the entry is in it and in
+  none of them), not by date, so merging a sibling cannot move it — and a
+  branch carrying two pieces does not answer for the earlier one's round
+  numbers. The pointer's value scopes nothing; if it resolves to no entry, the
+  whole branch counts.
+- **Known open hole (G3, not fixed).** Narrowing drops every round before the
+  active entry's introducing commit, and nothing else checks them: committing
+  a new entry and pointing `active_phase` at it silences the previous piece's
+  undercount and its hard cap. Two attempted fixes (STATE-PROBE-FIXES rounds 3
+  and 4) each failed review, so it was taken back out; see the
+  STATE-PROBE-TARGET-SCOPING record in PROJECT_STATE.json. Until it is fixed,
+  record a piece's rounds BEFORE opening the next one on the same branch.
+- **Round notation also read:** `clean after 7 rounds` (number before the
+  plural word), `rounds 1, 2 and 3`, `round #3`, `audit_r3`.
 - **The tiers.**
   - Rounds in the subjects with **no target** counting them: **warn** below
     round 3, **drift** at 3.
   - A target that declares **fewer** rounds than the subjects reach: **drift**
     (a round ran and was never written down). Declaring more is not flagged —
     rounds can run without a commit.
-  - **The hard cap:** the subjects reach round 3+ and the target is not
-    `audit_clean`: **drift** — *stop auditing and tell Kenneth*. It counts
+  - **The hard cap:** the subjects reach round 3+ and the target's
+    `audit_clean` is not the JSON value `true` (the string `"false"` is not
+    clean): **drift** — *stop auditing and tell Kenneth*. It counts
     rounds continuously across a phase's stages and units, so a multi-unit
     package keeps `audit_clean` true while its latest round was clean.
   - It **clears** by going clean or by merging, never by an acknowledgement
@@ -96,7 +110,7 @@ a green "No drift".
 - **When it cannot look, it says so.** No resolvable base, no git, or a
   `git log` that fails prints **warn** "COULD NOT RUN" — an unchecked bill, not
   a clean one (exit 0). A whole-number `audit_rounds` is read in any spelling
-  (`3`, `3.0`, `"3"`); anything else is a warn instead of a crash — except that
+  (`3`, `3.0`, `"3"`; decimal digits only, so `"²"` is not a number); anything else is a warn instead of a crash — except that
   the hard cap still fires as **drift**, since it never reads the count.
 - **The accepted hole** (Kenneth, `BACKLOG-DECISIONS-2026-09-25` Q3 — accepted
   and documented, not patched). The entry's name and presence are still
