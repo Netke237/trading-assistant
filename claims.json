@@ -15,6 +15,14 @@
       "expires_at": "2026-10-02T20:50:01Z",
       "note": "Fix audit findings in options pipeline root-cause inspector",
       "task": "PIPELINE-INSPECTOR-FIXES"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/k-trading-software-reviewer-80li7k",
+      "claimed_at": "2026-10-02T17:54:21Z",
+      "expires_at": "2026-10-02T20:54:21Z",
+      "note": "k-trading-software-reviewer full review (report only, no code changes)",
+      "task": "TRADING-REVIEW"
     }
   ]
 }
