@@ -12,6 +12,22 @@ logger = logging.getLogger(__name__)
 Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"]
 
 
+def normalize_direction(direction: str | None) -> Literal["Bullish", "Bearish"]:
+    """The one spelling the signal functions compare against.
+
+    Every branch in strategy_engine and `_entry_side` tests ``== "Bullish"``
+    and treats anything else as bearish, so a config value ``bullish`` silently
+    ran the BEARISH branch in the WFO tuner (TRADING_REVIEW.md fix #1).
+    Unknown values raise instead of falling through to bearish.
+    """
+    d = str(direction or "").strip().lower()
+    if d == "bullish":
+        return "Bullish"
+    if d == "bearish":
+        return "Bearish"
+    raise ValueError(f"direction must be bullish|bearish, got {direction!r}")
+
+
 def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | None:
     """Decide order side, or None if stop/target are on the wrong side of entry.
     Bullish: stop below entry, target above → 'buy'
@@ -66,6 +82,7 @@ def run_strategy_backtest(
     commission: float = 0.0,
 ) -> BacktestResult:
     """Run a full entry+stop+target backtest using backtesting.py."""
+    direction = normalize_direction(direction)
     from backtesting import Backtest, Strategy as BtStrategy
     from app.services.strategy_engine import (
         pullback_ema_signal, breakout_base_signal,

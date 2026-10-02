@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 def build_proposal(
     *,
     strategy: str,
+    direction: str,
     fold_winners: list[dict],
     fold_test_returns: list[float],
     in_sample_return: float,
@@ -29,6 +30,7 @@ def build_proposal(
 
     Args:
         strategy: Strategy name.
+        direction: Normalised direction ('Bullish' | 'Bearish') the params were tuned for.
         fold_winners: List of winning parameter dicts, one per fold (empty dicts filtered out).
         fold_test_returns: List of test period returns (as percentages).
         in_sample_return: Training (in-sample) return percentage.
@@ -39,7 +41,7 @@ def build_proposal(
         min_consistency: Minimum fraction of folds with positive OOS returns (0–1).
 
     Returns:
-        Dict with keys: strategy, proposed, consistency, eligible, oos_metrics,
+        Dict with keys: strategy, direction, proposed, consistency, eligible, oos_metrics,
         fold_winners, verdict, recommendation.
     """
     proposed = consensus(fold_winners)
@@ -56,6 +58,7 @@ def build_proposal(
 
     return {
         "strategy": strategy,
+        "direction": direction,
         "proposed": proposed,
         "consistency": cons,
         "eligible": eligible,
@@ -191,6 +194,7 @@ def _optimize_strategy_sync(
 
     return build_proposal(
         strategy=strategy,
+        direction=direction,
         fold_winners=valid_winners,
         fold_test_returns=valid_fold_test_returns,
         in_sample_return=in_sample_return,
@@ -228,10 +232,13 @@ async def run_optimization(
         Dict mapping strategy name to proposal dict.
         Strategies with no bars or all-empty folds are omitted.
     """
+    from app.services.strategy_backtest import normalize_direction
     from app.services.strategy_param_store import get_search_space
     from app.services.historical_store import get_bars
     from app.services.walk_forward import precompute_bar_dates
     from dateutil.relativedelta import relativedelta
+
+    direction = normalize_direction(direction)
 
     results: dict = {}
     total_work = len(strategies)

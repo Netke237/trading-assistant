@@ -2549,9 +2549,9 @@ function StrategyTuningForm() {
     return () => clearInterval(interval);
   }, [polling, jobId]);
 
-  const handleAdopt = async (strategy: string, params: Record<string, number | string>) => {
+  const handleAdopt = async (strategy: string, params: Record<string, number | string>, direction: 'Bullish' | 'Bearish') => {
     try {
-      await adoptStrategyParams(strategy, params);
+      await adoptStrategyParams(strategy, params, direction);
       setAdoptedStrategies(prev => {
         const next = new Set(prev).add(strategy);
         sessionStorage.setItem(SESSION_ADOPTED_KEY, JSON.stringify([...next]));
@@ -2648,7 +2648,7 @@ function StrategyTuningForm() {
               strategy={strategy}
               proposal={prop}
               adopted={adoptedStrategies.has(strategy)}
-              onAdopt={() => handleAdopt(strategy, prop.proposed)}
+              onAdopt={() => handleAdopt(strategy, prop.proposed, prop.direction)}
             />
           ))}
         </div>

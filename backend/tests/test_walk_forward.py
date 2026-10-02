@@ -143,6 +143,7 @@ def test_build_proposal_is_oos_same_units():
 
     prop = build_proposal(
         strategy="pullback_ema",
+        direction="Bullish",
         fold_winners=[{"ema_period": 50}],
         fold_test_returns=[5.0, 3.0],
         in_sample_return=10.0,   # return % — not Sharpe*100
@@ -162,6 +163,7 @@ def test_optimizer_builds_proposal_shape():
     from app.services.strategy_param_optimizer import build_proposal
     prop = build_proposal(
         strategy="pullback_ema",
+        direction="Bullish",
         fold_winners=[{"ema_period": 50, "trend_ema": 200}],
         fold_test_returns=[0.05, 0.02, -0.01],
         in_sample_return=30.0, walk_forward_return=12.0,
