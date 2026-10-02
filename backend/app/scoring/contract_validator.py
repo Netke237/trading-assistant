@@ -70,6 +70,13 @@ def hard_reject_delta_band() -> tuple[float, float]:
     return float(hr["min_delta"]), float(hr["max_delta"])
 
 
+def contract_caution_threshold() -> int:
+    """contract_score_thresholds.caution from contract_rules.yaml -- the score
+    below which validate_contract() returns REJECT with no reject reason. Not
+    an override key, so the YAML value is the one every scan applied."""
+    return int(_load_config()["contract_score_thresholds"]["caution"])
+
+
 def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     """Return list of hard-reject reason strings. Empty = no hard reject."""
     hr = cfg["hard_reject"]

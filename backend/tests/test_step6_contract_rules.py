@@ -236,3 +236,55 @@ def test_without_hold_days_the_fetch_uses_the_rules_dte_limits(client, rules, li
         r = client.get(url)
     assert r.status_code == 200, r.text
     assert seen == [(None, None, limits)]
+
+
+# ── Open question #8: Step 3's liquidity floors at 0 ──────────────────────────
+# Logged 2026-09-09 as "Min option volume / Min open interest = 0 do not reach
+# validate_contract". On this code they do: the hard reasons go away. What was
+# left was a contract that then REJECTs on its composite score (the soft
+# Preferred floors, 200 / 1000, sink its liquidity sub-score) with no reason of
+# its own, which the scan reported as a bare "all contracts rejected".
+
+_DUST = {**_THIN, "volume": 3, "open_interest": 10}
+_ZERO_FLOORS = {"min_volume": 0, "min_open_interest": 0}
+
+
+def _scan(client, overrides, hold=None):
+    hold_body = {"hold_min_days": hold[0], "hold_max_days": hold[1]} if hold else {}
+    with _scan_patches():
+        return client.post("/api/scan", json={
+            "universe": ["XOM"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": overrides, **hold_body,
+        }).json()
+
+
+def test_zero_liquidity_floors_reach_the_validator(client, monkeypatch):
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    default = _scan(client, {})
+    assert default["rejected"][0]["reason"] == (
+        "contracts rejected: volume_too_low(1), open_interest_too_low(1)")
+    zeroed = _scan(client, _ZERO_FLOORS)
+    assert zeroed["contract_rules"] == _ZERO_FLOORS
+    reason = zeroed["rejected"][0]["reason"]
+    assert "volume_too_low" not in reason and "open_interest_too_low" not in reason
+
+
+def test_a_score_reject_is_named_not_all_contracts_rejected(client, monkeypatch):
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert reason.startswith("contracts rejected: contract_score_below_caution(1); best contract score ")
+    assert reason.endswith(" < caution 45"), reason
+
+
+def test_zero_floors_plus_zero_preferred_floors_let_the_contract_through(client, monkeypatch):
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    scan = _scan(client, {**_ZERO_FLOORS, "preferred_volume_min": 0, "preferred_oi_min": 0})
+    assert scan["candidates"], scan["rejected"]
+
+
+def test_a_mixed_chain_names_both_the_hard_and_the_score_rejects(client, monkeypatch):
+    """Two contracts: one hard-rejected on spread, one below the caution score."""
+    wide = {**_DUST, "id": f"XOM|195|{_EXPIRY}|C", "strike": 195, "spread": 2.0}
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST, wide])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert "spread_too_wide(1)" in reason and "contract_score_below_caution(1)" in reason, reason
