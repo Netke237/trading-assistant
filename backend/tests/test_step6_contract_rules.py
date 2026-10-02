@@ -240,10 +240,12 @@ def test_without_hold_days_the_fetch_uses_the_rules_dte_limits(client, rules, li
 
 # ── Open question #8: Step 3's liquidity floors at 0 ──────────────────────────
 # Logged 2026-09-09 as "Min option volume / Min open interest = 0 do not reach
-# validate_contract". On this code they do: the hard reasons go away. What was
-# left was a contract that then REJECTs on its composite score (the soft
-# Preferred floors, 200 / 1000, sink its liquidity sub-score) with no reason of
-# its own, which the scan reported as a bare "all contracts rejected".
+# validate_contract". On this code they do: the hard reasons go away. The
+# original report's symptom (hard-reason counts unchanged) did not reproduce.
+# Found along the way: on the no-hold-window path this fixture then REJECTs on
+# its composite score (the soft Preferred floors, 200 / 1000, sink its
+# liquidity sub-score) with no reason of its own, which the scan reported as a
+# bare "all contracts rejected". With a hold window the same contract passes.
 
 _DUST = {**_THIN, "volume": 3, "open_interest": 10}
 _ZERO_FLOORS = {"min_volume": 0, "min_open_interest": 0}
@@ -297,8 +299,7 @@ def test_zero_floors_reach_the_validator_on_the_hold_window_path(client, monkeyp
     assert "volume_too_low(1)" in default["rejected"][0]["reason"]
     zeroed = _scan(client, _ZERO_FLOORS, hold=(20, 25))
     assert zeroed["contract_rules"] == _ZERO_FLOORS
-    for r in zeroed["rejected"]:
-        assert "volume_too_low" not in r["reason"] and "open_interest_too_low" not in r["reason"]
+    assert [c["symbol"] for c in zeroed["candidates"]] == ["XOM"], zeroed["rejected"]
 
 
 def test_a_thin_contract_with_one_more_soft_miss_is_too_many_soft_failures(client, monkeypatch):
@@ -307,3 +308,15 @@ def test_a_thin_contract_with_one_more_soft_miss_is_too_many_soft_failures(clien
     monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "spread": 0.30}])
     reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
     assert reason == "contracts rejected: too_many_soft_failures(1)", reason
+
+
+def test_a_fractional_caution_threshold_prints_as_written(client, monkeypatch):
+    """int() would print '... 45 < caution 45' for a 45.5 threshold."""
+    import copy
+    from app.scoring import contract_validator as cv
+    cfg = copy.deepcopy(cv._load_config())
+    cfg["contract_score_thresholds"]["caution"] = 45.5
+    monkeypatch.setattr(cv, "_load_config", lambda: cfg)
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert reason.endswith(" < caution 45.5"), reason
