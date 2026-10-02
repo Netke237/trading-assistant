@@ -1713,27 +1713,102 @@ describe('portfolioStore', () => {
       expect(updated.targets.map((t) => t.contractsToSell)).toEqual([75, 75]);
     });
 
-    it('keeps the local rungs when the soft-reduced qty raise did not send any', async () => {
+    it('does not undo a newer rung edit already IN FLIGHT behind the resized raise (delta review B1)', async () => {
       const { result } = renderHook(() => usePortfolioStore());
-      const rungs = [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }];
-      const pos = makePosition({ recId: 'REC-PATCH-KEEP', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100, targets: rungs });
+      const pos = makePosition({
+        recId: 'REC-PATCH-INFLIGHT', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100,
+        targets: [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }],
+      });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      const bodies: Record<string, unknown>[] = [];
+      let resolveFirst!: () => void;
+      let resolveSecond!: () => void;
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        if (bodies.length === 1) {
+          return new Promise((resolve) => {
+            resolveFirst = () => resolve(jsonResponse({
+              adjustedQty: 150,
+              targets: [{ stockPrice: 55, contractsToSell: 75 }, { stockPrice: 60, contractsToSell: 75 }],
+            }));
+          });
+        }
+        // The backend caps the targets-only edit at the 150 held: 90/100 -> 71/79.
+        return new Promise((resolve) => {
+          resolveSecond = () => resolve(jsonResponse({
+            targets: [{ stockPrice: 55, contractsToSell: 71 }, { stockPrice: 60, contractsToSell: 79 }],
+          }));
+        });
+      });
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          contracts: 200,
+          targets: [{ stockPrice: 55, contractsToSell: 100 }, { stockPrice: 60, contractsToSell: 100 }],
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });   // PATCH 1 in flight
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          targets: [{ stockPrice: 55, contractsToSell: 90 }, { stockPrice: 60, contractsToSell: 100 }],
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });   // PATCH 2 in flight, waiting
+      expect(bodies).toHaveLength(1);
+
+      await act(async () => { resolveFirst(); await jest.advanceTimersByTimeAsync(0); });
+      expect(bodies).toHaveLength(2);   // PATCH 2 sent, its response held back
+      const mid = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-INFLIGHT')!;
+      expect(mid.contracts).toBe(150);
+      // The newer edit is not wiped by PATCH 1's (older) stored rungs ...
+      expect(mid.targets.map((t) => t.contractsToSell)).toEqual([90, 100]);
+
+      await act(async () => { resolveSecond(); await jest.advanceTimersByTimeAsync(0); });
+      // ... and PATCH 2's capped response is what the row ends on.
+      const end = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-INFLIGHT')!;
+      expect(end.targets.map((t) => t.contractsToSell)).toEqual([71, 79]);
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('Sell targets scaled down');
+    });
+
+    it('adopts capped rungs from a targets-only PATCH and says so', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-CAP', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 5, targets: [] });
       act(() => {
         usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
       });
       (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
-        adjustedQty: 150, targets: [{ stockPrice: 99, contractsToSell: 1 }],
+        targets: [{ stockPrice: 55, contractsToSell: 3 }, { stockPrice: 60, contractsToSell: 2 }],
       }));
-
       act(() => {
-        result.current.updatePosition('AAA|STOCK', { contracts: 200 });
+        result.current.updatePosition('AAA|STOCK', {
+          targets: [{ stockPrice: 55, contractsToSell: 4 }, { stockPrice: 60, contractsToSell: 4 }],
+        });
       });
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(600);
-      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(600); });
 
-      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-KEEP')!;
-      expect(updated.contracts).toBe(150);
-      expect(updated.targets).toEqual(rungs);
+      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-CAP')!;
+      expect(updated.targets.map((t) => t.contractsToSell)).toEqual([3, 2]);
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('Sell targets scaled down to the 5 held');
+    });
+
+    it('raises no notice when the stored rungs match the local ones', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-SAME', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 5, targets: [] });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      // Key order differs from what was sent (JSONB): counts still match.
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
+        targets: [{ contractsToSell: 2, stockPrice: 55 }],
+      }));
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', { targets: [{ stockPrice: 55, contractsToSell: 2 }] });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(600); });
+      expect(usePortfolioStore.getState().lastSyncError).toBeNull();
     });
 
     it('reverts the optimistic update via a forced resync when the backend rejects the PATCH', async () => {

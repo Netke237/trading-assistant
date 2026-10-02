@@ -100,6 +100,25 @@ describe('ClosePositionDrawer — the row changes size under an open dialog', ()
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 33 }));
   });
 
+  it('caps a typed partial size at the new, smaller held size', () => {
+    const onConfirm = jest.fn();
+    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    fireEvent.change(screen.getByLabelText(/contracts to sell/i), { target: { value: '50' } });
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByLabelText(/contracts to sell/i)).toHaveValue(33);
+    fireEvent.click(screen.getByRole('button', { name: /close position/i }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 33 }));
+  });
+
+  it('keeps a full close full when the row grows', () => {
+    const onConfirm = jest.fn();
+    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 150 }} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByText(/of 150/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /close position/i }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 150 }));
+  });
+
   it('keeps a smaller partial size, and never raises it when the row grows', () => {
     const onConfirm = jest.fn();
     const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);

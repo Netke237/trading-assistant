@@ -174,6 +174,24 @@ async def add_position(
     return resp
 
 
+def _cap_rungs_to_qty(targets, qty: int):
+    """Scale rungs down by the overflow only: rungs whose integer
+    `contractsToSell` sum fits `qty` are returned as sent; above it, they are
+    scaled proportionally to sum exactly `qty` (position_writer's rounding
+    rule, asked = the rung sum). Non-list targets and non-integer counts are
+    left as they are, as _rescale_rung_shares does."""
+    if not isinstance(targets, list):
+        return targets
+    total = sum(
+        t["contractsToSell"] for t in targets
+        if isinstance(t, dict) and isinstance(t.get("contractsToSell"), int)
+        and not isinstance(t.get("contractsToSell"), bool) and t["contractsToSell"] > 0
+    )
+    if total <= qty:
+        return targets
+    return _rescale_rung_shares(targets, total, qty)
+
+
 @router.patch('/portfolio/{rec_id}', response_model=PortfolioPositionSchema)
 async def update_position(
     rec_id: str,
@@ -278,13 +296,11 @@ async def update_position(
         position.structural_stop = _floor_stop(updates["structuralStop"])
     if "targets" in updates:
         position.targets = updates["targets"]
-        if adjusted_qty is not None and isinstance(updates["targets"], list):
-            # The gate booked FEWER than requested: rungs sent with this PATCH
-            # were planned for the requested qty, so scale them to the booked
-            # one by the create path's rule (plan B3) -- or the row plans to
-            # sell more than it holds. Rungs NOT in this PATCH were planned for
-            # the smaller pre-raise qty and are left as stored.
-            position.targets = _rescale_rung_shares(updates["targets"], updates["qty"], position.qty)
+    if "targets" in updates or "qty" in updates:
+        # Open question 54: the stored rungs must never plan to sell more than
+        # the row holds -- after a raise the gate booked smaller, a decrease,
+        # or a rung edit sent separately from the size it was typed against.
+        position.targets = _cap_rungs_to_qty(position.targets, position.qty)
     # Exit-plan pipeline scaffolding (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
     # — later phases compute these values; this endpoint just persists
     # whatever they send, same exclude_unset/explicit-null-clears pattern as

@@ -322,8 +322,8 @@ async def test_patch_empty_body_is_a_noop(client):
 async def test_resized_qty_raise_scales_the_rungs_sent_with_it(client):
     # Open question 54 (C2): the soft-resize scenario above (1 -> 5 asked,
     # booked 2) with rungs planned for the 5 asked. Stored verbatim they would
-    # sell 5 of 2 held; the create path's rule (_rescale_rung_shares) scales
-    # 3/2 of 5 to 1/1 of 2.
+    # sell 5 of 2 held; capped by the overflow (_rescale_rung_shares' rounding)
+    # 3/2 becomes 1/1.
     await _add(client, rec="REC-QTYUP-RUNGS", qty=1, entry=2.00)
     rungs = [{"stockPrice": 200.0, "contractsToSell": 3}, {"stockPrice": 210.0, "contractsToSell": 2}]
     r = await client.patch(
@@ -353,3 +353,75 @@ async def test_resized_qty_raise_leaves_stored_rungs_alone(client):
     assert r.status_code == 200, r.text
     assert r.json()["adjustedQty"] == 2
     assert [t["contractsToSell"] for t in r.json()["targets"]] == [1]
+
+
+async def _patch_rungs(client, rec, body):
+    r = await client.patch(f"/api/portfolio/{rec}", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+@pytest.mark.asyncio
+async def test_resized_qty_raise_keeps_rungs_that_fit_the_booked_qty(client):
+    # Delta review B2: a rung edit typed against the held qty can be merged
+    # into the same debounced PATCH as the raise. Rungs that already fit the
+    # booked 2 are stored as sent -- not scaled by asked/booked (-> 0/0).
+    await _add(client, rec="REC-QTYUP-FIT", qty=1, entry=2.00)
+    body = await _patch_rungs(client, "REC-QTYUP-FIT", {
+        "qty": 5, "portfolioValue": 10_000.0,
+        "targets": [{"stockPrice": 200.0, "contractsToSell": 1}, {"stockPrice": 210.0, "contractsToSell": 1}],
+    })
+    assert body["adjustedQty"] == 2
+    assert [t["contractsToSell"] for t in body["targets"]] == [1, 1]
+
+
+@pytest.mark.asyncio
+async def test_targets_only_patch_selling_more_than_held_is_capped(client):
+    # Delta review B1: a rung edit sent on its own (behind a resized raise, or
+    # simply over-typed) must not store a plan selling more than is held.
+    # 4/4 of 5 held -> 3/2 (ties go to the earlier rung).
+    await _add(client, rec="REC-RUNG-OVER", qty=5, entry=1.00)
+    body = await _patch_rungs(client, "REC-RUNG-OVER", {
+        "targets": [{"stockPrice": 200.0, "contractsToSell": 4}, {"stockPrice": 210.0, "contractsToSell": 4}],
+    })
+    assert [t["contractsToSell"] for t in body["targets"]] == [3, 2]
+
+
+@pytest.mark.asyncio
+async def test_targets_only_patch_that_fits_is_stored_verbatim(client):
+    await _add(client, rec="REC-RUNG-FIT", qty=5, entry=1.00)
+    rungs = [{"stockPrice": 200.0, "contractsToSell": 2, "id": "t1"}, {"stockPrice": 210.0, "contractsToSell": 2}]
+    body = await _patch_rungs(client, "REC-RUNG-FIT", {"targets": rungs})
+    assert body["targets"] == rungs
+
+
+@pytest.mark.asyncio
+async def test_qty_decrease_caps_the_stored_rungs(client):
+    await _add(client, rec="REC-QTYDOWN-RUNGS", qty=5, entry=1.00,
+               targets=[{"stockPrice": 200.0, "contractsToSell": 3}, {"stockPrice": 210.0, "contractsToSell": 2}])
+    body = await _patch_rungs(client, "REC-QTYDOWN-RUNGS", {"qty": 2})
+    assert body["qty"] == 2
+    assert [t["contractsToSell"] for t in body["targets"]] == [1, 1]
+
+
+@pytest.mark.asyncio
+async def test_rejected_qty_raise_still_caps_the_rungs_sent_with_it(client):
+    # The raise is refused (portfolioValue missing) but the rungs in the same
+    # PATCH are saved -- against the qty actually held (5), not the asked 9.
+    await _add(client, rec="REC-QTYREJ-RUNGS", qty=5, entry=1.00)
+    r = await client.patch("/api/portfolio/REC-QTYREJ-RUNGS", json={
+        "qty": 9, "targets": [{"stockPrice": 200.0, "contractsToSell": 9}],
+    })
+    assert r.status_code == 422, r.text
+    stored = next(p for p in (await client.get("/api/portfolio")).json() if p["recId"] == "REC-QTYREJ-RUNGS")
+    assert stored["qty"] == 5
+    assert [t["contractsToSell"] for t in stored["targets"]] == [5]
+
+
+@pytest.mark.asyncio
+async def test_resized_raise_with_null_targets_stores_none(client):
+    await _add(client, rec="REC-QTYUP-NULL", qty=1, entry=2.00,
+               targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
+    body = await _patch_rungs(client, "REC-QTYUP-NULL", {"qty": 5, "portfolioValue": 10_000.0, "targets": None})
+    assert body["adjustedQty"] == 2
+    assert body["targets"] == []
