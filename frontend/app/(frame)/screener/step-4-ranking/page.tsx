@@ -219,7 +219,7 @@ export default function Step4Page() {
   }
 
   // The inspector's survivors and the button's count both come from the scan
-  // result, so the button agrees with the drawer's own "Filtered" badge.
+  // result, so the button agrees with the drawer's own "Not Ranked" badge.
   const candidateSymbols = candidates?.map((c) => c.symbol) ?? [];
   const filteredCount = Math.max(0,
     (pipeline?.scanned ?? (rejected?.length ?? 0) + candidateSymbols.length) - candidateSymbols.length);

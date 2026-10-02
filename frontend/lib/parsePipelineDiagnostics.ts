@@ -124,6 +124,9 @@ export function weakestComponent(bd?: Record<string, number>, excludeVol = false
   return keys.reduce((best, k) => (bd[k] < bd[best] ? k : best));
 }
 
+/** Components whose score 0 is also the scorer's "insufficient data" value. */
+const ZERO_AMBIGUOUS = ['trend', 'pullback'];
+
 /** Contract-validator reject code → sub-rule id (one per threshold). */
 const CONTRACT_CODE_RULE: Record<string, string> = {
   stock_score_below_threshold: 'min-stock-score',
@@ -162,7 +165,15 @@ export function classifyReason(entry: RejectedEntry): Classified {
   }
   if (reason.startsWith('Pre-screen:')) {
     const weak = weakestComponent(entry.breakdown, true);
-    return { stage: 'pre-screen', subRules: [weak ? `weak-${weak}` : 'no-breakdown'] };
+    if (!weak) return { stage: 'pre-screen', subRules: ['no-breakdown'] };
+    // The scorer returns trend/pullback 0 both for a real failure and for
+    // insufficient history (stock_scorer `insufficient_data`), and the
+    // breakdown carries no `measured` flag — so a 0 there is not attributed
+    // as a measured weakness.
+    if (ZERO_AMBIGUOUS.includes(weak) && entry.breakdown![weak] === 0) {
+      return { stage: 'pre-screen', subRules: [`zero-${weak}`] };
+    }
+    return { stage: 'pre-screen', subRules: [`weak-${weak}`] };
   }
   if (reason.startsWith(DIRECTION_UNMEASURED_PREFIX)) return { stage: 'pre-screen', subRules: ['trend-unmeasured'] };
   if (reason === 'no option chain') return { stage: 'chain-window', subRules: ['no-chain'] };
@@ -194,7 +205,10 @@ function ruleValue(rules: Record<string, number> | null | undefined, key: string
 
 interface SubRuleDef { id: string; label: string; explanation: string }
 
-const STATUS_CAVEAT = 'REJECT comes from the score band or from a demote-only gate cap (regime, fundamentals, confidence); the recorded breakdown cannot tell which.';
+// The pre-screen scores without a confidence gate (scan.py passes none), so
+// only the score gate can be capped by confidence.
+const PRE_SCREEN_CAVEAT = 'REJECT comes from the score band or from a demote-only gate cap (regime, fundamentals); the recorded breakdown cannot tell which.';
+const SCORE_GATE_CAVEAT = 'REJECT comes from the score band or from a demote-only gate cap (regime, fundamentals, confidence); the recorded breakdown cannot tell which.';
 
 function contractSubRuleDefs(rules: Record<string, number> | null | undefined): SubRuleDef[] {
   // One sub-rule per threshold, so a label's threshold is the one its symbols failed.
@@ -212,7 +226,7 @@ function contractSubRuleDefs(rules: Record<string, number> | null | undefined): 
   };
   return [
     { id: 'score-gate', label: 'Score Gate (re-scored with IV)',
-      explanation: `Re-scored once the chain supplied IV, and the status was REJECT. ${STATUS_CAVEAT}` },
+      explanation: `Re-scored once the chain supplied IV, and the status was REJECT. ${SCORE_GATE_CAVEAT}` },
     thresholdRule('min-stock-score', 'Stock Score Below Contract Minimum', 'min_stock_score',
       (v) => `< ${fmtNum(v)}`, 'Every contract was rejected because the stock score is below the minimum the contract rules require.'),
     thresholdRule('spread', 'Spread Too Wide', 'max_bid_ask_spread_pct',
@@ -230,7 +244,7 @@ function contractSubRuleDefs(rules: Record<string, number> | null | undefined): 
     thresholdRule('iv-rank', 'IV Rank Above Ceiling', 'max_iv_rank',
       (v) => `> ${fmtNum(v)}`, 'IV rank (a true percentile) above the ceiling.'),
     { id: 'dte', label: 'Expiry Outside DTE Limits',
-      explanation: 'Contract expiry shorter or longer than the validator\'s DTE limits (widened for the hold window).' },
+      explanation: 'Contract expiry shorter or longer than the validator\'s DTE limits (adjusted for the hold window when the scan has one).' },
     { id: 'low-score', label: 'Contract Score Below Caution',
       explanation: 'Contracts cleared every hard rule but scored below the caution threshold.' },
     { id: 'soft-failures', label: 'Too Many Soft Failures',
@@ -239,6 +253,10 @@ function contractSubRuleDefs(rules: Record<string, number> | null | undefined): 
       explanation: 'All contracts rejected with no reason code, or with a code this view does not recognise.' },
   ];
 }
+
+/** Contract sub-rules whose threshold Step 3 exposes for options scans
+ *  (PARAM_DEFS, section 'options'). Anything else lives only in YAML. */
+const STEP3_CONTRACT_RULES = new Set(['spread', 'volume', 'oi', 'delta-high']);
 
 // ── Report ──────────────────────────────────────────────────────────────────
 
@@ -312,6 +330,17 @@ export function parsePipelineDiagnostics(
     ? `The stage counts add up to ${countedWithoutGap}, more than the ${totalDropped} not ranked (scanned − survivors); this result's counters are inconsistent.`
     : undefined;
 
+  // Rows with their own backend counter take it as their count, so a stored
+  // result whose reasons were never listed still shows what was counted.
+  const rowCounters: Record<string, number> = {
+    'errors/unclassified': unclassifiedCount,
+    'errors/unattributed': unattributedCount,
+    'pre-screen/trend-unmeasured': unmeasuredCount,
+    'contract-rules/score-gate': scoreCount,
+    'direction-shortlist/direction': directionCount,
+    'direction-shortlist/shortlist': shortlistCount,
+  };
+
   function buildSubRules(
     stage: StageId,
     stageTotal: number,
@@ -319,28 +348,40 @@ export function parsePipelineDiagnostics(
     keepEmpty: boolean,
   ): { subRules: DiagnosticSubRule[]; note?: string } {
     const stageSyms = syms(stage);
-    const haveReasons = stageSyms.length > 0;
+    // Distinct symbols this stage can account for: the listed ones, plus
+    // whatever a row's counter counted beyond its listed symbols.
+    let attributed = stageSyms.length;
+    for (const d of defs) {
+      const c = rowCounters[`${stage}/${d.id}`];
+      if (c !== undefined) attributed += Math.max(0, c - listed(stage, d.id));
+    }
+    const haveDetail = attributed > 0;
     const subRules = defs
       .map((d): DiagnosticSubRule => {
         const s = subSyms(stage, d.id);
+        const counter = rowCounters[`${stage}/${d.id}`];
         return {
           id: d.id,
           label: d.label,
           symbols: s,
-          count: haveReasons || stageTotal === 0 ? s.length : null,
+          count: counter !== undefined ? counter : haveDetail || stageTotal === 0 ? s.length : null,
           ruleExplanation: d.explanation,
         };
       })
       .filter((r) => keepEmpty || r.count === null || r.count > 0);
-    let note: string | undefined;
-    if (stageTotal > 0 && !haveReasons) {
-      note = `Per-rule breakdown unavailable: this scan recorded ${stageTotal} drop${stageTotal === 1 ? '' : 's'} here but no per-symbol reasons.`;
-    } else if (stageSyms.length < stageTotal) {
-      note = `${stageSyms.length} of ${stageTotal} dropped symbols have a recorded reason; the rest are not attributed.`;
-    } else if (stageSyms.length > stageTotal) {
-      note = `${stageSyms.length} symbols carry this stage's reasons, but the scan counted ${stageTotal} here.`;
+    const notes: string[] = [];
+    if (stageTotal > 0 && !haveDetail) {
+      notes.push(`Per-rule breakdown unavailable: this scan recorded ${stageTotal} drop${stageTotal === 1 ? '' : 's'} here but no per-symbol reasons.`);
+    } else if (attributed < stageTotal) {
+      notes.push(`${attributed} of ${stageTotal} dropped symbols have a recorded reason; the rest are not attributed.`);
+    } else if (attributed > stageTotal) {
+      notes.push(`${attributed} symbols carry this stage's reasons, but the scan counted ${stageTotal} here.`);
     }
-    return { subRules, note };
+    if (stage === 'contract-rules') {
+      const rowTotal = subRules.reduce((n, r) => n + (r.count ?? 0), 0);
+      if (rowTotal > attributed) notes.push('Rule counts overlap: a symbol is listed under each rule its contracts failed.');
+    }
+    return { subRules, note: notes.length > 0 ? notes.join(' ') : undefined };
   }
 
   // Pre-screen sub-rules: one per weighted component actually named weakest.
@@ -348,7 +389,12 @@ export function parsePipelineDiagnostics(
     ...WEIGHTED_COMPONENTS.filter((k) => listed('pre-screen', `weak-${k}`) > 0).map((k) => ({
       id: `weak-${k}`,
       label: `Lowest Weighted Component: ${COMPONENT_LABELS[k]}`,
-      explanation: `Status REJECT at the pre-screen, and ${COMPONENT_LABELS[k]} was the lowest of the weighted components — a pointer, not the rule that fired. ${STATUS_CAVEAT}`,
+      explanation: `Status REJECT at the pre-screen, and ${COMPONENT_LABELS[k]} was the lowest of the weighted components — a pointer, not the rule that fired. ${PRE_SCREEN_CAVEAT}`,
+    })),
+    ...ZERO_AMBIGUOUS.filter((k) => listed('pre-screen', `zero-${k}`) > 0).map((k) => ({
+      id: `zero-${k}`,
+      label: `${COMPONENT_LABELS[k]} Scored 0 (failing or unmeasured)`,
+      explanation: `${COMPONENT_LABELS[k]} was the lowest component at 0 — which the scorer returns both for a genuine failure and for too little price history to measure it. The breakdown cannot tell which.`,
     })),
     { id: 'no-breakdown', label: 'Rejected (no component breakdown recorded)',
       explanation: 'Status REJECT at the pre-screen; the scan did not record a component breakdown for these symbols.' },
@@ -391,7 +437,7 @@ export function parsePipelineDiagnostics(
     {
       id: 'chain-window', title: 'Option Chain Window', count: chainCount, keepEmpty: true,
       summary: dteText
-        ? `Fetches the option chain around this scan's DTE window (${dteText}; the lower bound is widened by a small tolerance); symbols with nothing returned are dropped.`
+        ? `Fetches the option chain around this scan's DTE window (${dteText}; the fetch's lower bound is adjusted by a tolerance and kept above the hold period); symbols with nothing returned are dropped.`
         : 'Fetches the option chain around the scan\'s DTE window; symbols with nothing returned are dropped.',
       defs: [
         { id: 'no-chain', label: 'No Option Chain Returned',
@@ -415,35 +461,13 @@ export function parsePipelineDiagnostics(
     },
   ];
 
-  function errorsSubRules(): { subRules: DiagnosticSubRule[]; note?: string } {
-    // `unattributed` is arithmetic, not a reason — it never has symbols.
-    const unc = subSyms('errors', 'unclassified');
-    const [uncDef, unattrDef] = stageDefs[0].defs;
-    const subRules: DiagnosticSubRule[] = [
-      { id: uncDef.id, label: uncDef.label, ruleExplanation: uncDef.explanation, symbols: unc,
-        count: unc.length > 0 || unclassifiedCount === 0 ? unc.length : null },
-      { id: unattrDef.id, label: unattrDef.label, ruleExplanation: unattrDef.explanation, symbols: [],
-        count: unattributedCount },
-    ].filter((r) => r.count === null || r.count > 0);
-    const note = unclassifiedCount > 0 && unc.length !== unclassifiedCount
-      ? `${unc.length} of ${unclassifiedCount} errors/unclassified drops have a recorded reason.`
-      : undefined;
-    return { subRules, note };
-  }
-
   let remaining = scanned;
   const stages: DiagnosticStage[] = stageDefs
     .filter((d) => d.id !== 'errors' || d.count > 0)
     .map((d) => {
       remaining = Math.max(0, remaining - d.count);
-      const built = d.id === 'errors' ? errorsSubRules() : buildSubRules(d.id, d.count, d.defs, d.keepEmpty);
-      let note = built.note;
-      if (d.id === 'contract-rules' && !note) {
-        const listedTotal = built.subRules.reduce((n, r) => n + (r.count ?? 0), 0);
-        if (listedTotal > syms('contract-rules').length) {
-          note = 'Rule counts overlap: a symbol is listed under each rule its contracts failed.';
-        }
-      }
+      const built = buildSubRules(d.id, d.count, d.defs, d.keepEmpty);
+      const note = built.note;
       return {
         id: d.id,
         title: d.title,
@@ -498,13 +522,25 @@ export function parsePipelineDiagnostics(
       case 'pre-screen':
         suggestedAction = top?.id === 'trend-unmeasured'
           ? 'Unmeasured trends are missing bars or benchmark data, not a setting.'
-          : 'Look up a few rejected symbols: a weak weighted component points at its Step-3 scoring parameters; a high score that was still rejected points at a gate cap (regime, fundamentals, confidence).';
+          : top?.id.startsWith('zero-')
+            ? 'A component scored 0 — check whether these symbols have enough price history before changing any parameter.'
+            : 'Look up a few rejected symbols: a weak weighted component points at its Step-3 scoring parameters; a high score that was still rejected points at a gate cap (regime, fundamentals).';
         break;
       case 'chain-window':
         suggestedAction = `Review the horizon / hold window in Step 3${dteText ? ` (this scan's DTE window was ${dteText})` : ''}, and check the options data source.`;
         break;
       case 'contract-rules':
-        suggestedAction = 'Review the contract rules in Step 3\'s Execution Parameters, starting with the largest cause above.';
+        if (top && STEP3_CONTRACT_RULES.has(top.id)) {
+          suggestedAction = `The largest cause is a contract rule Step 3's Execution Parameters can change (${top.label}).`;
+        } else if (top?.id === 'score-gate') {
+          suggestedAction = 'Look up a few rejected symbols: a weak weighted component points at its Step-3 scoring parameters; a high score that was still rejected points at a gate cap (regime, fundamentals, confidence).';
+        } else {
+          suggestedAction = top
+            ? `The largest cause (${top.label}) is set in contract_rules.yaml, not in Step 3.`
+            : 'Contract-rule breakdown unavailable for this scan.';
+          adjustHref = null;
+          adjustLabel = null;
+        }
         break;
       default:
         if (top?.id === 'shortlist') {

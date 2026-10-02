@@ -97,6 +97,13 @@ export function PipelineInspector({
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
+      // Focus can fall out of the dialog when the focused control unmounts
+      // (e.g. "Clear search"); pull it back in rather than let Tab reach the page.
+      if (!dialogRef.current.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+        return;
+      }
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();
@@ -211,7 +218,10 @@ export function PipelineInspector({
             <button
               type="button"
               className={styles.clearBtn}
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchQuery('');
+                searchRef.current?.focus();
+              }}
               aria-label="Clear search"
             >
               ✕

@@ -378,3 +378,74 @@ describe('parsePipelineDiagnostics — stored legacy results', () => {
     for (const s of r.stages) expect(Number.isNaN(s.pctOfTotal)).toBe(false);
   });
 });
+
+describe('parsePipelineDiagnostics — round-2 regressions', () => {
+  const ZERO = { scanned: 0, failed_data: 0, failed_pre_screen: 0, no_chain: 0, failed_score: 0, failed_contracts: 0,
+    failed_direction: 0, failed_shortlist: 0, failed_direction_unmeasured: 0, other_rejected: 0, candidates: 0 };
+
+  it('uses a row\'s own counter when its reasons were never listed (trims stored 2026-09-15..29)', () => {
+    const r = parsePipelineDiagnostics(
+      { ...ZERO, scanned: 52, failed_direction: 2, failed_shortlist: 40, candidates: 10 },
+      ['D1', 'D2'].map((s) => ({ symbol: s, reason: 'direction_conviction: trend 20 < 40 for Bullish Swing' })),
+      Array.from({ length: 10 }, (_, i) => `S${i}`),
+    );
+    expect(sub(r, 'direction-shortlist', 'shortlist')?.count).toBe(40);
+    expect(sub(r, 'direction-shortlist', 'direction')?.count).toBe(2);
+    expect(stage(r, 'direction-shortlist').note).toBeUndefined();   // the counters account for all 42
+    expect(r.primaryBottleneck?.insight).toContain('Shortlist Cap (40)');
+    expect(r.primaryBottleneck?.adjustHref).toBe('/settings');
+  });
+
+  it('does not blame the direction floor when the scan recorded zero direction drops', () => {
+    const r = parsePipelineDiagnostics(
+      { ...ZERO, scanned: 50, failed_shortlist: 40, candidates: 10 }, [],
+      Array.from({ length: 10 }, (_, i) => `S${i}`),
+    );
+    expect(sub(r, 'direction-shortlist', 'direction')).toBeUndefined();
+    expect(r.primaryBottleneck?.suggestedAction).not.toMatch(/trend floor/);
+  });
+
+  it('counts unmeasured trends from their counter even when none are listed', () => {
+    const r = parsePipelineDiagnostics({ ...ZERO, scanned: 10, failed_direction_unmeasured: 8, candidates: 2 }, [], ['A', 'B']);
+    expect(sub(r, 'pre-screen', 'trend-unmeasured')?.count).toBe(8);
+    expect(r.primaryBottleneck?.suggestedAction).toMatch(/missing bars/);
+  });
+
+  it('does not call a 0 trend a measured weakness — it is also the insufficient-data value', () => {
+    const entry = { symbol: 'NEWIPO', reason: 'Pre-screen: score 15 rejected', breakdown: PRE_BD({ trend: 0 }) };
+    expect(classifyReason(entry).subRules).toEqual(['zero-trend']);
+    const r = parsePipelineDiagnostics({ ...ZERO, scanned: 2, failed_pre_screen: 1, candidates: 1 }, [entry], ['A']);
+    expect(sub(r, 'pre-screen', 'zero-trend')?.label).toBe('Trend Scored 0 (failing or unmeasured)');
+    expect(r.primaryBottleneck?.suggestedAction).toMatch(/price history/);
+  });
+
+  it('says confidence can cap the score gate but not the pre-screen', () => {
+    const r = parsePipelineDiagnostics(PIPELINE, REJECTED, SURVIVORS);
+    expect(sub(r, 'pre-screen', 'weak-trend')?.ruleExplanation).not.toMatch(/confidence/);
+    expect(sub(r, 'contract-rules', 'score-gate')?.ruleExplanation).toMatch(/confidence/);
+  });
+
+  it('sends a Step-3 contract rule to Step 3 and a YAML-only rule nowhere', () => {
+    const spread = parsePipelineDiagnostics({ ...ZERO, scanned: 3, failed_contracts: 2, candidates: 1 },
+      ['X', 'Y'].map((s) => ({ symbol: s, reason: 'contracts rejected: spread_too_wide(4)' })), ['A']);
+    expect(spread.primaryBottleneck?.adjustHref).toBe('/screener/step-3-direction');
+    const minScore = parsePipelineDiagnostics({ ...ZERO, scanned: 3, failed_contracts: 2, candidates: 1 },
+      ['X', 'Y'].map((s) => ({ symbol: s, reason: 'contracts rejected: stock_score_below_threshold(9)' })), ['A']);
+    expect(minScore.primaryBottleneck?.adjustHref).toBeNull();
+    expect(minScore.primaryBottleneck?.suggestedAction).toMatch(/contract_rules\.yaml, not in Step 3/);
+  });
+
+  it('explains an overcount even when some drops are also unattributed', () => {
+    const r = parsePipelineDiagnostics({ ...ZERO, scanned: 6, failed_contracts: 5, candidates: 1 },
+      ['X', 'Y', 'Z'].map((s) => ({ symbol: s, reason: 'contracts rejected: spread_too_wide(2), volume_too_low(1)' })), ['A']);
+    const note = stage(r, 'contract-rules').note ?? '';
+    expect(note).toMatch(/3 of 5/);
+    expect(note).toMatch(/overlap/);
+  });
+
+  it('does not mention a hold-window widening in the chain summary as a narrowing tolerance only', () => {
+    const r = parsePipelineDiagnostics(PIPELINE, REJECTED, SURVIVORS, { dteWindow: { min_dte: 10, max_dte: 40, multiplier: 1 } });
+    expect(stage(r, 'chain-window').ruleSummary).toMatch(/kept above the hold period/);
+  });
+});
+

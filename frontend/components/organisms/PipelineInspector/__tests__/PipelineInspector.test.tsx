@@ -241,4 +241,40 @@ describe('PipelineInspector Component', () => {
     window.dispatchEvent(ev);
     expect(handleClose).not.toHaveBeenCalled();
   });
+
+  it('resets stage expansion when a new scan result arrives', () => {
+    const { rerender } = render(
+      <PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer={false} />
+    );
+    fireEvent.click(screen.getByText('1. Data & Universe Filters'));
+    rerender(
+      <PipelineInspector pipeline={{ ...mockPipeline }} rejected={[...mockRejected]} survivors={['MSFT']} isDrawer={false} />
+    );
+    expect(screen.getByText('1. Data & Universe Filters').closest('button')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps expansion across a re-render with the same scan', () => {
+    const { rerender } = render(
+      <PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer={false} />
+    );
+    fireEvent.click(screen.getByText('1. Data & Universe Filters'));
+    rerender(
+      <PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer={false} />
+    );
+    expect(screen.getByText('1. Data & Universe Filters').closest('button')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('returns focus to the search box after Clear, and pulls stray focus back into the drawer on Tab', () => {
+    render(<PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer isOpen onClose={() => {}} />);
+    const search = screen.getByPlaceholderText('Search symbol (e.g. NVDA, AAPL)...');
+    fireEvent.change(search, { target: { value: 'NVDA' } });
+    fireEvent.click(screen.getByLabelText('Clear search'));
+    expect(document.activeElement).toBe(search);
+
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+  });
 });
+
