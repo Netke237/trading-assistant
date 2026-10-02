@@ -1,4 +1,4 @@
-# STOP-SEMANTICS — build plan (v3)
+# STOP-SEMANTICS — build plan (v4)
 
 Decision: `STOP-SEMANTICS-2026-10-02` (PROJECT_STATE.json). Task: `task_backlog` STOP-SEMANTICS.
 Two behaviour changes, one branch, one plan:
@@ -7,6 +7,17 @@ Two behaviour changes, one branch, one plan:
 - **(b)** A premium stop whose threshold is below $0.01 is REFUSED when saved.
 
 Part (c) of the decision (COMPOSITE-WATCH-KEYERROR) is closed, so no code.
+
+**v4 changes (plan round 3: 2 blocking / 7 should-fix / 9 nits; Kenneth: write v4 and build from it).**
+The deploy-time reset is gone. Both blockers were bugs in its mechanics (a marker the next dedup save erased;
+a store version bump that re-enabled STRUCTURAL_STOP_BREACHED and a flag that never persisted). v4 removes
+the need for a reset: a short-stock PREMIUM_STOP fire uses its OWN dedup key in both stores (`…:short`),
+so no state written under the old fall-side rule can silence, throttle or mis-date it (§2.4, R3-B1/B2/S1,
+N4). With the side fixed per key, the in-place refresh change is dropped too (N5). The backend derives the
+side from the DB row (R3-S2). PATCH refusal segments are joined with ` | ` and mapped per segment (R3-S3/S4,
+N2). The label fallback is "unstamped row → legacy label" (R3-S5). The rejection mapper and the drop-note
+text move into `lib/` so they can be unit-tested (R3-S6). The drop reason gains `unknown`, and a
+fraction-only drop is `below_one_cent` (R3-S7). Nits N1, N3, N6–N9 are folded in. §9 records where each went.
 
 **v3 changes (plan round 2: 0 blocking / 7 should-fix / 9 nits).** Deploy-time reset of short
 PREMIUM_STOP dedup/suppression in both stores (R2-1). The Settings hint limit goes through the predicate
@@ -55,8 +66,7 @@ Preview and label sites that state the threshold or the alert type:
 - `settings/page.tsx:103-123` stored-≥100% note and the "entry below $X puts the stop below a cent / fires
   only on a sub-penny quote" hint.
 - `alerts/page.tsx` `alertTypeLabel` — called by `AlertRow` (has the toast and the looked-up position) AND
-  by the Alert-types toggle list (`:470`, type + global only, no position). `ToastItem.direction` and
-  `contract` are optional (`types/domain.ts:1064-1065`), so older persisted toasts lack them.
+  by the Alert-types toggle list (`:470`, type + global only, no position).
 - `services/notifications/alert_notifier.py:165` `'PREMIUM_STOP': 'Premium stop hit'` (Gmail/Telegram).
 - Reasons: backend `Premium stop — SYM stock|option at $P`; frontend `Premium stop — SYM down N%`.
 
@@ -76,8 +86,9 @@ The create path already handles a stop it cannot store. A ratio `>= 1` → WARNI
 `body.premiumStopPct` (usually None → inherit the global). The client detects
 `premiumStopDollar != null && response.premiumStopPct == null` through **three** signals:
 - `applyPersistedPosition`'s `onPremiumStopDropped(requestedDollar)` callback (`portfolioStore.ts:519-521`) →
-  step-7 `addSaveNote(droppedStopNote(r))` (`step-7-trade-card/page.tsx:1166, :1214`). It also has two
-  callers in `lib/stockDirectSend.ts` (:162, :201).
+  step-7 `addSaveNote(droppedStopNote(r))` (`step-7-trade-card/page.tsx:1166, :1214`). Its two
+  callers in `lib/stockDirectSend.ts` (:162, :201) pass no callback, and no stock path sets a premium stop,
+  so they are a no-op here and stay unchanged (N7).
 - `addPosition`'s return `premiumStopDropped` (`portfolioStore.ts:1068-1074`) → step-7 `:1340-1341`
   `droppedStopNote`.
 - The offline retry (`portfolioStore.ts:1310-1327`) → `premiumStopDropQueue` → the Portfolio banner
@@ -111,7 +122,15 @@ from $0.02 to $50.00 (e.g. $0.02 on $0.03). **Those stops already never fire tod
 are under the engines as they stand. The editors therefore never offer them (F2 below), and the server
 drops them (S2). The alternative is a tolerance in both engines' comparisons, so that an intended $0.01
 threshold fires. That would change the boundary of every premium stop and of `premiumStopFiringPrice`'s
-pinned sweep. It is out of this task's scope unless Kenneth chooses it (Q4).
+pinned sweep. It is out of this task's scope unless Kenneth chooses it (Q4). **Kenneth chose the
+recommendation (no tolerance).**
+
+**Short thresholds carry float noise too (N6).** `entry * (1 + pct)` can land a few ulps ABOVE the nominal
+whole-cent price (entry $10.00 at 10% → 11.000000000000002), so a quote of exactly $11.00 does not fire and
+$11.01 does: about 0.7% of grid cases fire 1¢ late. Under the Q4 decision this is the engine's rule and is
+not corrected. `percentStopFiringPrice` reports the engine's real firing price ($11.01 here), so the preview
+never promises a fire the engine will not deliver. Tests compare against the computed threshold, never the
+nominal one, and the shared fixture carries short rows to pin TS/Python threshold parity (§4).
 
 New twin helpers, beside the existing ones:
 - TS `lib/premiumStop.ts`: `isShortStockPosition(contract, direction)`,
@@ -139,7 +158,7 @@ swept cases (plan round 2). It is still replaced by the named predicate, so ther
 - `alertEngine.ts` PREMIUM_STOP: `shortStock = isStock && isBearish`;
   `threshold = percentStopThresholdPrice(entry, pct, shortStock)`;
   `hit = entry > 0 && currentPrice > 0 && (shortStock ? currentPrice >= threshold : currentPrice <= threshold)`.
-  `referenceValue: pythonRound4(threshold)`. Reason: a short reads `Stock stop — SYM at $P` (price-only,
+  `referenceValue: pythonRound4(threshold)`, `stopSide: premiumStopSide(contract, direction)` (§2.2). Reason: a short reads `Stock stop — SYM at $P` (price-only,
   because `pnlPct` is not direction-aware, §0). **Both engines use this exact string for a short** (R2-10),
   so the in-place toast refresh cannot flip between wordings. Long stock and options keep their current
   per-engine reasons (unchanged behaviour, out of scope).
@@ -163,24 +182,37 @@ swept cases (plan round 2). It is still replaced by the named predicate, so ther
   the smallest whole-cent entry `e` with `!premiumStopIsSubCent(e, pct, false)`, found by stepping up from
   today's `ceil(...)` estimate. Today's formula names a limit that is itself sub-cent at 80% ($0.05), 90%
   ($0.10) and 98.75% ($0.80). A sweep test over 10.00%–99.00% by 0.01% pins it.
-- **Side stamped at fire time (R2-7a).** A new optional field `stopSide: 'short-stock' | 'long-stock' |
-  'option'` goes on the frontend `AlertReason`/`ToastItem` (`types/domain.ts`) and the backend `AlertItem`
-  (`schemas/__init__.py`). Both engines set it on PREMIUM_STOP, in the same spirit as
-  ALERT-THRESHOLD-STAMP (`types/domain.ts:1066-1084`): a row reports the rule it FIRED under, never one
-  re-derived later. `addToast`'s in-place refresh copies `stopSide`, `price`, `referenceValue` and
-  `premiumStopPct` along with `kind`/`reason` (today only `kind`/`reason`, `alertStore.ts:236-240`), so a
-  refreshed row is internally consistent.
+- **Side stamped at fire time (R2-7a, N1).** A new optional field `stopSide: 'short-stock' | 'long-stock' |
+  'option'` goes on the frontend `AlertReason` (`lib/alertEngine.ts:49-69`) and `ToastItem`
+  (`types/domain.ts`), and on the backend `AlertItem` (`schemas/__init__.py`). The frontend `AlertItem` type
+  is not touched (nothing feeds backend alert items into toasts). Twin helpers `premiumStopSide(contract,
+  direction)` / `premium_stop_side(contract, direction)` derive it from `isShortStockPosition` plus the
+  `|STOCK` suffix. Both engines set it on PREMIUM_STOP only, in the same spirit as ALERT-THRESHOLD-STAMP
+  (`types/domain.ts:1066-1084`): a row reports the rule it FIRED under, never one re-derived later.
+  `addToast`'s in-place refresh is **unchanged** (it copies `kind`/`reason`, as today). The side is part of
+  the dedup key (§2.4), so a refresh never crosses sides, and a refreshed row keeps the side it fired with.
+  The stale `price`/`referenceValue`/`premiumStopPct` on a refreshed row is pre-existing behaviour for every
+  type: those fields stamp the FIRST trigger, like `firedAt` (N5).
 - `alerts/page.tsx` `alertTypeLabel(type, pct, side?)` gives `Stock stop (+X%)` for `short-stock`,
-  `Stock stop (–X%)` for `long-stock`, and `Premium stop (–X%)` for `option` **and for any row without a
-  stamp** (every pre-deploy row, which fired under the old fall-side rule: its legacy wording stays true).
+  `Stock stop (–X%)` for `long-stock`, and `Premium stop (–X%)` for `option` **and for any unstamped row,
+  even one for a short position** (R3-S5). Every pre-deploy row fired under the old fall-side rule, so its
+  legacy wording stays true. The label never falls back to the position's current contract or direction.
   The toggle list (`:470`) passes no side and reads `Premium / stock stop (±X%)`.
 - Type-name tables (R2-11): `alerts/page.tsx:46` and `EditDrawer.tsx:1693` `ALERT_TYPE_LABELS` name the alert
   TYPE, not a row, and become `Premium / stock stop` (the same neutral wording as the toggle list).
 - Notifier (R2-7b): `notify_alert` / `_build_notification` (`alert_notifier.py:172, :224`) gain an optional
   `stop_side` parameter. The PREMIUM_STOP label (`:165`) is chosen from it (`Stock stop hit (short)`,
-  `Stock stop hit`, `Premium stop hit`; None → `Premium stop hit`). Callers updated: `portfolio_alert_monitor.py:185`
-  (passes `alert.stopSide`), `routers/alerts.py:147` (passes the posted toast's `stopSide`) and `auto_trader.py:1595`
-  (no PREMIUM_STOP, passes nothing).
+  `Stock stop hit`, `Premium stop hit`; None → `Premium stop hit`). It also selects the dedup key (§2.4).
+  Callers:
+  - `portfolio_alert_monitor.py:185` passes `alert.stopSide` (set by `alert_generator` from the DB row).
+  - `routers/alerts.py` `post_alert_notify` **derives the side from the DB row** (R3-S2), as it already does
+    for symbol, contract and direction (:96-101). It does not trust a client value. `AlertNotifyRequest`
+    (`routers/alerts.py:63-75`, not schemas) gains an optional `stopSide`, and `alertStore.notifyBackend`
+    plus its `addToast` call (`alertStore.ts:79-111, :256-267`) send it. The server uses it only as a
+    version signal: when it is absent and the row is a short stock, the POST came from a tab still running
+    the pre-deploy engine (a fall-side fire), so the server passes `stop_side=None` (legacy key and label).
+    Otherwise it passes the derived side.
+  - `auto_trader.py:1595` has no PREMIUM_STOP and passes nothing.
 
 ### 2.3 Not changed by (a)
 - `STOP_REACHED` / `STRUCTURAL_STOP_BREACHED` / `TP_HIT` are already direction-aware.
@@ -188,28 +220,40 @@ swept cases (plan round 2). It is still replaced by the named predicate, so ther
 - Option positions of either direction are unchanged, apart from the backend `> 0` guard.
 - The 10–99% editor band and the backend `lt=1` stay as they are for shorts too (Q5).
 
-### 2.4 Existing short positions: one-time reset at deploy (R2-1)
-Open short stock positions with a percent stop change behaviour at deploy: they now fire on a RISE. Old
-fall-side state would otherwise silence or mis-date the correct alert:
-- frontend `alertStore`: `suppressedAlerts["recId-PREMIUM_STOP"]` (set on acknowledge, `:283-290`, checked
-  first in `addToast`, `:212`) silences it permanently. `firedAlerts` holds its notify dedup, and an
-  unacknowledged row keeps stale numbers.
-- backend `alert_notifier._first_seen` (`:276-282`), persisted to `alert_dedup.json` until the position
-  closes, would send the correct fire as a "(reminder)" dated at the wrong-side trigger, or suppress it.
+### 2.4 Existing short positions: a separate dedup key, not a reset (R2-1, R3-B1/B2/S1, N4)
+Open short stock positions with a percent stop change behaviour at deploy: they now fire on a RISE. State
+written under the old fall-side rule must not silence or mis-date the correct alert:
+- frontend `alertStore`: `suppressedAlerts["recId-PREMIUM_STOP"]` (set on acknowledge) silences it
+  permanently, `firedAlerts` throttles its notify, and an unacknowledged row would absorb it as an in-place
+  refresh.
+- backend `alert_notifier._fired` / `_first_seen`, persisted to `alert_dedup.json` until the position
+  closes, would send it as a "(reminder)" dated at the wrong-side trigger, or suppress it.
 
-The reset:
-- **Backend**: a one-time function `reset_short_stock_premium_stop_dedup(rec_ids)` in `alert_notifier.py`
-  drops the `PREMIUM_STOP` keys for the given rec_ids (the `forget_alerts` pattern, `:309`). The first
-  `portfolio_alert_monitor` cycle after deploy calls it with its open `|STOCK` + Bearish rec_ids. A marker
-  in the dedup file (`"_migrations": ["stop-semantics-short-2026-10"]`) makes it run exactly once.
-- **Frontend**: `alertStore` version bump. `migrateAlerts` sets `pendingShortStopReset: true`. A store action
-  `resetShortStockPremiumStops(positions)` removes `suppressedAlerts`/`firedAlerts` PREMIUM_STOP keys and
-  marks unacknowledged PREMIUM_STOP rows acknowledged for the short-stock recIds among `positions`, then
-  clears the flag. `scanPortfolio`'s two callers (`portfolio/page.tsx:143-149`, `dashboard/page.tsx:94-100`)
-  call it once before their first scan while the flag is set. Option and long-stock keys are untouched, so
-  no acknowledged alert re-fires for them.
-- Tests pin both: a short's acknowledged pre-deploy key is cleared and the rise-side alert surfaces; a long's
-  and an option's keys survive; the backend marker prevents a second run.
+v3 cleared that state with a one-time reset. Round 3 found both halves broken. v4 needs no reset: **a
+short-stock PREMIUM_STOP fire is keyed separately in both stores.**
+- **Frontend**: one helper `alertKey(t)` in `alertStore.ts` = `makeDedupKey(recId, alertType)` plus
+  `':short'` when `t.alertType === 'PREMIUM_STOP' && t.stopSide === 'short-stock'`. Every site that keys by
+  `(recId, alertType)` uses it: `collapseToasts` (:55), `addToast`'s suppression check, its firedAlerts
+  throttle and its existing-row match (:209-221, which compares `alertKey` instead of the two fields),
+  `acknowledgeAlert` (:286) and `deleteAlert` (:296). There is **no version bump and no migration**, so
+  `migrateAlerts`' one-time STRUCTURAL_STOP_BREACHED backfill (gated on `_version < ALERT_STORE_VERSION`)
+  cannot re-run (R3-B2), and there is no flag to persist. A pre-deploy short row (unstamped, legacy key)
+  stays in history under its legacy label. The first rise-side fire is a new row with a new key, so the old
+  acknowledgement, throttle and open row cannot touch it. All three scan callers (`portfolio/page.tsx:149`,
+  `dashboard/page.tsx:100, :143`) go through `addToast`, so none needs a change (R3-S1).
+- **Backend**: `notify_alert`'s key is `f'{rec_id}|{alert_type}'`, plus `':short'` when `alert_type ==
+  'PREMIUM_STOP' and stop_side == 'short-stock'`. `forget_alerts` splits on the first `|` and still matches
+  the rec_id, so a closed short clears both keys. `_save_dedup`/`_load_dedup` are unchanged. The old
+  fall-side key simply ages out with the position. It runs whatever `masterEnabled` says, and it does not
+  matter whether the monitor or the browser is first after deploy (N4), because nothing has to run once.
+- `alert_generator`'s `_sustained` state is keyed by type per position. Old-rule met (`price <= e(1-p)`) and
+  new-rule met (`price >= e(1+p)`) are disjoint, so a pending old-rule timer is popped on the first new-rule
+  evaluation and cannot shorten a rise-side sustain. No change.
+- Tests pin it: a short with an acknowledged pre-deploy `recId-PREMIUM_STOP` key and an unacknowledged
+  legacy row still surfaces a NEW rise-side row and notifies; a long's and an option's keys are unchanged
+  (regression guards); the backend sends a short's first rise fire as a non-reminder although
+  `_first_seen` holds the legacy key, and `forget_alerts` drops both keys; STRUCTURAL_STOP_BREACHED stays off
+  for a persisted config without it after rehydration (`useAlertStore.persist.rehydrate()`, regression guard).
 
 ---
 
@@ -221,18 +265,28 @@ The reset:
   `premium_stop_is_sub_cent(position.entry_price, value, is_short_stock_position(position.contract,
   position.direction))`, do not write `premium_stop_pct`. Apply every other field, commit, and raise **422**
   at the end: the **late-raise** pattern `qty` uses. The drawer debounces several edits into one PATCH, and an
-  early raise would drop a valid stop sent alongside. The detail is a **string**, in this order (R2-6):
-  `qty_error` first, unchanged (space-joined risk codes, which `rejectionMessage` maps), then the code
-  `premium_stop_below_one_cent`, space-separated. The human text lives in the frontend map: a new
-  `REJECTION_LABELS.premium_stop_below_one_cent` = "Premium stop not saved: at this entry it would fire below
-  $0.01 and could never fire." With no space-joined free text, `rejectionMessage`'s token split maps every
-  code, and neither refusal can hide the other. When the same PATCH trimmed qty (`adjusted_qty`), the late
-  422 loses `adjustedQty` (R2-13), so the code `qty_saved_as_<N>` is appended and mapped to "Quantity saved
-  as N (reduced to fit exposure)." The Portfolio error banner's header "{symbol} was not saved" becomes
-  "{symbol}: some changes were not saved" when the detail contains only `premium_stop_below_one_cent` /
-  `qty_saved_as_*` codes, because the co-sent fields WERE saved. An explicit null (clear → inherit) is never refused.
-  - On a 422 the store toasts and calls `syncFromBackend(true)` (`portfolioStore.ts:668-687`), so the
-    optimistic percent reverts while the co-sent stop, which was saved, survives.
+  early raise would drop a valid stop sent alongside. The detail is a **string** of segments joined by
+  **` | `** (R2-6, R3-S3/S4), in this order: `qty_error` first, verbatim (it is space-joined risk codes OR
+  free text: `portfolio.py:251, 258, 281-285`), then `premium_stop_below_one_cent`, then
+  `qty_saved_as_<N>` when the same PATCH saved a trimmed qty (`adjusted_qty`, which the late 422 would
+  otherwise lose, R2-13). `qty_error` and `adjusted_qty` are set on exclusive branches, so at most one of
+  the first and third segments appears. With a single segment the detail is exactly today's string, so
+  every existing qty-only 422 renders as it does now.
+  - Frontend mapping moves from `portfolio/page.tsx:34-52` into a new `lib/portfolioRejection.ts` (R3-S6:
+    an App Router page cannot carry extra named exports): `REJECTION_LABELS`, `rejectionMessage(detail)`
+    and `isPartialSave(detail)`. `rejectionMessage` splits on ` | `. Each segment is mapped as today (its
+    space-split tokens through `REJECTION_LABELS`, the raw segment when none maps), so a free-text qty error
+    is shown verbatim beside the premium label instead of being swallowed. A segment matching
+    `^qty_saved_as_(\d+)$` (N2: exact prefix, digits only) maps to "Quantity saved as N (reduced to fit
+    exposure)." New label: `premium_stop_below_one_cent` = "Premium stop not saved: at this entry it would
+    fire below $0.01 and could never fire."
+  - `isPartialSave(detail)` is true when every segment is `premium_stop_below_one_cent` or
+    `qty_saved_as_<N>`. The page's banner header (`page.tsx:203`) then reads "{symbol}: some changes were not
+    saved:" instead of "{symbol} was not saved:", because the co-sent fields WERE saved.
+  - An explicit null (clear → inherit) is never refused.
+  - On a 422 the store sets `lastSyncError` (the Portfolio banner, not a toast, N3) and calls
+    `syncFromBackend(true)` (`portfolioStore.ts:668-687`), so the optimistic percent reverts while the
+    co-sent stop, which was saved, survives.
 - **S2/S3 create** `position_writer.create_position`, after the ratio branch: if `resolved_premium_stop_pct`
   is not None and `premium_stop_is_sub_cent(entry_price, it, is_short_stock_position(body.contract,
   body.direction))`, WARN-log (naming entry, pct and contract). Then fall back **exactly as the ratio ≥ 1 branch
@@ -266,21 +320,31 @@ The reset:
   false)` for `0 < dollar < entryPremium`, shown as a **warning** beside `premiumStopAtOrAbovePremium`, in the
   same way and for the same reason: the fill can differ, and the booking (S2) is the authority (R1-10).
   This is a warning, not a disable. That is a deviation from "refuse at save" for this one path → Q3.
-- **Drop reason, on every signal (R1-12, R2-4)**: one helper `premiumStopDropReason(requestedDollar,
-  requestedPct, savedEntry, shortStock)` returns `'total_loss' | 'below_one_cent'`
-  (`premiumStopPctFromDollars` undefined → total loss; otherwise below one cent). It feeds all three
-  signals:
-  - the `onPremiumStopDropped` callback becomes `(requestedDollar: number, reason)`;
+- **Drop reason, on every signal (R1-12, R2-4, R3-S7)**: one helper in `lib/premiumStop.ts`,
+  `premiumStopDropReason(requestedDollar: number | null, savedEntry: number | null | undefined)`, returns
+  `'total_loss' | 'below_one_cent' | 'unknown'`:
+  - `requestedDollar == null` (a fraction-only create) → `below_one_cent`. A schema-valid fraction is in
+    (0, 1), and the server drops one only when it is sub-cent.
+  - `savedEntry` null, undefined or `<= 0` (the response's `entryPrice` is optional,
+    `portfolioStore.ts:552, 1343`) → `unknown`.
+  - `premiumStopPctFromDollars(requestedDollar, savedEntry)` undefined (ratio ≥ 1) → `total_loss`.
+  - otherwise → `below_one_cent`.
+  It feeds all three signals:
+  - the `onPremiumStopDropped` callback becomes `(requestedDollar: number | null, reason)`;
   - `addPosition`'s return gains `premiumStopDropReason`;
-  - `PremiumStopDropNotice` gains `reason`.
-  Step-7's `droppedStopNote(requested, reason)` and the Portfolio banner both read "… could not be applied:
-  at the filled premium it is a total loss | it would fire below $0.01 — this position inherits the global
-  stop." The `stockDirectSend.ts` callers (:162, :201) pass the reason through. Detection widens to
+  - `PremiumStopDropNotice` gains `reason`, and `requestedDollar` becomes `number | null`.
+  One text helper, `premiumStopDropText(requestedDollar, reason)` in `lib/premiumStop.ts` (R3-S6), is used by
+  step-7's `droppedStopNote` closure (`:550`, now a one-line delegate) and by the Portfolio banner. It reads
+  "Premium stop [of $X/share] could not be applied: at the filled premium it is a total loss | at the
+  filled premium it would fire below $0.01 | (reason unavailable) — this position inherits the global
+  stop." The bracket is omitted when the dollar is null. Detection widens to
   `(premiumStopDollar != null || premiumStopPct != null) && response.premiumStopPct == null` (fraction-only
-  creates, S3), and the notice carries the dollar when known, else `entry × pct`. After the S2 fallback
-  (§3.1) a response can carry the CLIENT fraction instead of null. That is not a drop, and detection is
-  unchanged for it.
-- **G Settings global**: NOT refused (Q1).
+  creates, S3). After the S2 fallback (§3.1) a response can carry the CLIENT fraction instead of null. That
+  is not a drop, and detection is unchanged for it. The `stockDirectSend.ts` callers are a no-op (N7, §0).
+  The auto-trade booking (`auto_trade_booking.py`) does not run through these signals. Its drop is the S2
+  WARN log only, exactly as its total-loss drop is today. Not widened here.
+- **G Settings global**: NOT refused (Q1). One line under the Settings "Premium stop loss" field (N9):
+  "For short stock positions this is how far the price may RISE above entry."
 
 ---
 
@@ -289,15 +353,18 @@ The reset:
 Shared fixture: `frontend/lib/__tests__/fixtures/premium_stop_subcent.json`, generated by
 `gen_premium_stop_subcent.py` beside it (the `python_round4.json` pattern). It holds `[entry_cents, pct_bp,
 is_sub_cent]` rows (R2-15): the grid entries $0.01–$2.00 × pct 10%–99% by 25 bp, **kept only where
-`|entry*(1-pct) − 0.01| < 0.005`** (the boundary neighbourhood), plus the full `d = e − $0.01` family for
+`|entry*(1-pct) − 0.01| < 0.005`** (the boundary neighbourhood), short rows `[entry_cents, pct_bp, threshold]` over the same grid with the
+Python-computed `entry*(1+pct)` as a float, kept where it is within 0.005 of a whole cent (N6), plus the full
+`d = e − $0.01` family for
 $0.02–$50.00 as `[entry_cents, dollar_cents, is_sub_cent]`. CI's checkout is the whole repo, but pytest runs
 from `backend/` (`ci.yml:24-25`), so the backend test resolves it as
 `Path(__file__).resolve().parents[2] / 'frontend/lib/__tests__/fixtures/premium_stop_subcent.json'` (R2-12).
 
 Frontend (Jest):
-- `lib/__tests__/alertEngine.test.ts`: short stock fires at `>= entry*(1+pct)` and not on a fall; long stock
-  unchanged; Bearish option still fires on a fall; boundary equality on both sides; short reason is
-  price-only; `referenceValue` is the direction-aware threshold.
+- `lib/__tests__/alertEngine.test.ts`: short stock fires at `>= entry*(1+pct)` (the COMPUTED threshold, N6)
+  and not on a fall; boundary equality on both sides; short reason is price-only; `referenceValue` is the
+  direction-aware threshold; `stopSide` is stamped per side. Regression guards (pass on main too, N8): long
+  stock unchanged; Bearish option still fires on a fall.
 - `lib/__tests__/premiumStop.test.ts`: `premiumStopIsSubCent` equals the fixture on every row (fails on main:
   the helper is absent); a short is never sub-cent, including entry $0.05 at 90%; `percentStopFiringPrice`
   short sweep (smallest 2dp `>=` t, and `x - 0.01 < t`); bounds: for every mid $0.02–$50, `max` is not
@@ -308,35 +375,58 @@ Frontend (Jest):
   (ii); `globalNeverFires` hidden for a short; a 422 on `premiumStopPct` alongside `stop` keeps the stop and
   reverts the percent (store + sync mocked).
 - `app/(frame)/alerts/__tests__/page.test.tsx`: `Stock stop (+X%)` short, `(–X%)` long stock, `Premium stop`
-  option; toast without direction falls back to the position; toggle list neutral label.
+  option; an UNSTAMPED row for a short position reads the legacy `Premium stop (–X%)` (R3-S5); toggle list
+  and type-name tables read the neutral label.
 - `lib/__tests__/p2PortfolioStore.test.ts`: fraction-only create with `premiumStopPct == null` in the response
-  queues a notice; reason `below_one_cent` vs `total_loss` on all three signals; a response carrying the
-  client fraction (S2 fallback) is not a drop.
-- step-7 test (beside its existing `droppedStopNote` tests): the note names the reason.
-- `alertStore` test: `resetShortStockPremiumStops` clears only short-stock PREMIUM_STOP keys; in-place refresh
-  copies `stopSide`/`price`/`referenceValue`/`premiumStopPct`; migrate sets the flag once.
-- `portfolio/page` test: `rejectionMessage` on `"single_trade_exposure_too_high premium_stop_below_one_cent"`
-  shows both labels; the partial-save header.
-- AutoTradeArm test (beside its existing ones): sub-cent warning shown; Arm still enabled.
+  queues a notice with reason `below_one_cent` and a null dollar; `below_one_cent`, `total_loss` and
+  `unknown` (no `entryPrice` in the response) on all three signals; a response carrying the client fraction
+  (S2 fallback) is not a drop.
+- `lib/__tests__/premiumStop.test.ts` also: `premiumStopDropReason` on all four branches;
+  `premiumStopDropText` for each reason, with and without a dollar (R3-S6).
+- `app/(frame)/screener/step-7-trade-card/__tests__/edited-fields-sync.test.tsx` (its existing
+  `droppedStopNote` render tests at :863, :882): the rendered note names the reason. The existing regexes
+  still match, because the new text keeps the "Premium stop of $X/share could not be applied" prefix.
+- `lib/__tests__/alertStore.test.ts`: §2.4's short-key tests (acknowledged legacy key + open legacy row → a
+  new rise-side row is added and notifies; acknowledging it suppresses only the `:short` key; `collapseToasts`
+  keeps one legacy and one short row); a long's and an option's keys unchanged (regression guards);
+  STRUCTURAL_STOP_BREACHED stays off after `useAlertStore.persist.rehydrate()` of a v3 blob without it
+  (regression guard, R3-B2); `notifyBackend` posts `stopSide`.
+- `lib/__tests__/portfolioRejection.test.ts` (new, R3-S6): `rejectionMessage` on
+  `"single_trade_exposure_too_high | premium_stop_below_one_cent"` shows both labels; on each free-text
+  qty error (`portfolio.py:251, 258, 281-285`) joined with the premium code, the free text is shown verbatim
+  AND the premium label (R3-S3); `qty_saved_as_3` maps, `qty_saved_as_x` and `xqty_saved_as_3` do not (N2);
+  single-segment details render exactly as before; `isPartialSave` true only for premium / qty-saved
+  segments. The Portfolio page has no render test, so `isPartialSave` is the unit under test and the page's
+  header line is a one-expression use of it.
+- `components/organisms/AutoTradeArm/__tests__/AutoTradeArm.test.tsx`: sub-cent warning shown; Arm still
+  enabled.
 
 Backend (pytest):
 - `tests/test_alerts.py` (already has Bearish `|STOCK` fixtures at :191, :350-400): short fires on a rise and
-  not on a fall; `reference_value` direction-aware; Bearish option unchanged; `opt_price == 0.0` does not fire
-  (fails on main).
+  not on a fall; `reference_value` direction-aware; `stopSide` stamped; `opt_price == 0.0` does not fire
+  (fails on main). Regression guard: Bearish option unchanged.
 - `tests/test_premium_stop_per_position.py`: helpers + the shared fixture.
-- `tests/test_portfolio_update.py`: sub-cent → 422 string detail `premium_stop_below_one_cent…`,
+- `tests/test_portfolio_update.py`: sub-cent → 422 string detail `premium_stop_below_one_cent`,
   `premium_stop_pct` unchanged, a `stop` in the same PATCH saved; null clear allowed; qty + premium failures
-  produce one `; `-joined detail; a short at a sub-penny entry is NOT refused.
+  produce `"<qty_error> | premium_stop_below_one_cent"` (one free-text and one code-list qty error);
+  trimmed qty + premium → `"premium_stop_below_one_cent | qty_saved_as_<N>"` and the trimmed qty is saved;
+  a qty-only failure's detail is byte-identical to main's; a short at a sub-penny entry is NOT refused.
 - `tests/test_position_writer.py`: sub-cent from dollar (incl. $0.02 on $0.03) → None + WARNING, 201; sub-cent
   fraction fallback → None; valid unchanged; short sub-penny entry kept.
-- `tests/test_alert_notifier.py`: side-aware PREMIUM_STOP label (None → legacy); the one-time reset drops
-  only the given rec_ids' PREMIUM_STOP keys and the marker blocks a second run.
+- `tests/test_alert_notifier.py`: side-aware PREMIUM_STOP label (None → legacy); a `short-stock` fire uses the
+  `…|PREMIUM_STOP:short` key, so with a legacy `…|PREMIUM_STOP` entry in `_fired` and `_first_seen` it is
+  sent and is NOT a reminder; the key survives `_save_dedup` → `_load_dedup`; `forget_alerts` drops both
+  keys; a non-PREMIUM_STOP type ignores `stop_side`.
+- `tests/test_alert_notify_guard.py`: the side is derived from the DB
+  row; a request without `stopSide` for a short row uses the legacy key and label (stale-tab case); a
+  request claiming `stopSide: 'option'` for a short row still gets `short-stock`.
 - `tests/test_position_writer.py` also: a sub-cent dollar with a valid client fraction stores the fraction
   (R2-5).
 
 Mutations to run and record: swap `>=`/`<=` on the short branch; drop the `isStock` term (options must break);
 drop the late raise (the stop-alongside test must break); drop the backend `> 0` guard; give the short flag a
-default (typecheck / pytest signature test must break).
+default (typecheck / pytest signature test must break); drop `':short'` from either store's key (the
+legacy-key tests must break); join PATCH segments with a space (the free-text test must break).
 
 ---
 
@@ -344,17 +434,20 @@ default (typecheck / pytest signature test must break).
 
 Backend: `app/services/premium_stop.py`, `app/services/alert_generator.py`, `app/routers/portfolio.py`,
 `app/services/position_writer.py`, `app/services/notifications/alert_notifier.py`,
-`app/services/portfolio_alert_monitor.py`, `app/routers/alerts.py`, `app/schemas/__init__.py` (`AlertItem.stopSide`;
-the toast-notify request body), `app/services/auto_trader.py` (call-site signature only, if needed), plus tests.
+`app/services/portfolio_alert_monitor.py`, `app/routers/alerts.py` (`AlertNotifyRequest.stopSide`, side
+derivation), `app/schemas/__init__.py` (`AlertItem.stopSide`), plus tests. `auto_trader.py` needs no change
+(the new parameter is optional).
 Frontend: `lib/premiumStop.ts`, `lib/alertEngine.ts`, `lib/portfolioStore.ts`, `app/(frame)/portfolio/EditDrawer.tsx`,
-`app/(frame)/portfolio/page.tsx` (banner reason), `app/(frame)/alerts/page.tsx`, `app/(frame)/settings/page.tsx`,
-`components/organisms/AutoTradeArm/index.tsx`, `lib/alertStore.ts`, `types/domain.ts`, `app/(frame)/dashboard/page.tsx`,
-`app/(frame)/screener/step-7-trade-card/page.tsx`, `lib/stockDirectSend.ts`, plus tests and the fixture + generator. TradeCard consumes
+`lib/portfolioRejection.ts` (new), `app/(frame)/portfolio/page.tsx` (banner reason and header, imports the
+mapper), `app/(frame)/alerts/page.tsx`, `app/(frame)/settings/page.tsx`, `components/organisms/AutoTradeArm/index.tsx`,
+`lib/alertStore.ts` (`alertKey`, `notifyBackend`'s `stopSide`), `types/domain.ts`,
+`app/(frame)/screener/step-7-trade-card/page.tsx`, plus tests and the fixture + generator. Not touched:
+`dashboard/page.tsx`, `lib/stockDirectSend.ts`. TradeCard consumes
 `premiumStopDollarBounds` unchanged.
 Ledger: phase `STOP-SEMANTICS` with a verify probe on `premium_stop_is_sub_cent` and `isShortStockPosition`.
 Close the two open questions and the round_13 sub-cent item on merge.
 
-## 6. Questions for Kenneth (recommendation first)
+## 6. Questions for Kenneth (recommendation first) — ANSWERED 2026-10-02: all five recommendations (26d9fd0)
 
 - **Q1 — the Settings global (G).** The ledger summary I wrote on 2026-10-02 lists "Settings" among the places
   that refuse (R1-9). The global has no entry, so "sub-cent" is undefined for it. Recommend: leave the global
@@ -381,7 +474,14 @@ one short reason string (§2.1). R2-11 the type-name tables (§2.2). R2-12 the f
 `qty_saved_as_<N>` (§3.1). R2-14 F2 at a $0.01 mid (§3.2). R2-15 the fixture is trimmed to the boundary
 neighbourhood (§4). R2-16 `|STOCK` matching (§1).
 
-## 9. Plan round 3 findings — OPEN, to apply in v4 (round cap reached; stopped for Kenneth)
+## 9. Plan round 3 findings — APPLIED in v4 (Kenneth: write v4 and build from it)
+
+Where each went: R3-B1, R3-B2, R3-S1, N4, N5 → §2.4 (separate `:short` dedup key; no reset, no store
+version bump) and §2.2. R3-S2 → §2.2 notifier callers. R3-S3, R3-S4, N2, N3 → §3.1. R3-S5 → §0 and §2.2.
+R3-S6 → §3.1 (`lib/portfolioRejection.ts`), §3.2 (`premiumStopDropText`) and §4. R3-S7 → §3.2. N1 → §2.2.
+N6 → §1 and §4. N7 → §0 and §3.2. N8 → §4. N9 → §3.2.
+
+The original findings, as recorded at a0a4169:
 
 Round 3 (fresh reviewer, against v3 at abb0454): NOT clean, 2 blocking / 7 should-fix / 9 nits. Every numeric
 claim in v3 reproduced. The defects are in v3's additions.
@@ -436,5 +536,5 @@ Nits:
 - N9: a one-line note that the Settings "Premium stop loss" also governs shorts' rise-side stop.
 
 **Status:** three plan rounds used (1: 3B/8S/4N, 2: 0B/7S/9N, 3: 2B/7S/9N), none clean, so this is the cap.
-Kenneth decides: write v4 and build from it (the WATCH-RESEND-P1-BUILD-FROM-V4-2026-10-02 precedent), write
-v4 and run one more round, or park.
+Kenneth chose (2026-10-02) to write v4 and build from it (the WATCH-RESEND-P1-BUILD-FROM-V4-2026-10-02
+precedent). The build is then held to the adversarial CODE audit loop until a round comes back clean.
