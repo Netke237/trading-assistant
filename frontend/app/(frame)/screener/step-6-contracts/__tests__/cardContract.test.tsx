@@ -178,4 +178,38 @@ describe('Step 6 always lists the card\'s own contract', () => {
     await act(async () => { release([CARD_ROW]); });
     expect(useScanStore.getState().contractsBySymbol.XOM?.map((c) => c.id)).toEqual([OTHER.id]);
   });
+
+  it('every filtered row over the cap → the user\'s stored pick of the card contract is still selected', async () => {
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      Promise.resolve(ctx.strikes ? [CARD_ROW] : []));
+    setup({ XOM: CARD_ID });
+    render(<Step6Page />);
+    expect(await screen.findByText(/not in filtered table/)).toBeInTheDocument();
+    await waitFor(() => expect(selectedRow()).toMatch(/190C/));
+  });
+
+  it('the Refresh control is usable while the rescue is still in flight', async () => {
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      ctx.strikes ? new Promise(() => {}) : Promise.resolve([OTHER]));
+    setup();
+    render(<Step6Page />);
+    await waitFor(() => expect(getContracts).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: 'Refresh prices' })).toBeEnabled();
+  });
+
+  it('a card with no real expiry (the scan\'s TBD) is not asked for', async () => {
+    getContracts.mockResolvedValue([OTHER]);
+    useScanStore.setState({
+      scanResult: {
+        candidates: [{ symbol: 'XOM', stockScore: 80, direction: 'Bullish', contract: CARD_ID,
+          contractDetails: { strike: 190, expiry: 'TBD', right: 'C' } } as TradeCardData],
+        rejected: [], scan_id: 'y', timestamp: '', contract_rules: RULES,
+      } as never,
+      context: { direction: 'Bullish', horizon: 'Swing (5–20d)', holdMin: 5, holdMax: 20 } as never,
+      scanOverrides: {}, pickedContracts: {}, contractsBySymbol: {},
+    } as never);
+    render(<Step6Page />);
+    await waitFor(() => expect(useScanStore.getState().contractsBySymbol.XOM).toHaveLength(1));
+    expect(getContracts).toHaveBeenCalledTimes(1);
+  });
 });

@@ -33,7 +33,9 @@ export function missingCardContracts(
   candidates.forEach((c, index) => {
     const cd = c.contractDetails;
     if (!cd || cd.right !== right || !c.contract) return;
-    if (typeof cd.expiry !== 'string' || cd.expiry === '') return;
+    // A real date only: the scan writes 'TBD' when it had none, and asking
+    // for that expiry is a chain fetch that can only fail.
+    if (typeof cd.expiry !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(cd.expiry)) return;
     if (!Number.isFinite(cd.strike) || cd.strike < 0) return;
     if ((rows[index] ?? []).some((r) => r.id === c.contract)) return;
     out.push({ index, id: c.contract, expiry: cd.expiry, strike: Math.trunc(cd.strike) });

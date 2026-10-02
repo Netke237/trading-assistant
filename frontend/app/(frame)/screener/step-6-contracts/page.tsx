@@ -168,8 +168,10 @@ export default function Step6Page() {
       const first = storedPick
         ? rows[0]?.find((c) => c.id === storedPick) ?? rows[0]?.[0]
         : rows[0]?.[0];
-      if (first) setPick(first.id);
+      // No filtered row: nothing is auto-picked, and no stale id survives.
+      setPick(first?.id ?? '');
       if (candidates[0]) setExpanded(candidates[0].symbol);
+      setRefreshing(false);
 
       // The card's own contract, when max_price or limit cut it: asked for by
       // expiry + strike, which the backend exempts from both, with the SAME
@@ -205,7 +207,7 @@ export default function Step6Page() {
       // click on any row in that time (setPick + setPickedContract) wins.
       if (storedPick && storedPick !== first?.id && merged[firstSymbol]?.some((c) => c.id === storedPick)
           && useScanStore.getState().pickedContracts[firstSymbol] === storedPick) {
-        setPick((p) => (p === first?.id ? storedPick : p));
+        setPick((p) => (p === (first?.id ?? '') ? storedPick : p));
       }
     } catch {
       if (!signal?.aborted) setOffline(true);
