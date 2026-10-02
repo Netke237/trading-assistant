@@ -109,10 +109,17 @@ def test_fire_refuses_inside_the_window_and_sends_nothing(mocker, monkeypatch):
 
     svc = AutoTradeService()
     svc.arm(_armed())
+    before = len(svc.get_state().history)
     with pytest.raises(at.EventVetoError):
         svc.fire(attempt_id="attempt-EVT")
 
     assert sent == [], "a vetoed fire must not reach the broker"
+    rows = svc.get_state().history
+    assert len(rows) == before + 1, "exactly one row for the refused attempt"
+    assert [r for r in rows if r.get("attempt_id") == "attempt-EVT"] == [rows[-1]]
+    assert sum(float(r.get("premium_at_risk") or 0) for r in rows) == 0.0, (
+        "no premium may be booked against the daily budget by a refusal"
+    )
     last = svc.get_state().history[-1]
     assert last["status"] == "event_veto_blocked", last
     assert last["premium_at_risk"] == 0.0
@@ -151,6 +158,69 @@ def test_scan_trigger_alerts_an_event_veto_with_its_own_wording(mocker, monkeypa
     svc = AutoTradeService()
     svc.arm(_armed())
     svc.maybe_fire_on_scan()
+
+    assert event_alert.call_count == 1
+    assert event_alert.call_args.args[0] == "AAPL"
+    assert unclassified.call_count == 0
+
+
+def test_a_failing_veto_check_still_leaves_a_risk_check_failed_row(mocker, monkeypatch):
+    """The disarm has consumed the arm, so a crash INSIDE the veto must leave a row.
+
+    `effective_event_window` raising KeyError (a renamed YAML key) escaped
+    `fire()` after the disarm with no history row, so /auto-trade/status kept
+    showing the previous order. It is filed as `risk_check_failed`, not as an
+    event veto: the veto decided nothing.
+    """
+    import app.scoring.stock_scorer as ss
+    sent: list = []
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    mocker.patch.object(at, "execute_option_order", side_effect=lambda s: sent.append(s))
+    monkeypatch.setattr(at, "_fetch_earnings_date",
+                        lambda s: date.today() + timedelta(days=3))
+
+    def _boom(horizon, overrides):
+        raise KeyError("event")
+    monkeypatch.setattr(ss, "effective_event_window", _boom)
+
+    svc = AutoTradeService()
+    svc.arm(_armed())
+    before = len(svc.get_state().history)
+    with pytest.raises(KeyError):
+        svc.fire(attempt_id="attempt-BOOM")
+
+    rows = svc.get_state().history
+    assert len(rows) == before + 1
+    row = rows[-1]
+    assert row["status"] == at._STATUS_RISK_CHECK_FAILED, row
+    assert row["attempt_id"] == "attempt-BOOM"
+    assert row["premium_at_risk"] == 0.0
+    assert row["order_id"] is None
+    assert "earnings veto check failed" in row["error"]
+    assert sent == []
+    assert svc.get_state().armed is False
+
+
+def test_consumed_attempt_router_sends_an_event_veto_row_to_its_own_alert(mocker, monkeypatch):
+    """Direct test of the `_STATUS_EVENT_VETO_BLOCKED` branch of the router.
+
+    Without that branch the row falls through to the unclassified alert, whose
+    wording ("could not classify why ... verify at the broker") is wrong here.
+    """
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    mocker.patch.object(at, "execute_option_order")
+    monkeypatch.setattr(at, "_fetch_earnings_date",
+                        lambda s: date.today() + timedelta(days=3))
+    svc = AutoTradeService()
+    svc.arm(_armed())
+    with pytest.raises(at.EventVetoError) as info:
+        svc.fire(attempt_id="attempt-ROUTE")
+
+    event_alert = mocker.patch.object(at, "_alert_event_veto_refusal")
+    unclassified = mocker.patch.object(at, "_alert_unclassified_refusal")
+    svc._alert_for_consumed_attempt("attempt-ROUTE", "AAPL", info.value)
 
     assert event_alert.call_count == 1
     assert event_alert.call_args.args[0] == "AAPL"

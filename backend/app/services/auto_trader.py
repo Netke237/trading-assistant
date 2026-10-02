@@ -136,9 +136,15 @@ class RegimeHeadwindError(RuntimeError):
 class EventVetoError(RuntimeError):
     """Fix #3: an earnings date inside the trade's horizon reject window.
 
-    The scan marks such a card REJECT; this is the same rule at fire time,
+    The scan marks such a card REJECT; this refuses a fire for the same reason,
     because an arm can sit for up to max_arm_age_minutes and the card may have
     been armed from a scan that predates the earnings announcement date.
+
+    THE WINDOW IS THE HORIZON'S YAML ONE (scoring_rules.yaml
+    `horizons.<horizon>.event.reject_days`), NOT necessarily the scan's. A
+    Step-3 `event_reject_days` override is not carried on the arm, so a scan run
+    with a LOWERED override can still be refused here. That is deliberate: it
+    errs toward refusing, and carrying the override is a follow-up.
 
     A RuntimeError so `/auto-trade/fire` maps it to a 400 exactly as it does
     `RegimeHeadwindError`. Its own type, history status (`event_veto_blocked`)
@@ -160,8 +166,12 @@ def _fetch_earnings_date(symbol: str):
 def _apply_event_veto(strategy) -> None:
     """Raise `EventVetoError` when earnings fall inside the horizon's reject window.
 
-    The scan's own rule (`routers/scan.py::_earnings_veto`): `0 <= days <
-    reject_days`, on the YAML window for the horizon (`effective_event_window`).
+    Same comparison as the scan's (`routers/scan.py::_earnings_veto`): `0 <=
+    days < reject_days`. The window, though, is the horizon's YAML reject window
+    (`effective_event_window(horizon, None)`), NOT the scan's effective one: a
+    Step-3 `event_reject_days` override is not carried on the arm, so a lowered
+    override can still be refused here. Deliberate -- it errs toward refusing --
+    and a follow-up will carry the override.
 
     ORDER MATTERS. The earnings date is fetched FIRST: an UNKNOWN date (None, or
     a lookup that fails) or one already past never vetoes -- the scan treats
@@ -172,7 +182,7 @@ def _apply_event_veto(strategy) -> None:
     abstains there. This one must not abstain: for a KNOWN future date it uses
     the WIDEST reject window across every configured horizon (the `Horizon`
     literal is the source of truth, not a copied list), so a missing horizon can
-    only make the veto stricter than the scan's, never looser. Production cannot
+    only make the veto stricter, never looser. Production cannot
     reach that branch (`ArmRequest.horizon` is required); direct constructors can.
     """
     from typing import get_args
@@ -189,10 +199,10 @@ def _apply_event_veto(strategy) -> None:
         return
     if strategy.horizon is not None:
         reject_days, _ = effective_event_window(strategy.horizon, None)
-        label = f"{strategy.horizon} reject window"
+        label = f"{strategy.horizon} YAML reject window"
     else:
         reject_days = max(effective_event_window(h, None)[0] for h in get_args(Horizon))
-        label = "widest reject window"
+        label = "widest YAML reject window"
         logger.warning(
             "Event veto: the armed strategy for %s carries no horizon; "
             "using the widest configured reject window (%dd)",
@@ -1903,8 +1913,8 @@ def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
         "earnings-veto refusal",
         (
             f"Auto-trade REFUSED to fire {symbol}: earnings fall inside this "
-            f"trade's horizon reject window, the same rule that marks the scan "
-            f"candidate REJECT. Nothing was sent and the auto-trader is "
+            f"trade's horizon reject window (the horizon's configured window; "
+            f"a lowered Step-3 override is not carried on the arm). Nothing was sent and the auto-trader is "
             f"disarmed — re-arm after the announcement if you still want the "
             f"trade. {exc}"
         ),
@@ -2603,27 +2613,29 @@ class AutoTradeService:
             )
             raise
 
-        # Earnings veto (fix #3, part 2): the scan's REJECT rule, applied again
-        # because the arm may be older than the scan that produced it. After the
+        # Earnings veto (fix #3, part 2): refuses on the horizon's YAML reject
+        # window, because the arm may be older than the scan that produced it
+        # (a Step-3 override is not carried -- see EventVetoError). After the
         # disarm and outside the lock, like the sizing call above (a network
         # lookup), and before any broker call.
         try:
             _apply_event_veto(strategy)
         except EventVetoError as exc:
-            with self._lock:
-                self._state.history.append({
-                    "attempt_id":      attempt_id,
-                    "order_id":        None,
-                    "status":          _STATUS_EVENT_VETO_BLOCKED,
-                    "broker":          strategy.broker,
-                    "symbol":          strategy.symbol,
-                    "option":          strategy.option_symbol,
-                    "timestamp":       datetime.now(timezone.utc).isoformat(),
-                    "premium_at_risk": 0.0,
-                    "error":           str(exc),
-                })
+            self._record_refusal(attempt_id, strategy, _STATUS_EVENT_VETO_BLOCKED, str(exc))
             logger.error("AutoTrader fire REFUSED for %s %s — %s",
                          strategy.symbol, strategy.direction, exc)
+            raise
+        except Exception as exc:
+            # THE LAST-RESORT ROW, on the rule `_STATUS_RISK_CHECK_FAILED`
+            # states: the disarm above consumed the armed order, so a failure of
+            # the veto itself (a KeyError/ValueError reading the window, a
+            # TypeError from a datetime where a date was expected) must still
+            # leave a row. Not filed as `event_veto_blocked`: the veto did not
+            # decide anything. Nothing was sent.
+            self._record_refusal(attempt_id, strategy, _STATUS_RISK_CHECK_FAILED,
+                                 f"earnings veto check failed: {exc}")
+            logger.error("AutoTrader fire REFUSED for %s — the earnings veto "
+                         "check failed unexpectedly: %r", strategy.symbol, exc)
             raise
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
@@ -3082,6 +3094,28 @@ class AutoTradeService:
             # old `elif consumed:` guard on the no-row case is gone with the
             # state read that computed it.
             self._alert_for_consumed_attempt(attempt_id, strategy.symbol, exc)
+
+    def _record_refusal(self, attempt_id: str, strategy: "ArmedStrategy",
+                        status: str, error: str) -> None:
+        """Append the refusal row `fire()` writes when it declines to send.
+
+        The 9-key shape every refusal row has: no order id, zero premium at
+        risk, stamped with `attempt_id` so `maybe_fire_on_scan` can correlate it.
+        Used by the earnings-veto blocks only; the older refusal blocks in
+        `fire()` keep their own inline copies deliberately (audited code).
+        """
+        with self._lock:
+            self._state.history.append({
+                "attempt_id":      attempt_id,
+                "order_id":        None,
+                "status":          status,
+                "broker":          strategy.broker,
+                "symbol":          strategy.symbol,
+                "option":          strategy.option_symbol,
+                "timestamp":       datetime.now(timezone.utc).isoformat(),
+                "premium_at_risk": 0.0,
+                "error":           error,
+            })
 
     def _fire_attempt_record(self, attempt_id: str) -> dict | None:
         """The history row THIS attempt wrote, or None if it wrote none.
