@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.schemas import Direction
+from app.services.strategy_watch_evaluator import set_enabled_and_expire
 from app.services.strategy_watch_store import strategy_watch_store, VALID_STRATEGIES
 from app.services.strategy_watch_scheduler import strategy_watch_scheduler
 
@@ -75,9 +76,11 @@ async def remove_watch(watch_id: str) -> dict:
 
 @router.patch("/{watch_id}")
 async def set_enabled(watch_id: str, body: EnabledPatch) -> dict:
-    if not strategy_watch_store.set_enabled(watch_id, body.enabled):
+    # Re-enabling drops queued alerts older than 5 days (WATCH-RESEND-EXPIRY-ON-REENABLE).
+    expired = await set_enabled_and_expire(strategy_watch_store, watch_id, body.enabled)
+    if expired is None:
         raise HTTPException(status_code=404, detail="watch not found")
-    return {"id": watch_id, "enabled": body.enabled}
+    return {"id": watch_id, "enabled": body.enabled, "expired_alerts": expired}
 
 
 @router.get("/schedule")

@@ -117,6 +117,12 @@ _FAILURE_SPACING = timedelta(hours=1)
 _UNDELIVERABLE_AFTER = 3
 _DROP_LOG = ("strategy-watch: undeliverable alert dropped for %s after %d failed runs; "
              "a later alert was delivered: %s")
+
+# ── Expiry on re-enable (WATCH-RESEND-EXPIRY-ON-REENABLE, piece 2) ────────────
+# When a disabled watch is turned back on, its queued alerts older than this are
+# dropped instead of sent as Delayed (set_enabled_and_expire). 5 calendar days,
+# Kenneth's value (decision WATCH-RESEND-REENABLE-MAX-AGE-2026-10-02).
+_REENABLE_MAX_AGE = timedelta(days=5)
 _PRICE_KEYS = ("entry_price", "stop_price", "target_price")
 _EVENT_FLOATS = ("entry", "stop", "target", "rr_ratio", "close")
 
@@ -897,6 +903,58 @@ async def _deliver_or_queue(t: _Transition, any_channel: bool,
         "strategy-watch: %s %s for %s not delivered; stored, re-sent next run",
         ev.strategy_key, ev.event_type, ev.symbol,
     )
+
+
+def _expired(entry: object, cutoff: datetime) -> bool:
+    """True when a queued entry fired before cutoff. Not a dict, or a missing or
+    unparseable fired_at: expired. A naive fired_at is read as UTC."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("fired_at"), str):
+        return True
+    try:
+        at = datetime.fromisoformat(entry["fired_at"])
+    except ValueError:
+        return True
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    return at < cutoff
+
+
+async def set_enabled_and_expire(store, watch_id: str, enabled: bool) -> int | None:
+    """Enable or disable a watch; on a disabled -> enabled change, first drop its
+    leading queued alerts older than _REENABLE_MAX_AGE (committing the last dropped
+    one's new_state, as the queue cap does). Returns the number dropped, None if
+    the watch does not exist.
+
+    store is the caller's strategy_watch_store (the same object in production;
+    the router tests reload the store module). Under _run_lock() so no run sees
+    the watch enabled with its stale alerts. The expiry write is not swallowed:
+    if it fails the watch is not enabled."""
+    async with _run_lock():
+        w = next((x for x in store.list_watches() if x.get("id") == watch_id), None)
+        if w is None:
+            return None
+        n = 0
+        if enabled and not w.get("enabled"):
+            committed, pending = _split_state(dict(w.get("last_state") or {}))
+            cutoff = _utcnow() - _REENABLE_MAX_AGE
+            while pending and _expired(pending[0], cutoff):
+                dropped = pending.pop(0)
+                n += 1
+                ns = dropped.get("new_state") if isinstance(dropped, dict) else None
+                if isinstance(ns, dict):
+                    committed = ns
+                ev_d = (dropped.get("event") if isinstance(dropped, dict) else None) or {}
+                logger.warning("strategy-watch: queued alert for %s expired on re-enable "
+                               "(older than %s, fired %s): %s %s", watch_id, _REENABLE_MAX_AGE,
+                               dropped.get("fired_at") if isinstance(dropped, dict) else "?",
+                               ev_d.get("event_type") if isinstance(ev_d, dict) else "?",
+                               ev_d.get("reason") if isinstance(ev_d, dict) else dropped)
+            if n:
+                store.update_state(watch_id, {**committed, "pending_events": pending}
+                                   if pending else committed)
+        if not store.set_enabled(watch_id, enabled):
+            return None
+        return n
 
 
 async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = None) -> list[WatchEvent]:
