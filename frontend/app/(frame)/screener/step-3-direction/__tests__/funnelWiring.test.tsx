@@ -65,7 +65,7 @@ describe('Step 3 — the funnel reads the same gated result the numbers do', () 
     seed('COMPLETED');
     render(<Step3Page />);
 
-    expect(screen.getByText('OPTIONS PIPELINE')).toBeInTheDocument();
+    expect(screen.getByText('Pipeline Root-Cause Inspector')).toBeInTheDocument();
   });
 
   it('hides the previous run\'s funnel while a new scan is running', () => {
@@ -74,7 +74,7 @@ describe('Step 3 — the funnel reads the same gated result the numbers do', () 
     seed('SCANNING');
     render(<Step3Page />);
 
-    expect(screen.queryByText('OPTIONS PIPELINE')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pipeline Root-Cause Inspector')).not.toBeInTheDocument();
     expect(screen.queryByText('518')).not.toBeInTheDocument();
   });
 
@@ -83,7 +83,7 @@ describe('Step 3 — the funnel reads the same gated result the numbers do', () 
     seed('FAILED');
     render(<Step3Page />);
 
-    expect(screen.queryByText('OPTIONS PIPELINE')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pipeline Root-Cause Inspector')).not.toBeInTheDocument();
     expect(screen.queryByText('518')).not.toBeInTheDocument();
   });
 });

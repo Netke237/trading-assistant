@@ -26,6 +26,7 @@ import { api } from '@/lib/api';
 import { exportToXlsx } from '@/lib/export';
 import { useScanStore } from '@/lib/scanStore';
 import { cardToRow } from './cardToRow';
+import { PipelineInspector } from '@/components/organisms/PipelineInspector';
 import { trendDetailText, pullbackDetailText, triggerDetailText, eventDetailText, volDetailText } from '@/components/organisms/TradeCard';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { rankingStopCost } from '@/lib/risk';
@@ -153,8 +154,11 @@ export default function Step4Page() {
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates);
+  const pipeline = useScanStore((s) => s.scanResult?.pipeline);
+  const rejected = useScanStore((s) => s.scanResult?.rejected);
   const directionBanner = useScanStore((s) => s.scanResult?.direction_banner);
   const previousRun = useScanStore((s) => s.previousRun);
   const context = useScanStore((s) => s.context);
@@ -214,24 +218,40 @@ export default function Step4Page() {
 
   if (!selected) {
     const hasRun = candidates !== undefined;
+    const droppedCount = rejected?.length ?? pipeline?.scanned ?? 0;
     return (
       <div className={styles.main}>
         <div className={styles.stepHeader}>
           <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
           <Title as="h1" size={24}>Stock Ranking</Title>
         </div>
-        {/* Rendered HERE as well as in the populated branch below, because the
-            empty table is exactly the case the banner exists to explain: when
-            the direction-conviction gate strips every candidate, this early
-            return is the only branch that runs, and the banner was unreachable. */}
         {directionBanner && (
           <div className={styles.directionBanner}>
             <Text size={12} tone="caution">{directionBanner}</Text>
           </div>
         )}
-        <Text size={13} tone="dim">
-          {hasRun ? 'No candidates matched the current scan criteria.' : 'Run a scan to see ranked candidates.'}
-        </Text>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+          <Text size={13} tone="dim">
+            {hasRun ? 'No candidates matched the current scan criteria.' : 'Run a scan to see ranked candidates.'}
+          </Text>
+          {hasRun && (
+            <button
+              type="button"
+              className={styles.inspectBtn}
+              onClick={() => setInspectorOpen(true)}
+            >
+              🔍 Filter Breakdown ({droppedCount} Filtered)
+            </button>
+          )}
+        </div>
+        <PipelineInspector
+          isDrawer
+          isOpen={inspectorOpen}
+          onClose={() => setInspectorOpen(false)}
+          pipeline={pipeline}
+          rejected={rejected}
+          survivors={[]}
+        />
       </div>
     );
   }
@@ -242,7 +262,7 @@ export default function Step4Page() {
   const WEIGHTS = HORIZON_WEIGHTS[horizonKey];
 
   const contributions = COMPONENTS.map((c) => {
-    const raw    = selected.breakdown[c.key] ?? 0;
+    const raw    = selected.breakdown?.[c.key] ?? 0;
     const weight = WEIGHTS[c.key] ?? 0;
     const points = (raw * weight) / 100;
     return { ...c, raw, weight, points, signal: signalFor(raw) };
@@ -267,6 +287,14 @@ export default function Step4Page() {
           <header className={styles.panelHeader}>
             <Text size={13} weight={600}>Candidates</Text>
             <Text size={11} tone="secondary">{watchlist.length} ranked</Text>
+            <button
+              type="button"
+              className={styles.inspectBtn}
+              onClick={() => setInspectorOpen(true)}
+              title="Open Pipeline Root-Cause Inspector"
+            >
+              🔍 Filter Breakdown ({rejected?.length ?? (pipeline ? pipeline.scanned - watchlist.length : 0)} Filtered)
+            </button>
             <Link href="/validation" className={styles.exportBtn}>
               Validation
             </Link>
@@ -278,6 +306,7 @@ export default function Step4Page() {
               Export .xlsx
             </button>
           </header>
+
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             {/* Rides in the icon column's header (no track of its own: NAME's
                 width floor is already binding at 1920px, see COLUMNS). */}
@@ -455,6 +484,15 @@ export default function Step4Page() {
           </article>
         ))}
       </div>
+
+      <PipelineInspector
+        isDrawer
+        isOpen={inspectorOpen}
+        onClose={() => setInspectorOpen(false)}
+        pipeline={pipeline}
+        rejected={rejected}
+        survivors={watchlist.map((w) => w.symbol)}
+      />
     </div>
   );
 }

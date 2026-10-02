@@ -1,0 +1,545 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.drawer {
+  position: fixed;
+  top: var(--frame-topbar-h, 48px);
+  right: 0;
+  bottom: 0;
+  width: 440px;
+  max-width: 90vw;
+  z-index: 100;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  animation: slideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  top: var(--frame-topbar-h, 48px);
+  background: rgba(10, 14, 23, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 99;
+}
+
+.header {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--bg-surface-2);
+  flex-shrink: 0;
+}
+
+.headerTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.titleArea {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.iconBtn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iconBtn:hover {
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.closeBtn:hover {
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.badgeReject {
+  background: color-mix(in srgb, var(--reject) 12%, var(--bg-surface));
+  color: var(--reject);
+  border-color: color-mix(in srgb, var(--reject) 30%, transparent);
+}
+
+.badgePass {
+  background: color-mix(in srgb, var(--pass) 12%, var(--bg-surface));
+  color: var(--pass);
+  border-color: color-mix(in srgb, var(--pass) 30%, transparent);
+}
+
+.badgeBottleneck {
+  background: color-mix(in srgb, var(--caution) 15%, var(--bg-surface));
+  color: var(--caution);
+  border-color: color-mix(in srgb, var(--caution) 35%, transparent);
+  font-weight: 600;
+}
+
+/* Search Box */
+.searchSection {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.searchInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 7px 10px 7px 30px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+}
+
+/* Diagnostic Result Card */
+.symbolResultCard {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.symbolResultTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.symbolName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.symbolDetails {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.breakdownGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  padding-top: var(--space-1);
+}
+
+.breakdownItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+}
+
+.breakdownVal {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+
+/* Scrollable Content */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Bottleneck Card */
+.bottleneckCard {
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--caution) 7%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--caution) 30%, transparent);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bottleneckTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--caution);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.bottleneckDesc {
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.bottleneckTip {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.bottleneckBtn {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-surface-3);
+  color: var(--caution);
+  border: 1px solid color-mix(in srgb, var(--caution) 40%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.bottleneckBtn:hover {
+  background: var(--caution);
+  color: #000;
+}
+
+/* Tree Section */
+.treeSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.treeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.treeViewToggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-base);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.viewModeBtn {
+  padding: 2px 8px;
+  font-size: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.viewModeActive {
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Interactive Tree */
+.treeContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rootNode {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 10px;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.stageCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s ease;
+}
+
+.stageCardBottleneck {
+  border-color: color-mix(in srgb, var(--caution) 45%, var(--border-subtle));
+}
+
+.stageHeader {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.stageHeader:hover {
+  background: var(--bg-surface-3);
+}
+
+.stageTitleArea {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stageChevron {
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.stageChevronOpen {
+  transform: rotate(90deg);
+}
+
+.stageTitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.stageBadges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stageBody {
+  padding: 0 12px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.stageRuleSummary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding-top: var(--space-2);
+  line-height: 1.4;
+}
+
+.subRuleList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.subRuleItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.subRuleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.subRuleLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.subRuleCountArea {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.subRuleExplanation {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.tickerChipsToggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tickerChipsToggle:hover {
+  text-decoration: underline;
+}
+
+.tickerChipsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.tickerChip {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  padding: 2px 6px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tickerChip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ASCII Tree pre box */
+.asciiTreeBox {
+  padding: var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Survivor Stage */
+.survivorCard {
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--pass) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--pass) 30%, transparent);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.survivorTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pass);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
