@@ -1,0 +1,20 @@
+{
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/affectionate-vaughan-37b961",
+      "claimed_at": "2026-10-02T06:28:01Z",
+      "expires_at": "2026-10-02T09:28:01Z",
+      "note": "REVIVAL+NULL-POINTER+TARGET-SCOPING audit fixes",
+      "task": "STATE-PROBE-FIXES"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/infallible-hertz-c2c2d9",
+      "claimed_at": "2026-10-02T06:28:12Z",
+      "expires_at": "2026-10-02T09:28:12Z",
+      "note": "piece 2: drop queued watch alerts older than max age on re-enable",
+      "task": "WATCH-RESEND-EXPIRY-ON-REENABLE"
+    }
+  ]
+}
