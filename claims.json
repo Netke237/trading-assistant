@@ -23,6 +23,14 @@
       "expires_at": "2026-10-03T01:24:32Z",
       "note": "Complete remaining Step 3 parameter and restored contract reachability",
       "task": "STEP3-PARAM-REACH"
+    },
+    {
+      "agent": "claude",
+      "branch": "work",
+      "claimed_at": "2026-10-02T22:25:49Z",
+      "expires_at": "2026-10-03T01:25:49Z",
+      "note": "Resolve chart indicator IDs in standard alert rules",
+      "task": "ALERT-INDICATOR-ID-MAP"
     }
   ]
 }
