@@ -3787,6 +3787,17 @@
         ],
         "summary": "Run the branch delete loop; check whether C1/C2 apply to main; decide the parked STATE-PROBE rounds.",
         "weight": "-"
+      },
+      {
+        "id": "ALERT-INDICATOR-ID-MAP",
+        "owner": "agent",
+        "covers": [
+          "open_questions: UI-built indicator conditions never reach the backend dispatch (MACD-EMA-LAG audit r1 nit)",
+          "open_questions: empty indicator not rejected at save (MACD-EMA-LAG audit r1 nit)"
+        ],
+        "summary": "AlertRuleBuilder stores the option LABEL ('VOL(default)', 'MACD(12,26,9)', 'EMA(30)'), the browser evaluator keys by chart id, the backend by its own names: most UI-built indicator conditions never fire, silently. Fix both sides, flag unrecoverable names, reject empty/unknown at save. Plan: docs/superpowers/plans/2026-10-02-alert-indicator-id-map-plan.md",
+        "weight": "med-high",
+        "status": "in progress on claude/alert-indicator-id-map: plan written, plan audit next"
       }
     ]
   },
