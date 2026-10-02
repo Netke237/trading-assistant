@@ -57,6 +57,7 @@ describe('Step 1 — the regime verdict follows the context direction', () => {
       useScanStore.setState({ context: { universe: 'SP500', direction: 'Bearish', horizon: 'Swing (5–15d)',
         horizonPreset: 'Swing', holdMin: 5, holdMax: 15 } } as never);
     });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(useScanStore.getState().combinedRegime).toBe('PENDING');
   });
 });

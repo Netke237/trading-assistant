@@ -49,47 +49,47 @@ export function StoreHydration() {
       await useScanStore.persist.rehydrate();
       const { scanResult, stockScanResult, setScanResult, setStockScanResult, setScanState } = useScanStore.getState();
 
-      if (!scanResult) {
-        try {
-          const last = await api.getLastScan();
-          // STEP3-PARAM-REACH: not under a persisted context it was not
-          // produced for (direction, preset or hold days changed since --
-          // setContext cleared the result then, for exactly this reason).
-          if (last && resultMatchesContext(last.request_context, useScanStore.getState().context)) {
-            setScanResult(last);
-            setScanState('COMPLETED', toLocalWallClock(last.timestamp));
-          }
-        } catch {
-          // No backend reachable yet, or nothing to recover — leave state as-is.
-        }
+      // Both recoveries are fetched FIRST and applied together below: whether
+      // the options result's context may be rebuilt depends on whether a
+      // stock result is held (STEP3-PARAM-REACH), and the context must be in
+      // place before the result appears, or Step 6 -- which fetches as soon
+      // as the candidates change -- would grade the restored result under the
+      // null context's Bullish / no-hold-days defaults. A failed fetch is
+      // null: nothing to recover, state left as it is.
+      const [last, lastStock] = await Promise.all([
+        scanResult ? null : api.getLastScan().catch(() => null),
+        stockScanResult ? null : api.getLastStockScan().catch(() => null),
+      ]);
+
+      if (lastStock) {
+        setStockScanResult(lastStock);
+        // setStockScanResult()'s own auto-stamp (frontend/lib/scanStore.ts:186-190)
+        // uses local wall-clock time too — correct for "now", wrong here specifically,
+        // since a recovered scan could be hours old. Overwrite with the real timestamp.
+        useScanStore.setState({ stockScanAt: toLocalWallClock(lastStock.timestamp) });
       }
 
-      // STEP3-PARAM-REACH: a result with no context beside it (recovered just
-      // above into an empty browser) gets the context it was produced from,
-      // so Steps 5-7 read its direction and hold days instead of the
-      // Bullish / Swing defaults. Set directly, NOT via setContext, whose
-      // context-changed branch would clear the very result being restored.
-      {
+      // STEP3-PARAM-REACH: not under a persisted context it was not produced
+      // for (direction, preset or hold days changed since -- setContext
+      // cleared the result then, for exactly this reason).
+      if (last && resultMatchesContext(last.request_context, useScanStore.getState().context)) {
+        // An options result restored into an empty browser gets the context
+        // it was produced from, so Steps 5-7 read its direction and hold days
+        // instead of the Bullish / Swing defaults. Written BEFORE the result,
+        // so no subscriber ever sees the result under the null context; set
+        // directly, NOT via setContext, whose context-changed branch clears
+        // results. ScanContext is SHARED with Stocks mode (strategy list,
+        // first-passage and exit-plan horizon, portfolio snapshot), so it is
+        // only rebuilt in Options mode with no stock result held: a stock
+        // result has its own request and would otherwise be read under the
+        // options scan's direction and horizon. Skipped = null, as before.
         const now = useScanStore.getState();
-        if (now.scanResult && now.context === null) {
-          const restored = contextFromScanRequest(now.scanResult.request_context);
+        if (now.context === null && now.screenerMode === 'options' && !now.stockScanResult) {
+          const restored = contextFromScanRequest(last.request_context);
           if (restored) useScanStore.setState({ context: restored });
         }
-      }
-
-      if (!stockScanResult) {
-        try {
-          const lastStock = await api.getLastStockScan();
-          if (lastStock) {
-            setStockScanResult(lastStock);
-            // setStockScanResult()'s own auto-stamp (frontend/lib/scanStore.ts:186-190)
-            // uses local wall-clock time too — correct for "now", wrong here specifically,
-            // since a recovered scan could be hours old. Overwrite with the real timestamp.
-            useScanStore.setState({ stockScanAt: toLocalWallClock(lastStock.timestamp) });
-          }
-        } catch {
-          // Same fallback behavior as above.
-        }
+        setScanResult(last);
+        setScanState('COMPLETED', toLocalWallClock(last.timestamp));
       }
 
       // A5: a stock result with no request on record (recovered just above,

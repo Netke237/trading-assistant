@@ -171,17 +171,20 @@ describe('missingCardContracts / withCardContract', () => {
 });
 
 describe('StoreHydration restores the context of a recovered options result', () => {
-  async function hydrate(result: unknown, persistedContext: unknown = null) {
-    useScanStore.setState({ scanResult: null, context: null } as never);
+  async function hydrate(result: unknown, persistedContext: unknown = null,
+                         opts: { mode?: string; stock?: unknown; stockDelay?: Promise<unknown> } = {}) {
+    useScanStore.setState({ scanResult: null, stockScanResult: null, context: null, screenerMode: 'options' } as never);
     localStorage.clear();
-    if (persistedContext) {
+    if (persistedContext || opts.mode) {
       localStorage.setItem('bamendjou-scan-store', JSON.stringify({
-        version: 17, state: { context: persistedContext, scanResult: null },
+        version: 17,
+        state: { context: persistedContext ?? null, scanResult: null, screenerMode: opts.mode ?? 'options' },
       }));
     }
     for (const f of Object.values(api)) m(f).mockReset();
     m(api.getLastScan).mockResolvedValue(result);
-    m(api.getLastStockScan).mockResolvedValue(null);
+    if (opts.stockDelay) m(api.getLastStockScan).mockReturnValue(opts.stockDelay);
+    else m(api.getLastStockScan).mockResolvedValue(opts.stock ?? null);
     m(api.getLastScanStatus).mockResolvedValue({ status: 'idle', updated_at: null });
     m(api.getLastStockScanStatus).mockResolvedValue({ status: 'idle', updated_at: null, strategy: null });
     render(<StoreHydration />);
@@ -230,5 +233,37 @@ describe('StoreHydration restores the context of a recovered options result', ()
       horizonPreset: 'Swing', holdMin: 5, holdMax: 15 };
     await hydrate(RESULT(undefined), ctx);
     expect(useScanStore.getState().scanResult?.scan_id).toBe('S');
+  });
+
+  // Round 4: ScanContext is shared with Stocks mode.
+  it('in Stocks mode the context is not rebuilt from the options result', async () => {
+    await hydrate(RESULT(RC), null, { mode: 'stocks' });
+    expect(useScanStore.getState().scanResult?.scan_id).toBe('S');
+    expect(useScanStore.getState().context).toBeNull();
+  });
+
+  it('with a stock result held the context is not rebuilt from the options result', async () => {
+    await hydrate(RESULT(RC), null, {
+      stock: { scan_id: 'K', timestamp: '2026-10-02T09:00:00+00:00', candidates: [], rejected: [] },
+    });
+    expect(useScanStore.getState().stockScanResult?.scan_id).toBe('K');
+    expect(useScanStore.getState().context).toBeNull();
+  });
+
+  // Round 4: Step 6 fetches as soon as the candidates change, so the result
+  // and its rebuilt context must land in the same store update tick.
+  it('the restored result never appears without its context, even when the stock fetch is slow', async () => {
+    let releaseStock: (v: unknown) => void = () => {};
+    const seen: Array<{ result: boolean; context: boolean }> = [];
+    const unsub = useScanStore.subscribe((st) => {
+      if (st.scanResult) seen.push({ result: true, context: st.context !== null });
+    });
+    const done = hydrate(RESULT(RC), null, { stockDelay: new Promise((r) => { releaseStock = r; }) });
+    await new Promise((r) => setTimeout(r, 20));
+    releaseStock(null);
+    await done;
+    unsub();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((x) => x.context)).toBe(true);
   });
 });

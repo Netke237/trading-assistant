@@ -212,4 +212,31 @@ describe('Step 6 always lists the card\'s own contract', () => {
     await waitFor(() => expect(useScanStore.getState().contractsBySymbol.XOM).toHaveLength(1));
     expect(getContracts).toHaveBeenCalledTimes(1);
   });
+
+  it('Refresh clicked mid-rescue: the stale rescue writes nothing and moves no pick', async () => {
+    const releases: Array<(v: unknown) => void> = [];
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      ctx.strikes ? new Promise((r) => { releases.push(r); }) : Promise.resolve([OTHER]));
+    setup();
+    render(<Step6Page />);
+    await waitFor(() => expect(getContracts).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh prices' }));
+    await waitFor(() => expect(getContracts).toHaveBeenCalledTimes(4));
+    await act(async () => { releases[0]!([CARD_ROW]); });
+    expect(screen.queryByText(/not in filtered table/)).not.toBeInTheDocument();
+    expect(useScanStore.getState().contractsBySymbol.XOM?.map((c) => c.id)).toEqual([OTHER.id]);
+    expect(selectedRow()).toMatch(/185C/);
+    await act(async () => { releases[1]!([CARD_ROW]); });
+    expect(await screen.findByText(/not in filtered table/)).toBeInTheDocument();
+  });
+
+  it('a stored pick whose row is not (yet) listed shows no row selected, never the auto-pick', async () => {
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      ctx.strikes ? Promise.reject(new Error('503')) : Promise.resolve([OTHER]));
+    setup({ XOM: CARD_ID });
+    render(<Step6Page />);
+    await waitFor(() => expect(getContracts).toHaveBeenCalledTimes(2));
+    await screen.findByText(/185C/);
+    expect(selectedRow()).toBe('');
+  });
 });

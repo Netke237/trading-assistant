@@ -160,16 +160,16 @@ export default function Step6Page() {
       setGradingBySymbol(gradingMap);
       setContractsBySymbol(bySymbol);
       setRescuedBySymbol({});
-      // The auto-pick is from the FILTERED rows only: a rescued card contract
-      // (below) is outside the user's max price / limit and is never chosen
-      // for them.
+      // The selection shown is the user's OWN stored pick whenever there is
+      // one -- it is what Step 7 sends -- even while its row is not (yet) in
+      // the table: a rescued card contract arrives below, and until then (or
+      // if the rescue fails) no row is shown selected rather than a row Step
+      // 7 will not trade. With no stored pick, the auto-pick is from the
+      // FILTERED rows only: a rescued card contract is outside the user's max
+      // price / limit and is never chosen for them. No row: no stale id.
       const firstSymbol = candidates[0]?.symbol ?? '';
       const storedPick = pickedContracts[firstSymbol];
-      const first = storedPick
-        ? rows[0]?.find((c) => c.id === storedPick) ?? rows[0]?.[0]
-        : rows[0]?.[0];
-      // No filtered row: nothing is auto-picked, and no stale id survives.
-      setPick(first?.id ?? '');
+      setPick(storedPick ?? rows[0]?.[0]?.id ?? '');
       if (candidates[0]) setExpanded(candidates[0].symbol);
       setRefreshing(false);
 
@@ -201,14 +201,6 @@ export default function Step6Page() {
       setLocalContractsBySymbol(merged);
       setContractsBySymbol(merged);
       setRescuedBySymbol(rescuedIds);
-      // The user's OWN earlier pick of the card contract is still theirs: it
-      // was only missing from the filtered rows the auto-pick read.
-      // Only if nothing moved meanwhile: the rescue can take seconds, and a
-      // click on any row in that time (setPick + setPickedContract) wins.
-      if (storedPick && storedPick !== first?.id && merged[firstSymbol]?.some((c) => c.id === storedPick)
-          && useScanStore.getState().pickedContracts[firstSymbol] === storedPick) {
-        setPick((p) => (p === (first?.id ?? '') ? storedPick : p));
-      }
     } catch {
       if (!signal?.aborted) setOffline(true);
     } finally {
