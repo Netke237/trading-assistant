@@ -224,9 +224,9 @@ def _calc_vwap(highs: list[float], lows: list[float], closes: list[float], volum
 
 # ── COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD: composite 'momentum' confirmations ──
 # Plan: docs/superpowers/plans/2026-09-29-composite-momentum-confirmations-plan.md
-# (Q1-Q3, Q6, Q11). Additions only: _calc_rsi and compute_indicators_for_conditions
-# stay byte-for-byte unchanged (standard rules keep their behaviour). The lagged
-# _ema_values logged at Q9 is gone: MACD-EMA-LAG moved _calc_macd onto _ema_seeded.
+# (Q1-Q3, Q6, Q11). Additions only: _calc_rsi is unchanged by this build. The
+# lagged _ema_values logged at Q9 is gone: MACD-EMA-LAG moved _calc_macd onto
+# _ema_seeded and made the 'macd_signal' dispatch an exact match.
 # momentum_match judges the LAST bar of what it is given, on both the rule and
 # the watch path, so the two cannot disagree on the same bars.
 _momentum_logger = logging.getLogger(__name__)
