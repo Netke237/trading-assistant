@@ -168,13 +168,44 @@ _ALERT_TYPE_LABELS = {
     'REGIME_CHANGE': 'Market regime changed',
 }
 
+# STOP-SEMANTICS-2026-10-02 -- PREMIUM_STOP's label by the side it fired under
+# (`AlertItem.stopSide`). None (an unstamped or legacy fire) keeps the legacy
+# label above.
+_PREMIUM_STOP_LABELS_BY_SIDE = {
+    'short-stock': 'Stock stop hit (short)',
+    'long-stock': 'Stock stop hit',
+    'option': 'Premium stop hit',
+}
+
+
+def _dedup_key(rec_id: str, alert_type: str, stop_side: str | None) -> str:
+    """The dedup / first-seen key for one alert condition.
+
+    A short stock's PREMIUM_STOP gets its OWN key (`...:short`). Its stop fires
+    on a RISE since STOP-SEMANTICS; state written under the old fall-side rule
+    (a `_fired` hold, a `_first_seen` date) lives on the legacy key and so can
+    neither suppress the rise-side fire nor send it as a "(reminder)" dated at
+    the wrong-side trigger. This replaces a one-time reset at deploy: nothing
+    has to run once, so nothing can run twice. `forget_alerts` splits on the
+    FIRST `|`, so a closed short still clears both keys.
+    """
+    key = f'{rec_id}|{alert_type}'
+    if alert_type == 'PREMIUM_STOP' and stop_side == 'short-stock':
+        key += ':short'
+    return key
+
 
 def _build_notification(symbol: str, alert_type: str, reason: str,
                         timestamp: str | None,
-                        is_reminder: bool = False) -> tuple[str, str, str]:
+                        is_reminder: bool = False,
+                        stop_side: str | None = None) -> tuple[str, str, str]:
     # Date/Time always reflect the ORIGINAL trigger, even on reminders.
     date_str, time_str = _format_dt(timestamp)
-    type_label = _ALERT_TYPE_LABELS.get(alert_type, alert_type)
+    type_label = (
+        _PREMIUM_STOP_LABELS_BY_SIDE.get(stop_side or '', _ALERT_TYPE_LABELS['PREMIUM_STOP'])
+        if alert_type == 'PREMIUM_STOP'
+        else _ALERT_TYPE_LABELS.get(alert_type, alert_type)
+    )
     tag = ' (reminder)' if is_reminder else ''
     subject = f'Bamendjou Portfolio Alert — {symbol}: {type_label}{tag}'
     # On a reminder, note that the condition is still active as of now, without
@@ -223,7 +254,8 @@ def _build_notification(symbol: str, alert_type: str, reason: str,
 
 async def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
                  timestamp: str | None = None,
-                 type_enabled: bool | None = None) -> bool:
+                 type_enabled: bool | None = None,
+                 stop_side: str | None = None) -> bool:
     """Dispatch one portfolio alert to email/Telegram, deduped across all callers.
 
     Returns True if the alert was actually delivered by at least one channel,
@@ -243,6 +275,10 @@ async def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
     has no position in hand) to use the global list as before. ``masterEnabled``
     is deliberately NOT bypassed: it is the user's account-wide kill switch and
     a per-position toggle must not defeat it.
+
+    ``stop_side`` is the PREMIUM_STOP side stamp (``AlertItem.stopSide``). It
+    picks the label and, for a short stock, the separate dedup key
+    (``_dedup_key``). Ignored for every other type.
     """
     delivery = _load_delivery_config()
     if not delivery.get('masterEnabled', True):
@@ -256,7 +292,7 @@ async def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
         if alert_type not in enabled_types:
             return False
 
-    key = f'{rec_id}|{alert_type}'
+    key = _dedup_key(rec_id, alert_type, stop_side)
     now = time.time()
     window = _dedup_seconds(delivery)
 
@@ -283,7 +319,8 @@ async def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
             _first_seen[key] = original_ts
         _save_dedup()
     subject, plain, html = _build_notification(
-        symbol, alert_type, reason, original_ts, is_reminder=is_reminder)
+        symbol, alert_type, reason, original_ts, is_reminder=is_reminder,
+        stop_side=stop_side)
     try:
         sent = await notify_enabled_channels(subject, plain, html)
     except Exception:

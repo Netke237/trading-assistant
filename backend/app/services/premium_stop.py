@@ -61,3 +61,50 @@ def premium_stop_threshold_price(entry_price: float, pct: float) -> float:
     drawer's "fires at" preview cannot drift apart by rounding differently.
     """
     return entry_price * (1 - pct)
+
+
+# ── STOP-SEMANTICS-2026-10-02 ────────────────────────────────────────────────
+# Twins of `frontend/lib/premiumStop.ts`'s helpers of the same names. The short
+# flag is a REQUIRED positional argument everywhere (no default), so no call
+# site can apply the long rule to a short by omission.
+
+STOP_SIDE_SHORT_STOCK = 'short-stock'
+STOP_SIDE_LONG_STOCK = 'long-stock'
+STOP_SIDE_OPTION = 'option'
+
+
+def is_short_stock_position(contract: Optional[str], direction: Optional[str]) -> bool:
+    """A Bearish `|STOCK` position is a short: every stock send path opens it
+    with a SELL. A Bearish OPTION is a long put and is NOT a short.
+
+    Case-sensitive, exactly what the engines test (`contract.endswith('|STOCK')`
+    and `direction == 'Bearish'`)."""
+    return bool(contract) and contract.endswith('|STOCK') and direction == 'Bearish'
+
+
+def premium_stop_side(contract: Optional[str], direction: Optional[str]) -> str:
+    """The rule a PREMIUM_STOP fires under, stamped on the alert at fire time."""
+    if is_short_stock_position(contract, direction):
+        return STOP_SIDE_SHORT_STOCK
+    if contract and contract.endswith('|STOCK'):
+        return STOP_SIDE_LONG_STOCK
+    return STOP_SIDE_OPTION
+
+
+def percent_stop_threshold_price(entry_price: float, pct: float, short_stock: bool) -> float:
+    """Direction-aware percent-stop threshold: a short stock's stop is
+    `entry * (1 + pct)` (it fires on a RISE), everything else keeps
+    `entry * (1 - pct)` via `premium_stop_threshold_price`."""
+    if short_stock:
+        return entry_price * (1 + pct)
+    return premium_stop_threshold_price(entry_price, pct)
+
+
+def premium_stop_is_sub_cent(entry_price: float, pct: float, short_stock: bool) -> bool:
+    """True when a long stop's threshold is below the lowest live quote, $0.01,
+    so it can never fire. This IS the engines' own comparison at price $0.01
+    (`0.01 <= entry * (1 - pct)`), with no epsilon. A short stop fires on a
+    rise and is never sub-cent."""
+    if short_stock:
+        return False
+    return entry_price > 0 and not (0.01 <= entry_price * (1 - pct))
