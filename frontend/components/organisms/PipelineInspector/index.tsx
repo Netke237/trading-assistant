@@ -243,7 +243,8 @@ export function PipelineInspector({
               <span className={styles.symbolName}>{searchedResult.symbol}</span>
               <span
                 className={`${styles.badge} ${
-                  searchedResult.status === 'SURVIVOR' ? styles.badgePass : styles.badgeReject
+                  searchedResult.status === 'SURVIVOR' ? styles.badgePass
+                    : searchedResult.status === 'TRIMMED' ? styles.badgeBottleneck : styles.badgeReject
                 }`}
               >
                 {searchedResult.status}
@@ -261,18 +262,22 @@ export function PipelineInspector({
               )}
             </div>
 
-            {searchedResult.breakdown && (
+            {searchedResult.components && searchedResult.components.length > 0 && (
               <div className={styles.breakdownGrid}>
-                {Object.entries(searchedResult.breakdown).map(([k, v]) => (
+                {searchedResult.components.map((c) => (
                   <div
-                    key={k}
+                    key={c.key}
                     className={`${styles.breakdownItem} ${
-                      k === searchedResult.weakestComponent ? styles.breakdownWeakest : ''
+                      c.key === searchedResult.weakestComponent ? styles.breakdownWeakest : ''
                     }`}
-                    title={k === searchedResult.weakestComponent ? 'Lowest weighted component' : undefined}
+                    title={c.placeholder
+                      ? 'Placeholder value — the scorer also returns this when it cannot measure the component'
+                      : c.key === searchedResult.weakestComponent ? 'Lowest weighted component' : undefined}
                   >
-                    <Text size={10} tone="dim">{k.toUpperCase()}</Text>
-                    <Data size={11} weight={500}>{v}</Data>
+                    <Text size={10} tone="dim">{c.label.toUpperCase()}</Text>
+                    <Data size={11} weight={500} tone={c.placeholder ? 'dim' : 'primary'}>
+                      {c.placeholder ? `${c.score}?` : c.score}
+                    </Data>
                   </div>
                 ))}
               </div>

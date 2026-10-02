@@ -408,7 +408,7 @@ describe('parsePipelineDiagnostics — round-2 regressions', () => {
   it('counts unmeasured trends from their counter even when none are listed', () => {
     const r = parsePipelineDiagnostics({ ...ZERO, scanned: 10, failed_direction_unmeasured: 8, candidates: 2 }, [], ['A', 'B']);
     expect(sub(r, 'pre-screen', 'trend-unmeasured')?.count).toBe(8);
-    expect(r.primaryBottleneck?.suggestedAction).toMatch(/missing bars/);
+    expect(r.primaryBottleneck?.suggestedAction).toMatch(/too few bars/);
   });
 
   it('does not call a 0 trend a measured weakness — it is also the insufficient-data value', () => {
@@ -416,7 +416,7 @@ describe('parsePipelineDiagnostics — round-2 regressions', () => {
     expect(classifyReason(entry).subRules).toEqual(['ambiguous-trend']);
     const r = parsePipelineDiagnostics({ ...ZERO, scanned: 2, failed_pre_screen: 1, candidates: 1 }, [entry], ['A']);
     expect(sub(r, 'pre-screen', 'ambiguous-trend')?.label).toBe('Trend at a Placeholder Score (failing or unmeasured)');
-    expect(r.primaryBottleneck?.suggestedAction).toMatch(/price history/);
+    expect(r.primaryBottleneck?.suggestedAction).toMatch(/history against the Step-3 lookback/);
   });
 
   it('treats the relative-strength trend placeholder (50, no benchmark) as ambiguous too', () => {
@@ -439,22 +439,25 @@ describe('parsePipelineDiagnostics — round-2 regressions', () => {
     expect(sub(yaml, 'contract-rules', 'spread')?.ruleExplanation).toMatch(/contract_rules\.yaml/);
   });
 
-  it('points every Step-3-controllable contract cause at Step 3', () => {
-    const cases: Array<[string, RegExp]> = [
-      ['delta_too_low_far_otm', /minimum delta/],
-      ['dte_too_short', /horizon/],
-      ['too_many_soft_failures', /Preferred/],
-      ['contract_score_below_caution', /Preferred/],
-    ];
-    for (const [code, re] of cases) {
-      const r = parsePipelineDiagnostics(undefined,
-        ['X', 'Y'].map((s) => ({ symbol: s, reason: `contracts rejected: ${code}(3)` })), ['A']);
-      expect(r.primaryBottleneck?.adjustHref).toBe('/screener/step-3-direction');
-      expect(r.primaryBottleneck?.suggestedAction).toMatch(re);
-    }
-    const iv = parsePipelineDiagnostics(undefined,
-      ['X', 'Y'].map((s) => ({ symbol: s, reason: 'contracts rejected: iv_too_high(3)' })), ['A']);
-    expect(iv.primaryBottleneck?.adjustHref).toBeNull();
+  it('does not call an unmeasured trend "not a setting" — a Step-3 lookback can cause it', () => {
+    const r = parsePipelineDiagnostics({ ...ZERO, scanned: 10, failed_direction_unmeasured: 8, candidates: 2 }, [], ['A', 'B']);
+    expect(r.primaryBottleneck?.suggestedAction).not.toMatch(/not a setting/);
+    expect(r.primaryBottleneck?.suggestedAction).toMatch(/period/);
+  });
+
+  it('does not blame a missing benchmark for a 0 pullback', () => {
+    const entry = { symbol: 'P', reason: 'Pre-screen: score 15 rejected', breakdown: PRE_BD({ pullback: 0 }) };
+    const r = parsePipelineDiagnostics(undefined, [entry], []);
+    expect(sub(r, 'pre-screen', 'ambiguous-pullback')?.ruleExplanation).not.toMatch(/benchmark/);
+  });
+
+  it('marks a shortlist trim TRIMMED, not REJECTED, and shows only weighted components', () => {
+    const r = parsePipelineDiagnostics(PIPELINE, REJECTED, SURVIVORS);
+    expect(r.lookupSymbol('TRIMMED')?.status).toBe('TRIMMED');
+    const comps = r.lookupSymbol('WTREND')?.components ?? [];
+    expect(comps.map((c) => c.key)).toEqual(['trend', 'pullback', 'trigger', 'event', 'vol']);
+    expect(comps.find((c) => c.key === 'vol')?.placeholder).toBe(true);    // no IV at the pre-screen
+    expect(comps.find((c) => c.key === 'trend')?.placeholder).toBe(false);
   });
 
   it('says confidence can cap the score gate but not the pre-screen', () => {
@@ -463,14 +466,15 @@ describe('parsePipelineDiagnostics — round-2 regressions', () => {
     expect(sub(r, 'contract-rules', 'score-gate')?.ruleExplanation).toMatch(/confidence/);
   });
 
-  it('sends a Step-3 contract rule to Step 3 and a YAML-only rule nowhere', () => {
-    const spread = parsePipelineDiagnostics({ ...ZERO, scanned: 3, failed_contracts: 2, candidates: 1 },
-      ['X', 'Y'].map((s) => ({ symbol: s, reason: 'contracts rejected: spread_too_wide(4)' })), ['A']);
-    expect(spread.primaryBottleneck?.adjustHref).toBe('/screener/step-3-direction');
-    const minScore = parsePipelineDiagnostics({ ...ZERO, scanned: 3, failed_contracts: 2, candidates: 1 },
-      ['X', 'Y'].map((s) => ({ symbol: s, reason: 'contracts rejected: stock_score_below_threshold(9)' })), ['A']);
-    expect(minScore.primaryBottleneck?.adjustHref).toBeNull();
-    expect(minScore.primaryBottleneck?.suggestedAction).toMatch(/contract_rules\.yaml, not in Step 3/);
+  it('reports the top contract row as a frequency, never as the binding cause', () => {
+    // Every symbol fails spread at the money AND delta on the wings: delta is
+    // the most frequent row, but nothing says it removed them.
+    const r = parsePipelineDiagnostics({ ...ZERO, scanned: 4, failed_contracts: 3, candidates: 1 },
+      ['X', 'Y', 'Z'].map((s) => ({ symbol: s, reason: 'contracts rejected: delta_too_low_far_otm(20), spread_too_wide(4)' })), ['A']);
+    expect(r.primaryBottleneck?.insight).toMatch(/Most frequent contract-level failure/);
+    expect(r.primaryBottleneck?.insight).toMatch(/not the rule that removed them/);
+    expect(r.primaryBottleneck?.suggestedAction).not.toMatch(/largest cause is/i);
+    expect(r.primaryBottleneck?.adjustHref).toBe('/screener/step-3-direction');
   });
 
   it('explains an overcount even when some drops are also unattributed', () => {
