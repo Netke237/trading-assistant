@@ -133,6 +133,77 @@ class RegimeHeadwindError(RuntimeError):
     """
 
 
+class EventVetoError(RuntimeError):
+    """Fix #3: an earnings date inside the trade's horizon reject window.
+
+    The scan marks such a card REJECT; this is the same rule at fire time,
+    because an arm can sit for up to max_arm_age_minutes and the card may have
+    been armed from a scan that predates the earnings announcement date.
+
+    A RuntimeError so `/auto-trade/fire` maps it to a 400 exactly as it does
+    `RegimeHeadwindError`. Its own type, history status (`event_veto_blocked`)
+    and alert for the reason every refusal here has them: its remedy -- "an
+    earnings print is days away, re-arm after it" -- is neither "the market
+    moved" nor "fix the config" nor "the data feed is down".
+    """
+
+
+def _fetch_earnings_date(symbol: str):
+    """The symbol's next earnings date, or None when unknown.
+
+    Network-backed (yfinance). Module-level so a test can replace it, which the
+    suite does for every test (tests/conftest.py)."""
+    from app.data.market import _calendar_dates_yf
+    return _calendar_dates_yf(symbol)[0]
+
+
+def _apply_event_veto(strategy) -> None:
+    """Raise `EventVetoError` when earnings fall inside the horizon's reject window.
+
+    The scan's own rule (`routers/scan.py::_earnings_veto`): `0 <= days <
+    reject_days`, on the YAML window for the horizon (`effective_event_window`).
+
+    ORDER MATTERS. The earnings date is fetched FIRST: an UNKNOWN date (None, or
+    a lookup that fails) or one already past never vetoes -- the scan treats
+    unknown as unknown too (decision D4) -- so the horizon is not needed then and
+    its absence is not an error.
+
+    A trade with no horizon cannot say which window applies, and the regime gate
+    abstains there. This one must not abstain: for a KNOWN future date it uses
+    the WIDEST reject window across every configured horizon (the `Horizon`
+    literal is the source of truth, not a copied list), so a missing horizon can
+    only make the veto stricter than the scan's, never looser. Production cannot
+    reach that branch (`ArmRequest.horizon` is required); direct constructors can.
+    """
+    from typing import get_args
+    from app.scoring.stock_scorer import Horizon, effective_event_window
+    try:
+        earnings = _fetch_earnings_date(strategy.symbol)
+    except Exception as exc:  # noqa: BLE001 -- unknown == scan's unknown (D4)
+        logger.warning("Event veto: earnings lookup failed for %s: %s", strategy.symbol, exc)
+        return
+    if earnings is None:
+        return
+    days = (earnings - date.today()).days
+    if days < 0:
+        return
+    if strategy.horizon is not None:
+        reject_days, _ = effective_event_window(strategy.horizon, None)
+        label = f"{strategy.horizon} reject window"
+    else:
+        reject_days = max(effective_event_window(h, None)[0] for h in get_args(Horizon))
+        label = "widest reject window"
+        logger.warning(
+            "Event veto: the armed strategy for %s carries no horizon; "
+            "using the widest configured reject window (%dd)",
+            strategy.symbol, reject_days,
+        )
+    if days < reject_days:
+        raise EventVetoError(
+            f"earnings in {days}d is inside the {label} (<{reject_days}d)"
+        )
+
+
 class RegimeDataUnavailableError(RuntimeError):
     """The bars needed to measure this trade's regime could not be had.
 
@@ -1791,6 +1862,7 @@ def _alert_regime_headwind_refusal(symbol: str, exc: Exception) -> None:
 
 
 _REC_ID_REGIME_DATA = "auto-trade-regime-data-unavailable"
+_REC_ID_EVENT_VETO = "auto-trade-event-veto"
 
 
 def _alert_regime_data_refusal(symbol: str, exc: Exception) -> None:
@@ -1813,6 +1885,31 @@ def _alert_regime_data_refusal(symbol: str, exc: Exception) -> None:
         ),
         _per_symbol_rec_id(_REC_ID_REGIME_DATA, symbol),
         "AUTO_TRADE_REGIME_DATA_UNAVAILABLE",
+        discrete=True,
+    )
+
+
+def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
+    """Alert an earnings-veto refusal (fix #3 part 2, EventVetoError).
+
+    PER SYMBOL AND DISCRETE, for the headwind alert's reasons: one refusal per
+    symbol, an event rather than a standing condition. Its own wording and type:
+    nothing is misconfigured and the market did not move -- an earnings print is
+    inside the horizon's reject window, and the remedy is a decision (re-arm
+    after the print, or not at all).
+    """
+    _alert_refusal(
+        symbol,
+        "earnings-veto refusal",
+        (
+            f"Auto-trade REFUSED to fire {symbol}: earnings fall inside this "
+            f"trade's horizon reject window, the same rule that marks the scan "
+            f"candidate REJECT. Nothing was sent and the auto-trader is "
+            f"disarmed — re-arm after the announcement if you still want the "
+            f"trade. {exc}"
+        ),
+        _per_symbol_rec_id(_REC_ID_EVENT_VETO, symbol),
+        "AUTO_TRADE_EVENT_VETO",
         discrete=True,
     )
 
@@ -1910,6 +2007,8 @@ _STATUS_STALE_BLOCKED = "stale_blocked"
 _STATUS_RISK_CHECK_FAILED = "risk_check_failed"
 # P3b: the bars to measure the regime could not be had (RegimeDataUnavailableError).
 _STATUS_REGIME_DATA_BLOCKED = "regime_data_blocked"
+# Fix #3 part 2: earnings inside the horizon's reject window (EventVetoError).
+_STATUS_EVENT_VETO_BLOCKED = "event_veto_blocked"
 
 
 def _clear_config_refusal_holds() -> None:
@@ -2504,6 +2603,29 @@ class AutoTradeService:
             )
             raise
 
+        # Earnings veto (fix #3, part 2): the scan's REJECT rule, applied again
+        # because the arm may be older than the scan that produced it. After the
+        # disarm and outside the lock, like the sizing call above (a network
+        # lookup), and before any broker call.
+        try:
+            _apply_event_veto(strategy)
+        except EventVetoError as exc:
+            with self._lock:
+                self._state.history.append({
+                    "attempt_id":      attempt_id,
+                    "order_id":        None,
+                    "status":          _STATUS_EVENT_VETO_BLOCKED,
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
+                })
+            logger.error("AutoTrader fire REFUSED for %s %s — %s",
+                         strategy.symbol, strategy.direction, exc)
+            raise
+
         # Exposure cap check — runs after disarm so a double-fire is impossible.
         pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
         if portfolio_snapshot is not None and strategy.entry_premium > 0:
@@ -2884,6 +3006,8 @@ class AutoTradeService:
             _alert_regime_headwind_refusal(strategy.symbol, exc)
         except RegimeDataUnavailableError as exc:
             _alert_regime_data_refusal(strategy.symbol, exc)
+        except EventVetoError as exc:
+            _alert_event_veto_refusal(strategy.symbol, exc)
         except RegimeGateConfigError as exc:
             _alert_regime_gate_config_refusal(strategy.symbol, exc)
         except SizingConfigError as exc:
@@ -3045,6 +3169,8 @@ class AutoTradeService:
             _alert_risk_limit_refusal(symbol, exc, status)
         elif status == _STATUS_REGIME_DATA_BLOCKED:
             _alert_regime_data_refusal(symbol, exc)
+        elif status == _STATUS_EVENT_VETO_BLOCKED:
+            _alert_event_veto_refusal(symbol, exc)
         elif status == "not_submitted":
             # ABOVE `order_failed` for readability only — the two statuses
             # are disjoint, so this is reading order, not precedence.
