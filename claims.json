@@ -1,0 +1,28 @@
+{
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/intelligent-allen-463f3h",
+      "claimed_at": "2026-10-02T04:24:52Z",
+      "expires_at": "2026-10-02T07:50:33Z",
+      "note": "#54 risk-check shrink: targets + close drawer",
+      "task": "STOCK-POSITION-RESIZE"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/focused-wright-rh1oy6",
+      "claimed_at": "2026-10-02T05:39:44Z",
+      "expires_at": "2026-10-02T08:59:23Z",
+      "note": "#8: Step-3 min option volume / open interest = 0 do not reach validate_contract",
+      "task": "STEP3-LIQUIDITY-ZERO"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/meas-day-2026-10-01",
+      "claimed_at": "2026-10-02T06:19:09Z",
+      "expires_at": "2026-10-02T09:19:09Z",
+      "note": "MEAS day 1 results (plan section 7) + ledger; day 2 scheduling",
+      "task": "MEAS-MARKET-DATA-MEASUREMENT"
+    }
+  ]
+}
