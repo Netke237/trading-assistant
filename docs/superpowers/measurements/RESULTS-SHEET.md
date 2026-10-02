@@ -143,6 +143,36 @@ day's regime line is above. Inputs recorded in the funnel rows:
 - ATM cross-check pair: WMT, ATM absolute 27.2 vs O1's picked-contract `detail_iv_abs` 28.3
   (rank 31.7).
 
+**Independent check (2026-10-02, a second session).** Every figure in this section was
+recomputed from the raw `*.result.json` files through the manifest's scan ids, with code written
+separately from the first reading:
+- validity and flags;
+- S1–S4 counters, rates and rejected trend scores, plus the "would clear" counts;
+- C1/C1b/C5/C5b/C6 attribution, quality bars and drift;
+- the C6 liquidity echoes, the min_mult inputs and the deduplicated rank rows;
+- the `iv_rank_too_high` counts, the spread build rates and the 40/50/60 line counts.
+
+All of them match. No figure changed.
+
+**Observation, not a rule: the Swing O-scans lost most names to the expiry calendar.** O3 rejected
+213 names as `no option chain`, and O4 rejected 45. Of the names that reached the chain fetch, that
+is 61% and 40%; O1 lost 10 (3%). The cause is the expiry calendar, not a data outage:
+- The Swing window is 10–30 DTE. The fetch drops expiries below hold_max + 1 = 16
+  (`widened_min_dte`) and allows up to 40 (the tolerance), so it accepts 16–40 DTE.
+- On 2026-10-01 the October monthly (Oct 16) was at 15 DTE and the November monthly (Nov 20) at 50.
+  A name with no weekly options therefore had no expiry it could use. All three O4 picks are the
+  Oct 23 weekly.
+- The cause is inferred from the code at the tag and the reject pattern. Tradier was not
+  re-queried.
+- The same gap holds on every trading day from 2026-10-01 to 2026-10-09. From 2026-10-12, Nov 20
+  falls inside 16–40 and monthly-only names come back.
+
+So the Swing O-scans' candidates and IV rows depend on the calendar day: in a gap they are
+weekly-listed names only. The day stays valid (§5), and every rule computes within one day. But the
+Swing rank rows pool across days, so a day in the gap and a day outside it feed different name
+populations into the same IV sample. This is for Kenneth's choice of day 2's date. Whether a
+5–15-day hold should accept the 15-DTE monthly is a separate product question, outside the freeze.
+
 ---
 
 ## Day template (copy once per measurement day)
