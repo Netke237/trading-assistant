@@ -1684,6 +1684,58 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('2 contracts');
     });
 
+    it('adopts the stored (scaled) rungs when a soft-reduced qty raise sent rungs with it (open question 54, C2)', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-PATCH-RUNG', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100,
+        targets: [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }],
+      });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
+        adjustedQty: 150,
+        targets: [{ stockPrice: 55, contractsToSell: 75 }, { stockPrice: 60, contractsToSell: 75 }],
+      }));
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          contracts: 200,
+          targets: [{ stockPrice: 55, contractsToSell: 100 }, { stockPrice: 60, contractsToSell: 100 }],
+        });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-RUNG')!;
+      expect(updated.contracts).toBe(150);
+      expect(updated.targets.map((t) => t.contractsToSell)).toEqual([75, 75]);
+    });
+
+    it('keeps the local rungs when the soft-reduced qty raise did not send any', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const rungs = [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }];
+      const pos = makePosition({ recId: 'REC-PATCH-KEEP', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100, targets: rungs });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
+        adjustedQty: 150, targets: [{ stockPrice: 99, contractsToSell: 1 }],
+      }));
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', { contracts: 200 });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-KEEP')!;
+      expect(updated.contracts).toBe(150);
+      expect(updated.targets).toEqual(rungs);
+    });
+
     it('reverts the optimistic update via a forced resync when the backend rejects the PATCH', async () => {
       const { result } = renderHook(() => usePortfolioStore());
       const pos = makePosition({

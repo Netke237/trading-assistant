@@ -10,7 +10,7 @@
  *   the Step 7 Send-basket-to-broker feature that is wired but not yet live.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import type { PortfolioPosition } from '@/types/domain';
 import { positionMultiplier } from '@/lib/risk';
@@ -31,6 +31,12 @@ export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
   const [qty, setQty] = useState<number>(held);
   const [exitPrice, setExitPrice] = useState<number>(position.currentPrice || position.entryPrice);
   const [exitDate, setExitDate] = useState<string>(todayIso());
+  // The row can change under an open dialog (a close-404 re-save, a resized
+  // qty edit, a sync poll). Clamp the quantity to what is held now, or the
+  // input, the P&L preview and the button keep the old size beside '(of N)'
+  // (open question 54, C1). Clamp, not re-seed: a row that grows must never
+  // raise the size the user chose to sell.
+  useEffect(() => { setQty((q) => Math.min(q, held)); }, [held]);
 
   // Short *stock* positions profit when price falls — flip the delta's sign for
   // those. Options are never flipped: 'Bearish' on an option position just labels

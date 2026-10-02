@@ -316,3 +316,40 @@ async def test_patch_empty_body_is_a_noop(client):
     r = await client.patch("/api/portfolio/REC-NOOP", json={})
     assert r.status_code == 200, r.text
     assert r.json()["stop"] == 150.0
+
+
+@pytest.mark.asyncio
+async def test_resized_qty_raise_scales_the_rungs_sent_with_it(client):
+    # Open question 54 (C2): the soft-resize scenario above (1 -> 5 asked,
+    # booked 2) with rungs planned for the 5 asked. Stored verbatim they would
+    # sell 5 of 2 held; the create path's rule (_rescale_rung_shares) scales
+    # 3/2 of 5 to 1/1 of 2.
+    await _add(client, rec="REC-QTYUP-RUNGS", qty=1, entry=2.00)
+    rungs = [{"stockPrice": 200.0, "contractsToSell": 3}, {"stockPrice": 210.0, "contractsToSell": 2}]
+    r = await client.patch(
+        "/api/portfolio/REC-QTYUP-RUNGS",
+        json={"qty": 5, "targets": rungs, "portfolioValue": 10_000.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["adjustedQty"] == 2
+    assert [t["contractsToSell"] for t in body["targets"]] == [1, 1]
+    assert [t["stockPrice"] for t in body["targets"]] == [200.0, 210.0]
+    stored = next(p for p in (await client.get("/api/portfolio")).json() if p["recId"] == "REC-QTYUP-RUNGS")
+    assert stored["qty"] == 2
+    assert [t["contractsToSell"] for t in stored["targets"]] == [1, 1]
+
+
+@pytest.mark.asyncio
+async def test_resized_qty_raise_leaves_stored_rungs_alone(client):
+    # Rungs NOT sent with the resized PATCH were planned for the smaller
+    # pre-raise qty (here 1 of 1); they still fit the booked 2, so they stay.
+    await _add(client, rec="REC-QTYUP-KEEP", qty=1, entry=2.00,
+               targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
+    r = await client.patch(
+        "/api/portfolio/REC-QTYUP-KEEP",
+        json={"qty": 5, "portfolioValue": 10_000.0},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["adjustedQty"] == 2
+    assert [t["contractsToSell"] for t in r.json()["targets"]] == [1]

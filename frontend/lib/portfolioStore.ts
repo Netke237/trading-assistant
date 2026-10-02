@@ -593,7 +593,7 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
 async function patchPosition(
   recId: string,
   payload: Record<string, unknown>,
-): Promise<{ ok: boolean; detail?: string; adjustedQty?: number }> {
+): Promise<{ ok: boolean; detail?: string; adjustedQty?: number; targets?: TargetLevel[] }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, {
       method: 'PATCH',
@@ -602,8 +602,10 @@ async function patchPosition(
     });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
-      const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
-      return typeof adjustedQty === 'number' ? { ok: true, adjustedQty } : { ok: true };
+      const { adjustedQty, targets } = body as { adjustedQty?: number; targets?: unknown };
+      return typeof adjustedQty === 'number'
+        ? { ok: true, adjustedQty, ...(Array.isArray(targets) ? { targets: targets as TargetLevel[] } : {}) }
+        : { ok: true };
     }
     const body = await res.json().catch(() => ({}));
     return { ok: false, detail: errorDetail(body, res.status) };
@@ -679,9 +681,18 @@ async function _flushOne(recId: string): Promise<void> {
       // with no explanation — same failure mode Step 4 below prevents for an
       // in-flight edit, but this is a resolved edit the poll would otherwise
       // still be free to overwrite without warning.
+      // Rungs sent with this PATCH were planned for the requested size; the
+      // backend stored them scaled to the booked one (open question 54, C2).
+      // Adopt the stored rungs, or the local plan sells more than is held --
+      // unless a newer rung edit is already queued, which must not be undone.
+      const adopted = 'targets' in entry.payload
+        && !('targets' in (_pendingPatches.get(recId)?.payload ?? {}))
+        ? result.targets : undefined;
       usePortfolioStore.setState((s) => ({
         positions: s.positions.map((p) =>
-          p.recId === recId ? { ...p, contracts: result.adjustedQty } : p
+          p.recId === recId
+            ? { ...p, contracts: result.adjustedQty, ...(adopted ? { targets: adopted } : {}) }
+            : p
         ),
         lastSyncError: {
           symbol: entry.symbol,
