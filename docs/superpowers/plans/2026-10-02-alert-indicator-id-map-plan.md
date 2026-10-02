@@ -44,6 +44,10 @@ older builder or by hand; the mapping Kenneth asked for is kept.
   indicator rules (dual-judge), no rewrite on seed, canonical duplicate check, name-only
   validation, total helper, logic-dependent warning, ASCII-only normalisation, plain 422
   text, rollout note.
+- Plan r2: 0 blocking, 7 should-fix, 4 nits — all applied (v3): per-condition (multiset)
+  grandfathering, edit collision only for collisions the edit introduces, threshold-aware
+  warning, split rollout note, scheduler-fire toast regression named, malformed legacy
+  rows hardened in `_deserialize_rule` / compute, PUT-divergence residual named, wording.
 
 ## Design
 
@@ -69,11 +73,21 @@ older builder or by hand; the mapping Kenneth asked for is kept.
   character → None (so Python and JS case-folding cannot disagree); else strip ASCII
   whitespace (`' \t\n\r\f\v'`), ASCII-lowercase, look up in `INDICATOR_ALIASES`; unknown → None.
   The TS mirror implements exactly the same steps.
-- `compute_indicators_for_conditions` dispatches on `canonical_indicator(name)` (a `match`
+- `compute_indicators_for_conditions` only collects `str` names into `needed` (a `None`,
+  list or dict `indicator` on a legacy row raised `AttributeError`/`TypeError` today and
+  skipped every rule of the pair); it dispatches on `canonical_indicator(name)` (a `match`
   on the canonical name replaces the alias tuples) and still keys the result by the **raw**
   stored name, because `_evaluate_condition` looks up `indicators.get(condition.indicator)`.
   Behaviour for every name matched today is unchanged (same canonical → same calc; the
-  `macd_signal` dispatch stays exact). `.strip()` is new: `' ema20'` now matches.
+  `macd_signal` dispatch stays exact). Stripping is new: `' ema20'` now matches. The
+  existing golden pin `test_composite_momentum_match.py` (`_STANDARD_NAMES` sha256) guards
+  the plain names; the new tests add the `(n)` forms (`ema(20)`, `ema(9)`, `ema(50)`,
+  `sma(20)`, `sma(50)`, `rsi(14)`, `atr(14)`) and `macd_line`, `bollinger_*`.
+- `_deserialize_rule` (chart_alerts.py) reads an indicator condition's name with
+  `c.get('indicator')`, non-str → `''`, so a legacy row missing the key no longer raises
+  `KeyError` inside the list comprehension that builds every rule of the (symbol, interval)
+  — today one such row silences all its sibling rules. `operator`/`value` `KeyError`s on
+  any condition kind are pre-existing and out of scope.
 - `unsupported_indicators(conditions: object) -> list[str]`: TOTAL, never raises. Non-list
   input → `[]`; non-dict / non-object items skipped. The raw names (deduplicated, in order)
   of `kind == 'indicator'` conditions whose `canonical_indicator` is None; a missing or
@@ -105,12 +119,20 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
   - `''`: no extra option, the existing `Select...` placeholder (value `''`) shows.
 - Duplicate detection: `conditionsEqual` (used by the builder's edit collision check and by
   `addRule`) compares indicator conditions by `canonicalIndicator(name) ?? name`, so
-  `ema-20 > 100` and `ema20 > 100` are the same condition.
-- `handleSave` validation, per indicator condition, before the name check passes:
+  `ema-20 > 100` and `ema20 > 100` are the same condition. Today two such rules can coexist
+  (raw comparison). So that this cannot lock a legacy rule out of editing, the builder's
+  edit collision check is skipped when the edited conditions are `conditionsEqual` to the
+  seeded `editRule` conditions — only a collision the edit itself introduces is refused.
+- `handleSave` validation runs AFTER the existing `Name is required` check and before the
+  collision check, per indicator condition (numbered by position, 1-based):
   - canonical → OK;
-  - else, **editing** (`editRule`) and the raw name is one the rule being edited already
-    carried unsupported → allowed (grandfathered, mirrors the backend PUT exemption); the
-    rule keeps its visible "unsupported" warning;
+  - else, **editing** (`editRule`) and the condition is grandfathered: its `id` is one of the
+    ids the builder seeded from `editRule` AND its current `indicator` equals the name it was
+    seeded with → allowed (mirrors the backend PUT exemption); the rule keeps its visible
+    warning. Per CONDITION, not per name: on a legacy rule with `''`, a newly added `''`
+    condition (fresh id) is blocked. The seeded ids are captured once at mount (the seed
+    step already assigns an id to an id-less stored condition, and the kind-switch keeps
+    the row id);
   - else → `setError('Condition N: pick an indicator')` for `''`, or
     `'Condition N: indicator "X" is not supported — pick one from the list'`; no save.
   A duplicate is a new rule (POST, no exemption), so nothing is grandfathered there.
@@ -125,10 +147,11 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
 - Only the indicator NAME is validated; `operator`/`value` stay as unvalidated as today, so
   a legacy row with an odd `value` is not newly locked out. One function,
   `indicator_name_error(v) -> str | None` (plain text: `indicator "X" is not supported;
-  use one of: ema9, ema20, ...` / `indicator is empty; pick one`), is used by:
-  - `IndicatorConditionIn`'s `field_validator('indicator')` (raises `ValueError(text)`), so
-    the model states the rule (it stays otherwise unused, as today);
-  - `unsupported_indicators` above (same predicate: `canonical_indicator(...) is None`).
+  use one of: ema9, ema20, ...` / `indicator is empty; pick one`), is used by
+  `IndicatorConditionIn`'s `field_validator('indicator')` (raises `ValueError(text)`; the
+  model stays otherwise unconstructed, as today, and gets a direct unit test) and to build
+  the 422 detail. `unsupported_counts`/`unsupported_indicators` share its predicate
+  (`canonical_indicator(...) is None`).
 - `create_rule` / `replace_rule` read `unsupported_indicators(body.group.conditions)`.
   The 422 `detail` is the plain text for the first offending name (no pydantic banner — it
   lands verbatim in the Alerts page's "Not saved to server: …" line).
@@ -136,14 +159,21 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
   re-POSTing a rule the server already holds still gets 409 → 'ok'), a non-None error →
   `HTTPException(422, detail=...)`.
 - `replace_rule` (standard body): refused with 422 only when the body introduces an
-  unsupported name the stored row does not already carry:
-  `set(unsupported(body)) - set(unsupported(stored conditions))` non-empty. The stored set
+  unsupported occurrence the stored row does not already carry — a MULTISET comparison:
+  for some name, its count among the body's unsupported conditions exceeds its count among
+  the stored row's (a second `''` on a legacy `''` rule is refused). So the helper used here
+  is `unsupported_counts(conditions) -> Counter[str]` (total, same predicate);
+  `unsupported_indicators` is its deduplicated key list. The stored set
   is computed totally: composite rows, unparseable `rule_json`, non-dict group → empty set.
   Same exemption shape as `_stored_momentum`. The check runs next to the composite checks,
   BEFORE any `row.*` mutation.
 - No change to PATCH or DELETE. Composite rules have no indicator conditions; untouched.
-- Known, unchanged: `putRuleToAPI` swallows non-2xx, so a 422 on PUT is invisible in the
-  UI. The builder applies the same rule first, so the UI cannot produce that 422.
+- Residual, named (pre-existing mechanism): `putRuleToAPI` swallows network errors and
+  non-2xx. The builder grandfathers against its LOCAL copy, the server against the stored
+  row; these diverge only if an earlier PUT already failed silently. Then a grandfathered
+  local save can get a 422 nobody sees, and since the browser no longer judges indicator
+  rules, only the stale server version is evaluated. Surfacing PUT failures is out of scope
+  (it affects every PUT, not just this one).
   `syncRules` re-POSTs local-only rules: a local-only rule holding an unsupported name now
   gets 422 and shows the existing "Not saved to server: <detail>" line (visible).
 
@@ -154,16 +184,22 @@ in the Alerts page.
 
 - **API**: `_rule_to_dict` adds `unsupported_indicators: list[str]` to every rule
   (`[]` for composite and for clean rules) — computed on read from `rule_json` with the
-  total helper (a malformed row yields `[]`, never a 500 that would break `syncRules` for
-  every rule), never stored. GET /rules, GET /rules/{id}, POST/PUT responses carry it. It is
-  for API readers (curl, tests, future clients); the frontend does not type or read it.
+  total helper, so a parseable but malformed group yields `[]` rather than a new 500
+  (unparseable `rule_json` already 500s at the existing `json.loads`; unchanged), never
+  written to the DB. GET /rules, GET /rules/{id}, POST/PUT responses carry it. It is
+  for API readers (curl, tests, future clients); the frontend does not type or read it
+  (`syncRules` keeps server objects verbatim, so a copy can sit, unread and possibly stale,
+  in the persisted store — harmless).
 - **UI**: the Alerts page computes the warning from the rule's own conditions with the
   mirror `unsupportedIndicators(...)`, so it is right for local-only and freshly edited
-  rules and cannot go stale in the persisted store. Text depends on the logic:
-  - `AND`: `Never fires: indicator "<raw>" is not supported — edit the rule to pick one`;
-  - `OR` / `N_OF_M`: `Condition never met: indicator "<raw>" is not supported — edit the
-    rule to pick one` (the rule can still fire on its other conditions).
-  `''` renders as `(none)`. Tone caution, under the rule name like the unsaved line.
+  rules and cannot go stale in the persisted store. Let `ok` = number of conditions that
+  are not unsupported indicators and `need` = all conditions for AND, 1 for OR,
+  `n_of_m_threshold ?? 1` for N_OF_M (the evaluator's own fallback). When any condition is
+  unsupported:
+  - `ok < need`: `Never fires: unsupported indicator <names> — edit the rule to pick one`;
+  - else: `Never met: unsupported indicator <names> — the rule fires on its other
+    conditions only`.
+  `<names>` = each distinct raw name quoted, comma-separated; `''` renders as `(none)`. Tone caution, under the rule name like the unsaved line.
 - The conditions summary renders supported names through `indicatorLabel` (`EMA 20 > 100`
   rather than `ema20 > 100`). Backend reason/notification strings keep the raw name
   (unchanged).
@@ -183,19 +219,37 @@ as structure: an OR rule firing in the browser on its price condition would reco
 indicator line as unmet.
 
 - `ChartWorkspace` stops building indicator points for alerts: `getIndicatorPoints` (its only
-  caller is the alert evaluation) is deleted and `evaluateRules` gets `{}`.
-- Behaviour change, named: a legacy chart-id rule (`ema-20`) that fired in the browser at
-  the chart's current period now fires on the backend at the fixed alias period (EMA 20),
-  whatever the chart draws. A rule that exists only in this browser (never accepted by the
+  caller is the alert evaluation) is deleted and `evaluateRules` gets `{}`. The engine's
+  indicator branch stays (its tests run at `1D`, a path production never takes); a comment
+  marks it as reachable only from tests and 1D/1W callers, which today are none.
+- Behaviour changes, named:
+  - a legacy chart-id rule (`ema-20`) that fired in the browser at the chart's current
+    period now fires on the backend at the fixed alias period (EMA 20), whatever the chart
+    draws;
+  - an intraday rule mixing an indicator with price/regime conditions moves wholly to the
+    backend: its regime is judged by the backend's models and its price by the backend's
+    candle source, not the chart's `regimeDataRef`/candles;
+  - toast/history regression (the same residual W2-STRUCT already accepts): only the chart
+    WS path pushes `alert_triggered`; when the scheduler judges the bar first (the intraday
+    WS path does not use `_claim_candles_to_evaluate`, so the two race), the fire is
+    persisted and notified (Gmail/Telegram) but the open chart shows no toast and the local
+    history/`last_triggered_at` are not updated until a reload. Chart-id rules always
+    toasted in the browser before. Not fixed here. A rule that exists only in this browser (never accepted by the
   server — already shown as "Not saved to server") is no longer judged anywhere for its
   indicator conditions; its existing unsaved line already says it is not server-held.
 
 ## Rollout note (for the merge record)
 
-At deploy, stored rules whose names were dead and now map start being judged with
-thresholds set long ago: `VOL(default)`, `MACD(12,26,9)`, `VWAP(default)`, `vol`, `ema-20`,
-`ema-50`, `rsi-14`, and on intraday nothing new (those label rules already fired
-server-side). Name this in the merge commit / state record so Kenneth can review his rules.
+Name this in the merge commit / state record so Kenneth can review his rules:
+- start firing on EVERY interval (dead until now, thresholds set long ago): label rules
+  `VOL(default)`, `MACD(12,26,9)`, `VWAP(default)`; chart-id rules `ema-20`, `ema-50`,
+  `rsi-14`, `vol` on 1D/1W.
+- move from browser to backend on intraday and change period semantics: chart-id rules
+  (were judged at the chart's current period, now the fixed alias period).
+- unchanged: label rules the backend already matched (`EMA(20)`, `RSI(14)`, `SMA(20)`, ...).
+- canonically duplicate pairs (`ema-20 > 100` and `ema20 > 100` on the same symbol and
+  interval) now both fire on the same bar: two notifications. The builder's duplicate
+  check stops new pairs; existing ones remain until the user deletes one.
 
 ## Tests
 
@@ -216,10 +270,18 @@ directly — POST now refuses them.
 - `_rule_to_dict` / GET: `unsupported_indicators` lists the raw names; `[]` for clean and
   composite rules; a row with malformed `rule_json` group (non-list conditions, non-dict
   items) → `[]` and GET /rules still 200.
+- Malformed legacy rows on a pair with a sibling clean rule (`indicator` key missing;
+  `indicator: null`; `indicator: []`): the sibling still fires; GET /rules still 200.
+- `IndicatorConditionIn` direct: `''`/unknown raise `ValidationError`; `ema-20` accepted.
 - `unsupported_indicators` / `canonical_indicator`: non-ASCII (`'ema２0'`, `'EMA\u212a'`) → None.
 - 422 detail is the plain text (no "validation error for" banner).
-- Sustain: a PUT re-sending a legacy `EMA(20)` rule unchanged except its name keeps
-  `condition_state` (pins that nothing rewrites the name server-side).
+- Sustain: POST a rule with `EMA(20)` (conditions carrying ids, as the builder sends), set
+  its `condition_state` in the DB, PUT the identical body with a new name → `condition_state`
+  kept (pins that nothing rewrites the name server-side). Pre-existing, unchanged: a stored
+  condition WITHOUT an id gets one at builder seed time, so a rename of such a rule still
+  changes `rule_json` and resets sustain.
+- PUT multiset: legacy `''` rule + a second `''` condition → 422; legacy rule PUT with the
+  same `''` condition and a new name → 200.
 - Parity: the TS mirror equals the backend vocabulary.
 
 Frontend (Jest):
@@ -227,18 +289,23 @@ Frontend (Jest):
   empty indicator is blocked with the error; editing a rule seeded with `EMA(20)` and only
   renaming it saves `EMA(20)` unchanged (extra option labelled "EMA 20 (stored as EMA(20))");
   editing a legacy `'macd-1712345'` rule shows the disabled unsupported option and saves
-  (grandfathered); duplicating it is blocked; no extra option for `''` (placeholder only).
+  (grandfathered); duplicating it is blocked; no extra option for `''` (placeholder only);
+  on a legacy rule holding `''`, adding a second empty indicator condition blocks Save;
+  Save with an empty name reports `Name is required` first.
 - `conditionsEqual`: `ema-20 > 100` equals `ema20 > 100`; `addRule` refuses that duplicate;
-  editing rule A (`EMA(20) > 100`) to rename it while rule B (`ema20 > 100`) exists is
-  refused as a collision — by design, they are the same alert — and a rename of A alone
-  (no B) succeeds.
+  editing rule A (`EMA(20) > 100`) to rename it while rule B (`ema20 > 100`) exists
+  SUCCEEDS (the duplicate pre-existed); editing a third rule C (`close > 5`) to
+  `ema20 > 100` is refused as a collision.
 - `alertIndicators.ts`: `canonicalIndicator` (incl. non-ASCII → null), `indicatorLabel`,
   `unsupportedIndicators` (non-array input → []).
 - `chartAlertEngine.evaluateRules`: an intraday rule with an indicator condition is skipped
   (no history), also under OR with a met price condition; a 1D rule path unchanged; an
   intraday price-only rule still fires.
-- Alerts page: AND rule with an unsupported indicator shows "Never fires…"; OR rule shows
-  "Condition never met…"; a clean rule shows nothing; summary renders `EMA 20 > 100`.
+- Alerts page: AND rule with an unsupported indicator → "Never fires…"; OR rule with a
+  supported price condition → "Never met…"; OR rule whose conditions are all unsupported →
+  "Never fires…"; N_OF_M 2-of-2 with one unsupported → "Never fires…"; N_OF_M 1-of-2 →
+  "Never met…"; two distinct names both listed; a clean rule shows nothing; summary renders
+  `EMA 20 > 100`.
 - Existing builder / chartAlertEngine / alerts tests updated where they assumed chart-id
   options.
 
