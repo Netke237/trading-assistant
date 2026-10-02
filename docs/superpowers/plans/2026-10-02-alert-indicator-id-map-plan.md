@@ -22,8 +22,10 @@ The logged question says the builder stores the chart **id**. It does not:
   `macd(12,26,9)`, `bb(20,2)`, `vwap(default)`, other periods and overlay labels never fire.
 - Browser (intraday rules, `browserJudgesInterval`): `ChartWorkspace.getIndicatorPoints`
   keys series by chart **id**, computed with the chart's *current* params. A label never
-  matches, so no label-stored condition fires in the browser. A rule stored with a chart id
-  (`ema-20`) DID fire in the browser while that indicator was drawn, at whatever period the
+  matches, so no label-stored condition fires in the browser. A rule stored with an EMA,
+  SMA, RSI, ATR or MACD chart id (`ema-20`, `rsi-14`, `macd-<ts>`) DID fire in the browser
+  while that indicator was drawn (`getIndicatorPoints` has no VOL/BB/VWAP branch, so `vol`
+  never fired anywhere), at whatever period the
   chart had (`updateIndicator` edits params without changing the id).
 - Intraday rules are judged by BOTH sides: `chart_alert_scheduler._tick` evaluates every
   enabled (symbol, interval) pair through `evaluate_and_notify_for_symbol` (intraday
@@ -53,6 +55,10 @@ older builder or by hand; the mapping Kenneth asked for is kept.
   only (daily VWAP is an unanchored running total), grandfather map holds seeded
   INDICATOR conditions only, builder keyed per rule, non-string names rendered as
   `(none)`, `activeIndicators` dropped from the alert effect's deps.
+- Plan r4: 0 blocking, 2 should-fix, 4 nits — all applied (v5): builder key distinguishes
+  edit/duplicate, extra option whenever the stored name is not OFFERED at this interval
+  (daily `vwap`), `vol` never fired anywhere, golden-pin gap covered, `need` mirrors `or 1`
+  exactly (no clamp), validation keyed on `rule_type != 'composite'`.
 
 ## Design
 
@@ -86,7 +92,9 @@ older builder or by hand; the mapping Kenneth asked for is kept.
   Behaviour for every name matched today is unchanged (same canonical → same calc; the
   `macd_signal` dispatch stays exact). Stripping is new: `' ema20'` now matches. The
   existing golden pin `test_composite_momentum_match.py` (`_STANDARD_NAMES` sha256) guards
-  the plain names; the new tests add the `(n)` forms (`ema(20)`, `ema(9)`, `ema(50)`,
+  `ema, ema9, ema50, sma, sma50, rsi, atr, bb_*, vwap, volume, close`; a new test pins
+  `ema20 == ema`, `sma20 == sma`, `macd == macd_line` and `macd_signal` equal to today's
+  signal output (golden list untouched); the new tests also add the `(n)` forms (`ema(20)`, `ema(9)`, `ema(50)`,
   `sma(20)`, `sma(50)`, `rsi(14)`, `atr(14)`) and `macd_line`, `bollinger_*`.
 - `_deserialize_rule` (chart_alerts.py) reads an indicator condition's name with
   `c.get('indicator')`, non-str → `''`, so a legacy row missing the key no longer raises
@@ -120,8 +128,9 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
   a rename-only edit would change `rule_json` (so `replace_rule` wipes `condition_state`,
   i.e. in-progress sustain clocks) and could trip the duplicate check against another rule.
   A condition's name changes only when the user picks a new option. When the stored raw
-  name is not itself a catalog value, the select gets one extra option for it, value = the
-  raw name:
+  name is not among the options OFFERED for this interval (not a catalog value at all, or
+  `vwap` on 1D/1W), the select gets one extra option for it, value = the raw name:
+  - `vwap` on 1D/1W: enabled, label `VWAP (daily, unanchored)`;
   - mappable (`EMA(20)`, `ema-20`, `VOL(default)`): enabled, label
     `"<catalog label> (stored as <raw>)"`;
   - unsupported (`macd-1712345`, `BB(20,2)`): disabled, label `"<raw> — unsupported"`;
@@ -131,8 +140,9 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
     an unchanged save stays multiset-equal on the server. `indicatorLabel` and the Alerts
     summary render a non-string as `(none)`.
 - The Alerts page renders the builder with
-  `key={editingRule?.id ?? duplicatingRule?.id ?? 'new'}`, so opening another rule remounts
-  it: the seed state and the grandfather map are always the opened rule's (all builder state
+  `key={editingRule ? 'edit:' + editingRule.id : duplicatingRule ? 'dup:' + duplicatingRule.id : 'new'}`
+  (a duplicate keeps the source rule's id, so the prefix is what separates Edit A from
+  Duplicate A), so opening another rule or mode remounts it: the seed state and the grandfather map are always the opened rule's (all builder state
   comes from `useState` initialisers).
 - Duplicate detection: `conditionsEqual` (used by the builder's edit collision check and by
   `addRule`) compares indicator conditions by `canonicalIndicator(name) ?? name`, so
@@ -171,13 +181,15 @@ cross-tree pattern as `test_reprice_horizon_agreement.py`.
   model stays otherwise unconstructed, as today, and gets a direct unit test) and to build
   the 422 detail. `unsupported_counts`/`unsupported_indicators` share its predicate
   (`canonical_indicator(...) is None`).
+- The check applies to every body with `rule_type != 'composite'` (the router stores any
+  other `rule_type` as a standard group), never `== 'standard'`.
 - `create_rule` / `replace_rule` read `unsupported_indicators(body.group.conditions)`.
   The 422 `detail` is the plain text for the first offending name (no pydantic banner — it
   lands verbatim in the Alerts page's "Not saved to server: …" line).
-- `create_rule` (standard rules only): after the existing 409 id check (so `syncRules`
+- `create_rule` (`rule_type != 'composite'`): after the existing 409 id check (so `syncRules`
   re-POSTing a rule the server already holds still gets 409 → 'ok'), a non-None error →
   `HTTPException(422, detail=...)`.
-- `replace_rule` (standard body): refused with 422 only when the body introduces an
+- `replace_rule` (`rule_type != 'composite'` body): refused with 422 only when the body introduces an
   unsupported occurrence the stored row does not already carry — a MULTISET comparison:
   for some name, its count among the body's unsupported conditions exceeds its count among
   the stored row's (a second `''` on a legacy `''` rule is refused). So the helper used here
@@ -213,8 +225,10 @@ in the Alerts page.
   mirror `unsupportedIndicators(...)`, so it is right for local-only and freshly edited
   rules and cannot go stale in the persisted store. Let `ok` = number of conditions that
   are not unsupported indicators and `need` = all conditions for AND, 1 for OR,
-  `Math.max(1, n_of_m_threshold || 1)` for N_OF_M (the backend evaluator's `or 1`, which
-  turns a stored legacy 0 into 1; the backend is the only judge of these rules). When any condition is
+  `n_of_m_threshold || 1` for N_OF_M — exactly the backend evaluator's `or 1` (a stored
+  legacy 0 becomes 1; a stored legacy negative stays negative, the backend then fires on
+  any bar, and `ok >= need` shows the "Never met" variant, which is true). The backend is
+  the only judge of these rules. When any condition is
   unsupported:
   - `ok < need`: `Never fires: unsupported indicator <names> — edit the rule to pick one`;
   - else: `Never met: unsupported indicator <names> — the rule fires on its other
@@ -263,10 +277,12 @@ indicator line as unmet.
 
 Name this in the merge commit / state record so Kenneth can review his rules:
 - start firing on EVERY interval (dead until now, thresholds set long ago): label rules
-  `VOL(default)`, `MACD(12,26,9)`, `VWAP(default)`; chart-id rules `ema-20`, `ema-50`,
-  `rsi-14`, `vol` on 1D/1W.
+  `VOL(default)`, `MACD(12,26,9)`, `VWAP(default)`; chart-id `vol`; chart-id rules `ema-20`,
+  `ema-50`, `rsi-14` on 1D/1W.
 - move from browser to backend on intraday and change period semantics: chart-id rules
-  (were judged at the chart's current period, now the fixed alias period).
+  `ema-20`, `ema-50`, `rsi-14` (were judged at the chart's current period, now the fixed
+  alias period). Other `<type>-<timestamp>` ids that fired in the browser (`macd-<ts>`,
+  `sma-<ts>`, ...) are unsupported and STOP firing; they show the warning.
 - existing daily (1D/1W) `VWAP(default)` rules fire against an UNANCHORED running-total
   VWAP whose value depends on the loaded window; the builder no longer offers daily VWAP.
 - unchanged: label rules the backend already matched (`EMA(20)`, `RSI(14)`, `SMA(20)`, ...).
@@ -304,6 +320,7 @@ directly — POST now refuses them.
   verbatim (pins that nothing rewrites the name server-side). Pre-existing, unchanged: a stored
   condition WITHOUT an id gets one at builder seed time, so a rename of such a rule still
   changes `rule_json` and resets sustain.
+- POST with `rule_type: "x"` and an unsupported indicator → 422.
 - PUT multiset: legacy `''` rule + a second `''` condition → 422; legacy rule PUT with the
   same `''` condition and a new name → 200.
 - Parity: the TS mirror equals the backend vocabulary.
@@ -319,7 +336,8 @@ Frontend (Jest):
   seeded PRICE condition to Indicator without picking blocks Save; `vwap` is offered at
   `5min` and not at `1D`; a seeded `indicator: null` renders the placeholder and an
   unchanged save sends `null` back; opening Edit on rule B while A's builder is open shows
-  B's conditions.
+  B's conditions; Edit A then Duplicate A remounts (name gets "(copy)"); a 1D rule seeded
+  with `vwap` shows the enabled "VWAP (daily, unanchored)" option selected.
 - `conditionsEqual`: `ema-20 > 100` equals `ema20 > 100`; `addRule` refuses that duplicate;
   editing rule A (`EMA(20) > 100`) to rename it while rule B (`ema20 > 100`) exists
   SUCCEEDS (the duplicate pre-existed); editing a third rule C (`close > 5`) to
