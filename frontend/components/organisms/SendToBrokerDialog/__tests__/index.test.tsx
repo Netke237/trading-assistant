@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
@@ -197,7 +197,7 @@ describe('SendToBrokerDialog — the method-pick gate (Phase G piece 5, build st
     );
 
     expect(screen.getByText(/Method pick required/)).toBeInTheDocument();
-    const submitBtn = screen.getByRole('button', { name: /Submit 2 orders/ });
+    const submitBtn = screen.getByRole('button', { name: /Add 2 to Portfolio/ });
     expect(submitBtn).toBeDisabled();
   });
 
@@ -218,5 +218,42 @@ describe('SendToBrokerDialog — the method-pick gate (Phase G piece 5, build st
     );
 
     expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
+  });
+});
+
+describe('SendToBrokerDialog — tracks the basket, places no broker order (review #5, D6)', () => {
+  const noop = () => {};
+  // Within every risk limit, so one click submits (no override step).
+  const cleanCard = () => makeCard({
+    symbol: 'AAA',
+    contractDetails: { strike: 100, expiry: '2026-05-15', right: 'C', mid: 2, delta: 0.45, theta: -0.09, ivRank: 45, dte: 24 },
+    exit: {
+      invalidation: 90, premiumStop: 1.5, timeStopDays: 10, target: 130, targets: [],
+      exitPlan: {
+        computedAt: '2026-08-27T00:00:00.000Z',
+        stop: {
+          price: 90, source: 'structural', contractPrice: 1.5,
+          rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+          structuralPrice: 90, atrFloorPrice: 85, distanceDollar: 5,
+        },
+        targets: [],
+        atr: 3,
+      },
+    },
+  });
+
+  it('renders no Auto-send control and says no broker order is placed', () => {
+    render(<SendToBrokerDialog cards={[cleanCard()]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick() }} onClose={noop} onSubmit={noop} />);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto-send/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no broker order is placed/)).toBeInTheDocument();
+  });
+
+  it('submits drafts that carry no autoSend field', () => {
+    const onSubmit = jest.fn();
+    render(<SendToBrokerDialog cards={[cleanCard()]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick() }} onClose={noop} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to Portfolio' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(Object.keys(onSubmit.mock.calls[0][0][0]).sort()).toEqual(['card', 'contracts']);
   });
 });

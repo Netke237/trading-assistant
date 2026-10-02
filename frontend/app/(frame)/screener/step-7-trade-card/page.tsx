@@ -2,10 +2,11 @@
 
 /*
  * Screener Step 7 — Trade Card.
- * Prev/Next cycles ranked candidates, basket pins multiple. Send basket
- * opens a review dialog where any row can be switched from auto-send
- * (sent to broker mock) to manual (added to portfolio tagged MANUAL).
- * Successful submits surface a bottom-right toast with a Portfolio link.
+ * Prev/Next cycles ranked candidates, basket pins multiple. Track basket
+ * opens a review dialog; submitting it saves every row to the Portfolio tagged
+ * MANUAL. It places NO broker order (review #5, D6) -- a card's own send
+ * buttons do that. Successful submits surface a bottom-right toast with a
+ * Portfolio link.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -190,7 +191,8 @@ function positionFromOrder(
     theta:         cd?.theta,
     vega:          0.20,
     contracts:     order.contracts,
-    source:        order.autoSend ? 'broker' : 'manual',
+    // Fix #5: the basket places no broker order (D6); 'broker' made phantom positions count against real caps.
+    source:        'manual',
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
     tradeCardSnapshot: tradeCardSnapshotOf(c),
@@ -199,9 +201,8 @@ function positionFromOrder(
 }
 
 interface ToastState {
-  auto:    number;
-  manual:  number;
-  queued:  number;   // subset of auto+manual that is pending a backend retry
+  saved:   number;   // confirmed saved by the backend
+  queued:  number;   // saved locally, pending a backend retry
   // Positions whose requested size was auto-reduced by the backend's risk
   // check to fit exposure limits — "SYMBOL: N contracts" per entry.
   adjusted: string[];
@@ -1308,7 +1309,7 @@ export default function Step7Page() {
     setBasketNotes([]);
     setBasketError(null);
     setOrderError(null);
-    let auto = 0, manual = 0, queued = 0;
+    let saved = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];
 
@@ -1364,7 +1365,7 @@ export default function Step7Page() {
       }
       // status === 'ok' — confirmed saved by the backend.
       incrementDaily();
-      if (o.autoSend) auto++; else manual++;
+      saved++;
       if (res.adjustedQty != null) {
         adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
       }
@@ -1381,8 +1382,8 @@ export default function Step7Page() {
     // covers hard rejections. They describe DIFFERENT orders, so both may show for
     // a mixed basket — but a network-only submit shows just the toast (no
     // contradictory red banner) with the queued count reported distinctly.
-    if (auto + manual + queued > 0) {
-      setToast({ auto, manual, queued, adjusted });
+    if (saved + queued > 0) {
+      setToast({ saved, queued, adjusted });
       window.setTimeout(() => setToast(null), 6000);
     }
     if (failures.length) {
@@ -1391,7 +1392,7 @@ export default function Step7Page() {
   };
 
   const basketEmpty = basket.length === 0;
-  const sendLabel = basketEmpty ? 'Send to broker' : `Send basket (${basket.length})`;
+  const sendLabel = basketEmpty ? 'Send to broker' : `Track basket (${basket.length})`;
 
   return (
     <div className={styles.main}>
@@ -1399,8 +1400,8 @@ export default function Step7Page() {
         <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
         <Text size={13} tone="secondary">
-          Cycle candidates with Prev / Next. Pin multiple to the basket, then Send to broker — uncheck
-          Auto-send for any contract you&apos;d rather place manually.
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio — the
+          basket places no broker order; send each contract from its own card to trade it.
         </Text>
       </div>
 
@@ -1702,13 +1703,9 @@ export default function Step7Page() {
       {toast && (
         <div className={toastStyles.toast} role="status" aria-live="polite">
           <div>
-            <Text size={13} weight={500}>
-              {toast.auto + toast.manual + toast.queued} order{toast.auto + toast.manual + toast.queued === 1 ? '' : 's'} placed
-            </Text>
-            <Text size={11} tone="secondary">
-              {toast.auto} sent to broker · {toast.manual} added manually
-              {toast.queued > 0 ? ` · ${toast.queued} awaiting backend sync` : ''}
-            </Text>
+            <Text size={13} weight={500}>{toast.saved + toast.queued} added to Portfolio</Text>
+            <Text size={11} tone="caution">No broker order was placed — send each one from its card to trade it.</Text>
+            {toast.queued > 0 && <Text size={11} tone="secondary">{toast.queued} awaiting backend sync</Text>}
             {toast.adjusted.length > 0 && (
               <Text size={11} tone="caution">
                 Size reduced to fit exposure limits — {toast.adjusted.join(', ')}

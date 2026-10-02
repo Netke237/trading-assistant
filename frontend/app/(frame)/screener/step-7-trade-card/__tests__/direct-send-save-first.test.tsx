@@ -157,8 +157,8 @@ async function goPrev() {
 
 async function sendBasket() {
   fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-  fireEvent.click(await screen.findByRole('button', { name: /send basket/i }));
-  const submit = await screen.findByRole('button', { name: /^(Submit \d orders?|Override & Submit)$/ });
+  fireEvent.click(await screen.findByRole('button', { name: /track basket/i }));
+  const submit = await screen.findByRole('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
   await waitFor(() => expect(submit).toBeEnabled());
   fireEvent.click(submit);
 }
