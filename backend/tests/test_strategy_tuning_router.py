@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 import app.services.strategy_param_optimizer as opt_mod
@@ -41,32 +42,51 @@ def test_unknown_job_returns_404():
     assert r.status_code == 404
 
 
+def _assert_params_scalar_error(r):
+    """The 422 must come from params_must_be_scalars, not from a missing field."""
+    errs = r.json()["detail"]
+    assert any(e["loc"][-1] == "params" and "must be a scalar" in e["msg"] for e in errs), errs
+    assert not any(e["loc"][-1] == "direction" for e in errs), errs
+
+
 def test_adopt_rejects_empty_params(tmp_path, monkeypatch):
     from app.services import strategy_param_store as store
     monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    monkeypatch.setattr(store, "adopt", lambda *a, **k: pytest.fail("adopt reached with empty params"))
     c = TestClient(app)
-    r = c.post("/api/strategy-tuning/adopt", json={"strategy": "pullback_ema", "params": {}})
+    r = c.post("/api/strategy-tuning/adopt",
+               json={"strategy": "pullback_ema", "params": {}, "direction": "Bullish"})
     assert r.status_code == 422
+    # The endpoint's own guard fired (a string detail), not a Pydantic field error.
+    assert r.json()["detail"].startswith("params must not be empty")
 
 
-def test_adopt_rejects_nested_params():
+def test_adopt_rejects_nested_params(monkeypatch):
     """AdoptRequest must reject non-scalar values to prevent YAML injection."""
+    from app.services import strategy_param_store as store
+    monkeypatch.setattr(store, "adopt", lambda *a, **k: pytest.fail("adopt reached with nested params"))
     c = TestClient(app)
     r = c.post(
         "/api/strategy-tuning/adopt",
-        json={"strategy": "pullback_ema", "params": {"ema_period": {"nested": "dict"}}},
+        json={"strategy": "pullback_ema", "params": {"ema_period": {"nested": "dict"}},
+              "direction": "Bullish"},
     )
     assert r.status_code == 422
+    _assert_params_scalar_error(r)
 
 
-def test_adopt_rejects_list_params():
+def test_adopt_rejects_list_params(monkeypatch):
     """AdoptRequest must reject list values to prevent YAML injection."""
+    from app.services import strategy_param_store as store
+    monkeypatch.setattr(store, "adopt", lambda *a, **k: pytest.fail("adopt reached with list params"))
     c = TestClient(app)
     r = c.post(
         "/api/strategy-tuning/adopt",
-        json={"strategy": "pullback_ema", "params": {"ema_period": [20, 50]}},
+        json={"strategy": "pullback_ema", "params": {"ema_period": [20, 50]},
+              "direction": "Bullish"},
     )
     assert r.status_code == 422
+    _assert_params_scalar_error(r)
 
 
 def test_list_jobs_returns_counts(monkeypatch):
