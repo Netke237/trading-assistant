@@ -28,6 +28,7 @@ from app.services.audit import log_approval
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
 from app.services.position_writer import create_position, _rescale_rung_shares
+from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
 from app.models.audit_event import AuditEventModel
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -331,14 +332,37 @@ async def update_position(
     # explicit-null-clears contract as stop/structuralStop above. Not floored:
     # the schema's (0, 1) bound already rejects every meaningless value, and a
     # floor here would silently rewrite one rather than reject it.
+    #
+    # STOP-SEMANTICS-2026-10-02 (b): a stop whose threshold is below $0.01 at
+    # this position's entry can never fire, so it is refused -- late, like
+    # qty, so the fields sent alongside it in the same debounced PATCH still
+    # save. An explicit null (clear -> inherit) is never refused.
+    premium_stop_refused = False
     if "premiumStopPct" in updates:
-        position.premium_stop_pct = updates["premiumStopPct"]
+        requested_pct = updates["premiumStopPct"]
+        if requested_pct is not None and premium_stop_is_sub_cent(
+            position.entry_price, requested_pct,
+            is_short_stock_position(position.contract, position.direction),
+        ):
+            premium_stop_refused = True
+        else:
+            position.premium_stop_pct = requested_pct
 
     await db.commit()
     await db.refresh(position)
 
-    if qty_error is not None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=qty_error)
+    # The 422 detail is ` | `-joined segments: qty_error verbatim (risk codes OR
+    # free text), then the premium code, then the trimmed qty that WAS saved
+    # (which the 422 would otherwise lose). A single segment is exactly the
+    # pre-STOP-SEMANTICS detail. `frontend/lib/portfolioRejection.ts` maps it.
+    if qty_error is not None or premium_stop_refused:
+        segments = [qty_error] if qty_error is not None else []
+        if premium_stop_refused:
+            segments.append("premium_stop_below_one_cent")
+            if adjusted_qty is not None:
+                segments.append(f"qty_saved_as_{adjusted_qty}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail=" | ".join(segments))
 
     resp = PortfolioPositionSchema.from_orm_model(position)
     if adjusted_qty is not None:

@@ -163,9 +163,14 @@ describe('P2-13 -- a stock position names its percent stop as a stock level', ()
 });
 
 describe('R2-3 / R2-7 / R4-1 -- stops that cannot fire are called out, and only those', () => {
-  it('sub-cent threshold: 99% on a $0.50 entry', () => {
+  it('sub-cent threshold: a STORED 99% on a $0.50 entry (saved before the refusal)', () => {
     drawer(option({ entryPrice: 0.5, premiumStopPct: 0.99 }));
-    expect(screen.getByText('At this entry the stop threshold is below $0.01, so it can never fire.')).toBeInTheDocument();
+    expect(screen.getByText('Stored before sub-cent stops were refused; it can never fire — set a lower percent.')).toBeInTheDocument();
+  });
+  it('sub-cent threshold: an INHERITED global that is sub-cent at this entry', () => {
+    useSettingsStore.setState({ premiumStopPct: 0.9 });
+    drawer(option({ entryPrice: 0.05, premiumStopPct: null }));
+    expect(screen.getByText('At this entry the global stop fires below $0.01 and can never fire — pin a lower percent.')).toBeInTheDocument();
   });
   it('no sub-cent caution at 99% on a $2.00 entry', () => {
     drawer(option({ entryPrice: 2, premiumStopPct: 0.99 }));
@@ -182,5 +187,52 @@ describe('R2-3 / R2-7 / R4-1 -- stops that cannot fire are called out, and only 
     drawer(option({ entryPrice: 10, premiumStopPct: null }));
     expect(screen.queryByText(/The global stop is 100%/)).not.toBeInTheDocument();
     expect(screen.queryByText(/can never fire/)).not.toBeInTheDocument();
+  });
+});
+
+// ── STOP-SEMANTICS-2026-10-02 ───────────────────────────────────────────────
+describe('STOP-SEMANTICS -- a short stock stop fires on a RISE; a sub-cent stop is refused', () => {
+  const short = (o: Partial<PortfolioPosition> = {}) => stock({ direction: 'Bearish', ...o });
+
+  it('a short names its stop "above entry"; a long keeps "below entry"', () => {
+    const { unmount } = drawer(short({ premiumStopPct: 0.45 }));
+    expect(screen.getByText('Stock stop — fires 45% above entry')).toBeInTheDocument();
+    unmount();
+    drawer(stock({ premiumStopPct: 0.45 }));
+    expect(screen.getByText('Stock stop — fires 45% below entry')).toBeInTheDocument();
+  });
+
+  it("a short's preview is the rise-side firing price", () => {
+    // 190 x 1.45 = 275.5 -> fires at stock $275.50 (a long fires at $104.50).
+    drawer(short({ premiumStopPct: 0.45 }));
+    expect(screen.getByText('Fires at stock $275.50.')).toBeInTheDocument();
+    expect(screen.queryByText('Fires at stock $104.50.')).not.toBeInTheDocument();
+  });
+
+  it('commit refuses a sub-cent stop with the reason and writes nothing', () => {
+    const onChange = jest.fn();
+    drawer(option({ entryPrice: 0.05, premiumStopPct: 0.5 }), onChange);
+    const input = screen.getByLabelText('Premium stop percent') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '90' } });
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText('At this entry a 90% stop fires below $0.01 and could never fire — kept the previous value.')).toBeInTheDocument();
+    expect(input.value).toBe('50');
+  });
+
+  it('a short at a sub-penny entry is never refused and never called sub-cent', () => {
+    const onChange = jest.fn();
+    drawer(short({ entryPrice: 0.05, premiumStopPct: 0.5 }), onChange);
+    const input = screen.getByLabelText('Premium stop percent') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '90' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ premiumStopPct: 0.9 });
+    expect(screen.queryByText(/below \$0\.01/)).not.toBeInTheDocument();
+  });
+
+  it('a global of 100% is not called never-firing for a short (it fires at 2x entry)', () => {
+    useSettingsStore.setState({ premiumStopPct: 1.0 });
+    drawer(short({ premiumStopPct: null }));
+    expect(screen.queryByText(/The global stop is 100% and can never fire/)).not.toBeInTheDocument();
   });
 });

@@ -185,7 +185,8 @@ async def _run_once() -> None:
         await notify_alert(alert.symbol, alert.alertType, alert.reason,
                      alert.recId, alert.timestamp,
                      type_enabled=effective_enabled(
-                         overrides_by_rec_id.get(alert.recId), alert.alertType))
+                         overrides_by_rec_id.get(alert.recId), alert.alertType),
+                     stop_side=alert.stopSide)
 
         try:
             await alert_service.broadcast([alert.model_dump()])

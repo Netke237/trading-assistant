@@ -15,6 +15,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { armBookingFieldsFrom, classifyFireFailure } from '@/lib/armBookingFields';
 import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
+import { premiumStopIsSubCent } from '@/lib/premiumStop';
 import { armPickedFieldsFrom } from '@/lib/cardEdits';
 import { checkInvalidation, MISSING_INVALIDATION_TITLE, checkMethodPick, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
 import type { TradeCardData, MethodPick, ExitPlan, MaxLossOverride } from '@/types/domain';
@@ -237,6 +238,16 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    * Say what that means before arming. */
   const premiumStopAtOrAbovePremium = premiumStopDollar != null
     && entryPremium > 0 && premiumStopDollar >= entryPremium;
+
+  /* STOP-SEMANTICS-2026-10-02 (F3, decision Q3) -- a typed stop whose
+   * threshold is below $0.01 at today's premium can never fire. A WARNING, not
+   * a disable, for the same reason as its total-loss sibling above: the fill
+   * decides, and the booking (create_position) refuses to store a sub-cent
+   * stop at the filled entry and inherits the global instead. Options only,
+   * so the short flag is false. */
+  const premiumStopSubCent = premiumStopDollar != null
+    && entryPremium > 0 && premiumStopDollar > 0 && premiumStopDollar < entryPremium
+    && premiumStopIsSubCent(entryPremium, premiumStopDollar / entryPremium, false);
 
   /* DIRECT-SEND-STOP-GATE-2026-09-09 -- see the `resolvedInvalidation` prop
    * doc. `??` and not `!== undefined`, so this reads the card by the same rule
@@ -558,6 +569,15 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
             + `$${(premiumStopDollar as number).toFixed(2)}, the booked position inherits the global stop `
             + `(${Number((globalPremiumStopPct * 100).toFixed(2))}%); above it, your `
             + `$${(premiumStopDollar as number).toFixed(2)} stop applies.`}
+        </Text>
+      )}
+
+      {autoMode === 'armed' && !armed && premiumStopSubCent && (
+        <Text size={11} tone="caution">
+          {`Your $${(premiumStopDollar as number).toFixed(2)} premium stop leaves a threshold below $0.01 `
+            + `at today's $${entryPremium.toFixed(2)} premium, so it could never fire. If it is still below `
+            + `$0.01 at the fill, the booked position inherits the global stop `
+            + `(${Number((globalPremiumStopPct * 100).toFixed(2))}%).`}
         </Text>
       )}
 
