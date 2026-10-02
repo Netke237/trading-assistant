@@ -175,18 +175,44 @@ export function parsePipelineDiagnostics(
   const stage3Count = pipeline?.no_chain ?? allChainRejects.length;
   const leftAfterStage3 = Math.max(0, leftAfterStage2 - stage3Count);
 
-  const stage4Count = (pipeline ? pipeline.failed_score + pipeline.failed_contracts : allContractRejects.length);
+  const stage4Count = (pipeline ? (pipeline.failed_score ?? 0) + (pipeline.failed_contracts ?? 0) : allContractRejects.length);
   const leftAfterStage4 = Math.max(0, leftAfterStage3 - stage4Count);
 
-  const stage5Count = (pipeline?.failed_direction ?? allDirectionRejects.length) + (pipeline?.failed_shortlist ?? 0);
+  // Stage 5 accounts for direction conviction, shortlist caps, unmeasured direction, and residual "other" rejects
+  const directionCount = pipeline?.failed_direction ?? allDirectionRejects.length;
+  const shortlistCount = pipeline?.failed_shortlist ?? 0;
+  const unmeasuredCount = pipeline?.failed_direction_unmeasured ?? 0;
+  const otherCount = pipeline?.other_rejected ?? otherRejects.length;
+  const stage5Count = directionCount + shortlistCount + unmeasuredCount + otherCount;
   const leftFinal = candidatesCount;
 
-  // Helper for sub-rule metrics
-  function calcSubRule(subSymbols: string[], fallbackRatio: number, stageTotal: number, totalUniverse: number) {
-    const count = subSymbols.length > 0 ? subSymbols.length : Math.round(stageTotal * fallbackRatio);
-    const pctOfStage = stageTotal > 0 ? Math.round((count / stageTotal) * 100) : 0;
-    const pctOfTotal = totalUniverse > 0 ? Math.round((count / totalUniverse) * 100) : 0;
-    return { count, pctOfStage, pctOfTotal };
+  // Helper for sub-rule metrics — batch version that forces sub-rules to sum to stageTotal
+  // by giving the last sub-rule the remainder after rounding.
+  function calcSubRules(
+    entries: Array<{ symbols: string[]; fallbackRatio: number }>,
+    stageTotal: number,
+    totalUniverse: number,
+  ) {
+    const hasSymbols = entries.some((e) => e.symbols.length > 0);
+    if (hasSymbols) {
+      // Use actual symbol counts — no rounding needed
+      return entries.map((e) => {
+        const count = e.symbols.length;
+        const pctOfStage = stageTotal > 0 ? Math.round((count / stageTotal) * 100) : 0;
+        const pctOfTotal = totalUniverse > 0 ? Math.round((count / totalUniverse) * 100) : 0;
+        return { count, pctOfStage, pctOfTotal };
+      });
+    }
+    // Fallback: estimate from ratios, last entry gets remainder
+    let allocated = 0;
+    return entries.map((e, i) => {
+      const isLast = i === entries.length - 1;
+      const count = isLast ? Math.max(0, stageTotal - allocated) : Math.round(stageTotal * e.fallbackRatio);
+      allocated += count;
+      const pctOfStage = stageTotal > 0 ? Math.round((count / stageTotal) * 100) : 0;
+      const pctOfTotal = totalUniverse > 0 ? Math.round((count / totalUniverse) * 100) : 0;
+      return { count, pctOfStage, pctOfTotal };
+    });
   }
 
   // Stages array
@@ -200,29 +226,36 @@ export function parsePipelineDiagnostics(
       isBottleneck: false,
       ruleSummary: 'Filters out un-tradable prices, small market caps, or data gaps before running indicators.',
       allSymbols: allDataRejects,
-      subRules: [
-        {
-          id: 'price-filter',
-          label: 'Price Out of Range (Min/Max)',
-          symbols: priceRejects,
-          ...calcSubRule(priceRejects, 0.6, stage1Count, scanned),
-          ruleExplanation: 'Configured in Step 2: stocks with spot price outside the specified range.',
-        },
-        {
-          id: 'cap-filter',
-          label: 'Market Cap Out of Range',
-          symbols: capRejects,
-          ...calcSubRule(capRejects, 0.3, stage1Count, scanned),
-          ruleExplanation: 'Configured in Step 2: companies with market cap below the configured floor.',
-        },
-        {
-          id: 'missing-data',
-          label: 'Missing Quotes / Incomplete Bars',
-          symbols: missingDataRejects,
-          ...calcSubRule(missingDataRejects, 0.1, stage1Count, scanned),
-          ruleExplanation: 'EOD quote or historical candle series unavailable from market data provider.',
-        },
-      ],
+      subRules: (() => {
+        const metrics = calcSubRules([
+          { symbols: priceRejects, fallbackRatio: 0.6 },
+          { symbols: capRejects, fallbackRatio: 0.3 },
+          { symbols: missingDataRejects, fallbackRatio: 0.1 },
+        ], stage1Count, scanned);
+        return [
+          {
+            id: 'price-filter',
+            label: 'Price Out of Range (Min/Max)',
+            symbols: priceRejects,
+            ...metrics[0],
+            ruleExplanation: 'Configured in Step 2: stocks with spot price outside the specified range.',
+          },
+          {
+            id: 'cap-filter',
+            label: 'Market Cap Out of Range',
+            symbols: capRejects,
+            ...metrics[1],
+            ruleExplanation: 'Configured in Step 2: companies with market cap below the configured floor.',
+          },
+          {
+            id: 'missing-data',
+            label: 'Missing Quotes / Incomplete Bars',
+            symbols: missingDataRejects,
+            ...metrics[2],
+            ruleExplanation: 'EOD quote or historical candle series unavailable from market data provider.',
+          },
+        ];
+      })(),
     },
     {
       id: 'pre-screen',
@@ -233,43 +266,52 @@ export function parsePipelineDiagnostics(
       isBottleneck: false,
       ruleSummary: '5-rule weighted setup scorer (Trend, Pullback, Trigger, Event, Vol). Symbols scoring < 35 are REJECT.',
       allSymbols: allPreScreenRejects,
-      subRules: [
-        {
-          id: 'trend-failed',
-          label: 'Trend Rule Failed (EMA Slope / ADX / RS)',
-          symbols: trendRejects,
-          ...calcSubRule(trendRejects, 0.52, stage2Count, scanned),
-          ruleExplanation: 'Price below 200 EMA, negative MA slope, or weak Average Directional Index (ADX < 20).',
-        },
-        {
-          id: 'trigger-failed',
-          label: 'Trigger Momentum Failed (RSI / MACD / Volume)',
-          symbols: triggerRejects,
-          ...calcSubRule(triggerRejects, 0.24, stage2Count, scanned),
-          ruleExplanation: 'Momentum confirmation missing (RSI below floor or no bullish MACD cross).',
-        },
-        {
-          id: 'pullback-broken',
-          label: 'Pullback Broken / Too Deep (> 2.5 ATR)',
-          symbols: pullbackRejects,
-          ...calcSubRule(pullbackRejects, 0.14, stage2Count, scanned),
-          ruleExplanation: 'Retracement deeper than 2.5 ATR or violated 61.8% Fibonacci level.',
-        },
-        {
-          id: 'event-risk',
-          label: 'Event Risk (Earnings Catalyst Proximity)',
-          symbols: eventRejects,
-          ...calcSubRule(eventRejects, 0.08, stage2Count, scanned),
-          ruleExplanation: 'Upcoming earnings announcement within horizon caution/reject day window.',
-        },
-        {
-          id: 'regime-headwind',
-          label: 'Regime Headwind Gate',
-          symbols: regimeRejects,
-          ...calcSubRule(regimeRejects, 0.02, stage2Count, scanned),
-          ruleExplanation: 'Market regime (Markov / HMM) in strong distribution opposing direction.',
-        },
-      ],
+      subRules: (() => {
+        const metrics = calcSubRules([
+          { symbols: trendRejects, fallbackRatio: 0.52 },
+          { symbols: triggerRejects, fallbackRatio: 0.24 },
+          { symbols: pullbackRejects, fallbackRatio: 0.14 },
+          { symbols: eventRejects, fallbackRatio: 0.08 },
+          { symbols: regimeRejects, fallbackRatio: 0.02 },
+        ], stage2Count, scanned);
+        return [
+          {
+            id: 'trend-failed',
+            label: 'Trend Rule Failed (EMA Slope / ADX / RS)',
+            symbols: trendRejects,
+            ...metrics[0],
+            ruleExplanation: 'Price below 200 EMA, negative MA slope, or weak Average Directional Index (ADX < 20).',
+          },
+          {
+            id: 'trigger-failed',
+            label: 'Trigger Momentum Failed (RSI / MACD / Volume)',
+            symbols: triggerRejects,
+            ...metrics[1],
+            ruleExplanation: 'Momentum confirmation missing (RSI below floor or no bullish MACD cross).',
+          },
+          {
+            id: 'pullback-broken',
+            label: 'Pullback Broken / Too Deep (> 2.5 ATR)',
+            symbols: pullbackRejects,
+            ...metrics[2],
+            ruleExplanation: 'Retracement deeper than 2.5 ATR or violated 61.8% Fibonacci level.',
+          },
+          {
+            id: 'event-risk',
+            label: 'Event Risk (Earnings Catalyst Proximity)',
+            symbols: eventRejects,
+            ...metrics[3],
+            ruleExplanation: 'Upcoming earnings announcement within horizon caution/reject day window.',
+          },
+          {
+            id: 'regime-headwind',
+            label: 'Regime Headwind Gate',
+            symbols: regimeRejects,
+            ...metrics[4],
+            ruleExplanation: 'Market regime (Markov / HMM) in strong distribution opposing direction.',
+          },
+        ];
+      })(),
     },
     {
       id: 'chain-window',
@@ -280,22 +322,28 @@ export function parsePipelineDiagnostics(
       isBottleneck: false,
       ruleSummary: 'Filters option chains for expirations strictly falling within the horizon holding window.',
       allSymbols: allChainRejects,
-      subRules: [
-        {
-          id: 'no-expiry-band',
-          label: 'No Listed Expiry in Target DTE Band',
-          symbols: noChainRejects,
-          ...calcSubRule(noChainRejects, 0.94, stage3Count, scanned),
-          ruleExplanation: 'No monthly or weekly chain available matching the target days-to-expiration (DTE).',
-        },
-        {
-          id: 'empty-strikes',
-          label: 'Empty Strike Matrix Around Spot',
-          symbols: emptyStrikeRejects,
-          ...calcSubRule(emptyStrikeRejects, 0.06, stage3Count, scanned),
-          ruleExplanation: 'Option chain exists, but contains zero tradeable strikes within delta boundaries.',
-        },
-      ],
+      subRules: (() => {
+        const metrics = calcSubRules([
+          { symbols: noChainRejects, fallbackRatio: 0.94 },
+          { symbols: emptyStrikeRejects, fallbackRatio: 0.06 },
+        ], stage3Count, scanned);
+        return [
+          {
+            id: 'no-expiry-band',
+            label: 'No Listed Expiry in Target DTE Band',
+            symbols: noChainRejects,
+            ...metrics[0],
+            ruleExplanation: 'No monthly or weekly chain available matching the target days-to-expiration (DTE).',
+          },
+          {
+            id: 'empty-strikes',
+            label: 'Empty Strike Matrix Around Spot',
+            symbols: emptyStrikeRejects,
+            ...metrics[1],
+            ruleExplanation: 'Option chain exists, but contains zero tradeable strikes within delta boundaries.',
+          },
+        ];
+      })(),
     },
     {
       id: 'contract-rules',
@@ -306,36 +354,44 @@ export function parsePipelineDiagnostics(
       isBottleneck: false,
       ruleSummary: 'Evaluates each contract for bid-ask spread, liquidity (volume/OI), delta bounds, and IV ceilings.',
       allSymbols: allContractRejects,
-      subRules: [
-        {
-          id: 'spread-too-wide',
-          label: 'Spread Too Wide (> 15% of Mid)',
-          symbols: spreadRejects,
-          ...calcSubRule(spreadRejects, 0.48, stage4Count, scanned),
-          ruleExplanation: 'Bid-ask spread exceeds 15% of the mid-price, risking severe execution slippage.',
-        },
-        {
-          id: 'low-liquidity',
-          label: 'Low Liquidity (OI < 500 or Vol < 50)',
-          symbols: liquidityRejects,
-          ...calcSubRule(liquidityRejects, 0.31, stage4Count, scanned),
-          ruleExplanation: 'Contract lacks adequate market maker open interest or daily trading volume.',
-        },
-        {
-          id: 'delta-outside',
-          label: 'Delta Outside Range (0.30 – 0.70)',
-          symbols: deltaRejects,
-          ...calcSubRule(deltaRejects, 0.13, stage4Count, scanned),
-          ruleExplanation: 'Strike is either too far OTM (low delta) or deep ITM (capital inefficient).',
-        },
-        {
-          id: 'iv-elevated',
-          label: 'IV Rank Elevated / Ceiling Exceeded',
-          symbols: ivRejects,
-          ...calcSubRule(ivRejects, 0.08, stage4Count, scanned),
-          ruleExplanation: 'Implied volatility rank exceeds ceiling (>70%), making option purchase too costly.',
-        },
-      ],
+      subRules: (() => {
+        const metrics = calcSubRules([
+          { symbols: spreadRejects, fallbackRatio: 0.48 },
+          { symbols: liquidityRejects, fallbackRatio: 0.31 },
+          { symbols: deltaRejects, fallbackRatio: 0.13 },
+          { symbols: ivRejects, fallbackRatio: 0.08 },
+        ], stage4Count, scanned);
+        return [
+          {
+            id: 'spread-too-wide',
+            label: 'Spread Too Wide (> 15% of Mid)',
+            symbols: spreadRejects,
+            ...metrics[0],
+            ruleExplanation: 'Bid-ask spread exceeds 15% of the mid-price, risking severe execution slippage.',
+          },
+          {
+            id: 'low-liquidity',
+            label: 'Low Liquidity (OI < 500 or Vol < 50)',
+            symbols: liquidityRejects,
+            ...metrics[1],
+            ruleExplanation: 'Contract lacks adequate market maker open interest or daily trading volume.',
+          },
+          {
+            id: 'delta-outside',
+            label: 'Delta Outside Range (0.30 – 0.70)',
+            symbols: deltaRejects,
+            ...metrics[2],
+            ruleExplanation: 'Strike is either too far OTM (low delta) or deep ITM (capital inefficient).',
+          },
+          {
+            id: 'iv-elevated',
+            label: 'IV Rank Elevated / Ceiling Exceeded',
+            symbols: ivRejects,
+            ...metrics[3],
+            ruleExplanation: 'Implied volatility rank exceeds ceiling (>70%), making option purchase too costly.',
+          },
+        ];
+      })(),
     },
   ];
 
@@ -371,6 +427,10 @@ export function parsePipelineDiagnostics(
   }
 
   // Construct asciiTree
+  const stage5Line = stage5Count > 0
+    ? `\n│\n├── [−${stage5Count}] Direction / Shortlist / Other (Left: ${leftAfterStage4 - stage5Count})\n│   ${directionCount > 0 ? `├── Direction Conviction: ${directionCount}\n│   ` : ''}${shortlistCount > 0 ? `├── Shortlist Cap: ${shortlistCount}\n│   ` : ''}${unmeasuredCount > 0 ? `├── Direction Unmeasured: ${unmeasuredCount}\n│   ` : ''}${otherCount > 0 ? `└── Other: ${otherCount}` : ''}`
+    : '';
+
   const asciiTree = `Universe (${scanned})
 │
 ├── [−${stage1Count}] Data & Filters (Left: ${leftAfterStage1}) · ${stages[0].pctOfTotal}% ${stages[0].isBottleneck ? '<-- [PRIMARY BOTTLENECK]' : ''}
@@ -393,7 +453,7 @@ export function parsePipelineDiagnostics(
 │   ├── Spread Too Wide (ask-bid / mid > 15%): ${stages[3].subRules[0].count}
 │   ├── Low Liquidity (OI < 500 or Volume < 50): ${stages[3].subRules[1].count}
 │   ├── Delta Outside Range (< 0.30 or > 0.70): ${stages[3].subRules[2].count}
-│   └── IV Elevated / IV Rank Ceiling: ${stages[3].subRules[3].count}
+│   └── IV Elevated / IV Rank Ceiling: ${stages[3].subRules[3].count}${stage5Line}
 │
 └── Final Candidates: ${candidatesCount} Survivor${candidatesCount !== 1 ? 's' : ''}`;
 

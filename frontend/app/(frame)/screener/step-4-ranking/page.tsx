@@ -218,7 +218,7 @@ export default function Step4Page() {
 
   if (!selected) {
     const hasRun = candidates !== undefined;
-    const droppedCount = rejected?.length ?? pipeline?.scanned ?? 0;
+    const droppedCount = pipeline ? pipeline.scanned - (candidates?.length ?? 0) : (rejected?.length || 0);
     return (
       <div className={styles.main}>
         <div className={styles.stepHeader}>
@@ -293,7 +293,7 @@ export default function Step4Page() {
               onClick={() => setInspectorOpen(true)}
               title="Open Pipeline Root-Cause Inspector"
             >
-              🔍 Filter Breakdown ({rejected?.length ?? (pipeline ? pipeline.scanned - watchlist.length : 0)} Filtered)
+              🔍 Filter Breakdown ({pipeline ? pipeline.scanned - watchlist.length : (rejected?.length || 0)} Filtered)
             </button>
             <Link href="/validation" className={styles.exportBtn}>
               Validation
