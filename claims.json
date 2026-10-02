@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/youthful-carson-82x23x",
-      "claimed_at": "2026-10-02T04:54:28Z",
-      "expires_at": "2026-10-02T08:33:14Z",
-      "note": "split into 3 (Kenneth); piece 1 skip-on-proof, drop stuck head at once",
-      "task": "WATCH-RESEND-HEAD-OF-LINE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/focused-wright-rh1oy6",
       "claimed_at": "2026-10-02T05:39:44Z",
       "expires_at": "2026-10-02T08:39:44Z",
