@@ -51,8 +51,14 @@ class GitError(RuntimeError):
 
 def git(*args: str, input: str | None = None, check: bool = True,
         env: dict | None = None) -> subprocess.CompletedProcess:
-    p = subprocess.run(["git", *args], input=input, capture_output=True,
-                       text=True, env=env, timeout=60)
+    # Bytes in, bytes out. With text=True, Windows rewrites "\n" as "\r\n" on
+    # stdin, so mktree names the file "claims.json\r" and every reader then
+    # sees an empty ledger (and the next write drops everybody's claims).
+    p = subprocess.run(["git", *args],
+                       input=None if input is None else input.encode("utf-8"),
+                       capture_output=True, env=env, timeout=60)
+    p.stdout = p.stdout.decode("utf-8", "replace")
+    p.stderr = p.stderr.decode("utf-8", "replace")
     if check and p.returncode != 0:
         raise GitError(f"git {' '.join(args)}: {p.stderr.strip()}")
     return p
@@ -86,10 +92,32 @@ def fetch() -> str | None:
 def load(commit: str | None) -> dict:
     if commit is None:
         return {"claims": []}
-    p = git("show", f"{commit}:{FILE}", check=False)
-    if p.returncode != 0:
-        return {"claims": []}
-    return json.loads(p.stdout)
+    # An unfixed Windows client names the file "claims.json\r"; read it
+    # anyway. Never treat an unreadable ledger as empty: the next write would
+    # then erase every other session's claims.
+    repair = (f"repair by hand: re-commit the newest readable {FILE} from "
+              f"`git log {REMOTE}/{BRANCH}` on top of {commit[:8]} and push")
+    blob = None
+    for e in git("ls-tree", "-z", commit).stdout.split("\0"):
+        meta, sep, name = e.partition("\t")
+        if sep and name in (FILE, FILE + "\r") and meta.split()[1] == "blob":
+            blob = meta.split()[2]
+            if name == FILE:
+                break
+    if blob is None:
+        raise GitError(f"{FILE} missing from claims commit {commit[:8]}; {repair}")
+    try:
+        data = json.loads(git("cat-file", "blob", blob).stdout)
+        claims = data["claims"]
+        assert isinstance(claims, list)
+        for c in claims:
+            for k in ("task", "branch", "claimed_at", "expires_at"):
+                assert isinstance(c[k], str)
+            parse(c["claimed_at"]), parse(c["expires_at"])
+    except (ValueError, KeyError, TypeError, AssertionError) as e:
+        raise GitError(f"{FILE} in claims commit {commit[:8]} is not a valid "
+                       f"ledger ({type(e).__name__}: {e}); {repair}")
+    return data
 
 
 def write(parent: str | None, data: dict, message: str) -> bool:
@@ -97,6 +125,11 @@ def write(parent: str | None, data: dict, message: str) -> bool:
     body = json.dumps(data, indent=2, sort_keys=True) + "\n"
     blob = git("hash-object", "-w", "--stdin", input=body).stdout.strip()
     tree = git("mktree", input=f"100644 blob {blob}\t{FILE}\n").stdout.strip()
+    # Last line of defence: never push a tree whose only entry is not exactly
+    # claims.json (any newline translation would make readers see no ledger).
+    names = git("ls-tree", "-z", "--name-only", tree).stdout
+    if names != FILE + "\0":
+        raise GitError(f"refusing to push a claims tree named {names!r}")
     # A fixed identity keeps personal names/emails out of the ledger and works
     # in containers with no user.name configured.
     env = {**os.environ,
@@ -159,8 +192,13 @@ def cmd_list(a) -> int:
     except (GitError, subprocess.TimeoutExpired) as e:
         print(f"[claims] could not read claims ({str(e).splitlines()[0][:120]})")
         return 0 if a.quiet else 1
+    try:
+        data = load(head)
+    except (GitError, subprocess.TimeoutExpired) as e:
+        print(f"[claims] ledger unreadable ({str(e).splitlines()[0][:200]})")
+        return 0 if a.quiet else 1
     at = now()
-    claims = sorted(active(load(head).get("claims", []), at), key=lambda c: c["claimed_at"])
+    claims = sorted(active(data.get("claims", []), at), key=lambda c: c["claimed_at"])
     if not claims:
         if not a.quiet:
             print("[claims] no active claims")
@@ -244,6 +282,13 @@ def cmd_release(a) -> int:
 
 
 def main() -> int:
+    # A Windows OEM console (cp437/cp850/cp932) cannot encode the em dashes in
+    # --help and in the output; replace them rather than die mid-command.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except AttributeError:
+            pass
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
 

@@ -63,7 +63,7 @@ from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_even
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
-from app.scoring.contract_validator import effective_contract_overrides, effective_dte_limits, is_finite_rule_value
+from app.scoring.contract_validator import contract_caution_threshold, effective_contract_overrides, effective_dte_limits, is_finite_rule_value
 from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
@@ -860,13 +860,29 @@ async def _process_symbol(
     valid_scores = [(s, c) for s, c in scored if s.status != "REJECT"]
     if not valid_scores:
         reason_counts: dict[str, int] = {}
+        best_low_score: int | None = None
         for s, _ in scored:
             for r in s.reject_reasons:
                 reason_counts[r] = reason_counts.get(r, 0) + 1
+            # A contract that clears every hard rule but scores below the
+            # caution band is REJECT with no reason of its own; unnamed, a
+            # chain of them read as a bare "all contracts rejected". Found
+            # while checking open question #8 (Step 3's liquidity floors at 0):
+            # the floors do reach validate_contract on main as of 2026-10-02,
+            # but the soft Preferred floors can still sink a thin contract's
+            # score. #8's original report (hard-reason counts unchanged with
+            # both floors at 0) did not reproduce and stays unexplained.
+            if not s.reject_reasons:
+                reason_counts["contract_score_below_caution"] = (
+                    reason_counts.get("contract_score_below_caution", 0) + 1
+                )
+                best_low_score = s.score if best_low_score is None else max(best_low_score, s.score)
         if reason_counts:
             detail = ", ".join(
                 f"{r}({n})" for r, n in sorted(reason_counts.items(), key=lambda x: -x[1])
             )
+            if best_low_score is not None:
+                detail += f"; best contract score {best_low_score} < caution {contract_caution_threshold()}"
             reject_reason = f"contracts rejected: {detail}"
         else:
             reject_reason = "all contracts rejected"
