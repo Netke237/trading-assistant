@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/pipeline-inspector-fixes",
       "claimed_at": "2026-10-02T17:50:01Z",
-      "expires_at": "2026-10-02T20:50:01Z",
+      "expires_at": "2026-10-02T21:37:26Z",
       "note": "Fix audit findings in options pipeline root-cause inspector",
       "task": "PIPELINE-INSPECTOR-FIXES"
     }
