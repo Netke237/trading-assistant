@@ -380,3 +380,61 @@ R2-8 the quote paths are cited correctly (§0). R2-9 the predicate-equivalence c
 one short reason string (§2.1). R2-11 the type-name tables (§2.2). R2-12 the fixture path (§4). R2-13
 `qty_saved_as_<N>` (§3.1). R2-14 F2 at a $0.01 mid (§3.2). R2-15 the fixture is trimmed to the boundary
 neighbourhood (§4). R2-16 `|STOCK` matching (§1).
+
+## 9. Plan round 3 findings — OPEN, to apply in v4 (round cap reached; stopped for Kenneth)
+
+Round 3 (fresh reviewer, against v3 at abb0454): NOT clean, 2 blocking / 7 should-fix / 9 nits. Every numeric
+claim in v3 reproduced. The defects are in v3's additions.
+
+Blocking:
+- **R3-B1.** The backend "run once" marker is erased. `alert_notifier._save_dedup` (:83) writes only
+  `{'fired','first_seen'}` and `_load_dedup` (:107-113) reads only those, so the next save drops
+  `_migrations` and the reset re-runs on every restart, re-emailing. Fix: a module-level `_migrations`
+  set that load reads and save always writes. Check and set it under `_fired_lock`, and mark it done only
+  when `_save_dedup()` returns True. Test: reset → notify (save) → reload → the marker is present.
+- **R3-B2.** The frontend version bump re-enables STRUCTURAL_STOP_BREACHED. `alertStore.ts:172` backfills it
+  whenever `_version < ALERT_STORE_VERSION` (`types/domain.ts:1076-1080` warns about this). Separately,
+  `pendingShortStopReset` never survives: `merge` (:338-357) and `partialize` (:332-337) copy only four
+  fields. Fix: gate the backfill on `_version < 3`; set the flag only when `_version < 4`; add the flag to
+  `partialize` and to `merge` (`ps.pendingShortStopReset ?? false`). Test through
+  `useAlertStore.persist.rehydrate()` with a v3 blob that has STRUCTURAL removed.
+
+Should-fix:
+- **R3-S1.** A third scan caller: `dashboard/page.tsx:141-144` (mount/deps effect) runs first. Call the reset
+  at all three call sites, or inside `scanPortfolio`/`addToast` keyed on the flag.
+- **R3-S2.** `stopSide` never reaches `/api/alerts/notify`. `alertStore.ts:79-111` `notifyBackend` and the
+  `addToast` call (:256-267) omit it. The request model is `AlertNotifyRequest` in `routers/alerts.py:63-75`,
+  not schemas. Better: derive the side server-side from the DB position, as the endpoint already does for
+  symbol, contract and direction (:96-101).
+- **R3-S3.** `qty_error` can be free text (`portfolio.py:251, 258, 281-285`), so `rejectionMessage`'s token mapping
+  hides it. Join segments with `" | "`, map each segment by its tokens, and fall back to the raw segment. Test
+  each free-text qty error.
+- **R3-S4.** The separator is contradictory (§3.1 says space, §4 says `; `). Use the R3-S3 separator.
+- **R3-S5.** The label fallback is contradictory. §4's "toast without direction falls back to the position" is
+  pre-v3. Rewrite it as "unstamped row → legacy label even for a short", and drop the §0 sentence about
+  optional direction/contract.
+- **R3-S6.** The tests can't be written as named. There is no `portfolio/__tests__/page.test.tsx`;
+  `rejectionMessage`/`REJECTION_LABELS` are private in an App Router page (a named export breaks
+  `next build`); `droppedStopNote` is a closure (step-7 :550). Move them into a `lib/` module, or specify
+  render-level tests (`step-7-trade-card/__tests__/edited-fields-sync.test.tsx` pattern).
+- **R3-S7.** `premiumStopDropReason` mislabels drops. Fraction-only (`requestedDollar == null`) must be
+  `below_one_cent`, because a schema fraction is in (0, 1). An unknown saved entry (optional `entryPrice`,
+  `portfolioStore.ts:552, 1343`) gets a third value, `unknown`, with neutral wording.
+
+Nits:
+- N1: `AlertReason` lives in `lib/alertEngine.ts:49-69`, and the frontend `AlertItem` needs no `stopSide`.
+- N2: `qty_saved_as_<N>` needs a prefix rule.
+- N3: a 422 sets the `lastSyncError` banner, not a toast.
+- N4: run the backend reset only after the positions query succeeds, and state what happens with
+  `masterEnabled` false. A browser notify before the first tick sees stale keys; consider a lazy reset
+  inside `notify_alert`, or at lifespan startup.
+- N5: state the intent of copying `premiumStopPct` on an in-place refresh, given ALERT-THRESHOLD-STAMP.
+- N6: short thresholds carry float noise too (~0.7% fire 1¢ late). Test with the computed threshold, and
+  add short rows to the fixture.
+- N7: the stockDirectSend callers pass no callback, and no stock path sets a premium stop, so say "no-op".
+- N8: mark "long stock unchanged" and "Bearish option unchanged" as regression guards, not fails-on-main.
+- N9: a one-line note that the Settings "Premium stop loss" also governs shorts' rise-side stop.
+
+**Status:** three plan rounds used (1: 3B/8S/4N, 2: 0B/7S/9N, 3: 2B/7S/9N), none clean, so this is the cap.
+Kenneth decides: write v4 and build from it (the WATCH-RESEND-P1-BUILD-FROM-V4-2026-10-02 precedent), write
+v4 and run one more round, or park.

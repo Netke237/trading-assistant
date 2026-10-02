@@ -3771,7 +3771,7 @@
         ],
         "summary": "Decided 2026-10-02 (decision STOP-SEMANTICS-2026-10-02); build both: (a) a SHORT stock position's percent stop fires on a RISE of X% above entry (alertEngine.ts stock branch, today direction-blind); (b) a premium stop whose threshold entry x (1 - pct) < $0.01 is REJECTED at save on per-position saves (drawer PATCH; create falls back with a reasoned notice; AutoTradeArm warns; the Settings global is NOT refused -- decision STOP-SEMANTICS-PLAN-QUESTIONS-2026-10-02). (c) COMPOSITE-WATCH-KEYERROR closed by Kenneth.",
         "weight": "med",
-        "status": "plan v3 (docs/superpowers/plans/2026-10-02-stop-semantics-plan.md) on ccr-5fdfa0ea-jyqf7y; plan rounds 1 (3B/8S/4N) and 2 (0B/7S/9N) NOT clean, round 3 launched 2026-10-02 -- result not recorded at handoff; Kenneth answered section 6 Q1-Q5 (all recommendations). Next: record/re-run plan round 3, then build test-first."
+        "status": "plan v3 + round-3 findings (section 9) in docs/superpowers/plans/2026-10-02-stop-semantics-plan.md on ccr-5fdfa0ea-jyqf7y. Plan rounds 1 (3B/8S/4N), 2 (0B/7S/9N), 3 (2B/7S/9N) NOT clean -- round cap reached, STOPPED FOR KENNETH: v4 then build from it / v4 plus one more round / park. Kenneth answered section 6 Q1-Q5 (all recommendations). Claim released."
       },
       {
         "id": "TEST-SUITE-DECISIONS",
