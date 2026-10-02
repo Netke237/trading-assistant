@@ -136,8 +136,22 @@ def _git(*args: str) -> str | None:
 _GIT_FAILED = object()
 
 
+# A round number as this repo's subjects actually write it (STATE-PROBE-FIXES,
+# G1): "round 3", "Round-3", "rounds 6-7", "r3", "r1..r4", "r2+r3". `\bround\s+`
+# alone missed every form but the first -- 57 of 300 subjects -- and an entry
+# under-counted against "X r1..r4" rendered "No drift". Every number in a range
+# counts, so the highest is the range's end. `rN` is lower-case only: upper-case
+# R1-R9 is how plans number requirements. A false match is a false ALARM, the
+# direction this probe accepts; a missed one is silence.
+_ROUND_RE = re.compile(
+    r"(?:\b(?i:rounds?)[\s-]*|\br)\d+"
+    r"(?:\s*(?:-|–|\.\.|\+|/|&|\band\b|\bto\b)\s*(?:r|(?i:round)[\s-]*)?\d+)*"
+    r"(?![\w])"
+)
+
+
 def _round_numbers_in_branch_subjects(
-    base_ref: str | None, merged_ref: str | None = None,
+    base_ref: str | None, merged_ref: str | None = None, head: str = "HEAD",
 ) -> "tuple[int, list[str]] | None | object":
     """Highest `round N` mentioned in this branch's commit SUBJECTS.
 
@@ -153,6 +167,9 @@ def _round_numbers_in_branch_subjects(
     first-parent would also drop this branch's OWN commits that arrived by
     merging a sibling branch that has NOT reached main, and those are exactly
     the rounds an undercount hides in.
+
+    `head` is where the span ends: HEAD, or a later piece's introducing commit
+    when `_earlier_rounds_accounted` reads the span before it.
 
     WHAT IT COSTS, stated rather than discovered (round 1 of this piece):
 
@@ -193,7 +210,9 @@ def _round_numbers_in_branch_subjects(
     ref_shape = r"[0-9A-Za-z._/][0-9A-Za-z._/-]*"
     if not base_ref or not re.fullmatch(ref_shape, base_ref):
         return None
-    revs = [f"{base_ref}..HEAD"]
+    if not re.fullmatch(ref_shape, head):
+        return None
+    revs = [f"{base_ref}..{head}"]
     if merged_ref and merged_ref != base_ref:
         if not re.fullmatch(ref_shape, merged_ref):
             return None
@@ -211,7 +230,8 @@ def _round_numbers_in_branch_subjects(
     best = 0
     subjects: list[str] = []
     for line in proc.stdout.splitlines():
-        hits = [int(m.group(1)) for m in re.finditer(r"\bround\s+(\d+)", line, re.I)]
+        hits = [int(n) for m in _ROUND_RE.finditer(line)
+                for n in re.findall(r"\d+", m.group(0))]
         if not hits:
             continue
         subjects.append(line.strip())
@@ -455,48 +475,223 @@ def _target_scoped_base(base_ref: str, state: dict) -> str:
         # fall back to the full range rather than guess a boundary.
         return base_ref
 
-    out = _git("log", "--format=%H", f"{base_ref}..HEAD", "--", rel)
-    if out is None:
+    # `None` when even the newest COMMITTED state file lacks this entry -- the
+    # piece exists only in the working tree. There is then no history to scope
+    # by, so refuse to narrow rather than answer for the commits that happen to
+    # follow the newest state-file commit: invent an entry, point at it, declare
+    # 0, and the window would empty.
+    boundary = _introducing_commit(base_ref, identity, rel)
+    if boundary is None:
         return base_ref
+    # STATE-PROBE-FIXES, G3. Narrowing drops every round before `boundary` from
+    # this check, and nothing else read them: committing a new entry and
+    # pointing at it silenced the previous piece's undercount AND its cap. So
+    # narrow only when those rounds are accounted for; otherwise this target
+    # answers for them, which is loud.
+    if not _earlier_rounds_accounted(base_ref, boundary, state, rel):
+        return base_ref
+    return boundary
 
-    shas = out.split()          # newest first
-    truncated = len(shas) > _POINTER_SCAN_LIMIT
-    boundary: str | None = None
 
-    for sha in shas[:_POINTER_SCAN_LIMIT]:
-        blob = _git("show", f"{sha}:{rel}")
-        if blob is None:
+def _blob_ids(specs: list[str]) -> dict[str, str | None] | None:
+    """`<commit>:<path>` -> blob id, or None where that commit has no such
+    file. One `git cat-file --batch-check` for all of them. None on failure."""
+    try:
+        proc = subprocess.run(
+            ["git", "cat-file", "--batch-check"], cwd=ROOT, capture_output=True,
+            text=True, timeout=10, input="".join(f"{s}\n" for s in specs),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = proc.stdout.splitlines()
+    if proc.returncode != 0 or len(lines) != len(specs):
+        return None
+    return {
+        spec: (line.split()[0] if line.split()[1:2] == ["blob"] else None)
+        for spec, line in zip(specs, lines)
+    }
+
+
+def _introducing_commit(base_ref: str, identity: tuple[str, str], rel: str,
+                        head: str = "HEAD") -> str | None:
+    """The commit in `base_ref..head` that INTRODUCED this entry: it carries
+    the entry and none of its parents do. None when no commit in range does
+    (the entry predates the branch, or exists only in the working tree).
+
+    BY ANCESTRY, NOT DATE (STATE-PROBE-FIXES, G2). It used to walk `git log`'s
+    date order and stop at the first commit lacking the entry, taking the one
+    walked just before it. Merging a sibling branch whose later-dated
+    state-file commit lacked the entry put that commit first in the walk, so
+    the MERGE became the boundary and the window emptied: four rounds against
+    one declared, silent. A parent is a fact of the graph, so asking each
+    commit's own parents cannot be reordered by a merge.
+
+    Newest first in topological order, so a dropped-and-restored entry still
+    resets to the restoring commit -- the accepted hole the round record names.
+    Past `_POINTER_SCAN_LIMIT` commits, falls back to the oldest commit walked
+    that CONFIRMED carries the entry rather than widening to the full range.
+    """
+    out = _git("log", "--topo-order", "--format=%H %P", f"{base_ref}..{head}", "--", rel)
+    if out is None:
+        return None
+    rows = [line.split() for line in out.splitlines() if line.strip()]
+    truncated = len(rows) > _POINTER_SCAN_LIMIT
+    rows = rows[:_POINTER_SCAN_LIMIT]
+    specs = sorted({f"{sha}:{rel}" for row in rows for sha in row})
+    oids = _blob_ids(specs)
+    if oids is None:
+        return None
+    parsed: dict[str, object] = {}
+
+    def rounds_at(sha: str):
+        oid = oids.get(f"{sha}:{rel}")
+        if oid is None:
+            return _TARGET_ABSENT       # no state file at all in that commit
+        if oid not in parsed:
+            blob = _git("cat-file", "-p", oid)
+            parsed[oid] = (_TARGET_UNREADABLE if blob is None
+                           else _declared_rounds_at(blob, identity))
+        return parsed[oid]
+
+    oldest_carrier: str | None = None
+    for sha, *parents in rows:
+        here = rounds_at(sha)
+        if here is _TARGET_ABSENT or here is _TARGET_UNREADABLE:
             continue
-        rounds = _declared_rounds_at(blob, identity)
-        if rounds is _TARGET_UNREADABLE:
-            continue            # not a boundary to trust
-        if rounds is _TARGET_ABSENT:
-            # The piece does not exist yet here, so the boundary is the commit
-            # that INTRODUCED it -- `boundary`, the oldest one walked that
-            # still carries it -- and not this one. Round 2 finding 1 again in
-            # a new key: opening a piece while recording the PREVIOUS piece's
-            # last round is one commit in this repo's style ("Record round 2
-            # clean; open piece two"), so including it would hand a brand-new
-            # piece the round number of the piece before it.
-            #
-            # `boundary` is None when even the newest COMMITTED state file
-            # lacks this entry -- the piece exists only in the working tree.
-            # There is then no history to scope by, so refuse to narrow rather
-            # than answer for the commits that happen to follow the newest
-            # state-file commit. Narrowing there would be a fresh escape of
-            # exactly the family this rework closed: invent an entry, point at
-            # it, declare 0, and the window empties.
-            return boundary if boundary is not None else base_ref
-        boundary = sha          # confirmed to carry this entry
+        oldest_carrier = sha
+        # An unreadable parent is not proof of absence, so it is not a
+        # boundary to trust: the walk goes on and the window stays wider.
+        if all(rounds_at(p) is _TARGET_ABSENT for p in parents):
+            return sha
+    return oldest_carrier if truncated else None
 
-    if truncated and boundary is not None:
-        # The window ran out before the count was seen to be lower, so the
-        # boundary may lie beyond it. Fall back to the oldest commit CONFIRMED
-        # to carry the declared count rather than widening to the full range,
-        # which would be the pre-fix false positive rather than a safe
-        # degradation.
-        return boundary
-    return base_ref
+
+def _earlier_rounds_accounted(base_ref: str, boundary: str, state: dict,
+                              rel: str) -> bool:
+    """Are the rounds BEFORE `boundary` -- which narrowing drops from the
+    active target's check -- answered for by the piece they belonged to? See
+    `_earlier_span_verdict`."""
+    return _earlier_span_verdict(base_ref, boundary, state, rel)[0]
+
+
+def _earlier_span_verdict(base_ref: str, boundary: str, state: dict,
+                          rel: str) -> tuple[bool, str | None]:
+    """(accounted, problem) for the rounds before `boundary`.
+
+    STATE-PROBE-FIXES, G3. Walk back one piece at a time. The piece a span
+    belonged to is whatever `active_phase` resolved to in the commit just
+    before that span's end (its first parent); its span starts at that piece's
+    own introducing commit, or the base. It is accounted for when the CURRENT
+    file still carries that piece, declares at least the span's highest round,
+    and -- at or past the hard cap -- is clean. That is exactly the check the
+    piece would have faced had the pointer stayed on it, so opening a new piece
+    can no longer switch it off.
+
+    Not accounted means the caller does not narrow, so the active target
+    answers for the whole branch: a false ALARM at worst, never silence. When
+    the previous piece itself is what fails (undercount or cap), `problem`
+    names it, because the active target's banner would prescribe recording a
+    number on the wrong entry. A span whose pointer resolved to nothing, or
+    whose piece is no longer in the file, has no one else to name; the active
+    target answers for it, and if it counts those rounds that is honest.
+    """
+    # Ends: each step's `start` is an introducing commit found among the
+    # ancestors of `end^`, so it is strictly older than `end`, and the walk
+    # stops at the base. `seen` guards it anyway.
+    end = boundary
+    seen: set[str] = set()
+    while end not in seen:
+        seen.add(end)
+        prev: tuple[str, str] | None = None
+        blob = _git("show", f"{end}^:{rel}")
+        if blob is not None:
+            try:
+                old = json.loads(blob)
+            except ValueError:
+                old = None
+            if isinstance(old, dict):
+                prev = _target_identity(old)
+        start = base_ref
+        if prev is not None:
+            start = _introducing_commit(base_ref, prev, rel, head=f"{end}^") or base_ref
+        evidence = _round_numbers_in_branch_subjects(start, base_ref, head=end)
+        if evidence is _GIT_FAILED:
+            return False, None
+        if evidence is not None:
+            entry = _entry_for(state, prev) if prev is not None else None
+            if entry is None:
+                return False, None
+            declared = _whole_number(entry.get("audit_rounds"))
+            span_max, subjects = evidence
+            shown = "; ".join(subjects[:3])
+            label = f"'{prev[1]}'"
+            if declared is None or declared < span_max:
+                return False, (
+                    f"Audit bookkeeping: {label} -- the target BEFORE the current "
+                    f"one -- declares {entry.get('audit_rounds')!r} round(s), but "
+                    f"its span of this branch reaches round {span_max}. Opening a "
+                    f"new piece does not clear an earlier undercount; record the "
+                    f"count on {label}. Subjects: {shown}"
+                )
+            if span_max >= UNPHASED_FAIL_ROUND and entry.get("audit_clean") is not True:
+                return False, (
+                    f"Audit bookkeeping: {label} -- the target BEFORE the current "
+                    f"one -- ran to round {span_max} on this branch, NONE of them "
+                    f"clean. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND}: STOP "
+                    f"AUDITING AND TELL KENNETH. Opening a new piece does not clear "
+                    f"it; going clean or merging does. Subjects: {shown}"
+                )
+        if start == base_ref:
+            return True, None
+        end = start
+    return False, None
+
+
+def _earlier_span_problem(base_ref: str, state: dict) -> str | None:
+    """The previous piece's own failure, if narrowing to the active target
+    would have dropped it (G3). Recomputes the boundary the way
+    `_target_scoped_base` does; it only runs when the branch carries rounds."""
+    identity = _target_identity(state)
+    if identity is None:
+        return None
+    try:
+        rel = STATE.relative_to(ROOT).as_posix()
+    except ValueError:
+        return None
+    boundary = _introducing_commit(base_ref, identity, rel)
+    if boundary is None:
+        return None
+    return _earlier_span_verdict(base_ref, boundary, state, rel)[1]
+
+
+def _entry_for(state: dict, identity: tuple[str, str]) -> dict | None:
+    """The entry `identity` names in `state`, or None."""
+    pool, key = identity
+    entries = state.get("phases" if pool == "phase" else "already_shipped", [])
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("id" if pool == "phase" else "name") == key:
+            return entry
+    return None
+
+
+def _whole_number(raw) -> int | None:
+    """`audit_rounds` read as a whole number in any spelling JSON allows (3,
+    3.0, "3"); None when it is not one. A missing count is 0."""
+    if raw is None:
+        return 0
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float) and raw.is_integer():
+        return int(raw)
+    # isdecimal, not isdigit: '²' passes isdigit and int('²') raises, a
+    # traceback in the SessionStart hook (open question P6 UNIT D round 7).
+    if isinstance(raw, str) and raw.strip().isdecimal():
+        return int(raw.strip())
+    return None
 
 def _pointer_target(state: dict) -> tuple[dict | None, str]:
     """Resolve `active_phase` against BOTH pools that carry audit counts.
@@ -593,6 +788,11 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     git_max, subjects = evidence
     shown = "; ".join(subjects[:3])
 
+    # G3: a previous piece that narrowing dropped speaks for itself, by name.
+    earlier = _earlier_span_problem(base_ref, state)
+    if earlier is not None:
+        return "drift", earlier
+
     target, label = _pointer_target(state)
 
     if target is None:
@@ -634,19 +834,7 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     # a non-numeric count get its warning. Deliberately ONE cap check, not a
     # copy here: STATE-PROBE-TARGET-SCOPING's verify pattern anchors on it.
     raw = target.get("audit_rounds")
-    declared: int | None
-    if raw is None:
-        declared = 0
-    elif isinstance(raw, bool):
-        declared = None
-    elif isinstance(raw, int):
-        declared = raw
-    elif isinstance(raw, float) and raw.is_integer():
-        declared = int(raw)
-    elif isinstance(raw, str) and raw.strip().isdigit():
-        declared = int(raw.strip())
-    else:
-        declared = None
+    declared = _whole_number(raw)
     if declared is not None and git_max > declared:
         return "drift", (
             f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
@@ -683,7 +871,10 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     # Acknowledging it is deliberately NOT a third route -- an acknowledgement
     # flag would be one more editable field that switches the check off, which
     # is the exact shape of the three findings the scoping rework just closed.
-    if git_max >= UNPHASED_FAIL_ROUND and not target.get("audit_clean"):
+    #
+    # `is not True`, not `not ...` (STATE-PROBE-FIXES, G4): the string "false"
+    # is truthy, so a hand-typed quote switched the cap off.
+    if git_max >= UNPHASED_FAIL_ROUND and target.get("audit_clean") is not True:
         return "drift", (
             f"Audit bookkeeping: {label} -- the active target -- declares {declared} "
             f"round(s), NONE of them clean, and this branch still carries round "
@@ -729,7 +920,8 @@ def main() -> int:
                 f"{'BUILT' if actual_shipped else 'NOT BUILT'} — {detail}"
             )
 
-        rounds, clean = ph["audit_rounds"], ph["audit_clean"]
+        # `is True` (G4): the string "false" is truthy and rendered "clean after N".
+        rounds, clean = ph["audit_rounds"], ph["audit_clean"] is True
         if declared_shipped and not clean:
             unaudited.append(f"Phase {ph['id']} ({ph['name']}) — {rounds} round(s) run, none clean")
 
@@ -757,7 +949,7 @@ def main() -> int:
     # and the next session planned an audit around a list that was missing it.
     shipped_items = state.get("already_shipped", [])
     for item in shipped_items:
-        if not item.get("audit_clean"):
+        if item.get("audit_clean") is not True:
             rounds = item.get("audit_rounds", 0)
             unaudited.append(
                 f"Shipped: {item['name']} — {rounds} round(s) run, none clean"
@@ -790,7 +982,7 @@ def main() -> int:
         if shipped_items:
             print(f"\n  {BOLD}{'':<2} {'ALREADY SHIPPED':<42} {'STATUS':<13} {'AUDIT':<22}{RESET}")
             for item in shipped_items:
-                clean = item.get("audit_clean")
+                clean = item.get("audit_clean") is True
                 rounds = item.get("audit_rounds", 0)
                 if clean:
                     audit = f"{GREEN}clean{RESET}"
