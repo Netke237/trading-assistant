@@ -38,6 +38,113 @@ Pre-freeze, Position parameters for Swing, no C- or A-scans. Regime: conviction 
 15.4, MIXED. Stability **missing** (never captured). Its IV rows (`REC-20260907-7FB87376`,
 `REC-20260918-74674A41`) are excluded from every IV rule by scan id.
 
+## Measurement days
+
+### Day 2026-10-01
+
+- Freeze tag / commit: `meas-freeze-1` / `61a03e49`
+- Valid day? (plan §5) **yes**. All eight base scans ran on the tag, none INVALID or
+  `late_for_comparison` (O1 13:00:45 ET, last base S4 ended 14:06 ET).
+- Manifest `core_status`: `core_complete` (status `ivabs_complete`)
+- Manifest flags / `day_invalid` / `snapshot_failed`: none / none / none. No scan carries a flag.
+- Day regime (position `/api/regime` at start): conviction **+20** · **Choppy** · **Fragile** · VIX **17.0** · **MIXED**
+  (hmm Bull, alignment Diverging, overall PASS)
+- `strategy_params.yaml` sha256 (start): `6e60d95a…a764`
+- `sp500.csv` sha256 (core start / end): `6d7eae00…60e3` / same. Other days: none yet [U1]
+- Config health pid start / end: core 12568 / 12568; A-block 19880 / 19880 (the stripped-credentials backend)
+- C-scans skipped (`skipped:time`): none
+- Pairs excluded (`pair_excluded`): none
+- Truncated scans: none
+- A-block run today? **yes**, usable (`ivabs_unusable_because`: [])
+
+**Direction floors (S-scans; measured only, plan §6 [v6 R3])**
+
+| Horizon | Dir | scanned | failed_history | failed_score | entered | failed_direction_unmeasured | measured entrants | failed_direction | rate | candidates |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Swing | Bearish (S1) | 518 | 2 | 171 | 345 | 0 | 345 | 7 | 2.0% | 0 |
+| Swing | Bullish (S2) | 518 | 2 | 395 | 121 | 0 | 121 | 4 | 3.3% | 3 |
+| Position | Bearish (S3) | 518 | 2 | 173 | 343 | 0 | 343 | 12 | 3.5% | 1 |
+| Position | Bullish (S4) | 518 | 2 | 328 | 188 | 0 | 188 | 28 | 14.9% | 9 |
+
+Rejected trend scores: S1 {0: 5, 15: 2}; S2 {0: 3, 15: 1}; S3 {0: 2, 15: 2, 30: 8}; S4 {0: 1, 15: 2, 30: 25}.
+Bearish − bullish gap (information only): Swing −1.3 pt, Position −11.4 pt.
+O-scan direction removals: `direction_conviction:` 0 and `direction_conviction_unmeasured:` 0 on
+O1–O4 (min trend 40 Position, 30 Swing).
+
+Floor-rule note for the last-day reading: S1's bearish rate is 2.03%, just above the < 2% step-up
+line, and S1 produced 0 candidates. S3 is 3.5% with 1 candidate. One day decides nothing (§6 needs
+2 counted days per horizon).
+
+**Confidence (C1 / C1b):**
+- C1 (bearish, vs O1): 0 attributed, 0 drift. C1 returned the same single name as O1.
+- C1b (bullish, vs O2): 1 attributed, passes the quality bar: **AMD** (CAUTION, stop cost CAUTION,
+  contractScore 67 ≥ base median 58.5; base breakdown confidence 32, fundamentals 95). 0 drift.
+- S-scan confidence-gate rejects ("would clear at 30 / 25"): S1 2 rejects (0 / 0), S2 1 (0 / 1),
+  S3 1 (0 / 0), S4 0.
+
+**min_stock_score (C5 / C5b):** every added name lay in [35, 55); drift (≥ 55): 0 on both.
+- C5 (bearish, vs O1; quality bar contractScore ≥ 56): 4 attributed, **2 quality**: CSCO
+  (stockScore 53, cs 64) and NFLX (38, 65). Below the bar: CEG (50, cs 52) and CPRT (50, cs 47).
+- C5b (bullish, vs O2; bar ≥ 58.5): 9 attributed, **5 quality**: NOW (54, cs 66), MSFT (48, 64),
+  INTC (43, 68), AAPL (43, 63) and GOOGL (38, 67). Below the bar: PANW (53, 48), APH (44, 50),
+  LRCX (42, 47) and XOM (38, 48).
+- `contract_rules` echo: C5 / C5b `{"min_stock_score": 35}` ✓.
+
+**Liquidity (C6, report only):**
+- 4 attributed (bearish, vs O1), 1 passes the quality bar.
+- All four trade below the frozen `min_volume` 50, so none is drift.
+
+| Symbol | Volume | OI | Spread % | contractScore | Quality |
+|---|---|---|---|---|---|
+| LULU | 4 | 2853 | 7.4 | 58 | yes |
+| ALB | 8 | 210 | 8.7 | 52 | no |
+| ROST | 0 | 2360 | 10.5 | 48 | no |
+| MDT | 2 | 919 | 15.2 | 48 | no |
+
+- `contract_rules`: C6 shows all four keys at 0 ✓. O1–O4, C1, C1b, A1 and A2 show `{}` ✓.
+- No C6 reject reason contains `volume_too_low` or `open_interest_too_low`. Every C6 candidate echoes
+  `preferred_volume_min` / `preferred_oi_min` 0.
+- `override_not_applied:liquidity`: **no**.
+
+**min_mult:** not shown yet. The table is gated on two valid days in different regimes (§5), and this
+day's regime line is above. Inputs recorded in the funnel rows:
+
+| Scan | Candidates | No sentiment | Conviction % values | Stability |
+|---|---|---|---|---|
+| O1 | 1 | 1 | — | — |
+| O2 | 4 | 0 | 33, 50, 67, 100 | 3 Fragile, 1 Stable |
+| O4 | 3 | 0 | 0, 14, 64 | 2 Fragile, 1 Stable |
+| S2 | 3 | 1 | −9, 0 | 2 Fragile |
+| S3 | 1 | 0 | 50 | 1 Fragile |
+| S4 | 9 | 0 | −67, −20, −20, 0, 11, 17, 25, 33, 43 | 9 Fragile |
+
+**IV (rank basis, untruncated O1–O4):** "not used: truncated": none.
+- Deduplicated primary rank rows:
+
+| Horizon | Direction | Rows | Names (rank `stock_iv`) |
+|---|---|---|---|
+| Swing | Bullish | 3 | MU 14.2, AMD 27.7, SMCI 48.3 |
+| Swing | Bearish | 0 | O3 had no candidates |
+| Position | Bullish | 4 | MU 14.2, PFE 33.6, HPE 46.1, MRNA 65.6 |
+| Position | Bearish | 1 | WMT 31.7 |
+
+  Totals: Swing 3, Position 5, against a floor of ≥ 30 per horizon.
+- `iv_rank_too_high` (names whose reason contains it): O1 3, O2 11, O3 0, O4 3.
+- Spread build rate: O1 0/1, O2 0/4, O3 0/0, O4 0/3.
+- Line counts (below / at or above) at 40 / 50 / 60:
+  - O1: 1/0 at every line.
+  - O2: 2/2 at 40, 3/1 at 50, 3/1 at 60. Moving the line to 40 flips 1 name.
+  - O4: 2/1 at 40, 3/0 at 50, 3/0 at 60. Moving the line to 40 flips 1 name.
+
+**A-block (usable):**
+- A1: 2 absolute rows, ROST 31.5 and WMT 27.2. Both sit below 40 / 50 / 60.
+- A2: 0 candidates (as O3).
+- Structures built: none (0/2 spread build).
+- ATM cross-check pair: WMT, ATM absolute 27.2 vs O1's picked-contract `detail_iv_abs` 28.3
+  (rank 31.7).
+
+---
+
 ## Day template (copy once per measurement day)
 
 ### Day <YYYY-MM-DD>[-<run-tag>]
