@@ -100,7 +100,7 @@ can only be met by a quote of 0, which both engines treat as "no quote" (`> 0` g
 - `alertEngine.ts` PREMIUM_STOP block: compute `shortStock = isStock && isBearish`;
   `threshold = percentStopThresholdPrice(entry, pct, shortStock)`;
   `hit = entry > 0 && currentPrice > 0 && (shortStock ? currentPrice >= threshold : currentPrice <= threshold)`.
-  Reason text for a short: `Stock stop — SYM up N%` (N = −pnlPct... **no**: `pnlPct` on a short. See 2.4).
+  Reason text for a short: see 2.4.
   `referenceValue: pythonRound4(threshold)` unchanged in shape.
 - `alert_generator.py` PREMIUM_STOP block: same, via `percent_stop_threshold_price(..., short_stock)` and
   `opt_price >= threshold` for a short. `threshold_price` / `reference_value` / event-log payload use the
