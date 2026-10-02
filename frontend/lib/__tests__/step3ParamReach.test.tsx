@@ -10,7 +10,6 @@
 import '@testing-library/jest-dom';
 import { render, waitFor } from '@testing-library/react';
 import { contextFromScanRequest, resultMatchesContext } from '@/lib/scanContextFromResult';
-import { NAMED_UNIVERSES } from '@/lib/universeStore';
 import { rrOverridesForPlan } from '@/lib/tradeCardOverride';
 import { missingCardContracts, withCardContract } from '@/lib/step6CardContract';
 import { useScanStore } from '@/lib/scanStore';
@@ -45,18 +44,13 @@ describe('contextFromScanRequest', () => {
     });
   });
 
-  // Never 'Custom': the Stocks scan posts [context.universe], and a ticker
-  // called "Custom" would be scanned (round 1 BLOCKING).
-  it('a list of symbols (Custom or Watchlist) gets the null-context default, SP500', () => {
-    expect(contextFromScanRequest({ ...RC, universe: ['AAPL', 'MSFT'] })?.universe).toBe('SP500');
-    expect(contextFromScanRequest({ ...RC, universe: ['AAPL'] })?.universe).toBe('SP500');
-    expect(contextFromScanRequest({ ...RC, universe: [] })?.universe).toBe('SP500');
-    expect(contextFromScanRequest({ ...RC, universe: ['Custom'] })?.universe).toBe('SP500');
-  });
-
-  it('a named sector universe keeps its name', () => {
-    expect(contextFromScanRequest({ ...RC, universe: ['SECTOR:XLE'] })?.universe).toBe('SECTOR:XLE');
-  });
+  // Never from the result: the Stocks scan posts [context.universe], so
+  // 'Custom' would be scanned as a ticker (round 1) and 'NDX100' would move
+  // every later Stocks scan to NDX100 (round 2). Always the null default.
+  it.each([[['AAPL', 'MSFT']], [['AAPL']], [[]], [['Custom']], [['NDX100']], [['SECTOR:XLE']]])(
+    'universe %j restores as SP500', (universe) => {
+      expect(contextFromScanRequest({ ...RC, universe })?.universe).toBe('SP500');
+    });
 
   it('a Custom preset keeps its own hold days', () => {
     expect(contextFromScanRequest({ ...RC, horizon_preset: 'Custom', hold_min_days: 30, hold_max_days: 70 }))
@@ -101,10 +95,9 @@ describe('resultMatchesContext', () => {
     expect(resultMatchesContext(RC, null)).toBe(true);
   });
 
-  it('every named universe restores under its own name', () => {
-    for (const u of NAMED_UNIVERSES) {
-      expect(contextFromScanRequest({ ...RC, universe: [u] })?.universe).toBe(u);
-    }
+  // Round 2: what the scan posted is the SANITISED hold days.
+  it('compares against the sanitised context hold days', () => {
+    expect(resultMatchesContext(RC, { ...CTX, holdMin: 44.6, holdMax: 60.2 })).toBe(true);
   });
 });
 
@@ -165,7 +158,9 @@ describe('missingCardContracts / withCardContract', () => {
     expect(missingCardContracts([card(), other], [[row(ID)], []], 'C').map((r) => r.index)).toEqual([1]);
   });
 
-  it('appends only the row whose id is the card\'s contract', () => {
+  // Ids carry int(strike), so 182 vs 182.5 cannot be told apart by id at
+  // all -- this pins only that a DIFFERENT id is never taken.
+  it('appends only a row with the card\'s id, never another id', () => {
     const rows = [row('a')];
     const out = withCardContract(rows, [row('XOM|182|2026-12-18|C'), row(ID)], ID);
     expect(out.map((r) => r.id)).toEqual(['a', ID]);

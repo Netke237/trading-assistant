@@ -4,7 +4,7 @@
  * cut it from the table.
  */
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Step6Page from '../page';
 import { api } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
@@ -31,7 +31,7 @@ const OTHER = row('XOM|185|2026-12-18|C', 185, 80);
 const CARD_ROW = row(CARD_ID, 190, 70);
 const RULES = { min_volume: 20 };
 
-function setup() {
+function setup(pickedContracts: Record<string, string> = {}) {
   useScanStore.setState({
     scanResult: {
       candidates: [{
@@ -42,7 +42,7 @@ function setup() {
     } as never,
     context: { direction: 'Bullish', horizon: 'Swing (5–20d)', holdMin: 5, holdMax: 20 } as never,
     scanOverrides: {},
-    pickedContracts: {},
+    pickedContracts,
     contractsBySymbol: {},
   } as never);
 }
@@ -72,8 +72,8 @@ describe('Step 6 always lists the card\'s own contract', () => {
     setup();
     render(<Step6Page />);
     await waitFor(() => expect(useScanStore.getState().contractsBySymbol.XOM).toHaveLength(2));
-    // The rescue would run before contractsBySymbol is written, so by now it
-    // would already have been called.
+    // The rescue would be called in the same continuation that writes
+    // contractsBySymbol, so by now it would already have been called.
     expect(getContracts).toHaveBeenCalledTimes(1);
   });
 
@@ -85,7 +85,7 @@ describe('Step 6 always lists the card\'s own contract', () => {
     await waitFor(() => expect(getContracts).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(useScanStore.getState().contractsBySymbol.XOM).toHaveLength(1));
     expect(screen.queryByText(/Backend not running/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/outside filters/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/not in filtered table/)).not.toBeInTheDocument();
   });
 
   /** The contract label in the row right after the "A — RECOMMENDED" label. */
@@ -100,7 +100,7 @@ describe('Step 6 always lists the card\'s own contract', () => {
       Promise.resolve(ctx.strikes ? [CARD_TOP] : [OTHER]));
     setup();
     render(<Step6Page />);
-    expect(await screen.findByText(/outside filters/)).toBeInTheDocument();
+    expect(await screen.findByText(/not in filtered table/)).toBeInTheDocument();
     expect(recommendedLabel()).toMatch(/185C/);
     expect(recommendedLabel()).not.toMatch(/190C/);
   });
@@ -110,7 +110,7 @@ describe('Step 6 always lists the card\'s own contract', () => {
       Promise.resolve(ctx.strikes ? [CARD_ROW] : []));
     setup();
     render(<Step6Page />);
-    expect(await screen.findByText(/outside filters/)).toBeInTheDocument();
+    expect(await screen.findByText(/not in filtered table/)).toBeInTheDocument();
     expect(screen.queryByText('A — RECOMMENDED')).not.toBeInTheDocument();
     expect(screen.getByText('B — FULL CHAIN')).toBeInTheDocument();
   });
@@ -126,5 +126,56 @@ describe('Step 6 always lists the card\'s own contract', () => {
     expect(screen.queryByText(/190C/)).not.toBeInTheDocument();
     release([CARD_ROW]);
     expect(await screen.findByText(/190C/)).toBeInTheDocument();
+  });
+
+  /** The text of the row whose pick dot reads 'Selected'. */
+  const selectedRow = () => {
+    const dots = screen.queryAllByLabelText('Selected');
+    return dots.map((d) => d.parentElement?.textContent ?? '').join(' | ');
+  };
+  it('a top-scoring rescued row is never the auto-pick', async () => {
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      Promise.resolve(ctx.strikes ? [{ ...CARD_ROW, score: 99 }] : [OTHER]));
+    setup();
+    render(<Step6Page />);
+    expect(await screen.findByText(/not in filtered table/)).toBeInTheDocument();
+    expect(selectedRow()).toMatch(/185C/);
+    expect(selectedRow()).not.toMatch(/190C/);
+  });
+
+  it('the user\'s own stored pick of the card contract is restored once it is rescued', async () => {
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      Promise.resolve(ctx.strikes ? [CARD_ROW] : [OTHER]));
+    setup({ XOM: CARD_ID });
+    render(<Step6Page />);
+    expect(await screen.findByText(/not in filtered table/)).toBeInTheDocument();
+    await waitFor(() => expect(selectedRow()).toMatch(/190C/));
+  });
+
+  it('a click made while the rescue is in flight is not overridden by the stored pick', async () => {
+    let release: (v: unknown) => void = () => {};
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      ctx.strikes ? new Promise((r) => { release = r; }) : Promise.resolve([OTHER, { ...OTHER, id: 'XOM|180|2026-12-18|C', strike: 180, score: 60 }]));
+    setup({ XOM: CARD_ID });
+    render(<Step6Page />);
+    await screen.findByText(/180C/);
+    fireEvent.click(screen.getAllByLabelText('Select').find((b) => b.parentElement?.textContent?.match(/180C/))!.parentElement!);
+    await waitFor(() => expect(selectedRow()).toMatch(/180C/));
+    expect(useScanStore.getState().pickedContracts.XOM).toBe('XOM|180|2026-12-18|C');
+    await act(async () => { release([CARD_ROW]); });
+    expect(await screen.findByText(/not in filtered table/)).toBeInTheDocument();
+    expect(selectedRow()).toMatch(/180C/);
+  });
+
+  it('unmounting mid-rescue writes nothing more', async () => {
+    let release: (v: unknown) => void = () => {};
+    getContracts.mockImplementation((_s: string, _r: string, ctx: { strikes?: number[] }) =>
+      ctx.strikes ? new Promise((r) => { release = r; }) : Promise.resolve([OTHER]));
+    setup();
+    const { unmount } = render(<Step6Page />);
+    await waitFor(() => expect(getContracts).toHaveBeenCalledTimes(2));
+    unmount();
+    await act(async () => { release([CARD_ROW]); });
+    expect(useScanStore.getState().contractsBySymbol.XOM?.map((c) => c.id)).toEqual([OTHER.id]);
   });
 });

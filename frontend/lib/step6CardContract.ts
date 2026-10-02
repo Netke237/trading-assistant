@@ -42,8 +42,10 @@ export function missingCardContracts(
 }
 
 /** Append the card's own row to `rows` (a new array; `rows` untouched). Only a
- *  returned row whose id IS the card's contract is taken -- the strike filter
- *  is on truncated strikes, so 182 and 182.5 can come back together. */
+ *  returned row whose id IS the card's contract is taken. NOTE: ids carry
+ *  int(strike) (backend market.py), so a 182 and a 182.5 strike share one id
+ *  and cannot be told apart here or anywhere else that matches on id -- a
+ *  pre-existing limit of the contract id, logged, not fixed by this change. */
 export function withCardContract(
   rows: readonly OptionContract[],
   fetched: readonly OptionContract[],

@@ -201,8 +201,11 @@ export default function Step6Page() {
       setRescuedBySymbol(rescuedIds);
       // The user's OWN earlier pick of the card contract is still theirs: it
       // was only missing from the filtered rows the auto-pick read.
-      if (storedPick && storedPick !== first?.id && merged[firstSymbol]?.some((c) => c.id === storedPick)) {
-        setPick(storedPick);
+      // Only if nothing moved meanwhile: the rescue can take seconds, and a
+      // click on any row in that time (setPick + setPickedContract) wins.
+      if (storedPick && storedPick !== first?.id && merged[firstSymbol]?.some((c) => c.id === storedPick)
+          && useScanStore.getState().pickedContracts[firstSymbol] === storedPick) {
+        setPick((p) => (p === first?.id ? storedPick : p));
       }
     } catch {
       if (!signal?.aborted) setOffline(true);
@@ -317,8 +320,8 @@ export default function Step6Page() {
                   <Data size={13} weight={500}>
                     {contractLabel(c)}
                     {rescuedIds.includes(c.id) && (
-                      <span title="The trade card's contract. Listed although it is above your max contract price or past the contracts-per-chain limit in Settings.">
-                        <Text size={10} tone="caution">{' card · outside filters'}</Text>
+                      <span title="The trade card's own contract. It was not in the filtered table -- above your max contract price, past the contracts-per-chain limit, or on a different expiry from the one this table lists -- and is shown so you can still see and pick it.">
+                        <Text size={10} tone="caution">{' card · not in filtered table'}</Text>
                       </span>
                     )}
                   </Data>
@@ -378,7 +381,9 @@ export default function Step6Page() {
                         <Text size={10} weight={500}>{badge}</Text>
                       </span>
                     )}
-                    <Text size={11} tone="secondary">{contracts.length} contracts</Text>
+                    <Text size={11} tone="secondary">
+                      {contracts.length - rescuedIds.length} contracts{rescuedIds.length > 0 ? ' + card' : ''}
+                    </Text>
                     <span className={`${tbl.chevron} ${isOpen ? tbl.chevronOpen : ''}`} aria-hidden>&#x203A;</span>
                   </button>
                   <button

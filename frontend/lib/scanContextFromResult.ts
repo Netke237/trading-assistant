@@ -11,14 +11,12 @@
  */
 import type { Direction } from '@/types/domain';
 import type { ScanContext, ScanRequestContext } from './scanStore';
-import { HORIZON_PRESETS, horizonDisplayString, type HorizonKey, type ScoringHorizon } from './horizonPresets';
-import { NAMED_UNIVERSES } from './universeStore';
+import { HORIZON_PRESETS, horizonDisplayString, sanitizeHoldDays, type HorizonKey, type ScoringHorizon } from './horizonPresets';
 
-const NAMED = new Set<string>(NAMED_UNIVERSES);
 const SCORING: readonly ScoringHorizon[] = ['Intraday', 'Swing', 'Position'];
 
-/** The universe label a null context resolves to at every reader
- *  (`context?.universe ?? 'SP500'`). */
+/** The universe a null context resolves to at every scan reader
+ *  (`context?.universe ?? 'SP500'`), and the one Step 3 writes. */
 const DEFAULT_UNIVERSE = 'SP500';
 
 function isWholeDay(v: unknown): v is number {
@@ -46,13 +44,15 @@ export function contextFromScanRequest(rc: ScanRequestContext | null | undefined
   const holdMin = rc.hold_min_days;
   const holdMax = rc.hold_max_days;
 
-  // Only a universe the scan posted BY NAME is restored. A symbol list
-  // (Custom or Watchlist) cannot be named: the context's universe is not a
-  // label only -- the Stocks scan posts `[context.universe]` -- so 'Custom'
-  // would scan a ticker called "Custom". It gets the label a null context
-  // already resolves to. Steps 5-7 of the Options path do not read it.
-  const list = Array.isArray(rc.universe) ? rc.universe : [];
-  const universe = list.length === 1 && NAMED.has(list[0]!) ? list[0]! : DEFAULT_UNIVERSE;
+  // Never restored from the result. The context's universe is not a label
+  // only: the Stocks scan posts `[context.universe]`, so 'Custom' would scan
+  // a ticker called "Custom" (round 1), and a restored 'NDX100' would silently
+  // move every later Stocks scan in this browser to NDX100 (round 2) -- Step 2
+  // never writes it and Step 3's syncToStore keeps it. 'SP500' is what a null
+  // context already resolves to at every scan reader, and what Step 3 writes.
+  // Known, logged: TopBar / Dashboard then caption the restored scan "SP500"
+  // whatever was scanned, as they already do after any Step-3 edit.
+  const universe = DEFAULT_UNIVERSE;
 
   return {
     universe,
@@ -80,7 +80,11 @@ export function resultMatchesContext(
   if (!rc || !ctx) return true;
   if (rc.direction !== ctx.direction) return false;
   if (rc.horizon_preset != null && ctx.horizonPreset != null && rc.horizon_preset !== ctx.horizonPreset) return false;
-  if (rc.hold_min_days != null && rc.hold_min_days !== ctx.holdMin) return false;
-  if (rc.hold_max_days != null && rc.hold_max_days !== ctx.holdMax) return false;
+  // Against the SANITISED context hold days: that is what every options scan
+  // posts (resolveOptionsScanRequest), and a persisted context can hold
+  // unrounded or inverted values (see sanitizeHoldDays).
+  const hold = sanitizeHoldDays(ctx.holdMin, ctx.holdMax);
+  if (rc.hold_min_days != null && rc.hold_min_days !== hold.hold_min_days) return false;
+  if (rc.hold_max_days != null && rc.hold_max_days !== hold.hold_max_days) return false;
   return true;
 }
