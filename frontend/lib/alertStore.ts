@@ -41,6 +41,21 @@ function makeDedupKey(recId: string, alertType: AlertType | string): string {
   return `${recId}-${alertType}`;
 }
 
+/** The key of one alert CONDITION: suppression, notify throttle, in-place
+ *  refresh and hydration collapse all use it.
+ *
+ *  STOP-SEMANTICS-2026-10-02: a short stock's PREMIUM_STOP fires on a RISE now,
+ *  so it gets its OWN key (`...:short`). An acknowledgement, a throttle stamp
+ *  or an open row left by the old fall-side rule lives on the legacy key and
+ *  cannot silence, throttle or absorb the rise-side fire. This replaces a
+ *  deploy-time reset: no version bump (which would re-run `migrateAlerts`'
+ *  one-time STRUCTURAL_STOP_BREACHED backfill) and no flag to persist. The
+ *  backend notifier keys the same way (`alert_notifier._dedup_key`). */
+function alertKey(t: { recId: string; alertType: AlertType | string; stopSide?: ToastItem['stopSide'] }): string {
+  const base = makeDedupKey(t.recId, t.alertType);
+  return t.alertType === 'PREMIUM_STOP' && t.stopSide === 'short-stock' ? `${base}:short` : base;
+}
+
 // Collapse un-acknowledged duplicates down to one row per (recId, alertType),
 // keeping the most recent. Acknowledged rows are left untouched as history.
 // Used on hydration to clean up any pre-existing pile-up.
@@ -52,7 +67,7 @@ function collapseToasts(toasts: ToastItem[]): ToastItem[] {
       acknowledged.push(t);
       continue;
     }
-    const key = makeDedupKey(t.recId, t.alertType);
+    const key = alertKey(t);
     const existing = latestActive.get(key);
     if (!existing || new Date(t.firedAt).getTime() >= new Date(existing.firedAt).getTime()) {
       latestActive.set(key, t);
@@ -87,6 +102,7 @@ function notifyBackend(item: {
   direction?: string;
   contract?: string;
   note?: string;
+  stopSide?: ToastItem['stopSide'];
 }): void {
   if (typeof window === 'undefined') return;
   if (!NOTIFIABLE_TYPES.has(item.alertType)) return;
@@ -105,6 +121,9 @@ function notifyBackend(item: {
         direction: item.direction,
         contract: item.contract,
         note: item.note,
+        // The server derives the side from the DB row; this only tells it the
+        // fire came from a post-STOP-SEMANTICS engine (routers/alerts.py).
+        stopSide: item.stopSide,
       }),
     }).catch(() => {
       /* backend offline — in-app alert still shows */
@@ -206,7 +225,7 @@ export const useAlertStore = create<AlertStoreState>()(
         const now = Date.now();
         const nowIso = new Date(now).toISOString();
 
-        const compositeKey = makeDedupKey(item.recId, item.alertType);
+        const compositeKey = alertKey(item);
 
         // permanently suppressed after acknowledge
         if (suppressedAlerts[compositeKey]) return;
@@ -215,7 +234,7 @@ export const useAlertStore = create<AlertStoreState>()(
         //    keeps re-checking updates its existing (un-acknowledged) row in
         //    place instead of spawning a new one — no pile-up.
         const existingIdx = toasts.findIndex(
-          (t) => t.recId === item.recId && t.alertType === item.alertType && !t.acknowledged,
+          (t) => alertKey(t) === compositeKey && !t.acknowledged,
         );
         const isNewRow = existingIdx < 0;
 
@@ -265,6 +284,7 @@ export const useAlertStore = create<AlertStoreState>()(
             direction: item.direction,
             contract: item.contract,
             note: item.note,
+            stopSide: item.stopSide,
           });
         }
 
@@ -283,7 +303,7 @@ export const useAlertStore = create<AlertStoreState>()(
       acknowledgeAlert: (id) => {
         const toast = get().toasts.find((t) => t.id === id);
         if (!toast) return;
-        const key = makeDedupKey(toast.recId, toast.alertType);
+        const key = alertKey(toast);
         set((s) => ({
           toasts: s.toasts.map((t) => (t.id === id ? { ...t, acknowledged: true } : t)),
           suppressedAlerts: { ...s.suppressedAlerts, [key]: true },
@@ -293,7 +313,7 @@ export const useAlertStore = create<AlertStoreState>()(
       deleteAlert: (id) => {
         const toast = get().toasts.find((t) => t.id === id);
         if (!toast) return;
-        const key = makeDedupKey(toast.recId, toast.alertType);
+        const key = alertKey(toast);
         set((s) => {
           const next = { ...s.suppressedAlerts };
           delete next[key];

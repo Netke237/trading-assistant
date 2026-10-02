@@ -126,9 +126,9 @@ pinned sweep. It is out of this task's scope unless Kenneth chooses it (Q4). **K
 recommendation (no tolerance).**
 
 **Short thresholds carry float noise too (N6).** `entry * (1 + pct)` can land a few ulps ABOVE the nominal
-whole-cent price (entry $10.00 at 10% → 11.000000000000002), so a quote of exactly $11.00 does not fire and
-$11.01 does: about 0.7% of grid cases fire 1¢ late. Under the Q4 decision this is the engine's rule and is
-not corrected. `percentStopFiringPrice` reports the engine's real firing price ($11.01 here), so the preview
+whole-cent price (entry $100.00 at 10% → 110.00000000000001), so a quote of exactly $110.00 does not fire and
+$110.01 does: about 0.7% of grid cases fire 1¢ late. Under the Q4 decision this is the engine's rule and is
+not corrected. `percentStopFiringPrice` reports the engine's real firing price ($110.01 here), so the preview
 never promises a fire the engine will not deliver. Tests compare against the computed threshold, never the
 nominal one, and the shared fixture carries short rows to pin TS/Python threshold parity (§4).
 
@@ -538,3 +538,23 @@ Nits:
 **Status:** three plan rounds used (1: 3B/8S/4N, 2: 0B/7S/9N, 3: 2B/7S/9N), none clean, so this is the cap.
 Kenneth chose (2026-10-02) to write v4 and build from it (the WATCH-RESEND-P1-BUILD-FROM-V4-2026-10-02
 precedent). The build is then held to the adversarial CODE audit loop until a round comes back clean.
+
+## 10. Build notes (v4 build, 2026-10-02) — where the code differs from the text above
+
+- **Backend tests** for the helpers, the shared fixture, the engine, the PATCH refusal and the create fallback live
+  in one new module, `backend/tests/test_stop_semantics.py`, not spread over `test_alerts.py`,
+  `test_premium_stop_per_position.py`, `test_portfolio_update.py` and `test_position_writer.py`. Notifier tests are
+  in `test_alert_notifier.py`, notify-route tests in `test_alert_notify_guard.py`, as planned.
+- **Notify route, absent `stopSide`**: the server passes `stop_side=None` for EVERY row when the request carries no
+  `stopSide` (not only for shorts). For a long or an option, None and the derived side share one dedup key, and the
+  only difference is the label ("Premium stop hit" rather than "Stock stop hit"), which is the legacy label a
+  pre-deploy tab's fire should carry.
+- **Fixture short rows** are kept where the computed threshold is within 1e-6 of a whole cent (the rows where float
+  noise decides the firing cent), not within 0.005; entries are stepped to keep the file at ~200 KB.
+- **The noisy short example** is $100.00 at 10% → 110.00000000000001 (fires at $110.01). §1's first draft said
+  $10.00 at 10%, which is exactly 11.0.
+- **Settings hint** is two lines: the long/option limit ("… it can never fire.") and N9's short line.
+- **Mutations run** (each broke the named tests, then was reverted): short `>=` → `<=` in `alertEngine.ts` (3 engine
+  tests fail); `isShortStockPosition` without the `|STOCK` term (the Bearish-option guard fails); `alertKey` without
+  `:short` (3 store tests fail). Backend: see the code-audit record. A DEFAULT on the TS short flag is not caught by
+  `tsc` (every caller passes it explicitly); only the backend has a signature test.
