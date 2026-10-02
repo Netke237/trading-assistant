@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import type { PortfolioPosition } from '@/types/domain';
 
@@ -79,5 +79,54 @@ describe('ClosePositionDrawer realized P&L', () => {
     // tag: (1 - 2) * 100 * 2 = -$200, -50%. Rendered as "$-200", sign after the "$".
     expect(screen.getByText(/\$-200\b/)).toBeInTheDocument();
     expect(screen.getByText(/-50\.0%/)).toBeInTheDocument();
+  });
+});
+
+/* Open question 54 (C1): the row can shrink under an open dialog (a close-404
+ * re-save or a qty edit booked smaller). The drawer must follow it, so the
+ * preview and the next confirm describe the size actually held. */
+describe('ClosePositionDrawer — the row changes size under an open dialog', () => {
+  const big = makePosition({ contract: 'AAA|STOCK', entryPrice: 100, currentPrice: 110, contracts: 100 });
+
+  it('clamps the quantity to the new size and sends it on the next confirm', () => {
+    const onConfirm = jest.fn();
+    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByText(/\+\$1000\b/)).toBeInTheDocument();
+
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByText(/of 33/)).toBeInTheDocument();
+    expect(screen.getByText(/\+\$330\b/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /close position/i }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 33 }));
+  });
+
+  it('caps a typed partial size at the new, smaller held size', () => {
+    const onConfirm = jest.fn();
+    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    fireEvent.change(screen.getByLabelText(/contracts to sell/i), { target: { value: '50' } });
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByLabelText(/contracts to sell/i)).toHaveValue(33);
+    fireEvent.click(screen.getByRole('button', { name: /close position/i }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 33 }));
+  });
+
+  it('keeps a full close full when the row grows', () => {
+    const onConfirm = jest.fn();
+    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 150 }} onCancel={noop} onConfirm={onConfirm} />);
+    expect(screen.getByText(/of 150/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /close position/i }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 150 }));
+  });
+
+  it('keeps a smaller partial size, and never raises it when the row grows', () => {
+    const onConfirm = jest.fn();
+    const { rerender } = render(<ClosePositionDrawer position={big} onCancel={noop} onConfirm={onConfirm} />);
+    fireEvent.change(screen.getByLabelText(/contracts to sell/i), { target: { value: '20' } });
+
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 33 }} onCancel={noop} onConfirm={onConfirm} />);
+    rerender(<ClosePositionDrawer position={{ ...big, contracts: 150 }} onCancel={noop} onConfirm={onConfirm} />);
+    fireEvent.click(screen.getByRole('button', { name: /sell 20 of 150/i }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ qtyToClose: 20 }));
   });
 });
