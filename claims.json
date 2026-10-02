@@ -23,6 +23,14 @@
       "expires_at": "2026-10-02T10:32:37Z",
       "note": "Step-3 values not reaching backend; restored-scan defaults; /api/contracts max_price/limit dropping card contract",
       "task": "STEP3-PARAM-REACH"
+    },
+    {
+      "agent": "claude",
+      "branch": "ccr-5fdfa0ea-jyqf7y",
+      "claimed_at": "2026-10-02T07:47:26Z",
+      "expires_at": "2026-10-02T10:47:26Z",
+      "note": "build (a) direction-aware short stock pct stop, (b) reject sub-cent premium stop at save",
+      "task": "STOP-SEMANTICS"
     }
   ]
 }
