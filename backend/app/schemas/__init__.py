@@ -631,6 +631,9 @@ class TradeCardData(BaseModel):
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status
+    # Fix #3: earnings inside the reject window -> finalStatus REJECT and no send.
+    earningsVeto: bool = False
+    earningsUnknown: bool = False
     alternatives:      list[AlternativeContract] = []
     alternativesCount: int = 0
     confidence:        Optional[int] = None

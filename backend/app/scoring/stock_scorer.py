@@ -866,6 +866,16 @@ def _rule_event(
     worst_days: int | None = None
     event_label = "none"
 
+    # Fix #3: the earnings distance is recorded on EVERY detail dict, even when
+    # a nearer dividend names the event, so the options scan can veto on it.
+    earnings_days = (earnings_date - today).days if earnings_date is not None else None
+    if earnings_days is not None and earnings_days < 0:
+        earnings_days = None
+    base_detail: dict = {"earnings_days": earnings_days, "reject_days": int(ec["reject_days"])}
+    if scoring_mode != "stock":
+        # D4 (fix #3): unknown is surfaced, never scored -- ETFs have no earnings.
+        base_detail["earnings_unknown"] = earnings_date is None
+
     for label, ev_date in [("earnings", earnings_date), ("dividend", dividend_date)]:
         if ev_date is None:
             continue
@@ -877,7 +887,7 @@ def _rule_event(
             event_label = label
 
     if worst_days is None:
-        detail: dict = {"event": "none"}
+        detail: dict = {"event": "none", **base_detail}
         if scoring_mode == "stock":
             detail["note"] = "Event weight is zero — shown for context only, does not affect stock score."
         return RuleResult("event", "PASS", 90, detail)
@@ -885,6 +895,7 @@ def _rule_event(
     detail = {
         "event": event_label,
         "days_to_event": worst_days,
+        **base_detail,
     }
 
     if scoring_mode == "stock":

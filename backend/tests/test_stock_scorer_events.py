@@ -133,3 +133,38 @@ def test_stock_mode_score_in_range():
     bars = _bars_up()
     card = score_stock("X", "Bullish", "Swing", bars, scoring_mode="stock")
     assert 0 <= card.score <= 100
+
+
+def test_options_detail_records_earnings_even_when_dividend_is_nearer():
+    cfg = {"event": {"reject_days": 21, "caution_days": 45}}
+    r = _rule_event(earnings_date=date.today() + timedelta(days=5),
+                    dividend_date=date.today() + timedelta(days=2),
+                    cfg=cfg, scoring_mode="options")
+    assert r.detail["event"] == "dividend"
+    assert r.detail["earnings_days"] == 5
+    assert r.detail["reject_days"] == 21
+
+
+def test_options_unknown_earnings_flagged_but_score_unchanged():
+    cfg = {"event": {"reject_days": 21, "caution_days": 45}}
+    r = _rule_event(earnings_date=None, dividend_date=None, cfg=cfg, scoring_mode="options")
+    assert r.status == "PASS" and r.score == 90       # D4: no ETF penalty
+    assert r.detail["earnings_unknown"] is True
+    assert r.detail["earnings_days"] is None
+    assert r.detail["reject_days"] == 21
+
+
+def test_options_known_earnings_not_flagged_unknown_and_past_earnings_is_none():
+    cfg = {"event": {"reject_days": 21, "caution_days": 45}}
+    known = _rule_event(earnings_date=date.today() + timedelta(days=30),
+                        dividend_date=None, cfg=cfg, scoring_mode="options")
+    assert known.detail["earnings_unknown"] is False
+    past = _rule_event(earnings_date=date.today() - timedelta(days=3),
+                       dividend_date=None, cfg=cfg, scoring_mode="options")
+    assert past.detail["earnings_days"] is None
+
+
+def test_stock_mode_has_no_earnings_unknown_key():
+    cfg = {"event": {"reject_days": 21, "caution_days": 45}}
+    r = _rule_event(earnings_date=None, dividend_date=None, cfg=cfg, scoring_mode="stock")
+    assert "earnings_unknown" not in r.detail

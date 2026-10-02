@@ -694,6 +694,9 @@ export interface TradeCardData {
   rrRatio:  number;
   rrModel:  'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
   finalStatus: Status;
+  /** Fix #3: earnings inside the horizon reject window -> finalStatus REJECT, no send. */
+  earningsVeto?: boolean;
+  earningsUnknown?: boolean;
   /** Signal confidence 0–100 (null when history is too thin to judge). */
   confidence?: number | null;
   confidenceText?: string | null;
