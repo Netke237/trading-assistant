@@ -288,3 +288,22 @@ def test_a_mixed_chain_names_both_the_hard_and_the_score_rejects(client, monkeyp
     monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST, wide])
     reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
     assert "spread_too_wide(1)" in reason and "contract_score_below_caution(1)" in reason, reason
+
+
+def test_zero_floors_reach_the_validator_on_the_hold_window_path(client, monkeypatch):
+    """The UI always sends hold days, so the DTE-widened overrides are the real path."""
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    default = _scan(client, {}, hold=(20, 25))
+    assert "volume_too_low(1)" in default["rejected"][0]["reason"]
+    zeroed = _scan(client, _ZERO_FLOORS, hold=(20, 25))
+    assert zeroed["contract_rules"] == _ZERO_FLOORS
+    for r in zeroed["rejected"]:
+        assert "volume_too_low" not in r["reason"] and "open_interest_too_low" not in r["reason"]
+
+
+def test_a_thin_contract_with_one_more_soft_miss_is_too_many_soft_failures(client, monkeypatch):
+    """The second route the Step-3 hint names: the two Preferred-floor misses
+    plus one more (a wide-ish spread) reach max_soft_fail_count."""
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "spread": 0.30}])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert reason == "contracts rejected: too_many_soft_failures(1)", reason

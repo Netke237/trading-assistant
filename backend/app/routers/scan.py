@@ -865,12 +865,13 @@ async def _process_symbol(
             for r in s.reject_reasons:
                 reason_counts[r] = reason_counts.get(r, 0) + 1
             # A contract that clears every hard rule but scores below the
-            # caution band is REJECT with no reason of its own. Unnamed, a
-            # chain of them read as a bare "all contracts rejected" -- which is
-            # what made Step 3's Min option volume / Min open interest at 0
-            # look like they never reached the validator (open question #8):
-            # the hard floors were gone, the soft Preferred floors still sank
-            # the score.
+            # caution band is REJECT with no reason of its own; unnamed, a
+            # chain of them read as a bare "all contracts rejected". Found
+            # while checking open question #8 (Step 3's liquidity floors at 0):
+            # the floors do reach validate_contract on main as of 2026-10-02,
+            # but the soft Preferred floors can still sink a thin contract's
+            # score. #8's original report (hard-reason counts unchanged with
+            # both floors at 0) did not reproduce and stays unexplained.
             if not s.reject_reasons:
                 reason_counts["contract_score_below_caution"] = (
                     reason_counts.get("contract_score_below_caution", 0) + 1
