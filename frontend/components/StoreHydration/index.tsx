@@ -16,6 +16,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
+import { contextFromScanRequest } from '@/lib/scanContextFromResult';
 import { api } from '@/lib/api';
 
 // Backend timestamps are real UTC-offset ISO strings (e.g. "...T18:32:10+00:00",
@@ -57,6 +58,19 @@ export function StoreHydration() {
           }
         } catch {
           // No backend reachable yet, or nothing to recover — leave state as-is.
+        }
+      }
+
+      // STEP3-PARAM-REACH: a result with no context beside it (recovered just
+      // above into an empty browser) gets the context it was produced from,
+      // so Steps 5-7 read its direction and hold days instead of the
+      // Bullish / Swing defaults. Set directly, NOT via setContext, whose
+      // context-changed branch would clear the very result being restored.
+      {
+        const now = useScanStore.getState();
+        if (now.scanResult && now.context === null) {
+          const restored = contextFromScanRequest(now.scanResult.request_context);
+          if (restored) useScanStore.setState({ context: restored });
         }
       }
 

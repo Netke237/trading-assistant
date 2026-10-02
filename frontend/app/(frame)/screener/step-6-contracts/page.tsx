@@ -11,6 +11,7 @@ import { contractScoreTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { buildGrading, gradingToCtx } from '@/lib/contractGrading';
+import { missingCardContracts, withCardContract } from '@/lib/step6CardContract';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { contractLabel, type ContractGrading, type OptionContract, type TradeCardData } from '@/types/domain';
@@ -147,17 +148,33 @@ export default function Step6Page() {
         }, signal))
       );
       if (signal?.aborted) return;
+      // The card's own contract, when max_price or limit cut it: asked for by
+      // expiry + strike, which the backend exempts from both, with the SAME
+      // grading as its table. A failure here leaves the table as fetched --
+      // it is never what makes Step 6 read as offline.
+      const missing = missingCardContracts(candidates, results, right);
+      const rescued = await Promise.all(missing.map((m) =>
+        api.getContracts(candidates[m.index]!.symbol, right, {
+          ...gradingToCtx(gradings[m.index]),
+          direction:     context?.direction ?? 'Bullish',
+          horizon:       context?.horizon ?? 'swing',
+          expiry:        m.expiry,
+          strikes:       [m.strike],
+        }, signal).catch(() => [] as OptionContract[])));
+      if (signal?.aborted) return;
+      const rows = results.map((r) => r ?? []);
+      missing.forEach((m, k) => { rows[m.index] = withCardContract(rows[m.index]!, rescued[k] ?? [], m.id); });
       const bySymbol: Record<string, OptionContract[]> = {};
       const gradingMap: Record<string, ContractGrading> = {};
-      candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; gradingMap[c.symbol] = gradings[i]!; });
+      candidates.forEach((c, i) => { bySymbol[c.symbol] = rows[i] ?? []; gradingMap[c.symbol] = gradings[i]!; });
       setLocalContractsBySymbol(bySymbol);
       setGradingBySymbol(gradingMap);
       setContractsBySymbol(bySymbol);
       const firstSymbol = candidates[0]?.symbol ?? '';
       const storedPick = pickedContracts[firstSymbol];
       const first = storedPick
-        ? bySymbol[firstSymbol]?.find((c) => c.id === storedPick) ?? results[0]?.[0]
-        : results[0]?.[0];
+        ? bySymbol[firstSymbol]?.find((c) => c.id === storedPick) ?? rows[0]?.[0]
+        : rows[0]?.[0];
       if (first) setPick(first.id);
       if (candidates[0]) setExpanded(candidates[0].symbol);
     } catch {
