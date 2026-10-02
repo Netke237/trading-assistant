@@ -94,13 +94,13 @@ describe('PipelineInspector Component', () => {
     expect(screen.getByText('NVDA')).toBeInTheDocument();
     expect(screen.getByText('REJECTED')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Stage: Score Gate & Contract Rules');
-    expect(screen.getByText(/Spread Too Wide, Low Liquidity/)).toBeInTheDocument();
+    expect(screen.getByText(/Spread Too Wide, Volume Too Low/)).toBeInTheDocument();
   });
 
   it('says a symbol was not part of the scan instead of showing nothing', () => {
     render(<PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer={false} />);
     fireEvent.change(screen.getByPlaceholderText('Search symbol (e.g. NVDA, AAPL)...'), { target: { value: 'zzzz' } });
-    expect(screen.getByText('ZZZZ was not part of this scan.')).toBeInTheDocument();
+    expect(screen.getByText("ZZZZ is not among this scan's survivors or recorded rejects.")).toBeInTheDocument();
   });
 
   it('shows no bottleneck card when nothing was dropped', () => {
@@ -195,5 +195,50 @@ describe('PipelineInspector Component', () => {
     // After clicking chip, PLUG should be searched and diagnosed in the card
     expect(screen.getAllByText('PLUG').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText(/Data & Universe Filters/i).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('moves focus into the drawer, traps Tab, and returns focus to the opener on close', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const { rerender } = render(
+      <PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer isOpen onClose={() => {}} />
+    );
+    const search = screen.getByPlaceholderText('Search symbol (e.g. NVDA, AAPL)...');
+    expect(document.activeElement).toBe(search);
+
+    const dialog = screen.getByRole('dialog');
+    const focusable = dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled])');
+    const last = focusable[focusable.length - 1];
+    last.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(focusable[0]);
+
+    rerender(
+      <PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer isOpen={false} onClose={() => {}} />
+    );
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('does not steal focus back when the parent re-renders with a new inline onClose', () => {
+    const { rerender } = render(
+      <PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer isOpen onClose={() => {}} />
+    );
+    const closeBtn = screen.getByLabelText('Close inspector');
+    closeBtn.focus();
+    rerender(
+      <PipelineInspector pipeline={mockPipeline} rejected={mockRejected} survivors={['MSFT']} isDrawer isOpen onClose={() => {}} />
+    );
+    expect(document.activeElement).toBe(closeBtn);
+  });
+
+  it('ignores an Escape another handler already consumed', () => {
+    const handleClose = jest.fn();
+    render(<PipelineInspector pipeline={mockPipeline} rejected={mockRejected} isDrawer isOpen onClose={handleClose} />);
+    const ev = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    ev.preventDefault();
+    window.dispatchEvent(ev);
+    expect(handleClose).not.toHaveBeenCalled();
   });
 });

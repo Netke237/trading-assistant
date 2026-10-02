@@ -251,7 +251,7 @@ export default function Step4Page() {
               className={styles.inspectBtn}
               onClick={() => setInspectorOpen(true)}
             >
-              Filter Breakdown ({filteredCount} Filtered)
+              Filter Breakdown ({filteredCount} Not Ranked)
             </button>
           )}
         </div>
@@ -306,7 +306,7 @@ export default function Step4Page() {
               onClick={() => setInspectorOpen(true)}
               title="Open Pipeline Root-Cause Inspector"
             >
-              Filter Breakdown ({filteredCount} Filtered)
+              Filter Breakdown ({filteredCount} Not Ranked)
             </button>
             <Link href="/validation" className={styles.exportBtn}>
               Validation

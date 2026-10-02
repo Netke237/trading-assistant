@@ -47,7 +47,7 @@ describe('Step 3 Direction Page — PipelineInspector Integration', () => {
 
     expect(screen.getByText('Pipeline Root-Cause Inspector')).toBeInTheDocument();
     expect(screen.getByText('500 Scanned')).toBeInTheDocument();
-    expect(screen.getByText('−499 Filtered')).toBeInTheDocument();
+    expect(screen.getByText('−499 Not Ranked')).toBeInTheDocument();
     expect(screen.getByText('1 Survivor')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search symbol (e.g. NVDA, AAPL)...')).toBeInTheDocument();
   });

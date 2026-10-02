@@ -710,7 +710,9 @@ export default function Step3Page() {
   const { shownResult, rejectedLog, totalPassed, totalRejected, totalScanned, totalTrimmed } =
     scanLogTotals(scanState, liveRejectedLog, scanResult);
 
-  const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
+  // Gated like every other number in the log header: a scan in flight or
+  // failed shows no DTE rather than the previous run's.
+  const enforcedDte = shownResult?.dte_window;
 
   const stocksDefs  = PARAM_DEFS.filter((d) => d.section === 'stocks' || d.section === 'all');
   const optionsDefs = PARAM_DEFS.filter((d) => d.section === 'options' || d.section === 'all');

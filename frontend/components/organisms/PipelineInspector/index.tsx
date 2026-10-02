@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { OptionsPipeline, RejectedEntry } from '@/lib/scanStore';
 import type { DteWindow } from '@/types/domain';
 import { parsePipelineDiagnostics, type DiagnosticStage } from '@/lib/parsePipelineDiagnostics';
+import { Text, Data } from '@/components/primitives';
 import styles from './PipelineInspector.module.css';
 
 interface PipelineInspectorProps {
@@ -85,6 +86,7 @@ export function PipelineInspector({
     searchRef.current?.focus();
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        if (e.defaultPrevented) return;
         onCloseRef.current?.();
         return;
       }
@@ -155,7 +157,9 @@ export function PipelineInspector({
     >
       <div className={styles.header}>
         <div className={styles.headerTop}>
-          <h2 id={titleId} className={styles.title}>Pipeline Root-Cause Inspector</h2>
+          <h2 id={titleId} className={styles.title}>
+            <Text size={13} weight={600}>Pipeline Root-Cause Inspector</Text>
+          </h2>
           <div className={styles.headerActions}>
             <button
               type="button"
@@ -180,7 +184,12 @@ export function PipelineInspector({
 
         <div className={styles.metaRow}>
           <span className={styles.badge}>{report.scanned} Scanned</span>
-          <span className={`${styles.badge} ${styles.badgeReject}`}>−{report.totalDropped} Filtered</span>
+          <span
+            className={`${styles.badge} ${styles.badgeReject}`}
+            title="Scanned minus survivors: every rejected symbol plus any trimmed by the shortlist cap"
+          >
+            −{report.totalDropped} Not Ranked
+          </span>
           <span className={`${styles.badge} ${styles.badgePass}`}>
             {report.candidatesCount} Survivor{report.candidatesCount !== 1 ? 's' : ''}
           </span>
@@ -210,14 +219,16 @@ export function PipelineInspector({
           )}
         </div>
 
+        {/* Always mounted so screen readers announce each new lookup result. */}
+        <div role="status" aria-live="polite">
         {trimmedQuery && !searchedResult && (
-          <div className={styles.notFound} role="status">
-            {trimmedQuery.toUpperCase()} was not part of this scan.
+          <div className={styles.notFound}>
+            {trimmedQuery.toUpperCase()} is not among this scan&apos;s survivors or recorded rejects.
           </div>
         )}
 
         {searchedResult && (
-          <div className={styles.symbolResultCard} role="status">
+          <div className={styles.symbolResultCard}>
             <div className={styles.symbolResultTop}>
               <span className={styles.symbolName}>{searchedResult.symbol}</span>
               <span
@@ -248,19 +259,23 @@ export function PipelineInspector({
                     className={`${styles.breakdownItem} ${
                       k === searchedResult.weakestComponent ? styles.breakdownWeakest : ''
                     }`}
-                    title={k === searchedResult.weakestComponent ? 'Lowest-scoring component' : undefined}
+                    title={k === searchedResult.weakestComponent ? 'Lowest weighted component' : undefined}
                   >
-                    <span className={styles.breakdownKey}>{k}</span>
-                    <span className={styles.breakdownVal}>{v}</span>
+                    <Text size={10} tone="dim">{k.toUpperCase()}</Text>
+                    <Data size={11} weight={500}>{v}</Data>
                   </div>
                 ))}
               </div>
             )}
           </div>
         )}
+        </div>
       </div>
 
       <div className={styles.content}>
+        {report.reconciliationNote && (
+          <div className={styles.stageNote}>{report.reconciliationNote}</div>
+        )}
         {bottleneck && (
           <div className={styles.bottleneckCard}>
             <div className={styles.bottleneckTitle}>
@@ -270,7 +285,7 @@ export function PipelineInspector({
             <div className={styles.bottleneckTip}>
               <span className={styles.detailKey}>Where to look:</span> {bottleneck.suggestedAction}
             </div>
-            {isDrawer && (
+            {isDrawer && bottleneck.adjustHref && (
               <Link href={bottleneck.adjustHref} className={styles.bottleneckBtn}>
                 {bottleneck.adjustLabel} →
               </Link>
@@ -280,7 +295,7 @@ export function PipelineInspector({
 
         <div className={styles.treeSection}>
           <div className={styles.treeHeader}>
-            <span className={styles.sectionLabel}>DROP-OFF HIERARCHY</span>
+            <Text size={11} weight={500} tone="secondary">DROP-OFF HIERARCHY</Text>
             <div className={styles.treeViewToggle}>
               <button
                 type="button"
@@ -324,9 +339,9 @@ export function PipelineInspector({
                         <span className={`${styles.stageChevron} ${isExpanded ? styles.stageChevronOpen : ''}`} aria-hidden>
                           ▶
                         </span>
-                        <span className={styles.stageTitle}>
+                        <Text size={12} weight={500}>
                           {idx + 1}. {stage.title}
-                        </span>
+                        </Text>
                       </span>
                       <span className={styles.stageBadges}>
                         <span className={`${styles.badge} ${styles.badgeReject}`}>−{stage.droppedCount}</span>
@@ -354,10 +369,10 @@ export function PipelineInspector({
                             return (
                               <div key={sub.id} className={styles.subRuleItem}>
                                 <div className={styles.subRuleHeader}>
-                                  <span className={styles.subRuleLabel}>{sub.label}</span>
-                                  <span className={styles.subRuleCount}>
+                                  <Text size={11} weight={500}>{sub.label}</Text>
+                                  <Data size={11} weight={500} tone="reject">
                                     {sub.count === null ? '—' : `−${sub.count}`}
-                                  </span>
+                                  </Data>
                                 </div>
                                 <div className={styles.subRuleExplanation}>{sub.ruleExplanation}</div>
 
@@ -399,9 +414,9 @@ export function PipelineInspector({
               })}
 
               <div className={styles.survivorCard}>
-                <div className={styles.survivorTitle}>
+                <Text size={12} weight={600} tone="pass">
                   Final Survivors: {report.candidatesCount} Candidate{report.candidatesCount !== 1 ? 's' : ''}
-                </div>
+                </Text>
                 {survivors.length > 0 && (
                   <div className={styles.survivorChips}>
                     {survivors.slice(0, 5).map((s) => (
