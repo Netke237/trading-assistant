@@ -525,7 +525,7 @@ export function parsePipelineDiagnostics(
       ? ''
       : b.id === 'contract-rules'
         ? ` Most frequent contract-level failure: ${top.label} (${top.count} symbols) — symbols are listed under every rule any of their contracts failed, so this is a frequency, not the rule that removed them.`
-        : ` Largest recorded cause: ${top.label} (${top.count}).`;
+        : ` Largest recorded group: ${top.label} (${top.count}).`;
     const tieText = tiedWith.length > 0 ? ` Tied with ${tiedWith.map((s) => s.title).join(', ')}.` : '';
     const insight = `${b.title} removed ${b.droppedCount} of ${scanned} scanned symbols (${b.pctOfTotal}%).${topText}${tieText}`;
     let suggestedAction: string;

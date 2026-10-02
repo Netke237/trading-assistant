@@ -380,6 +380,12 @@ describe('parsePipelineDiagnostics — stored legacy results', () => {
 });
 
 describe('parsePipelineDiagnostics — round-2 regressions', () => {
+  it('describes cap-rejected pre-screen components as groups rather than causes', () => {
+    const r = parsePipelineDiagnostics(undefined, [{ symbol: 'CAPPED', reason: 'Pre-screen: score 80 rejected',
+      breakdown: PRE_BD({ trend: 90, pullback: 75, trigger: 85, event: 90 }) }], []);
+    expect(r.primaryBottleneck?.insight).toContain('Largest recorded group:');
+    expect(r.primaryBottleneck?.insight).not.toMatch(/cause/i);
+  });
   const ZERO = { scanned: 0, failed_data: 0, failed_pre_screen: 0, no_chain: 0, failed_score: 0, failed_contracts: 0,
     failed_direction: 0, failed_shortlist: 0, failed_direction_unmeasured: 0, other_rejected: 0, candidates: 0 };
 
