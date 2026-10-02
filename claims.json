@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "ccr-5c724df1-2zfbux",
       "claimed_at": "2026-10-02T12:12:57Z",
-      "expires_at": "2026-10-02T15:12:57Z",
+      "expires_at": "2026-10-02T15:33:20Z",
       "note": "built f6bfdf6; merging main + adversarial code audit loop",
       "task": "STEP3-PARAM-REACH"
     },
