@@ -100,3 +100,13 @@ later rounds review only the preceding fixes and their interactions.
   swallow save failure, and bypass both PATCH routes' expiry helper. Mutation
   runs changed only isolated pytest-process function objects; repository source
   and running services were not mutated.
+
+## Final integrated validation
+
+Merged origin/main 525b547e into the feature branch without conflicts; audited
+implementation unchanged. Backend from backend/: 4638 passed, 1 skipped,
+1 pre-existing SHORTLIST-PREFIX-DRIFT failure. Frontend typecheck passed; Jest
+183 suites / 4462 tests passed. state.py --quiet exits 0; full rendering fails
+on the pre-existing object in open_questions[57]. These unrelated defects
+were preserved and recorded; no scope expansion. Own independent audit stages
+are clean, with no outstanding gate findings.
