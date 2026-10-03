@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "claude/trading-review-fixes",
       "claimed_at": "2026-10-03T13:14:52Z",
-      "expires_at": "2026-10-03T16:14:52Z",
+      "expires_at": "2026-10-03T18:22:46Z",
       "note": "Phase A trading-review fixes: audit round-1 fix wave, then re-audit + PR",
       "task": "TRADING-REVIEW-FIXES"
     },
