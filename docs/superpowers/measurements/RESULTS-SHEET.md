@@ -155,9 +155,9 @@ are listed: O3, S1 and A2 had none, and the C-scans are not listed.
   used") a later A-block would not replace it. Using a later one would need Kenneth to amend §5,
   and even an A2 outside the gap may return 0 candidates. 0 candidates does not make the block
   unusable.
-- Names whose contract-reject reason contains `iv_too_high` (`max_iv_abs` 70): A1 22, A2 6. Every
-  one of them also had contracts rejected for other reasons, so no name was removed by this check
-  alone. No rule reads this count.
+- Names whose contract-reject reason contains `iv_too_high` (`max_iv_abs` 70): A1 22, A2 6. Each
+  also had contracts rejected for other reasons. The per-reason counts cannot show whether this
+  check alone removed any name. No rule reads this count.
 - Structures built: none (0/2 spread build).
 - ATM cross-check pair: WMT, ATM absolute 27.2 vs O1's picked-contract `detail_iv_abs` 28.3
   (rank 31.7).
@@ -203,10 +203,10 @@ How much is calendar, out of each no-chain set:
 - All three O4 picks are the Oct 23 weekly.
 - The expiry lists are cached per symbol per day (`market.py`), so O3/O4 reused the lists O1/O2
   had already fetched successfully.
-- A2 ran about an hour after O3, on a freshly restarted backend whose cache started empty. A1,
-  which ran just before it, re-fetched the expiry lists of 186 of these 213 names (177 of them got
-  a chain in A1's Position window), and A2 fetched the other 27 itself. A2 lost exactly the same
-  213 names as O3.
+- The backend was restarted before A1 (new pid), so the A-block started with an empty cache.
+  A1 and A2 then ran in that process, about an hour after O3. Of the 213 names, 186 reached A1's
+  chain fetch first (177 got a chain there); A2 fetched at least the other 27 itself. A2 lost
+  exactly the same 213 names as O3.
 - The cause is inferred from the code at the tag and this pattern. Tradier was not re-queried by
   hand.
 
