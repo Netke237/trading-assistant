@@ -1,5 +1,6 @@
 import type { OptionsPipeline, RejectedEntry } from './scanStore';
 import type { DteWindow } from '@/types/domain';
+import { SHORTLIST_REASON_PREFIX } from './shortlistCap';
 
 // Turns the options scan's pipeline counters and rejected list into the
 // staged drop-off model the PipelineInspector renders.
@@ -20,8 +21,6 @@ import type { DteWindow } from '@/types/domain';
 // hard-reject codes). Change one there and the matching table here must move
 // with it — the parser tests are written against those exact strings.
 
-// Mirrors backend `_SHORTLIST_REASON_PREFIX` (and scanLogTotals' SHORTLIST_REASON_PREFIX).
-const SHORTLIST_PREFIX = 'Shortlist cap:';
 const DIRECTION_PREFIX = 'direction_conviction:';
 const DIRECTION_UNMEASURED_PREFIX = 'direction_conviction_unmeasured:';
 
@@ -200,7 +199,7 @@ export function classifyReason(entry: RejectedEntry): Classified {
     return { stage: 'contract-rules', subRules: Array.from(rules) };
   }
   if (reason.startsWith(DIRECTION_PREFIX)) return { stage: 'direction-shortlist', subRules: ['direction'] };
-  if (reason.startsWith(SHORTLIST_PREFIX)) return { stage: 'direction-shortlist', subRules: ['shortlist'] };
+  if (reason.startsWith(SHORTLIST_REASON_PREFIX)) return { stage: 'direction-shortlist', subRules: ['shortlist'] };
   // The backend's residual bucket (`other_rejected`): per-symbol exceptions —
   // often an empty reason — and any reason no predicate matches. These can
   // happen at ANY step, so they are not placed in the funnel's order.
