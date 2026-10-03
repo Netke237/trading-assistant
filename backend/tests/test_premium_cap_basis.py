@@ -194,7 +194,9 @@ def test_booking_body_carries_the_armed_order():
 # gates-off booking re-judged it at the BOOKING-time live mid + spread/2, so it
 # could flag `over_exposure` -- and page -- on an order the fire had approved.
 # Both now call `auto_trader.armed_cap_basis(strategy)`: the same function on
-# the same armed inputs, and the booking invents no spread.
+# the same armed inputs. That still holds for an LMT arm (a fill cannot exceed
+# the limit). Audit round 3, R3-F1, narrowed it for a MKT arm: its booking is
+# judged at max(armed basis, booking-time fill basis) -- see the R3-F1 section.
 
 def test_the_fire_and_the_booking_share_one_basis_function():
     from app.services.auto_trader import armed_cap_basis
@@ -255,10 +257,13 @@ async def test_a_limit_arm_is_judged_at_the_armed_basis_not_the_booking_mid(sess
 @pytest.mark.asyncio
 async def test_the_booking_still_flags_an_arm_the_basis_does_not_fit(session, mocker):
     """The shared basis is not a free pass: the booking (gates off) still
-    reports a breach judged at it -- here the snapshot the fire never saw."""
-    s = _strategy(order_type="MKT", limit_price=None, quantity=13,
+    reports a breach judged at it -- here the snapshot the fire never saw.
+    An LMT arm, so the armed basis is the ONLY basis (R3-F1 adds a booking-time
+    floor for MKT only); the booking quote's mid is below the limit, so the
+    flag can come from the armed basis alone."""
+    s = _strategy(limit_price=3.00, quantity=13,
                   portfolio_value=100_000.0)                    # 13 x 300 = 3,900
-    out = await _book(session, mocker, s, dict(_QUOTE))
+    out = await _book(session, mocker, s, {**_QUOTE, "price": 2.50})
     assert out.booked is True
     assert out.over_exposure is True
 
