@@ -31,6 +31,14 @@
       "expires_at": "2026-10-03T08:29:08Z",
       "note": "Step 0 measurement script + plan rewrite",
       "task": "NO-LIVE-QUOTE"
+    },
+    {
+      "agent": "claude",
+      "branch": "work",
+      "claimed_at": "2026-10-03T05:32:14Z",
+      "expires_at": "2026-10-03T08:32:14Z",
+      "note": "Plan, build and independently audit queued watch-alert expiry on re-enable",
+      "task": "WATCH-RESEND-EXPIRY-ON-REENABLE"
     }
   ]
 }
