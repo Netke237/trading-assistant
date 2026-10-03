@@ -1,10 +1,10 @@
 # ALERT-INDICATOR-ID-MAP review evidence
 
-Review gate: wrong user-visible readings or corrupt persisted data, including mechanism comments that would cause a wrong change. Review performed by the implementing agent as an adversarial self-review; no independent reviewer was used.
+Review gate: wrong user-visible readings or corrupt persisted data, including mechanism comments that would cause a wrong change. The original reviews were performed by the implementing agent; they did NOT satisfy K-adversarial-audit-loop and are not counted as audit rounds. The previous audit-clean declaration was incorrect and has been withdrawn. Independent code audit round 1 is now running.
 
-Round 1 examined selector serialization, browser evaluation, backend dispatch, persistence and compatibility. Corrections: parameter ordering is explicit rather than object insertion order; opaque chart IDs are never guessed; browser computations use saved rule parameters without active chart state; empty and unsupported references cannot be saved. Numeric-period bounds prevent enormous integer conversion failures. MACD requires fast < slow so the browser's missing-fast-EMA fallback cannot diverge from backend warm-up. Bollinger standard deviations use the same finite, positive decimal syntax in both parsers.
+Non-qualifying self-review pass 1 examined selector serialization, browser evaluation, backend dispatch, persistence and compatibility. Corrections: parameter ordering is explicit rather than object insertion order; opaque chart IDs are never guessed; browser computations use saved rule parameters without active chart state; empty and unsupported references cannot be saved. Numeric-period bounds prevent enormous integer conversion failures. MACD requires fast < slow so the browser's missing-fast-EMA fallback cannot diverge from backend warm-up. Bollinger standard deviations use the same finite, positive decimal syntax in both parsers.
 
-Round 2 examined those corrections and their interactions: timestamp-based chart IDs, default/legacy labels, custom periods, indicator removal, API create/update/read round trips, invalid-input rejection and the EMA seed bar. No remaining gate findings were identified in that self-review.
+Non-qualifying self-review pass 2 examined those corrections and their interactions: timestamp-based chart IDs, default/legacy labels, custom periods, indicator removal, API create/update/read round trips, invalid-input rejection and the EMA seed bar. No remaining gate findings were identified in that self-review.
 
 Validation observations:
 
