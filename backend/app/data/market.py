@@ -1261,8 +1261,26 @@ def _yf_iv_for_chain(symbol: str, expiry: str, is_call: bool) -> dict[float, flo
         return {}
 
 
-def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
-    """Fetch earnings + dividend dates in ONE yfinance calendar call (avoids two round-trips)."""
+class EarningsLookupError(Exception):
+    """An earnings lookup FAILED (audit round 1, F3) -- the request raised, timed
+    out or answered with something unreadable.
+
+    Distinct from a lookup that ANSWERED "no date on file", which returns None.
+    The two used to be one value (`_calendar_dates_yf` swallowed every error into
+    `(None, None)`), so the fire-time refusal could only ever say "none on file"
+    and the scan day-cached a transient failure as if it were an answer.
+
+    WHERE THE SOURCE ALLOWS: yfinance can itself swallow a failed request and
+    hand back an empty calendar, which is then indistinguishable from a genuine
+    "no calendar" and reads as None. What it raises is reported as a failure.
+    """
+
+
+def _calendar_dates_yf_strict(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Earnings + dividend dates in ONE yfinance calendar call, or raise
+    `EarningsLookupError` when the call fails. `(None, None)` means yfinance
+    answered with no calendar. A date already past reads as None (the next one
+    is not known)."""
     try:
         import yfinance as yf
         from datetime import datetime as _dt
@@ -1287,7 +1305,19 @@ def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
             div = d2 if d2 >= today else None
 
         return earn, div
-    except Exception:
+    except Exception as exc:
+        raise EarningsLookupError(f"yfinance calendar for {symbol} failed: {exc}") from exc
+
+
+def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Fetch earnings + dividend dates in ONE yfinance calendar call (avoids two round-trips).
+
+    Lenient: a failed lookup reads as `(None, None)`, exactly as before audit
+    round 1. Callers that must tell a failure from "no date" use
+    `_calendar_dates_yf_strict`."""
+    try:
+        return _calendar_dates_yf_strict(symbol)
+    except EarningsLookupError:
         return None, None
 
 
@@ -1327,7 +1357,15 @@ async def fetch_calendar_dates_async(symbol: str) -> tuple[Optional[date], Optio
         # Double-check after acquiring semaphore — another coroutine may have populated it.
         if symbol in _yf_cal_cache:
             return _yf_cal_cache[symbol]
-        result = await asyncio.to_thread(_calendar_dates_yf, symbol)
+        try:
+            result = await asyncio.to_thread(_calendar_dates_yf_strict, symbol)
+        except EarningsLookupError:
+            # Audit round 1, F3: a FAILED lookup is not cached. Since D4 was
+            # amended an unknown date caps a stock card at CAUTION, so caching
+            # one transient failure pinned the symbol at CAUTION for the rest
+            # of the day, re-scans included. Only real answers are cached --
+            # a genuine "no date" among them (the `(None, None)` return above).
+            return None, None
 
     _yf_cal_cache[symbol] = result
     return result
@@ -1801,6 +1839,77 @@ def _extract_dividend_date(fund_data: dict | None) -> Optional[date]:
     """Extract next ex-dividend date from pre-fetched fundamentals data (sync, no I/O)."""
     if not fund_data:
         return None
+
+
+def _first_calendar_result(data) -> dict | None:
+    """The first `results` entry of a Tradier fundamentals/calendars answer."""
+    if data and isinstance(data, list):
+        for entry in data:
+            for r in entry.get("results", []):
+                return r
+    return None
+
+
+def _fundamentals_calendar_sync(symbol: str) -> dict | None:
+    """Sync twin of `fetch_fundamentals_calendar` for the fire path, which runs
+    on a worker thread. Reuses the scan's same-day answer when there is one
+    (that cache holds only real answers). Raises `EarningsLookupError` on a
+    failed request instead of reading it as "no data"; a real answer is cached
+    the way the async path caches it."""
+    cached = _fundamentals_calendar_cache.get(symbol)
+    if cached is not None and cached[1] == date.today().isoformat():
+        return cached[0]
+    try:
+        resp = httpx.get(
+            f"{_tradier_base()}/beta/markets/fundamentals/calendars",
+            headers=_headers(),
+            params={"symbols": symbol},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        result = _first_calendar_result(resp.json())
+    except Exception as exc:
+        raise EarningsLookupError(f"fundamentals calendar for {symbol} failed: {exc}") from exc
+    _fundamentals_calendar_cache[symbol] = (result, date.today().isoformat())
+    return result
+
+
+def fetch_next_earnings_date(symbol: str) -> Optional[date]:
+    """The symbol's next earnings date for the auto-trade FIRE path (audit
+    round 1, F3), read through the SAME source chain the options scan uses
+    (`routers/scan.py`, the candidate loop): Tradier fundamentals first, then
+    the yfinance calendar only when fundamentals gave no date.
+
+    Returns the date (today or later), or None when every source ANSWERED and
+    none has a future date. Raises `EarningsLookupError` when no source gave a
+    date and at least one FAILED, so the refusal can say "lookup failed" rather
+    than "none on file". One source failing while the other dates it is not a
+    failure: the date is returned.
+
+    Each source's same-day answer from the scan is reused (both caches hold
+    real answers only), which also keeps a fire right after a scan from
+    re-hitting a feed that scan just hammered. Sync and unbounded on its own:
+    the caller (`auto_trader._lookup_earnings_date`) runs it under a deadline.
+    """
+    failures: list[str] = []
+    try:
+        earn = _extract_earnings_date(_fundamentals_calendar_sync(symbol))
+        if earn is not None:
+            return earn
+    except EarningsLookupError as exc:
+        failures.append(str(exc))
+
+    cached = _yf_cal_cache.get(symbol) if _yf_cal_cache_date == date.today().isoformat() else None
+    try:
+        earn = cached[0] if cached is not None else _calendar_dates_yf_strict(symbol)[0]
+        if earn is not None:
+            return earn
+    except EarningsLookupError as exc:
+        failures.append(str(exc))
+
+    if failures:
+        raise EarningsLookupError("; ".join(failures))
+    return None
     ex_date_str = fund_data.get("tables", {}).get("dividend", {}).get("ex_dividend_date")
     if not ex_date_str:
         return None

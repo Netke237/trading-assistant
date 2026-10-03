@@ -635,7 +635,9 @@ class TradeCardData(BaseModel):
     earningsVeto: bool = False
     # Unknown earnings (none on file, or only a past date). D4 amended
     # 2026-10-03: on a single stock (isEtf False) finalStatus is capped at
-    # CAUTION and the auto-trader refuses to fire; an ETF is unaffected.
+    # CAUTION; an ETF is unaffected. The cap is display/ranking only -- the
+    # auto-trader never reads this card; its OWN fire-time lookup is what
+    # refuses (auto_trader._apply_event_veto; audit round 1, F7).
     earningsUnknown: bool = False
     # Membership in the curated ETF set (app/data/etfs.py). False for any
     # symbol not in it -- the safe direction (treated as a stock).

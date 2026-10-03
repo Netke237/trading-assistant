@@ -167,13 +167,61 @@ class EventVetoError(RuntimeError):
         self.unknown = unknown
 
 
-def _fetch_earnings_date(symbol: str):
-    """The symbol's next earnings date, or None when unknown.
+# Audit round 1, F11: the fire-time earnings lookup runs on the ONE fire worker
+# (`routers/auto_trade.py::_FIRE_EXECUTOR`, max_workers=1) or the scan
+# trigger's thread, and yfinance has no timeout of its own, so a hung call
+# held the worker indefinitely. Each attempt is abandoned at this deadline
+# (the regime fetch's pattern); with the one retry the worst case is twice it.
+# Above the 8s Tradier timeout inside, so a slow-but-answering Tradier call is
+# not cut off before yfinance gets its turn.
+_EARNINGS_LOOKUP_DEADLINE_S = 12.0
 
-    Network-backed (yfinance). Module-level so a test can replace it, which the
-    suite does for every test (tests/conftest.py)."""
-    from app.data.market import _calendar_dates_yf
-    return _calendar_dates_yf(symbol)[0]
+
+def _lookup_earnings_date(symbol: str):
+    """The symbol's next earnings date, or None when every source ANSWERED with
+    no future date. Raises `EarningsLookupError` when the lookup FAILED.
+
+    Audit round 1, F3 + F11 (Kenneth 2026-10-03):
+      - the scan's source chain, not yfinance alone
+        (`market.fetch_next_earnings_date`: Tradier fundamentals, then yfinance,
+        reusing the scan's same-day answers);
+      - each attempt bounded by `_EARNINGS_LOOKUP_DEADLINE_S` (an abandoned
+        thread keeps running, as the regime fetch's does; this one cannot
+        touch any state the fire reads);
+      - ONE retry, on a failure or a timeout only. A genuine "no date" is an
+        answer and is not retried.
+    """
+    import concurrent.futures
+    from app.data import market
+    last: Exception | None = None
+    for _attempt in range(2):
+        ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
+            # `market.fetch_next_earnings_date` looked up at call time so a
+            # test patch on the market module lands.
+            future = ex.submit(market.fetch_next_earnings_date, symbol)
+            return future.result(timeout=_EARNINGS_LOOKUP_DEADLINE_S)
+        except concurrent.futures.TimeoutError:
+            last = market.EarningsLookupError(
+                f"no answer within {_EARNINGS_LOOKUP_DEADLINE_S:g}s")
+        except market.EarningsLookupError as exc:
+            last = exc
+        finally:
+            ex.shutdown(wait=False)
+        logger.warning("Event veto: earnings lookup for %s failed (%s)%s",
+                       symbol, last, "; retrying once" if _attempt == 0 else "")
+    assert last is not None
+    raise last
+
+
+def _fetch_earnings_date(symbol: str):
+    """The symbol's next earnings date, or None when unknown; raises when the
+    lookup failed (see `_lookup_earnings_date`, which this calls).
+
+    Module-level so a test can replace it, which the suite does for every test
+    (tests/conftest.py); tests/test_earnings_lookup_fire.py drives the real
+    lookup underneath it."""
+    return _lookup_earnings_date(symbol)
 
 
 def _apply_event_veto(strategy) -> None:

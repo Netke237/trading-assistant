@@ -279,7 +279,8 @@ def _reset_market_data_caches():
 def _no_network_earnings_lookup_at_fire(monkeypatch):
     """`AutoTradeService.fire()` looks up the symbol's next earnings date (fix #3
     part 2, the fire-time event veto) through `auto_trader._fetch_earnings_date`,
-    which calls the network-backed `market._calendar_dates_yf` (yfinance).
+    which calls the network-backed `market.fetch_next_earnings_date` (Tradier
+    fundamentals, then yfinance; audit round 1, F3).
 
     Default it to a date a year out for every test, so no test that reaches
     `fire()` touches the network or becomes order- and date-dependent. A year

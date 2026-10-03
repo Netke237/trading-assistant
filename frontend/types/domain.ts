@@ -698,7 +698,9 @@ export interface TradeCardData {
   earningsVeto?: boolean;
   /** No known next earnings date (none on file, or only a past one). D4
    *  amended 2026-10-03: on a single stock the backend caps finalStatus at
-   *  CAUTION and the auto-trader refuses to fire; an ETF is unaffected. */
+   *  CAUTION; an ETF is unaffected. The cap does not stop an auto-fire by
+   *  itself -- the auto-trader re-looks the date up at fire time and refuses
+   *  on that (audit round 1, F7). Step 7 refuses the Arm for it (F8). */
   earningsUnknown?: boolean;
   /** In the backend's curated ETF set (app/data/etfs.py). Absent on pre-deploy
    *  scans -- read as false, i.e. a single stock (the safe direction). */
