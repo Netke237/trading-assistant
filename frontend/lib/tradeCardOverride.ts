@@ -43,6 +43,9 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
     // backend already computes this per contract and simply was not returning
     // it.
     contractBreakdown: picked.breakdown ?? card.contractBreakdown,
+    // Set from picked row ONLY; legacy/missing picked explanation clears it rather
+    // than borrowing the auto-picked card's explanation.
+    contractExplanation: picked.explanation,
     contractDetails: {
       strike:       picked.strike,
       expiry:       picked.expiry,

@@ -219,6 +219,58 @@ class WatchlistRow(BaseModel):
     nextEventLabel: Optional[str] = None
 
 
+class BlockerComparison(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    code: str
+    label: str
+    metric: str
+    observed: float | int | str | None = None
+    threshold: float | int | str
+    operator: str
+
+
+class ComponentExplanation(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    name: str
+    wire_name: str
+    raw_score: int
+    weight: float
+    contribution: float
+    lost_points: float
+    observed: float | int | None = None
+    observed_unit: str = ""
+    basis: Literal["rank", "absolute", "none"] | None = None
+    preferred_min: float | int | None = None
+    preferred_max: float | int | None = None
+    flags: list[str] = Field(default_factory=list)
+    volume: int | None = None
+    open_interest: int | None = None
+    preferred_volume_min: int | None = None
+    preferred_oi_min: int | None = None
+
+
+class ContractExplanation(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    version: int = 1
+    contract_id: str
+    evaluated_at: str
+    outcome: Literal["blocked", "aggregate"]
+    score: int
+    status: Status
+    unrounded_score: float | None = None
+    rounded_score: int | None = None
+    pass_threshold: float
+    caution_threshold: float
+    weights: dict[str, float]
+    components: dict[str, ComponentExplanation]
+    largest_losses: list[ComponentExplanation]
+    blockers: list[BlockerComparison]
+    reject_reasons: list[str] = Field(default_factory=list)
+    soft_flags: list[str] = Field(default_factory=list)
+    soft_fail_count: int
+    max_soft_fail_count: int
+
+
 # ── Contracts ────────────────────────────────────────────────────────────────
 
 class OptionContract(BaseModel):
@@ -256,6 +308,7 @@ class OptionContract(BaseModel):
     volume: int
     score: int
     contractConfidence: Status
+    explanation: Optional[ContractExplanation] = None
 
 
 # ── Candles ──────────────────────────────────────────────────────────────────
