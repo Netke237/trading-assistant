@@ -31,7 +31,7 @@ No gate/scorer, dependency, lockfile or persistence-schema changes were made in 
 
 ## Independent reviews and cap
 
-Step 5's historical code rounds remain 4 with findings 13, 12, 6, 0. Its current clean flag is false because the new fixes were not independently reviewed. No fifth round was silently run, and no history was reset. The user was asked for one explicit exception after the corrections and checks were concrete. No approval has been received; pending approval is not approval.
+Step 5's historical code rounds remain 4 with findings 13, 12, 6, 0. After the explicit extra-round request, the user instructed root to take over and ensure both pages are audited and fixed. Root stated that this authorizes the pending extra Step 5 round. Fresh reviewer `/root/vol_events_corrections_audit` is reviewing only `66561e26..283c2cbb` Step 5 corrections and their interactions. No history is reset; its verdict is pending.
 
 Contracts retains its historical completed round 1 (zero findings). An earlier independent reviewer died on a model usage limit before returning a verdict; that aborted review is not clean and does not increment completed audit rounds.
 
@@ -42,4 +42,6 @@ Contracts retains its historical completed round 1 (zero findings). An earlier i
 
 Round 2 independently reproduced the card displaying `Weight: 15%` while the corrected banner showed `15.25%` for `iv_rank: 0.1525`. The follow-up removes integer rounding from component weights and adds a literal rendered-card regression. Round 3 verified that backend supplies the same effective weight to both paths, and both now display `15.25%`. Both rounds excluded Step 5 entirely. Round 3 was checked against its intended scope and closes the Contracts correction audit at the three-round cap.
 
-Contracts is `ready_to_merge`; Step 5 remains `awaiting_audit` pending an explicit cap exception. The integrated branch therefore remains unapproved for merge. Project state is authoritative for current verdicts; this document records evidence and scope.
+Contracts corrections on this branch are `ready_to_merge`; Step 5 remains `awaiting_audit` pending the authorized independent review. Another Contracts session holds a claim on `fix/options-contract-explanations` and is still editing, as confirmed by the user. That branch was not published when checked. The user was asked to pause the other session and publish its latest work for reconciliation. Both original published feature branch heads are ancestors of this branch. The combined release remains unapproved until the remaining review and cross-session reconciliation are complete. Project state is authoritative for current verdicts; this document records evidence and scope.
+
+Takeover verification: Step 5 targeted Jest rerun passed 6 suites / 124 tests; typecheck passed.

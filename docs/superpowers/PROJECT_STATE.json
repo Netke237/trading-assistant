@@ -4104,14 +4104,19 @@
           ],
           "head_commit": "7756732a"
         },
-        "note": "Confirmed review defects corrected on codex/options-explanation-fixes. Current source awaits independent verification; not approved for merge. Prior code audit history is retained above.",
+        "note": "User authorized takeover and pending extra Step5 review. Historical audit counters retained. Contracts session is still editing separately; its unpublished work is not reconciled.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
           "historical_rounds_preserved": 4,
           "known_defects_fixed": 3,
-          "independent_verdict": "blocked_by_existing_three_round_cap",
-          "note": "Current code has corrections beyond the recorded review. Historical counters and findings remain intact; passing tests do not clear the shipping gate."
+          "independent_verdict": "authorized_extra_round_pending",
+          "note": "Current code has corrections beyond the recorded review. Historical counters and findings remain intact; passing tests do not clear the shipping gate.",
+          "audit_cap_exception": {
+            "date": "2026-10-03",
+            "authorization": "User asked root to take over, ensure both pages are audited and fixed after the explicit extra-round request.",
+            "scope": "One independent review of Step5 correction commit 283c2cbb and interactions; preserve existing four-round history."
+          }
         }
       },
       {
