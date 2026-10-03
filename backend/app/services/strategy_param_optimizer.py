@@ -103,6 +103,14 @@ def _optimize_strategy_sync(
         winner, winner_results = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
         fold_winners.append(winner)
 
+        # No trained parameters means this fold contributes no proposal evidence.
+        # Evaluating defaults here would contaminate the global OOS metrics even
+        # though valid_triples below excludes this fold's return and parameters.
+        if not winner:
+            in_sample_fold_returns.append(0.0)
+            fold_test_returns.append(0.0)
+            continue
+
         # IS return: reuse the winning combo's backtest results computed inside train_fold's
         # grid search (train_fold already ran this exact backtest to select the winner by
         # Sharpe) — avoids a second identical Backtest.run() per symbol per fold.
