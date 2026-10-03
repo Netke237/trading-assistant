@@ -23,7 +23,7 @@ import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
 
 // Compact column template (10 cols) — fits comfortably at 1280px without horizontal scroll
-const COLUMNS = '28px minmax(110px, 1fr) 90px 50px 56px 56px 56px 90px 72px 36px';
+const COLUMNS = '24px minmax(0, 1fr) 80px 44px 60px 52px 50px 80px 64px 20px';
 
 type SortKey =
   | 'contract' | 'dte' | 'delta' | 'price'
@@ -367,7 +367,7 @@ export default function Step6Page() {
                     setPick(c.id);
                     setPickedContract(candidate.symbol, c.id);
                   }}
-                  className={extra?.className}
+                  className={`${tbl.contractRow} ${extra?.className ?? ''}`}
                 >
                   <ContractStar contractId={c.id} grading={gradingBySymbol[candidate.symbol]} size="sm" />
                   <Data size={13} weight={500}>

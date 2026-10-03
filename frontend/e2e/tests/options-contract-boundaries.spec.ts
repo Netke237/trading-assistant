@@ -12,7 +12,7 @@ async function seed(page: Page, contract: OptionContract, spreadType?: 'bear_put
   await page.route('**/api/contracts**', r => r.fulfill({ json: [contract] }));
   await page.addInitScript(c => localStorage.setItem('bamendjou-scan-store', JSON.stringify({ version: 13, state: {
     scanResult: { scan_id: 'contract-boundary', timestamp: new Date().toISOString(), candidates: [c], rejected: [] },
-    context: { direction: 'Bullish', horizon: 'Swing (5-20d)', holdMin: 5, holdMax: 20 }, scanState: 'COMPLETED',
+    context: { direction: c.contract.endsWith('|P') ? 'Bearish' : 'Bullish', horizon: 'Swing (5-20d)', holdMin: 5, holdMax: 20 }, scanState: 'COMPLETED',
   } })), candidate);
   await page.goto('/screener/step-6-contracts');
   await page.getByRole('button', { name: /^Explain score/ }).click();
@@ -43,7 +43,7 @@ for (const width of [1280, 1440, 1920]) {
       const overflow = await page.evaluate(() => {
         const elements = [document.documentElement, document.body,
           ...document.querySelectorAll('[role="table"], [role="region"][aria-label^="Score explanation"]')];
-        return elements.filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.tagName);
+        return elements.filter(el => el.scrollWidth > el.clientWidth + 1).map(el => ({tag: el.tagName, role: el.getAttribute('role'), scroll: el.scrollWidth, client: el.clientWidth}));
       });
       expect(overflow).toEqual([]);
       const clipped = await panel.evaluate(p => {
