@@ -1603,8 +1603,8 @@
       "id": "WATCH-RESEND-EXPIRY-ON-REENABLE",
       "name": "Piece 2 of 3: queued watch alerts older than a max age are dropped when the watch is re-enabled (strategy and composite routes)",
       "status": "not_started",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "audit_rounds": 1,
+      "audit_clean": true,
       "depends_on": [],
       "verify": {
         "kind": "present",
@@ -1612,7 +1612,8 @@
         "pattern": "^_REENABLE_MAX_AGE = ",
         "note": "BUILT once the max-age constant exists."
       },
-      "note": "Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 section 2.8 and its round-1/2 findings (R1-1, R1-5, R1-13). Own plan, three plan rounds."
+      "note": "2026-10-03 PLAN ROUND 1 CLEAN (0 gate-level findings), independent reviewer checked atomic persistence/rollback, both PATCH routes, prefix semantics, shared evaluation lock and malformed entries. Next: build from own plan; code stage starts at round 2 (code round 1 of 3). 2026-10-03: claimed on codex/watch-resend-expiry; own plan v1 written from combined plan section 2.8, with atomic enable/state persistence, both PATCH routes, and shared locking for both evaluation entry points. Plan round 1 next. Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 section 2.8 and its round-1/2 findings (R1-1, R1-5, R1-13). Own plan, three plan rounds.",
+      "plan": "docs/superpowers/plans/2026-10-03-watch-resend-expiry-on-reenable-plan.md"
     },
     {
       "id": "WATCH-RESEND-PER-CHANNEL",
