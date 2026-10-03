@@ -11,6 +11,7 @@ import logging
 import os
 import threading
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -94,7 +95,7 @@ def _migrate_interval_spellings(watches: list[dict]) -> list[tuple]:
 class StrategyWatchStore:
     def __init__(self, path: Path | None = _DEFAULT_PATH) -> None:
         self._path = path
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._watches: list[dict] = []
         self._schedule: dict = dict(_DEFAULT_SCHEDULE)
         if self._path and self._path.exists():
@@ -151,13 +152,13 @@ class StrategyWatchStore:
     def save(self) -> None:
         if not self._path:
             return
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._path.with_suffix(".yaml.tmp")
         with self._lock:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._path.with_suffix(".yaml.tmp")
             data = {"schedule": dict(self._schedule),
                     "watches": [dict(w) for w in self._watches]}
-        tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
-        os.replace(tmp, self._path)
+            tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+            os.replace(tmp, self._path)
 
     # ── watches ──────────────────────────────────────────────────────────────
     def list_watches(self) -> list[dict]:
@@ -251,17 +252,27 @@ class StrategyWatchStore:
             self.save()
         return removed
 
-    def set_enabled(self, watch_id: str, enabled: bool) -> bool:
+    def set_enabled(self, watch_id: str, enabled: bool, *,
+                    on_reenable: Callable[[dict], dict] | None = None) -> bool:
+        """Persist enable and an optional re-enable state transform together.
+
+        The transform must not mutate its input. A failed save restores the
+        watch in memory and propagates the error to the caller.
+        """
         with self._lock:
-            found = False
-            for w in self._watches:
+            for index, w in enumerate(self._watches):
                 if w["id"] == watch_id:
-                    w["enabled"] = bool(enabled)
-                    found = True
-                    break
-        if found:
-            self.save()
-        return found
+                    previous = dict(w)
+                    try:
+                        if enabled and not w.get("enabled", True) and on_reenable is not None:
+                            w["last_state"] = on_reenable(dict(w.get("last_state") or {}))
+                        w["enabled"] = bool(enabled)
+                        self.save()
+                    except Exception:
+                        self._watches[index] = previous
+                        raise
+                    return True
+        return False
 
     def update_state(self, watch_id: str, new_state: dict) -> None:
         with self._lock:

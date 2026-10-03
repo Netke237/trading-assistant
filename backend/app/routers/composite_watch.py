@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from app.schemas import Direction
 from app.services.strategy_watch_store import strategy_watch_store
 from app.services.strategy_param_store import get_composite_trigger_defaults
+from app.services.strategy_watch_evaluator import set_enabled_and_expire
 
 router = APIRouter(prefix="/api/composite-watches", tags=["composite-watch"])
 
@@ -147,6 +148,7 @@ async def delete_composite_watch(watch_id: str) -> None:
 
 @router.patch("/{watch_id}")
 async def set_enabled(watch_id: str, body: EnabledPatch) -> dict:
-    if not strategy_watch_store.set_enabled(watch_id, body.enabled):
+    expired = await set_enabled_and_expire(watch_id, body.enabled, store=strategy_watch_store)
+    if expired is None:
         raise HTTPException(status_code=404, detail="composite watch not found")
-    return {"id": watch_id, "enabled": body.enabled}
+    return {"id": watch_id, "enabled": body.enabled, "expired_alerts": expired}
