@@ -696,7 +696,13 @@ export interface TradeCardData {
   finalStatus: Status;
   /** Fix #3: earnings inside the horizon reject window -> finalStatus REJECT, no send. */
   earningsVeto?: boolean;
+  /** No known next earnings date (none on file, or only a past one). D4
+   *  amended 2026-10-03: on a single stock the backend caps finalStatus at
+   *  CAUTION and the auto-trader refuses to fire; an ETF is unaffected. */
   earningsUnknown?: boolean;
+  /** In the backend's curated ETF set (app/data/etfs.py). Absent on pre-deploy
+   *  scans -- read as false, i.e. a single stock (the safe direction). */
+  isEtf?: boolean;
   /** Days to earnings alone; nextEventDays is the nearer of earnings/dividend. */
   earningsDays?: number | null;
   /** Signal confidence 0–100 (null when history is too thin to judge). */

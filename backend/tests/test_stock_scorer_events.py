@@ -154,7 +154,7 @@ def test_options_unknown_earnings_flagged_but_score_unchanged():
     assert r.detail["reject_days"] == 21
 
 
-def test_options_known_earnings_not_flagged_unknown_and_past_earnings_is_none():
+def test_options_known_earnings_not_flagged_unknown_and_past_earnings_is_unknown():
     cfg = {"event": {"reject_days": 21, "caution_days": 45}}
     known = _rule_event(earnings_date=date.today() + timedelta(days=30),
                         dividend_date=None, cfg=cfg, scoring_mode="options")
@@ -162,6 +162,8 @@ def test_options_known_earnings_not_flagged_unknown_and_past_earnings_is_none():
     past = _rule_event(earnings_date=date.today() - timedelta(days=3),
                        dividend_date=None, cfg=cfg, scoring_mode="options")
     assert past.detail["earnings_days"] is None
+    # Task 10b: a PAST date means the NEXT one is unknown.
+    assert past.detail["earnings_unknown"] is True
 
 
 def test_stock_mode_has_no_earnings_unknown_key():

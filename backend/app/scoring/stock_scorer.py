@@ -873,8 +873,11 @@ def _rule_event(
         earnings_days = None
     base_detail: dict = {"earnings_days": earnings_days, "reject_days": int(ec["reject_days"])}
     if scoring_mode != "stock":
-        # D4 (fix #3): unknown is surfaced, never scored -- ETFs have no earnings.
-        base_detail["earnings_unknown"] = earnings_date is None
+        # D4 (fix #3, amended 2026-10-03): unknown is surfaced, never SCORED --
+        # ETFs have no earnings. The options scan caps a single stock's card at
+        # CAUTION on it (routers/scan.py::_earnings_unknown_caps). A PAST date
+        # means the next one is unknown, so it is flagged unknown too.
+        base_detail["earnings_unknown"] = earnings_days is None
 
     for label, ev_date in [("earnings", earnings_date), ("dividend", dividend_date)]:
         if ev_date is None:

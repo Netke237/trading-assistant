@@ -2,8 +2,14 @@
 
 The scan marks an options candidate REJECT when earnings fall inside the
 horizon's reject window. An arm can sit for up to max_arm_age_minutes after its
-scan, so `fire()` applies the same rule again. An UNKNOWN earnings date never
-vetoes (decision D4), exactly as in the scan.
+scan, so `fire()` refuses on the horizon's YAML window (a Step-3 override is not
+carried on the arm).
+
+D4 AMENDED 2026-10-03 (Kenneth): for a SINGLE STOCK an UNKNOWN earnings date
+(None, a failed lookup, or a date already past) also refuses -- the scan caps
+that card at CAUTION. ETFs (app.data.etfs.is_etf) have no earnings and still
+fire. A symbol missing from the curated ETF set is treated as a stock (the safe
+direction).
 """
 from datetime import date, timedelta
 
@@ -30,16 +36,59 @@ def test_no_veto_outside_window(monkeypatch):
     at._apply_event_veto(_S())
 
 
-def test_unknown_earnings_does_not_veto(monkeypatch):
+class _Etf(_S):
+    symbol = "SPY"
+
+
+def test_stock_with_unknown_earnings_is_refused(monkeypatch):
+    """D4 amended: a single stock with no earnings date on file cannot auto-fire."""
     monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: None)
-    at._apply_event_veto(_S())
+    with pytest.raises(at.EventVetoError) as info:
+        at._apply_event_veto(_S())
+    assert "unknown" in str(info.value)
+    assert "inside" not in str(info.value), "an unknown date is not 'inside the window'"
+    assert info.value.unknown is True
 
 
-def test_failed_lookup_does_not_veto(monkeypatch):
+def test_etf_with_unknown_earnings_is_not_refused(monkeypatch):
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: None)
+    at._apply_event_veto(_Etf())
+
+
+def test_stock_with_failed_lookup_is_refused(monkeypatch):
     def _boom(symbol):
         raise RuntimeError("yfinance down")
     monkeypatch.setattr(at, "_fetch_earnings_date", _boom)
-    at._apply_event_veto(_S())
+    with pytest.raises(at.EventVetoError) as info:
+        at._apply_event_veto(_S())
+    assert "unknown" in str(info.value) and "yfinance down" in str(info.value)
+
+
+def test_etf_with_failed_lookup_is_not_refused(monkeypatch):
+    def _boom(symbol):
+        raise RuntimeError("yfinance down")
+    monkeypatch.setattr(at, "_fetch_earnings_date", _boom)
+    at._apply_event_veto(_Etf())
+
+
+def test_stock_with_past_earnings_date_is_refused(monkeypatch):
+    """A past date means the NEXT one is unknown."""
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: date.today() - timedelta(days=2))
+    with pytest.raises(at.EventVetoError) as info:
+        at._apply_event_veto(_S())
+    assert "unknown" in str(info.value)
+
+
+def test_etf_with_past_earnings_date_is_not_refused(monkeypatch):
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: date.today() - timedelta(days=2))
+    at._apply_event_veto(_Etf())
+
+
+def test_inside_window_refusal_is_not_flagged_unknown(monkeypatch):
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: date.today() + timedelta(days=3))
+    with pytest.raises(at.EventVetoError) as info:
+        at._apply_event_veto(_S())
+    assert info.value.unknown is False
 
 
 def test_missing_horizon_with_earnings_inside_the_widest_window_vetoes(monkeypatch, caplog):
@@ -64,12 +113,15 @@ def test_missing_horizon_with_earnings_beyond_the_widest_window_passes(monkeypat
     at._apply_event_veto(s)
 
 
-def test_missing_horizon_with_unknown_or_past_earnings_passes(monkeypatch):
-    s = _S()
-    s.horizon = None
+def test_missing_horizon_with_unknown_or_past_earnings(monkeypatch):
+    """Unknown needs no window: an ETF passes, a stock is refused."""
+    etf, stock = _Etf(), _S()
+    etf.horizon = stock.horizon = None
     for value in (None, date.today() - timedelta(days=2)):
         monkeypatch.setattr(at, "_fetch_earnings_date", lambda sym, v=value: v)
-        at._apply_event_veto(s)
+        at._apply_event_veto(etf)
+        with pytest.raises(at.EventVetoError):
+            at._apply_event_veto(stock)
 
 
 def test_window_boundary_is_exclusive(monkeypatch):
@@ -225,3 +277,47 @@ def test_consumed_attempt_router_sends_an_event_veto_row_to_its_own_alert(mocker
     assert event_alert.call_count == 1
     assert event_alert.call_args.args[0] == "AAPL"
     assert unclassified.call_count == 0
+
+
+def _fire_with(mocker, monkeypatch, symbol, earnings):
+    from app.data.ibkr_paper import OrderResult
+    sent: list = []
+    mocker.patch.object(at, "_market_is_open", return_value=True)
+    mocker.patch.object(at, "_apply_vol_sizing", lambda s: s)
+    mocker.patch.object(
+        at, "execute_option_order",
+        side_effect=lambda s: sent.append(s) or OrderResult("x", "ok", "ibkr_paper"))
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: earnings)
+    svc = AutoTradeService()
+    svc.arm(_armed(symbol))
+    return svc, sent
+
+
+def test_fire_refuses_a_stock_with_unknown_earnings_and_sends_nothing(mocker, monkeypatch):
+    svc, sent = _fire_with(mocker, monkeypatch, "AAPL", None)
+    with pytest.raises(at.EventVetoError):
+        svc.fire(attempt_id="attempt-UNK")
+    assert sent == []
+    last = svc.get_state().history[-1]
+    assert last["status"] == "event_veto_blocked", last
+    assert last["attempt_id"] == "attempt-UNK"
+    assert last["premium_at_risk"] == 0.0 and last["order_id"] is None
+    assert "unknown" in last["error"]
+    assert svc.get_state().armed is False
+
+
+def test_fire_still_fires_an_etf_with_unknown_earnings(mocker, monkeypatch):
+    svc, sent = _fire_with(mocker, monkeypatch, "SPY", None)
+    svc.fire()
+    assert len(sent) == 1
+
+
+def test_unknown_earnings_alert_says_unknown_not_inside_the_window(mocker, monkeypatch):
+    """The page must name the real reason: no date on file, not a near print."""
+    svc, _ = _fire_with(mocker, monkeypatch, "AAPL", None)
+    alert = mocker.patch.object(at, "_alert_refusal")
+    svc.maybe_fire_on_scan()
+    assert alert.call_count == 1
+    body = alert.call_args.args[2]
+    assert "unknown" in body
+    assert "fall inside" not in body

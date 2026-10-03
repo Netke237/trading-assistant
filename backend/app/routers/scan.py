@@ -58,6 +58,7 @@ from app.data.market import (
     get_tradier_creds,
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
+from app.data.etfs import is_etf
 from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_event_window
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
@@ -153,6 +154,22 @@ def _earnings_veto(card) -> bool:
     days = r.detail.get("earnings_days")
     reject = r.detail.get("reject_days")
     return days is not None and reject is not None and days < reject
+
+
+def _earnings_unknown_caps(card, symbol: str) -> bool:
+    """D4 as amended 2026-10-03 (Kenneth): a SINGLE STOCK whose next earnings
+    date is unknown (none on file, or only a past one) is capped at CAUTION --
+    a CAUTION card never auto-fires on the scan, and the fire path refuses it
+    too (`auto_trader._apply_event_veto`). The score is unchanged.
+
+    An ETF (`app.data.etfs.is_etf`) has no earnings and is never capped. A
+    symbol missing from that curated set counts as a stock: the safe direction.
+    No event rule at all means nothing says when earnings are -- unknown.
+    """
+    if is_etf(symbol):
+        return False
+    r = next((r for r in card.rules if r.name == "event"), None)
+    return r is None or r.detail.get("earnings_days") is None
 
 
 def _resolve_gate(req: ScanRequest) -> dict:
@@ -1231,9 +1248,12 @@ async def _process_symbol(
         finalStatus=_final_status(
             card.status, contract_card.status, entry.quality_status,
             "REJECT" if _earnings_veto(card) else "PASS",
+            # D4 amended 2026-10-03: unknown earnings caps a single stock.
+            "CAUTION" if _earnings_unknown_caps(card, symbol) else "PASS",
         ),
         earningsVeto=_earnings_veto(card),
         earningsUnknown=bool(rule_detail.get("event", {}).get("earnings_unknown", False)),
+        isEtf=is_etf(symbol),
         earningsDays=rule_detail.get("event", {}).get("earnings_days"),
         confidence=(_conf_rule.detail.get("confidence") if (_conf_rule := next((r for r in card.rules if r.name == "confidence"), None)) else None),
         confidenceText=(_conf_rule.detail.get("interpretation") if _conf_rule else None),

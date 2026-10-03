@@ -134,11 +134,18 @@ class RegimeHeadwindError(RuntimeError):
 
 
 class EventVetoError(RuntimeError):
-    """Fix #3: an earnings date inside the trade's horizon reject window.
+    """Fix #3: an earnings date inside the trade's horizon reject window -- or,
+    for a SINGLE STOCK, an earnings date nobody knows (D4 amended 2026-10-03).
 
-    The scan marks such a card REJECT; this refuses a fire for the same reason,
+    The scan marks the first card REJECT; this refuses a fire for the same reason,
     because an arm can sit for up to max_arm_age_minutes and the card may have
     been armed from a scan that predates the earnings announcement date.
+
+    The second case (`unknown=True`): Kenneth, 2026-10-03 -- a single stock whose
+    next earnings date is unknown (none on file, a lookup that failed, or only a
+    past date) is capped at CAUTION by the scan and must not auto-fire either.
+    ETFs (`app.data.etfs.is_etf`) have no earnings and are exempt; a symbol not
+    in that curated set counts as a stock, which is the safe direction.
 
     THE WINDOW IS THE HORIZON'S YAML ONE (scoring_rules.yaml
     `horizons.<horizon>.event.reject_days`), NOT necessarily the scan's. A
@@ -153,6 +160,12 @@ class EventVetoError(RuntimeError):
     moved" nor "fix the config" nor "the data feed is down".
     """
 
+    def __init__(self, message: str, *, unknown: bool = False) -> None:
+        super().__init__(message)
+        # True when the refusal is "earnings date unknown", not "inside the
+        # window" -- the alert words the two differently.
+        self.unknown = unknown
+
 
 def _fetch_earnings_date(symbol: str):
     """The symbol's next earnings date, or None when unknown.
@@ -164,7 +177,8 @@ def _fetch_earnings_date(symbol: str):
 
 
 def _apply_event_veto(strategy) -> None:
-    """Raise `EventVetoError` when earnings fall inside the horizon's reject window.
+    """Raise `EventVetoError` when earnings fall inside the horizon's reject
+    window, or when a single stock's earnings date is unknown.
 
     Same comparison as the scan's (`routers/scan.py::_earnings_veto`): `0 <=
     days < reject_days`. The window, though, is the horizon's YAML reject window
@@ -173,10 +187,14 @@ def _apply_event_veto(strategy) -> None:
     override can still be refused here. Deliberate -- it errs toward refusing --
     and a follow-up will carry the override.
 
-    ORDER MATTERS. The earnings date is fetched FIRST: an UNKNOWN date (None, or
-    a lookup that fails) or one already past never vetoes -- the scan treats
-    unknown as unknown too (decision D4) -- so the horizon is not needed then and
-    its absence is not an error.
+    ORDER MATTERS. The earnings date is fetched FIRST. An UNKNOWN date (None, a
+    lookup that fails, or one already past -- the next one is then unknown) needs
+    no window, so the horizon is not needed then and its absence is not an
+    error. Decision D4 as AMENDED 2026-10-03 (Kenneth): unknown REFUSES for a
+    single stock (the scan caps that card at CAUTION,
+    `routers/scan.py::_earnings_unknown_caps`) and passes for an ETF, which has
+    no earnings (`app.data.etfs.is_etf`; a symbol not in that set is a stock --
+    the safe direction).
 
     A trade with no horizon cannot say which window applies, and the regime gate
     abstains there. This one must not abstain: for a KNOWN future date it uses
@@ -187,15 +205,29 @@ def _apply_event_veto(strategy) -> None:
     """
     from typing import get_args
     from app.scoring.stock_scorer import Horizon, effective_event_window
+    from app.data.etfs import is_etf
+
+    def _unknown(why: str) -> None:
+        if is_etf(strategy.symbol):
+            return  # an ETF has no earnings: unknown is the normal case
+        raise EventVetoError(
+            f"earnings date unknown for single stock {strategy.symbol} ({why}) -- "
+            "an unknown earnings date blocks auto-fire on a stock (D4, amended 2026-10-03)",
+            unknown=True,
+        )
+
     try:
         earnings = _fetch_earnings_date(strategy.symbol)
-    except Exception as exc:  # noqa: BLE001 -- unknown == scan's unknown (D4)
+    except Exception as exc:  # noqa: BLE001 -- a failed lookup is an unknown date (D4)
         logger.warning("Event veto: earnings lookup failed for %s: %s", strategy.symbol, exc)
+        _unknown(f"lookup failed: {exc}")
         return
     if earnings is None:
+        _unknown("none on file")
         return
     days = (earnings - date.today()).days
     if days < 0:
+        _unknown(f"last date on file {earnings} is past")
         return
     if strategy.horizon is not None:
         reject_days, _ = effective_event_window(strategy.horizon, None)
@@ -1906,18 +1938,30 @@ def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     symbol, an event rather than a standing condition. Its own wording and type:
     nothing is misconfigured and the market did not move -- an earnings print is
     inside the horizon's reject window, and the remedy is a decision (re-arm
-    after the print, or not at all).
+    after the print, or not at all). When `exc.unknown` (D4 amended 2026-10-03:
+    a single stock with no known earnings date) the wording says so instead of
+    claiming a print is inside the window -- the remedy is to check the calendar.
     """
-    _alert_refusal(
-        symbol,
-        "earnings-veto refusal",
-        (
+    if getattr(exc, "unknown", False):
+        # D4 amended 2026-10-03: a single stock with no known earnings date.
+        reason = (
+            f"Auto-trade REFUSED to fire {symbol}: its earnings date is unknown, "
+            f"and an unknown earnings date blocks auto-fire on a single stock. "
+            f"Nothing was sent and the auto-trader is disarmed — check the "
+            f"earnings calendar and place the trade manually if it is clear. {exc}"
+        )
+    else:
+        reason = (
             f"Auto-trade REFUSED to fire {symbol}: earnings fall inside this "
             f"trade's horizon reject window (the horizon's configured window; "
             f"a lowered Step-3 override is not carried on the arm). Nothing was sent and the auto-trader is "
             f"disarmed — re-arm after the announcement if you still want the "
             f"trade. {exc}"
-        ),
+        )
+    _alert_refusal(
+        symbol,
+        "earnings-veto refusal",
+        reason,
         _per_symbol_rec_id(_REC_ID_EVENT_VETO, symbol),
         "AUTO_TRADE_EVENT_VETO",
         discrete=True,
@@ -2614,7 +2658,8 @@ class AutoTradeService:
             raise
 
         # Earnings veto (fix #3, part 2): refuses on the horizon's YAML reject
-        # window, because the arm may be older than the scan that produced it
+        # window -- and, since D4 was amended 2026-10-03, on an unknown earnings
+        # date for a single stock (ETFs exempt) -- because the arm may be older than the scan that produced it
         # (a Step-3 override is not carried -- see EventVetoError). After the
         # disarm and outside the lock, like the sizing call above (a network
         # lookup), and before any broker call.

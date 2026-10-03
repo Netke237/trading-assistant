@@ -216,14 +216,33 @@ describe('earnings gate uses the scan-echoed window, not a fixed 7/3 days', () =
     expect(screen.getByText("Next event in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
   });
 
-  it('shows CAUTION "Earnings date" when the earnings date is unknown', () => {
+  it('shows CAUTION "Earnings date" when a single stock has no known earnings date', () => {
     scanWith({ reject_days: 21, caution_days: 45 });
-    publish({ earningsDays: null, earningsUnknown: true });
+    publish({ earningsDays: null, earningsUnknown: true, isEtf: false });
     render(<TradeCardContextRail />);
     expect(screen.getByText('Earnings date')).toBeInTheDocument();
     expect(earningsStatus()).toBe('CAUTION');
-    expect(screen.getByText('No earnings date on file — check the calendar before sending.')).toBeInTheDocument();
+    // D4 amended 2026-10-03: the backend caps the card at CAUTION and the
+    // auto-trader refuses to fire it -- the rail says the same thing.
+    expect(screen.getByText(
+      'No earnings date on file — the card is capped at CAUTION and auto-trade will not fire a single stock. Check the calendar before sending.',
+    )).toBeInTheDocument();
     // No days figure, so no window-based gate beside it.
     expect(screen.queryByText(EARNINGS_LABEL)).not.toBeInTheDocument();
+  });
+
+  it('treats a card without the isEtf flag (pre-deploy scan) as a single stock', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    publish({ earningsDays: null, earningsUnknown: true });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('CAUTION');
+  });
+
+  it('passes the "Earnings date" gate for an ETF, which has no earnings', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    publish({ earningsDays: null, earningsUnknown: true, isEtf: true });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('PASS');
+    expect(screen.getByText('ETF — no earnings date to check.')).toBeInTheDocument();
   });
 });

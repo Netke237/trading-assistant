@@ -119,12 +119,23 @@ function buildChecklist(
   // Fix #3: the scan's own event window (echoed on the scan result), never a
   // fixed 7/3d. With no window in hand the gate is CAUTION, not PASS -- an
   // unknown window is not a clean read (same rule as the IV gate above).
+  //
+  // D4 amended 2026-10-03 (Kenneth): an unknown earnings date caps a SINGLE
+  // STOCK's card at CAUTION and blocks its auto-fire (backend). An ETF has no
+  // earnings, so it passes. A card without `isEtf` (pre-deploy scan) reads as
+  // a stock -- the same safe direction the backend takes.
   if (candidate.earningsUnknown) {
-    gates.push({
-      label: 'Earnings date',
-      status: 'CAUTION',
-      detail: 'No earnings date on file — check the calendar before sending.',
-    });
+    gates.push(candidate.isEtf
+      ? {
+          label: 'Earnings date',
+          status: 'PASS',
+          detail: 'ETF — no earnings date to check.',
+        }
+      : {
+          label: 'Earnings date',
+          status: 'CAUTION',
+          detail: 'No earnings date on file — the card is capped at CAUTION and auto-trade will not fire a single stock. Check the calendar before sending.',
+        });
   }
   // Graded on EARNINGS distance only. nextEventDays is the nearer of earnings
   // and dividend, and only earnings veto (D3): a dividend inside the window
