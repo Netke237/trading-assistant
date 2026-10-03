@@ -16,6 +16,7 @@ import pytest
 import app.services.strategy_watch_evaluator as ev_mod
 from app.services.strategy_watch_evaluator import evaluate_and_notify
 from app.services.strategy_watch_store import StrategyWatchStore
+from tests.watch_notify_helpers import configured_channels_no_real_sends, per_channel  # noqa: F401
 from tests.test_watch_undelivered_resend import _ARMED, _Env, _Store, _bars, _entry, _sw
 
 _EV = "app.services.strategy_watch_evaluator"
@@ -33,7 +34,7 @@ def _e(reason: str, new_state: dict | None = None, event_type="exit_stop", **ext
 
 
 class _Notify:
-    """notify_enabled_channels fake: fails every body carrying a reason in
+    """bool notify fake (adapted with per_channel): fails every body carrying a reason in
     `fail`, delivers the rest; records the reasons it was asked to send."""
 
     def __init__(self, fail=(), deliver_all=True):
@@ -71,7 +72,7 @@ class _CfgEnv(_Env):
                                     "strategy_matched": [], "strategy_total": 0}), \
                 patch(f"{_EV}.read_notification_config", **self.cfg_reader), \
                 patch(f"{_EV}._utcnow", side_effect=lambda: self.now), \
-                patch(f"{_EV}.notify_enabled_channels", self.notify):
+                patch(f"{_EV}.notify_channels", per_channel(self.notify)):
             return await evaluate_and_notify(**kw)
 
 
@@ -99,7 +100,7 @@ async def test_1_poison_head_dropped_on_third_spaced_run_when_next_delivers(capl
     env = _CfgEnv(store, n)
     await _runs(env, 0, 1)
     assert n.reasons() == ["RZ-head", "RZ-head"]            # the entry behind is never sent
-    assert _head(store)["failures"] == 2 and _reasons_pending(store) == ["RZ-head", "RZ-next"]
+    assert ev_mod._failures(_head(store), "gmail") == 2 and _reasons_pending(store) == ["RZ-head", "RZ-next"]
     with caplog.at_level(logging.ERROR, logger=_EV):
         await _runs(env, 2)
     assert n.reasons() == ["RZ-head", "RZ-head", "RZ-head", "RZ-next"]
@@ -120,7 +121,7 @@ async def test_1b_same_on_the_real_store_rebuilt_from_disk_each_run(tmp_path):
         await env.run()
         if h < 2:
             head = StrategyWatchStore(path=path).list_watches()[0]["last_state"]["pending_events"][0]
-            assert head["failures"] == h + 1                  # written, not only mutated in memory
+            assert ev_mod._failures(head, "gmail") == h + 1                  # written, not only mutated in memory
     final = StrategyWatchStore(path=path).list_watches()[0]["last_state"]
     assert "pending_events" not in final and n.reasons()[-1] == "RZ-next"
 
@@ -134,7 +135,7 @@ async def test_2_stored_two_not_counted_no_probe_counted_probes():
     n = _Notify(fail={"RZ-head"})
     env = _CfgEnv(store, n)
     await env.run()
-    assert n.reasons() == ["RZ-head"] and _head(store)["failures"] == 2
+    assert n.reasons() == ["RZ-head"] and ev_mod._failures(_head(store), "gmail") == 2
     env.now = T0 + timedelta(hours=1)
     await env.run()
     assert n.reasons() == ["RZ-head", "RZ-head", "RZ-next"] and "pending_events" not in store.state("a")
@@ -159,13 +160,14 @@ async def test_2c_unreadable_config_counts_nothing_and_never_probes(reader):
     n = _Notify(fail={"RZ-head"})
     env = _CfgEnv(store, n, cfg_reader=reader)
     await _runs(env, 0, 1, 2)
-    assert "failures" not in _head(store) and n.reasons() == ["RZ-head"] * 3
+    assert ev_mod._failures(_head(store), "gmail") == 0 and "channel_failures" not in _head(store)
+    assert n.reasons() == []                                  # hold: nothing is sent
     # (b) eligible head, P deliverable -> P not sent, nothing dropped
     store = _Store([_sw("a", pending=[_e("RZ-head", failures=3, last_failure_at=old), _e("RZ-next")])])
     n = _Notify(fail={"RZ-head"})
     await _CfgEnv(store, n, cfg_reader=reader).run()
-    assert n.reasons() == ["RZ-head"] and _reasons_pending(store) == ["RZ-head", "RZ-next"]
-    assert _head(store)["failures"] == 3
+    assert n.reasons() == [] and _reasons_pending(store) == ["RZ-head", "RZ-next"]
+    assert ev_mod._failures(_head(store), "gmail") == 3
     # (c) eligible head alone + a fresh stop hit -> fresh queued unsent
     head_state = {**_ARMED, "stop_price": 101.0}
     store = _Store([_sw("a", pending=[_e("RZ-head", head_state, event_type="entry",
@@ -173,8 +175,8 @@ async def test_2c_unreadable_config_counts_nothing_and_never_probes(reader):
     n = _Notify(fail={"RZ-head"})
     env = _CfgEnv(store, n, cfg_reader=reader)
     assert [e.event_type for e in await env.run()] == ["exit_stop"]
-    assert n.reasons() == ["RZ-head"] and store.kinds("a") == ["entry", "exit_stop"]
-    assert _head(store)["failures"] == 3 and _head(store)["last_failure_at"] == old
+    assert n.reasons() == [] and store.kinds("a") == ["entry", "exit_stop"]
+    assert ev_mod._failures(_head(store), "gmail") == 3 and ev_mod._last_failure(_head(store), "gmail") == old
 
 
 @pytest.mark.asyncio
@@ -184,10 +186,10 @@ async def test_3_failures_within_the_hour_count_once():
     for m in (0, 5, 10):
         env.now = T0 + timedelta(minutes=m)
         await env.run()
-    assert _head(store)["failures"] == 1
+    assert ev_mod._failures(_head(store), "gmail") == 1
     env.now = T0 + timedelta(minutes=61)
     await env.run()
-    assert _head(store)["failures"] == 2
+    assert ev_mod._failures(_head(store), "gmail") == 2
 
 
 @pytest.mark.asyncio
@@ -196,7 +198,7 @@ async def test_4_outage_drops_nothing():
     n = _Notify(deliver_all=False)
     env = _CfgEnv(store, n)
     await _runs(env, 0, 1, 2, 3, 4, 5)
-    assert _head(store)["failures"] == 6 and _reasons_pending(store) == ["RZ-head", "RZ-next"]
+    assert ev_mod._failures(_head(store), "gmail") == 6 and _reasons_pending(store) == ["RZ-head", "RZ-next"]
     assert store.committed("a")["phase"] == "armed"
     assert n.reasons().count("RZ-next") == 4                  # probed from the 3rd run, never dropped
 
@@ -219,7 +221,7 @@ async def test_6_two_stuck_in_a_row_nothing_dropped():
     n = _Notify(fail={"RZ-head", "RZ-P2"})
     await _CfgEnv(store, n).run()
     assert n.reasons() == ["RZ-head", "RZ-P2"]
-    assert _reasons_pending(store) == ["RZ-head", "RZ-P2", "RZ-C"] and _head(store)["failures"] == 3
+    assert _reasons_pending(store) == ["RZ-head", "RZ-P2", "RZ-C"] and ev_mod._failures(_head(store), "gmail") == 3
 
 
 @pytest.mark.asyncio
@@ -247,7 +249,7 @@ async def test_7b_fresh_probe_failing_is_queued_behind_the_head():
     env = _CfgEnv(store, _Notify(deliver_all=False))
     await env.run()
     assert store.kinds("a") == ["entry", "exit_stop"]
-    assert _head(store)["failures"] == 4 and _head(store)["last_failure_at"] == T0.isoformat()
+    assert ev_mod._failures(_head(store), "gmail") == 4 and ev_mod._last_failure(_head(store), "gmail") == T0.isoformat()
 
 
 @pytest.mark.asyncio
@@ -278,7 +280,7 @@ async def test_9_failed_probe_leaves_an_unreached_malformed_entry():
     assert n.reasons() == ["RZ-head", "RZ-P"]
     pend = store.pending("a")
     assert [p["event"].get("reason") for p in pend] == ["RZ-head", "RZ-P", None]
-    assert pend[0]["failures"] == 3 and pend[2]["new_state"] == "x"
+    assert ev_mod._failures(pend[0], "gmail") == 3 and pend[2]["new_state"] == "x"
 
 
 @pytest.mark.asyncio
@@ -320,7 +322,7 @@ async def test_10_malformed_and_odd_counter_values(failures, last, expect, caplo
     store = _Store([_sw("a", pending=[_e("RZ-head", **extra)])])
     with caplog.at_level(logging.ERROR, logger=_EV):
         await _CfgEnv(store, _Notify(fail={"RZ-head"})).run()
-    assert _head(store)["failures"] == expect
+    assert ev_mod._failures(_head(store), "gmail") == expect
     assert "resend for a failed" not in caplog.text
 
 
@@ -334,8 +336,9 @@ async def test_11_defensive_length_check_queues_the_fresh_event_unsent():
         pending=[_e("RZ-head", failures=3), _e("RZ-P")])
     n = _Notify()
     with patch(f"{_EV}.strategy_watch_store", store), \
-            patch(f"{_EV}.notify_enabled_channels", n.mock):
-        await ev_mod._deliver_or_queue(t, True, {"a": 3})
+            patch(f"{_EV}.notify_channels", per_channel(n.mock)):
+        run = ev_mod._Run("send", {"gmail": {"enabled": True}}, ("gmail",))
+        await ev_mod._deliver_or_queue(t, run, {"a": {"gmail": 3}})
     assert n.sent == [] and _reasons_pending(store) == ["RZ-head", "RZ-P", "RZ-fresh"]
 
 
@@ -375,7 +378,7 @@ async def test_14_counters_survive_write_effective_and_leave_with_an_evicted_hea
     env.now = T0 + timedelta(hours=3)
     await env.run()
     head = store.pending("c")[0]
-    assert head["failures"] == 2 and head["new_state"]["phase"] == "idle"
+    assert ev_mod._failures(head, "gmail") == 2 and head["new_state"]["phase"] == "idle"
     # the cap evicts the head with its counters; the new head starts at 0
     pend = [_e("RZ-head", failures=2)] + [_e(f"RZ-{i}") for i in range(ev_mod._QUEUE_CAP - 1)]
     store = _Store([_sw("a", pending=pend)])
@@ -383,7 +386,8 @@ async def test_14_counters_survive_write_effective_and_leave_with_an_evicted_hea
     env.store.watches[0]["last_state"]["pending_events"][-1]["new_state"] = {**_ARMED, "stop_price": 101.0}
     await env.run()
     assert len(store.pending("a")) == ev_mod._QUEUE_CAP
-    assert store.pending("a")[0]["event"]["reason"] == "RZ-0" and "failures" not in store.pending("a")[0]
+    assert store.pending("a")[0]["event"]["reason"] == "RZ-0" and "failures" not in store.pending("a")[0] \
+        and "channel_failures" not in store.pending("a")[0]
 
 
 @pytest.mark.asyncio

@@ -127,6 +127,25 @@ export interface ScanResult {
    *  2026-09-29 or when the scan could not record them. Step 6 sends it to
    *  /api/contracts so its table grades with the trade cards' rules. */
   contract_rules?: Record<string, number> | null;
+  /** The Reward/Risk overrides (rr_* keys) the scan priced its plans with;
+   *  `{}` when it overrode none. Absent, or null, on results from before
+   *  2026-10-02. Step 7's recompute-plan sends these, not live scanOverrides
+   *  (STEP3-PARAM-REACH) -- see rrOverridesForPlan. */
+  rr_overrides?: Record<string, number> | null;
+  /** The request fields the result was produced from. Absent, or null, on
+   *  results from before 2026-10-02. A result restored into an empty browser
+   *  rebuilds its ScanContext from this (contextFromScanRequest). */
+  request_context?: ScanRequestContext | null;
+}
+
+/** ScanResult.request_context -- the backend's ScanRequestContext. */
+export interface ScanRequestContext {
+  universe:       string[];
+  direction:      string;
+  horizon:        string;
+  horizon_preset?: string | null;
+  hold_min_days?:  number | null;
+  hold_max_days?:  number | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

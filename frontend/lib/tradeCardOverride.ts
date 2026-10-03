@@ -170,6 +170,20 @@ export function rrOverridesFrom(
   return out;
 }
 
+/** The Reward/Risk overrides Step 7's recompute-plan sends: the ones the scan
+ *  priced its plans with (ScanResult.rr_overrides), so a Step-3 value edited
+ *  after the scan cannot reprice the card's plan on different targets from
+ *  the card the scan built (STEP3-PARAM-REACH). A result from before the scan
+ *  recorded them (absent or null) falls back to live scanOverrides, which is
+ *  what every recompute sent before. */
+export function rrOverridesForPlan(
+  scanResult: { rr_overrides?: Record<string, number> | null } | null | undefined,
+  scanOverrides: Record<string, number | boolean | string>,
+): Partial<Record<typeof RR_OVERRIDE_KEYS[number], number>> {
+  const recorded = scanResult?.rr_overrides;
+  return rrOverridesFrom(recorded != null ? recorded : scanOverrides);
+}
+
 /** The repricing-horizon fields every trade-card backend call must carry.
  *
  *  Three call sites send them today — the two recomputePlan effects in

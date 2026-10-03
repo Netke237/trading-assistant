@@ -16,7 +16,9 @@ from app.services.audit import log_event
 from app.services.position_alert_log import log_position_alert
 from app.services.premium_stop import (
     resolve_premium_stop_pct,
-    premium_stop_threshold_price,
+    is_short_stock_position,
+    percent_stop_threshold_price,
+    premium_stop_side,
 )
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
@@ -310,17 +312,26 @@ async def generate_alerts(
         resolved_premium_stop_pct = resolve_premium_stop_pct(
             pos.premium_stop_pct, _premium_stop_pct()
         )
+        #
+        # STOP-SEMANTICS-2026-10-02: a SHORT stock (Bearish `|STOCK`) loses on a
+        # rise, so its stop fires at `price >= entry * (1 + pct)`. Every other
+        # position keeps the fall-side rule. `opt_price > 0` matches the
+        # frontend engine's `currentPrice > 0`: a quote that rounded to $0.00 is
+        # no quote, not a fill at zero, so it fires nothing on either side.
+        short_stock = is_short_stock_position(pos.contract, pos.direction)
+        premium_threshold = (
+            percent_stop_threshold_price(
+                pos.entry_price, resolved_premium_stop_pct, short_stock)
+            if pos.entry_price > 0 else None
+        )
         premium_hit_raw = bool(
-            opt_price is not None and pos.entry_price > 0
-            and opt_price <= premium_stop_threshold_price(
-                pos.entry_price, resolved_premium_stop_pct
-            )
+            opt_price is not None and opt_price > 0 and premium_threshold is not None
+            and (opt_price >= premium_threshold if short_stock
+                 else opt_price <= premium_threshold)
         )
         if not _muted("PREMIUM_STOP") and _sustained("PREMIUM_STOP", premium_hit_raw):
             counter += 1
-            threshold_price = round(
-                premium_stop_threshold_price(pos.entry_price, resolved_premium_stop_pct), 4
-            )
+            threshold_price = round(premium_threshold, 4)
             log_event("alert_fired", pos.rec_id, {
                 "symbol": symbol,
                 "alertType": "PREMIUM_STOP",
@@ -339,7 +350,12 @@ async def generate_alerts(
                 id=f"a{counter}",
                 kind="Critical",
                 symbol=symbol,
-                reason=f"Premium stop — {symbol} {'stock' if pos.contract.endswith('|STOCK') else 'option'} at ${opt_price:.2f}",
+                # A short's reason is price-only and identical in both engines
+                # (pnlPct is not direction-aware, so "down N%" would be wrong).
+                reason=(
+                    f"Stock stop — {symbol} at ${opt_price:.2f}" if short_stock
+                    else f"Premium stop — {symbol} {'stock' if pos.contract.endswith('|STOCK') else 'option'} at ${opt_price:.2f}"
+                ),
                 timestamp=now_iso,
                 recId=pos.rec_id,
                 alertType="PREMIUM_STOP",
@@ -351,6 +367,7 @@ async def generate_alerts(
                 # position resolves to when it is later looked at
                 # (ALERT-THRESHOLD-STAMP-2026-09-05).
                 premiumStopPct=resolved_premium_stop_pct,
+                stopSide=premium_stop_side(pos.contract, pos.direction),
                 direction=pos.direction,
                 contract=pos.contract,
             ))

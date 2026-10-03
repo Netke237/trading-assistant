@@ -901,6 +901,21 @@ describe('AutoTradeArm — P2-18 premium-stop caution, unbooked fire, booking wo
     expect(screen.queryByText(/at or above today's/)).not.toBeInTheDocument();
   });
 
+  it('STOP-SEMANTICS (F3): a sub-cent stop at today\'s premium is WARNED, and Arm stays enabled', () => {
+    // $0.02 on a $0.03 premium: the threshold is a few ulps under a cent.
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={0.02} liveMid={0.03} methodPick={pick()} />);
+    expect(screen.getByText(
+      "Your $0.02 premium stop leaves a threshold below $0.01 at today's $0.03 premium, so it could never fire. "
+      + 'If it is still below $0.01 at the fill, the booked position inherits the global stop (60%).',
+    )).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Arm —/ })).toBeEnabled();
+  });
+
+  it('STOP-SEMANTICS (F3): no sub-cent warning for an ordinary stop', () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={2.5} methodPick={pick()} />);
+    expect(screen.queryByText(/below \$0\.01/)).not.toBeInTheDocument();
+  });
+
   it('(b) an unbooked fire shows the order id in caution, never "Auto-trade fired"', async () => {
     act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });

@@ -31,7 +31,8 @@ import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
-import { premiumStopDollarToSend } from '@/lib/premiumStop';
+import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import {
   checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
   checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
@@ -39,7 +40,7 @@ import {
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
-  rrOverridesFrom, withCachedEstimate,
+  rrOverridesForPlan, withCachedEstimate,
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
@@ -182,6 +183,11 @@ function positionFromOrder(
     // Sent as DOLLARS; the backend derives the fraction against the entry
     // price it persists (which may be a live quote, not this `mid`).
     premiumStopDollar,
+    // ...and as the user's own FRACTION of this `mid` (decision PREMIUM-STOP-
+    // FALLBACK-USER-FRACTION-2026-10-03): the writer stores it only when the
+    // dollar is unusable at the persisted entry (a total loss, or sub-cent),
+    // instead of the global. Same divisor as `entryPrice` above.
+    premiumStopPct: premiumStopPctFromDollars(premiumStopDollar, mid) ?? null,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     // Both quantities travel to the position, kept apart
@@ -555,8 +561,10 @@ export default function Step7Page() {
   // The one place the card can tell the user their premium stop did not survive
   // the save-time re-anchor. The router logs it server-side and the position
   // quietly inherits the global -- a TIGHTER stop than the one asked for.
-  const droppedStopNote = (requested: number) =>
-    `Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`;
+  // STOP-SEMANTICS -- the wording (and the reason it names) is shared with the
+  // Portfolio banner through `premiumStopDropText`.
+  const droppedStopNote = (requested: number | null, reason: PremiumStopDropReason, keptPct?: number) =>
+    premiumStopDropText(requested, reason, keptPct);
   /* ROUND 10 finding 1 — the quote CARRIES THE CONTRACT IT IS FOR.
    *
    * These used to be bare values, cleared at the top of the fetch effect. The
@@ -898,7 +906,7 @@ export default function Step7Page() {
           // endpoint echoes it and builds the plan around it, so an override
           // changes the CONTRACT and nothing about where the stock stop sits.
           final_stop:  pickedCard.exit.finalStop ?? null,
-          ...rrOverridesFrom(useScanStore.getState().scanOverrides),
+          ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
           .then((plan) => {
@@ -971,7 +979,7 @@ export default function Step7Page() {
         delta: cd.delta,
         spread: 0,
         final_stop: resolved.exit.finalStop ?? null,
-        ...rrOverridesFrom(useScanStore.getState().scanOverrides),
+        ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
         .then((plan) => {
@@ -1056,6 +1064,8 @@ export default function Step7Page() {
       // Piece 4 — MUST match what positionFromOrder produces for the same card,
       // which is now true by construction: both call premiumStopDollarFor.
       premiumStopDollar: premiumStopDollarFor(card),
+      // The user's own fraction of this `mid` -- see positionFromOrder.
+      premiumStopPct: premiumStopPctFromDollars(premiumStopDollarFor(card), mid) ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -1181,7 +1191,7 @@ export default function Step7Page() {
           applyPersistedPosition(
             saved, { ...pos, contracts: orderQty }, addPosition,
             (q) => addSaveNote(`${label}: Portfolio sized it to ${q}; the order was requested for ${q}, status unknown.`),
-            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
           );
         } catch (e) {
           setOrderError(`${banner} The local view failed to update: ${String(e)}`);
@@ -1229,7 +1239,7 @@ export default function Step7Page() {
             { ...pos, contracts: orderQty, sourceLabel: `${brokerLabel} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: ${orderId})` },
             addPosition,
             (q) => addSaveNote(`${label}: ${sizeNote(q)}`),
-            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
           );
         } catch (e) {
           setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
@@ -1374,8 +1384,8 @@ export default function Step7Page() {
       // only two paths that told the user were placeLimitPaper and
       // placeMarketNow. Same fallback, same silence, one of four create paths
       // away. Symbol-qualified because a basket submits several at once.
-      if (res.premiumStopDropped != null) {
-        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped)}`;
+      if (res.premiumStopDropReason != null) {
+        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped ?? null, res.premiumStopDropReason, res.premiumStopKeptPct)}`;
         setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
       }
       if (res.status === 'pending') {

@@ -25,6 +25,7 @@ import json as _json
 # both build a trade plan off the same numbers.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
+from app.services.config_loader import effective_rr_overrides
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 from app.services.config_loader import load_direction_conviction_min_trend
 
@@ -36,7 +37,7 @@ from app.schemas import (
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     SentimentData, FundamentalsOut, SCAN_RESULT_SCHEMA_VERSION,
-    RegimeGateSnapshot,
+    RegimeGateSnapshot, ScanRequestContext,
 )
 from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
@@ -1793,6 +1794,31 @@ async def _execute_scan_core(
     except Exception as exc:
         _log.warning("SCAN %s contract_rules unavailable: %s", scan_id, exc)
 
+    # The Reward/Risk overrides every plan below is priced with, echoed so
+    # Step 7's recompute-plan reprices with the scan's values rather than live
+    # scanOverrides (STEP3-PARAM-REACH). Validated above (422 on a bad value);
+    # never allowed to fail the scan: None makes Step 7 fall back to live.
+    _rr_overrides = None
+    try:
+        _rr_overrides = effective_rr_overrides(req.overrides)
+    except Exception as exc:
+        _log.warning("SCAN %s rr_overrides unavailable: %s", scan_id, exc)
+
+    # The request fields Steps 5-7 read back as their scan context, echoed so a
+    # result restored into an empty browser does not default to Bullish/Swing.
+    _request_context = None
+    try:
+        _request_context = ScanRequestContext(
+            universe=list(req.universe),
+            direction=req.direction,
+            horizon=req.horizon,
+            horizon_preset=req.horizon_preset,
+            hold_min_days=req.hold_min_days,
+            hold_max_days=req.hold_max_days,
+        )
+    except Exception as exc:
+        _log.warning("SCAN %s request_context unavailable: %s", scan_id, exc)
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
@@ -2076,6 +2102,8 @@ async def _execute_scan_core(
         dte_window=_dte_win,
         event_window=_event_win,
         contract_rules=_contract_rules,
+        rr_overrides=_rr_overrides,
+        request_context=_request_context,
     )
     return result
 

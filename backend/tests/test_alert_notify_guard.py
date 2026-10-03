@@ -126,3 +126,60 @@ async def test_notify_suppressed_when_position_absent(client):
     assert body["sent"] is False
     assert body.get("reason") == "position_not_found"
     mock_notify.assert_not_called()
+
+
+# ── STOP-SEMANTICS-2026-10-02: the side comes from the DB row ───────────────
+
+async def _insert_stock(db: AsyncSession, rec_id: str, direction: str,
+                        symbol: str = "ABT") -> None:
+    db.add(PortfolioPositionModel(
+        rec_id=rec_id, symbol=symbol, contract=f"{symbol}|STOCK",
+        direction=direction, entry_price=100.0, qty=10, entry_date="2026-07-17",
+        stop=89.89, targets=[], dte_total=547,
+    ))
+    await db.commit()
+
+
+async def _post_premium(client, rec_id: str, **extra):
+    with patch("app.routers.alerts.notify_alert", return_value=True) as mock_notify:
+        resp = await client.post("/api/alerts/notify", json={
+            "symbol": "ABT", "alertType": "PREMIUM_STOP",
+            "reason": "Stock stop — ABT at $110.00", "recId": rec_id, **extra,
+        })
+    assert resp.status_code == 200
+    return mock_notify.call_args.kwargs["stop_side"]
+
+
+@pytest.mark.asyncio
+async def test_notify_derives_the_side_from_the_db_row(client, db_session):
+    await _insert_stock(db_session, "REC-SHORT", "Bearish")
+    await _insert_stock(db_session, "REC-LONG", "Bullish", symbol="MDT")
+    await _insert(db_session, "REC-OPT")
+    assert await _post_premium(client, "REC-SHORT", stopSide="short-stock") == "short-stock"
+    assert await _post_premium(client, "REC-LONG", stopSide="long-stock") == "long-stock"
+    assert await _post_premium(client, "REC-OPT", stopSide="option") == "option"
+
+
+@pytest.mark.asyncio
+async def test_notify_does_not_trust_a_client_side(client, db_session):
+    await _insert_stock(db_session, "REC-SHORT-2", "Bearish")
+    assert await _post_premium(client, "REC-SHORT-2", stopSide="option") == "short-stock"
+
+
+@pytest.mark.asyncio
+async def test_notify_without_a_side_is_a_pre_deploy_tab_and_stays_legacy(client, db_session):
+    # A tab still running the old engine posts a FALL-side fire for a short and
+    # no stopSide; it must keep the legacy key and label, not claim "short".
+    await _insert_stock(db_session, "REC-SHORT-3", "Bearish")
+    assert await _post_premium(client, "REC-SHORT-3") is None
+
+
+@pytest.mark.asyncio
+async def test_notify_passes_no_side_for_other_types(client, db_session):
+    await _insert_stock(db_session, "REC-SHORT-4", "Bearish")
+    with patch("app.routers.alerts.notify_alert", return_value=True) as mock_notify:
+        await client.post("/api/alerts/notify", json={
+            "symbol": "ABT", "alertType": "STOP_REACHED", "reason": "x",
+            "recId": "REC-SHORT-4", "stopSide": "short-stock",
+        })
+    assert mock_notify.call_args.kwargs["stop_side"] is None

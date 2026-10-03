@@ -1095,6 +1095,16 @@ export interface ToastItem {
    *  constant). A FRACTION (0.30), not a percentage (30), matching
    *  `resolvePremiumStopPct` and the backend's `thresholdPct`. */
   premiumStopPct?: number;
+  /** PREMIUM_STOP only — the side rule this alert FIRED under
+   *  (STOP-SEMANTICS-2026-10-02): 'short-stock' fires on a RISE above entry,
+   *  'long-stock' and 'option' on a fall. Stamped at fire time, like
+   *  `premiumStopPct`, and part of the alert store's dedup key (`alertKey`), so
+   *  a short's rise-side fire never inherits state written under the old
+   *  fall-side rule. ABSENT on every pre-deploy row, which fired under that
+   *  old rule -- the Alerts page then keeps the legacy label. Needs no store
+   *  migration for the same reason `premiumStopPct` needs none. Mirrors
+   *  `PremiumStopSide` in lib/premiumStop.ts (types/ does not import lib/). */
+  stopSide?: 'short-stock' | 'long-stock' | 'option';
 }
 
 // --- Risk management ---

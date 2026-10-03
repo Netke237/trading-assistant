@@ -16,6 +16,9 @@ import pytest
 
 from app.services import strategy_watch_evaluator as ev
 from app.services.strategy_watch_store import StrategyWatchStore
+from tests.watch_notify_helpers import configured_channels_no_real_sends, per_channel  # noqa: F401
+
+_GMAIL = {"gmail": {"enabled": True}}  # a ready channel (credentials from the helper's env)
 
 _TRIGGER = {"primary": {"model": "OMM", "to_state": "Bull"}}
 
@@ -114,7 +117,8 @@ async def test_evaluate_and_notify_sends_one_notification_per_event(store):
     store.add_watch("MSFT", "pullback_ema")
     sent = AsyncMock(return_value=True)
 
-    with patch.object(ev, "notify_enabled_channels", sent):
+    with patch.object(ev, "notify_channels", per_channel(sent)), \
+         patch.object(ev, "read_notification_config", return_value=(_GMAIL, True)):
         events = await _run(store, composite_fires=True, notify=True)
 
     assert len(events) == 2
@@ -235,7 +239,8 @@ async def _run_real(store, omm_results):
     sent = AsyncMock(return_value=True)
     with patch.object(ev, "strategy_watch_store", store), \
          patch.object(ev, "get_bars", new=AsyncMock(return_value=_bars())), \
-         patch.object(ev, "notify_enabled_channels", sent), \
+         patch.object(ev, "notify_channels", per_channel(sent)), \
+         patch.object(ev, "read_notification_config", return_value=(_GMAIL, True)), \
          patch("app.services.composite_trigger_evaluator.describe_match", return_value={}), \
          patch("app.services.regime_omm.compute_omm", side_effect=list(omm_results)):
         for _ in omm_results:
@@ -372,7 +377,8 @@ async def test_a_genuine_exit_during_an_intraday_outage_re_arms_and_the_next_ent
     fetch = MagicMock(side_effect=[healthy, [], []])
     with patch.object(ev, "strategy_watch_store", store), \
          patch.object(ev, "get_bars", new=AsyncMock(return_value=_bars(n=300))), \
-         patch.object(ev, "notify_enabled_channels", sent), \
+         patch.object(ev, "notify_channels", per_channel(sent)), \
+         patch.object(ev, "read_notification_config", return_value=(_GMAIL, True)), \
          patch("app.data.market.fetch_intraday_candles", fetch), \
          patch("app.data.market.intraday_feed_lag_seconds", return_value=0), \
          patch("app.services.composite_trigger_evaluator.describe_match", return_value={}), \
