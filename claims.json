@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "claude/trading-review-fixes",
       "claimed_at": "2026-10-03T05:41:42Z",
-      "expires_at": "2026-10-03T09:09:15Z",
+      "expires_at": "2026-10-03T09:10:29Z",
       "note": "Phase A trading-review fixes: decision changes + adversarial audit loop + PR",
       "task": "TRADING-REVIEW-FIXES"
     }
