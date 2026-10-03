@@ -197,7 +197,8 @@ export default function PortfolioPage() {
         <div role="alert" className={styles.syncErrorBanner}>
           <Text size={13} tone="caution">
             {`${lastPremiumStopDropped.symbol}: ${premiumStopDropText(
-              lastPremiumStopDropped.requestedDollar, lastPremiumStopDropped.reason)}`}
+              lastPremiumStopDropped.requestedDollar, lastPremiumStopDropped.reason,
+              lastPremiumStopDropped.keptPct)}`}
           </Text>
           <button type="button" className={styles.syncErrorDismiss} onClick={clearPremiumStopDropped} aria-label="Dismiss">
             ×
