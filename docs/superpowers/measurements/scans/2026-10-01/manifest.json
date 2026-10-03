@@ -1,0 +1,555 @@
+{
+  "protocol": "docs/superpowers/measurements/PROTOCOL.md",
+  "base_url": "http://127.0.0.1:8000",
+  "git_head": "61a03e49975a9384f72597a9148848d979769548",
+  "freeze": {
+    "tag": "meas-freeze-1",
+    "commit": "61a03e49975a9384f72597a9148848d979769548"
+  },
+  "started_at": {
+    "utc": "2026-10-01T17:00:42.556624+00:00",
+    "et": "2026-10-01 13:00:42 ET"
+  },
+  "config_start": {
+    "sha256": {
+      "contract_rules.yaml": "27f5dac43eeda4e161efade7752cf605127ef89568007ed33e77c74500da8278",
+      "risk_rules.yaml": "3036590da346f0752124a21ae60e32ee1a480092d59e1c1366aa8147b1f9ef8d",
+      "scoring_rules.yaml": "6cb7f0bd81fb8ebbb00caa23f99e0dfc8d5b2ab4da16624b6cb125d088e6b14c",
+      "settings.example.yaml": "f374a5284e7a787198580711f304902ac11ae5fe1b806163eb3666da66b71eee",
+      "settings.yaml": "d0ea0bfd352494de7cc74c9986838889a2920372a9e78adead25eefe23a1eee3",
+      "strategy_params.yaml": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+      "strategy_watches.yaml": "4af68615f77634e45ee8e617a063edbbee5bc082221f3b3f54a1ae5992c14831"
+    }
+  },
+  "strategy_params_sha256": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+  "universe_sha256_core_start": "6d7eae00fc236f25a8a97e30cbd72fbdc62a9a4152750d91ec7d28847ebb60e3",
+  "config_health_core_start": {
+    "at": {
+      "utc": "2026-10-01T17:00:29.929703+00:00",
+      "et": "2026-10-01 13:00:29 ET"
+    },
+    "ok": true,
+    "pid": 12568,
+    "stale": []
+  },
+  "scan_schedule": {
+    "entries": 0,
+    "enabled": []
+  },
+  "regime_urls": {
+    "position": "/api/regime?horizon=position&lookback=20&threshold=0.02&smoothing=0"
+  },
+  "scans": [
+    {
+      "id": "O1",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": null,
+      "request_file": "O1-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:00:45.294495+00:00",
+        "et": "2026-10-01 13:00:45 ET"
+      },
+      "start_utc_s": 1790874045.294495,
+      "flags": [],
+      "result_file": "O1-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:07:37.173655+00:00",
+        "et": "2026-10-01 13:07:37 ET"
+      },
+      "end_utc_s": 1790874457.173655,
+      "scan_id": "REC-20261001-03C1DDBC",
+      "candidates": 1,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 1
+      },
+      "envelope_file": "O1-options-position-bearish.envelope.json"
+    },
+    {
+      "id": "C1",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": {
+        "confidence_reject_below": 30
+      },
+      "request_file": "C1-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:07:37.194395+00:00",
+        "et": "2026-10-01 13:07:37 ET"
+      },
+      "start_utc_s": 1790874457.194395,
+      "flags": [],
+      "result_file": "C1-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:14:21.779678+00:00",
+        "et": "2026-10-01 13:14:21 ET"
+      },
+      "end_utc_s": 1790874861.779678,
+      "scan_id": "REC-20261001-33DF428A",
+      "candidates": 1,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 1
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "C5",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": {
+        "overrides": {
+          "min_stock_score": 35
+        }
+      },
+      "request_file": "C5-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:14:21.788464+00:00",
+        "et": "2026-10-01 13:14:21 ET"
+      },
+      "start_utc_s": 1790874861.788464,
+      "flags": [],
+      "result_file": "C5-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:21:27.820750+00:00",
+        "et": "2026-10-01 13:21:27 ET"
+      },
+      "end_utc_s": 1790875287.82075,
+      "scan_id": "REC-20261001-AFA0C794",
+      "candidates": 5,
+      "truncated": false,
+      "contract_rules": {
+        "min_stock_score": 35.0
+      },
+      "iv_basis_counts": {
+        "rank": 5
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "C6",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": {
+        "overrides": {
+          "min_volume": 0,
+          "min_open_interest": 0,
+          "preferred_volume_min": 0,
+          "preferred_oi_min": 0
+        }
+      },
+      "request_file": "C6-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:21:27.829696+00:00",
+        "et": "2026-10-01 13:21:27 ET"
+      },
+      "start_utc_s": 1790875287.829696,
+      "flags": [],
+      "result_file": "C6-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:28:18.390532+00:00",
+        "et": "2026-10-01 13:28:18 ET"
+      },
+      "end_utc_s": 1790875698.390532,
+      "scan_id": "REC-20261001-87EF9F0C",
+      "candidates": 5,
+      "truncated": false,
+      "contract_rules": {
+        "min_volume": 0.0,
+        "min_open_interest": 0.0,
+        "preferred_volume_min": 0.0,
+        "preferred_oi_min": 0.0
+      },
+      "iv_basis_counts": {
+        "rank": 5
+      },
+      "no_liquidity_detail": 0,
+      "pair_excluded": []
+    },
+    {
+      "id": "O2",
+      "endpoint": "/api/scan",
+      "base": "options-position-bullish",
+      "change": null,
+      "request_file": "O2-options-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:28:18.400808+00:00",
+        "et": "2026-10-01 13:28:18 ET"
+      },
+      "start_utc_s": 1790875698.400808,
+      "flags": [],
+      "result_file": "O2-options-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:31:53.254931+00:00",
+        "et": "2026-10-01 13:31:53 ET"
+      },
+      "end_utc_s": 1790875913.255938,
+      "scan_id": "REC-20261001-833BAC31",
+      "candidates": 4,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 4
+      },
+      "envelope_file": "O2-options-position-bullish.envelope.json"
+    },
+    {
+      "id": "C1b",
+      "endpoint": "/api/scan",
+      "base": "options-position-bullish",
+      "change": {
+        "confidence_reject_below": 30
+      },
+      "request_file": "C1b-options-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:31:53.294232+00:00",
+        "et": "2026-10-01 13:31:53 ET"
+      },
+      "start_utc_s": 1790875913.294232,
+      "flags": [],
+      "result_file": "C1b-options-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:35:29.590757+00:00",
+        "et": "2026-10-01 13:35:29 ET"
+      },
+      "end_utc_s": 1790876129.590757,
+      "scan_id": "REC-20261001-94C149E1",
+      "candidates": 5,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 5
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "C5b",
+      "endpoint": "/api/scan",
+      "base": "options-position-bullish",
+      "change": {
+        "overrides": {
+          "min_stock_score": 35
+        }
+      },
+      "request_file": "C5b-options-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:35:29.600041+00:00",
+        "et": "2026-10-01 13:35:29 ET"
+      },
+      "start_utc_s": 1790876129.600041,
+      "flags": [],
+      "result_file": "C5b-options-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:39:10.410184+00:00",
+        "et": "2026-10-01 13:39:10 ET"
+      },
+      "end_utc_s": 1790876350.410184,
+      "scan_id": "REC-20261001-8FC17076",
+      "candidates": 13,
+      "truncated": false,
+      "contract_rules": {
+        "min_stock_score": 35.0
+      },
+      "iv_basis_counts": {
+        "rank": 13
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "O3",
+      "endpoint": "/api/scan",
+      "base": "options-swing-bearish",
+      "change": null,
+      "request_file": "O3-options-swing-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:39:10.441682+00:00",
+        "et": "2026-10-01 13:39:10 ET"
+      },
+      "start_utc_s": 1790876350.441682,
+      "flags": [],
+      "result_file": "O3-options-swing-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:42:48.887238+00:00",
+        "et": "2026-10-01 13:42:48 ET"
+      },
+      "end_utc_s": 1790876568.887238,
+      "scan_id": "REC-20261001-13F1BAB1",
+      "candidates": 0,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {},
+      "envelope_file": "O3-options-swing-bearish.envelope.json"
+    },
+    {
+      "id": "O4",
+      "endpoint": "/api/scan",
+      "base": "options-swing-bullish",
+      "change": null,
+      "request_file": "O4-options-swing-bullish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:42:48.922810+00:00",
+        "et": "2026-10-01 13:42:48 ET"
+      },
+      "start_utc_s": 1790876568.92281,
+      "flags": [],
+      "result_file": "O4-options-swing-bullish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:45:12.833133+00:00",
+        "et": "2026-10-01 13:45:12 ET"
+      },
+      "end_utc_s": 1790876712.833133,
+      "scan_id": "REC-20261001-94DA79DA",
+      "candidates": 3,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 3
+      },
+      "envelope_file": "O4-options-swing-bullish.envelope.json"
+    },
+    {
+      "id": "S1",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-swing-bearish",
+      "change": null,
+      "request_file": "S1-stocks-swing-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:45:12.854034+00:00",
+        "et": "2026-10-01 13:45:12 ET"
+      },
+      "start_utc_s": 1790876712.854034,
+      "flags": [],
+      "result_file": "S1-stocks-swing-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:50:15.668761+00:00",
+        "et": "2026-10-01 13:50:15 ET"
+      },
+      "end_utc_s": 1790877015.668761,
+      "scan_id": "REC-20261001-DD13156D",
+      "candidates": 0,
+      "truncated": false
+    },
+    {
+      "id": "S2",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-swing-bullish",
+      "change": null,
+      "request_file": "S2-stocks-swing-bullish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:50:15.674772+00:00",
+        "et": "2026-10-01 13:50:15 ET"
+      },
+      "start_utc_s": 1790877015.674772,
+      "flags": [],
+      "result_file": "S2-stocks-swing-bullish.result.json",
+      "end": {
+        "utc": "2026-10-01T17:55:21.969877+00:00",
+        "et": "2026-10-01 13:55:21 ET"
+      },
+      "end_utc_s": 1790877321.969877,
+      "scan_id": "REC-20261001-012F7C52",
+      "candidates": 3,
+      "truncated": false
+    },
+    {
+      "id": "S3",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-position-bearish",
+      "change": null,
+      "request_file": "S3-stocks-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T17:55:21.974876+00:00",
+        "et": "2026-10-01 13:55:21 ET"
+      },
+      "start_utc_s": 1790877321.975882,
+      "flags": [],
+      "result_file": "S3-stocks-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T18:00:19.212032+00:00",
+        "et": "2026-10-01 14:00:19 ET"
+      },
+      "end_utc_s": 1790877619.212032,
+      "scan_id": "REC-20261001-938FB123",
+      "candidates": 1,
+      "truncated": false
+    },
+    {
+      "id": "S4",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-position-bullish",
+      "change": null,
+      "request_file": "S4-stocks-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-01T18:00:19.217740+00:00",
+        "et": "2026-10-01 14:00:19 ET"
+      },
+      "start_utc_s": 1790877619.21774,
+      "flags": [],
+      "result_file": "S4-stocks-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-01T18:06:07.306753+00:00",
+        "et": "2026-10-01 14:06:07 ET"
+      },
+      "end_utc_s": 1790877967.306753,
+      "scan_id": "REC-20261001-D6C1A064",
+      "candidates": 9,
+      "truncated": false
+    },
+    {
+      "id": "A1",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": null,
+      "request_file": "A1-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T18:34:15.212871+00:00",
+        "et": "2026-10-01 14:34:15 ET"
+      },
+      "start_utc_s": 1790879655.212871,
+      "flags": [],
+      "result_file": "A1-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T18:36:41.598855+00:00",
+        "et": "2026-10-01 14:36:41 ET"
+      },
+      "end_utc_s": 1790879801.598855,
+      "scan_id": "REC-20261001-4C502628",
+      "candidates": 2,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "absolute": 2
+      },
+      "envelope_file": "A1-options-position-bearish.envelope.json"
+    },
+    {
+      "id": "A2",
+      "endpoint": "/api/scan",
+      "base": "options-swing-bearish",
+      "change": null,
+      "request_file": "A2-options-swing-bearish.request.json",
+      "start": {
+        "utc": "2026-10-01T18:36:41.621974+00:00",
+        "et": "2026-10-01 14:36:41 ET"
+      },
+      "start_utc_s": 1790879801.621974,
+      "flags": [],
+      "result_file": "A2-options-swing-bearish.result.json",
+      "end": {
+        "utc": "2026-10-01T18:38:23.551545+00:00",
+        "et": "2026-10-01 14:38:23 ET"
+      },
+      "end_utc_s": 1790879903.551545,
+      "scan_id": "REC-20261001-CD94971F",
+      "candidates": 0,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {},
+      "envelope_file": "A2-options-swing-bearish.envelope.json"
+    }
+  ],
+  "flags": [],
+  "status": "ivabs_complete",
+  "core_status": "core_complete",
+  "config_copied": [
+    "contract_rules.yaml",
+    "risk_rules.yaml",
+    "scoring_rules.yaml",
+    "settings.example.yaml",
+    "strategy_params.yaml",
+    "strategy_watches.yaml"
+  ],
+  "config_core_end": {
+    "sha256": {
+      "contract_rules.yaml": "27f5dac43eeda4e161efade7752cf605127ef89568007ed33e77c74500da8278",
+      "risk_rules.yaml": "3036590da346f0752124a21ae60e32ee1a480092d59e1c1366aa8147b1f9ef8d",
+      "scoring_rules.yaml": "6cb7f0bd81fb8ebbb00caa23f99e0dfc8d5b2ab4da16624b6cb125d088e6b14c",
+      "settings.example.yaml": "f374a5284e7a787198580711f304902ac11ae5fe1b806163eb3666da66b71eee",
+      "settings.yaml": "d0ea0bfd352494de7cc74c9986838889a2920372a9e78adead25eefe23a1eee3",
+      "strategy_params.yaml": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+      "strategy_watches.yaml": "4af68615f77634e45ee8e617a063edbbee5bc082221f3b3f54a1ae5992c14831"
+    }
+  },
+  "config_changed": {
+    "core_end": [],
+    "ivabs_end": []
+  },
+  "universe_sha256_core_end": "6d7eae00fc236f25a8a97e30cbd72fbdc62a9a4152750d91ec7d28847ebb60e3",
+  "config_health_core_end": {
+    "at": {
+      "utc": "2026-10-01T18:06:07.324284+00:00",
+      "et": "2026-10-01 14:06:07 ET"
+    },
+    "ok": true,
+    "pid": 12568,
+    "stale": []
+  },
+  "core_end_at": {
+    "utc": "2026-10-01T18:06:22.600715+00:00",
+    "et": "2026-10-01 14:06:22 ET"
+  },
+  "config_health_ivabs_start": {
+    "at": {
+      "utc": "2026-10-01T18:34:10.678990+00:00",
+      "et": "2026-10-01 14:34:10 ET"
+    },
+    "ok": true,
+    "pid": 19880,
+    "stale": []
+  },
+  "universe_sha256_ivabs_start": "6d7eae00fc236f25a8a97e30cbd72fbdc62a9a4152750d91ec7d28847ebb60e3",
+  "config_ivabs_start": {
+    "sha256": {
+      "contract_rules.yaml": "27f5dac43eeda4e161efade7752cf605127ef89568007ed33e77c74500da8278",
+      "risk_rules.yaml": "3036590da346f0752124a21ae60e32ee1a480092d59e1c1366aa8147b1f9ef8d",
+      "scoring_rules.yaml": "6cb7f0bd81fb8ebbb00caa23f99e0dfc8d5b2ab4da16624b6cb125d088e6b14c",
+      "settings.example.yaml": "f374a5284e7a787198580711f304902ac11ae5fe1b806163eb3666da66b71eee",
+      "settings.yaml": "d0ea0bfd352494de7cc74c9986838889a2920372a9e78adead25eefe23a1eee3",
+      "strategy_params.yaml": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+      "strategy_watches.yaml": "4af68615f77634e45ee8e617a063edbbee5bc082221f3b3f54a1ae5992c14831"
+    }
+  },
+  "ivabs_sources": {
+    "tastytrade": "unconfigured",
+    "ibkr": "down",
+    "tradier": "connected"
+  },
+  "ivabs_flags": [],
+  "ivabs_usable": true,
+  "config_ivabs_end": {
+    "sha256": {
+      "contract_rules.yaml": "27f5dac43eeda4e161efade7752cf605127ef89568007ed33e77c74500da8278",
+      "risk_rules.yaml": "3036590da346f0752124a21ae60e32ee1a480092d59e1c1366aa8147b1f9ef8d",
+      "scoring_rules.yaml": "6cb7f0bd81fb8ebbb00caa23f99e0dfc8d5b2ab4da16624b6cb125d088e6b14c",
+      "settings.example.yaml": "f374a5284e7a787198580711f304902ac11ae5fe1b806163eb3666da66b71eee",
+      "settings.yaml": "d0ea0bfd352494de7cc74c9986838889a2920372a9e78adead25eefe23a1eee3",
+      "strategy_params.yaml": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+      "strategy_watches.yaml": "4af68615f77634e45ee8e617a063edbbee5bc082221f3b3f54a1ae5992c14831"
+    }
+  },
+  "universe_sha256_ivabs_end": "6d7eae00fc236f25a8a97e30cbd72fbdc62a9a4152750d91ec7d28847ebb60e3",
+  "config_health_ivabs_end": {
+    "at": {
+      "utc": "2026-10-01T18:38:23.577294+00:00",
+      "et": "2026-10-01 14:38:23 ET"
+    },
+    "ok": true,
+    "pid": 19880,
+    "stale": []
+  },
+  "ivabs_end_at": {
+    "utc": "2026-10-01T18:38:38.454759+00:00",
+    "et": "2026-10-01 14:38:38 ET"
+  },
+  "ivabs_unusable_because": [],
+  "restore_check": {
+    "tastytrade": "connected",
+    "at": {
+      "utc": "2026-10-01T18:39:18.093472+00:00",
+      "et": "2026-10-01 14:39:18 ET"
+    }
+  }
+}
