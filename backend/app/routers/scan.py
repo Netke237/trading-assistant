@@ -1234,6 +1234,7 @@ async def _process_symbol(
         ),
         earningsVeto=_earnings_veto(card),
         earningsUnknown=bool(rule_detail.get("event", {}).get("earnings_unknown", False)),
+        earningsDays=rule_detail.get("event", {}).get("earnings_days"),
         confidence=(_conf_rule.detail.get("confidence") if (_conf_rule := next((r for r in card.rules if r.name == "confidence"), None)) else None),
         confidenceText=(_conf_rule.detail.get("interpretation") if _conf_rule else None),
         sentiment=SentimentData(**_regime_signal) if _regime_signal else None,

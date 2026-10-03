@@ -95,3 +95,18 @@ def test_scan_card_dividend_inside_window_is_not_a_veto(client):
     for c in _scan_with_calendar(client, date.today() + timedelta(days=90),
                                  date.today() + timedelta(days=2)):
         assert c["earningsVeto"] is False
+
+
+def test_scan_card_carries_earnings_days_not_the_nearer_dividend(client):
+    # Final review: nextEventDays is the NEARER of earnings/dividend, so the
+    # Step-7 rail cannot grade an "Earnings" gate on it. earningsDays is the
+    # earnings distance alone (30d here, with a dividend 2d out).
+    for c in _scan_with_calendar(client, date.today() + timedelta(days=30),
+                                 date.today() + timedelta(days=2)):
+        assert c["nextEventDays"] == 2
+        assert c["earningsDays"] == 30
+
+
+def test_scan_card_earningsdays_null_when_earnings_unknown(client):
+    for c in _scan_with_calendar(client, None, date.today() + timedelta(days=2)):
+        assert c["earningsDays"] is None

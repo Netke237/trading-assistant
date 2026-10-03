@@ -697,6 +697,8 @@ export interface TradeCardData {
   /** Fix #3: earnings inside the horizon reject window -> finalStatus REJECT, no send. */
   earningsVeto?: boolean;
   earningsUnknown?: boolean;
+  /** Days to earnings alone; nextEventDays is the nearer of earnings/dividend. */
+  earningsDays?: number | null;
   /** Signal confidence 0–100 (null when history is too thin to judge). */
   confidence?: number | null;
   confidenceText?: string | null;

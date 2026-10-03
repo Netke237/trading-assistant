@@ -634,6 +634,8 @@ class TradeCardData(BaseModel):
     # Fix #3: earnings inside the reject window -> finalStatus REJECT and no send.
     earningsVeto: bool = False
     earningsUnknown: bool = False
+    # Days to EARNINGS alone (nextEventDays is the nearer of earnings/dividend).
+    earningsDays: Optional[int] = None
     alternatives:      list[AlternativeContract] = []
     alternativesCount: int = 0
     confidence:        Optional[int] = None

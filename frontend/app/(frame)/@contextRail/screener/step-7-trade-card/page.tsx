@@ -126,7 +126,11 @@ function buildChecklist(
       detail: 'No earnings date on file — check the calendar before sending.',
     });
   }
-  const days = wlRow?.nextEventDays;
+  // Graded on EARNINGS distance only. nextEventDays is the nearer of earnings
+  // and dividend, and only earnings veto (D3): a dividend inside the window
+  // must not read as an "Earnings" REJECT. Unknown earnings is the CAUTION
+  // gate above.
+  const days = candidate.earningsDays;
   if (days != null) {
     gates.push(eventWindow
       ? {
