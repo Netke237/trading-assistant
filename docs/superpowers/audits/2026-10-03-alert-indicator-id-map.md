@@ -1,6 +1,6 @@
 # ALERT-INDICATOR-ID-MAP review evidence
 
-Review gate: wrong user-visible readings or corrupt persisted data, including mechanism comments that would cause a wrong change. The original reviews were performed by the implementing agent; they did NOT satisfy K-adversarial-audit-loop and are not counted as audit rounds. The previous audit-clean declaration was incorrect and has been withdrawn. Independent code audit round 1 is now running.
+Review gate: wrong user-visible readings or corrupt persisted data, including mechanism comments that would cause a wrong change. The original reviews were performed by the implementing agent; they did NOT satisfy K-adversarial-audit-loop and are not counted as audit rounds. The previous audit-clean declaration was incorrect and has been withdrawn. Qualifying independent audit records follow below.
 
 Non-qualifying self-review pass 1 examined selector serialization, browser evaluation, backend dispatch, persistence and compatibility. Corrections: parameter ordering is explicit rather than object insertion order; opaque chart IDs are never guessed; browser computations use saved rule parameters without active chart state; empty and unsupported references cannot be saved. Numeric-period bounds prevent enormous integer conversion failures. MACD requires fast < slow so the browser's missing-fast-EMA fallback cannot diverge from backend warm-up. Bollinger standard deviations use the same finite, positive decimal syntax in both parsers.
 
@@ -16,3 +16,13 @@ Validation observations:
 - Frontend `/alerts` returned HTTP 200 using development fallback fonts. Production build was blocked by denied Google Fonts networking; required domains were saved in the environment draft, not applied to the current runtime.
 
 Compatibility observations: existing recognized names remain readable. Opaque stored chart IDs contain no recoverable parameter snapshot and must be reselected when editing; no stored data is silently rewritten. EMA now includes its seed at period-1, matching the chart; earlier warm-up readings remain absent. Composite momentum calculations are unchanged. Parameterized `BB_MID` explicitly denotes the middle band; unsupported chart-only indicators are excluded from new rule choices.
+
+
+## Independent code audit round 1
+
+Fresh reviewer: `indicator_map_audit_1`; applied `bmad-review-adversarial-general` under the project gate. Reviewed actual `12b64ea6^..12b64ea6`, traced selector, both parsers, browser/live evaluation, persistence and cooldown synchronization. Two gate findings:
+
+1. Browser full-precision readings diverged from backend four-decimal rounding, causing false alerts and cooldown writes. Seven closes of 100, one of 100.01, sixteen of 100 yield EMA(7)=100.00002505648939 in browser vs 100.0 on server, so `>100` disagrees. Fixed by applying existing `pythonRound4` to browser EMA/SMA/RSI/ATR/BB/VWAP readings. MACD, volume and close remain unrounded, matching backend.
+2. Saved `BB_UPPER(2,1e308)` computes infinity from ordinary prices and can persist invalid JSON history. Fixed by bounding the multiplier to 10000 in both parsers and rejecting nonfinite current/previous indicator readings in both evaluators. Invalid readings never enter trigger history, even when another OR condition matches.
+
+Regression evidence: affected backend checks 199 passed. Fresh independent round 2 reviews only these fixes and their interactions. No clean audit declaration yet.

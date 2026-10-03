@@ -98,7 +98,7 @@ def parse_indicator_reference(reference: object) -> tuple[str, tuple] | None:
                 value = float(part)
             except ValueError:
                 return None
-            if not math.isfinite(value) or value <= 0:
+            if not math.isfinite(value) or not 0 < value <= 10000:
                 return None
         else:
             if len(part) > 5 or not re.fullmatch(r'[1-9][0-9]*', part):

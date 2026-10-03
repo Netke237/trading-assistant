@@ -1,4 +1,5 @@
 /** Stable alert references encode parameters, never a mutable chart instance id. */
+import { pythonRound4 } from './premiumStop';
 import type { IndicatorConfig } from './chartStore';
 import type { Condition } from '@/types/alerts';
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD, calcBB, calcVWAP, type Candle, type Point } from './indicators';
@@ -26,7 +27,7 @@ export function parseAlertIndicator(reference: unknown): Spec | null {
   if (parts.length !== defaults[kind].length) return null;
   const params = parts.map(Number);
   if (parts.some((part, i) => {
-    if (kind.startsWith('bb') && i === 1) return !/^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?$/.test(part) || !Number.isFinite(params[i]) || params[i] <= 0;
+    if (kind.startsWith('bb') && i === 1) return !/^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?$/.test(part) || !Number.isFinite(params[i]) || params[i] <= 0 || params[i] > 10000;
     return !/^[1-9][0-9]*$/.test(part) || params[i] > 10000;
   })) return null;
   if (['macd', 'macd_signal'].includes(kind) && params[0] >= params[1]) return null;
@@ -69,7 +70,9 @@ export function computeAlertIndicatorPoints(candles: Candle[], conditions: Condi
       points = kind === 'bb_upper' ? bb.upper : kind === 'bb_lower' ? bb.lower : bb.middle;
     } else if (kind === 'vwap') points = calcVWAP(candles);
     else points = candles.map(b => ({ time: b.time, value: kind === 'volume' ? b.volume : b.close }));
-    result[c.indicator] = points;
+    // Match backend comparison precision; MACD and raw prices/volume are unrounded.
+    result[c.indicator] = ['macd', 'macd_signal', 'volume', 'close'].includes(kind)
+      ? points : points.map(p => ({ ...p, value: pythonRound4(p.value) }));
   }
   return result;
 }

@@ -1635,7 +1635,7 @@
       "id": "ALERT-INDICATOR-ID-MAP",
       "name": "Stable parameterized indicator references across standard alert rule builder and browser/backend evaluation",
       "status": "shipped",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
@@ -1644,7 +1644,7 @@
         "pattern": "export function computeAlertIndicatorPoints\\(",
         "note": "Presence probe only; behavior is exercised by the regression tests."
       },
-      "note": "BUILT on work, NOT MERGED. AUDIT CORRECTION: prior self-reviews were not qualifying audits under K-adversarial-audit-loop and do not count. Independent code audit now running; NOT DONE and NOT MERGEABLE until a qualifying round is clean. Evidence: docs/superpowers/audits/2026-10-03-alert-indicator-id-map.md. Saved references include parameters in explicit semantic order, browser evaluation no longer depends on active chart indicators, backend accepts custom periods and MACD parameters, saves reject empty/unsupported references. Opaque stored chart IDs require reselection, not guessed parameters. EMA includes its seed bar (period-1); later values unchanged. Full frontend 173 suites/4273 passed, focused delta 138 passed; full backend 4546 passed/1 skipped/1 stale golden failure, final affected rerun 195 passed after baseline-verified golden correction. Typecheck and API persistence checks passed. Production build remains blocked by Google Fonts network access; environment draft contains required domain additions and tested setup/startup instructions."
+      "note": "BUILT on work, NOT MERGED. AUDIT CORRECTION: prior self-reviews were not qualifying audits under K-adversarial-audit-loop and do not count. Independent code audit round 1 found two gate defects (browser/backend rounding disagreement; nonfinite Bollinger history values), both fixed. Fresh independent round 2 is running on the fixes and interactions. NOT DONE and NOT MERGEABLE until a qualifying round is clean. Evidence: docs/superpowers/audits/2026-10-03-alert-indicator-id-map.md. Saved references include parameters in explicit semantic order, browser evaluation no longer depends on active chart indicators, backend accepts custom periods and MACD parameters, saves reject empty/unsupported references. Opaque stored chart IDs require reselection, not guessed parameters. EMA includes its seed bar (period-1); later values unchanged. Full frontend 173 suites/4273 passed, focused delta 138 passed; full backend 4546 passed/1 skipped/1 stale golden failure, final affected rerun 195 passed after baseline-verified golden correction. Typecheck and API persistence checks passed. Production build remains blocked by Google Fonts network access; environment draft contains required domain additions and tested setup/startup instructions."
     }
   ],
   "already_shipped": [

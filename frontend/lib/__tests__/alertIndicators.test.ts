@@ -1,12 +1,15 @@
 import { alertIndicatorReference, computeAlertIndicatorPoints, parseAlertIndicator } from '../alertIndicators';
+import { pythonRound4 } from '../premiumStop';
+import { evaluateRules } from '../chartAlertEngine';
+import type { AlertRule } from '@/types/alerts';
 import { calcEMA, calcMACD } from '../indicators';
 import type { IndicatorConfig } from '../chartStore';
-import type { Condition } from '@/types/alerts';
+import type { IndicatorCondition } from '@/types/alerts';
 
 const candles = Array.from({ length: 80 }, (_, i) => ({
   time: `bar-${i}`, open: 100+i, close: 100+i+i%3, high: 104+i, low: 98+i, volume: 1000+i,
 }));
-const condition = (indicator: string): Condition => ({ kind: 'indicator', indicator, operator: '>', value: 0 });
+const condition = (indicator: string): IndicatorCondition => ({ kind: 'indicator', indicator, operator: '>', value: 0 });
 
 test('chart instance id and parameter insertion order do not change saved MACD reference', () => {
   const config: IndicatorConfig = { id: 'macd-1720000000000', type: 'MACD',
@@ -17,14 +20,41 @@ test('chart instance id and parameter insertion order do not change saved MACD r
 
 test('browser computes rule parameters without any active chart indicators', () => {
   const points = computeAlertIndicatorPoints(candles, [condition('EMA(7)'), condition('MACD(5,12,4)')]);
-  expect(points['EMA(7)']).toEqual(calcEMA(candles, 7));
+  expect(points['EMA(7)']).toEqual(calcEMA(candles, 7).map(p => ({ ...p, value: pythonRound4(p.value) })));
   expect(points['MACD(5,12,4)']).toEqual(calcMACD(candles, 5, 12, 4).macd);
 });
 
-test.each(['', 'ema-20', 'macd-1720000000000', 'EMA(0)', 'RSI(1.5)', 'MACD(26,12,9)', 'EMA(' + '1'.repeat(5000) + ')', 'MACD(5,12)', 'SMA(10001)', 'BB_MID(8,nan)'])('rejects %s', ref => {
+test.each(['', 'ema-20', 'macd-1720000000000', 'EMA(0)', 'RSI(1.5)', 'MACD(26,12,9)', 'EMA(' + '1'.repeat(5000) + ')', 'MACD(5,12)', 'SMA(10001)', 'BB_MID(8,nan)', 'BB_UPPER(2,1e308)'])('rejects %s', ref => {
   expect(parseAlertIndicator(ref)).toBeNull();
 });
 
 test.each(['VOL(default)', 'VWAP(default)', 'BB(20,2)', 'RSI(5)', 'ATR(6)', 'macd_signal', 'ema20'])('preserves supported old references %s', ref => {
   expect(computeAlertIndicatorPoints(candles, [condition(ref)])[ref].length).toBeGreaterThan(0);
+});
+
+
+test('cent-price EMA decay cannot falsely fire above the rounded backend threshold', () => {
+  const bars = [...Array(7).fill(100), 100.01, ...Array(16).fill(100)].map((close, i) => ({
+    time: 1720000000 + i * 3600, open: close, high: close + 1, low: close - 1, close, volume: 100,
+  }));
+  const c = condition('EMA(7)');
+  c.value = 100;
+  const rule: AlertRule = { id: 'parity', name: 'parity', symbol: 'AAPL', interval: '1h',
+    enabled: true, group: { logic: 'AND', conditions: [c] }, cooldown_minutes: 0,
+    expiry_date: null, created_at: '2024-01-01', last_triggered_at: null };
+  const points = computeAlertIndicatorPoints(bars, [c]);
+  expect(points['EMA(7)'].at(-1)?.value).toBe(100);
+  expect(evaluateRules([rule], bars.at(-1)!, bars, points, [], new Date(), 'AAPL', '1h')).toEqual([]);
+});
+
+test('an OR match never includes nonfinite indicator values in persisted trigger data', () => {
+  const candle = candles.at(-1)!;
+  const rule: AlertRule = { id: 'finite', name: 'finite', symbol: 'AAPL', interval: '1h',
+    enabled: true, group: { logic: 'OR', conditions: [condition('BB_UPPER(2,2)'),
+      { kind: 'price', operator: '>', value: 0 }] }, cooldown_minutes: 0,
+    expiry_date: null, created_at: '2024-01-01', last_triggered_at: null };
+  const result = evaluateRules([rule], candle, candles,
+    { 'BB_UPPER(2,2)': [{ time: candle.time, value: Infinity }] }, [], new Date(), 'AAPL', '1h');
+  expect(result).toHaveLength(1);
+  expect(result[0].trigger_values).toEqual({ close: candle.close });
 });
