@@ -1746,7 +1746,7 @@
         "pattern": "^def account_value\\(",
         "note": "Presence only; behavioral evidence in audit report."
       },
-      "note": "Built, independently audited clean; not yet merged. PLAN rounds1/2:2 findings fixed then0. CODE rounds1/2:2 findings fixed then0. Gate proof and reviewed blobs in docs/superpowers/audits/2026-10-03-server-owned-account-value.md. Focused407passed; fix45passed; reviewer28passed; frontendtypecheckpassed. Fullbackendpending. B2 dailyledger remains separate."
+      "note": "Built, independently audited clean; not yet merged. PLAN rounds1/2:2 findings fixed then0. CODE rounds1/2:2 findings fixed then0. Gate proof and reviewed blobs in docs/superpowers/audits/2026-10-03-server-owned-account-value.md. Focused407passed; fix45passed; reviewer28passed; frontendtypecheckpassed. Finalcombinedbackend4797passed1skipped0failed. B2 dailyledger remains separate."
     },
     {
       "id": "TRADING-REVIEW-DAILY-BUDGET",
@@ -1764,7 +1764,7 @@
         "pattern": "^class DailyRiskService:",
         "note": "Presence only; audit and behavioral evidence recorded separately."
       },
-      "note": "Built and independently audited clean, not yet merged. PLAN rounds1/2:2 gate findings fixed then0; CODE rounds1/2:3 gate findings fixed then0. Reviewed hashes/proof in docs/superpowers/audits/2026-10-03-persisted-daily-risk-budget.md. Core30/integration23 independently53passed; author115focusedpassed. Frontend183suites4486tests/typecheck/build passed; fullbackendpending. Retuning blocked by historical data/network access; min_signal_rr remains0.0, no strategy parameters adopted."
+      "note": "Built and independently audited clean, not yet merged. PLAN rounds1/2:2 gate findings fixed then0; CODE rounds1/2:3 gate findings fixed then0. Reviewed hashes/proof in docs/superpowers/audits/2026-10-03-persisted-daily-risk-budget.md. Core30/integration23 independently53passed; author115focusedpassed. Frontend183suites4486tests/typecheck/build passed; finalcombinedbackend4797passed1skipped0failed. Retuning data verified for all60configuredsymbols; fullsearchseparatework; min_signal_rr remains0.0, no strategy parameters adopted."
     }
   ],
   "already_shipped": [
