@@ -2,31 +2,9 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "codex/options-explanation-fixes",
-      "claimed_at": "2026-10-03T19:56:47Z",
-      "expires_at": "2026-10-03T23:57:44Z",
-      "note": "User authorized takeover and final Step5 correction audit; coordinating Contracts handoff",
-      "task": "OPTIONS-VOL-EVENTS-EXPLANATIONS"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/options-explanation-fixes",
-      "claimed_at": "2026-10-03T20:00:01Z",
-      "expires_at": "2026-10-03T23:57:44Z",
-      "note": "User reassigned both pages to root; other session reports no code edits or commits",
-      "previous": [
-        {
-          "branch": "fix/options-contract-explanations",
-          "claimed_at": "2026-10-03T19:50:54Z"
-        }
-      ],
-      "task": "OPTIONS-CONTRACT-EXPLANATIONS"
-    },
-    {
-      "agent": "claude",
       "branch": "codex/trade-card-ui-core",
       "claimed_at": "2026-10-03T23:28:02Z",
-      "expires_at": "2026-10-04T02:28:02Z",
+      "expires_at": "2026-10-04T02:59:02Z",
       "note": "CORE presentation only; latest main contains trading-review and verified leaves; no live overlap claim",
       "task": "TRADE-CARD-UI-CORE"
     }
