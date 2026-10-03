@@ -29,6 +29,14 @@
         }
       ],
       "task": "OPTIONS-CONTRACT-EXPLANATIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/trade-card-parallel-handoff",
+      "claimed_at": "2026-10-03T20:56:13Z",
+      "expires_at": "2026-10-03T23:56:13Z",
+      "note": "Documentation only: register disjoint parallel tasks and new-session handoff; no UI implementation",
+      "task": "TRADE-CARD-PRESENTATION-HANDOFF"
     }
   ]
 }
