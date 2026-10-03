@@ -24,14 +24,6 @@
     },
     {
       "agent": "claude",
-      "branch": "codex/trade-card-context-cards",
-      "claimed_at": "2026-10-03T22:34:13Z",
-      "expires_at": "2026-10-04T01:34:13Z",
-      "note": "Implement optional compact context cards only; preserve information, safety flags and default layouts",
-      "task": "TRADE-CARD-CONTEXT-CARDS"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/zen-newton-o3ix8q",
       "claimed_at": "2026-10-03T22:39:53Z",
       "expires_at": "2026-10-04T01:39:53Z",
