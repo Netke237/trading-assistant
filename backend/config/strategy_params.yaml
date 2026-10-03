@@ -59,7 +59,14 @@ strategies:
     exit:
       exit_swing_lookback: 20
       rr_target_mult: 2.0
-      min_signal_rr: 1.0   # review fix #6: skip signals whose first target is < 1R
+      # Review fix #6 / D7: skip (never clamp) a signal whose first target is
+      # under min_signal_rr R. The mechanism stays; it ships DISABLED (0.0) until
+      # the Phase B multi-year re-tune (Kenneth, 2026-10-03): on the fixtures 1.0
+      # made pullback_ema worse per trade (AAPL +0.08 -> -4.35 %, NVDA +0.415 ->
+      # -2.34 %, SPY -0.52 -> -3.78 %, n <= 11). Set > 0 to re-enable. adopt()
+      # drops YAML comments; the durable record is tests/test_pullback_min_rr.py
+      # and decision D7 in docs/superpowers/plans/2026-10-03-trading-review-fixes-plan.md.
+      min_signal_rr: 0.0
     search:
       # 35 is included alongside the original [20, 50] grid because
       # active.bearish.ema_period is deliberately hand-tuned to 35 — this

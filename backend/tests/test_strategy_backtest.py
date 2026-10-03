@@ -262,8 +262,9 @@ def test_below_gate_result_preserves_real_trade_stats():
     signals, which silently broke walk-forward optimization on realistic (low)
     trade counts (2026-08 audit)."""
     bars = _synth_bars(400, trend=True)
-    # min_signal_rr=0.0 opts out of the YAML's 1R floor (review fix #6): this test
-    # is about the sub-gate stats path, and the synthetic bars only yield sub-1R setups.
+    # min_signal_rr=0.0 pins the R floor (review fix #6) off so this test does not
+    # depend on the YAML value (shipped 0.0 on 2026-10-03, may be re-enabled after
+    # the Phase B re-tune): the synthetic bars only yield sub-1R setups.
     below_gate = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
                                         min_trades=1000,  # unreachable gate
                                         params={"min_signal_rr": 0.0})
@@ -289,8 +290,9 @@ def test_backtest_result_changes_with_params():
     # default 0.04) — how close price must pull back to the EMA to count as a
     # setup. A near-zero tolerance should fire far fewer (or differently timed)
     # entries than a very loose one.
-    # min_signal_rr=0.0 opts out of the 1R floor (review fix #6) so the synthetic
-    # bars still trade; this test is about params being forwarded, not the floor.
+    # min_signal_rr=0.0 pins the R floor (review fix #6) off, independent of the
+    # YAML value, so the synthetic bars still trade; this test is about params
+    # being forwarded, not the floor.
     tight = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
                                    params={"tolerance": 0.005, "min_signal_rr": 0.0})
     loose = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",

@@ -45,10 +45,12 @@ def test_floor_skips_never_clamps():
     assert floored <= base
 
 
-def test_yaml_exit_block_carries_the_floor():
+def test_yaml_exit_block_carries_the_floor_disabled():
     """exit: is merged by run_strategy_backtest, the live scan and the watch
-    evaluator, and adopt() never touches it."""
-    assert get_exit("pullback_ema")["min_signal_rr"] == 1.0
+    evaluator, and adopt() never touches it. Kenneth 2026-10-03: the floor ships
+    DISABLED (0.0) until the Phase B multi-year re-tune -- on the fixtures 1.0
+    made pullback_ema's per-trade expectancy worse (n <= 11)."""
+    assert get_exit("pullback_ema")["min_signal_rr"] == 0.0
 
 
 def test_floor_reaches_scan_merge_and_only_pullback_ema():
@@ -57,7 +59,19 @@ def test_floor_reaches_scan_merge_and_only_pullback_ema():
     from app.routers.stock_scan import _merge_strategy_params, _SIGNAL_FNS
 
     for d in ("Bullish", "Bearish"):
-        assert _merge_strategy_params("pullback_ema", d, {})["min_signal_rr"] == 1.0
+        assert _merge_strategy_params("pullback_ema", d, {})["min_signal_rr"] == 0.0
     for k in _SIGNAL_FNS:
         if k != "pullback_ema":
             assert "min_signal_rr" not in get_exit(k)
+
+
+def test_floor_set_above_zero_still_filters_the_backtest():
+    """The mechanism stays wired end-to-end while the YAML ships it disabled:
+    passing min_signal_rr > 0 through run_strategy_backtest's params drops
+    trades versus the (disabled) default."""
+    from app.services.strategy_backtest import run_strategy_backtest
+
+    default = run_strategy_backtest(BARS, strategy="pullback_ema", direction="Bullish")
+    floored = run_strategy_backtest(BARS, strategy="pullback_ema", direction="Bullish",
+                                    params={"min_signal_rr": 1.0})
+    assert default.n_trades > floored.n_trades

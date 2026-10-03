@@ -58,8 +58,8 @@ def test_entry_start_blocks_entries_before_it(monkeypatch):
 
     monkeypatch.setattr(Backtest, "run", spy)
 
-    # min_signal_rr=0.0 opts out of the YAML's 1R floor (review fix #6): this test
-    # needs the pre-floor trade set, since the floor removes the pre-`cut` entry.
+    # min_signal_rr=0.0 pins the R floor (review fix #6) off, independent of the
+    # YAML value: a 1R floor removes the pre-`cut` entry this test needs.
     nofloor = {"min_signal_rr": 0.0}
     full = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
                                  params=nofloor)

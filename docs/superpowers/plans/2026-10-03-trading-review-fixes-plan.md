@@ -29,7 +29,7 @@
 | D4 | An unknown earnings date does **not** change the score (SPY and other ETFs have none). It shows as CAUTION on the Step-7 checklist | Scoring unknown as CAUTION would penalise every ETF |
 | D5 | For options, the effective single-position cap is `min(max_single_position_pct, max_loss_per_trade_pct)`. Today that is 3.75%, not 5%. Long premium with no protective order can lose 100% | Keeping 5% and making the loss check advisory is the defect itself |
 | D6 | Basket sends are honestly labelled "tracked, no broker order" and stored as `source: 'manual'`. Real basket routing is Phase B | Routing the basket through the direct-send path is a large change to a heavily audited flow |
-| D7 | `pullback_ema` skips (does not clamp) a signal whose first target is below `min_signal_rr` = 1.0 R | Clamping manufactures a target the strategy never claimed (the Chair's ruling) |
+| D7 | `pullback_ema` skips (does not clamp) a signal whose first target is below `min_signal_rr` R. **Amended 2026-10-03 (Kenneth):** the mechanism stays but ships **disabled** (`min_signal_rr: 0.0`) until the Phase B multi-year re-tune. On the fixtures 1.0 made pullback_ema worse per trade (AAPL +0.08 → −4.35 %, NVDA +0.415 → −2.34 %, SPY −0.52 → −3.78 %, n ≤ 11) | Clamping manufactures a target the strategy never claimed (the Chair's ruling). Shipping 1.0 now: the fixture evidence went the wrong way |
 
 ## Task 0: Branch, claim, carry the review
 
@@ -895,7 +895,7 @@ Existing tests that assumed a 5% option cap with a 3.75% loss limit in config wi
 
 **Files:**
 - Modify: `backend/app/services/strategy_engine.py:403-520` (`pullback_ema_signal` gains `min_signal_rr: float = 0.0`)
-- Modify: `backend/config/strategy_params.yaml` `pullback_ema.exit` (add `min_signal_rr: 1.0`)
+- Modify: `backend/config/strategy_params.yaml` `pullback_ema.exit` (add `min_signal_rr: 1.0`; **superseded 2026-10-03: ships 0.0, see D7**)
 - Test: `backend/tests/test_pullback_min_rr.py` (new)
 
 **Interfaces:**
@@ -956,7 +956,7 @@ Use the variable names the function actually uses for entry and risk (`current` 
 ```yaml
       min_signal_rr: 1.0   # review fix #6: skip signals whose first target is < 1R
 ```
-`exit:` keys go through `adopt()` untouched, so a WFO adopt cannot drop it. That is the reason `rr_target_mult` also lives there.
+(Superseded 2026-10-03, Task 10a: the key ships as `min_signal_rr: 0.0`, i.e. disabled — see D7.) `exit:` keys go through `adopt()` untouched, so a WFO adopt cannot drop it. That is the reason `rr_target_mult` also lives there.
 
 - [ ] **Step 4: Measure and run tests**
 
