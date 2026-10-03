@@ -511,7 +511,10 @@ def pullback_ema_signal(
 
     # Fix #6 / D7: SKIP, never clamp. A first target nearer than min_signal_rr R
     # needs a >90% win rate to pay costs; clamping would invent a target the
-    # strategy never claimed (Chair, TRADING_REVIEW.md).
+    # strategy never claimed (Chair, TRADING_REVIEW.md). D7 AMENDED 2026-10-03
+    # (Kenneth): the mechanism ships DISABLED -- strategy_params.yaml sets
+    # min_signal_rr 0.0 until the Phase B re-tune -- so by default this skips
+    # nothing and fix #6 is mechanism-only.
     if min_signal_rr > 0 and abs(target - current) < min_signal_rr * risk:
         return None
 

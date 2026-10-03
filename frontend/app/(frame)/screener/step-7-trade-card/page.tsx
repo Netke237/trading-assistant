@@ -578,7 +578,7 @@ export default function Step7Page() {
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
   // the active card AND every overridden basket item share this one cache so a
-  // basket "Send to broker" never falls back to an auto-pick's stale plan just
+  // tracked basket row never falls back to an auto-pick's stale plan just
   // because that symbol isn't the currently-active card. Each entry is tagged
   // with the contract key it was computed for so a plan for contract A is never
   // merged onto contract B while B's recompute is still in flight.
@@ -781,10 +781,11 @@ export default function Step7Page() {
   );
 
   // Every basket item, override-resolved and (if overridden) merged with its
-  // recomputed plan. `basketPlansPending` gates the whole "Send to broker" flow
-  // so a basket order can never go out carrying an overridden contract whose
-  // Entry/Exit/RR still describe the auto-pick — the exact bug this recompute
-  // machinery exists to prevent, previously reachable only via Send basket.
+  // recomputed plan. `basketPlansPending` gates the whole "Track basket" flow
+  // so a tracked basket row can never be booked carrying an overridden contract
+  // whose Entry/Exit/RR still describe the auto-pick — the exact bug this
+  // recompute machinery exists to prevent. (Fix #5 / D6: the basket books
+  // Portfolio rows only; it places no broker order.)
   // (resolveBasketCards is the same pure logic exercised directly in
   // lib/__tests__/tradeCardOverride.test.ts.)
   const { cards: basketCards, pending: basketPlansPending } = useMemo(

@@ -1,8 +1,9 @@
 /*
  * Portfolio store — Zustand with localStorage persistence.
  *
- * Holds open positions. Step 7's "Send to broker" flow calls `addPosition`
- * to push new orders in — tagged as either `broker` or `manual` via `source`.
+ * Holds open positions. Step 7's direct sends (Place Limit / Right Now —
+ * Market) and its tracked-only basket (fix #5 / D6: no broker order) call
+ * `addPosition` — tagged `paper` or `manual` via `source`.
  */
 
 import { create } from 'zustand';

@@ -2,9 +2,10 @@
  * Pure helpers for Step 7's contract-override + recompute-plan machinery.
  * Extracted out of the page component so the exact logic that determines
  * "which contract/plan does this order actually carry" is unit-testable —
- * this is what silently broke for the basket "Send to broker" flow (the
- * override reached the single-card buttons but not the basket path, since
- * the basket cards were built straight from the raw scan candidates).
+ * this is what silently broke for the basket flow (the override reached the
+ * single-card buttons but not the basket path, since the basket cards were
+ * built straight from the raw scan candidates). Since fix #5 (D6) the basket
+ * TRACKS positions in Portfolio and places no broker order.
  */
 import type {
   TradeCardData, OptionContract, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan,
@@ -97,14 +98,16 @@ export function mergePlan(card: OverriddenCard, plan: RecomputedPlanShape): Over
  * Resolve every basket symbol to its (possibly overridden, possibly
  * plan-merged) card. Any overridden symbol whose plan isn't cached yet for its
  * CURRENT contract key is excluded from the returned list and flips
- * `pending` — this is the gate that must block "Send to broker" so an order
- * can never go out carrying an overridden contract whose Entry/Exit/RR still
- * describe the auto-pick.
+ * `pending` — this is the gate that must block the basket's "Track basket"
+ * submit, so a tracked row can never be booked carrying an overridden contract
+ * whose Entry/Exit/RR still describe the auto-pick. (The basket places no
+ * broker order since fix #5 / D6; it books Portfolio rows that reserve the
+ * contract and symbol.)
  *
  * Also splices in each card's cached "Compute Exit Plan" result (keyed by
  * contract, same cache `withCachedEstimate` reads for the single active
  * TradeCard) — without this, `checkTradeRisk`'s max-loss-per-trade gate
- * silently never fires for the basket "Send to broker" path: a raw scan
+ * silently never fires for the basket "Track basket" path: a raw scan
  * candidate never carries `exit.exitPlan` on its own, only a user's
  * "Compute Exit Plan" click populates it, and that click's result was never
  * otherwise reaching the cards this function returns.
