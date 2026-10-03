@@ -15,6 +15,14 @@
       "expires_at": "2026-10-03T22:26:36Z",
       "note": "Execute full configured multiyear search and independently verify financial results",
       "task": "TRADING-REVIEW-RETUNE-EVIDENCE"
+    },
+    {
+      "agent": "claude",
+      "branch": "fix/options-contract-explanations",
+      "claimed_at": "2026-10-03T19:50:54Z",
+      "expires_at": "2026-10-03T22:50:54Z",
+      "note": "User reassigned: correct numeric explanation defects and complete required validation",
+      "task": "OPTIONS-CONTRACT-EXPLANATIONS"
     }
   ]
 }
