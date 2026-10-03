@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "work",
-      "claimed_at": "2026-10-03T14:56:06Z",
-      "expires_at": "2026-10-03T17:56:06Z",
-      "note": "Plan and audit Options Step 6 score explanations; documentation only",
-      "task": "OPTIONS-CONTRACT-EXPLANATIONS-PLAN"
-    },
-    {
-      "agent": "claude",
       "branch": "codex/trading-review-retune",
       "claimed_at": "2026-10-03T14:57:27Z",
       "expires_at": "2026-10-03T17:57:27Z",
