@@ -21,14 +21,6 @@
         }
       ],
       "task": "OPTIONS-CONTRACT-EXPLANATIONS"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/zen-newton-o3ix8q",
-      "claimed_at": "2026-10-03T22:39:53Z",
-      "expires_at": "2026-10-04T01:39:53Z",
-      "note": "Reorganise BarrierRaceCard presentation only (own BarrierRaceCard/** only)",
-      "task": "TRADE-CARD-BARRIER-PRESENTATION"
     }
   ]
 }
