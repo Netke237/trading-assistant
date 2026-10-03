@@ -1,0 +1,46 @@
+# Copy this to settings.yaml and fill in non-secret values.
+# Secrets (passwords, tokens) live in .env — do NOT put them here.
+
+notifications:
+  gmail:
+    enabled: false
+    smtp_host: smtp.gmail.com
+    smtp_port: 465
+  telegram:
+    enabled: false
+
+scan:
+  cadence_minutes: 60
+
+# Operator timezone — governs jobs that only need some quiet, convenient
+# local hour (nightly ingestion/EDGAR/S&P 500/tuning, audit-log rotation).
+# Does NOT govern anything tracking real NYSE hours (e.g. the strategy-watch
+# EOD trigger) — those are pinned to America/New_York regardless of this
+# setting. Any IANA timezone name.
+scheduling:
+  timezone: Europe/Berlin
+
+# Retention window (days) for scheduled-scan-run history rows
+# (ScheduledScanRunModel) — deliberately separate from history_retention_years
+# (which governs the audit.log/AuditEventModel trade-rationale trail): this
+# table is operational scan-run history, not the trade-rationale record.
+scheduled_scan_run_retention_days: 90
+
+alert_delivery:
+  masterEnabled: true
+  enabledTypes:
+    - TP_HIT
+    - STOP_REACHED
+    - STRUCTURAL_STOP_BREACHED
+    - PREMIUM_STOP
+    - TIME_STOP
+    - EVENT_RISK
+    - REGIME_CHANGE
+  dedupWindowMinutes: 15
+  reminderIntervalHours: 4
+  retentionDays: 30
+  positionAlertRetentionDays: 30
+
+ibkr:
+  enabled: true
+  base_url: https://localhost:5000/v1/api

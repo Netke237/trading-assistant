@@ -1,0 +1,77 @@
+# backend/config/contract_rules.yaml
+
+# contract_score_thresholds: classifies a CONTRACT's composite score (liquidity, spread,
+# delta, DTE, IV-rank — see `weights:` below). Read by contract_validator.py.
+# NOTE: scoring_rules.yaml has a similarly-named `score_thresholds` block with different
+# numbers (55/35) — that one classifies STOCK scores (trend/pullback/trigger/event/vol),
+# a different scale entirely. Do not "fix" the numeric mismatch; they measure different things.
+contract_score_thresholds:
+  pass: 65
+  caution: 45
+
+# DTE is derived from the selected holding horizon: dte = holding_days * multiplier.
+# Never hold an option to expiry — this buffer leaves time value at exit.
+dte_holding_multiplier: 2.0
+
+# Hard-reject rules (FR-24) — any one triggers REJECT, score = 0
+hard_reject:
+  min_volume: 50                # contracts per day — below this = illiquid
+  min_open_interest: 200        # open interest — below this = illiquid
+  max_bid_ask_spread_pct: 0.20  # spread / mid-price — above this = too wide
+  min_delta: 0.20               # absolute delta — below this = too far OTM
+  max_delta: 0.85               # absolute delta — above this = too deep ITM
+  min_dte: 21                   # calendar days to expiry — below this = too short
+  max_dte: 90                   # calendar days to expiry — above this = too long
+  # TWO HARD-REJECT CEILINGS, because the volatility figure reaching
+  # contract_validator can be either of two different quantities and only one
+  # of them is usually available (PHASE-A-NULL-IVRANK-2026-09-06). Which one
+  # applies is decided by `iv_basis`, set in app/data/augment.py:
+  #   max_iv_abs  judges ABSOLUTE implied volatility 0-100 (Tradier per strike,
+  #               the yfinance backfill, or scan.py's Black-Scholes inversion).
+  #   max_iv_rank judges a TRUE PERCENTILE, available only when IBKR or
+  #               tastytrade answered.
+  # 70 is the number this ceiling has ACTUALLY been applying all along, to an
+  # absolute level mislabelled as a rank, so it moves to max_iv_abs and
+  # behaviour is unchanged for every chain without a rank source.
+  max_iv_abs: 70                # long-premium strategy: never buy when absolute IV > 70%
+  # UNMEASURED — seeded from the absolute ceiling above. Nobody has checked
+  # whether a percentile deserves the same cut-off; a name at the 75th
+  # percentile of its own range is a genuinely different claim from one at 75%
+  # IV. Same standing as the iv_rank_* thresholds in scoring_rules.yaml.
+  max_iv_rank: 70               # long-premium strategy: never buy when IV rank > 70
+  max_soft_fail_count: 3        # reject if this many soft rules fail
+  min_stock_score: 55           # contracts only recommended when the underlying's stock score is at least this
+                                 # (matches scoring_rules.yaml's stock `pass` bar exactly — CAUTION-grade
+                                 # underlyings, 35-54, no longer qualify for options recommendations)
+
+# Soft-rank rules (FR-25) — penalise score but do not block
+soft_rank:
+  preferred_volume_min: 200          # below this = soft penalty
+  preferred_oi_min: 1000             # below this = soft penalty
+  preferred_spread_pct_max: 0.08     # above this = soft penalty
+  preferred_delta_min: 0.30          # below this = soft penalty (edge of golden zone)
+  preferred_delta_max: 0.70          # above this = soft penalty
+  preferred_dte_min: 21              # intentionally equals hard_reject.min_dte above. Every
+                                      # horizon-derived override (dte_window.py's
+                                      # widen_contract_overrides_for_dte) sets both to the same
+                                      # widened value on purpose, so a contract the hard-reject
+                                      # check already forgives near the window edge isn't then
+                                      # soft-penalized as if it were far outside it. This default
+                                      # mirrors that for the no-override case. Do not space this
+                                      # apart from min_dte without revisiting dte_window.py first —
+                                      # see contract_validator.py's _score_dte for the mechanics.
+  preferred_dte_max: 60              # above this = soft penalty
+  # Two soft ceilings for the same reason as max_iv_abs / max_iv_rank above —
+  # `iv_basis` picks which one scores the contract. 55 is what has actually
+  # been applied to absolute IV, so it moves to preferred_iv_abs_max.
+  preferred_iv_abs_max: 55           # above this = soft penalty (expensive premium)
+  # UNMEASURED — seeded from the absolute ceiling above.
+  preferred_iv_rank_max: 55          # above this = soft penalty (expensive premium)
+
+# Weights for scoring (must sum to 1.0)
+weights:
+  liquidity: 0.25    # volume + OI combined
+  spread: 0.25       # bid-ask spread tightness
+  delta: 0.20        # delta in preferred zone
+  dte: 0.15          # DTE in preferred band
+  iv_rank: 0.15      # IV rank acceptability
