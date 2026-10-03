@@ -138,7 +138,7 @@ export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> =
               <div className={styles.cardMetrics}>
                 <div className={styles.metricRow}>
                   <span className={styles.metricLabel}>Weight:</span>
-                  <Data size={11}>{(comp.weight * 100).toFixed(0)}%</Data>
+                  <Data size={11}>{comp.weight * 100}%</Data>
                 </div>
 
                 {isLiq && (

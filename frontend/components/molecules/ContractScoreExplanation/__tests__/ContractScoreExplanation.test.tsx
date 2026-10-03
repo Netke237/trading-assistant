@@ -167,6 +167,20 @@ describe('ContractScoreExplanation component', () => {
     expect(screen.getByText('volume:')).toBeInTheDocument();
   });
 
+  test('preserves the effective fractional component weight', () => {
+    render(<ContractScoreExplanation id="fractional-exp" contract={{
+      ...mockBaseContract,
+      explanation: { ...mockValidExplanation, weights: {
+        ...mockValidExplanation.weights, iv_rank: 0.1525,
+      }, components: {
+        ...mockValidExplanation.components,
+        iv_rank: { ...mockValidExplanation.components.iv_rank, weight: 0.1525 },
+      } },
+    }} />);
+    const ivCard = screen.getByText('IV Attractiveness').closest('div')?.parentElement;
+    expect(ivCard).toHaveTextContent('Weight:15.25%');
+  });
+
   test('shows a 200 percent spread without changing its ratio unit', () => {
     render(<ContractScoreExplanation id="spread-exp" contract={{
       ...mockBaseContract,
