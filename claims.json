@@ -23,6 +23,14 @@
       "expires_at": "2026-10-03T17:57:27Z",
       "note": "Execute full configured multiyear search and independently verify financial results",
       "task": "TRADING-REVIEW-RETUNE-EVIDENCE"
+    },
+    {
+      "agent": "claude",
+      "branch": "feat/options-vol-events-explanations",
+      "claimed_at": "2026-10-03T15:16:17Z",
+      "expires_at": "2026-10-03T18:16:17Z",
+      "note": "Implement Options Step 5 vol + events explanations",
+      "task": "OPTIONS-VOL-EVENTS-EXPLANATIONS"
     }
   ]
 }
