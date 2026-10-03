@@ -1,4 +1,4 @@
-# WATCH-RESEND-PER-CHANNEL, piece 3: per-channel delivery — plan (v1, not yet reviewed)
+# WATCH-RESEND-PER-CHANNEL, piece 3: per-channel delivery — plan (v2; round 1 NOT clean: 2 gate findings, both fixed here as [R1-1], [R1-2]; v2 not reviewed)
 
 - **Phase:** `WATCH-RESEND-PER-CHANNEL`, piece 3 of 3 (decision `WATCH-RESEND-SPLIT-2026-10-02`). Own plan,
   own three plan rounds, then its own three code rounds (`AUDIT-CAP-PER-STAGE-2026-09-25`).
@@ -162,8 +162,8 @@ the eligible head on that channel and its failures). For entry `e`:
    - delivered → `channel_done[c] = "delivered"`. If `c in stuck`: the stuck head `h` gets
      `channel_done[c] = "dropped"` and the ERROR `_DROP_LOG` is logged (watch id, channel, `h`'s failures on
      `c`, `h`'s reason); `stuck.pop(c)`; `c` stays open.
-   - failed and `c in stuck` → this was the PROBE on `c`: nothing dropped, nothing counted on `e`, `c` →
-     blocked (an outage on `c`, or a second stuck alert — open question WATCH-RESEND-TWO-STUCK-IN-A-ROW).
+   - failed and `c in stuck` → this was the PROBE on `c`: nothing dropped, nothing counted on `e`,
+     `stuck.pop(c)`, `c` → blocked (an outage on `c`, or a second stuck alert — open question WATCH-RESEND-TWO-STUCK-IN-A-ROW).
    - failed otherwise → `e` is the HEAD on `c` (every earlier entry with `c` remaining was delivered or
      dropped on `c`, or `c` would be blocked/stuck). Count it per piece 1's rule on channel `c` (spacing 1 h
      against `_last_failure(e, c)`). `_failures(e, c) >= _UNDELIVERABLE_AFTER` → `stuck[c] = (e, n)` (the
@@ -173,14 +173,21 @@ the eligible head on that channel and its failures). For entry `e`:
    next send (at most one entry sent-but-unwritten, today's guarantee).
 6. Stop the walk when every channel in `run.channels` is blocked (piece 1 test 9: an entry behind a failed
    probe is not reached).
+7. [R1-1] AFTER THE WALK, ALWAYS (whether or not anything changed or was sent): `committed, rest =
+   _pop_complete(committed, rest)`; if that popped anything, write. So an entry finished only because a
+   channel was disabled or lost its credentials (nothing to send, nothing changed in steps 1-6) is popped
+   and its new_state committed in that run (test 7). A disabled watch is not walked (unchanged), so its
+   entries are not popped until it is re-enabled and walked.
 
 After the walk, every `c` still in `stuck` had no valid entry behind its head: the watch is PROBE-READY on
 `c`. `_resend_watch` returns `{c: n}` for those (None/empty otherwise); `_resend_pending(run)` returns
 `{watch_id: {c: n}}` and keeps the per-watch `try`.
 
-The drop ERROR becomes `"strategy-watch: undeliverable alert dropped for %s on %s after %d failed runs; a
-later alert was delivered there: %s"` (still contains "undeliverable alert dropped for <id>", which piece 1's
-tests match).
+[R1-2] The drop ERROR becomes `"strategy-watch: undeliverable alert dropped for %s after %d failed runs on
+%s; a later alert was delivered there: %s"` (watch id, failures, channel, reason). It keeps piece 1's
+`"undeliverable alert dropped for <id> after <n> failed runs"` as a contiguous prefix, which piece 1's tests
+match verbatim (`test_watch_resend_skip_on_proof.py:107` `"... a after 3 failed runs"`, `:239` `"... a after
+4 failed runs"`); those assertions stay unchanged.
 
 Order on each channel: `c` never receives an entry while an earlier one is outstanding on `c` (not
 delivered, not dropped), except piece 1's probe — and then the earlier one is dropped on `c` at once, never
@@ -279,9 +286,18 @@ settings.yaml and relied on today's "send even when nothing is enabled" (`test_s
 
 Piece 1 tests whose assertions name the representation change, not the behaviour:
 
-- counter assertions `_head(store)["failures"] == n` / `["last_failure_at"] == x` read
-  `channel_failures["gmail"]` / `channel_last_failure_at["gmail"]` (inputs keep the legacy scalars, so the
-  fallback is exercised); `"failures" not in head` becomes "no `channel_failures`".
+- [R1-2] counter assertions `_head(store)["failures"] == n` / `["last_failure_at"] == x` go through the
+  evaluator's READERS: `ev_mod._failures(_head(store), "gmail") == n` /
+  `ev_mod._last_failure(_head(store), "gmail") == x` (the raw stored value, string as stored). The reader
+  returns the per-channel value when written and the legacy scalar otherwise, so every case works whether
+  or not this run counted a failure: test 2 (:133, uncounted, stays 2), test 10's uncounted
+  `(2, "2026-10-01T13:30:00", 2)` case, and test 2c (b)/(c) (`== 3`, `last_failure_at == old`) included.
+  Inputs keep the legacy scalars, so the fallback is exercised. `"failures" not in _head(store)` (test 2c
+  (a), :162) becomes `ev_mod._failures(_head(store), "gmail") == 0` AND `"channel_failures" not in
+  _head(store)` (nothing written on a hold run). Test 14's `"failures" not in store.pending("a")[0]` (:386,
+  the new head after a cap eviction) stays as is and gains `"channel_failures" not in ...`.
+  `_last_failure(e, c)` is therefore a named helper returning the raw stored string (or None); the spacing
+  check parses it.
 - test 2c (unreadable config): `n.reasons() == ["RZ-head"]*3` / `["RZ-head"]` become `[]` (hold sends
   nothing); every other assertion (nothing dropped, counters untouched, fresh queued) stays.
 - test 11 (defensive length check) calls `_deliver_or_queue(t, _Run("send", cfg, ("gmail",)),
@@ -369,3 +385,18 @@ counted on the probe entry; walk not stopped when all channels blocked.
 ## 6. Gates
 
 Backend pytest full from `backend/` (Python 3.11); `python3 scripts/state.py` exit 0; frontend untouched.
+
+## 7. Audit record
+
+- **Plan round 1 (overall round 1, plan round 1 of 3), v1 at a2dbf02, fresh independent reviewer: NOT
+  clean, 2 gate.** [R1-1] an entry finished only by a channel being disabled/losing credentials was never
+  popped (writes only on change; test 7 unpassable; residual 1 false) → section 2.4 step 7. [R1-2] the new
+  drop-log text broke piece 1's verbatim `"... after 3/4 failed runs"` assertions, and migrated counter
+  assertions on `channel_failures["gmail"]` would KeyError on uncounted runs → log keeps piece 1's prefix;
+  assertions go through the readers (4.1). Below gate, logged, NOT changed (rule: only gate findings are
+  fixed): `ready_channels` does not check Gmail's recipient (`to` / `BAMENDJOU_GMAIL_TO`), so Gmail enabled
+  with an empty `to` is a ready channel that always fails (residual 1 applies); legacy scalar counters make a
+  channel disabled at upgrade time immediately eligible (needs a real failure and a delivered later alert);
+  a newly enabled channel gets still-queued entries (stated design, reverses combined-plan R1-16);
+  `test_strategy_watch_router.py:176` `assert_not_called` cannot fail. Clarified while editing step 4:
+  a failed probe also leaves `stuck`.
