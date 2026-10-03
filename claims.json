@@ -29,6 +29,14 @@
         }
       ],
       "task": "OPTIONS-CONTRACT-EXPLANATIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/trading-review-retune",
+      "claimed_at": "2026-10-03T20:43:07Z",
+      "expires_at": "2026-10-03T23:43:07Z",
+      "note": "Update audited retuning evidence branch to resolved PR30 base; preserve current main state and verify harness",
+      "task": "TRADING-REVIEW-RETUNE-INTEGRATION"
     }
   ]
 }
