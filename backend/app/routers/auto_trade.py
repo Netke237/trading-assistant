@@ -120,8 +120,11 @@ class ArmRequest(BaseModel):
     order_type:      Literal["MKT", "LMT"] = "LMT"
     # gt=0 -- ROUND 9, same reasoning as broker.py's two order schemas: a
     # non-positive limit is never a price, and this endpoint reaches a broker
-    # without passing through either of them.
-    limit_price:     Optional[float] = Field(default=None, gt=0)
+    # without passing through either of them. allow_inf_nan=False -- audit
+    # round 5, R5-F1: the JSON parser accepts `Infinity`/`NaN`, and a
+    # non-finite limit on a MKT arm reached the broker and then failed the
+    # booking's own schema, leaving a live order with no Portfolio row.
+    limit_price:     Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
     conid:           Optional[int] = None
     # The option mid the position books and the D5 cap is judged from.
     # REQUIRED and gt=0 -- audit round 2, R2-F2. It defaulted to 0.0 ("exposure

@@ -69,6 +69,34 @@ async def test_an_arm_with_a_non_positive_entry_premium_is_a_422(premium):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("order_type", ["MKT", "LMT"])
+@pytest.mark.parametrize("token", ["Infinity", "NaN"])
+async def test_r5f1_a_non_finite_limit_price_is_a_422(order_type, token):
+    """Audit round 5, R5-F1: the JSON parser accepts `Infinity`/`NaN`, and the
+    arm schema let a non-finite limit through; on a MKT arm it reached the
+    broker and then failed the booking's schema (`allow_inf_nan=False` there)."""
+    import json as _json
+    raw = _json.dumps(_arm_body(order_type=order_type, limit_price="__LIMIT__"))
+    raw = raw.replace('"__LIMIT__"', token)
+    # The app's own 422 handler (main.py): FastAPI's default one echoes the
+    # non-finite input and its encoder then raises, turning the refusal into a 500.
+    from fastapi.exceptions import RequestValidationError
+    from app.main import request_validation_handler
+    app = FastAPI()
+    app.add_exception_handler(RequestValidationError, request_validation_handler)
+    app.include_router(auto_trade_router)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            resp = await c.post("/auto-trade/arm", content=raw,
+                                headers={"content-type": "application/json"})
+        assert resp.status_code == 422, resp.text
+        assert "limit_price" in resp.text
+        assert auto_trader.get_state().armed is False
+    finally:
+        auto_trader.disarm()
+
+
+@pytest.mark.asyncio
 async def test_a_positive_entry_premium_still_arms():
     app = FastAPI()
     app.include_router(auto_trade_router)

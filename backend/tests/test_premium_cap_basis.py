@@ -188,6 +188,21 @@ def test_booking_body_carries_the_armed_order():
     assert body.orderLimitPrice == pytest.approx(3.60)
 
 
+def test_r5f1_a_market_arm_books_no_limit_price():
+    """Audit round 5, R5-F1: a MKT order carries no limit at the broker (every
+    adapter drops it), so the booking must not record one -- a stray limit on a
+    MKT arm (e.g. a non-finite one) would otherwise fail the position's schema
+    AFTER the order was placed, leaving a live order with no Portfolio row."""
+    from app.services import auto_trade_booking
+    from app.services.auto_trader import FiredOrder
+    body = auto_trade_booking._build_body(
+        FiredOrder(result=None, strategy=_strategy(order_type="MKT", limit_price=3.60),
+                   attempt_id="A1"), "REC-AT-1",
+    )
+    assert body.orderType == "MKT"
+    assert body.orderLimitPrice is None
+
+
 # ── Audit round 2, R2-F6: the fire and the booking judge an arm at ONE basis ──
 #
 # The fire judged a MKT arm at the armed mid (an arm carries no spread); the

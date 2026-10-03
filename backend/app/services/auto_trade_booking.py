@@ -228,7 +228,9 @@ def _build_body(fired: FiredOrder, rec_id: str) -> PortfolioPositionCreate:
         # armed basis is a floor and `create_position` still derives the
         # booking-time fill basis from `orderType` and the live quote.
         orderType=s.order_type,
-        orderLimitPrice=s.limit_price,
+        # Audit round 5, R5-F1: a MKT order carries no limit at the broker
+        # (every adapter drops it), so none is recorded.
+        orderLimitPrice=s.limit_price if s.order_type == "LMT" else None,
     )
 
 
