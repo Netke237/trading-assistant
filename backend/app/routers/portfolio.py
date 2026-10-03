@@ -19,7 +19,7 @@ from app.schemas import (
     ClosePositionRequest, ClosedPositionSchema,
     PerformanceResponse, PerformancePoint,
 )
-from app.services.portfolio_risk import check_position_risk, orm_positions_to_risk, PortfolioPosition as RiskPosition
+from app.services.portfolio_risk import account_value, AccountValueError, check_position_risk, orm_positions_to_risk, PortfolioPosition as RiskPosition
 from app.services.portfolio_performance import (
     realized_pnl, bucket_realized_by_calendar, cumulative_curve, _contract_multiplier,
 )
@@ -255,8 +255,10 @@ async def update_position(
             # exposure gate POST /api/portfolio enforces at creation. A decrease
             # only ever reduces exposure, so it skips this gate entirely and
             # doesn't need portfolioValue at all.
-            if body.portfolioValue is None:
-                qty_error = "portfolioValue is required to increase qty."
+            try:
+                server_value = account_value()
+            except AccountValueError as exc:
+                qty_error = str(exc)
             else:
                 others = (await db.execute(
                     select(PortfolioPositionModel).where(PortfolioPositionModel.id != position.id)
@@ -268,7 +270,7 @@ async def update_position(
                     entry_premium=position.entry_price,
                     current_price=position.entry_price,
                     portfolio=orm_positions_to_risk(others),
-                    portfolio_value=body.portfolioValue,
+                    portfolio_value=server_value,
                 )
                 if not risk.approved:
                     qty_error = " ".join(risk.reasons)

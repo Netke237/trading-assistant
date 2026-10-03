@@ -1054,7 +1054,7 @@ class PortfolioPositionCreate(BaseModel):
     exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
-    portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
+    portfolioValue: float = Field(alias="portfolio_value", default=100000.0, description="Deprecated compatibility field; server account value is authoritative")
     scanStockPrice: Optional[float] = Field(alias="scan_stock_price", default=None)
     tradeCardSnapshot: Optional[dict] = Field(alias="trade_card_snapshot", default=None)
     # Feature 5 (TradeCard Exit-Plan Restructure) — pre-trade max-loss override
@@ -1177,10 +1177,9 @@ class PortfolioPositionUpdate(BaseModel):
     `exclude_unset=True` still means an omitted `qty` key never touches this
     field at all.
 
-    `portfolioValue` is only required by the router when `qty` is being
-    increased (it re-runs the exposure gate in that case, same as
-    `POST /api/portfolio`); a `qty` decrease or an edit that never sends `qty`
-    doesn't need it.
+    `portfolioValue` is retained for wire compatibility and ignored. Quantity
+    increases re-run the exposure gate against server account configuration;
+    decreases and edits without a quantity increase bypass that gate.
 
     `exitPlan`, `maxLossOverride`, `activeTpMethod`, `resolvedTpPrice`/
     `resolvedTpUpdatedAt`, and `alertOverrides` are Phase 0 scaffolding for

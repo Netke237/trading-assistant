@@ -362,7 +362,7 @@ class ArmedStrategy:
     limit_price:     Optional[float]
     conid:           Optional[int]
     entry_premium:   float = 0.0
-    portfolio_value: float = 50_000.0
+    portfolio_value: float = 100_000.0  # Legacy snapshot; not authoritative
     # Piece 4 — the per-trade premium stop the card was showing when this was
     # armed. Booked onto the position the fire opens (auto_trade_booking.py),
     # where the premium-stop alert reads it; None means that position inherits
@@ -2684,7 +2684,12 @@ class AutoTradeService:
             raise
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
-        pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
+        from app.services.portfolio_risk import account_value, AccountValueError
+        try:
+            pv = account_value()
+        except AccountValueError as exc:
+            self._record_refusal(attempt_id, strategy, _STATUS_RISK_CHECK_FAILED, str(exc))
+            raise
         if portfolio_snapshot is not None and strategy.entry_premium > 0:
             try:
                 self._check_exposure(strategy, portfolio_snapshot, pv)

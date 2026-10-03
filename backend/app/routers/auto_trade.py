@@ -124,7 +124,7 @@ class ArmRequest(BaseModel):
     limit_price:     Optional[float] = Field(default=None, gt=0)
     conid:           Optional[int] = None
     entry_premium:   float = 0.0   # set to actual option mid; exposure check is skipped if 0
-    portfolio_value: float = 50_000.0
+    portfolio_value: float = 100_000.0  # Ignored compatibility field; server config is authoritative
     # Piece 4 — the per-trade premium stop from the card being armed. Omitted
     # or null inherits auto_trade.premium_stop_pct. Bounded here as well as on
     # the portfolio schemas: this endpoint reaches the same sizing arithmetic
@@ -269,7 +269,7 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     cf = _FIRE_EXECUTOR.submit(
         auto_trader.fire,
         portfolio_snapshot=portfolio_snapshot,
-        portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
+        portfolio_value=None,  # fire() resolves the server account configuration at dispatch
         # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same contract
         # `maybe_fire_on_scan` passes, and for the same reason. This handler
         # reads the armed slot, decides something about what it read (the 400

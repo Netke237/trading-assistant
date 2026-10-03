@@ -2137,7 +2137,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             fired = await asyncio.to_thread(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
-                None,  # fire() reads portfolio_value from strategy under lock
+                None,  # fire() resolves the server account configuration at dispatch
             )
             # O4 step 5: book the fired order, back ON the event loop with this
             # request's session (it never enters the worker thread). None on

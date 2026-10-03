@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from app.services import portfolio_risk, alert_generator
@@ -40,7 +40,10 @@ RISK_RULES_HEADER = (
 )
 
 
-def _load_risk() -> dict:
+def _load_risk(*, strict: bool = False) -> dict:
+    if strict:
+        with open(_RISK_PATH) as f:
+            return yaml.safe_load(f)
     if _RISK_PATH.exists():
         with open(_RISK_PATH) as f:
             return yaml.safe_load(f) or {}
@@ -69,7 +72,8 @@ class RiskConfig(BaseModel):
     )
     portfolioValue: Optional[float] = Field(
         default=None,
-        ge=1.0,
+        gt=0.0,
+        allow_inf_nan=False,
         description='Total account value used as exposure denominator ($)',
     )
     maxSinglePositionPct: Optional[float] = Field(
@@ -145,12 +149,18 @@ class RiskConfig(BaseModel):
 
 @router.get('/risk')
 async def get_risk_settings() -> dict:
-    cfg = _load_risk()
+    try:
+        cfg = _load_risk(strict=True)
+        if not isinstance(cfg, dict):
+            raise portfolio_risk.AccountValueError("Invalid server account value: risk config must be a mapping")
+        server_value = portfolio_risk.account_value(cfg)
+    except (portfolio_risk.AccountValueError, OSError, yaml.YAMLError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     rr = cfg.get('reward_risk', {})
     portfolio = cfg.get('portfolio', {})
     return {
         'premiumStopPct': float(rr.get('premium_stop_pct', 0.60)),
-        'portfolioValue': float(portfolio.get('portfolio_value', 50000.0)),
+        'portfolioValue': server_value,
         'maxSinglePositionPct': float(portfolio.get('max_single_position_pct', 0.05)),
         'maxLossPerTradePct': float(portfolio.get('max_loss_per_trade_pct', 0.0375)),
         'maxTotalExposurePct': float(portfolio.get('max_total_exposure_pct', 0.25)),

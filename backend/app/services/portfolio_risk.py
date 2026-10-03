@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import yaml
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -63,6 +64,26 @@ config_health.watch(
     fn=_load_config,
     project=lambda doc: doc,
 )
+
+
+DEFAULT_ACCOUNT_VALUE = 100_000.0
+
+
+class AccountValueError(RuntimeError):
+    """The server account configuration cannot safely authorize new risk."""
+
+
+def account_value(config: dict | None = None) -> float:
+    try:
+        cfg = _load_config() if config is None else config
+        value = cfg.get("portfolio", {}).get("portfolio_value", DEFAULT_ACCOUNT_VALUE)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("account value must be numeric")
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("account value must be finite and positive")
+        return float(value)
+    except Exception as exc:
+        raise AccountValueError(f"Invalid server account value: {exc}") from exc
 
 
 def check_position_risk(

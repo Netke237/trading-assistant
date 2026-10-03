@@ -15,6 +15,18 @@ from app.services.audit import log_event, new_rec_id
 
 router = APIRouter(prefix="/broker", tags=["broker"])
 
+
+def _dispatch_order(router_, broker, order):
+    """Validate current configuration in the worker immediately before dispatch."""
+    if order.effect == "OPEN":
+        from app.services.portfolio_risk import account_value, AccountValueError
+        try:
+            account_value()
+        except AccountValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return router_.execute(broker, order)
+
+
 BrokerKey = Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
 
 # ── Idempotency guard ─────────────────────────────────────────────────────────
@@ -257,7 +269,7 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
             sec_type="STK",
         )
         try:
-            result = await asyncio.to_thread(router_.execute, req.broker, order)
+            result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order)
         except ValueError as exc:
             log_event("broker_order_failed", rec_id, {
                 "kind": "stock", "broker": req.broker, "symbol": req.symbol,
@@ -325,7 +337,7 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
             option_symbol=req.option_symbol,
         )
         try:
-            result = await asyncio.to_thread(router_.execute, req.broker, order)
+            result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order)
         except ValueError as exc:
             log_event("broker_order_failed", rec_id, {
                 "kind": "option", "broker": req.broker, "symbol": req.symbol,
