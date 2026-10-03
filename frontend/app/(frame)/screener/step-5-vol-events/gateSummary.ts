@@ -294,7 +294,13 @@ export function formatRulesStripData(args: {
   };
 }
 
-export function rowDecidingReason(gate: Status, drivers: GateDrivers, ivBasis: IvBasis): string {
+export function rowDecidingReason(
+  gate: Status,
+  drivers: GateDrivers,
+  ivBasis: IvBasis,
+  avail: ThresholdsAvail = 'ready',
+): string {
+  if (avail !== 'ready' || gate === 'PENDING' || gate === 'NO_DATA') return '—';
   if (gate === 'PASS') return 'No adverse driver';
   const ivNoun = ivBasis === 'rank' ? 'IV rank' : 'IV';
   if (drivers.iv && drivers.event) {
@@ -316,7 +322,11 @@ export function rowCombinationPhrase(
   gate: Status,
   drivers: GateDrivers,
   ivBasis: IvBasis,
+  avail: ThresholdsAvail = 'ready',
 ): string {
+  if (avail !== 'ready' || gate === 'PENDING' || gate === 'NO_DATA') {
+    return `${ivSt} + ${proxStatus} → ${gate}`;
+  }
   if (gate === 'PASS') {
     return `${ivSt} + ${proxStatus} → PASS`;
   }
@@ -334,6 +344,7 @@ export interface RowExplanation {
   ivRuleExplanation: string;
   eventObserved: string;
   eventRuleExplanation: string;
+  pctlFormatted: string;
 }
 
 export function formatRowExplanation(args: {
@@ -350,6 +361,7 @@ export function formatRowExplanation(args: {
   eventWindow: HorizonEventThresholds | null;
   gateDisabled: boolean;
   pctl: number | null | undefined;
+  avail?: ThresholdsAvail;
 }): RowExplanation {
   const {
     iv,
@@ -363,13 +375,16 @@ export function formatRowExplanation(args: {
     ivThresholds,
     eventWindow,
     gateDisabled,
+    pctl,
+    avail = 'ready',
   } = args;
 
   const basisLabel = iv.basis === 'rank' ? 'IV rank' : iv.basis === 'absolute' ? 'IV' : '—';
   const unit = iv.basis === 'rank' ? '0–100' : iv.basis === 'absolute' ? '%' : 'none';
 
-  const decidingReason = rowDecidingReason(gate, drivers, iv.basis);
-  const combination = rowCombinationPhrase(ivSt, proxStatus, gate, drivers, iv.basis);
+  const decidingReason = rowDecidingReason(gate, drivers, iv.basis, avail);
+  const combination = rowCombinationPhrase(ivSt, proxStatus, gate, drivers, iv.basis, avail);
+  const pctlFormatted = pctl != null ? `${pctl} (does not determine this gate)` : '—';
 
   // IV Observed & Rule Explanation
   let ivObserved = 'Missing';
@@ -378,7 +393,9 @@ export function formatRowExplanation(args: {
   }
 
   let ivRuleExplanation = '';
-  if (gateDisabled) {
+  if (avail !== 'ready') {
+    ivRuleExplanation = 'Thresholds unavailable; rule cannot be evaluated';
+  } else if (gateDisabled) {
     ivRuleExplanation = 'IV gate disabled for this horizon (ungated)';
   } else if (!hasIv) {
     ivRuleExplanation = 'Missing reading on gated horizon → CAUTION';
@@ -405,7 +422,9 @@ export function formatRowExplanation(args: {
   }
 
   let eventRuleExplanation = '';
-  if (nextEventDays === null) {
+  if (avail !== 'ready') {
+    eventRuleExplanation = 'Thresholds unavailable; rule cannot be evaluated';
+  } else if (nextEventDays === null) {
     eventRuleExplanation = 'No event date available; existing gate applies no event penalty';
   } else if (eventWindow) {
     eventRuleExplanation = `< ${eventWindow.reject_days}d → REJECT; < ${eventWindow.caution_days}d → CAUTION; else → PASS`;
@@ -420,5 +439,6 @@ export function formatRowExplanation(args: {
     ivRuleExplanation,
     eventObserved,
     eventRuleExplanation,
+    pctlFormatted,
   };
 }

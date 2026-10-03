@@ -121,7 +121,16 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
         await new ScreenerPage(page).goto(5);
 
         // Verify page root is visible
-        await expect(page.getByTestId('step-5')).toBeVisible();
+        const step5 = page.getByTestId('step-5');
+        await expect(step5).toBeVisible();
+
+        // Bounding box checks
+        const step5Box = await step5.boundingBox();
+        expect(step5Box).not.toBeNull();
+        if (step5Box) {
+          expect(step5Box.x).toBeGreaterThanOrEqual(0);
+          expect(step5Box.x + step5Box.width).toBeLessThanOrEqual(vp.width + 1);
+        }
 
         // Check horizontal overflow on document
         const isDocOverflowing = await page.evaluate(() => {
@@ -131,18 +140,35 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
 
         // Check horizontal overflow on step-5 table
         const isTableOverflowing = await page.evaluate(() => {
-          const step5 = document.querySelector('[data-testid="step-5"]') as HTMLElement | null;
-          if (!step5) return false;
-          return step5.scrollWidth > step5.clientWidth + 1;
+          const el = document.querySelector('[data-testid="step-5"]') as HTMLElement | null;
+          if (!el) return false;
+          return el.scrollWidth > el.clientWidth + 1;
         });
         expect(isTableOverflowing).toBe(false);
+
+        // Hover gate badge tooltip and verify no overflow
+        const firstBadge = page.locator('[data-cell="gate"]').first();
+        await firstBadge.hover();
+        const isOverflowingOnTooltip = await page.evaluate(() => {
+          return document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
+        });
+        expect(isOverflowingOnTooltip).toBe(false);
 
         // Expand first row disclosure
         const firstExplainBtn = page.locator('[data-cell="disclosure"] button').first();
         await firstExplainBtn.click();
 
         // Verify disclosure panel is open
-        await expect(page.locator('[data-disclosure-panel]').first()).toBeVisible();
+        const panel = page.locator('[data-disclosure-panel]').first();
+        await expect(panel).toBeVisible();
+
+        // Panel bounding box containment
+        const panelBox = await panel.boundingBox();
+        expect(panelBox).not.toBeNull();
+        if (panelBox) {
+          expect(panelBox.x).toBeGreaterThanOrEqual(0);
+          expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(vp.width + 1);
+        }
 
         // Verify zero overflow after disclosure expansion
         const isDocOverflowingAfterExpand = await page.evaluate(() => {
@@ -151,14 +177,39 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
         expect(isDocOverflowingAfterExpand).toBe(false);
 
         const isTableOverflowingAfterExpand = await page.evaluate(() => {
-          const step5 = document.querySelector('[data-testid="step-5"]') as HTMLElement | null;
-          if (!step5) return false;
-          return step5.scrollWidth > step5.clientWidth + 1;
+          const el = document.querySelector('[data-testid="step-5"]') as HTMLElement | null;
+          if (!el) return false;
+          return el.scrollWidth > el.clientWidth + 1;
         });
         expect(isTableOverflowingAfterExpand).toBe(false);
+
+        // Capture layout screenshot
+        await page.screenshot({
+          path: `test-results/layout-${vp.width}x${vp.height}-${theme}.png`,
+        });
       });
     }
   }
+
+  test('AC5: Failed threshold fetch shows wrapped error message and zero horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    await page.route('**/api/config/event-thresholds', async (route) => {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Server error' }) });
+    });
+
+    const candidates = [createCandidate('ERR1')];
+    await seedScan(page, candidates, 'dark');
+    await new ScreenerPage(page).goto(5);
+
+    await expect(page.getByTestId('step-5')).toBeVisible();
+    await expect(page.locator('[data-part="thresholds-unavailable"]')).toBeVisible();
+
+    const isDocOverflowing = await page.evaluate(() => {
+      return document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
+    });
+    expect(isDocOverflowing).toBe(false);
+  });
 
   test('AC8: 20 candidates render without console errors and disclosures toggle without API calls', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });

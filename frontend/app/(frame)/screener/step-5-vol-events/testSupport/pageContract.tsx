@@ -10,11 +10,11 @@ import { screen } from '@testing-library/react';
 import {
   missingReadingClause, headSentence, causesSentence, ivThresholdSentence,
   eventWindowSentence, thresholdsUnavailableSentence, ivOverrideSentence,
-  MISSING_READING_CLAIM, rowDecidingReason,
+  MISSING_READING_CLAIM, rowDecidingReason, rowCombinationPhrase, formatRulesStripData,
   type MissingReadingClaim, type GateCause, type GateCounts, type IvBand, type ThresholdsAvail,
 } from '../gateSummary';
 import { STATUS_LABEL, type Status } from '@/lib/status';
-import { formatIv, type IvBasis } from '@/lib/ivBasis';
+import { formatIv, ivBasesOf, type IvBasis } from '@/lib/ivBasis';
 import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';
 import { useIvThresholdsStore, effectiveIvThresholds, ivOverrideFor } from '@/lib/ivThresholdsStore';
 import {
@@ -413,7 +413,8 @@ export const CELL_PINS: Record<string, (el: HTMLElement, row: HTMLElement) => vo
       hasIv: basis !== 'none',
       ivGated,
     });
-    expect(el.textContent).toContain(rowDecidingReason(gate, d, basis));
+    const expectedReason = rowDecidingReason(gate, d, basis, avail);
+    expect(el.textContent).toBe(`Why this gate: ${expectedReason}`);
   },
 
   disclosure: (el, row) => {
@@ -528,11 +529,53 @@ export function expectPageCopy() {
           ? 'Legacy scan: current configuration fallback'
           : 'Current backend configuration';
       expect(owner.querySelector('[data-provenance]')?.textContent).toBe(expectedProvenance);
-      expect(owner.querySelector('[data-horizon-tag]')?.textContent).toBe(`Horizon: ${horizon}`);
+      const rawThresholds = useIvThresholdsStore.getState().thresholds;
+      const ivOverrides = useIvThresholdsStore.getState().overrides;
+      const ivThresholds = effectiveIvThresholds(rawThresholds, ivOverrides);
+      const eventThresholds = useEventThresholdsStore.getState().thresholds;
+      const ivOverride = (horizon in ivOverrides) ? ivOverrides[horizon as keyof typeof ivOverrides] ?? null : null;
+      const eventWindow = scanEventWindow ?? (eventThresholds ? eventThresholds[horizon] : null);
+      const candidates = useScanStore.getState().scanResult?.candidates ?? [];
+      const basesPresent = ivBasesOf(candidates.map((x) => x.contractDetails));
+      const expected = formatRulesStripData({
+        horizon,
+        ivThresholds: ivThresholds ? ivThresholds[horizon] : null,
+        eventWindow,
+        scanEventWindow,
+        hasScanResult: hasScan,
+        ivOverride: ivOverride ? { value: ivOverride.abs_pass_max, yaml: rawThresholds ? (rawThresholds[horizon].abs_pass_max ?? 0) : 0 } : null,
+        basesPresent,
+      });
+      expect(owner.textContent).toContain(expected.rankInterval);
+      expect(owner.textContent).toContain(expected.absInterval);
+      expect(owner.textContent).toContain(expected.eventInterval);
+      if (expected.overrideNotice) {
+        expect(owner.textContent).toContain(expected.overrideNotice);
+      }
     } else if (kind === 'disclosure-panel') {
-      const sym = owner.getAttribute('data-symbol');
+      const sym = owner.getAttribute('data-symbol') as string;
       expect(owner.getAttribute('id')).toBe(`disclosure-${sym}`);
       expect(owner.getAttribute('role')).toBe('region');
+      const row = owner.closest('[data-status]') as HTMLElement;
+      expect(row).not.toBeNull();
+      const ivSt = sideVerdict(sym, 'volatility');
+      const proxStatus = sideVerdict(sym, 'event');
+      const gate = gateOf(sym);
+      const ivCell = row.querySelector('[data-cell="iv"]');
+      const basis = (ivCell?.getAttribute('data-iv-basis') ?? 'none') as IvBasis;
+      const avail = (root.getAttribute('data-avail') ?? 'ready') as ThresholdsAvail;
+      const d = gateDrivers({
+        ivStatus: ivSt, proxStatus, gate,
+        hasIv: basis !== 'none',
+        ivGated: root.getAttribute('data-iv-gated') === 'true',
+      });
+      const expectedReason = rowDecidingReason(gate, d, basis, avail);
+      const expectedCombination = rowCombinationPhrase(ivSt, proxStatus, gate, d, basis, avail);
+      expect(owner.textContent).toContain('Volatility Check');
+      expect(owner.textContent).toContain('Event Proximity Check');
+      expect(owner.textContent).toContain('Gate Decision & Context');
+      expect(owner.textContent).toContain(expectedReason);
+      expect(owner.textContent).toContain(expectedCombination);
     } else if (kind === 'cell') {
       const name = owner.getAttribute('data-cell') as string;
       const pin = CELL_PINS[name];

@@ -82,6 +82,7 @@ function cardToRow(c: TradeCardData): WatchlistRow {
 }
 
 export default function Step5Page() {
+  const hasScanResult        = useScanStore((s) => s.scanResult !== undefined);
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? NO_CANDIDATES;
@@ -287,11 +288,11 @@ export default function Step5Page() {
       ivThresholds: ivThresholds ? ivThresholds[horizonKey] : null,
       eventWindow,
       scanEventWindow,
-      hasScanResult: scanResultCandidates !== undefined,
+      hasScanResult,
       ivOverride,
       basesPresent,
     });
-  }, [avail, horizonKey, ivThresholds, eventWindow, scanEventWindow, scanResultCandidates, ivOverride, basesPresent]);
+  }, [avail, horizonKey, ivThresholds, eventWindow, scanEventWindow, hasScanResult, ivOverride, basesPresent]);
 
   const ivBands: IvBand[] = avail !== 'ready' || ivThresholds === null ? [] : basesPresent
     .map((b) => {
@@ -584,6 +585,7 @@ export default function Step5Page() {
             eventWindow,
             gateDisabled,
             pctl,
+            avail,
           });
 
           return (
@@ -714,70 +716,72 @@ export default function Step5Page() {
 
               {/* Expanded details disclosure panel */}
               {isExpanded && (
-                <div
-                  className={pageStyles.disclosurePanel}
-                  data-disclosure-panel
-                  data-symbol={r.symbol}
-                  id={`disclosure-${r.symbol}`}
-                  role="region"
-                  aria-label={`Gate details for ${r.symbol}`}
-                >
-                  <div className={pageStyles.disclosureGrid}>
-                    {/* Check 1: Volatility */}
-                    <div className={pageStyles.disclosureBlock}>
-                      <div className={pageStyles.disclosureBlockHeader}>
-                        <Text size={12} weight={600} tone="primary">Volatility Check</Text>
-                        <StatusBadge status={ivSt} />
+                <div role="gridcell" style={{ gridColumn: '1 / -1' }}>
+                  <div
+                    className={pageStyles.disclosurePanel}
+                    data-disclosure-panel
+                    data-symbol={r.symbol}
+                    id={`disclosure-${r.symbol}`}
+                    role="region"
+                    aria-label={`Gate details for ${r.symbol}`}
+                  >
+                    <div className={pageStyles.disclosureGrid}>
+                      {/* Check 1: Volatility */}
+                      <div className={pageStyles.disclosureBlock}>
+                        <div className={pageStyles.disclosureBlockHeader}>
+                          <Text size={12} weight={600} tone="primary">Volatility Check</Text>
+                          <StatusBadge status={ivSt} />
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Basis / Unit:</Text>
+                          <Text size={11} tone="primary">{`${rowExplanation.basisLabel} (${rowExplanation.unit})`}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Observed value:</Text>
+                          <Text size={11} tone="primary">{rowExplanation.ivObserved}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Rule applied:</Text>
+                          <Text size={11} tone="secondary">{rowExplanation.ivRuleExplanation}</Text>
+                        </div>
                       </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">Basis / Unit:</Text>
-                        <Text size={11} tone="primary">{`${rowExplanation.basisLabel} (${rowExplanation.unit})`}</Text>
-                      </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">Observed value:</Text>
-                        <Text size={11} tone="primary">{rowExplanation.ivObserved}</Text>
-                      </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">Rule applied:</Text>
-                        <Text size={11} tone="secondary">{rowExplanation.ivRuleExplanation}</Text>
-                      </div>
-                    </div>
 
-                    {/* Check 2: Event Proximity */}
-                    <div className={pageStyles.disclosureBlock}>
-                      <div className={pageStyles.disclosureBlockHeader}>
-                        <Text size={12} weight={600} tone="primary">Event Proximity Check</Text>
-                        <StatusBadge status={proxStatus} />
+                      {/* Check 2: Event Proximity */}
+                      <div className={pageStyles.disclosureBlock}>
+                        <div className={pageStyles.disclosureBlockHeader}>
+                          <Text size={12} weight={600} tone="primary">Event Proximity Check</Text>
+                          <StatusBadge status={proxStatus} />
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Next event:</Text>
+                          <Text size={11} tone="primary">{rowExplanation.eventObserved}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Rule applied:</Text>
+                          <Text size={11} tone="secondary">{rowExplanation.eventRuleExplanation}</Text>
+                        </div>
                       </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">Next event:</Text>
-                        <Text size={11} tone="primary">{rowExplanation.eventObserved}</Text>
-                      </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">Rule applied:</Text>
-                        <Text size={11} tone="secondary">{rowExplanation.eventRuleExplanation}</Text>
-                      </div>
-                    </div>
 
-                    {/* Block 3: Decision & Context */}
-                    <div className={pageStyles.disclosureBlock}>
-                      <div className={pageStyles.disclosureBlockHeader}>
-                        <Text size={12} weight={600} tone="primary">Gate Decision & Context</Text>
-                        <StatusBadge status={gate} />
-                      </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">Combination:</Text>
-                        <Text size={11} tone="primary">{rowExplanation.combination}</Text>
-                      </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">Deciding driver:</Text>
-                        <Text size={11} tone="primary" weight={500}>{rowExplanation.decidingReason}</Text>
-                      </div>
-                      <div className={pageStyles.disclosureRow}>
-                        <Text size={11} tone="dim">IV Percentile (Context only):</Text>
-                        <Text size={11} tone="secondary">
-                          {pctl != null ? `${pctl} (does not determine this gate)` : '—'}
-                        </Text>
+                      {/* Block 3: Decision & Context */}
+                      <div className={pageStyles.disclosureBlock}>
+                        <div className={pageStyles.disclosureBlockHeader}>
+                          <Text size={12} weight={600} tone="primary">Gate Decision & Context</Text>
+                          <StatusBadge status={gate} />
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Combination:</Text>
+                          <Text size={11} tone="primary">{rowExplanation.combination}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Deciding driver:</Text>
+                          <Text size={11} tone="primary" weight={500}>{rowExplanation.decidingReason}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">IV Percentile (Context only):</Text>
+                          <Text size={11} tone="secondary">
+                            {rowExplanation.pctlFormatted}
+                          </Text>
+                        </div>
                       </div>
                     </div>
                   </div>
