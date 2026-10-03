@@ -47,6 +47,44 @@ STOCK_SINGLE_DEFAULT = 0.20
 STOCK_TOTAL_DEFAULT = 1.00
 
 
+def premium_cap_basis(
+    mid: float,
+    order_type: Optional[str],
+    limit_price: Optional[float],
+    *,
+    ask: Optional[float] = None,
+    spread: Optional[float] = None,
+) -> float:
+    """The per-contract premium the D5 cap is judged at (audit round 1, F1).
+
+    The cap bounds what the order can PAY, so it is judged at the worst price
+    the order can fill at, not the mid:
+      - LMT: ``max(mid, limit)``. A limit typed above the mid can fill there.
+      - MKT: the ask when known; else ``mid + spread / 2`` when the spread is
+        known (which is the ask, re-derived); else the mid. The last branch
+        UNDERSTATES a market order's cost by half the spread -- there is no
+        better number to use when the quote carried neither -- and is stated
+        here so nobody mistakes it for a fill price.
+      - None (no order is placed, e.g. a tracked basket row): the mid.
+
+    The STORED entry price is not this: callers judge the cap at the basis
+    and keep persisting the mid, which is what P&L and the premium stop read.
+    There is deliberately no frontend copy: the direct send and the arm only
+    SUPPLY the order type and limit, and this function (via position_writer
+    and AutoTradeService._check_exposure) is the one judge, so the two sides
+    cannot disagree. The basket's client-side checkTradeRisk places no order
+    and judges at the mid, which is what the None branch above does too.
+    """
+    if order_type == "LMT" and limit_price is not None and limit_price > 0:
+        return max(mid, float(limit_price))
+    if order_type == "MKT":
+        if ask is not None and ask > 0:
+            return float(ask)
+        if spread is not None and spread > 0:
+            return mid + float(spread) / 2
+    return mid
+
+
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
 

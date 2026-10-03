@@ -599,6 +599,14 @@ export default function Step5Page() {
                 {r.nextEventDays != null
                   ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
                   : <Text size={11} tone="dim">—</Text>}
+                {/* Audit round 1, F9. This gate grades the NEARER of earnings
+                  * and dividend; only earnings veto a send (D3), so a row
+                  * rejected by a dividend alone says so -- Step 7 will let it
+                  * send. No note when earnings are inside the window too. */}
+                {proxStatus === 'REJECT' && r.nextEventLabel === 'Dividend'
+                  && !(c?.earningsDays != null && evReject != null && c.earningsDays < evReject) && (
+                  <Text size={10} tone="dim">Dividend — score penalty, not a send veto</Text>
+                )}
               </span>
 
               {/* THESE ARE PRODUCT DATA, NOT TEST HOOKS, and the distinction

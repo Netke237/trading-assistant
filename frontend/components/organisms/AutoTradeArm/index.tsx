@@ -167,6 +167,11 @@ interface AutoTradeArmProps {
    *  strategy, not the card on screen, so another symbol's arm is not this
    *  card's veto to block. The backend fire refuses a vetoed trade anyway.
    *
+   *  Audit round 1, F8: step 7 also passes a reason for a SINGLE STOCK whose
+   *  earnings date is unknown (`lib/earningsGate.ts`) -- the backend's fire
+   *  would refuse every fire of it, so the Arm is refused up front. Same
+   *  rules: Disarm stays reachable, Fire now follows the symbol rule above.
+   *
    *  Like the regime-gate refusal, the sentence itself is printed by the
    *  CALLER (step 7 shows it beside the direct buttons in the same panel), so
    *  it is not repeated here. */
@@ -389,6 +394,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // where it came from.
         quantity:        Math.max(1, contracts),
         order_type:      'LMT',
+        // Audit round 1, F1: BOTH travel and both matter. `entry_premium` is
+        // the mid the position books; the fire-time cap check judges
+        // max(entry_premium, limit_price) -- what this LMT order can pay --
+        // in `AutoTradeService._check_exposure` (portfolio_risk.premium_cap_basis).
         limit_price:     entryLimit ?? card.entry.limit,
         entry_premium:   entryPremium,
         // Piece 4 — undefined (omitted) rather than null when the card carries

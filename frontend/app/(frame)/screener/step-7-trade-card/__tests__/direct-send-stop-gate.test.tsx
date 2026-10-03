@@ -445,3 +445,101 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
   });
 });
+
+/* Audit round 1, F4 (Kenneth: age it client-side) — the veto is a scan-time
+ * snapshot, and the scan result is persisted. The auditor's example: a Swing
+ * scan on Monday sees earnings 23 days out against the 21-day window (no
+ * veto); reopened on Thursday the print is 20 days out. Step 7 ages
+ * `earningsDays` by the scan's age in calendar days and judges that.
+ *
+ * F8 — a single stock with UNKNOWN earnings: every fire would be refused, so
+ * the Arm is refused up front. A manual send stays allowed (D4: CAUTION). */
+describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () => {
+  const VETO_REASON = 'Earnings inside the reject window — no send';
+  const UNKNOWN_ARM = /Earnings date unknown — auto-trade will not fire a single stock/;
+
+  /** Local wall-clock timestamp `days` calendar days before today. */
+  function daysAgo(days: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    d.setHours(10, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00:00`;
+  }
+
+  function mountScannedAgo(ago: number, extra: Partial<TradeCardData>) {
+    const view = mount(140, { extra });
+    act(() => {
+      useScanStore.setState((s: any) => ({
+        scanResult: { ...s.scanResult, timestamp: daysAgo(ago), event_window: { reject_days: 21, caution_days: 45 } },
+      }));
+    });
+    return view;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+    global.fetch = echoFetch();
+  });
+  afterEach(() => { global.fetch = originalFetch; });
+
+  it('Thursday: a Monday card at 23d has aged to 20d — both direct buttons and the pin are refused', async () => {
+    mountScannedAgo(3, { earningsDays: 23, earningsVeto: false, isEtf: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    expect(limitBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: /right now — market/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeDisabled();
+    expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
+  });
+
+  it('Monday (same day): the same card at 23d still sends', async () => {
+    mountScannedAgo(0, { earningsDays: 23, earningsVeto: false, isEtf: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit/i })).toBeEnabled());
+  });
+
+  it('F8: a single stock with unknown earnings cannot be armed, but can still be sent manually', async () => {
+    mountScannedAgo(0, { earningsDays: null, earningsUnknown: true, isEtf: false, finalStatus: 'CAUTION' });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
+    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeDisabled();
+    expect(arm.getAttribute('title')).toMatch(UNKNOWN_ARM);
+    expect(screen.getByText(UNKNOWN_ARM)).toBeInTheDocument();
+    fireEvent.click(arm);
+    await Promise.resolve();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+  });
+
+  it('F8: Disarm stays reachable on that card', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAA', direction: 'Bullish' });
+    mountScannedAgo(0, { earningsDays: null, earningsUnknown: true, isEtf: false, finalStatus: 'CAUTION' });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    expect(disarm).toBeEnabled();
+    fireEvent.click(disarm);
+    await waitFor(() => expect(api.disarmAutoTrade).toHaveBeenCalledTimes(1));
+  });
+
+  it('F8 control: an ETF with unknown earnings can be armed', async () => {
+    mountScannedAgo(0, { earningsDays: null, earningsUnknown: true, isEtf: true });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
+    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    expect(arm.getAttribute('title') ?? '').not.toMatch(UNKNOWN_ARM);
+  });
+});

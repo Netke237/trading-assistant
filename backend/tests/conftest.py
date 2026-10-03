@@ -268,18 +268,24 @@ def _reset_market_data_caches():
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
+    # R2-F4's yfinance failure backoff: one test's simulated failure must not
+    # make the next test's lookup of the same symbol skip its stub.
+    mkt._yf_cal_fail_until.clear()
     yield
     mkt._candles_cache.clear()
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
+    mkt._yf_cal_fail_until.clear()
 
 
 @pytest.fixture(autouse=True)
 def _no_network_earnings_lookup_at_fire(monkeypatch):
     """`AutoTradeService.fire()` looks up the symbol's next earnings date (fix #3
     part 2, the fire-time event veto) through `auto_trader._fetch_earnings_date`,
-    which calls the network-backed `market._calendar_dates_yf` (yfinance).
+    which calls the network-backed `market.tradier_next_earnings_date` and
+    `market.yfinance_next_earnings_date` (Tradier fundamentals, then yfinance;
+    audit round 1, F3; each under its own deadline, round 2, R2-F3).
 
     Default it to a date a year out for every test, so no test that reaches
     `fire()` touches the network or becomes order- and date-dependent. A year
