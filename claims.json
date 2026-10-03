@@ -15,6 +15,14 @@
       "expires_at": "2026-10-03T08:20:52Z",
       "note": "User-authorized split: align alert seed arithmetic/runtime and audit before merge",
       "task": "ALERT-INDICATOR-SEED-PARITY"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/dazzling-rhodes-a1ab99",
+      "claimed_at": "2026-10-03T05:29:03Z",
+      "expires_at": "2026-10-03T08:29:03Z",
+      "note": "parsePipelineDiagnostics.ts: import SHORTLIST_REASON_PREFIX instead of a local literal",
+      "task": "SHORTLIST-PREFIX-DRIFT"
     }
   ]
 }
