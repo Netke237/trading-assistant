@@ -167,50 +167,63 @@ export default function BarrierRaceCard({
     <section className={styles.card}>
       <Header />
 
+      {/* Above everything it qualifies, and never inside the disclosure below:
+          it caveats every number on the card, so a reader who never opens the
+          full arithmetic must still see it. */}
+      {!race.ivSolved && (
+        <Text size={10} tone="caution">
+          The contract&apos;s own implied volatility could not be backed out of its quote, so this
+          simulation ran on a generic fallback volatility. Treat every number on this card as
+          describing a contract the market is not pricing this way — re-check the quote.
+        </Text>
+      )}
+
       {/* 1. The three barriers ------------------------------------------- */}
       <div className={styles.block}>
         <Text size={12} weight={600}>The three barriers</Text>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th scope="col"><Text size={10} tone="dim">Barrier</Text></th>
-              <th scope="col"><Text size={10} tone="dim">Level</Text></th>
-              <th scope="col"><Text size={10} tone="dim">How it is set</Text></th>
-              <th scope="col"><Text size={10} tone="dim">Armed</Text></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><Text size={11}>Profit target</Text></td>
-              <td><Data size={11}>per row below</Data></td>
-              <td><Text size={11} tone="secondary">Your T1/T2/T3 % of premium</Text></td>
-              <td><Text size={11} tone="dim">exit, not a stop</Text></td>
-            </tr>
-            <tr>
-              <td><Text size={11}>Stock stop</Text></td>
-              {/* Always with its unit. A bare number here would be ambiguous
-                  against the option-value barrier on the next row. */}
-              <td><Data size={11}>{money(race.stockStopPrice)} stock</Data></td>
-              <td><Text size={11} tone="secondary">Structural level, or structural + ATR once an Arithmetic Plan has run</Text></td>
-              {/* Both stops are live at once — Q6's armed stop is "whichever
-                  fires first", which is exactly what the race measures. Neither
-                  is a broker instruction (D10); both are in-app levels. */}
-              <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
-            </tr>
-            <tr>
-              <td><Text size={11}>Premium stop</Text></td>
-              <td><Data size={11}>{money(race.premiumStopPrice)} option</Data></td>
-              <td>
-                <Text size={11} tone="secondary">
-                  {premiumStopSourceNote(
-                    race.premiumStopPct, premiumStopFromField, premiumStopField, race.premiumUsed,
-                  )}
-                </Text>
-              </td>
-              <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
-            </tr>
-          </tbody>
-        </table>
+        <div className={styles.tableScroll}>
+          <table className={`${styles.table} ${styles.barrierTable}`}>
+            <thead>
+              <tr>
+                <th scope="col"><Text size={10} tone="dim">Barrier</Text></th>
+                <th scope="col"><Text size={10} tone="dim">Level</Text></th>
+                <th scope="col"><Text size={10} tone="dim">How it is set</Text></th>
+                <th scope="col"><Text size={10} tone="dim">Armed</Text></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><Text size={11}>Profit target</Text></td>
+                <td className={styles.nowrap}><Data size={11}>per row below</Data></td>
+                <td><Text size={11} tone="secondary">Your T1/T2/T3 % of premium</Text></td>
+                <td><Text size={11} tone="dim">exit, not a stop</Text></td>
+              </tr>
+              <tr>
+                <td><Text size={11}>Stock stop</Text></td>
+                {/* Always with its unit. A bare number here would be ambiguous
+                    against the option-value barrier on the next row. */}
+                <td className={styles.nowrap}><Data size={11}>{money(race.stockStopPrice)} stock</Data></td>
+                <td><Text size={11} tone="secondary">Structural level, or structural + ATR once an Arithmetic Plan has run</Text></td>
+                {/* Both stops are live at once — Q6's armed stop is "whichever
+                    fires first", which is exactly what the race measures. Neither
+                    is a broker instruction (D10); both are in-app levels. */}
+                <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
+              </tr>
+              <tr>
+                <td><Text size={11}>Premium stop</Text></td>
+                <td className={styles.nowrap}><Data size={11}>{money(race.premiumStopPrice)} option</Data></td>
+                <td>
+                  <Text size={11} tone="secondary">
+                    {premiumStopSourceNote(
+                      race.premiumStopPct, premiumStopFromField, premiumStopField, race.premiumUsed,
+                    )}
+                  </Text>
+                </td>
+                <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         {invalidation && (
           <Text size={10} tone="dim">
             Measured on its own, {(invalidation.probability * 100).toFixed(0)}% of paths touch the
@@ -230,7 +243,14 @@ export default function BarrierRaceCard({
         )}
       </div>
 
-      {/* 2. Race outcome -------------------------------------------------- */}
+      {/* 2. The comparison: one row per target ---------------------------- */}
+      {/* Everything a target is compared on sits in its one row — the four
+          first-outcome shares, the conditional median to the target, the
+          stock-stop R:R and the edge — so two targets can be read across
+          without hunting down three separate blocks. The R:R and edge cells
+          are the TAILS of the full chains printed in the disclosure below,
+          cut from those chains' own strings rather than re-formatted from the
+          payload, so the row and its chain cannot disagree. */}
       <div className={styles.block}>
         <Text size={12} weight={600}>Which barrier is reached first</Text>
         <div className={styles.legend}>
@@ -239,117 +259,79 @@ export default function BarrierRaceCard({
           <LegendKey className={styles.swatchPremium} label="Premium stop first" />
           <LegendKey className={styles.swatchNeither} label="Neither, held to expiry" />
         </div>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th scope="col"><Text size={10} tone="dim">Target</Text></th>
-              <th scope="col"><Text size={10} tone="dim">Split</Text></th>
-              {/* "Target first", not "Target": the first column is the target
-                  percentage, this one is its share of the attribution. */}
-              <th scope="col"><Text size={10} tone="dim">Target first</Text></th>
-              <th scope="col"><Text size={10} tone="dim">Stock stop</Text></th>
-              <th scope="col"><Text size={10} tone="dim">Premium stop</Text></th>
-              <th scope="col"><Text size={10} tone="dim">Neither</Text></th>
-              {/* All three conditional medians. The stop ones were computed,
-                  mapped onto the wire and typed, but never rendered — dead
-                  payload on a card whose point is that the medians are
-                  conditional on the outcome they belong to. */}
-              <th scope="col"><Text size={10} tone="dim">Median to target</Text></th>
-              <th scope="col"><Text size={10} tone="dim">to stock stop</Text></th>
-              <th scope="col"><Text size={10} tone="dim">to premium stop</Text></th>
-            </tr>
-          </thead>
-          <tbody>
-            {race.outcomes.map((o) => {
-              // Scaled from the weights the BACKEND allocated and weighted the
-              // edge with, so these labels, the edge chain's multipliers and
-              // the printed total are all the same four numbers. Rounding each
-              // share here independently put a sizeable minority of real rows
-              // at 99% or 101% (12% on one sweep, 22% on another);
-              // allocating them here instead fixed the row sum but still left
-              // the chain below printing a different rounding of the same
-              // outcome. See lib/barrierRace.test.ts for the measured rate and
-              // the sweep behind it — three sites quoted three different
-              // unqualified figures for one quantity, which is worse than one
-              // qualified figure in one place.
-              const [sTarget, sStock, sPrem, sNone] = weightPercents(o);
-              return (
-                <tr key={o.targetPct}>
-                  <td>
-                    <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
-                    <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
-                  </td>
-                  <td><StackedBar o={o} /></td>
-                  <td><Data size={11}>{sTarget}%</Data></td>
-                  <td><Data size={11}>{sStock}%</Data></td>
-                  <td><Data size={11}>{sPrem}%</Data></td>
-                  <td><Data size={11}>{sNone}%</Data></td>
-                  <td><Data size={11}>{daysLabel(o.daysTarget)}</Data></td>
-                  <td><Data size={11}>{daysLabel(o.daysStockStop)}</Data></td>
-                  <td><Data size={11}>{daysLabel(o.daysPremiumStop)}</Data></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <Text size={10} tone="dim">
-          Every row sums to 100% because each of the {race.nPaths.toLocaleString()} simulated paths
-          is counted once, for whichever barrier it reached first. The Monte Carlo card above
-          measures each barrier on its own, so its numbers can sum past 100%.
-        </Text>
-        <Text size={10} tone="dim">
-          The medians are conditional: &quot;{daysLabel(race.outcomes[0]?.daysTarget ?? null)} to{' '}
-          {pctLabel(race.outcomes[0]?.targetPct ?? 0)}&quot; is the median over the paths that got
-          there first, not over all paths.
-        </Text>
-      </div>
+        {/* Scrolls only as a last resort. The columns are sized to fit the
+            card at the frame's minimum width, so the outcomes are not clipped
+            behind a scrollbar in normal use. */}
+        <div className={styles.tableScroll}>
+          <table className={`${styles.table} ${styles.outcomeTable}`}>
+            <thead>
+              <tr>
+                <th scope="col" className={styles.nowrap}><Text size={10} tone="dim">Target / option</Text></th>
+                <th scope="col"><Text size={10} tone="dim">Split</Text></th>
+                {/* "Target first", not "Target": the first column is the target
+                    percentage, this one is its share of the attribution. */}
+                <th scope="col"><Text size={10} tone="dim">Target first</Text></th>
+                <th scope="col"><Text size={10} tone="dim">Stock stop</Text></th>
+                <th scope="col"><Text size={10} tone="dim">Premium stop</Text></th>
+                <th scope="col"><Text size={10} tone="dim">Neither</Text></th>
+                {/* Only the target's conditional median is in the row. The two
+                    stop medians are in the disclosure below, beside the chains
+                    they belong to — still rendered, not dropped: they were
+                    once computed, mapped onto the wire and typed, but never
+                    shown. */}
+                <th scope="col"><Text size={10} tone="dim">Median to target</Text></th>
+                <th scope="col"><Text size={10} tone="dim">R:R vs stock stop</Text></th>
+                <th scope="col"><Text size={10} tone="dim">Edge / contract</Text></th>
+              </tr>
+            </thead>
+            <tbody>
+              {race.outcomes.map((o) => {
+                // Scaled from the weights the BACKEND allocated and weighted the
+                // edge with, so these labels, the edge chain's multipliers and
+                // the printed total are all the same four numbers. Rounding each
+                // share here independently put a sizeable minority of real rows
+                // at 99% or 101% (12% on one sweep, 22% on another);
+                // allocating them here instead fixed the row sum but still left
+                // the chain below printing a different rounding of the same
+                // outcome. See lib/barrierRace.test.ts for the measured rate and
+                // the sweep behind it — three sites quoted three different
+                // unqualified figures for one quantity, which is worse than one
+                // qualified figure in one place.
+                const [sTarget, sStock, sPrem, sNone] = weightPercents(o);
+                return (
+                  <tr key={o.targetPct}>
+                    <td className={styles.nowrap}>
+                      <div className={styles.targetCell}>
+                        <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
+                        <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
+                      </div>
+                    </td>
+                    <td className={styles.splitCell}><StackedBar o={o} /></td>
+                    <td><Data size={11}>{sTarget}%</Data></td>
+                    <td><Data size={11}>{sStock}%</Data></td>
+                    <td><Data size={11}>{sPrem}%</Data></td>
+                    <td><Data size={11}>{sNone}%</Data></td>
+                    <td><Data size={11}>{daysLabel(o.daysTarget)}</Data></td>
+                    {/* Bold, as the stock-stop R:R has always been: it is the
+                        one ratio on this card that is a measurement, and the
+                        weak-stop warning below refers to it as "the bolded
+                        R:R". */}
+                    <td><Data size={11} weight={500}>{raceRRValue(o)}</Data></td>
+                    {/* Neutral on purpose. Colouring the edge green or red would
+                        read as a verdict, and this card adds no gate. */}
+                    <td><Data size={11}>{raceEdgeValue(o, race.premiumUsed)}</Data></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-      {/* 3. Risk / reward ------------------------------------------------- */}
-      <div className={styles.block}>
-        <Text size={12} weight={600}>Risk and reward, per target</Text>
-        {/* The two cards print two different stop losses for the same stop and
-            they will not match: this one reprices at the simulation's median
-            day to the barrier, the Arithmetic card's prices at today with no
-            decay. Both are right; without saying so they read as a
-            contradiction, which is exactly how they read to Kenneth. */}
-        {/* Only when that readout is actually on screen. The race falls back to
-            data.exit.invalidation for its stock stop, so it renders in states
-            the Arithmetic card's gate does not — a failed structural sub-fetch
-            leaves this card pointing a reader at a row that is nowhere on the
-            page. */}
-        <Text size={10} tone="dim">
-          Priced at each barrier&apos;s own median day, so time decay is included.
-          {stopCostShown ? (
-            <>
-              {' '}For the immediate figure — what this stop costs if it is hit right now —
-              see &ldquo;Max loss if the stop is hit&rdquo; on the Arithmetic Profit Target
-              card. The two differ by time decay AND by pricing model: that one is a
-              delta-linear estimate at today&apos;s price, capped at the premium, while these
-              are repriced by the simulation. Both are correct; naming only the decay sent a
-              hand-checker looking for a difference decay alone cannot account for.
-            </>
-          ) : null}
-        </Text>
-        {race.outcomes.map((o) => (
-          <div key={o.targetPct} className={styles.chainGroup}>
-            <Text size={11} weight={500}>{pctLabel(o.targetPct)} target</Text>
-            <div className={styles.chain}>
-              <Text size={10} tone="dim">Risk</Text>
-              <Data size={11}>{formatRaceRisk(o, race.premiumUsed)}</Data>
-            </div>
-            <div className={styles.chain}>
-              <Text size={10} tone="dim">R:R vs stock stop</Text>
-              <Data size={11} weight={500}>{formatRaceRR(o)}</Data>
-            </div>
-            <div className={`${styles.chain} ${styles.muted}`}>
-              <Text size={10} tone="dim">R:R vs premium stop</Text>
-              <Data size={11} tone="dim">{formatRacePremiumRR(o)}</Data>
-            </div>
-          </div>
-        ))}
+        {/* Visible whenever it applies — a warning is not an explanation, and
+            folding it into the disclosure would hide it behind a click. */}
         {/* The WEIGHT, not the raw share: a share of 0.0045 rounds to 0 but is
              allocated 0.01, so reading the raw value let this claim the stock
-             stop never wins while the table two blocks above printed 1%. */}
+             stop never wins while the table above printed 1%. */}
         {race.outcomes.every((o) => o.weightStockStopFirst === 0) && (
           <Text size={10} tone="caution">
             On this contract the stock stop wins under 1% of paths, so the bolded R:R above
@@ -359,47 +341,149 @@ export default function BarrierRaceCard({
             is exact, because the edge is weighted with that same allocated 0.
           </Text>
         )}
-        {!race.ivSolved && (
-          <Text size={10} tone="caution">
-            The contract&apos;s own implied volatility could not be backed out of its quote, so this
-            simulation ran on a generic fallback volatility. Treat every number on this card as
-            describing a contract the market is not pricing this way — re-check the quote.
-          </Text>
-        )}
-        <Text size={10} tone="dim">
-          Only the first ratio is a measurement. Its risk leg is the premium minus what the
-          contract would still be worth at the stock stop, which depends on strike, spot, time and
-          IV independently — so it genuinely differs between contracts. The greyed one divides two
-          numbers that are both a fixed fraction of premium, so premium cancels out of it
-          entirely and nothing about this contract survives into the result. It is the same on
-          every contract you could pick, which is why it is greyed. Deliberately not written as a
-          division of the two percentages shown above: both are rounded for display while the stop
-          fraction is an arbitrary number, so working it out from them disagrees with the printed
-          ratio on roughly two rows in five.
-        </Text>
+
+        {/* The assumptions every number in the row rests on, short enough to
+            stay on screen. Each is stated in full in the disclosure below. */}
+        <div className={styles.assumptions}>
+          <Text size={10} tone="dim">{race.nPaths.toLocaleString()} paths · each row sums to 100%</Text>
+          <Text size={10} tone="dim">Medians are conditional on the outcome</Text>
+          <Text size={10} tone="dim">Repriced at the median barrier day</Text>
+          <Text size={10} tone="dim">IV unchanged at the barriers</Text>
+          <Text size={10} tone="dim">Edge before commissions</Text>
+        </div>
       </div>
 
-      {/* 4. Edge ---------------------------------------------------------- */}
-      <div className={styles.block}>
-        <Text size={12} weight={600}>Edge per contract</Text>
-        {race.outcomes.map((o) => (
-          <div key={o.targetPct} className={styles.chainGroup}>
-            <Text size={11} weight={500}>{pctLabel(o.targetPct)} target</Text>
-            <Data size={11}>{formatRaceEdge(o, race.premiumUsed)}</Data>
-          </div>
-        ))}
-        <Text size={10} tone="dim">
-          The &quot;Neither&quot; term is the mean value of those paths at expiry minus the premium
-          paid. It is signed, not a loss — those paths can end above what you paid.
-        </Text>
-        <Text size={10} tone="dim">
-          Assumes implied volatility is unchanged when a barrier is reached. On a long call that is
-          pessimistic at the stop and optimistic at the target — a real fear bid would leave more
-          premium than shown.
-        </Text>
-      </div>
+      {/* 3. Everything else, one click away ------------------------------- */}
+      {/* A native <details>: its content stays mounted while closed, so the
+          full chains remain in the document (and searchable) rather than
+          being created on demand. Nothing actionable or any warning lives in
+          here — only the remaining medians, the arithmetic behind the row and
+          the prose that explains it. */}
+      <details className={styles.details}>
+        <summary className={styles.summary}>
+          <Text size={11} tone="accent">
+            Stop medians, full risk / R:R / edge arithmetic and explanations
+          </Text>
+        </summary>
+        <div className={styles.detailsBody}>
+          <Text size={10} tone="dim">
+            Every row sums to 100% because each of the {race.nPaths.toLocaleString()} simulated paths
+            is counted once, for whichever barrier it reached first. The Monte Carlo card above
+            measures each barrier on its own, so its numbers can sum past 100%.
+          </Text>
+          <Text size={10} tone="dim">
+            The medians are conditional: &quot;{daysLabel(race.outcomes[0]?.daysTarget ?? null)} to{' '}
+            {pctLabel(race.outcomes[0]?.targetPct ?? 0)}&quot; is the median over the paths that got
+            there first, not over all paths.
+          </Text>
+
+          {/* The two cards print two different stop losses for the same stop and
+              they will not match: this one reprices at the simulation's median
+              day to the barrier, the Arithmetic card's prices at today with no
+              decay. Both are right; without saying so they read as a
+              contradiction, which is exactly how they read to Kenneth. */}
+          {/* Only when that readout is actually on screen. The race falls back to
+              data.exit.invalidation for its stock stop, so it renders in states
+              the Arithmetic card's gate does not — a failed structural sub-fetch
+              leaves this card pointing a reader at a row that is nowhere on the
+              page. */}
+          <Text size={10} tone="dim">
+            Priced at each barrier&apos;s own median day, so time decay is included.
+            {stopCostShown ? (
+              <>
+                {' '}For the immediate figure — what this stop costs if it is hit right now —
+                see &ldquo;Max loss if the stop is hit&rdquo; on the Arithmetic Profit Target
+                card. The two differ by time decay AND by pricing model: that one is a
+                delta-linear estimate at today&apos;s price, capped at the premium, while these
+                are repriced by the simulation. Both are correct; naming only the decay sent a
+                hand-checker looking for a difference decay alone cannot account for.
+              </>
+            ) : null}
+          </Text>
+
+          {race.outcomes.map((o) => (
+            <div key={o.targetPct} className={styles.chainGroup}>
+              <Text size={11} weight={500}>
+                {pctLabel(o.targetPct)} target · {money(o.targetOptionPrice)} option
+              </Text>
+              <div className={styles.chain}>
+                <Text size={10} tone="dim">Median to stock stop</Text>
+                <Data size={11}>{daysLabel(o.daysStockStop)}</Data>
+              </div>
+              <div className={styles.chain}>
+                <Text size={10} tone="dim">Median to premium stop</Text>
+                <Data size={11}>{daysLabel(o.daysPremiumStop)}</Data>
+              </div>
+              <div className={styles.chain}>
+                <Text size={10} tone="dim">Risk</Text>
+                <Data size={11}>{formatRaceRisk(o, race.premiumUsed)}</Data>
+              </div>
+              <div className={styles.chain}>
+                <Text size={10} tone="dim">R:R vs stock stop</Text>
+                <Data size={11} weight={500}>{formatRaceRR(o)}</Data>
+              </div>
+              <div className={`${styles.chain} ${styles.muted}`}>
+                <Text size={10} tone="dim">R:R vs premium stop</Text>
+                <Data size={11} tone="dim">{formatRacePremiumRR(o)}</Data>
+              </div>
+              <div className={styles.chain}>
+                <Text size={10} tone="dim">Edge</Text>
+                <Data size={11}>{formatRaceEdge(o, race.premiumUsed)}</Data>
+              </div>
+            </div>
+          ))}
+
+          <Text size={10} tone="dim">
+            Only the first ratio is a measurement. Its risk leg is the premium minus what the
+            contract would still be worth at the stock stop, which depends on strike, spot, time and
+            IV independently — so it genuinely differs between contracts. The greyed one divides two
+            numbers that are both a fixed fraction of premium, so premium cancels out of it
+            entirely and nothing about this contract survives into the result. It is the same on
+            every contract you could pick, which is why it is greyed. Deliberately not written as a
+            division of the two percentages shown above: both are rounded for display while the stop
+            fraction is an arbitrary number, so working it out from them disagrees with the printed
+            ratio on roughly two rows in five.
+          </Text>
+          <Text size={10} tone="dim">
+            The &quot;Neither&quot; term is the mean value of those paths at expiry minus the premium
+            paid. It is signed, not a loss — those paths can end above what you paid.
+          </Text>
+          <Text size={10} tone="dim">
+            Assumes implied volatility is unchanged when a barrier is reached. On a long call that is
+            pessimistic at the stop and optimistic at the target — a real fear bid would leave more
+            premium than shown.
+          </Text>
+        </div>
+      </details>
     </section>
   );
+}
+
+/**
+ * The stock-stop R:R as the row shows it: the RESULT of `formatRaceRR`'s chain,
+ * taken from that chain's own string ("$1.04 / $5.17 = 0.20x" -> "0.20x"). Not
+ * re-formatted from `rrStockStop`, because the formatter decides when there is
+ * no ratio to print (no reprice, a non-positive risk leg) and a second copy of
+ * those conditions could drift from it and print a ratio beside a chain that
+ * ends in an em dash. Every branch of the formatter ends in " = <result>"; if
+ * one ever stops doing so this shows the em dash rather than a guess.
+ */
+function raceRRValue(o: BarrierRaceOutcome): string {
+  const chain = formatRaceRR(o);
+  const at = chain.lastIndexOf(' = ');
+  return at < 0 ? '—' : chain.slice(at + 3);
+}
+
+/**
+ * The edge per contract as the row shows it: the per-contract total that ends
+ * `formatRaceEdge`'s chain ("... = -$1.93  ->  -$193.00 per contract" ->
+ * "-$193.00"), for the same reason as `raceRRValue` — the formatter alone
+ * decides when there is an edge to print. Its em-dash branch, or any output
+ * that does not end in the per-contract total, shows the em dash.
+ */
+function raceEdgeValue(o: BarrierRaceOutcome, premium: number): string {
+  const match = /->\s+(\S+) per contract$/.exec(formatRaceEdge(o, premium));
+  return match ? match[1] : '—';
 }
 
 function Header() {
