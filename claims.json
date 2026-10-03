@@ -29,14 +29,6 @@
         }
       ],
       "task": "OPTIONS-CONTRACT-EXPLANATIONS"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/server-account-risk",
-      "claimed_at": "2026-10-03T20:33:30Z",
-      "expires_at": "2026-10-03T23:33:30Z",
-      "note": "Integrate current independently audited main with server account/daily risk PR30; resolve state conflict and audit numeric interactions",
-      "task": "TRADING-REVIEW-INTEGRATION"
     }
   ]
 }
