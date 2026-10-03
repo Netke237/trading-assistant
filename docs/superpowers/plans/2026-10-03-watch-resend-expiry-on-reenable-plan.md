@@ -80,3 +80,23 @@ change is required. Update the phase and audit_rounds/audit_clean in
 PROJECT_STATE.json in the same commits as plan/code/audit updates. Each clean
 audit must be an independent reviewer applying PROJECT_STATE.json's gate;
 later rounds review only the preceding fixes and their interactions.
+
+## Audit results
+
+- Plan round 1: CLEAN, zero gate-level findings. Independent reviewer traced
+  the complete plan against both routes, store persistence, scheduler and
+  evaluator, including a second pass over failure and concurrency semantics.
+- Code round 1 (overall round 2): CLEAN, zero gate-level findings on
+  `94873792..7904d552`. Independent reviewer traced the complete implementation,
+  including adjacent state writers, and independently ran all 32 new tests.
+  No code fixes or further audit round required.
+- Focused watch/store/router/resend suites: 111 passed. Frontend typecheck
+  passed. First full run from the repo root: 4588 passed, 1 skipped,
+  3 failed. Two cwd-dependent failures pass from backend; the remaining
+  failure is pre-existing SHORTLIST-PREFIX-DRIFT (another branch owns it).
+  Final integrated validation will run from backend.
+- Six process-local mutants killed by the new tests: cutoff `>=` -> `>`,
+  discard retained queue, omit false -> true guard, omit PATCH evaluation lock,
+  swallow save failure, and bypass both PATCH routes' expiry helper. Mutation
+  runs changed only isolated pytest-process function objects; repository source
+  and running services were not mutated.

@@ -1602,9 +1602,9 @@
     {
       "id": "WATCH-RESEND-EXPIRY-ON-REENABLE",
       "name": "Piece 2 of 3: queued watch alerts older than a max age are dropped when the watch is re-enabled (strategy and composite routes)",
-      "status": "in_progress",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "status": "shipped",
+      "audit_rounds": 2,
+      "audit_clean": true,
       "depends_on": [],
       "verify": {
         "kind": "present",
@@ -1612,7 +1612,7 @@
         "pattern": "^_REENABLE_MAX_AGE = ",
         "note": "BUILT once the max-age constant exists."
       },
-      "note": "2026-10-03 BUILT on codex/watch-resend-expiry: false->true five-day prefix expiry, both PATCH responses, atomic enable/state save with rollback, serialized save and both evaluator entry points. Focused 111 tests passed; frontend typecheck passed. Code round 1 (overall round 2) next; full backend suite running. 2026-10-03 PLAN ROUND 1 CLEAN (0 gate-level findings), independent reviewer checked atomic persistence/rollback, both PATCH routes, prefix semantics, shared evaluation lock and malformed entries. Next: build from own plan; code stage starts at round 2 (code round 1 of 3). 2026-10-03: claimed on codex/watch-resend-expiry; own plan v1 written from combined plan section 2.8, with atomic enable/state persistence, both PATCH routes, and shared locking for both evaluation entry points. Plan round 1 next. Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 section 2.8 and its round-1/2 findings (R1-1, R1-5, R1-13). Own plan, three plan rounds.",
+      "note": "2026-10-03 BUILT + CODE AUDITED CLEAN on codex/watch-resend-expiry, not merged yet. Full run from repository root: 4588 passed / 1 skipped / 3 failed; two cwd-dependent failures pass from backend, one existing SHORTLIST-PREFIX-DRIFT fails (owned by another branch). Final integration validation pending. 2026-10-03 CODE ROUND 1 (overall round 2) CLEAN: independent reviewer audited 94873792..7904d552 and ran all 32 new tests; 0 gate-level findings after sanity recheck. Six process-local mutants killed. Focused suites 111 passed; frontend typecheck passed. Full backend suite still running before completion. 2026-10-03 BUILT on codex/watch-resend-expiry: false->true five-day prefix expiry, both PATCH responses, atomic enable/state save with rollback, serialized save and both evaluator entry points. Focused 111 tests passed; frontend typecheck passed. Code round 1 (overall round 2) next; full backend suite running. 2026-10-03 PLAN ROUND 1 CLEAN (0 gate-level findings), independent reviewer checked atomic persistence/rollback, both PATCH routes, prefix semantics, shared evaluation lock and malformed entries. Next: build from own plan; code stage starts at round 2 (code round 1 of 3). 2026-10-03: claimed on codex/watch-resend-expiry; own plan v1 written from combined plan section 2.8, with atomic enable/state persistence, both PATCH routes, and shared locking for both evaluation entry points. Plan round 1 next. Split off WATCH-RESEND-HEAD-OF-LINE (decision WATCH-RESEND-SPLIT-2026-10-02). Starting material: combined plan v2 section 2.8 and its round-1/2 findings (R1-1, R1-5, R1-13). Own plan, three plan rounds.",
       "plan": "docs/superpowers/plans/2026-10-03-watch-resend-expiry-on-reenable-plan.md"
     },
     {
