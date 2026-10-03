@@ -7,9 +7,10 @@ but:
       (a genuine "no date" included);
   (b) the fire path reads the scan's source chain -- Tradier fundamentals
       first, then yfinance -- not yfinance alone;
-  (c) a failed lookup is retried once;
-  (d) the lookup has a bounded deadline, so a hang cannot stall the single
-      fire worker;
+  (c) a failed lookup is retried once -- only a source that failed fast
+      (audit round 2, R2-F3);
+  (d) EACH SOURCE has its own bounded deadline, so a hang cannot stall the
+      single fire worker and a slow Tradier cannot starve yfinance (R2-F3);
 and a failed lookup is told apart from "no date on file" where the source
 allows, so the refusal says which. These tests drive the REAL path, stubbing
 only the network edge (httpx.get and yfinance.Ticker).
@@ -204,13 +205,107 @@ def test_a_genuine_no_date_is_not_retried(monkeypatch):
     assert len(yf_calls) == 1
 
 
-# ── (d) a bounded deadline ──────────────────────────────────────────────────
+# ── (d) a bounded deadline, PER SOURCE (audit round 2, R2-F3) ──────────────
+#
+# Round 1 bounded each ATTEMPT (Tradier then yfinance) by one 12s deadline,
+# so a Tradier that hung for 8s+ left yfinance nothing, and the retry re-ran
+# the same hung Tradier leg. Each source now has its own deadline, and the
+# retry does not re-ask a source that timed out (it would spend its whole
+# deadline again) or one that answered (its answer stands).
 
-def test_a_hung_lookup_is_abandoned_at_the_deadline(monkeypatch):
-    monkeypatch.setattr(at, "_EARNINGS_LOOKUP_DEADLINE_S", 0.2)
-    monkeypatch.setattr(market, "fetch_next_earnings_date", lambda s: time.sleep(3))
+def _hang(seconds, calls=None):
+    def _get(url, **kw):
+        if calls is not None:
+            calls.append(url)
+        time.sleep(seconds)
+        raise RuntimeError("should have been abandoned")
+    return _get
+
+
+@pytest.fixture
+def _short_deadlines(monkeypatch):
+    monkeypatch.setattr(at, "_TRADIER_LOOKUP_DEADLINE_S", 0.2)
+    monkeypatch.setattr(at, "_YF_LOOKUP_DEADLINE_S", 0.2)
+
+
+def test_a_hung_tradier_does_not_starve_yfinance(monkeypatch, _short_deadlines):
+    monkeypatch.setattr(market.httpx, "get", _hang(3))
+    _install_yf(monkeypatch, [{"Earnings Date": [IN_60]}])
+    t0 = time.monotonic()
+    assert at._lookup_earnings_date("AAPL") == IN_60
+    assert time.monotonic() - t0 < 1.5
+
+
+def test_the_retry_skips_a_source_that_timed_out(monkeypatch, _short_deadlines):
+    tradier_calls: list[str] = []
+    yf_calls: list[str] = []
+    monkeypatch.setattr(market.httpx, "get", _hang(3, tradier_calls))
+    _install_yf(monkeypatch, [RuntimeError("rate limited"), {"Earnings Date": [IN_60]}], yf_calls)
+    assert at._lookup_earnings_date("AAPL") == IN_60
+    assert len(tradier_calls) == 1, "the hung Tradier leg was re-run on the retry"
+    assert len(yf_calls) == 2, "the fast yfinance failure was not retried"
+
+
+def test_the_retry_does_not_re_ask_a_source_that_answered(monkeypatch):
+    tradier_calls: list[str] = []
+    yf_calls: list[str] = []
+    _install_tradier(monkeypatch, report_date=None, calls=tradier_calls)
+    _install_yf(monkeypatch, [RuntimeError("rate limited"), {"Earnings Date": [IN_60]}], yf_calls)
+    assert at._lookup_earnings_date("AAPL") == IN_60
+    assert len(tradier_calls) == 1
+    assert len(yf_calls) == 2
+
+
+def test_a_fast_tradier_error_is_retried_once(monkeypatch):
+    tradier_calls: list[str] = []
+    _install_tradier(monkeypatch, fail=True, calls=tradier_calls)
+    _install_yf(monkeypatch, [RuntimeError("rate limited")])
+    with pytest.raises(market.EarningsLookupError):
+        at._lookup_earnings_date("AAPL")
+    assert len(tradier_calls) == 2
+
+
+def test_both_sources_hanging_is_bounded_and_refused(monkeypatch, _short_deadlines):
+    monkeypatch.setattr(market.httpx, "get", _hang(3))
+    import yfinance
+
+    class _HungTicker:
+        def __init__(self, symbol):
+            pass
+
+        @property
+        def calendar(self):
+            time.sleep(3)
+            return {}
+
+    monkeypatch.setattr(yfinance, "Ticker", _HungTicker)
     t0 = time.monotonic()
     with pytest.raises(at.EventVetoError) as info:
         at._apply_event_veto(_Strategy())
-    assert time.monotonic() - t0 < 2.0, "the hang held the fire worker"
+    # Two 0.2s deadlines, no retry of either (both timed out).
+    assert time.monotonic() - t0 < 1.5, "the hang held the fire worker"
     assert "lookup failed" in str(info.value) and "within" in str(info.value)
+
+
+def test_the_worst_case_is_stated_and_bounded():
+    """Worst case: both sources fail FAST on the first attempt, then both hang
+    on the retry -- each source's deadline twice. Pinned so a change to either
+    deadline has to restate the bound."""
+    worst = 2 * (at._TRADIER_LOOKUP_DEADLINE_S + at._YF_LOOKUP_DEADLINE_S)
+    assert worst == at._EARNINGS_LOOKUP_WORST_CASE_S <= 24.0
+
+
+def test_the_tradier_request_carries_a_tight_http_timeout(monkeypatch):
+    """The thread deadline is the hard bound; the httpx timeout keeps the
+    abandoned thread from lingering past it. httpx's timeouts are PER PHASE,
+    so the read timeout alone must sit under the deadline."""
+    seen: dict = {}
+
+    def _get(url, **kw):
+        seen.update(kw)
+        return _Resp(_fund_payload(IN_30))
+    monkeypatch.setattr(market.httpx, "get", _get)
+    assert market.tradier_next_earnings_date("AAPL") == IN_30
+    t = seen["timeout"]
+    assert t.read is not None and t.read < at._TRADIER_LOOKUP_DEADLINE_S
+    assert t.connect is not None and t.connect < at._TRADIER_LOOKUP_DEADLINE_S

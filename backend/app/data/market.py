@@ -1860,6 +1860,14 @@ def _first_calendar_result(data) -> dict | None:
     return None
 
 
+# httpx timeouts are PER PHASE (connect, read, write, pool each get their own),
+# not a total, so a bare `timeout=8` let one slow request run 8-16s+ (audit
+# round 2, R2-F3). The hard bound on the fire path is the per-source thread
+# deadline in `auto_trader`; these keep an abandoned thread from lingering far
+# past it. Both sit under `auto_trader._TRADIER_LOOKUP_DEADLINE_S` (5s).
+_TRADIER_CALENDAR_HTTP_TIMEOUT = httpx.Timeout(4.0, connect=2.0)
+
+
 def _fundamentals_calendar_sync(symbol: str) -> dict | None:
     """Sync twin of `fetch_fundamentals_calendar` for the fire path, which runs
     on a worker thread. Reuses the scan's same-day answer when there is one
@@ -1874,7 +1882,7 @@ def _fundamentals_calendar_sync(symbol: str) -> dict | None:
             f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
-            timeout=8,
+            timeout=_TRADIER_CALENDAR_HTTP_TIMEOUT,
         )
         resp.raise_for_status()
         result = _first_calendar_result(resp.json())
@@ -1884,39 +1892,26 @@ def _fundamentals_calendar_sync(symbol: str) -> dict | None:
     return result
 
 
-def fetch_next_earnings_date(symbol: str) -> Optional[date]:
-    """The symbol's next earnings date for the auto-trade FIRE path (audit
-    round 1, F3), read through the SAME source chain the options scan uses
-    (`routers/scan.py`, the candidate loop): Tradier fundamentals first, then
-    the yfinance calendar only when fundamentals gave no date.
+# The fire path's two earnings sources, in the scan's order (`routers/scan.py`,
+# the candidate loop): Tradier fundamentals first, then the yfinance calendar.
+# Each one is called by `auto_trader._lookup_earnings_date` under its OWN
+# deadline (audit round 2, R2-F3); neither is bounded on its own.
+#
+# Each returns the date (today or later) or None when the source ANSWERED with
+# no future date, and raises `EarningsLookupError` when it FAILED. Each reuses
+# the scan's same-day answer when there is one (both caches hold real answers
+# only), which also keeps a fire right after a scan from re-hitting a feed that
+# scan just hammered.
 
-    Returns the date (today or later), or None when every source ANSWERED and
-    none has a future date. Raises `EarningsLookupError` when no source gave a
-    date and at least one FAILED, so the refusal can say "lookup failed" rather
-    than "none on file". One source failing while the other dates it is not a
-    failure: the date is returned.
+def tradier_next_earnings_date(symbol: str) -> Optional[date]:
+    """Source 1: Tradier fundamentals/calendars (`_fundamentals_calendar_sync`)."""
+    return _extract_earnings_date(_fundamentals_calendar_sync(symbol))
 
-    Each source's same-day answer from the scan is reused (both caches hold
-    real answers only), which also keeps a fire right after a scan from
-    re-hitting a feed that scan just hammered. Sync and unbounded on its own:
-    the caller (`auto_trader._lookup_earnings_date`) runs it under a deadline.
-    """
-    failures: list[str] = []
-    try:
-        earn = _extract_earnings_date(_fundamentals_calendar_sync(symbol))
-        if earn is not None:
-            return earn
-    except EarningsLookupError as exc:
-        failures.append(str(exc))
 
-    cached = _yf_cal_cache.get(symbol) if _yf_cal_cache_date == date.today().isoformat() else None
-    try:
-        earn = cached[0] if cached is not None else _calendar_dates_yf_strict(symbol)[0]
-        if earn is not None:
-            return earn
-    except EarningsLookupError as exc:
-        failures.append(str(exc))
-
-    if failures:
-        raise EarningsLookupError("; ".join(failures))
-    return None
+def yfinance_next_earnings_date(symbol: str) -> Optional[date]:
+    """Source 2: the yfinance calendar, strict (a failure raises)."""
+    if _yf_cal_cache_date == date.today().isoformat():
+        cached = _yf_cal_cache.get(symbol)
+        if cached is not None:
+            return cached[0]
+    return _calendar_dates_yf_strict(symbol)[0]
