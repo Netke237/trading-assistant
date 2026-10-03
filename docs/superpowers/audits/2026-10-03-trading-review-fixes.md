@@ -1,6 +1,6 @@
 # TRADING-REVIEW-FIXES — Phase A completion
 
-Code is built and independently audit-clean on `codex/trading-review-fixes`; not merged.
+Code is built and independently audit-clean on `codex/trading-review-fixes`; not merged. Pull request: [#28](https://github.com/Netke237/trading-assistant/pull/28).
 
 ## Scope and decisions
 
@@ -22,7 +22,7 @@ Fix `ce4cfc14` skips OOS entirely without a training winner while keeping the pa
 
 - Python 3.11.16, matching the repository runtime pin.
 - Full backend run on recovered integrated implementation `77431943`: **4,710 passed, 1 skipped, 1 failed**, 464.41 seconds. The failure is inherited `test_stock_shortlist.py::test_the_frontend_prefix_matches_the_backend_constant`: main's `frontend/lib/parsePipelineDiagnostics.ts` duplicates `Shortlist cap:`. Neither failing file changed in this task. This defect was already recorded against main; it was not hidden, disabled, or fixed outside scope.
-- After `ce4cfc14`: **56 focused backend tests passed**, including optimizer, warmup, direction normalization, walk-forward, and tuning adoption. The full expensive suite was not rerun after this backend-only fix; impacted modules were rerun.
+- After `ce4cfc14`: **56 focused backend tests passed**; the final reviewer independently completed **29 optimizer/walk-forward/warmup tests** (exit 0, 112.54 seconds), including optimizer, warmup, direction normalization, walk-forward, and tuning adoption. The full expensive suite was not rerun after this backend-only fix; impacted modules were rerun.
 - Frontend **183 suites / 4,486 tests passed**, typecheck passed, production build passed. There were existing lint/backtesting warnings, not a warnings-free claim.
 - `python3 scripts/state.py --quiet` succeeds, with inherited unaudited-target warnings. Nonquiet rendering still raises an inherited KeyError on a dictionary-valued open question. No claim that unrelated state targets were audited.
 
