@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -23,7 +23,14 @@ _LOCK: asyncio.Lock = asyncio.Lock()
 class AdoptRequest(BaseModel):
     strategy: str
     params: dict[str, Any]
-    direction: str = "Bullish"
+    direction: Literal["Bullish", "Bearish"]   # REQUIRED -- fix #1: the old
+    # "Bullish" default wrote bearish-tuned params into active.bullish.
+
+    @field_validator("direction", mode="before")
+    @classmethod
+    def _norm_direction(cls, v):
+        from app.services.strategy_backtest import normalize_direction
+        return normalize_direction(v)
 
     @field_validator("params")
     @classmethod

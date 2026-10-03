@@ -1117,6 +1117,7 @@ export interface WfoOosMetrics {
 
 export interface WfoProposal {
   strategy: string;
+  direction: 'Bullish' | 'Bearish';
   proposed: Record<string, number | string>;
   consistency: number;
   eligible: boolean;
@@ -1154,6 +1155,6 @@ export async function clearTuningJobs(): Promise<{ cleared: number }> {
   return res.json() as Promise<{ cleared: number }>;
 }
 
-export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>): Promise<{ ok: boolean; active: Record<string, number | string> }> {
-  return post('/api/strategy-tuning/adopt', { strategy, params });
+export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>, direction: 'Bullish' | 'Bearish'): Promise<{ ok: boolean; active: Record<string, number | string> }> {
+  return post('/api/strategy-tuning/adopt', { strategy, params, direction });
 }

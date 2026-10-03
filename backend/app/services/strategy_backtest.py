@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
+from datetime import date
 from typing import Literal
 
 import pandas as pd
@@ -10,6 +11,22 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"]
+
+
+def normalize_direction(direction: str | None) -> Literal["Bullish", "Bearish"]:
+    """The one spelling the signal functions compare against.
+
+    Every branch in strategy_engine and `_entry_side` tests ``== "Bullish"``
+    and treats anything else as bearish, so a config value ``bullish`` silently
+    ran the BEARISH branch in the WFO tuner (TRADING_REVIEW.md fix #1).
+    Unknown values raise instead of falling through to bearish.
+    """
+    d = str(direction or "").strip().lower()
+    if d == "bullish":
+        return "Bullish"
+    if d == "bearish":
+        return "Bearish"
+    raise ValueError(f"direction must be bullish|bearish, got {direction!r}")
 
 
 def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | None:
@@ -64,8 +81,16 @@ def run_strategy_backtest(
     min_win_rate: float = _MIN_WIN_RATE,
     params: dict | None = None,
     commission: float = 0.0,
+    entry_start: date | None = None,
 ) -> BacktestResult:
-    """Run a full entry+stop+target backtest using backtesting.py."""
+    """Run a full entry+stop+target backtest using backtesting.py.
+
+    ``entry_start`` (walk-forward, fix #2): bars before it only prime the
+    indicators — no entry is placed on them — and the return / drawdown /
+    Sharpe are computed over the equity curve from ``entry_start`` onward, so a
+    warm-up prefix neither trades nor dilutes the window's statistics.
+    """
+    direction = normalize_direction(direction)
     from backtesting import Backtest, Strategy as BtStrategy
     from app.services.strategy_engine import (
         pullback_ema_signal, breakout_base_signal,
@@ -90,6 +115,8 @@ def run_strategy_backtest(
         return _empty_result(strategy, direction, "Insufficient history (< 100 bars)")
 
     df = _bars_to_df(bars)
+    if entry_start is not None and not isinstance(df.index, pd.DatetimeIndex):
+        return _empty_result(strategy, direction, "entry_start needs dated bars")
     fn = _signal_fn
 
     # WFO's train_fold (walk_forward.py:212) passes ONLY the search-grid combo as
@@ -111,6 +138,8 @@ def run_strategy_backtest(
             n = len(self.data.Close)
             if n < 60:
                 return
+            if entry_start is not None and self.data.index[-1].date() < entry_start:
+                return  # warm-up bar: indicators prime, no entry (fix #2)
             # Only the trailing window is needed (mean_reversion_bb needs ~225+ bars
             # with trend_sma:200 headroom — the largest of the five strategies).
             # Capping at 350 avoids rebuilding the full history every bar (was O(n²)
@@ -155,6 +184,16 @@ def run_strategy_backtest(
     max_dd      = float(stats.get("Max. Drawdown [%]", 0))
     _sharpe_raw = float(stats.get("Sharpe Ratio", 0) or 0)
     sharpe      = 0.0 if math.isnan(_sharpe_raw) else _sharpe_raw
+    if entry_start is not None:
+        # Score only the fold itself; the warm-up prefix is flat (no entries).
+        eq = stats["_equity_curve"]["Equity"]
+        # tz-aware bar times (e.g. "...T00:00:00+00:00") make a naive cutoff raise
+        # TypeError on comparison, which train_fold's broad except would swallow.
+        cutoff = pd.Timestamp(entry_start)
+        if getattr(eq.index, "tz", None) is not None:
+            cutoff = cutoff.tz_localize(eq.index.tz)
+        eq = eq[eq.index >= cutoff]
+        total_ret, max_dd, sharpe = _window_stats(eq)
 
     # Use real per-trade returns (stats['_trades']['ReturnPct']) rather than deriving
     # avg_win/avg_loss from portfolio-level aggregates (total_return_pct, max_drawdown_pct).
@@ -196,6 +235,18 @@ def run_strategy_backtest(
         expectancy=round(expectancy, 3), sharpe=round(sharpe, 3),
         confidence=confidence, passes_gate=passes, summary_text=summary,
     )
+
+
+def _window_stats(equity: pd.Series) -> tuple[float, float, float]:
+    """Return %, max drawdown % (<= 0), annualised Sharpe of an equity slice."""
+    if len(equity) < 2 or equity.iloc[0] <= 0:
+        return 0.0, 0.0, 0.0
+    ret = (equity.iloc[-1] / equity.iloc[0] - 1.0) * 100.0
+    dd = float(((equity / equity.cummax()) - 1.0).min() * 100.0)
+    daily = equity.pct_change().dropna()
+    sd = float(daily.std())
+    sharpe = float(daily.mean() / sd * (252 ** 0.5)) if sd > 0 else 0.0
+    return float(ret), dd, sharpe
 
 
 def _empty_result(strategy: str, direction: str, reason: str) -> BacktestResult:

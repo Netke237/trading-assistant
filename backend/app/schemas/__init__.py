@@ -636,6 +636,17 @@ class TradeCardData(BaseModel):
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status
+    # Fix #3: earnings inside the reject window -> finalStatus REJECT and no send.
+    earningsVeto: bool = False
+    # Unknown earnings (none on file, or only a past date). D4 amended
+    # 2026-10-03: on a single stock (isEtf False) finalStatus is capped at
+    # CAUTION and the auto-trader refuses to fire; an ETF is unaffected.
+    earningsUnknown: bool = False
+    # Membership in the curated ETF set (app/data/etfs.py). False for any
+    # symbol not in it -- the safe direction (treated as a stock).
+    isEtf: bool = False
+    # Days to EARNINGS alone (nextEventDays is the nearer of earnings/dividend).
+    earningsDays: Optional[int] = None
     alternatives:      list[AlternativeContract] = []
     alternativesCount: int = 0
     confidence:        Optional[int] = None

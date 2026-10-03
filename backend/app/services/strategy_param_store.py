@@ -109,8 +109,9 @@ def get_costs() -> dict:
 
 
 def get_direction() -> str:
-    """Get optimization direction (bullish|bearish)."""
-    return str(_load().get("direction", "bullish"))
+    """Optimization direction, normalised to 'Bullish' | 'Bearish' (fix #1)."""
+    from app.services.strategy_backtest import normalize_direction
+    return normalize_direction(_load().get("direction", "bullish"))
 
 
 def get_optimization_config() -> dict:

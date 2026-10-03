@@ -97,7 +97,7 @@ const TYPED_STOP = 138;
  * never pass — it would report the gate as always-on. */
 const REFUSAL = 'Invalidation stop required — define an invalidation level before submitting.';
 
-function makeCard(invalidation: number | null): TradeCardData {
+function makeCard(invalidation: number | null, extra: Partial<TradeCardData> = {}): TradeCardData {
   return {
     symbol: 'AAA',
     company: 'AAA Inc.',
@@ -117,16 +117,20 @@ function makeCard(invalidation: number | null): TradeCardData {
     rrRatio: 2.0,
     rrModel: 'Heston repriced',
     finalStatus: 'PASS',
+    ...extra,
   };
 }
 
 const originalFetch = global.fetch;
 
-function mount(invalidation: number | null, { withPick = true }: { withPick?: boolean } = {}) {
+function mount(
+  invalidation: number | null,
+  { withPick = true, extra = {} }: { withPick?: boolean; extra?: Partial<TradeCardData> } = {},
+) {
   localStorage.clear();
   act(() => {
     useScanStore.setState({
-      scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard(invalidation)] } as any,
+      scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard(invalidation, extra)] } as any,
       // Phase G piece 5: the three edit caches this file exercises now live in
       // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
       // has to carry the `scan_id` the real type has always declared required
@@ -329,5 +333,115 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     expect(created.pickedRowOptionPrice).toBeNull();
     expect(created.pickedStopBasis).toBe('stock');
     expect(created.pickedAt).toBe('2026-09-14T10:00:00.000Z');
+  });
+});
+
+/* Fix #3 (review, High). Earnings inside the scan's reject window veto the
+ * trade: the backend sets `earningsVeto` and forces finalStatus REJECT, and
+ * Step 7 must then refuse the send -- both direct buttons and the pin -- and
+ * SAY why, rather than leave a greyed button with no reason beside it. Same
+ * shape as the stop and method-pick suites above: the refusal is asserted on
+ * the ORDER (`postOptionOrder` never called, no position stored), and an
+ * ordinary card is the control. */
+describe('step-7-trade-card — earnings veto blocks the send', () => {
+  const VETO_REASON = 'Earnings inside the reject window — no send';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+    global.fetch = echoFetch();
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('disables Place Limit, Right Now — Market and Pin to basket, places NO order, and says why', async () => {
+    // A real stop and a real pick: the veto is the ONLY reason for the refusal.
+    mount(140, { extra: { earningsVeto: true, finalStatus: 'REJECT' } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    const limitBtn  = screen.getByRole('button', { name: /place limit/i });
+    const marketBtn = screen.getByRole('button', { name: /right now — market/i });
+    expect(limitBtn).toBeDisabled();
+    expect(marketBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeDisabled();
+    expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
+    // The stop and pick gates are satisfied, so theirs are not the reasons shown.
+    expect(screen.queryByText(REFUSAL)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
+
+    // Disabled is not the claim -- not ordering is.
+    fireEvent.click(limitBtn);
+    fireEvent.click(marketBtn);
+    await Promise.resolve();
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+  });
+
+  it('keeps Disarm reachable for a strategy already armed on the vetoed card, and refuses Arm-side fires', async () => {
+    // Task 10c (Kenneth, 2026-10-03): the vetoed card used to hide the whole
+    // auto-trade control, Disarm included.
+    // The backend says AAA is armed; the component's status read switches the
+    // panel to armed mode on its own (mount() resets the store to manual).
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAA', direction: 'Bullish' });
+    mount(140, { extra: { earningsVeto: true, finalStatus: 'REJECT' } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    expect(disarm).toBeEnabled();
+    const fire = screen.getByRole('button', { name: 'Fire now' });
+    expect(fire).toBeDisabled();
+    expect(fire).toHaveAttribute('title', VETO_REASON);
+
+    fireEvent.click(disarm);
+    await waitFor(() => expect(api.disarmAutoTrade).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows Arm disabled with the veto reason when nothing is armed', async () => {
+    mount(140, { extra: { earningsVeto: true, finalStatus: 'REJECT' } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    // mount() resets the store to manual mode; Arm shows in armed mode only.
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
+
+    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeDisabled();
+    expect(arm).toHaveAttribute('title', VETO_REASON);
+    fireEvent.click(arm);
+    await Promise.resolve();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('leaves an ordinary card alone when earningsVeto is false', async () => {
+    mount(140, { extra: { earningsVeto: false } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    expect(screen.getByRole('button', { name: /right now — market/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeEnabled();
+  });
+
+  it('leaves an ordinary card alone when earningsVeto is absent, and still sends', async () => {
+    mount(140);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeEnabled();
+
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
   });
 });

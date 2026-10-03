@@ -2,10 +2,13 @@
 
 /*
  * Screener Step 7 — Trade Card.
- * Prev/Next cycles ranked candidates, basket pins multiple. Send basket
- * opens a review dialog where any row can be switched from auto-send
- * (sent to broker mock) to manual (added to portfolio tagged MANUAL).
- * Successful submits surface a bottom-right toast with a Portfolio link.
+ * Prev/Next cycles ranked candidates, basket pins multiple. Track basket
+ * opens a review dialog; submitting it saves every row to the Portfolio tagged
+ * MANUAL. It places NO broker order (review #5, D6) -- a card's own send
+ * buttons do that. A tracked row still reserves its contract and symbol (the
+ * caps and the duplicate refusal count it), so tracking blocks a later send of
+ * the same card until the row is closed. Successful submits surface a
+ * bottom-right toast with a Portfolio link.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -49,6 +52,10 @@ import {
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
+
+/** Fix #3 (review). The reason shown beside the disabled send controls when
+ *  the backend vetoed the card (earnings inside the scan's reject window). */
+const EARNINGS_VETO_MESSAGE = 'Earnings inside the reject window — no send';
 
 function nowISOLocal(): string {
   const d = new Date();
@@ -186,7 +193,8 @@ function positionFromOrder(
     theta:         cd?.theta,
     vega:          0.20,
     contracts:     order.contracts,
-    source:        order.autoSend ? 'broker' : 'manual',
+    // Fix #5: the basket places no broker order (D6); 'broker' made phantom positions count against real caps.
+    source:        'manual',
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
     tradeCardSnapshot: tradeCardSnapshotOf(c),
@@ -195,9 +203,8 @@ function positionFromOrder(
 }
 
 interface ToastState {
-  auto:    number;
-  manual:  number;
-  queued:  number;   // subset of auto+manual that is pending a backend retry
+  saved:   number;   // confirmed saved by the backend
+  queued:  number;   // saved locally, pending a backend retry
   // Positions whose requested size was auto-reduced by the backend's risk
   // check to fit exposure limits — "SYMBOL: N contracts" per entry.
   adjusted: string[];
@@ -1084,6 +1091,8 @@ export default function Step7Page() {
   async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
+    // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
+    if (card.earningsVeto === true) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
     // `disabled` protects the button and this protects the ORDER -- anything
     // that reaches this function by another route inherits the refusal.
@@ -1269,13 +1278,21 @@ export default function Step7Page() {
 
   const marketBlocked = directOrderBlock('MKT', selectedBroker);
 
+  // Fix #3 (review, High). The backend sets `earningsVeto` when earnings fall
+  // inside the scan's reject window (and forces finalStatus REJECT). Strictly
+  // `=== true`: absent/false leaves every send path as it was.
+  const earningsVeto = effectiveCard?.earningsVeto === true;
+
   const idx = symbols.indexOf(active);
 
   const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
   const goNext = () => { if (idx >= 0 && idx < symbols.length - 1) setActive(symbols[idx + 1]!); };
 
-  const togglePin = () =>
+  const togglePin = () => {
+    // Fix #3 (review). A vetoed card never enters the basket (un-pinning is fine).
+    if (earningsVeto && !basket.includes(active)) return;
     setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
+  };
   const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
 
   const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
@@ -1296,7 +1313,7 @@ export default function Step7Page() {
     setBasketNotes([]);
     setBasketError(null);
     setOrderError(null);
-    let auto = 0, manual = 0, queued = 0;
+    let saved = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];
 
@@ -1352,7 +1369,7 @@ export default function Step7Page() {
       }
       // status === 'ok' — confirmed saved by the backend.
       incrementDaily();
-      if (o.autoSend) auto++; else manual++;
+      saved++;
       if (res.adjustedQty != null) {
         adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
       }
@@ -1369,8 +1386,8 @@ export default function Step7Page() {
     // covers hard rejections. They describe DIFFERENT orders, so both may show for
     // a mixed basket — but a network-only submit shows just the toast (no
     // contradictory red banner) with the queued count reported distinctly.
-    if (auto + manual + queued > 0) {
-      setToast({ auto, manual, queued, adjusted });
+    if (saved + queued > 0) {
+      setToast({ saved, queued, adjusted });
       window.setTimeout(() => setToast(null), 6000);
     }
     if (failures.length) {
@@ -1379,7 +1396,7 @@ export default function Step7Page() {
   };
 
   const basketEmpty = basket.length === 0;
-  const sendLabel = basketEmpty ? 'Send to broker' : `Send basket (${basket.length})`;
+  const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
 
   return (
     <div className={styles.main}>
@@ -1387,8 +1404,9 @@ export default function Step7Page() {
         <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
         <Text size={13} tone="secondary">
-          Cycle candidates with Prev / Next. Pin multiple to the basket, then Send to broker — uncheck
-          Auto-send for any contract you&apos;d rather place manually.
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
+          places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
+          its card instead of tracking it, or close the tracked row first.
         </Text>
       </div>
 
@@ -1401,6 +1419,8 @@ export default function Step7Page() {
         onSelect={setActive}
         onTogglePin={togglePin}
         onRemovePin={removePin}
+        pinDisabled={earningsVeto}
+        pinDisabledReason={EARNINGS_VETO_MESSAGE}
       />
 
       {cards.length === 0 && (
@@ -1480,7 +1500,7 @@ export default function Step7Page() {
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
             <Text size={11} tone="caution">
-              Computing the plan for an overridden contract in your basket — Send basket enables once it&apos;s ready.
+              Computing the plan for an overridden contract in your basket — Track basket enables once it&apos;s ready.
             </Text>
           )}
           {basketPlanErrors.map(({ symbol, error }) => (
@@ -1514,9 +1534,10 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto}
                   title={
-                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
                   }
@@ -1527,10 +1548,11 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || marketBlocked != null}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || marketBlocked != null}
                   title={
                     // The broker refusal wins: filling a field cannot cure it.
                     marketBlocked != null ? marketBlocked
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
@@ -1539,6 +1561,14 @@ export default function Step7Page() {
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
               </div>
+              {/* Fix #3 (review). Said, not merely disabled; independent of the
+                * stop / pick refusals below for the same reason they are
+                * independent of each other. */}
+              {earningsVeto && (
+                <Text size={11} tone="reject">
+                  {EARNINGS_VETO_MESSAGE}
+                </Text>
+              )}
               {!planReady && (
                 <Text size={11} tone="caution">
                   Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
@@ -1568,8 +1598,13 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
+              {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
+                * Hiding it also hid Disarm for a strategy already armed; the
+                * veto now refuses Arm / Fire now inside the component, and the
+                * sentence is the one printed above. */}
               {planReady && (
                 <AutoTradeArm
+                  armBlockedReason={earningsVeto ? EARNINGS_VETO_MESSAGE : null}
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path
@@ -1678,13 +1713,9 @@ export default function Step7Page() {
       {toast && (
         <div className={toastStyles.toast} role="status" aria-live="polite">
           <div>
-            <Text size={13} weight={500}>
-              {toast.auto + toast.manual + toast.queued} order{toast.auto + toast.manual + toast.queued === 1 ? '' : 's'} placed
-            </Text>
-            <Text size={11} tone="secondary">
-              {toast.auto} sent to broker · {toast.manual} added manually
-              {toast.queued > 0 ? ` · ${toast.queued} awaiting backend sync` : ''}
-            </Text>
+            <Text size={13} weight={500}>{toast.saved + toast.queued} added to Portfolio</Text>
+            <Text size={11} tone="caution">No broker order was placed. Tracked rows reserve their contract — to trade one, close the row and send from its card.</Text>
+            {toast.queued > 0 && <Text size={11} tone="secondary">{toast.queued} awaiting backend sync</Text>}
             {toast.adjusted.length > 0 && (
               <Text size={11} tone="caution">
                 Size reduced to fit exposure limits — {toast.adjusted.join(', ')}
