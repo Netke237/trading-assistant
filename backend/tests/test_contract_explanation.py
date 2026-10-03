@@ -350,3 +350,13 @@ async def test_get_contracts_route_includes_explanation():
                 validated = ContractExplanation.model_validate(exp)
                 assert validated.outcome in ("blocked", "aggregate")
                 assert len(validated.components) == 5
+
+
+def test_put_explanation_binds_to_the_returned_row_identity():
+    c = _make_contract()
+    c['id'] = f"AAPL|185|{c['expiry']}|P"
+    c['right'] = 'P'
+    card = validate_contract(c, 80)
+    assert card.explanation['contract_id'] == c['id']
+    # Leave the existing score card identity and scoring/persistence contracts unchanged.
+    assert card.contract_id.endswith('|C')

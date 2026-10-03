@@ -17,7 +17,7 @@ export interface ContractScoreExplanationProps {
   contract: OptionContract;
 }
 
-export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> = ({ id, contract }) => {
+const ContractScoreExplanationContent: React.FC<ContractScoreExplanationProps> = ({ id, contract }) => {
   const exp = contract.explanation;
 
   if (!exp || !validateExplanation(exp, contract.id)) {
@@ -297,3 +297,5 @@ export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> =
     </div>
   );
 };
+
+export const ContractScoreExplanation = React.memo(ContractScoreExplanationContent);

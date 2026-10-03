@@ -63,7 +63,7 @@ export const MOCK_OPTION_CHAIN = [
       outcome: 'aggregate',
       score: 78,
       status: 'PASS',
-      weights: { liquidity: 0.25, spread: 0.25, delta: 0.2, dte: 0.15, iv: 0.15 },
+      weights: { liquidity: 0.25, spread: 0.25, delta: 0.2, dte: 0.15, iv_rank: 0.15 },
       pass_threshold: 65,
       caution_threshold: 45,
       unrounded_score: 78.2,

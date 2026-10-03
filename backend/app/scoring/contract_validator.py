@@ -760,7 +760,7 @@ def validate_contract(
 
     explanation = {
         "version": 1,
-        "contract_id": contract_id,
+        "contract_id": contract.get("id") or contract_id,
         "evaluated_at": date.today().isoformat(),
         "outcome": outcome,
         "score": final_score,
