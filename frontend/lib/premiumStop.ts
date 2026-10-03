@@ -14,6 +14,8 @@
  *
  *  Keep in step with the Python module above — the two implement one rule. */
 
+import { premiumStopPctFromDollars } from './barrierRace';
+
 /** Last-resort value, used only when no global was supplied. Mirrors
  *  `risk_rules.yaml -> reward_risk.premium_stop_pct` and
  *  `settingsStore.premiumStopPct`, both of which ship as 0.60. */
@@ -101,8 +103,21 @@ export const PREMIUM_STOP_MAX_PCT = 0.99;
  *  pinned (decision Q-P2-2). See round_2_batch_followups R2-6. */
 export function premiumStopDollarBounds(mid: number): { min: number; max: number } {
   const cents = Math.round(mid * 100);
-  const min = Math.max(0.01, Math.ceil(cents * PREMIUM_STOP_MIN_PCT) / 100);
-  const max = Math.max(min, Math.floor(cents * PREMIUM_STOP_MAX_PCT) / 100);
+  const minCents = Math.max(1, Math.ceil(cents * PREMIUM_STOP_MIN_PCT));
+  const min = minCents / 100;
+  // STOP-SEMANTICS (b): the ceiling is the largest whole-cent stop that is NOT
+  // sub-cent at this mid, found by stepping down in integer cents from the 99%
+  // cap. `floor(cents * 0.99)` alone offered stops that can never fire -- 43
+  // mids from $0.02 to $50 (a $0.03 mid offered $0.02, whose threshold is a few
+  // ulps under a cent). One step is always enough there; the loop is bounded
+  // by `minCents` anyway. When nothing qualifies (a $0.01 mid) the old
+  // degenerate `max = min` stands, so TradeCard's read-only detection is
+  // unchanged.
+  let maxCents = Math.floor(cents * PREMIUM_STOP_MAX_PCT);
+  while (maxCents >= minCents && premiumStopIsSubCent(mid, maxCents / 100 / mid, false)) {
+    maxCents -= 1;
+  }
+  const max = Math.max(min, maxCents / 100);
   return { min, max };
 }
 
@@ -298,4 +313,103 @@ export function pythonRound4(x: number): number {
     return even / 1e4;
   }
   return Number(x.toFixed(4));
+}
+
+// ── STOP-SEMANTICS-2026-10-02 ────────────────────────────────────────────────
+// Twins of `backend/app/services/premium_stop.py`'s helpers of the same names.
+// The short flag is a REQUIRED positional argument everywhere (no default), so
+// no call site can apply the long rule to a short by omission.
+
+/** The rule a PREMIUM_STOP fires under, stamped on the alert at fire time. */
+export type PremiumStopSide = 'short-stock' | 'long-stock' | 'option';
+
+/** A Bearish `|STOCK` position is a short: every stock send path opens it with
+ *  a SELL. A Bearish OPTION is a long put and is NOT a short. Case-sensitive,
+ *  exactly what the engines test. */
+export function isShortStockPosition(
+  contract: string | null | undefined,
+  direction: string | null | undefined,
+): boolean {
+  return !!contract && contract.endsWith('|STOCK') && direction === 'Bearish';
+}
+
+export function premiumStopSide(
+  contract: string | null | undefined,
+  direction: string | null | undefined,
+): PremiumStopSide {
+  if (isShortStockPosition(contract, direction)) return 'short-stock';
+  if (contract && contract.endsWith('|STOCK')) return 'long-stock';
+  return 'option';
+}
+
+/** Direction-aware percent-stop threshold: a short stock's stop is
+ *  `entry * (1 + pct)` (it fires on a RISE); everything else keeps
+ *  `premiumStopThresholdPrice`'s `entry * (1 - pct)`. */
+export function percentStopThresholdPrice(entryPrice: number, pct: number, shortStock: boolean): number {
+  if (shortStock) return entryPrice * (1 + pct);
+  return premiumStopThresholdPrice(entryPrice, pct);
+}
+
+/** The 2dp price at which the stop ACTUALLY fires, for previews. Long: the
+ *  existing `premiumStopFiringPrice` (largest 2dp `<=` threshold). Short: the
+ *  SMALLEST 2dp price `>=` the computed threshold. That threshold can sit a few
+ *  ulps above its nominal cent ($100.00 at 10% is 110.00000000000001), and the
+ *  engine then fires at $110.01, not $110.00 -- so the preview says $110.01. */
+export function percentStopFiringPrice(entryPrice: number, pct: number, shortStock: boolean): number {
+  if (!shortStock) return premiumStopFiringPrice(entryPrice, pct);
+  const threshold = percentStopThresholdPrice(entryPrice, pct, true);
+  let cents = Math.round(threshold * 100);
+  if (cents / 100 < threshold) cents += 1;
+  return cents / 100;
+}
+
+/** True when a long stop's threshold is below the lowest live quote, $0.01, so
+ *  it can never fire. This IS the engines' own comparison at price $0.01
+ *  (`0.01 <= entry * (1 - pct)`), with no epsilon -- see plan §1 and Q4. A
+ *  short stop fires on a rise and is never sub-cent. */
+export function premiumStopIsSubCent(entryPrice: number, pct: number, shortStock: boolean): boolean {
+  if (shortStock) return false;
+  return entryPrice > 0 && !(0.01 <= entryPrice * (1 - pct));
+}
+
+/** The smallest whole-cent entry at which a long stop of `pct` is NOT sub-cent
+ *  -- the limit the Settings hint names. Derived through the predicate, not a
+ *  closed form: `ceil(0.01 / (1 - pct) * 100) / 100` names a limit that is
+ *  itself sub-cent at 80% ($0.05), 90% ($0.10) and 98.75% ($0.80). */
+export function premiumStopMinWholeCentEntry(pct: number): number {
+  let cents = Math.max(1, Math.ceil((0.01 / (1 - pct)) * 100 - 1e-9));
+  while (premiumStopIsSubCent(cents / 100, pct, false)) cents += 1;
+  return cents / 100;
+}
+
+/** Why the server dropped a per-position stop on create (it answered with a
+ *  null `premiumStopPct` although one was requested). */
+export type PremiumStopDropReason = 'total_loss' | 'below_one_cent' | 'unknown';
+
+export function premiumStopDropReason(
+  requestedDollar: number | null | undefined,
+  savedEntry: number | null | undefined,
+): PremiumStopDropReason {
+  // A fraction-only create: a schema-valid fraction is in (0, 1), and the
+  // server drops one only when it is sub-cent.
+  if (requestedDollar == null) return 'below_one_cent';
+  if (savedEntry == null || !Number.isFinite(savedEntry) || savedEntry <= 0) return 'unknown';
+  if (premiumStopPctFromDollars(requestedDollar, savedEntry) === undefined) return 'total_loss';
+  return 'below_one_cent';
+}
+
+const DROP_REASON_TEXT: Record<PremiumStopDropReason, string> = {
+  total_loss: 'at the filled premium it is a total loss',
+  below_one_cent: 'at the filled premium it would fire below $0.01',
+  unknown: '(reason unavailable)',
+};
+
+/** The one wording for a dropped stop -- Step 7's save note and the Portfolio
+ *  banner both use it. */
+export function premiumStopDropText(
+  requestedDollar: number | null | undefined,
+  reason: PremiumStopDropReason,
+): string {
+  const of = requestedDollar != null ? ` of $${requestedDollar.toFixed(2)}/share` : '';
+  return `Premium stop${of} could not be applied: ${DROP_REASON_TEXT[reason]} — this position inherits the global stop.`;
 }

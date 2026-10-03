@@ -11,6 +11,7 @@ import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverri
 import { useRiskStore } from '@/lib/riskStore';
 import { stripLegacyIvFields } from '@/lib/ivBasis';
 import { validationMessages } from '@/lib/pydanticError';
+import { premiumStopDropReason, type PremiumStopDropReason } from '@/lib/premiumStop';
 
 type BackendPosition = {
   id: string;
@@ -113,8 +114,30 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
 }
 
 export type PremiumStopDropNotice = {
-  symbol: string; contract: string; requestedDollar: number; at: number;
+  /** Null when the create sent only a fraction (STOP-SEMANTICS S3). */
+  symbol: string; contract: string; requestedDollar: number | null; at: number;
+  reason: PremiumStopDropReason;
 };
+
+/** STOP-SEMANTICS-2026-10-02 -- did the server drop the per-position stop this
+ *  create asked for, and why? One rule for all three create signals.
+ *
+ *  "Asked for" is what `toBackendBody` actually POSTs: a positive
+ *  `premiumStopDollar`, or a `premiumStopPct` inside (0, 1). A null resolved
+ *  `premiumStopPct` in the 201 then means the server could not store it -- a
+ *  total loss at the persisted entry, or a stop that would fire below $0.01.
+ *  A response carrying the CLIENT fraction (the server's fallback when only
+ *  the dollar was unusable) is not a drop. */
+export function premiumStopDropOf(
+  p: Pick<PortfolioPosition, 'premiumStopDollar' | 'premiumStopPct'>,
+  savedPremiumStopPct: number | null | undefined,
+  savedEntry: number | null | undefined,
+): { requestedDollar: number | null; reason: PremiumStopDropReason } | null {
+  const dollar = (p.premiumStopDollar ?? 0) > 0 ? (p.premiumStopDollar as number) : null;
+  const pct = (p.premiumStopPct ?? 0) > 0 && (p.premiumStopPct as number) < 1 ? p.premiumStopPct : null;
+  if ((dollar == null && pct == null) || savedPremiumStopPct != null) return null;
+  return { requestedDollar: dollar, reason: premiumStopDropReason(dollar, savedEntry) };
+}
 
 /** P2-09 (R1-7) -- adopt the server's entry price on a row, and reset the
  *  row's mark to it.
@@ -178,7 +201,7 @@ interface PortfolioStoreState {
    *  instead (a TIGHTER stop than requested). Undefined means nothing was
    *  dropped. Without it the basket path could not report the fallback at all
    *  -- see the note in step-7-trade-card's handleSubmit. */
-  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number }>;
+  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number; premiumStopDropReason?: PremiumStopDropReason }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
@@ -507,7 +530,7 @@ export function applyPersistedPosition(
    *  The router's own comment says "nothing on screen says why". This is the
    *  hook that lets a call site say it: the response already carries the
    *  resolved `premiumStopPct`, so no extra request is needed. */
-  onPremiumStopDropped?: (requestedDollar: number) => void,
+  onPremiumStopDropped?: (requestedDollar: number | null, reason: PremiumStopDropReason) => void,
 ): { rejected: boolean; detail?: string } {
   if (saved.offline) {
     void addPosition(pos);
@@ -517,9 +540,8 @@ export function applyPersistedPosition(
     return { rejected: true, detail: saved.detail };
   }
   if (saved.adjustedQty != null) onAdjusted?.(saved.adjustedQty);
-  if (pos.premiumStopDollar != null && saved.premiumStopPct == null) {
-    onPremiumStopDropped?.(pos.premiumStopDollar);
-  }
+  const dropped = premiumStopDropOf(pos, saved.premiumStopPct, saved.entryPrice);
+  if (dropped) onPremiumStopDropped?.(dropped.requestedDollar, dropped.reason);
   // Piece 4 — carry the server's derived premium-stop fraction onto the row
   // that goes into local state. `skipPost: true` means nothing else will fetch
   // it until the next 30s syncFromBackend, and until then the frontend alert
@@ -1065,13 +1087,18 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           // comment concedes "nothing on screen says why". Reachable through
           // an ordinary fill: a $4.50 stop typed against a $5.20 mid, filled
           // at $4.20.
-          const premiumStopDropped =
-            p.premiumStopDollar != null
-            && outcome.kind === 'ok'
-            && (outcome.premiumStopPct == null)
-              ? p.premiumStopDollar
-              : undefined;
-          return { ok: true, status: 'ok' as const, adjustedQty, premiumStopDropped };
+          // STOP-SEMANTICS -- a fraction-only create counts too, and the
+          // reason travels with it. `premiumStopDropped` stays the dollar
+          // (null for a fraction-only create); a drop is signalled by
+          // `premiumStopDropReason`, which is set exactly when one happened.
+          const drop = outcome.kind === 'ok'
+            ? premiumStopDropOf(p, outcome.premiumStopPct, outcome.entryPrice)
+            : null;
+          return {
+            ok: true, status: 'ok' as const, adjustedQty,
+            premiumStopDropped: drop?.requestedDollar ?? undefined,
+            premiumStopDropReason: drop?.reason,
+          };
         }
         if (outcome.kind === 'rejected' || scaleInRefused) {
           const detail = outcome.kind === 'rejected'
@@ -1308,11 +1335,10 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                   // Say so when the server could not apply the stop this row
                   // asked for -- the fourth and last create path to get the
                   // notice the other three now have.
-                  if (
-                    _createOnly != null
-                    && outcome.kind === 'ok'
-                    && outcome.premiumStopPct == null
-                  ) {
+                  const drop = outcome.kind === 'ok'
+                    ? premiumStopDropOf(p, outcome.premiumStopPct, outcome.entryPrice)
+                    : null;
+                  if (drop) {
                     // QUEUED, not first-wins (P2-08). This runs inside a
                     // for-loop over every queued row and on every 30s cycle;
                     // one banner names one position, so each later drop waits
@@ -1321,7 +1347,8 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     set((s) => {
                       const queue = [...s.premiumStopDropQueue, {
                         symbol: p.symbol, contract: p.contract,
-                        requestedDollar: _createOnly, at: Date.now(),
+                        requestedDollar: drop.requestedDollar, reason: drop.reason,
+                        at: Date.now(),
                       }];
                       return { premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };
                     });
