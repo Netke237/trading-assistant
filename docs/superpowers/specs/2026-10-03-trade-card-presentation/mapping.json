@@ -1,0 +1,4162 @@
+[
+  {
+    "current": "Page header",
+    "item": "STEP 7 OF 7",
+    "destination": "Page heading + How this page works",
+    "visibility": "Heading visible; explanation expandable",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Page header",
+    "item": "Trade Card",
+    "destination": "Page heading + How this page works",
+    "visibility": "Heading visible; explanation expandable",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Page header",
+    "item": "Cycle candidates / tracking explanation",
+    "destination": "Page heading + How this page works",
+    "visibility": "Heading visible; explanation expandable",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Mode / frame",
+    "item": "Options",
+    "destination": "Existing application shell",
+    "visibility": "Visible; context becomes inline on laptop",
+    "source": "frontend/app/(frame)/screener/layout.tsx",
+    "note": ""
+  },
+  {
+    "current": "Mode / frame",
+    "item": "Stocks",
+    "destination": "Existing application shell",
+    "visibility": "Visible; context becomes inline on laptop",
+    "source": "frontend/app/(frame)/screener/layout.tsx",
+    "note": ""
+  },
+  {
+    "current": "Mode / frame",
+    "item": "Pre-Breakout",
+    "destination": "Existing application shell",
+    "visibility": "Visible; context becomes inline on laptop",
+    "source": "frontend/app/(frame)/screener/layout.tsx",
+    "note": ""
+  },
+  {
+    "current": "Mode / frame",
+    "item": "Step navigation",
+    "destination": "Existing application shell",
+    "visibility": "Visible; context becomes inline on laptop",
+    "source": "frontend/app/(frame)/screener/layout.tsx",
+    "note": ""
+  },
+  {
+    "current": "Mode / frame",
+    "item": "App navigation",
+    "destination": "Existing application shell",
+    "visibility": "Visible; context becomes inline on laptop",
+    "source": "frontend/app/(frame)/screener/layout.tsx",
+    "note": ""
+  },
+  {
+    "current": "Mode / frame",
+    "item": "Context rail",
+    "destination": "Existing application shell",
+    "visibility": "Visible; context becomes inline on laptop",
+    "source": "frontend/app/(frame)/screener/layout.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Prev",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Next",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Symbol",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Candidate index / count",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Pin / Pinned",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Pin-disabled reason",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Basket count / empty",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Pinned symbol chip",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Select pinned symbol",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "CandidateNav",
+    "item": "Remove pinned symbol",
+    "destination": "Compact navigation + basket strip",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/CandidateNav/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Ticker",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Company",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Stock price",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Direction",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Status",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Chart button",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Edited indicator",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Symbol header",
+    "item": "Edited fields explanation",
+    "destination": "Identity header",
+    "visibility": "Always visible; edited explanation expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Horizon",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Timeframe",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Conviction %",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Conviction label",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Interpretation",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "State",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Sticky probability",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Average regime duration",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "OMM/HMM alignment",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "OMM only",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Market Sentiment",
+    "item": "Insufficient history",
+    "destination": "Slim Market Sentiment card directly below How this page works",
+    "visibility": "Conviction, interpretation, horizon and alignment visible; state statistics expandable",
+    "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Title",
+    "destination": "Stock qualification card",
+    "visibility": "Score, confidence and their distinct meanings visible; explanations expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Total score / maximum",
+    "destination": "Stock qualification card",
+    "visibility": "Score, confidence and their distinct meanings visible; explanations expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Stock confidence status",
+    "destination": "Stock qualification card",
+    "visibility": "Score, confidence and their distinct meanings visible; explanations expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Numeric confidence %",
+    "destination": "Stock qualification card",
+    "visibility": "Score, confidence and their distinct meanings visible; explanations expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Displayed as Backtested setup confidence, with visible history/payoff explanation; original per-symbol text retained."
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Confidence explanation",
+    "destination": "Stock qualification card",
+    "visibility": "Score, confidence and their distinct meanings visible; explanations expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Displayed as Backtested setup confidence, with visible history/payoff explanation; original per-symbol text retained."
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Status tooltip",
+    "destination": "Stock qualification card",
+    "visibility": "Score, confidence and their distinct meanings visible; explanations expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trend label",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trend score / maximum",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trend bar",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trend observation text",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Pullback label",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Pullback score / maximum",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Pullback bar",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Pullback observation text",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trigger label",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trigger score / maximum",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trigger bar",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Trigger observation text",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Event label",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Event score / maximum",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Event bar",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Event observation text",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Volatility label",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Volatility score / maximum",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Volatility bar",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stock Scorecard",
+    "item": "Volatility observation text",
+    "destination": "Stock qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Contract identifier",
+    "destination": "Contract qualification card",
+    "visibility": "Always visible; explanation expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Total score / maximum",
+    "destination": "Contract qualification card",
+    "visibility": "Always visible; explanation expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Contract confidence status",
+    "destination": "Contract qualification card",
+    "visibility": "Always visible; explanation expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Status tooltip",
+    "destination": "Contract qualification card",
+    "visibility": "Always visible; explanation expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "DTE fit label",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "DTE fit score / maximum",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "DTE fit bar",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "DTE fit observation text",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Delta label",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Delta score / maximum",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Delta bar",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Delta observation text",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "IV label",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "IV score / maximum",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "IV bar",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "IV observation text",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Liquidity label",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Liquidity score / maximum",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Liquidity bar",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Liquidity observation text",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Spread label",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Spread score / maximum",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Spread bar",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Scorecard",
+    "item": "Spread observation text",
+    "destination": "Contract qualification factor table",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Overall score",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Quality label",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Risk label",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Growth score",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Quality score",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Risk score",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Overall score tooltip",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Growth tooltip",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Quality tooltip",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Risk tooltip",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Safety flags",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "Safety flag tooltips",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fundamental Health",
+    "item": "No data state",
+    "destination": "Slim Fundamental Health card directly below stock / option identity",
+    "visibility": "Scores, labels and safety flags visible; interpretation expands",
+    "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "Strike",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "Expiry",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "Right",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "Mid",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "Delta",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "Theta / day",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "IV rank or absolute IV (basis-aware)",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "DTE",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Contract Details",
+    "item": "CaR",
+    "destination": "Readable contract header + Contract facts",
+    "visibility": "Strike, expiry, right, mid, DTE and CaR visible; Greeks and IV expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Spread type",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Leg action",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Leg quantity",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Leg strike",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Leg right",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Leg expiry",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Net debit / credit",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Max profit",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Max loss",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Spread Legs (conditional)",
+    "item": "Breakeven",
+    "destination": "Spread details immediately below contract identity",
+    "visibility": "Visible when spread exists; legs expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Alternative count",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Expand / collapse",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Rank",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Symbol",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Strike",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Right",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Expiry",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "DTE",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Contract confidence badge",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Contract confidence tooltip",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Score",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Mid",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Delta",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Theta",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "IV rank or absolute IV",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "R/R",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Alternatives (conditional)",
+    "item": "Trade-off reason",
+    "destination": "Alternative contracts under Contract facts",
+    "visibility": "Expandable",
+    "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Order Entry",
+    "item": "Order type",
+    "destination": "Order & exit settings",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Order Entry",
+    "item": "Editable Limit",
+    "destination": "Order & exit settings",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Order Entry",
+    "item": "Limit revert",
+    "destination": "Order & exit settings",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Order Entry",
+    "item": "Read-only Max fill",
+    "destination": "Order & exit settings",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Order Entry",
+    "item": "Editable Contracts",
+    "destination": "Order & exit settings",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Order Entry",
+    "item": "Contracts validation",
+    "destination": "Order & exit settings",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic",
+    "item": "Title",
+    "destination": "Arithmetic method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic",
+    "item": "Direction",
+    "destination": "Arithmetic method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic",
+    "item": "Stock entry price",
+    "destination": "Arithmetic method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic",
+    "item": "Independence explanation",
+    "destination": "Arithmetic method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic",
+    "item": "Check structure button",
+    "destination": "Arithmetic method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic",
+    "item": "Compute Arithmetic Plan button",
+    "destination": "Arithmetic method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Max loss override",
+    "item": "Max loss budget",
+    "destination": "Arithmetic card \u2192 visible Max loss budget / Set override button",
+    "visibility": "Budget and Set/Edit override always visible; %/$ editor opens on click",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Max loss override",
+    "item": "Default / override indication",
+    "destination": "Arithmetic card \u2192 visible Max loss budget / Set override button",
+    "visibility": "Budget and Set/Edit override always visible; %/$ editor opens on click",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Max loss override",
+    "item": "Set override / Edit override",
+    "destination": "Arithmetic card \u2192 visible Max loss budget / Set override button",
+    "visibility": "Budget and Set/Edit override always visible; %/$ editor opens on click",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Max loss override",
+    "item": "Percent / dollar mode",
+    "destination": "Arithmetic card \u2192 visible Max loss budget / Set override button",
+    "visibility": "Budget and Set/Edit override always visible; %/$ editor opens on click",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Max loss override",
+    "item": "Override value input",
+    "destination": "Arithmetic card \u2192 visible Max loss budget / Set override button",
+    "visibility": "Budget and Set/Edit override always visible; %/$ editor opens on click",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Max loss override",
+    "item": "Apply override",
+    "destination": "Arithmetic card \u2192 visible Max loss budget / Set override button",
+    "visibility": "Budget and Set/Edit override always visible; %/$ editor opens on click",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Max loss override",
+    "item": "Use default",
+    "destination": "Arithmetic card \u2192 visible Max loss budget / Set override button",
+    "visibility": "Budget and Set/Edit override always visible; %/$ editor opens on click",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "Stop price",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "Stop source label",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "Distance %",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "Checking",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "Not run",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "No structural stop found",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "Stop equals price",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Structure check",
+    "item": "Failure / retry message",
+    "destination": "Arithmetic card \u2192 Structural check",
+    "visibility": "Price, source and distance visible; state replaces result",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Max loss heading",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Status",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Loss % of premium",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Remaining premium / share",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Dollar loss per contract",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Original premium per contract",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Remaining value per contract",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Full pricing arithmetic",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Pricing model / priced today",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Badge interpretation",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Stop cost gate",
+    "item": "Not computed reason",
+    "destination": "Arithmetic card \u2192 Loss if stop hit",
+    "visibility": "Dollar loss, badge and timing visible; full arithmetic expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Bottom (final stop)",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Price",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Structural stop price / source",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "ATR-floor price",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "ATR(14)",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Structural \u2194 ATR-floor distance",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Stop justification",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Risk-derived whole contracts",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Exact fractional size",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Apply recommended size",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic final stop",
+    "item": "Apply disabled state",
+    "destination": "Arithmetic card \u2192 Stop & size",
+    "visibility": "Stop, size, justification and Apply visible; ATR evidence expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "Scan stop source",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "Scan stop value",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "Contract value at stop placeholder",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "Max loss if stopped placeholder",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "From scan / compute to price explanation",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "Missing stop / re-run scan",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "2:1 not yet computed",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "3:1 not yet computed",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic pre-computation",
+    "item": "Calculation error",
+    "destination": "Arithmetic card \u2192 Scan-only state",
+    "visibility": "Visible in scan-only state",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Target label",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Arithmetic price",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Nearest structural level",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Distance",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Tolerance",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Contract price",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Pricing model",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Probability before expiry",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Expected time / unlikely",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 2:1",
+    "item": "Structural comparison warning",
+    "destination": "Arithmetic card \u2192 2:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Target label",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Arithmetic price",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Nearest structural level",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Distance",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Tolerance",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Contract price",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Pricing model",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Probability before expiry",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Expected time / unlikely",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Arithmetic 3:1",
+    "item": "Structural comparison warning",
+    "destination": "Arithmetic card \u2192 3:1 target",
+    "visibility": "Target, contract value, probability, time and warning visible; geometry and pricing expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "Title",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "Independence explanation",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "T1 % input",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "T2 % input",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "T3 % input",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "Input bounds",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "Run Monte Carlo Estimate",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "Estimating state",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "Waiting for stop state",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo",
+    "item": "Failure / retry",
+    "destination": "Monte Carlo method card",
+    "visibility": "Always visible",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T1",
+    "item": "Target label / %",
+    "destination": "Monte Carlo card \u2192 T1 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T1",
+    "item": "Estimated option value",
+    "destination": "Monte Carlo card \u2192 T1 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T1",
+    "item": "Stock price",
+    "destination": "Monte Carlo card \u2192 T1 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T1",
+    "item": "Probability",
+    "destination": "Monte Carlo card \u2192 T1 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T1",
+    "item": "Expected time",
+    "destination": "Monte Carlo card \u2192 T1 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T1",
+    "item": "Structural level found",
+    "destination": "Monte Carlo card \u2192 T1 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T1",
+    "item": "Structural pending / unavailable / zero-risk states",
+    "destination": "Monte Carlo card \u2192 T1 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T2",
+    "item": "Target label / %",
+    "destination": "Monte Carlo card \u2192 T2 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T2",
+    "item": "Estimated option value",
+    "destination": "Monte Carlo card \u2192 T2 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T2",
+    "item": "Stock price",
+    "destination": "Monte Carlo card \u2192 T2 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T2",
+    "item": "Probability",
+    "destination": "Monte Carlo card \u2192 T2 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T2",
+    "item": "Expected time",
+    "destination": "Monte Carlo card \u2192 T2 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T2",
+    "item": "Structural level found",
+    "destination": "Monte Carlo card \u2192 T2 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T2",
+    "item": "Structural pending / unavailable / zero-risk states",
+    "destination": "Monte Carlo card \u2192 T2 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T3",
+    "item": "Target label / %",
+    "destination": "Monte Carlo card \u2192 T3 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T3",
+    "item": "Estimated option value",
+    "destination": "Monte Carlo card \u2192 T3 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T3",
+    "item": "Stock price",
+    "destination": "Monte Carlo card \u2192 T3 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T3",
+    "item": "Probability",
+    "destination": "Monte Carlo card \u2192 T3 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T3",
+    "item": "Expected time",
+    "destination": "Monte Carlo card \u2192 T3 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T3",
+    "item": "Structural level found",
+    "destination": "Monte Carlo card \u2192 T3 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo T3",
+    "item": "Structural pending / unavailable / zero-risk states",
+    "destination": "Monte Carlo card \u2192 T3 row",
+    "visibility": "Option, stock, probability and time visible; structural pairing expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo explanation",
+    "item": "Independent probabilities may sum beyond 100%",
+    "destination": "Monte Carlo header + explanation disclosure",
+    "visibility": "Short distinction visible; full original prose expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo explanation",
+    "item": "Barrier Race counts paths once",
+    "destination": "Monte Carlo header + explanation disclosure",
+    "visibility": "Short distinction visible; full original prose expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Monte Carlo explanation",
+    "item": "Invalidation row location",
+    "destination": "Monte Carlo header + explanation disclosure",
+    "visibility": "Short distinction visible; full original prose expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier Race",
+    "item": "Title",
+    "destination": "Barrier Race comparison card",
+    "visibility": "Visible when current source permits; explanatory state when appropriate",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier Race",
+    "item": "Same simulation / no new levels explanation",
+    "destination": "Barrier Race comparison card",
+    "visibility": "Visible when current source permits; explanatory state when appropriate",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier Race",
+    "item": "Not simulated today expiry",
+    "destination": "Barrier Race comparison card",
+    "visibility": "Visible when current source permits; explanatory state when appropriate",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier Race",
+    "item": "Freshness suppression",
+    "destination": "Barrier Race comparison card",
+    "visibility": "Visible when current source permits; explanatory state when appropriate",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier Race",
+    "item": "Barriers changed / re-run",
+    "destination": "Barrier Race comparison card",
+    "visibility": "Visible when current source permits; explanatory state when appropriate",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier Race",
+    "item": "Stock-stop moved handling",
+    "destination": "Barrier Race comparison card",
+    "visibility": "Visible when current source permits; explanatory state when appropriate",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Profit target level per row",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Target source % of premium",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Target is exit not stop",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Stock stop level",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Stock stop source",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Stock stop whichever first",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Premium stop level",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Premium stop %",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Premium stop source note",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Premium stop whichever first",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Standalone invalidation probability",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Standalone invalidation median",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race barriers",
+    "item": "Ignoring earlier premium stop explanation",
+    "destination": "Race card \u2192 Barriers + standalone stop touch",
+    "visibility": "Levels, source and standalone probability visible; longer attribution explanation expands",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Target %",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Option target",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Stacked split bar",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Target-first %",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Stock-stop-first %",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Premium-stop-first %",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Neither %",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Conditional median to target",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Conditional median to stock stop",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Conditional median to premium stop",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Risk dollars / share",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "R:R vs stock stop",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "R:R vs premium stop",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Edge / contract",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Full risk arithmetic",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Full R:R arithmetic",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Full premium R:R arithmetic",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 20%",
+    "item": "Full edge arithmetic",
+    "destination": "Race card \u2192 20% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Target %",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Option target",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Stacked split bar",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Target-first %",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Stock-stop-first %",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Premium-stop-first %",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Neither %",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Conditional median to target",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Conditional median to stock stop",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Conditional median to premium stop",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Risk dollars / share",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "R:R vs stock stop",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "R:R vs premium stop",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Edge / contract",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Full risk arithmetic",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Full R:R arithmetic",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Full premium R:R arithmetic",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 35%",
+    "item": "Full edge arithmetic",
+    "destination": "Race card \u2192 35% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Target %",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Option target",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Stacked split bar",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Target-first %",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Stock-stop-first %",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Premium-stop-first %",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Neither %",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Conditional median to target",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Conditional median to stock stop",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Conditional median to premium stop",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Risk dollars / share",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "R:R vs stock stop",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "R:R vs premium stop",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Edge / contract",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Full risk arithmetic",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Full R:R arithmetic",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Full premium R:R arithmetic",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Barrier race 50%",
+    "item": "Full edge arithmetic",
+    "destination": "Race card \u2192 50% comparison row + inline details",
+    "visibility": "All outcome shares, target time, stock R:R and edge visible; other medians and full chains expand",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Number of paths",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "100% attribution explanation",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Conditional medians definition",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Repriced at barrier median day",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Immediate loss cross-reference",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Pricing model difference",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Stock stop under 1% warning",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "IV fallback warning",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Stock R:R interpretation",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Premium R:R cancellation explanation",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Neither term signed explanation",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Unchanged IV assumption",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Long call fear-bid interpretation",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Race explanations",
+    "item": "Before commissions",
+    "destination": "Race card \u2192 assumptions strip + per-row explanation",
+    "visibility": "IV fallback / weak stop warnings and assumptions visible; full prose expandable",
+    "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Editable Invalidation",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Invalidation revert",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Missing invalidation / rescan",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Editable Premium stop loss dollars",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Premium stop revert",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Global % note",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Pinned read-only stop",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Too-small-mid explanation",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Pinned stop retained / dropped explanation",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Time exit DTE",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Exit Plan",
+    "item": "Invalidation separate from arithmetic / submit gate explanation",
+    "destination": "Order & exit settings",
+    "visibility": "Inputs, time exit and distinction visible; long explanations expand",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "Premium stop input is loss amount; it is NOT the option exit threshold."
+  },
+  {
+    "current": "Fixed % Ladder",
+    "item": "Collapse toggle / persistence",
+    "destination": "Fixed % Ladder method card",
+    "visibility": "Summary visible; original ladder expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed % Ladder",
+    "item": "Sell-to-Close title",
+    "destination": "Fixed % Ladder method card",
+    "visibility": "Summary visible; original ladder expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed % Ladder",
+    "item": "Independence explanation",
+    "destination": "Fixed % Ladder method card",
+    "visibility": "Summary visible; original ladder expands",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "Label",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "Editable stock target",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "Edited indicator",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "Estimated option",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "R:R contribution",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "Contracts to sell",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "Single-contract leftover warning",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T1",
+    "item": "Pricing method",
+    "destination": "Ladder \u2192 T1 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "Label",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "Editable stock target",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "Edited indicator",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "Estimated option",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "R:R contribution",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "Contracts to sell",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "Single-contract leftover warning",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T2",
+    "item": "Pricing method",
+    "destination": "Ladder \u2192 T2 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "Label",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "Editable stock target",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "Edited indicator",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "Estimated option",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "R:R contribution",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "Contracts to sell",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "Single-contract leftover warning",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Fixed Ladder T3",
+    "item": "Pricing method",
+    "destination": "Ladder \u2192 T3 row",
+    "visibility": "All row values visible when ladder expanded",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Title",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Final Status label",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Final Status value",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Status explanation",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Computed via method",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Computed timestamp",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Arithmetic stop",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Arithmetic stop justification",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Arithmetic targets / probabilities",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Arithmetic stop not auto-monitored warning",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Monte Carlo targets / probabilities",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Not re-run this session warning",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Race armed stock / option stops",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Edge per target / contract",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Stock R:R per target",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Edge assumptions",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "No method run / default Ladder notice",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "Final Recommendation",
+    "item": "Default ladder target rows",
+    "destination": "Latest calculation summary",
+    "visibility": "Summary near top; full original body expands; last-run logic unchanged",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": "The latest calculation display and explicit method pick remain separate."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Exit method label",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Ladder",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Arithmetic",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Monte Carlo",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Barrier Race",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Availability reasons",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Target counts",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Clear selection",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Target row selector",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Target row prices",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Judged on Stock stop",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Judged on Premium stop",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "MethodPickSelector",
+    "item": "Judged-on record explanation",
+    "destination": "Your decision panel above execution",
+    "visibility": "Always visible",
+    "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "note": "No default method; method-only pick remains allowed. Judged on does not change alerts."
+  },
+  {
+    "current": "Card actions",
+    "item": "Track basket (current page-supplied send label)",
+    "destination": "Execution / tools footer",
+    "visibility": "Visible; chart expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Card actions",
+    "item": "Disabled reason",
+    "destination": "Execution / tools footer",
+    "visibility": "Visible; chart expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Card actions",
+    "item": "View / Hide chart",
+    "destination": "Execution / tools footer",
+    "visibility": "Visible; chart expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Card actions",
+    "item": "Inline chart",
+    "destination": "Execution / tools footer",
+    "visibility": "Visible; chart expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Card actions",
+    "item": "Export JSON",
+    "destination": "Execution / tools footer",
+    "visibility": "Visible; chart expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Card actions",
+    "item": "Recommendation ID",
+    "destination": "Execution / tools footer",
+    "visibility": "Visible; chart expandable",
+    "source": "frontend/components/organisms/TradeCard/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Broker picker",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "IBKR Paper",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Tradier Paper",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Tastytrade Paper",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Not configured reasons",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Place Limit",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Right Now \u2014 Market",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Broker refusal",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Plan preparation",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Missing invalidation",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Missing method pick",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Earnings veto",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Live mid",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Live stock price",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Fetching live price",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Placed order ID",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Plan retry",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Save notes",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Basket save errors",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Order errors",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Direct-send notes",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Retry direct-send note",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Backend sync / tracking toast",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "Current page execution",
+    "item": "Track basket dialog",
+    "destination": "Execution panel + feedback region",
+    "visibility": "Controls and active refusals always visible; dialog unchanged",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Manual mode",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Armed mode",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Post-scan mode",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Arm",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Disarm",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Fire now",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Armed symbol and direction",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Waiting trigger message",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Missing broker / stop / pick reasons",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Missing gate snapshot",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Premium stop at or above fill warning",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Sub-cent stop warning",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Booking explanation / arm-time snapshot",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Post-scan instruction",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Order ID",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Order sent not booked",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Auto-trade fired",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Error",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Fire note",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "AutoTradeArm",
+    "item": "Duplicate warning",
+    "destination": "Execution \u2192 Auto-trade section",
+    "visibility": "Mode and active controls visible; active warnings always visible",
+    "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Pre-trade checklist title",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Scan empty message",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Checklist context text",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Regime status / explanation",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "IV status / thresholds / override / missing",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Earnings date / ETF / unknown",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Earnings window status / exact scan thresholds",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Score \u226555 / lower of scores",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "R:R \u22652.0 / caution band / pending",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Spread <5% label / subscore rule",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Historical analogs unavailable",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Context rail checklist",
+    "item": "Rail Quick Look",
+    "destination": "Qualification \u2192 Pre-trade checklist + existing quick look",
+    "visibility": "Visible beside scores on desktop; inline expandable on laptop",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "note": "Existing labels and gate comparators preserved; no harmonisation of different thresholds."
+  },
+  {
+    "current": "Presentation enhancement",
+    "item": "Effective stock factor weights",
+    "destination": "Qualification factor tables / rule disclosure",
+    "visibility": "Visible where proven from scan snapshot; otherwise explicitly unavailable",
+    "source": "backend/config/scoring_rules.yaml + backend/config/contract_rules.yaml",
+    "note": "Added explanations, not new calculations. Screenshot totals do not reconcile with current default weights; never invent scan-time values."
+  },
+  {
+    "current": "Presentation enhancement",
+    "item": "Effective contract factor weights",
+    "destination": "Qualification factor tables / rule disclosure",
+    "visibility": "Visible where proven from scan snapshot; otherwise explicitly unavailable",
+    "source": "backend/config/scoring_rules.yaml + backend/config/contract_rules.yaml",
+    "note": "Added explanations, not new calculations. Screenshot totals do not reconcile with current default weights; never invent scan-time values."
+  },
+  {
+    "current": "Presentation enhancement",
+    "item": "Weighted contribution",
+    "destination": "Qualification factor tables / rule disclosure",
+    "visibility": "Visible where proven from scan snapshot; otherwise explicitly unavailable",
+    "source": "backend/config/scoring_rules.yaml + backend/config/contract_rules.yaml",
+    "note": "Added explanations, not new calculations. Screenshot totals do not reconcile with current default weights; never invent scan-time values."
+  },
+  {
+    "current": "Presentation enhancement",
+    "item": "Score rule thresholds",
+    "destination": "Qualification factor tables / rule disclosure",
+    "visibility": "Visible where proven from scan snapshot; otherwise explicitly unavailable",
+    "source": "backend/config/scoring_rules.yaml + backend/config/contract_rules.yaml",
+    "note": "Added explanations, not new calculations. Screenshot totals do not reconcile with current default weights; never invent scan-time values."
+  },
+  {
+    "current": "Presentation enhancement",
+    "item": "Gate reasons / effective configuration provenance",
+    "destination": "Qualification factor tables / rule disclosure",
+    "visibility": "Visible where proven from scan snapshot; otherwise explicitly unavailable",
+    "source": "backend/config/scoring_rules.yaml + backend/config/contract_rules.yaml",
+    "note": "Added explanations, not new calculations. Screenshot totals do not reconcile with current default weights; never invent scan-time values."
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Dialog title",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "No broker order explanation",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Close dialog",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Symbol",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Contract",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Mid",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Quantity input",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Estimated dollars",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Spread leg identity",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Spread leg quantity",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Number to track",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Estimated total",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Cancel",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Add to Portfolio",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Override & Submit",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Missing invalidation",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Missing method pick",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Within risk limits",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Single-trade exposure reason",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Total exposure reason",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Concurrent positions reason",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Duplicate symbol reason",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Daily recommendations reason",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Max loss per trade reason",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Worst offender symbol / loss / limit",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Tracking dialog",
+    "item": "Second-click override instruction",
+    "destination": "Execution \u2192 existing Track basket dialog",
+    "visibility": "Dialog opens on action; all original contents retained",
+    "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Inline chart",
+    "item": "Company / Chart title",
+    "destination": "Existing inline chart below card",
+    "visibility": "Expandable; original chart controls retained",
+    "source": "frontend/components/molecules/ChartPanelHeader/index.tsx + frontend/components/organisms/InlineChartPanel/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Inline chart",
+    "item": "Symbol",
+    "destination": "Existing inline chart below card",
+    "visibility": "Expandable; original chart controls retained",
+    "source": "frontend/components/molecules/ChartPanelHeader/index.tsx + frontend/components/organisms/InlineChartPanel/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Inline chart",
+    "item": "WatchStar",
+    "destination": "Existing inline chart below card",
+    "visibility": "Expandable; original chart controls retained",
+    "source": "frontend/components/molecules/ChartPanelHeader/index.tsx + frontend/components/organisms/InlineChartPanel/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Inline chart",
+    "item": "Timeframe descriptor",
+    "destination": "Existing inline chart below card",
+    "visibility": "Expandable; original chart controls retained",
+    "source": "frontend/components/molecules/ChartPanelHeader/index.tsx + frontend/components/organisms/InlineChartPanel/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Inline chart",
+    "item": "Close chart",
+    "destination": "Existing inline chart below card",
+    "visibility": "Expandable; original chart controls retained",
+    "source": "frontend/components/molecules/ChartPanelHeader/index.tsx + frontend/components/organisms/InlineChartPanel/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Inline chart",
+    "item": "Candlesticks",
+    "destination": "Existing inline chart below card",
+    "visibility": "Expandable; original chart controls retained",
+    "source": "frontend/components/molecules/ChartPanelHeader/index.tsx + frontend/components/organisms/InlineChartPanel/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Inline chart",
+    "item": "Chart unavailable",
+    "destination": "Existing inline chart below card",
+    "visibility": "Expandable; original chart controls retained",
+    "source": "frontend/components/molecules/ChartPanelHeader/index.tsx + frontend/components/organisms/InlineChartPanel/index.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Watchlist Top 5 title",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Watchlist symbol",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Watchlist score",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Watchlist status dot",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Open symbol chart",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Watchlist load error",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Portfolio positions",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Portfolio deployed",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Portfolio open P&L",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Portfolio winners / count",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Data Sources title",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Data source label",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Data source status / dot",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Data source detail / provides",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  },
+  {
+    "current": "Rail Quick Look",
+    "item": "Broker family groupings",
+    "destination": "Context \u2192 Quick Look",
+    "visibility": "Expandable on laptop; accessible on desktop",
+    "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+    "note": ""
+  }
+]
