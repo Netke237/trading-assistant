@@ -1,5 +1,7 @@
 # Trading Review Fixes (Phase A: the six Highs) Implementation Plan
 
+> Completion record, 2026-10-03: Phase A implementation recovered on `codex/trading-review-fixes`, integrated with current main, validated and independently code-audit-clean after final round 3. Round 2 was interrupted and retained in the count. Not merged. Full results, deferred decisions, known inherited failures and scoped trading-review follow-up: [audit report](../audits/2026-10-03-trading-review-fixes.md). Historical checklist steps below are retained rather than claimed as newly executed by the recovering session. The named trading-panel skill was unavailable; no formal panel invocation is claimed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development (recommended) or executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the six High findings in `TRADING_REVIEW.md` (2026-10-02, overall REJECT) so that areas 2, 3 and 4 can be re-graded: the WFO tuner grades the right direction and really runs out-of-sample, an earnings date inside the reject window vetoes an options trade, an option position can never put more than the per-trade loss limit at risk, the basket stops claiming it sent orders, and `pullback_ema` stops emitting signals whose first target is a fraction of its risk.
