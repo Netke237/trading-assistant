@@ -49,7 +49,10 @@ Pre-freeze, Position parameters for Swing, no C- or A-scans. Regime: conviction 
 - Manifest flags / `day_invalid` / `snapshot_failed`: none / none / none. No scan carries a flag.
 - Day regime (position `/api/regime` at start): conviction **+20** · **Choppy** · **Fragile** · VIX **17.0** · **MIXED**
   (hmm Bull, alignment Diverging, overall PASS)
-- `strategy_params.yaml` sha256 (start): `6e60d95a…a764`
+- `strategy_params.yaml` sha256 (start): `6e60d95a…a764`. The manifest hashes the files as they
+  were on disk (CRLF line endings). The committed `config-start/` copies are stored with LF, so
+  re-hashing them gives a different value. [v6 R1] compares the manifest values, never a re-hash of
+  a committed copy.
 - `sp500.csv` sha256 (core start / end): `6d7eae00…60e3` / same. Other days: none yet [U1]
 - Config health pid start / end: core 12568 / 12568; A-block 19880 / 19880 (the stripped-credentials backend)
 - C-scans skipped (`skipped:time`): none
@@ -107,13 +110,16 @@ line, and S1 produced 0 candidates. S3 is 3.5% with 1 candidate. One day decides
 - `override_not_applied:liquidity`: **no**.
 
 **min_mult:** not shown yet. The table is gated on two valid days in different regimes (§5), and this
-day's regime line is above. Inputs recorded in the funnel rows:
+day's regime line is above. The inputs below are read from the `*.result.json` files; the
+`scan-funnel.jsonl` rows do not carry candidate sentiment. Only scans with candidates are listed
+(O3 and S1 had none).
 
 | Scan | Candidates | No sentiment | Conviction % values | Stability |
 |---|---|---|---|---|
 | O1 | 1 | 1 | — | — |
 | O2 | 4 | 0 | 33, 50, 67, 100 | 3 Fragile, 1 Stable |
 | O4 | 3 | 0 | 0, 14, 64 | 2 Fragile, 1 Stable |
+| A1 | 2 | 2 | — | — |
 | S2 | 3 | 1 | −9, 0 | 2 Fragile |
 | S3 | 1 | 0 | 50 | 1 Fragile |
 | S4 | 9 | 0 | −67, −20, −20, 0, 11, 17, 25, 33, 43 | 9 Fragile |
@@ -135,37 +141,73 @@ day's regime line is above. Inputs recorded in the funnel rows:
   - O1: 1/0 at every line.
   - O2: 2/2 at 40, 3/1 at 50, 3/1 at 60. Moving the line to 40 flips 1 name.
   - O4: 2/1 at 40, 3/0 at 50, 3/0 at 60. Moving the line to 40 flips 1 name.
+- Only the bearish scans can build a structure: at the tag, `_build_spreads` (routers/scan.py)
+  returns nothing for any other direction, and `choose_primary` is the only reader of the line. So
+  the bullish build rates (O2, O4) are 0 by design, and a bullish name crossing 40 / 50 / 60
+  changes nothing. The bearish names that matter are O1's 1 and A1's 2: all below every line,
+  and none built.
 
 **A-block (usable):**
 - A1: 2 absolute rows, ROST 31.5 and WMT 27.2. Both sit below 40 / 50 / 60.
-- A2: 0 candidates (as O3).
+- A2: 0 candidates (as O3). A2 lost the same 213 names to `no option chain` as O3; see the
+  expiry-gap observation below. Plan §5 uses only the first usable A-block, so the report's Swing
+  absolute-IV sample stays empty unless Kenneth repeats the A-block on a day outside the gap.
+  Information, not a rule: 0 candidates does not make the block unusable.
 - Structures built: none (0/2 spread build).
 - ATM cross-check pair: WMT, ATM absolute 27.2 vs O1's picked-contract `detail_iv_abs` 28.3
   (rank 31.7).
 
-**Independent check (2026-10-02, a second session).** Every figure in this section was
-recomputed from the raw `*.result.json` files through the manifest's scan ids, with code written
-separately from the first reading:
+**Independent check (2026-10-02, a second session; re-checked by a fresh reviewer 2026-10-03).**
+These figures were recomputed from the raw `*.result.json` files through the manifest's scan ids,
+with code written separately from the first reading:
 - validity and flags;
 - S1–S4 counters, rates and rejected trend scores, plus the "would clear" counts;
 - C1/C1b/C5/C5b/C6 attribution, quality bars and drift;
 - the C6 liquidity echoes, the min_mult inputs and the deduplicated rank rows;
 - the `iv_rank_too_high` counts, the spread build rates and the 40/50/60 line counts.
 
-All of them match. No figure changed.
+All of them match, and no figure changed. The 2026-10-03 reviewer also re-derived:
+- the header (regime, hashes, pids) and the A-block rows with the ATM pair;
+- the 24 `iv-basis-samples.jsonl` rows, re-collected with the tag's `iv_basis_analysis.py`;
+- the 15 `scan-funnel.jsonl` rows.
 
-**Observation, not a rule: the Swing O-scans lost most names to the expiry calendar.** O3 rejected
-213 names as `no option chain`, and O4 rejected 45. Of the names that reached the chain fetch, that
-is 61% and 40%; O1 lost 10 (3%). The cause is the expiry calendar, not a data outage:
+All of these match too.
+
+**Observation, not a rule: the Swing O-scans lost many names to the expiry calendar.**
+Of the names that reached the chain fetch, O3 rejected 213 of 347 (61%) as `no option chain` and O4
+rejected 45 of 112 (40%). The Position bases lost far fewer: O1 10 of 315 (3%), O2 8 of 142 (6%).
+
+Most of the Swing losses come from the expiry calendar:
 - The Swing window is 10–30 DTE. The fetch drops expiries below hold_max + 1 = 16
   (`widened_min_dte`) and allows up to 40 (the tolerance), so it accepts 16–40 DTE.
 - On 2026-10-01 the October monthly (Oct 16) was at 15 DTE and the November monthly (Nov 20) at 50.
-  A name with no weekly options therefore had no expiry it could use. All three O4 picks are the
-  Oct 23 weekly.
-- The cause is inferred from the code at the tag and the reject pattern. Tradier was not
+  A name with no weekly options therefore had no expiry it could use.
+
+How much is calendar, out of each no-chain set:
+
+| Scan | No chain | Chain in a Position scan the same day (calendar) | No chain at any DTE (baseline) | Never reached a Position fetch |
+|---|---|---|---|---|
+| O3 | 213 | 193 | 10 | 10 |
+| O4 | 45 | 32 | 6 | 7 |
+
+- The baseline names are the usual ticker and delisting losses, the same ones O1 and O2 lose.
+  O3's are ANSS, AVB, BF.B, BRK.B, CTRA, EQR, FI, IPG, MMC and NVR; O4's are AXL, CTRA, DAY, EA,
+  HOLX and MMC.
+- No name that reached the fetch in both O3 and O4 got a chain in one and not the other.
+- All three O4 picks are the Oct 23 weekly.
+- The cause is inferred from the code at the tag and this cross-scan pattern. Tradier was not
   re-queried.
-- The same gap holds on every trading day from 2026-10-01 to 2026-10-09. From 2026-10-12, Nov 20
-  falls inside 16–40 and monthly-only names come back.
+
+**The gap repeats around every monthly expiry.** The weekdays with no third-Friday monthly in
+16–40 DTE are:
+- 2026-10-01 to 10-09: **every trading day of the week of 10-05 is a gap day**;
+- 2026-11-05 and 11-06;
+- 2026-12-03 and 12-04;
+- 2026-12-31 to 2027-01-08;
+- 2027-02-04 and 02-05.
+
+Outside these, a monthly is in range and monthly-only names come back, for example from 2026-10-12,
+when Nov 20 is at 39 DTE.
 
 So the Swing O-scans' candidates and IV rows depend on the calendar day: in a gap they are
 weekly-listed names only. The day stays valid (§5), and every rule computes within one day. But the
