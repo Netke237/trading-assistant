@@ -918,3 +918,79 @@ describe('AutoTradeArm — P2-18 premium-stop caution, unbooked fire, booking wo
     expect(screen.queryByText(/with the invalidation, premium stop and exit\s+plan this card had/)).not.toBeInTheDocument();
   });
 });
+
+/* Task 10c (Kenneth, 2026-10-03). An earnings-vetoed card used to HIDE this
+ * whole component, which also hid Disarm for a strategy already armed. Now the
+ * caller always renders it and passes `armBlockedReason`: Arm and Fire now are
+ * refused on it, Disarm never is. */
+describe('AutoTradeArm — armBlockedReason (earnings-vetoed card)', () => {
+  const REASON = 'Earnings inside the reject window — no send';
+
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+    (api.disarmAutoTrade as jest.Mock).mockClear();
+    (api.fireAutoTrade as jest.Mock).mockClear();
+    (api.getAutoTradeStatus as jest.Mock).mockReset().mockResolvedValue({ armed: false });
+  });
+
+  it('vetoed + unarmed: Arm is disabled, carries the reason, and posts nothing', async () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={REASON} />);
+    const arm = screen.getByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeDisabled();
+    expect(arm).toHaveAttribute('title', REASON);
+    fireEvent.click(arm);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('vetoed + armed on this card: Disarm stays enabled and works, Fire now is refused', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={REASON} />);
+
+    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    const fire = screen.getByRole('button', { name: 'Fire now' });
+    await waitFor(() => expect(fire).toBeDisabled());
+    expect(fire).toHaveAttribute('title', REASON);
+    expect(disarm).toBeEnabled();
+
+    fireEvent.click(fire);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.fireAutoTrade).not.toHaveBeenCalled();
+
+    fireEvent.click(disarm);
+    await waitFor(() => expect(api.disarmAutoTrade).toHaveBeenCalledTimes(1));
+  });
+
+  it('vetoed card while ANOTHER symbol is armed: Fire now is not blocked by this card\'s veto', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'NVDA', direction: 'Bearish' });
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={REASON} />);
+    await screen.findByText(/Armed NVDA Bearish/);
+    expect(screen.getByRole('button', { name: 'Fire now' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Disarm' })).toBeEnabled();
+  });
+
+  it('un-vetoed + unarmed: Arm is unchanged', () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={null} />);
+    const arm = screen.getByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeEnabled();
+    expect(arm).not.toHaveAttribute('title');
+  });
+
+  it('un-vetoed + armed: Disarm and Fire now are unchanged', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    const fire = await screen.findByRole('button', { name: 'Fire now' });
+    expect(fire).toBeEnabled();
+    expect(fire).not.toHaveAttribute('title');
+    expect(screen.getByRole('button', { name: 'Disarm' })).toBeEnabled();
+    fireEvent.click(fire);
+    await waitFor(() => expect(api.fireAutoTrade).toHaveBeenCalledTimes(1));
+  });
+});

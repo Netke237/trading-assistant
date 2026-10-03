@@ -1596,8 +1596,13 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
-              {planReady && !earningsVeto && (
+              {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
+                * Hiding it also hid Disarm for a strategy already armed; the
+                * veto now refuses Arm / Fire now inside the component, and the
+                * sentence is the one printed above. */}
+              {planReady && (
                 <AutoTradeArm
+                  armBlockedReason={earningsVeto ? EARNINGS_VETO_MESSAGE : null}
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path
