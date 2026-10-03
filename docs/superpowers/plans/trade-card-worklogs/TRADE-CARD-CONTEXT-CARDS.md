@@ -159,3 +159,9 @@ Next-task readiness observed against main and live claims:
   ownership on that branch. Require final exact-diff independent clearance,
   landed interfaces, and release/disjoint ownership before launch. No external
   state or CORE/SCORE-EVIDENCE entries were overwritten to express this finding.
+
+Publication confirmed: normal push advanced `origin/main` from `c3f6d519` to
+`4acb1e74`. Both original source/evidence histories and both merge commits are
+verified ancestors of fetched main. Follow-up state reconciliation marks only
+these two components merged; complete redesign/final composition remains pending.
+No deployment or broker actions occurred.

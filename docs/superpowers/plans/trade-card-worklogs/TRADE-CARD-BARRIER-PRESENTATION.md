@@ -155,3 +155,8 @@ worklog's **Component landing verification** section. This does not replace the
 original task's one clean code round or certify final page composition.
 Recursive comparison against canonical main verified only these two tasks'
 PROJECT_STATE entries changed; unrelated state and audit counters are preserved.
+
+Publication confirmed: `origin/main` advanced to `4acb1e74` by normal push;
+`51342019`, `589bbb66`, `e5049f43` and merge `076a5a80` are verified ancestors.
+Only the two component entries are marked merged in the follow-up reconciliation.
+No deployment or broker actions occurred.

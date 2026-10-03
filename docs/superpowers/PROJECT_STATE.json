@@ -4210,8 +4210,8 @@
           "frontend/components/molecules/FundamentalHealthCard/**"
         ],
         "owner": "agent",
-        "status": "ready_to_merge",
-        "implementation": "complete_unmerged",
+        "status": "shipped",
+        "implementation": "complete_merged",
         "claim_required": true,
         "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
         "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
@@ -4231,7 +4231,7 @@
         },
         "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
         "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
-        "readiness": "verified_component_landing_ready",
+        "readiness": "landed_code_audited_clean_awaiting_final_composition",
         "branch": "codex/trade-card-context-cards",
         "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
         "implementation_commit": "739afd1fc8c3247475579538c4e4182ffd61315a",
@@ -4263,7 +4263,10 @@
           "build": "Normal build blocked by HTTP 403 Google Fonts policy; separate Next font-mock build passed. No source/config/lockfile changes.",
           "hosted_checks": "GitHub API Forbidden; PR/protection configuration and hosted CI results unavailable",
           "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md#component-landing-verification--2026-10-04",
-          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green."
+          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green.",
+          "landed_on": "origin/main",
+          "publication_commit": "4acb1e74",
+          "publication_note": "Verified normal push to origin/main; original source/evidence commits retained as ancestors. Hosted CI remains unverified due API access denial."
         }
       },
       {
@@ -4278,8 +4281,8 @@
           "frontend/components/organisms/BarrierRaceCard/**"
         ],
         "owner": "agent",
-        "status": "ready_to_merge",
-        "implementation": "complete_unmerged",
+        "status": "shipped",
+        "implementation": "complete_merged",
         "branch": "claude/zen-newton-o3ix8q",
         "base": "c3f6d51",
         "commits": [
@@ -4303,7 +4306,7 @@
         "validation": "typecheck clean; BarrierRaceCard 39/39; TradeCard/MethodPick/step-7 dependents 274 passed; full frontend 184 suites/4525 tests passed; Playwright width check at 600/900px dark+light, no horizontal overflow",
         "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
         "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
-        "readiness": "verified_component_landing_ready",
+        "readiness": "landed_code_audited_clean_awaiting_final_composition",
         "landing_verification": {
           "date": "2026-10-04",
           "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
@@ -4323,7 +4326,10 @@
           "build": "Normal build blocked by HTTP 403 Google Fonts policy; separate Next font-mock build passed. No source/config/lockfile changes.",
           "hosted_checks": "GitHub API Forbidden; PR/protection configuration and hosted CI results unavailable",
           "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md#component-landing-verification--2026-10-04",
-          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green."
+          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green.",
+          "landed_on": "origin/main",
+          "publication_commit": "4acb1e74",
+          "publication_note": "Verified normal push to origin/main; original source/evidence commits retained as ancestors. Hosted CI remains unverified due API access denial."
         }
       },
       {
