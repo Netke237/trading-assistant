@@ -8,10 +8,16 @@ from typing import Callable
 
 from app.services.walk_forward import (
     apply_costs, consensus, consistency, degradation_pct,
-    build_folds, train_fold, slice_with_warmup, MIN_SCORED_BARS,
+    build_folds, train_fold, slice_with_warmup, MIN_SCORED_BARS, WARMUP_BARS,
 )
 
 logger = logging.getLogger(__name__)
+
+# Audit round 1, F5 (D2): history fetched BEFORE the 3-year fold window so the
+# FIRST train fold gets the full WARMUP_BARS warm-up too. 260 trading bars is
+# about 377 calendar days; 14 months (~425 days, ~290 bars) leaves margin for
+# holidays and a symbol whose first stored bar is a few days late.
+_WARMUP_FETCH = {"months": 14}
 
 
 def build_proposal(
@@ -255,12 +261,16 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
+        # The folds cover the 3 years to today, as before. The fetch reaches
+        # `_WARMUP_FETCH` further back: those bars are warm-up only, never
+        # inside a fold (audit round 1, F5).
+        end_date = date.today()
+        window_start = end_date - relativedelta(years=3)
+        fetch_start = window_start - relativedelta(**_WARMUP_FETCH)
         basket_bars: dict[str, list[dict]] = {}
         for sym in basket_symbols:
             try:
-                end_date = date.today()
-                start_date = end_date - relativedelta(years=3)
-                bars = await get_bars(sym, start_date, end_date)
+                bars = await get_bars(sym, fetch_start, end_date)
                 if bars:
                     basket_bars[sym] = bars
             except Exception as exc:
@@ -279,15 +289,38 @@ async def run_optimization(
 
         # Intersection of per-symbol date ranges via pre-computed _date (date objects)
         # so the comparison is type-safe regardless of what format get_bars returns.
-        symbol_starts = [min(b["_date"] for b in bars) for bars in basket_bars.values()]
+        #
+        # A symbol's start is its first bar INSIDE the 3-year window, so the
+        # folds' date ranges are exactly what they were before the warm-up
+        # fetch was added (audit round 1, F5); the earlier bars only feed
+        # `slice_with_warmup`'s prefix.
+        symbol_starts = [
+            min((b["_date"] for b in bars if b["_date"] >= window_start), default=None)
+            for bars in basket_bars.values()
+        ]
         symbol_ends = [max(b["_date"] for b in bars) for bars in basket_bars.values()]
-        if not symbol_starts:
+        if not symbol_starts or None in symbol_starts:
             done += 1
             progress_cb(done, total_work)
             continue
 
         start = max(symbol_starts)  # latest start — intersection
         end = min(symbol_ends)      # earliest end — intersection
+
+        # D2 needs WARMUP_BARS before every fold. A history store holding less
+        # than that before `start` (get_bars does not backfill before its first
+        # stored row) leaves the early folds short, as before this fix -- say so
+        # rather than tune on cold indicators silently.
+        short = [
+            sym for sym, bars in basket_bars.items()
+            if sum(1 for b in bars if b["_date"] < start) < WARMUP_BARS
+        ]
+        if short:
+            logger.warning(
+                "WFO %s: %s hold fewer than %d bars before the first fold (%s); "
+                "the early folds' indicators start partly cold",
+                strategy, ", ".join(sorted(short)), WARMUP_BARS, start,
+            )
 
         folds = build_folds(
             start, end,
