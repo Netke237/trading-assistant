@@ -1,5 +1,9 @@
 import type { AlertKind, AlertType, TargetLevel, Direction, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
-import { resolvePremiumStopPct, premiumStopThresholdPrice, PREMIUM_STOP_PCT_FALLBACK, pythonRound4 } from './premiumStop';
+import {
+  resolvePremiumStopPct, percentStopThresholdPrice, isShortStockPosition, premiumStopSide,
+  PREMIUM_STOP_PCT_FALLBACK, pythonRound4,
+} from './premiumStop';
+import type { PremiumStopSide } from './premiumStop';
 
 /** An option position raises TIME_STOP at this many days to expiry or fewer.
  *
@@ -66,6 +70,9 @@ export interface AlertReason {
    *  the position resolves to when the row is later looked at
    *  (ALERT-THRESHOLD-STAMP-2026-09-05). */
   premiumStopPct?: number;
+  /** PREMIUM_STOP only — the side rule this fire used (STOP-SEMANTICS-2026-10-02):
+   *  'short-stock' fires on a RISE. Absent on every pre-deploy row. */
+  stopSide?: PremiumStopSide;
 }
 
 export interface ScanOptions {
@@ -272,18 +279,28 @@ export function scanPortfolio(
     // with no backend alert behind it — the exact divergence this change was
     // made to close. `> 0` is the frontend spelling of `is not None`: a long
     // option quoted at zero is not a live quote either.
+    //
+    // STOP-SEMANTICS-2026-10-02: a SHORT stock (Bearish `|STOCK`) loses on a
+    // rise, so its stop fires at `price >= entry * (1 + pct)`. Every other
+    // position keeps the fall-side rule. A short's reason is price-only and
+    // identical to the backend's, because `pnlPct` is not direction-aware (a
+    // short that rose 12% reads +12%).
     const resolvedPremiumStopPct = resolvePremiumStopPct(p.premiumStopPct, globalPremiumStopPct);
-    const premiumStopPrice = premiumStopThresholdPrice(p.entryPrice, resolvedPremiumStopPct);
+    const shortStock = isShortStockPosition(p.contract, p.direction);
+    const premiumStopPrice = percentStopThresholdPrice(p.entryPrice, resolvedPremiumStopPct, shortStock);
     if (
       p.entryPrice > 0 && p.currentPrice > 0
-      && p.currentPrice <= premiumStopPrice && enabled('PREMIUM_STOP')
+      && (shortStock ? p.currentPrice >= premiumStopPrice : p.currentPrice <= premiumStopPrice)
+      && enabled('PREMIUM_STOP')
     ) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'PREMIUM_STOP',
-        reason: `Premium stop — ${p.symbol} down ${p.pnlPct.toFixed(1)}%`,
+        reason: shortStock
+          ? `Stock stop — ${p.symbol} at $${p.currentPrice.toFixed(2)}`
+          : `Premium stop — ${p.symbol} down ${p.pnlPct.toFixed(1)}%`,
         // Both now in scope, and both are what the backend records for the
         // same alert (`alert_generator.py`: `price=opt_price,
         // reference_value=threshold_price`). Leaving them undefined gave
@@ -306,6 +323,9 @@ export function scanPortfolio(
         // server-derived fraction like 0.7554 must not lose precision on the
         // way into storage the way the label's old Math.round did.
         premiumStopPct: resolvedPremiumStopPct,
+        // The side rule it FIRED under; also part of the alert store's dedup
+        // key, so a short's rise-side fire never inherits fall-side state.
+        stopSide: premiumStopSide(p.contract, p.direction),
         direction: p.direction,
         contract: p.contract,
       });

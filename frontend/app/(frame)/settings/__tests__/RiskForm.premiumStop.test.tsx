@@ -40,27 +40,29 @@ beforeEach(() => { jest.clearAllMocks(); useSettingsStore.setState({ premiumStop
 describe('Settings — global premium stop', () => {
   it('a loaded legacy 1.0: never-fires caution, no "Infinity"; blur saves 0.99 and the caution goes', async () => {
     const input = await openRisk(1.0);
-    expect(screen.getByText('Stored 100% can never fire, in this browser or on the server. Save to apply 99%.')).toBeInTheDocument();
+    expect(screen.getByText('Stored 100% can never fire for long positions and options, in this browser or on the server. Save to apply 99%.')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Infinity/);
     expect(screen.queryByText(/sub-penny quote/)).not.toBeInTheDocument();
 
     fireEvent.blur(input);
     await waitFor(() => expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ premiumStopPct: 0.99 })));
-    await waitFor(() => expect(screen.queryByText(/can never fire/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Stored 100% can never fire/)).not.toBeInTheDocument());
     expect(useSettingsStore.getState().premiumStopPct).toBe(0.99);
   });
 
   it('a loaded 0.995: its real percentage, no never-fires claim, and the sub-cent limit from the RAW value ($2.00)', async () => {
     await openRisk(0.995);
     expect(screen.getByText('Stored 99.5% is above the 99% maximum. Save to apply 99%.')).toBeInTheDocument();
-    expect(screen.queryByText(/can never fire/)).not.toBeInTheDocument();
-    expect(screen.getByText('At 99.5%, an entry below $2.00 puts the stop threshold below $0.01 — fires only on a sub-penny quote.')).toBeInTheDocument();
+    expect(screen.queryByText(/Stored 100% can never fire/)).not.toBeInTheDocument();
+    expect(screen.getByText('At 99.5%, for long positions and options an entry below $2.00 puts the stop threshold below $0.01 — it can never fire.')).toBeInTheDocument();
   });
 
   it('an ordinary 0.60: no caution; the limit rounds UP to the cent ($0.025 -> $0.03)', async () => {
     await openRisk(0.6);
     expect(screen.queryByText(/Save to apply 99%/)).not.toBeInTheDocument();
-    expect(screen.getByText('At 60%, an entry below $0.03 puts the stop threshold below $0.01 — fires only on a sub-penny quote.')).toBeInTheDocument();
+    expect(screen.getByText('At 60%, for long positions and options an entry below $0.03 puts the stop threshold below $0.01 — it can never fire.')).toBeInTheDocument();
+    // N9 -- the same global governs a short's RISE-side stop.
+    expect(screen.getByText('For short stock positions this is how far the price may RISE above entry.')).toBeInTheDocument();
   });
 
   it('0.99: the limit is exactly $1.00 (no float cent added)', async () => {
@@ -68,10 +70,12 @@ describe('Settings — global premium stop', () => {
     expect(screen.getByText(/an entry below \$1\.00 puts/)).toBeInTheDocument();
   });
 
-  it('0.80: float noise does not add a cent ($0.05, not $0.06)', async () => {
-    // 0.01 / (1 - 0.8) * 100 is 5.000000000000001 in binary floats.
+  it('0.80: the limit is the first entry that fires ($0.06), not $0.05', async () => {
+    // STOP-SEMANTICS (R2-2): the limit is derived THROUGH the sub-cent
+    // predicate. $0.05 x (1 - 0.8) is 0.009999999999999998, a few ulps under a
+    // cent, so a $0.05 entry never fires; the old closed form named it.
     await openRisk(0.8);
-    expect(screen.getByText(/At 80%, an entry below \$0\.05 puts/)).toBeInTheDocument();
+    expect(screen.getByText(/At 80%, for long positions and options an entry below \$0\.06 puts/)).toBeInTheDocument();
   });
 
   it('typing 1 stores 0.99', async () => {

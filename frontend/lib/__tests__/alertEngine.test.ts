@@ -797,3 +797,50 @@ describe('PREMIUM_STOP stamps the threshold it fired at', () => {
     }
   });
 });
+
+// ── STOP-SEMANTICS-2026-10-02 ───────────────────────────────────────────────
+import { percentStopThresholdPrice, pythonRound4 } from '@/lib/premiumStop';
+
+describe('STOP-SEMANTICS -- a short stock stop fires on a RISE', () => {
+  // Far-away stop and no targets, so only PREMIUM_STOP can fire.
+  const stockPos = (direction: 'Bullish' | 'Bearish', currentPrice: number) => makePosition({
+    contract: 'NVDA|STOCK', direction, entryPrice: 100, currentPrice, currentStockPrice: currentPrice,
+    stop: direction === 'Bearish' ? 1000 : 1, premiumStopPct: 0.1, dteRemaining: 0, dteTotal: 0,
+  });
+  const premium = (p: AlertPosition) => scanPortfolio([p]).filter((r) => r.alertType === 'PREMIUM_STOP');
+  const t = percentStopThresholdPrice(100, 0.1, true);   // 110.00000000000001 -- the COMPUTED one
+
+  it('fires at the computed threshold and not a hair below it', () => {
+    const [a] = premium(stockPos('Bearish', t));
+    expect(a).toBeDefined();
+    expect(premium(stockPos('Bearish', 110))).toEqual([]);   // 110.00 < 110.00000000000001 (N6)
+  });
+
+  it('does not fire on a fall (the old rule)', () => {
+    expect(premium(stockPos('Bearish', 85))).toEqual([]);
+  });
+
+  it('a price-only reason, the direction-aware referenceValue, and the stamped side', () => {
+    const [a] = premium(stockPos('Bearish', 112.5));
+    expect(a!.reason).toBe('Stock stop — NVDA at $112.50');
+    expect(a!.referenceValue).toBe(pythonRound4(t));
+    expect(a!.stopSide).toBe('short-stock');
+  });
+
+  it('regression guard: a long stock is unchanged', () => {
+    const [a] = premium(stockPos('Bullish', 90));
+    expect(a!.stopSide).toBe('long-stock');
+    expect(a!.reason).toMatch(/^Premium stop — NVDA down/);
+    expect(premium(stockPos('Bullish', 120))).toEqual([]);
+  });
+
+  it('regression guard: a Bearish OPTION (a long put) still fires on a fall', () => {
+    const put = (currentPrice: number) => makePosition({
+      contract: 'NVDA|100|2026-12-18|P', direction: 'Bearish', entryPrice: 5, currentPrice,
+      currentStockPrice: 100, stop: 1000, premiumStopPct: 0.1,
+    });
+    const [a] = premium(put(4.4));
+    expect(a!.stopSide).toBe('option');
+    expect(premium(put(5.6))).toEqual([]);
+  });
+});

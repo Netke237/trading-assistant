@@ -1257,7 +1257,9 @@ describe('portfolioStore', () => {
       );
 
       expect(result.rejected).toBe(false);
-      expect(onDropped).toHaveBeenCalledWith(4.5);
+      // STOP-SEMANTICS: the reason travels with it. No entryPrice in this
+      // response, so the reason is honestly 'unknown'.
+      expect(onDropped).toHaveBeenCalledWith(4.5, 'unknown');
     });
 
     it('does NOT report a drop when the server applied the stop, or when none was asked for', () => {

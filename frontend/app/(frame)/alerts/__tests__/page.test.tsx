@@ -39,7 +39,9 @@ describe('Alerts page — premium-stop label reflects configured percentage', ()
 
     render(<AlertsPage />);
 
-    expect(screen.getByText('Premium stop (–60%)')).toBeInTheDocument();
+    // The Alert-types toggle row names the TYPE, which covers options and both
+    // stock sides (STOP-SEMANTICS-2026-10-02).
+    expect(screen.getByText('Premium / stock stop (±60%)')).toBeInTheDocument();
     expect(screen.queryByText(/–40%/)).not.toBeInTheDocument();
   });
 
@@ -48,7 +50,7 @@ describe('Alerts page — premium-stop label reflects configured percentage', ()
 
     render(<AlertsPage />);
 
-    expect(screen.getByText('Premium stop (–45%)')).toBeInTheDocument();
+    expect(screen.getByText('Premium / stock stop (±45%)')).toBeInTheDocument();
     expect(screen.queryByText(/–40%/)).not.toBeInTheDocument();
   });
 
@@ -147,7 +149,37 @@ describe('Alerts page — a fired row is labelled with the threshold it fired at
 
     render(<AlertsPage />);
 
-    expect(screen.getByText('Premium stop (–60%)')).toBeInTheDocument();
+    expect(screen.getByText('Premium / stock stop (±60%)')).toBeInTheDocument();
+  });
+});
+
+// ── STOP-SEMANTICS-2026-10-02 ───────────────────────────────────────────────
+describe('Alerts page — a fired row is labelled with the SIDE it fired under', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 't1', recId: 'r1', symbol: 'AAPL', kind: 'Critical', alertType: 'PREMIUM_STOP',
+    reason: 'x', firedAt: new Date().toISOString(), acknowledged: false,
+    premiumStopPct: 0.25, ...over,
+  });
+  const shortPosition = { recId: 'r1', symbol: 'AAPL', contract: 'AAPL|STOCK', direction: 'Bearish', premiumStopPct: 0.25 };
+
+  beforeEach(() => { useSettingsStore.setState({ premiumStopPct: 0.60 } as any); });
+
+  it.each([
+    ['short-stock', 'Stock stop (+25%)'],
+    ['long-stock', 'Stock stop (–25%)'],
+    ['option', 'Premium stop (–25%)'],
+  ])('%s -> %s', (stopSide, label) => {
+    useAlertStore.setState({ toasts: [row({ stopSide })], config: DEFAULT_CONFIG } as any);
+    render(<AlertsPage />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it('an UNSTAMPED row for a short keeps the legacy label (it fired on the old fall-side rule)', () => {
+    usePortfolioStore.setState({ positions: [shortPosition] } as any);
+    useAlertStore.setState({ toasts: [row({})], config: DEFAULT_CONFIG } as any);
+    render(<AlertsPage />);
+    expect(screen.getByText('Premium stop (–25%)')).toBeInTheDocument();
+    expect(screen.queryByText(/Stock stop \(\+/)).not.toBeInTheDocument();
   });
 });
 
