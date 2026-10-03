@@ -1,14 +1,79 @@
+.mainOverride {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .headerRow {
   display: grid;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 var(--space-3) var(--space-2);
+  padding: 0 var(--space-3) var(--space-2) 10px;
   border-bottom: 1px solid var(--border-subtle);
-  min-width: max-content;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   position: sticky;
   top: 0;
   z-index: 10;
   background: var(--bg-canvas);
+}
+
+.rulesAppliedBanner {
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  margin-bottom: var(--space-3);
+}
+
+.spreadSnapshot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--caution) 6%, var(--bg-surface));
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sortToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sortLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sortSelect {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sortDirBtn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.sortDirBtn:hover {
+  background: var(--bg-surface-2);
 }
 
 .right {

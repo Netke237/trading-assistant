@@ -623,6 +623,8 @@ export interface TradeCardData {
   contractScore: number;
   contractConfidence: Status;
   contractBreakdown: ContractScoreBreakdown;
+  /** Authoritative evaluation explanation for the picked contract, if available */
+  contractExplanation?: ContractExplanation;
   /** Alternative contracts (FR-28) — zero to N alternatives to the best contract. */
   alternatives?: AlternativeContract[];
   alternativesCount?: number;
@@ -761,6 +763,55 @@ export interface TradeCardData {
   _userOverride?: boolean;
 }
 
+export interface BlockerComparison {
+  code: string;
+  label: string;
+  metric: string;
+  observed: number | string | null;
+  threshold: number | string;
+  operator: string;
+}
+
+export interface ComponentExplanation {
+  name: string;
+  wire_name: string;
+  raw_score: number;
+  weight: number;
+  contribution: number;
+  lost_points: number;
+  observed?: number | null;
+  observed_unit?: string;
+  basis?: 'rank' | 'absolute' | 'none' | null;
+  preferred_min?: number | null;
+  preferred_max?: number | null;
+  flags: string[];
+  volume?: number | null;
+  open_interest?: number | null;
+  preferred_volume_min?: number | null;
+  preferred_oi_min?: number | null;
+}
+
+export interface ContractExplanation {
+  version: number;
+  contract_id: string;
+  evaluated_at: string;
+  outcome: 'blocked' | 'aggregate';
+  score: number;
+  status: Status;
+  unrounded_score: number | null;
+  rounded_score: number | null;
+  pass_threshold: number;
+  caution_threshold: number;
+  weights: Record<string, number>;
+  components: Record<string, ComponentExplanation>;
+  largest_losses: ComponentExplanation[];
+  blockers: BlockerComparison[];
+  reject_reasons: string[];
+  soft_flags: string[];
+  soft_fail_count: number;
+  max_soft_fail_count: number;
+}
+
 // --- Option contracts ---
 
 export type OptionRight = 'C' | 'P';
@@ -790,6 +841,8 @@ export interface OptionContract {
    *  (/api/contracts does). Optional because older cached responses and the
    *  scan's own chain rows do not carry it. See applyPickedContract. */
   breakdown?: ContractScoreBreakdown;
+  /** Authoritative evaluation breakdown and blocking causes for THIS contract */
+  explanation?: ContractExplanation;
 }
 
 /** The grading inputs Step 6 sent to `/api/contracts` for a row when it was

@@ -41,6 +41,7 @@ class ContractScoreCard:
         default_factory=lambda: ContractScoreBreakdown(0, 0, 0, 0, 0, 0)
     )
     detail: dict = field(default_factory=dict)
+    explanation: dict | None = None
 
 
 @lru_cache(maxsize=1)
@@ -515,6 +516,275 @@ def validate_contract(
     if soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
         reject_reasons.append("too_many_soft_failures")
 
+    hr = cfg["hard_reject"]
+    volume = contract.get("volume") or 0
+    oi = contract.get("open_interest") or 0
+    delta_val = abs(contract.get("delta") or 0)
+    iv_rank_val = contract.get("iv_rank")
+    iv_basis_val = contract.get(
+        "iv_basis",
+        "none" if iv_rank_val is None else "absolute",
+    )
+    _iv_key = "max_iv_rank" if iv_basis_val == "rank" else "max_iv_abs"
+    max_iv_val = hr.get(_iv_key, hr.get("max_iv_rank"))
+
+    blockers = []
+    for r in reject_reasons:
+        if r == "volume_too_low":
+            blockers.append({
+                "code": "volume_too_low",
+                "label": "Volume too low",
+                "metric": "volume",
+                "observed": volume,
+                "threshold": hr["min_volume"],
+                "operator": "<",
+            })
+        elif r == "open_interest_too_low":
+            blockers.append({
+                "code": "open_interest_too_low",
+                "label": "Open interest too low",
+                "metric": "open_interest",
+                "observed": oi,
+                "threshold": hr["min_open_interest"],
+                "operator": "<",
+            })
+        elif r == "spread_too_wide":
+            blockers.append({
+                "code": "spread_too_wide",
+                "label": "Spread too wide",
+                "metric": "spread_pct",
+                "observed": round(spread_pct, 4),
+                "threshold": hr["max_bid_ask_spread_pct"],
+                "operator": ">",
+            })
+        elif r == "delta_too_low_far_otm":
+            blockers.append({
+                "code": "delta_too_low_far_otm",
+                "label": "Delta too low (far OTM)",
+                "metric": "delta",
+                "observed": round(delta_val, 4),
+                "threshold": hr["min_delta"],
+                "operator": "<",
+            })
+        elif r == "delta_too_high_deep_itm":
+            blockers.append({
+                "code": "delta_too_high_deep_itm",
+                "label": "Delta too high (deep ITM)",
+                "metric": "delta",
+                "observed": round(delta_val, 4),
+                "threshold": hr["max_delta"],
+                "operator": ">",
+            })
+        elif r == "dte_too_short":
+            blockers.append({
+                "code": "dte_too_short",
+                "label": "DTE too short",
+                "metric": "dte",
+                "observed": dte,
+                "threshold": hr["min_dte"],
+                "operator": "<",
+            })
+        elif r == "dte_too_long":
+            blockers.append({
+                "code": "dte_too_long",
+                "label": "DTE too long",
+                "metric": "dte",
+                "observed": dte,
+                "threshold": hr["max_dte"],
+                "operator": ">",
+            })
+        elif r == "iv_rank_too_high":
+            blockers.append({
+                "code": "iv_rank_too_high",
+                "label": "IV rank too high",
+                "metric": "iv_rank",
+                "observed": iv_rank_val,
+                "threshold": max_iv_val,
+                "operator": ">",
+            })
+        elif r == "iv_too_high":
+            blockers.append({
+                "code": "iv_too_high",
+                "label": "IV too high",
+                "metric": "iv",
+                "observed": iv_rank_val,
+                "threshold": max_iv_val,
+                "operator": ">",
+            })
+        elif r == "stock_score_below_threshold":
+            blockers.append({
+                "code": "stock_score_below_threshold",
+                "label": "Stock score below threshold",
+                "metric": "stock_score",
+                "observed": stock_score,
+                "threshold": hr["min_stock_score"],
+                "operator": "<",
+            })
+        elif r == "too_many_soft_failures":
+            blockers.append({
+                "code": "too_many_soft_failures",
+                "label": "Too many soft failures",
+                "metric": "soft_fail_count",
+                "observed": soft_fail_count,
+                "threshold": hr["max_soft_fail_count"],
+                "operator": ">=",
+            })
+        else:
+            blockers.append({
+                "code": r,
+                "label": r.replace("_", " ").title(),
+                "metric": r,
+                "observed": None,
+                "threshold": "",
+                "operator": "",
+            })
+
+    weights = cfg["weights"]
+    liq_w = float(weights["liquidity"])
+    spread_w = float(weights["spread"])
+    delta_w = float(weights["delta"])
+    dte_w = float(weights["dte"])
+    iv_w = float(weights["iv_rank"])
+
+    components_dict = {
+        "liquidity": {
+            "name": "liquidity",
+            "wire_name": "liquidity",
+            "raw_score": liq_score,
+            "weight": liq_w,
+            "contribution": round(liq_score * liq_w, 4),
+            "lost_points": round(liq_w * 100 - (liq_score * liq_w), 4),
+            "observed": volume,
+            "observed_unit": "contracts",
+            "basis": None,
+            "preferred_min": sr["preferred_volume_min"],
+            "preferred_max": None,
+            "flags": liq_flags,
+            "volume": volume,
+            "open_interest": oi,
+            "preferred_volume_min": sr["preferred_volume_min"],
+            "preferred_oi_min": sr["preferred_oi_min"],
+        },
+        "spread": {
+            "name": "spread",
+            "wire_name": "spread",
+            "raw_score": spread_score,
+            "weight": spread_w,
+            "contribution": round(spread_score * spread_w, 4),
+            "lost_points": round(spread_w * 100 - (spread_score * spread_w), 4),
+            "observed": round(spread_pct, 4),
+            "observed_unit": "%",
+            "basis": None,
+            "preferred_min": None,
+            "preferred_max": sr["preferred_spread_pct_max"],
+            "flags": spread_flags,
+        },
+        "delta": {
+            "name": "delta",
+            "wire_name": "delta",
+            "raw_score": delta_score,
+            "weight": delta_w,
+            "contribution": round(delta_score * delta_w, 4),
+            "lost_points": round(delta_w * 100 - (delta_score * delta_w), 4),
+            "observed": round(delta_val, 4),
+            "observed_unit": "",
+            "basis": None,
+            "preferred_min": sr["preferred_delta_min"],
+            "preferred_max": sr["preferred_delta_max"],
+            "flags": delta_flags,
+        },
+        "dte": {
+            "name": "dte",
+            "wire_name": "dteFit",
+            "raw_score": dte_score,
+            "weight": dte_w,
+            "contribution": round(dte_score * dte_w, 4),
+            "lost_points": round(dte_w * 100 - (dte_score * dte_w), 4),
+            "observed": dte,
+            "observed_unit": "days",
+            "basis": None,
+            "preferred_min": sr["preferred_dte_min"],
+            "preferred_max": sr["preferred_dte_max"],
+            "flags": dte_flags,
+        },
+        "iv_rank": {
+            "name": "iv_rank",
+            "wire_name": "ivAttractiveness",
+            "raw_score": iv_score,
+            "weight": iv_w,
+            "contribution": round(iv_score * iv_w, 4),
+            "lost_points": round(iv_w * 100 - (iv_score * iv_w), 4),
+            "observed": iv_rank_val,
+            "observed_unit": "%" if iv_basis_val == "absolute" else ("percentile" if iv_basis_val == "rank" else ""),
+            "basis": iv_basis_val,
+            "preferred_min": None,
+            "preferred_max": _preferred_iv_max(contract, cfg),
+            "flags": iv_flags,
+        },
+    }
+
+    largest_losses = sorted(
+        list(components_dict.values()),
+        key=lambda c: c["lost_points"],
+        reverse=True,
+    )
+
+    thresholds = cfg["contract_score_thresholds"]
+    pass_thresh = float(thresholds["pass"])
+    caution_thresh = float(thresholds["caution"])
+
+    if reject_reasons:
+        final_score = 0
+        final_status: Status = "REJECT"
+        unrounded_score = None
+        rounded_score = None
+        outcome = "blocked"
+    else:
+        weighted = (
+            liq_score * liq_w
+            + spread_score * spread_w
+            + delta_score * delta_w
+            + dte_score * dte_w
+            + iv_score * iv_w
+        )
+        final_score = round(weighted)
+        unrounded_score = round(weighted, 4)
+        rounded_score = final_score
+        outcome = "aggregate"
+        if final_score >= pass_thresh:
+            final_status = "PASS"
+        elif final_score >= caution_thresh:
+            final_status = "CAUTION"
+        else:
+            final_status = "REJECT"
+
+    explanation = {
+        "version": 1,
+        "contract_id": contract_id,
+        "evaluated_at": date.today().isoformat(),
+        "outcome": outcome,
+        "score": final_score,
+        "status": final_status,
+        "unrounded_score": unrounded_score,
+        "rounded_score": rounded_score,
+        "pass_threshold": pass_thresh,
+        "caution_threshold": caution_thresh,
+        "weights": {
+            "liquidity": liq_w,
+            "spread": spread_w,
+            "delta": delta_w,
+            "dte": dte_w,
+            "iv_rank": iv_w,
+        },
+        "components": components_dict,
+        "largest_losses": largest_losses,
+        "blockers": blockers,
+        "reject_reasons": list(reject_reasons),
+        "soft_flags": list(soft_flags),
+        "soft_fail_count": soft_fail_count,
+        "max_soft_fail_count": hr["max_soft_fail_count"],
+    }
+
     if reject_reasons:
         return ContractScoreCard(
             contract_id=contract_id,
@@ -535,25 +805,8 @@ def validate_contract(
                 oi_score=oi_score_val,
             ),
             detail=detail,
+            explanation=explanation,
         )
-
-    weights = cfg["weights"]
-    weighted = (
-        liq_score * weights["liquidity"]
-        + spread_score * weights["spread"]
-        + delta_score * weights["delta"]
-        + dte_score * weights["dte"]
-        + iv_score * weights["iv_rank"]
-    )
-    score = round(weighted)
-    thresholds = cfg["contract_score_thresholds"]
-
-    if score >= thresholds["pass"]:
-        status: Status = "PASS"
-    elif score >= thresholds["caution"]:
-        status = "CAUTION"
-    else:
-        status = "REJECT"
 
     return ContractScoreCard(
         contract_id=contract_id,
@@ -561,8 +814,8 @@ def validate_contract(
         strike=float(contract.get("strike", 0)),
         expiry=contract.get("expiry", ""),
         is_call=contract.get("is_call", True),
-        score=score,
-        status=status,
+        score=final_score,
+        status=final_status,
         reject_reasons=[],
         soft_flags=soft_flags,
         breakdown=ContractScoreBreakdown(
@@ -574,4 +827,5 @@ def validate_contract(
             oi_score=oi_score_val,
         ),
         detail=detail,
+        explanation=explanation,
     )

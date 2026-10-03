@@ -1,0 +1,49 @@
+.toggleBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.15s ease-in-out;
+}
+
+.toggleBtn:hover:not(:disabled) {
+  background-color: var(--bg-surface-2);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.toggleBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.toggleBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.open {
+  background-color: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chevron {
+  display: inline-block;
+  font-size: 9px;
+  transition: transform 0.2s ease-in-out;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}

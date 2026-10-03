@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
+import { ContractExplanationToggle } from '@/components/atoms/ContractExplanationToggle';
+import { ContractScoreExplanation } from '@/components/molecules/ContractScoreExplanation';
 import { contractScoreTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
@@ -19,10 +21,8 @@ import { resolveIv, formatIv, ivSortValue, ivColumnLabel, ivBasesOf } from '@/li
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
 
-// Single-leg column template (12 cols)
-const COLUMNS_SINGLE = '28px minmax(120px, 1fr) 90px 56px 60px 60px 60px 64px 56px 60px 96px 44px';
-// Spread column template — adds 5 spread cols before PICK
-const COLUMNS_SPREAD  = '28px minmax(120px, 1fr) 90px 56px 60px 60px 60px 64px 56px 60px 96px 52px 80px 80px 80px 80px 44px';
+// Compact column template (10 cols) — fits comfortably at 1280px without horizontal scroll
+const COLUMNS = '28px minmax(110px, 1fr) 90px 50px 56px 56px 56px 90px 72px 36px';
 
 type SortKey =
   | 'contract' | 'dte' | 'delta' | 'price'
@@ -88,6 +88,38 @@ function spreadBadge(candidate: TradeCardData): string | null {
   return null;
 }
 
+/** Derives global rules applied summary from returned contract evaluation snapshots. */
+function getGlobalRulesBanner(contractsBySymbol: Record<string, OptionContract[]>): string | null {
+  const allContracts = Object.values(contractsBySymbol).flat();
+  const withExp = allContracts.filter((c) => c.explanation != null);
+  if (withExp.length === 0) return null;
+
+  const firstExp = withExp[0].explanation!;
+  const firstWeights = JSON.stringify(firstExp.weights);
+  const firstPass = firstExp.pass_threshold;
+  const firstCaution = firstExp.caution_threshold;
+
+  const allAgree = withExp.every(
+    (c) =>
+      JSON.stringify(c.explanation?.weights) === firstWeights &&
+      c.explanation?.pass_threshold === firstPass &&
+      c.explanation?.caution_threshold === firstCaution,
+  );
+
+  if (!allAgree) {
+    return 'Rules applied: Evaluation rules vary per contract (see individual contract explanations for effective weights and thresholds).';
+  }
+
+  const w = firstExp.weights;
+  const wLiq = Math.round((w.liquidity ?? 0) * 100);
+  const wSpr = Math.round((w.spread ?? 0) * 100);
+  const wDel = Math.round((w.delta ?? 0) * 100);
+  const wDte = Math.round((w.dte ?? 0) * 100);
+  const wIv = Math.round((w.iv ?? 0) * 100);
+
+  return `Rules applied: Liquidity ${wLiq}% · Spread ${wSpr}% · Delta ${wDel}% · DTE ${wDte}% · IV ${wIv}% | Status: Pass ≥ ${firstPass} · Caution ≥ ${firstCaution} · Reject < ${firstCaution}`;
+}
+
 export default function Step6Page() {
   const router = useRouter();
   const [localContractsBySymbol, setLocalContractsBySymbol] = useState<Record<string, OptionContract[]>>({});
@@ -105,6 +137,7 @@ export default function Step6Page() {
   const [sortDir, setSortDir]   = useState<SortDir>('desc');
   const [offline, setOffline]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});
   // Shared ref for both mount-triggered and manual-refresh fetch so they cancel each other.
   const fetchControllerRef = useRef<AbortController | null>(null);
 
@@ -128,6 +161,13 @@ export default function Step6Page() {
   const stockScoreBySymbol = Object.fromEntries(
     (scanResult?.candidates ?? []).map((c) => [c.symbol, c.stockScore ?? 70]),
   );
+
+  const toggleExplanation = (id: string) => {
+    setExpandedExplanations((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   const loadContracts = useCallback(async (signal?: AbortSignal) => {
     if ((rawCandidates ?? []).length === 0) return;
@@ -160,6 +200,15 @@ export default function Step6Page() {
       setGradingBySymbol(gradingMap);
       setContractsBySymbol(bySymbol);
       setRescuedBySymbol({});
+      setExpandedExplanations((prev) => {
+        const allIds = new Set<string>();
+        rows.forEach((list) => list.forEach((c) => allIds.add(c.id)));
+        const next: Record<string, boolean> = {};
+        for (const [id, open] of Object.entries(prev)) {
+          if (open && allIds.has(id)) next[id] = true;
+        }
+        return next;
+      });
       // The selection shown is the user's OWN stored pick whenever there is
       // one -- it is what Step 7 sends -- even while its row is not (yet) in
       // the table: a rescued card contract arrives below, and until then (or
@@ -233,7 +282,7 @@ export default function Step6Page() {
   };
 
   return (
-    <div className={styles.main}>
+    <div className={`${styles.main} ${tbl.mainOverride}`}>
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
         <Title as="h1" size={24}>Contracts</Title>
@@ -272,6 +321,15 @@ export default function Step6Page() {
         </Text>
       )}
 
+      {(() => {
+        const banner = getGlobalRulesBanner(localContractsBySymbol);
+        return banner ? (
+          <div className={tbl.rulesAppliedBanner}>
+            <Text size={12} tone="secondary">{banner}</Text>
+          </div>
+        ) : null;
+      })()}
+
       {candidates.length === 0 && (
         <Text size={13} tone="secondary">Run a scan to see contracts.</Text>
       )}
@@ -283,7 +341,8 @@ export default function Step6Page() {
             const isOpen     = expanded === candidate.symbol;
             const badge      = spreadBadge(candidate);
             const isSpread   = badge !== null;
-            const COLUMNS    = isSpread ? COLUMNS_SPREAD : COLUMNS_SINGLE;
+            const netDC      = candidate.netDebitCredit;
+            const sign       = netDC != null ? (netDC >= 0 ? '+' : '−') : null;
 
             // Recommended is always the highest-score contract regardless of active sort column.
             const rescuedIds  = rescuedBySymbol[candidate.symbol] ?? [];
@@ -296,8 +355,6 @@ export default function Step6Page() {
             /** Renders a single contract row, reused for recommended + chain. */
             const renderRow = (c: OptionContract, extra?: { className?: string }) => {
               const status = c.contractConfidence;
-              const netDC = candidate.netDebitCredit;
-              const sign  = netDC != null ? (netDC >= 0 ? '+' : '−') : null;
               return (
                 <TableRow
                   key={c.id}
@@ -323,33 +380,17 @@ export default function Step6Page() {
                   <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
                   <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
                   <IvCell contract={c} />
-                  <Data size={12} className={tbl.right}>{c.ivPercentile != null ? c.ivPercentile : '—'}</Data>
-                  <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
                   <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
-                  <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
                   <div className={tbl.scoreCell}>
                     <Data size={13} weight={500}>{c.score}</Data>
                     <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
                   </div>
-                  {isSpread && (
-                    <>
-                      <span className={tbl.spreadBadge}>
-                        <Text size={10} weight={500}>{badge}</Text>
-                      </span>
-                      <Data size={12} className={`${tbl.right} ${tbl.spreadCell}`}>
-                        {netDC != null ? `${sign}$${Math.abs(netDC).toFixed(2)}` : '—'}
-                      </Data>
-                      <Data size={12} className={`${tbl.right} ${tbl.spreadCell}`}>
-                        {candidate.maxProfit != null ? `$${candidate.maxProfit.toFixed(2)}` : '—'}
-                      </Data>
-                      <Data size={12} className={`${tbl.right} ${tbl.spreadCell}`}>
-                        {candidate.maxLoss != null ? `$${candidate.maxLoss.toFixed(2)}` : '—'}
-                      </Data>
-                      <Data size={12} className={`${tbl.right} ${tbl.spreadCell}`}>
-                        {candidate.breakeven != null ? `$${candidate.breakeven.toFixed(2)}` : '—'}
-                      </Data>
-                    </>
-                  )}
+                  <ContractExplanationToggle
+                    isOpen={!!expandedExplanations[c.id]}
+                    onToggle={() => toggleExplanation(c.id)}
+                    controlsId={`explanation-${c.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`}
+                    contractLabel={contractLabel(c)}
+                  />
                   <span
                     aria-label={c.id === pick ? 'Selected' : 'Select'}
                     className={tbl.pickDot}
@@ -394,38 +435,87 @@ export default function Step6Page() {
                   // readers and for any future e2e test that seeds scan data and asserts on it
                   // via getByRole('table').
                   <div role="table" className={tbl.groupBody}>
-                    {/* Sticky sub-header per group so spread columns have labels */}
+                    {/* Candidate spread snapshot banner */}
+                    {isSpread && (
+                      <div className={tbl.spreadSnapshot}>
+                        <Text size={11} weight={600} tone="primary">
+                          Candidate spread snapshot ({candidate.spreadType === 'bear_put' ? 'Bear Put Spread' : candidate.spreadType === 'bear_call' ? 'Bear Call Spread' : candidate.spreadType}):
+                        </Text>
+                        <Text size={11} tone="secondary">
+                          Net D/C: <Data size={11}>{netDC != null ? `${sign}$${Math.abs(netDC).toFixed(2)}` : '—'}</Data>
+                        </Text>
+                        <Text size={11} tone="secondary">
+                          Max Gain: <Data size={11}>{candidate.maxProfit != null ? `$${candidate.maxProfit.toFixed(2)}` : '—'}</Data>
+                        </Text>
+                        <Text size={11} tone="secondary">
+                          Max Loss: <Data size={11}>{candidate.maxLoss != null ? `$${candidate.maxLoss.toFixed(2)}` : '—'}</Data>
+                        </Text>
+                        <Text size={11} tone="secondary">
+                          Breakeven: <Data size={11}>{candidate.breakeven != null ? `$${candidate.breakeven.toFixed(2)}` : '—'}</Data>
+                        </Text>
+                      </div>
+                    )}
+
+                    {/* Sort toolbar allowing sort by any of 10 metrics */}
+                    <div className={tbl.sortToolbar}>
+                      <label className={tbl.sortLabel} htmlFor={`sort-${candidate.symbol}`}>
+                        Sort chain by:
+                        <select
+                          id={`sort-${candidate.symbol}`}
+                          className={tbl.sortSelect}
+                          value={sortKey}
+                          onChange={(e) => setSortKey(e.target.value as SortKey)}
+                        >
+                          <option value="score">Score</option>
+                          <option value="contract">Contract</option>
+                          <option value="dte">DTE</option>
+                          <option value="delta">Delta</option>
+                          <option value="price">Price</option>
+                          <option value="ivRank">{ivColumnLabel(ivBasesOf(contracts))}</option>
+                          <option value="ivPercentile">IV Percentile</option>
+                          <option value="theta">Theta (Θ/day)</option>
+                          <option value="spread">Spread</option>
+                          <option value="volume">Volume</option>
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className={tbl.sortDirBtn}
+                        onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                        title={`Current: ${sortDir.toUpperCase()}. Click to switch to ${sortDir === 'asc' ? 'DESC' : 'ASC'}`}
+                        aria-label={`Sort direction: ${sortDir}`}
+                      >
+                        <Text size={11} weight={500}>{sortDir === 'asc' ? 'Asc ↑' : 'Desc ↓'}</Text>
+                      </button>
+                    </div>
+
+                    {/* Compact sticky header */}
                     <div className={tbl.headerRow} style={{ gridTemplateColumns: COLUMNS, position: 'relative', top: 0 }}>
                       <span aria-hidden />
-                      <SortBtn label="CONTRACT" k="contract"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                      <SortBtn label="DTE"      k="dte"          sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-                      <SortBtn label="DELTA"    k="delta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label="PRICE"    k="price"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+                      <SortBtn label="CONTRACT" k="contract" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                      <SortBtn label="DTE"      k="dte"      sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+                      <SortBtn label="DELTA"    k="delta"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+                      <SortBtn label="PRICE"    k="price"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label={ivColumnLabel(ivBasesOf(contracts))} k="ivRank" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label="IV PCTL"  k="ivPercentile" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label="Θ/DAY"    k="theta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label="SPREAD"   k="spread"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label="VOL"      k="volume"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label="SCORE"    k="score"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      {isSpread && (
-                        <>
-                          <Text size={11} tone="dim" className={tbl.sortBtn}>TYPE</Text>
-                          <Text size={11} tone="dim" className={`${tbl.sortBtn} ${tbl.sortRight}`}>NET D/C</Text>
-                          <Text size={11} tone="dim" className={`${tbl.sortBtn} ${tbl.sortRight}`}>MAX GAIN</Text>
-                          <Text size={11} tone="dim" className={`${tbl.sortBtn} ${tbl.sortRight}`}>MAX LOSS</Text>
-                          <Text size={11} tone="dim" className={`${tbl.sortBtn} ${tbl.sortRight}`}>B/E</Text>
-                        </>
-                      )}
+                      <SortBtn label="SPREAD"   k="spread"   sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+                      <SortBtn label="SCORE"    k="score"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+                      <Text size={11} tone="dim">EXPLAIN</Text>
                       <Text size={11} tone="dim">PICK</Text>
                     </div>
 
                     {recommended && (
-                      <>
+                      <Fragment key={recommended.id}>
                         <div className={tbl.sectionLabel}>
                           <Text size={10} tone="dim" weight={500}>A — RECOMMENDED</Text>
                         </div>
                         {renderRow(recommended, { className: tbl.recommendedRow })}
-                      </>
+                        {expandedExplanations[recommended.id] && (
+                          <ContractScoreExplanation
+                            id={`explanation-${recommended.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`}
+                            contract={recommended}
+                          />
+                        )}
+                      </Fragment>
                     )}
 
                     {chain.length > 0 && (
@@ -433,7 +523,17 @@ export default function Step6Page() {
                         <div className={tbl.sectionLabel}>
                           <Text size={10} tone="dim" weight={500}>B — FULL CHAIN</Text>
                         </div>
-                        {chain.map((c) => renderRow(c))}
+                        {chain.map((c) => (
+                          <Fragment key={c.id}>
+                            {renderRow(c)}
+                            {expandedExplanations[c.id] && (
+                              <ContractScoreExplanation
+                                id={`explanation-${c.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`}
+                                contract={c}
+                              />
+                            )}
+                          </Fragment>
+                        ))}
                       </>
                     )}
                   </div>

@@ -13,6 +13,7 @@ from app.schemas import (
     OptionContract, RrModel, TradeEntry, TradeExit, ContractScoreBreakdown,
     FinalStopOut,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
+    ContractExplanation,
 )
 from app.data.market import (
     fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async,
@@ -337,6 +338,7 @@ async def get_contracts(
                 liquidityDetail=_safe_detail(LiquidityDetail, score_card.detail.get("liquidity")),
                 spreadDetail=   _safe_detail(SpreadDetail,    score_card.detail.get("spread")),
             ),
+            explanation=ContractExplanation.model_validate(score_card.explanation) if score_card.explanation else None,
         ))
 
     # 7. Sort by score descending (stable — preserves input order for ties)
