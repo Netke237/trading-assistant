@@ -3522,6 +3522,26 @@
     {
       "path": "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md",
       "role": "Options Step 6: authoritative weighted-score breakdown and blocking reasons, inline details, no horizontal overflow and measured 200-contract responsiveness. Implementation plan and historical independent plan-review evidence; canonical status is in task_backlog."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+      "role": "Audited original Step-7 plan; scheduling amended only by parallel handoff. Canonical status in trade_card_presentation/task_backlog."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+      "role": "Fresh-session read-first, exclusive ownership, dependencies and launch instructions. Canonical status in trade_card_presentation/task_backlog."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-03-trade-card-presentation/preview.html",
+      "role": "Approved visual proposal with green Bullish and slim top cards; design reference, not production data."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff-audit.md",
+      "role": "Independent parallel-handoff/state audit evidence, separate from original plan and future code audits."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-03-trade-card-presentation/README.md",
+      "role": "Implementation/design document index; current launch status is canonical JSON, not the original sequential roadmap."
     }
   ],
   "traps": [
@@ -4140,6 +4160,196 @@
           "clean": false
         },
         "note": "User requested parallel implementation planning and independent plan audit, then publication of the documents to origin/main. This record clears the plan stage only; implementation requires a separate authorized session, validation and independent code-stage audit. Maximum three rounds per stage; stop at first zero gate-finding round."
+      },
+      {
+        "id": "TRADE-CARD-UI-CORE",
+        "summary": "Main trade-card handling and method presentation; no leaf or shared data edits",
+        "depends_on": [
+          "TRADING-REVIEW-FIXES-A"
+        ],
+        "parallel_group": "initial_disjoint",
+        "original_slices": [
+          2,
+          3,
+          4,
+          7
+        ],
+        "allowed_paths": [
+          "frontend/components/organisms/TradeCard/**",
+          "frontend/app/(frame)/screener/step-7-trade-card/**",
+          "frontend/components/molecules/TradeCardPresentation/**"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_until_trading_review_overlap_is_landed_and_released_or_documented_scope_transfer",
+        "external_shared_owners": [
+          "TRADING-REVIEW-FIXES"
+        ],
+        "dependency_gate": "Shipped/code audit-clean phase flag alone is insufficient when its PR is recorded open; verify checkout and live-owner clearance."
+      },
+      {
+        "id": "TRADE-CARD-CONTEXT-CARDS",
+        "summary": "Optional compact MarketSentiment and FundamentalHealthCard variants; no page placement",
+        "depends_on": [],
+        "parallel_group": "initial_disjoint",
+        "original_slices": [
+          2
+        ],
+        "allowed_paths": [
+          "frontend/components/molecules/MarketSentiment/**",
+          "frontend/components/molecules/FundamentalHealthCard/**"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "startable_after_published_handoff_audit_and_claim"
+      },
+      {
+        "id": "TRADE-CARD-BARRIER-PRESENTATION",
+        "summary": "Standalone BarrierRaceCard presentation using original props, guards and formatters; no selection shortcut yet",
+        "depends_on": [],
+        "parallel_group": "initial_disjoint",
+        "original_slices": [
+          5
+        ],
+        "allowed_paths": [
+          "frontend/components/organisms/BarrierRaceCard/**"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "startable_after_published_handoff_audit_and_claim"
+      },
+      {
+        "id": "TRADE-CARD-SCORE-EVIDENCE",
+        "summary": "Reuse external authoritative contract explanation; add missing stock evidence and Step-7 provenance propagation",
+        "depends_on": [
+          "OPTIONS-CONTRACT-EXPLANATIONS",
+          "TRADING-REVIEW-FIXES-A"
+        ],
+        "parallel_group": "after_external_contract_evidence",
+        "original_slices": [
+          1
+        ],
+        "allowed_paths": [
+          "backend/app/scoring/stock_scorer.py",
+          "backend/app/routers/scan.py",
+          "backend/app/schemas/__init__.py",
+          "frontend/types/domain.ts",
+          "frontend/lib/tradeCardOverride.ts",
+          "frontend/lib/scanStore.ts"
+        ],
+        "external_shared_owners": [
+          "OPTIONS-CONTRACT-EXPLANATIONS",
+          "OPTIONS-VOL-EVENTS-EXPLANATIONS",
+          "TRADING-REVIEW-FIXES"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_until_external_contract_evidence_lands_or_explicit_ownership_transfer"
+      },
+      {
+        "id": "TRADE-CARD-QUALIFICATION-PRESENTATION",
+        "summary": "Controlled qualification/score evidence view and backtested-confidence explanation; no main-card edits",
+        "depends_on": [
+          "TRADE-CARD-SCORE-EVIDENCE"
+        ],
+        "parallel_group": "after_evidence",
+        "original_slices": [
+          6
+        ],
+        "allowed_paths": [
+          "frontend/components/molecules/ScoreCardPanel/**",
+          "frontend/components/molecules/TradeCardQualification/**",
+          "frontend/lib/tradeCardQualification*"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_on_score_evidence"
+      },
+      {
+        "id": "TRADE-CARD-PRESENTATION-INTEGRATION",
+        "summary": "Serial final composition, guarded selection shortcut, execution panel and full information/parity reconciliation",
+        "depends_on": [
+          "TRADE-CARD-UI-CORE",
+          "TRADE-CARD-CONTEXT-CARDS",
+          "TRADE-CARD-BARRIER-PRESENTATION",
+          "TRADE-CARD-SCORE-EVIDENCE",
+          "TRADE-CARD-QUALIFICATION-PRESENTATION"
+        ],
+        "parallel_group": "serial_final_integration",
+        "original_slices": [
+          2,
+          5,
+          6,
+          7
+        ],
+        "allowed_paths": [
+          "Prior task paths only after ownership release",
+          "frontend/components/molecules/MethodPickSelector/**",
+          "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/**"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_on_all_five_internal_tasks_and_dependency_audits"
       }
     ]
   },
@@ -4387,5 +4597,64 @@
     "finding_f3_1": "auto_trader.py, the SAME host-ahead limb. The round-2 fix correctly introduced 'a UTC host is +4 in EDT and +5 in EST' and then, one sentence later, derived the window as 'a real NY 20:00-24:00 every evening, four hours daily'. 20:00 IS THE +4 (EDT) ANSWER ONLY. Feeding the block's own formula with the +5 it had just given for EST yields NY 19:00-24:00 -- FIVE hours. Verified empirically, not reasoned: 2026-09-22 (EDT) = 240 minutes, 2026-01-15 (EST) = 300 minutes, the EST stretch being ~Nov 1 - Mar 7, about a third of the year. The commit MESSAGE carried the 'EDT' qualifier; the DOCSTRING dropped it. Conclusion survives again (19:00 and 20:00 are both after the 16:00 close; 5 <= 8 exactly as 4 <= 8), so no number moves and no test changes. FIXED at the commit following dcff1667 -- AND THAT FIX IS UNAUDITED, because the cap fired.",
     "claims_checked_and_confirmed_true_do_not_re_derive": "THE DST ARITHMETIC WAS CHECKED IN BOTH DIRECTIONS against real `zoneinfo` transitions. 'Every offset in this block is NY-relative' is TRUE for every bare offset (+6, +4/+5, <=+8, +13, -3); the one UTC-relative figure ('UTC+2 in summer') is explicitly labelled as such. UTC host +4 EDT / +5 EST TRUE both ways. Berlin +6 TRUE as qualified -- and THE EU/US TRANSITION-MISMATCH WEEKS WERE HUNTED: in 2026 Berlin is NY-relative +5 from Mar 8-28 and Oct 25-31, which is SMALLER and so satisfies `offset <= +8` more comfortably; not a finding. Tokyo +13 in NY-summer, +14 in NY-winter, both >= +9, and Tokyo is not a deployment. US-west -3 TRUE YEAR-ROUND (US zones switch together). Window `[24:00 - offset, 24:00)` TRUE, confirmed minute-by-minute. || CLAIM 8'S MECHANISM TRACED THROUGH THE REAL CALL SITE: in the host-ahead window `last_day` is the NY date and `today` is NY+1, so the first conjunct is False, Python SHORT-CIRCUITS, and the trim body and the session test are both unreached -- and it is the END trim only; the START cutoff and the stale-feed net still run, exactly as the comment says. || CLAIM 9 ('keeping the bar is the right answer throughout') TRUE AT EVERY INSTANT: the real helper was driven over every minute of NY 20:00-24:00 (EDT) and 19:00-24:00 (EST) -- ZERO instants read unclosed, so the kept bar is closed by the guard's own criterion and the outcome agrees whether the trim is skipped or reached.",
     "the_cap_fired_and_what_it_actually_means": "*** DO NOT RUN ROUND 4. *** The audit rule's cap is three rounds without a clean, and its stated reading is 'the batch is too big to audit'. THAT READING DOES NOT FIT HERE AND THE NEXT SESSION SHOULD NOT ACT ON IT. The BEHAVIOURAL audit converged: round 2 returned ZERO behavioural gate-level findings over a 29-mutant battery, and round 3's target was a comment-only diff with no executable line in it. What is not converging is THE PROSE. Rounds 1, 2 and 3 each returned exactly one finding of the SAME SPECIES -- an under-qualified claim in the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). The comment-truth exception, applied to a docstring this dense, MANUFACTURES A FINDING EVERY ROUND, because each correction adds new prose carrying new claims. That is audit-rule-v1's non-termination reappearing through the COMMENT EXCEPTION instead of through the severity floor -- the exact failure v2 was written to kill, in the one doorway v2 left open. KENNETH'S CALL, and the options are recorded in pending_kenneth."
+  },
+  "trade_card_presentation": {
+    "id": "TRADE-CARD-PRESENTATION",
+    "scope": "User-approved Step-7 presentation; preserve every information item and all trading logic; new sessions implement only their owned tasks.",
+    "implementation": "not_started",
+    "original_plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+    "original_plan_audit": {
+      "rounds": 1,
+      "clean": true,
+      "gate_findings_by_round": [
+        0
+      ],
+      "reviewer": "Bernoulli / 01a10383-5e4a-7249-b358-33d5f4979049",
+      "sha256": "eb63bc8f348bb49ba9ee5ca0e88ee7bcc2ea2100acefc05f38e3b256e200dbc4",
+      "evidence": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan-audit.md"
+    },
+    "parallel_handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+    "handoff_audit": {
+      "rounds": 1,
+      "clean": true,
+      "gate_findings_by_round": [
+        0
+      ],
+      "fixes": 0,
+      "reviewer": "Confucius / 01a10390-df99-738d-869a-e1838b03405d",
+      "scope": "Final parallel handoff and state delta including external trading-review ownership gate; original-plan audit is separate.",
+      "evidence": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff-audit.md"
+    },
+    "approved_design": "docs/superpowers/specs/2026-10-03-trade-card-presentation/preview.html",
+    "information_mapping": "docs/superpowers/specs/2026-10-03-trade-card-presentation/information-mapping.md",
+    "task_ids": [
+      "TRADE-CARD-UI-CORE",
+      "TRADE-CARD-CONTEXT-CARDS",
+      "TRADE-CARD-BARRIER-PRESENTATION",
+      "TRADE-CARD-SCORE-EVIDENCE",
+      "TRADE-CARD-QUALIFICATION-PRESENTATION",
+      "TRADE-CARD-PRESENTATION-INTEGRATION"
+    ],
+    "start_together": [
+      "TRADE-CARD-CONTEXT-CARDS",
+      "TRADE-CARD-BARRIER-PRESENTATION"
+    ],
+    "external_dependencies": [
+      "OPTIONS-CONTRACT-EXPLANATIONS",
+      "TRADING-REVIEW-FIXES-A"
+    ],
+    "external_claim_observation": "2026-10-03: OPTIONS-CONTRACT-EXPLANATIONS and OPTIONS-VOL-EVENTS-EXPLANATIONS actively claimed by codex/options-explanation-fixes. Recheck live claims at every session start. Do not trust their old backlog not_started status over active claims. TRADING-REVIEW-FIXES is also active on claude/trading-review-fixes; its plan overlaps Step7/stock scorer/schemas and its phase note records open PR28. CORE and SCORE-EVIDENCE must clear that owner/landing gate.",
+    "state_writer_lock": "TRADE-CARD-PRESENTATION-STATE",
+    "shared_state_rule": "Acquire lock for short JSON update; reconcile latest canonical JSON and update only your own task entry. Preserve unrelated phases/active target/audit counters. No stale wholesale state replacement.",
+    "source_branch": "main",
+    "publication": {
+      "remote": "origin",
+      "branch": "main",
+      "launch_requirement": "Fetch latest origin/main and create a separate implementation branch per task. Read canonical handoff/state and recheck dependencies plus live owners before edits.",
+      "authorisation": "User explicitly requested all implementation documents on origin/main."
+    },
+    "colour_contract": "Existing tokens/helpers only: PASS/Bullish green, CAUTION amber, REJECT/Bearish red, existing neutral unknown/pending. Preserve score/segment semantics.",
+    "note": "Two independent leaf tasks can start together; CORE can join only after its external overlap gate. Evidence reuses external contract explanation and waits both overlapping owners. Shared-file final wiring is serial. Original plan audit is separate from concurrency audit.",
+    "potential_third_parallel_task": "TRADE-CARD-UI-CORE after external overlap clearance"
   }
 }

@@ -1,0 +1,6587 @@
+
+
+SOURCE: frontend/components/organisms/TradeCard/index.tsx
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Text, Data } from '@/components/primitives';
+import { SymbolHeader } from '@/components/molecules/SymbolHeader';
+import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
+import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
+import { AlternativeContractRow } from '@/components/molecules/AlternativeContractRow';
+import { MethodPickSelector } from '@/components/molecules/MethodPickSelector';
+import type { MethodPickOption } from '@/components/molecules/MethodPickSelector';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
+import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
+import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
+import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { Tooltip } from '@/components/atoms/Tooltip';
+import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
+import { stopJustification, targetCompareState, targetCompareLabel } from '@/lib/exitPlanLabels';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossBadge, stopLossIsTotalOnPrintedFigures } from '@/lib/risk';
+import { resolveIv, formatIv } from '@/lib/ivBasis';
+import { useRiskStore } from '@/lib/riskStore';
+import { api } from '@/lib/api';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { useScanStore } from '@/lib/scanStore';
+import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
+import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
+import { premiumStopDollarBounds } from '@/lib/premiumStop';
+import { TIME_STOP_DTE } from '@/lib/alertEngine';
+import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
+import {
+  type EditOverlay,
+  type EditedFields,
+  DEFAULT_CONTRACTS,
+  FIELD_LABELS,
+  editedFields as editedFieldsAgainstPlan,
+  markEdited,
+  planOverlay,
+  restoredEdits,
+} from '@/lib/tradeCardEdits';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride, MethodPick, StopCostOut } from '@/types/domain';
+import {
+  triggerDetailText,
+  pullbackDetailText,
+  trendDetailText,
+  eventDetailText,
+  volDetailText,
+  dteDetailText,
+  deltaDetailText,
+  ivDetailText,
+  liquidityDetailText,
+  spreadDetailText,
+} from '@/lib/scoreDetailText';
+import styles from './TradeCard.module.css';
+
+
+
+
+
+
+
+interface TouchedFields {
+  entryLimit: boolean;
+  invalidation: boolean;
+  premiumStop: boolean;
+}
+
+function defaultOverlay(data: TradeCardData): EditOverlay {
+  return {
+    entryLimit: data.entry.limit,
+    maxFill: data.entry.maxFill,
+    invalidation: data.exit.invalidation,
+    premiumStop: data.exit.premiumStop,
+    timeStopDays: data.exit.timeStopDays,
+    targets: data.exit.targets.map((t) => t.targetPrice ?? t.stockPrice),
+    contracts: DEFAULT_CONTRACTS,
+  };
+}
+
+
+
+
+
+
+
+
+
+
+function recomputeTargetEstOption(
+  targetStockPrice: number,
+  entryLimit: number,
+  data: TradeCardData,
+): number {
+  const cd = data.contractDetails;
+  if (!cd) return 0;
+  const isCall = cd.right === 'C';
+  const strike = cd.strike;
+  const currentStockPrice = data.price;
+  const delta =
+    (isCall && targetStockPrice > strike) || (!isCall && targetStockPrice < strike)
+      ? 0.5
+      : 0.3;
+  const priceMove = Math.abs(targetStockPrice - currentStockPrice);
+  return Math.max(0.01, entryLimit + delta * priceMove);
+}
+
+function rrContribution(
+  estOptionPrice: number,
+  entryLimit: number,
+  riskBasis: number,
+): number {
+
+
+
+
+
+
+
+
+
+
+
+  if (riskBasis <= 0 || entryLimit <= 0) return 0;
+  const reward = estOptionPrice - entryLimit;
+  return Math.round((reward / riskBasis) * 10) / 10;
+}
+
+function normalizeStructuralStopResponse(res: {
+  available: boolean;
+  price: number | null;
+  source: 'order_block' | 'swing_low' | 'swing_high' | null;
+  confidence: number | null;
+  distancePct: number | null;
+  stopCost?: StopCostOut | null;
+}): StructuralStop | null {
+  return res.available && res.price != null && res.source != null
+    && res.confidence != null && res.distancePct != null
+
+
+
+
+
+
+
+    ? { price: res.price, source: res.source, confidence: res.confidence,
+        distancePct: res.distancePct, stopCost: res.stopCost ?? null }
+    : null;
+}
+
+
+
+
+function formatHHMM(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function structuralStopSourceLabel(source: 'order_block' | 'swing_low' | 'swing_high' | null | undefined): string {
+  if (source === 'order_block') return 'Structural stop — Order Block';
+  if (source === 'swing_low') return 'Structural stop — Swing Low';
+  if (source === 'swing_high') return 'Structural stop — Swing High';
+  return 'Structural stop';
+}
+
+interface TradeCardProps {
+  data: TradeCardData;
+  recId?: string;
+  onSendToBroker?: () => void;
+  sendLabel?: string;
+  sendDisabled?: boolean;
+  contracts?: number;
+  
+  onEditsChange?: (overlay: EditOverlay, meta: { touched: TouchedFields }) => void;
+  
+  onStructuralStopChange?: (stop: StructuralStop | null | undefined, stockPrice: number | null) => void;
+  
+  onFirstPassageChange?: (
+    estimate: FirstPassageEstimate | null | undefined,
+    context: FirstPassageContext | null,
+  ) => void;
+  
+  onExitPlanChange?: (plan: ExitPlan | null | undefined) => void;
+  
+  initialMaxLossOverride?: MaxLossOverride | null;
+  
+  initialPremiumStop?: number | null;
+  
+  initialEntryLimit?: number | null;
+  initialInvalidation?: number | null;
+  
+  liveStockPrice?: number | null;
+  liveMid?: number | null;
+  
+  resetKey?: number;
+  
+  onMaxLossOverrideChange?: (v: MaxLossOverride | null) => void;
+  
+  initialMethodPick?: MethodPick | null;
+  onMethodPickChange?: (pick: MethodPick | null) => void;
+}
+
+function targetStatusTooltip(statusVal: TargetLevel['status']): string {
+  if (statusVal === 'HIT') return 'This profit target has been reached.';
+  if (statusVal === 'MISSED') return 'Price moved past this target level without filling — treated as missed.';
+  return 'Target not yet reached.';
+}
+
+function generateRecId(): string {
+  return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+
+const REQUEST_TIMEOUT_MS = 20_000;
+
+interface RequestDeadline {
+  timer: ReturnType<typeof setTimeout>;
+  
+  timedOut: boolean;
+}
+
+function abortAfterTimeout(controller: AbortController): RequestDeadline {
+  const deadline: Partial<RequestDeadline> = { timedOut: false };
+  deadline.timer = setTimeout(() => {
+    deadline.timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  return deadline as RequestDeadline;
+}
+
+
+function isFinished(controller: AbortController): boolean {
+  return controller.signal.aborted;
+}
+
+
+function isRealFailure(controller: AbortController, deadline: RequestDeadline): boolean {
+  return !controller.signal.aborted || deadline.timedOut;
+}
+
+export function TradeCard({
+  data,
+  recId: propRecId,
+  onSendToBroker,
+  sendLabel,
+  sendDisabled,
+  contracts: initialContracts = 1,
+  onEditsChange,
+  onStructuralStopChange,
+  onFirstPassageChange,
+  onExitPlanChange,
+  initialMaxLossOverride = null,
+  initialPremiumStop = null,
+  initialEntryLimit = null,
+  initialInvalidation = null,
+  liveStockPrice = null,
+  liveMid = null,
+  resetKey = 0,
+  onMaxLossOverrideChange,
+  initialMethodPick = null,
+  onMethodPickChange,
+}: TradeCardProps) {
+  const [chartOpen, setChartOpen] = useState(false);
+  const [altOpen, setAltOpen] = useState(false);
+  const [overlay, setOverlay] = useState<EditOverlay>(() => ({
+    ...defaultOverlay(data),
+    contracts: initialContracts,
+    premiumStop: initialPremiumStop ?? data.exit.premiumStop,
+    entryLimit: initialEntryLimit ?? data.entry.limit,
+    invalidation: initialInvalidation ?? data.exit.invalidation,
+  }));
+
+
+
+
+  const touchedRef = useRef<TouchedFields>({
+    entryLimit: initialEntryLimit != null,
+    invalidation: initialInvalidation != null,
+    premiumStop: initialPremiumStop != null,
+  });
+  
+  const [edited, setEdited] = useState<EditedFields>(() => restoredEdits({
+    entryLimit: initialEntryLimit,
+    invalidation: initialInvalidation,
+    premiumStop: initialPremiumStop,
+    contracts: initialContracts,
+  }));
+
+
+
+
+
+  const [maxLossOverride, setMaxLossOverride] = useState<MaxLossOverride | null>(initialMaxLossOverride);
+  
+  const [methodPick, setMethodPick] = useState<MethodPick | null>(initialMethodPick);
+  const [structuralStop, setStructuralStop] = useState<StructuralStop | null | undefined>(
+    data.exit.structuralStop,
+  );
+  const [structuralLoading, setStructuralLoading] = useState(false);
+  const [structuralError, setStructuralError] = useState(false);
+
+
+
+
+
+
+
+
+  const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(
+    data.exit.structuralStopStockPrice ?? null,
+  );
+
+
+
+
+
+
+
+
+
+
+
+  const [arithmeticLiveStockPrice, setArithmeticLiveStockPrice] = useState<number | null>(null);
+
+
+
+
+  const structuralRequestRef = useRef<AbortController | null>(null);
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const structuralIsFreshRef = useRef(false);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const firstPassageIsFreshRef = useRef(false);
+
+  const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
+
+
+  const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
+
+
+
+
+
+  const [targetPct, setTargetPct] = useState(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
+  const [firstPassage, setFirstPassage] = useState<FirstPassageEstimate | null | undefined>(
+    data.exit.firstPassage,
+  );
+  const [firstPassageLoading, setFirstPassageLoading] = useState(false);
+  const [firstPassageError, setFirstPassageError] = useState(false);
+
+
+
+
+
+
+  const [firstPassageContext, setFirstPassageContext] = useState<FirstPassageContext | null>(
+    data.exit.firstPassageContext ?? null,
+  );
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const [raceBarriers, setRaceBarriers] = useState<
+    { contract: string; stockStop: number; premiumStop: number; fromField: boolean } | null
+  >(null);
+  const firstPassageRequestRef = useRef<AbortController | null>(null);
+
+  const [exitPlan, setExitPlan] = useState<ExitPlan | null | undefined>(data.exit.exitPlan);
+  const [exitPlanLoading, setExitPlanLoading] = useState(false);
+  const [exitPlanError, setExitPlanError] = useState(false);
+
+  const exitPlanRequestRef = useRef<AbortController | null>(null);
+
+  const prevSymbolRef = useRef(data.symbol);
+  const prevContractRef = useRef(data.contract);
+
+  const prevResetKeyRef = useRef(resetKey);
+
+
+
+
+
+
+
+  useEffect(() => {
+    if (
+      data.symbol !== prevSymbolRef.current
+      || data.contract !== prevContractRef.current
+      || resetKey !== prevResetKeyRef.current
+    ) {
+      structuralRequestRef.current?.abort();
+      firstPassageRequestRef.current?.abort();
+      exitPlanRequestRef.current?.abort();
+      touchedRef.current = {
+        entryLimit: initialEntryLimit != null,
+        invalidation: initialInvalidation != null,
+        premiumStop: initialPremiumStop != null,
+      };
+
+
+      setEdited(restoredEdits({
+        entryLimit: initialEntryLimit,
+        invalidation: initialInvalidation,
+        premiumStop: initialPremiumStop,
+        contracts: initialContracts,
+      }));
+      setOverlay({
+        ...defaultOverlay(data),
+        contracts: initialContracts,
+        premiumStop: initialPremiumStop ?? data.exit.premiumStop,
+        entryLimit: initialEntryLimit ?? data.entry.limit,
+        invalidation: initialInvalidation ?? data.exit.invalidation,
+      });
+
+
+
+
+
+
+
+      setStructuralStop(data.exit.structuralStop);
+      setStructuralStopStockPrice(data.exit.structuralStopStockPrice ?? null);
+      setStructuralError(false);
+      setStructuralLoading(false);
+
+
+      structuralIsFreshRef.current = false;
+      firstPassageIsFreshRef.current = false;
+      setTargetPct(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
+      setFirstPassage(data.exit.firstPassage);
+      setFirstPassageContext(data.exit.firstPassageContext ?? null);
+      setRaceBarriers(null);
+      setFirstPassageError(false);
+      setFirstPassageLoading(false);
+      setExitPlan(data.exit.exitPlan);
+      setExitPlanError(false);
+      setExitPlanLoading(false);
+
+
+
+      setArithmeticLiveStockPrice(null);
+
+
+
+      setMaxLossOverride(initialMaxLossOverride);
+
+
+
+
+
+
+
+
+
+
+
+
+      setMethodPick(initialMethodPick);
+      prevSymbolRef.current = data.symbol;
+      prevContractRef.current = data.contract;
+      prevResetKeyRef.current = resetKey;
+    }
+  }, [data.symbol, data.contract, resetKey, initialContracts, defaultTargetPct, initialMaxLossOverride,
+      initialPremiumStop, initialEntryLimit, initialInvalidation, initialMethodPick]);
+
+  useEffect(() => () => structuralRequestRef.current?.abort(), []);
+  useEffect(() => () => firstPassageRequestRef.current?.abort(), []);
+  useEffect(() => () => exitPlanRequestRef.current?.abort(), []);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const onStructuralStopChangeRef = useRef(onStructuralStopChange);
+  useEffect(() => {
+    onStructuralStopChangeRef.current = onStructuralStopChange;
+  }, [onStructuralStopChange]);
+  useEffect(() => {
+    onStructuralStopChangeRef.current?.(structuralStop, structuralStopStockPrice);
+  }, [structuralStop, structuralStopStockPrice]);
+
+
+
+
+
+
+
+
+  const onFirstPassageChangeRef = useRef(onFirstPassageChange);
+  useEffect(() => {
+    onFirstPassageChangeRef.current = onFirstPassageChange;
+  }, [onFirstPassageChange]);
+  useEffect(() => {
+    onFirstPassageChangeRef.current?.(firstPassage, firstPassageContext);
+  }, [firstPassage, firstPassageContext]);
+
+  const onExitPlanChangeRef = useRef(onExitPlanChange);
+  useEffect(() => {
+    onExitPlanChangeRef.current = onExitPlanChange;
+  }, [onExitPlanChange]);
+  useEffect(() => {
+    onExitPlanChangeRef.current?.(exitPlan);
+  }, [exitPlan]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const horizonPreset = useScanStore((s) => s.context?.horizonPreset ?? null);
+  const holdMin = useScanStore((s) => s.context?.holdMin ?? null);
+  const holdMax = useScanStore((s) => s.context?.holdMax ?? null);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const gateHorizon = horizonPreset
+    ? resolveParamsHorizon(horizonPreset, holdMax ?? presetByKey(horizonPreset).holdMax)
+    : null;
+
+  const computeExitPlan = useCallback(async () => {
+    exitPlanRequestRef.current?.abort();
+    const controller = new AbortController();
+    exitPlanRequestRef.current = controller;
+    const deadline = abortAfterTimeout(controller);
+
+
+
+    const failExitPlan = () => {
+      setExitPlanError(true);
+      setExitPlan(null);
+    };
+    setExitPlanLoading(true);
+    setExitPlanError(false);
+    setExitPlan(undefined);
+    try {
+      const cd = data.contractDetails;
+      if (!cd) throw new Error('no contract selected');
+
+
+
+      const [stockQuote, contractQuote] = await Promise.all([
+        api.getStockQuote(data.symbol, controller.signal).catch(() => null),
+        api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
+      ]);
+
+
+
+
+
+
+
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failExitPlan();
+        return;
+      }
+      const entryPrice = stockQuote?.price ?? data.price;
+      const premium = contractQuote?.price ?? cd.mid;
+      const res = await api.getExitPlan({
+        symbol: data.symbol,
+        direction: data.direction,
+        entry_price: entryPrice,
+        strike: cd.strike,
+        dte: cd.dte,
+        premium,
+        trend_score: data.stockBreakdown.trend,
+        horizon_preset: gateHorizon ?? undefined,
+      }, controller.signal);
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failExitPlan();
+        return;
+      }
+      setExitPlan({ ...res, computedAt: new Date().toISOString() });
+      setArithmeticLiveStockPrice(entryPrice);
+    } catch {
+      if (!isRealFailure(controller, deadline)) return;
+      failExitPlan();
+
+
+
+
+
+    } finally {
+      clearTimeout(deadline.timer);
+      if (isRealFailure(controller, deadline)) setExitPlanLoading(false);
+    }
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, gateHorizon]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const sharedStop = useMemo(() => {
+    if (exitPlan && arithmeticLiveStockPrice != null) {
+      return { price: exitPlan.stop.price, stockPrice: arithmeticLiveStockPrice, source: 'exit_plan' as const };
+    }
+    if (structuralStop) {
+      return { price: structuralStop.price, stockPrice: structuralStopStockPrice ?? data.price, source: 'structural' as const };
+    }
+    return null;
+  }, [exitPlan, arithmeticLiveStockPrice, structuralStop, structuralStopStockPrice, data.price]);
+
+  const estimateFirstPassage = useCallback(async () => {
+    firstPassageRequestRef.current?.abort();
+    const controller = new AbortController();
+    firstPassageRequestRef.current = controller;
+
+
+
+
+    const deadline = abortAfterTimeout(controller);
+
+
+
+
+    const failFirstPassage = () => {
+      setFirstPassageError(true);
+      setFirstPassage(null);
+      setFirstPassageContext(null);
+    };
+    setFirstPassageLoading(true);
+    setFirstPassageError(false);
+    setFirstPassage(undefined);
+    setFirstPassageContext(null);
+    setRaceBarriers(null);
+    firstPassageIsFreshRef.current = false;
+    try {
+      const cd = data.contractDetails;
+      if (!cd) throw new Error('no contract selected');
+
+
+
+
+      const [stockQuote, contractQuote] = await Promise.all([
+        api.getStockQuote(data.symbol, controller.signal).catch(() => null),
+        api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
+      ]);
+
+
+
+
+
+
+
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failFirstPassage();
+        return;
+      }
+      const referenceStockPrice = stockQuote?.price ?? data.price;
+      const premium = contractQuote?.price ?? cd.mid;
+      const delta = contractQuote?.delta ?? cd.delta;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      let resolvedStructural = structuralStop ?? null;
+      if (!structuralIsFreshRef.current && !structuralLoading) {
+        structuralRequestRef.current?.abort();
+        const structuralController = new AbortController();
+        structuralRequestRef.current = structuralController;
+        const structuralDeadline = abortAfterTimeout(structuralController);
+        setStructuralLoading(true);
+        setStructuralError(false);
+        await api.getStructuralStop({
+          symbol: data.symbol,
+          direction: data.direction,
+          stock_price: referenceStockPrice,
+
+
+          strike: cd.strike,
+          dte: cd.dte,
+
+
+
+
+
+
+
+
+          premium,
+          horizon_preset: gateHorizon ?? undefined,
+        }, structuralController.signal)
+          .then((res) => {
+            if (isFinished(structuralController)) return;
+            const normalized = normalizeStructuralStopResponse(res);
+            resolvedStructural = normalized;
+            setStructuralStop(normalized);
+            setStructuralStopStockPrice(referenceStockPrice);
+            structuralIsFreshRef.current = true;
+          })
+          .catch(() => {
+            if (!isRealFailure(structuralController, structuralDeadline)) return;
+            setStructuralError(true);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            resolvedStructural = null;
+            setStructuralStop(null);
+            setStructuralStopStockPrice(null);
+          })
+          .finally(() => {
+            clearTimeout(structuralDeadline.timer);
+            if (isRealFailure(structuralController, structuralDeadline)) setStructuralLoading(false);
+          });
+
+
+
+
+
+
+        if (isFinished(controller)) {
+          if (deadline.timedOut) failFirstPassage();
+          return;
+        }
+      }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      const sentPremiumStopPct = touchedRef.current.premiumStop
+        ? premiumStopPctFromDollars(overlay.premiumStop, premium)
+        : undefined;
+
+
+
+
+
+
+
+
+
+
+      const resolvedStockStop = (exitPlan && arithmeticLiveStockPrice != null)
+        ? exitPlan.stop.price
+        : (resolvedStructural?.price ?? overlay.invalidation);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      if (resolvedStockStop == null) {
+        failFirstPassage();
+        return;
+      }
+
+      const res = await api.getFirstPassageEstimate({
+        symbol: data.symbol,
+        direction: data.direction,
+        stock_price: referenceStockPrice,
+        strike: cd.strike,
+        dte: cd.dte,
+        premium,
+        delta,
+        trend_score: data.stockBreakdown.trend,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        invalidation_price: resolvedStockStop,
+        t1_pct: targetPct.t1,
+        t2_pct: targetPct.t2,
+        t3_pct: targetPct.t3,
+
+
+
+
+
+
+        premium_stop_pct: sentPremiumStopPct,
+
+
+
+
+
+        ...horizonFieldsFrom({
+          horizonPreset: horizonPreset ?? undefined,
+          holdMin: holdMin ?? undefined,
+          holdMax: holdMax ?? undefined,
+        }),
+      }, controller.signal);
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failFirstPassage();
+        return;
+      }
+
+
+
+      setFirstPassage({
+        targets: res.targets,
+        invalidation: res.invalidation,
+
+
+        race: res.race ?? null,
+        computedAt: new Date().toISOString(),
+      });
+
+
+
+
+
+
+      setFirstPassageContext({ premium, delta, targetPct: { ...targetPct } });
+
+
+
+
+
+      setRaceBarriers({
+        contract: data.contract,
+        stockStop: resolvedStockStop,
+        premiumStop: overlay.premiumStop,
+        fromField: sentPremiumStopPct != null,
+      });
+      firstPassageIsFreshRef.current = true;
+    } catch {
+      if (!isRealFailure(controller, deadline)) return;
+      failFirstPassage();
+
+
+
+
+
+
+
+
+
+
+
+    } finally {
+      clearTimeout(deadline.timer);
+      if (isRealFailure(controller, deadline)) setFirstPassageLoading(false);
+    }
+
+
+
+
+
+
+
+  }, [data.symbol, data.direction, data.price, data.contract, data.contractDetails, data.stockBreakdown.trend, overlay.invalidation, structuralStop, exitPlan, arithmeticLiveStockPrice, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, gateHorizon, holdMin, holdMax]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const stopIsAtPrice = sharedStop != null && sharedStop.price === sharedStop.stockPrice;
+  const stopCostShown = !structuralError && !structuralLoading && !stopIsAtPrice;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const stopRisk = useMemo(() => {
+    if (!sharedStop) return null;
+    const block = sharedStop.source === 'exit_plan'
+      ? exitPlan?.stop.stopCost
+      : structuralStop?.stopCost;
+    return stopPremiumRisk(block ?? null);
+  }, [sharedStop, exitPlan, structuralStop]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const structuralPairing = useMemo<'ok' | 'zero_risk' | null>(() => {
+    if (!sharedStop || !firstPassage || !firstPassageContext) return null;
+    if (!firstPassageIsFreshRef.current) return null;
+    if (sharedStop.source === 'structural' && !structuralIsFreshRef.current) return null;
+
+
+
+    if (Math.abs(sharedStop.price - sharedStop.stockPrice) <= 0) return 'zero_risk';
+    return 'ok';
+  }, [sharedStop, firstPassage, firstPassageContext]);
+
+
+
+
+
+
+  const structuralPairEligible = firstPassageIsFreshRef.current
+    && (sharedStop?.source === 'exit_plan' || structuralIsFreshRef.current);
+
+  const checkStructure = useCallback(async () => {
+    structuralRequestRef.current?.abort();
+    const controller = new AbortController();
+    structuralRequestRef.current = controller;
+    const deadline = abortAfterTimeout(controller);
+    const failStructural = () => {
+      setStructuralError(true);
+      setStructuralStop(null);
+      setStructuralStopStockPrice(null);
+    };
+    setStructuralLoading(true);
+    setStructuralError(false);
+    setStructuralStop(undefined);
+    setStructuralStopStockPrice(null);
+    structuralIsFreshRef.current = false;
+    try {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      const cd = data.contractDetails;
+      const [stockQuote, contractQuote] = await Promise.all([
+        api.getStockQuote(data.symbol, controller.signal).catch(() => null),
+        cd
+          ? api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failStructural();
+        return;
+      }
+      const referenceStockPrice = stockQuote?.price ?? data.price;
+      const res = await api.getStructuralStop({
+        symbol: data.symbol,
+        direction: data.direction,
+        stock_price: referenceStockPrice,
+
+
+
+
+        ...(cd ? {
+          strike: cd.strike,
+          dte: cd.dte,
+          premium: contractQuote?.price ?? cd.mid,
+          horizon_preset: gateHorizon ?? undefined,
+        } : {}),
+      }, controller.signal);
+      if (controller.signal.aborted) return;
+      setStructuralStop(normalizeStructuralStopResponse(res));
+      setStructuralStopStockPrice(referenceStockPrice);
+      setArithmeticLiveStockPrice(referenceStockPrice);
+      structuralIsFreshRef.current = true;
+    } catch {
+      if (!isRealFailure(controller, deadline)) return;
+      setStructuralError(true);
+
+
+
+
+
+
+      setStructuralStop(null);
+      setStructuralStopStockPrice(null);
+    } finally {
+      clearTimeout(deadline.timer);
+      if (isRealFailure(controller, deadline)) setStructuralLoading(false);
+    }
+  }, [data.symbol, data.direction, data.price, data.contractDetails, gateHorizon]);
+
+  useEffect(() => {
+    setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
+  }, [initialContracts]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  useEffect(() => {
+    if (touchedRef.current.premiumStop) return;
+    setOverlay((prev) =>
+      prev.premiumStop === data.exit.premiumStop
+        ? prev
+        : { ...prev, premiumStop: data.exit.premiumStop },
+    );
+  }, [data.exit.premiumStop]);
+
+
+
+
+
+
+
+  useEffect(() => {
+    if (touchedRef.current.entryLimit) return;
+    setOverlay((prev) =>
+      prev.entryLimit === data.entry.limit ? prev : { ...prev, entryLimit: data.entry.limit },
+    );
+  }, [data.entry.limit]);
+
+  useEffect(() => {
+    if (touchedRef.current.invalidation) return;
+    setOverlay((prev) =>
+      prev.invalidation === data.exit.invalidation
+        ? prev
+        : { ...prev, invalidation: data.exit.invalidation },
+    );
+  }, [data.exit.invalidation]);
+
+
+
+
+
+
+
+
+
+
+
+
+  const patch = useCallback(
+    (partial: Partial<EditOverlay>) => {
+
+
+
+
+
+
+
+
+      for (const k of ['entryLimit', 'invalidation', 'premiumStop'] as const) {
+        if (partial[k] !== undefined && partial[k] !== overlay[k]) {
+          touchedRef.current = { ...touchedRef.current, [k]: true };
+        }
+      }
+
+
+
+
+      setEdited((prev) => markEdited(prev, partial, overlay));
+      const next = { ...overlay, ...partial };
+      setOverlay(next);
+      onEditsChange?.(next, { touched: touchedRef.current });
+    },
+    [overlay, onEditsChange],
+  );
+
+  
+  const revert = useCallback(
+    (key: 'entryLimit' | 'invalidation' | 'premiumStop') => {
+      const seed =
+        key === 'entryLimit' ? data.entry.limit
+        : key === 'invalidation' ? data.exit.invalidation
+        : data.exit.premiumStop;
+      if (!touchedRef.current[key] && overlay[key] === seed) return;
+      touchedRef.current = { ...touchedRef.current, [key]: false };
+
+
+
+      setEdited((prev) => (prev[key] ? { ...prev, [key]: false } : prev));
+      const next = { ...overlay, [key]: seed };
+      setOverlay(next);
+      onEditsChange?.(next, { touched: touchedRef.current });
+    },
+    [overlay, onEditsChange, data.entry.limit, data.exit.invalidation, data.exit.premiumStop],
+  );
+
+  
+  const editedLabels = useMemo(
+    () => editedFieldsAgainstPlan(overlay, planOverlay(data), edited)
+      .map((f) => FIELD_LABELS[f]),
+    [overlay, data, edited],
+  );
+
+  const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);
+  const car = useMemo(
+    () => capitalAtRisk(data.contractDetails?.mid ?? 0, overlay.contracts),
+    [data.contractDetails?.mid, overlay.contracts],
+  );
+
+
+
+
+
+
+
+
+  const limits = useRiskStore((s) => s.limits);
+  const recommendedSize = useMemo(() => {
+    if (!exitPlan) return null;
+    const entryPremium = data.contractDetails?.mid ?? 0;
+    const riskPerContract = maxLossAtStop(entryPremium, exitPlan.stop.contractPrice, 1);
+    const riskBudget = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride);
+    return recommendedContractSize(riskBudget, riskPerContract);
+  }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride]);
+
+  
+  const scanFinalStop = data.exit.finalStop ?? null;
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+
+
+
+
+
+  const firstPositive = (...xs: (number | null | undefined)[]) =>
+    xs.find((x): x is number => x != null && Number.isFinite(x) && x > 0) ?? 0;
+  const anchorStockPrice = firstPositive(liveStockPrice, arithmeticLiveStockPrice, data.price);
+  const anchorMid = firstPositive(liveMid, data.contractDetails?.mid, data.entry.limit);
+
+  
+  const invalidationBounds = useMemo(() => {
+
+
+
+
+
+
+
+
+    if (!(anchorStockPrice > 0)) return { min: 0.01, max: undefined as number | undefined };
+    return data.direction === 'Bearish'
+      ? { min: Math.max(0.01, round2(anchorStockPrice * 1.01)), max: round2(anchorStockPrice * 1.50) }
+      : { min: Math.max(0.01, round2(anchorStockPrice * 0.50)), max: Math.max(0.01, round2(anchorStockPrice * 0.99)) };
+  }, [anchorStockPrice, data.direction]);
+
+  
+  const premiumStopBounds = useMemo(() => {
+    if (!(anchorMid > 0)) return { min: 0.01, max: undefined as number | undefined };
+    return premiumStopDollarBounds(anchorMid);
+  }, [anchorMid]);
+
+  
+  const premiumStopReadOnly = anchorMid > 0
+    && premiumStopBounds.max != null
+    && premiumStopPctFromDollars(premiumStopBounds.max, anchorMid) === undefined;
+
+  
+  const premiumStopTouched = touchedRef.current.premiumStop;
+  const showsGlobalOnLiveMid = !premiumStopTouched && liveMid != null && liveMid > 0;
+  const effectivePremiumStop = showsGlobalOnLiveMid
+    ? Math.round((liveMid as number) * globalPremiumStopPct * 100) / 100
+    : overlay.premiumStop;
+
+  
+  const entryLimitBounds = useMemo(() => {
+    if (!(anchorMid > 0)) return { min: 0.01, max: undefined as number | undefined };
+    return {
+      min: Math.max(0.01, round2(anchorMid * 0.25)),
+      max: Math.max(0.02, round2(anchorMid * 3)),
+    };
+  }, [anchorMid]);
+
+
+  const maxLossLimitDollar = useMemo(
+    () => resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride),
+    [limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride],
+  );
+
+
+  const applyMaxLossOverride = useCallback(
+    (next: MaxLossOverride | null) => {
+      setMaxLossOverride(next);
+      onMaxLossOverrideChange?.(next);
+    },
+    [onMaxLossOverrideChange],
+  );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const stockStopMoved = useMemo(() => {
+    if (raceBarriers == null || firstPassage?.race == null) return false;
+
+
+
+
+
+
+
+
+    return (sharedStop?.price ?? overlay.invalidation) !== raceBarriers.stockStop;
+  }, [raceBarriers, firstPassage, sharedStop, overlay.invalidation]);
+
+  const raceBarriersMoved = useMemo(() => {
+    if (raceBarriers == null || firstPassage?.race == null) return false;
+    return stockStopMoved || overlay.premiumStop !== raceBarriers.premiumStop;
+  }, [raceBarriers, firstPassage, stockStopMoved, overlay.premiumStop]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const estimateIsFresh = raceBarriers?.contract === data.contract;
+
+  const raceIsShowable = estimateIsFresh && !raceBarriersMoved;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const pickEstimateIsFresh = raceBarriers?.contract === prevContractRef.current;
+  const pickRaceIsShowable = pickEstimateIsFresh && !raceBarriersMoved;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const lastRunMethod = useMemo<'arithmetic' | 'monte_carlo' | null>(() => {
+    const exitAt = exitPlan?.computedAt ? Date.parse(exitPlan.computedAt) : null;
+    const fpAt = firstPassage?.computedAt ? Date.parse(firstPassage.computedAt) : null;
+    if (exitAt == null && fpAt == null) return null;
+    if (exitAt == null) return 'monte_carlo';
+    if (fpAt == null) return 'arithmetic';
+    return exitAt >= fpAt ? 'arithmetic' : 'monte_carlo';
+  }, [exitPlan?.computedAt, firstPassage?.computedAt]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const methodPickOptions = useMemo<MethodPickOption[]>(() => [
+    {
+
+
+
+
+      method: 'ladder' as const,
+      label: 'Ladder',
+      unavailable: null,
+      rows: data.exit.targets.map((t, i) => {
+        const price = t.targetPrice ?? t.stockPrice;
+        return {
+          key: t.id ?? `ladder-${i}`,
+          label: t.id ? t.id.toUpperCase() : `T${i + 1}`,
+          displayPrice: price,
+          rowStockPrice: price,
+          rowOptionPrice: null,
+        };
+      }),
+    },
+    {
+      method: 'arithmetic' as const,
+      label: 'Arithmetic',
+      unavailable: exitPlan ? null : 'Compute Arithmetic Plan first',
+      rows: (exitPlan?.targets ?? []).map((t) => ({
+        key: `arith-${t.rrRatio}`,
+        label: `${t.rrRatio}:1`,
+        displayPrice: t.price,
+        rowStockPrice: t.price,
+        rowOptionPrice: null,
+      })),
+    },
+    {
+
+
+
+
+
+
+
+
+
+
+
+      method: 'monte_carlo' as const,
+      label: 'Monte Carlo',
+      unavailable: firstPassage
+        ? (pickEstimateIsFresh ? null : 'Estimate not re-run this session')
+        : 'Run Monte Carlo Estimate first',
+      rows: (firstPassage?.targets ?? []).map((t, i) => ({
+        key: `mc-${t.pct}-${i}`,
+        label: `T${Math.round(t.pct * 100)}%`,
+        displayPrice: t.optionPrice,
+        rowStockPrice: t.stockPrice,
+        rowOptionPrice: t.optionPrice,
+      })),
+    },
+    {
+
+
+
+
+
+
+      method: 'barrier_race' as const,
+      label: 'Barrier Race',
+      unavailable: firstPassage?.race
+
+
+
+
+        ? (pickRaceIsShowable ? null : 'Barriers moved since the estimate')
+        : 'Run Monte Carlo Estimate first',
+      rows: (firstPassage?.race?.outcomes ?? []).map((o) => ({
+        key: `race-${o.targetPct}`,
+        label: `T${Math.round(o.targetPct * 100)}%`,
+        displayPrice: o.targetOptionPrice,
+
+        rowStockPrice: null,
+        rowOptionPrice: o.targetOptionPrice,
+      })),
+    },
+  ], [data.exit.targets, exitPlan, firstPassage, pickEstimateIsFresh, pickRaceIsShowable]);
+
+
+  const applyMethodPick = useCallback((next: MethodPick | null) => {
+    setMethodPick(next);
+    onMethodPickChange?.(next);
+  }, [onMethodPickChange]);
+
+  
+  const pickedOption = methodPick
+    ? methodPickOptions.find((o) => o.method === methodPick.method) ?? null
+    : null;
+  const pickedMethodGone = methodPick != null
+    && (pickedOption == null || pickedOption.unavailable != null);
+
+  const applyMethodPickRef = useRef(applyMethodPick);
+  useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
+  useEffect(() => {
+
+
+    if (pickedMethodGone) applyMethodPickRef.current(null);
+  }, [pickedMethodGone]);
+
+  const stockBars = [
+    { label: 'Trend',     value: data.stockBreakdown.trend,     detailText: trendDetailText(data.stockBreakdown.trendDetail) },
+    { label: 'Pullback',  value: data.stockBreakdown.pullback,  detailText: pullbackDetailText(data.stockBreakdown.pullbackDetail) },
+    { label: 'Trigger',   value: data.stockBreakdown.trigger,   detailText: triggerDetailText(data.stockBreakdown.triggerDetail) },
+    { label: 'Event',     value: data.stockBreakdown.event,     detailText: eventDetailText(data.stockBreakdown.eventDetail) },
+    { label: 'Volatility',value: data.stockBreakdown.volatility,detailText: volDetailText(data.stockBreakdown.volDetail) },
+  ];
+
+  const contractBars = [
+    { label: 'DTE fit', value: data.contractBreakdown.dteFit, detailText: dteDetailText(data.contractBreakdown.dteDetail) },
+    { label: 'Delta', value: data.contractBreakdown.delta, detailText: deltaDetailText(data.contractBreakdown.deltaDetail) },
+    { label: 'IV', value: data.contractBreakdown.ivAttractiveness, detailText: ivDetailText(data.contractBreakdown.ivDetail) },
+    { label: 'Liquidity', value: data.contractBreakdown.liquidity, detailText: liquidityDetailText(data.contractBreakdown.liquidityDetail) },
+    { label: 'Spread', value: data.contractBreakdown.spread, detailText: spreadDetailText(data.contractBreakdown.spreadDetail) },
+  ];
+
+  return (
+    <div className={styles.wrap}>
+      {}
+      <div className={styles.headerCard}>
+        <div className={styles.headerRow}>
+          <SymbolHeader
+            ticker={data.symbol}
+            company={data.company}
+            price={data.price}
+            direction={data.direction}
+            status={data.status}
+            size={24}
+            showChartButton
+          />
+          {}
+          {editedLabels.length > 0 && (
+            <Tooltip
+              text={`Edited on this card, so it no longer matches the scan's plan: ${editedLabels.join(', ')}. Clearing a field's input restores the planned value.`}
+              align="right"
+              position="bottom"
+            >
+              <span className={styles.editedBadge}>
+                <Text size={11} weight={500} tone="caution">Edited</Text>
+              </span>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.grid}>
+        {}
+        <div className={styles.fullWidth}>
+          <MarketSentiment s={data.sentiment} />
+        </div>
+
+        {}
+        <ScoreCardPanel
+          title="Stock Scorecard"
+          bars={stockBars}
+          total={data.stockScore}
+          confidence={data.stockConfidence}
+          confidenceScore={data.confidence ?? null}
+          confidenceText={data.confidenceText ?? null}
+          statusTooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
+        />
+
+        <ScoreCardPanel
+          title={`Contract — ${data.contract}`}
+          bars={contractBars}
+          total={data.contractScore}
+          confidence={data.contractConfidence}
+          statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+          statusTooltipAlignRight
+        />
+
+        {}
+        <div className={styles.fullWidth}>
+          <FundamentalHealthCard f={data.fundamentals} />
+        </div>
+
+        {}
+        {data.contractDetails && (
+          <section className={styles.detailsCard}>
+            <Text size={14} weight={600}>Contract Details</Text>
+            <div className={styles.detailsGrid}>
+              <DetailCell label="Strike" value={`$${data.contractDetails.strike}`} />
+              <DetailCell label="Expiry" value={data.contractDetails.expiry} />
+              <DetailCell label="Right" value={data.contractDetails.right === 'C' ? 'Call' : 'Put'} />
+              <DetailCell label="Mid" value={`$${data.contractDetails.mid.toFixed(2)}`} />
+              <DetailCell label="Δ" value={data.contractDetails.delta.toFixed(2)} mono />
+              <DetailCell label="Θ / day" value={`$${data.contractDetails.theta.toFixed(2)}`} mono />
+              {}
+              <DetailCell
+                label={resolveIv(data.contractDetails).basis === 'rank' ? 'IV rank' : 'IV'}
+                value={formatIv(resolveIv(data.contractDetails), data.symbol).text}
+                mono
+              />
+              <DetailCell label="DTE" value={`${data.contractDetails.dte}d`} mono />
+              <DetailCell label="CaR" value={`$${car.toFixed(0)}`} mono />
+            </div>
+          </section>
+        )}
+
+        {}
+        {data.spreadType && data.spreadType !== 'single' && data.legs && data.legs.length > 0 && (
+          <section className={`${styles.detailsCard} ${styles.spreadLegsCard}`}>
+            <Text size={14} weight={600}>
+              Spread Legs —{' '}
+              {data.spreadType === 'bear_put' ? 'Bear Put Spread' : 'Bear Call Spread'}
+            </Text>
+            <div className={styles.legsTableHead}>
+              <Text size={10} tone="dim">ACTION</Text>
+              <Text size={10} tone="dim">QTY</Text>
+              <Text size={10} tone="dim">STRIKE</Text>
+              <Text size={10} tone="dim">RIGHT</Text>
+              <Text size={10} tone="dim">EXPIRY</Text>
+            </div>
+            {data.legs.map((leg, i) => (
+              <div key={i} className={styles.legRow}>
+                <Data size={12} weight={500} tone={leg.action === 'BUY' ? 'pass' : 'caution'}>
+                  {leg.action}
+                </Data>
+                <Data size={12}>{leg.qty}</Data>
+                <Data size={12}>${leg.strike}</Data>
+                <Data size={12}>{leg.right === 'C' ? 'Call' : 'Put'}</Data>
+                <Data size={12}>{leg.expiry}</Data>
+              </div>
+            ))}
+            <div className={styles.spreadSummary}>
+              <KV
+                label="Net debit / credit"
+                value={
+                  data.netDebitCredit != null
+                    ? `${data.netDebitCredit >= 0 ? '+' : '−'}$${Math.abs(data.netDebitCredit).toFixed(2)}`
+                    : '—'
+                }
+                mono
+              />
+              <KV label="Max profit" value={data.maxProfit != null ? `$${data.maxProfit.toFixed(2)}` : '—'} mono />
+              <KV label="Max loss"   value={data.maxLoss   != null ? `$${data.maxLoss.toFixed(2)}`   : '—'} mono />
+              <KV label="Breakeven"  value={data.breakeven  != null ? `$${data.breakeven.toFixed(2)}`  : '—'} mono />
+            </div>
+          </section>
+        )}
+
+        {data.alternatives && data.alternatives.length > 0 && (
+          <div className={styles.altSection}>
+            <button
+              type="button"
+              className={styles.altToggle}
+              onClick={() => setAltOpen((v) => !v)}
+              aria-expanded={altOpen}
+            >
+              <Text size={11} tone="dim">ALTERNATIVES ({data.alternatives.length})</Text>
+              <Text size={11} tone="dim">{altOpen ? '▲' : '▼'}</Text>
+            </button>
+            {altOpen && (
+              <div className={styles.altList}>
+                {data.alternatives.map((alt, i) => (
+                  <AlternativeContractRow key={`${alt.strike}|${alt.expiry}|${alt.right ?? ''}`} alt={alt} rank={i + 1} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {}
+        <div className={styles.orderStrip}>
+          <div className={styles.orderStripItem}>
+            <Text size={11} tone="secondary">Order type</Text>
+            <Data size={13} weight={500}>{data.entry.orderType}</Data>
+          </div>
+          <div className={styles.orderStripItem}>
+            <EditableKV
+              label="Limit"
+              value={overlay.entryLimit}
+              onChange={(v) => patch({ entryLimit: v })}
+              onRevert={() => revert('entryLimit')}
+              prefix="$"
+              min={entryLimitBounds.min}
+              max={entryLimitBounds.max}
+              mono
+            />
+          </div>
+          <div className={styles.orderStripItem}>
+            {}
+            <KV label="Max fill" value={`$${data.entry.maxFill.toFixed(2)}`} mono />
+          </div>
+          <div className={styles.orderStripItem}>
+            <EditableKV
+              label="Contracts"
+              value={overlay.contracts}
+              onChange={(v) => patch({ contracts: v })}
+              min={1}
+              mono
+              decimals={0}
+            />
+          </div>
+        </div>
+
+        {}
+        <section className={`${styles.planCard} ${styles.fullWidth}`}>
+          <div className={styles.scoreCardHeader}>
+            <Text size={14} weight={600}>Arithmetic Profit Target</Text>
+            <Text size={11} tone="secondary">{data.direction}</Text>
+          </div>
+          <div className={styles.kvRow}>
+            <Text size={12} tone="secondary">Stock entry price</Text>
+            {}
+            <Data size={13} weight={500}>${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}</Data>
+          </div>
+          <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
+
+          {}
+          <MaxLossOverrideEditor
+            key={`${data.symbol}|${data.contract}`}
+            override={maxLossOverride}
+            limitDollar={maxLossLimitDollar}
+            onApply={applyMaxLossOverride}
+          />
+
+          {}
+          <div className={styles.structuralStop}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={checkStructure}
+              disabled={structuralLoading}
+            >
+              <Text size={12} weight={500}>
+                {structuralLoading ? 'Checking structure…' : 'Check structure'}
+              </Text>
+            </button>
+            {structuralError && (
+              <Text size={11} tone="reject">Couldn&apos;t check structure — try again.</Text>
+            )}
+            {!structuralError && structuralLoading && (
+              <Text size={11} tone="dim">Checking…</Text>
+            )}
+            {!structuralError && !structuralLoading && structuralStop === undefined && (
+              <Text size={11} tone="dim">—</Text>
+            )}
+            {!structuralError && !structuralLoading && structuralStop === null && (
+              <Text size={11} tone="dim">No structural stop found</Text>
+            )}
+            {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct === 0 && (
+              <Text size={11} tone="dim">N/A (stop = price)</Text>
+            )}
+            {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct !== 0 && (
+              <dl className={styles.kvList}>
+                <KV
+                  label={structuralStopSourceLabel(structuralStop.source)}
+                  value={`$${structuralStop.price.toFixed(2)} (${structuralStop.distancePct.toFixed(1)}% away)`}
+                  mono
+                />
+              </dl>
+            )}
+            {}
+            {stopCostShown && !stopRisk && sharedStop && (
+              <div className={styles.stopRiskGate}>
+                <Text size={10} tone="dim">MAX LOSS IF THE STOP IS HIT</Text>
+                <Text size={11} tone="dim">
+                  Not computed — no priced contract for this stop.
+                </Text>
+              </div>
+            )}
+            {stopCostShown && stopRisk && (
+              <div className={styles.stopRiskGate}>
+                <div className={styles.stopRiskHead}>
+                  <Text size={10} tone="dim">MAX LOSS IF THE STOP IS HIT</Text>
+                  <StatusBadge
+                    status={stopRisk.status}
+                    label={formatStopLossBadge(stopRisk)}
+                    tooltip={
+                      stopRisk.status === 'PASS'
+                        ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
+                        : stopLossIsTotalOnPrintedFigures(stopRisk)
+                          ? 'At this stop the contract is a total loss, so the stop is not a risk control on it. A closer stop, or a higher-delta strike, would make it one. Not a reason to skip the trade — a reason to size it knowing that.'
+                          : 'This stop costs most of the premium. Little is left to salvage if it is hit.'
+                    }
+                  />
+                </div>
+                {}
+                {}
+                <Data size={12} tone="primary">{formatStopLossHeadline(stopRisk)}</Data>
+                <Data size={11} tone="secondary">{formatStopPremiumRisk(stopRisk)}</Data>
+              </div>
+            )}
+          </div>
+
+          {}
+          <div className={styles.structuralStop}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={computeExitPlan}
+              disabled={exitPlanLoading || !data.contractDetails}
+            >
+              <Text size={12} weight={500}>
+                {exitPlanLoading ? 'Computing arithmetic plan…' : 'Compute Arithmetic Plan'}
+              </Text>
+            </button>
+            {exitPlanError && (
+              <Text size={11} tone="reject">Couldn&apos;t compute an arithmetic plan — try again.</Text>
+            )}
+            {!exitPlan && (
+              <div className={styles.targetsTable}>
+                {}
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    {scanFinalStop ? (
+                      <>
+                        <div className={styles.targetId}>
+                          <Text size={12} weight={600}>Bottom (final stop)</Text>
+                        </div>
+                        <div className={styles.targetValues}>
+                          <KV label="Price" value={`$${scanFinalStop.price.toFixed(2)}`} mono />
+                          <KV
+                            label={structuralStopSourceLabel(scanFinalStop.structuralSource ?? null)}
+                            value={scanFinalStop.structuralPrice != null
+                              ? `$${scanFinalStop.structuralPrice.toFixed(2)}`
+                              : 'No structural stop found'}
+                            mono
+                          />
+                          <KV
+                            label="ATR-floor price"
+                            value={scanFinalStop.atrFloorPrice != null
+                              ? `$${scanFinalStop.atrFloorPrice.toFixed(2)}` : '—'}
+                            mono
+                          />
+                          <KV label="ATR(14)" value={`$${scanFinalStop.atr.toFixed(2)}`} mono />
+                          <KV
+                            label="Structural ↔ ATR-floor distance"
+                            value={scanFinalStop.distanceDollar != null
+                              ? `$${scanFinalStop.distanceDollar.toFixed(2)}` : '—'}
+                            mono
+                          />
+                          {}
+                          <KV label="Contract value at stop" value="—" mono />
+                          <KV label="Max loss if stopped" value="—" mono />
+                        </div>
+                        {scanFinalStop.stopSource != null && scanFinalStop.atrFloorPrice != null && (
+                          <Text size={10} tone="dim">
+                            {stopJustification({
+                              source: scanFinalStop.stopSource,
+                              structuralPrice: scanFinalStop.structuralPrice ?? null,
+                              atrFloorPrice: scanFinalStop.atrFloorPrice,
+                              distanceDollar: scanFinalStop.distanceDollar ?? null,
+                            })}
+                          </Text>
+                        )}
+                        <Text size={10} tone="dim">
+                          From the scan. Compute an Arithmetic Plan to price this stop
+                          against the contract and size the position.
+                        </Text>
+                      </>
+                    ) : (
+                      <Text size={12} tone="dim">
+                        Bottom (final stop) — not computed — re-run the scan
+                      </Text>
+                    )}
+                  </div>
+                </div>
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    <Text size={12} tone="dim">2:1 target — not yet computed —</Text>
+                  </div>
+                </div>
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    <Text size={12} tone="dim">3:1 target — not yet computed —</Text>
+                  </div>
+                </div>
+              </div>
+            )}
+            {exitPlan && (
+              <div className={styles.targetsTable}>
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    <div className={styles.targetId}>
+                      <Text size={12} weight={600}>Bottom (final stop)</Text>
+                    </div>
+                    <div className={styles.targetValues}>
+                      <KV label="Price" value={`$${exitPlan.stop.price.toFixed(2)}`} mono />
+                      <KV
+                        label={structuralStopSourceLabel(exitPlan.stop.structuralSource)}
+                        value={exitPlan.stop.structuralPrice != null ? `$${exitPlan.stop.structuralPrice.toFixed(2)}` : 'No structural stop found'}
+                        mono
+                      />
+                      <KV label="ATR-floor price" value={`$${exitPlan.stop.atrFloorPrice.toFixed(2)}`} mono />
+                      <KV label="ATR(14)" value={`$${exitPlan.atr.toFixed(2)}`} mono />
+                      <KV
+                        label="Structural ↔ ATR-floor distance"
+                        value={exitPlan.stop.distanceDollar != null ? `$${exitPlan.stop.distanceDollar.toFixed(2)}` : '—'}
+                        mono
+                      />
+                    </div>
+                    <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
+                    {recommendedSize && (
+                      <div className={styles.structuralStop}>
+                        <Text size={10} tone="dim">
+                          Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
+                          ({formatRecommendedContractSizeRaw(recommendedSize)} exact)
+                        </Text>
+                        <button
+                          type="button"
+                          className={styles.btn}
+
+
+
+
+
+
+
+
+
+
+
+
+                          onClick={() => patch({ contracts: Math.max(1, recommendedSize.recommended) })}
+                          disabled={recommendedSize.recommended < 1}
+                          aria-label="Apply recommended contract size"
+                        >
+                          <Text size={12} weight={500}>Apply</Text>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {exitPlan.targets.map((t) => {
+                  const compareState = targetCompareState(t);
+                  return (
+                    <div className={styles.targetRow} key={t.rrRatio}>
+                      <div className={styles.targetMain}>
+                        <div className={styles.targetId}>
+                          <Text size={12} weight={600}>
+                            {t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}
+                          </Text>
+                        </div>
+                        <div className={styles.targetValues}>
+                          <KV label="Arithmetic price" value={`$${t.arithmeticPrice.toFixed(2)}`} mono />
+                          <KV
+                            label="Nearest structural level"
+                            value={t.structuralPrice != null ? `$${t.structuralPrice.toFixed(2)}` : 'No structural stop found'}
+                            mono
+                          />
+                          <KV
+                            label="Distance"
+                            value={t.distanceDollar != null ? `$${t.distanceDollar.toFixed(2)}` : '—'}
+                            mono
+                          />
+                          <KV label="Tolerance" value={`$${t.toleranceDollar.toFixed(2)}`} mono />
+                          <KV label="Contract price" value={`$${t.contractPrice.toFixed(2)}`} mono />
+                          <KV label="Pricing" value={t.rrModel} mono />
+                          <KV label="Probability before expiry" value={`${(t.probability * 100).toFixed(0)}%`} mono />
+                          <KV
+                            label="Expected time"
+                            value={t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}
+                            mono
+                          />
+                        </div>
+                        <Text size={10} tone={compareState === 'beyond' ? 'caution' : 'dim'}>
+                          {targetCompareLabel(compareState)}
+                        </Text>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {}
+        <section className={`${styles.planCard} ${styles.fullWidth}`}>
+          <Text size={14} weight={600}>Monte Carlo Profit Target</Text>
+          <Text size={10} tone="dim">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
+          <div className={styles.targetPctRow}>
+            {(['t1', 't2', 't3'] as const).map((key) => (
+              <label key={key} className={styles.targetPctInput}>
+                <Text size={11} tone="secondary">{key.toUpperCase()}</Text>
+                <input
+                  type="number"
+                  className={styles.editInput}
+                  min={1}
+                  max={500}
+                  aria-label={`${key.toUpperCase()} profit target %`}
+                  value={Math.round(targetPct[key] * 100)}
+                  onChange={(e) => {
+                    const pct = Math.max(0.01, Math.min(5.0, Number(e.target.value) / 100));
+                    setTargetPct((prev) => ({ ...prev, [key]: pct }));
+                  }}
+                />
+                <Text size={11} tone="secondary">%</Text>
+              </label>
+            ))}
+          </div>
+          <div className={styles.structuralStop}>
+            {}
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={estimateFirstPassage}
+              disabled={
+                firstPassageLoading || structuralLoading || exitPlanLoading || !data.contractDetails
+              }
+            >
+              <Text size={12} weight={500}>
+                {firstPassageLoading ? 'Estimating…' : 'Run Monte Carlo Estimate'}
+              </Text>
+            </button>
+            {!firstPassageLoading && (structuralLoading || exitPlanLoading) && (
+              <Text size={11} tone="dim">
+                Waiting for the stop this estimate races against…
+              </Text>
+            )}
+            {firstPassageError && (
+              <Text size={11} tone="reject">Couldn&apos;t compute an estimate — try again.</Text>
+            )}
+          </div>
+          {firstPassage && (
+            <div className={styles.targetsTable}>
+              {firstPassage.targets.map((t, i) => (
+                <ProfitTargetRow
+                  key={`${t.pct}-${i}`}
+                  target={t}
+                  structuralPaired={structuralPairing === 'ok'}
+                  structuralPending={structuralLoading}
+                  structuralUnavailable={structuralStop === null}
+                  structuralZeroRisk={
+                    sharedStop != null
+                    && firstPassageContext != null && structuralPairing === 'zero_risk'
+                    && !structuralLoading && structuralPairEligible
+                  }
+                  sharedStopPrice={sharedStop?.price ?? null}
+                />
+              ))}
+            </div>
+          )}
+          {}
+          {}
+          {firstPassage && raceIsShowable && (
+            <Text size={10} tone="dim">
+              Each probability above is measured on its own, so they can sum past 100% — a path that
+              hits the target and later the stop is counted in both. The Barrier Race card below
+              counts every path once, for whichever barrier it reached first. The invalidation row
+              moved there too, for the same reason.
+            </Text>
+          )}
+        </section>
+
+        {}
+        <BarrierRaceCard
+
+
+
+
+
+
+          race={estimateIsFresh ? firstPassage?.race : undefined}
+          invalidation={firstPassage?.invalidation ?? null}
+
+
+          stopCostShown={stopCostShown && stopRisk != null}
+          premiumStopFromField={raceBarriers?.fromField ?? false}
+          premiumStopField={overlay.premiumStop ?? null}
+
+
+
+
+
+
+
+
+          isFresh={estimateIsFresh}
+          barriersChanged={raceBarriersMoved}
+          stockStopMoved={stockStopMoved}
+        />
+
+        {}
+        {}
+          <section className={`${styles.planCard} ${styles.fullWidth}`}>
+            <Text size={14} weight={600}>Exit Plan</Text>
+            <dl className={styles.kvList}>
+              <EditableKV
+                label="Invalidation"
+                value={overlay.invalidation}
+                onChange={(v) => patch({ invalidation: v })}
+                onRevert={() => revert('invalidation')}
+                prefix="$"
+                min={invalidationBounds.min}
+                max={invalidationBounds.max}
+                mono
+
+
+
+
+
+
+                nullLabel="not computed — re-run the scan"
+              />
+              {premiumStopReadOnly ? (
+
+
+
+                <>
+                  <KV
+                    label="Premium stop"
+                    value={premiumStopTouched && overlay.premiumStop != null
+                      ? `$${overlay.premiumStop.toFixed(2)} (pinned)`
+                      : `global (${Number((globalPremiumStopPct * 100).toFixed(2))}%)`}
+                    mono
+                  />
+                  <div>
+                    <Text size={10} tone="dim">
+                      {premiumStopTouched
+                        ? 'The mid is too small to edit a per-contract stop here. Your pinned stop is kept and sent; the server derives it against the fill, and drops it (with a notice) if it is at or above the fill.'
+                        : 'The mid is too small for a per-contract premium stop — the global stop applies.'}
+                    </Text>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <EditableKV
+                    label="Premium stop"
+                    value={effectivePremiumStop}
+                    onChange={(v) => patch({ premiumStop: v })}
+                    onRevert={() => revert('premiumStop')}
+                    prefix="$"
+                    min={premiumStopBounds.min}
+                    max={premiumStopBounds.max}
+                    mono
+                  />
+                  {showsGlobalOnLiveMid && (
+                    <div>
+                      <Text size={10} tone="dim">
+                        {`(global ${Number((globalPremiumStopPct * 100).toFixed(2))}%)`}
+                      </Text>
+                    </div>
+                  )}
+                </>
+              )}
+              {}
+              <KV label="Time exit" value={`${TIME_STOP_DTE} DTE`} mono />
+            </dl>
+            <Text size={10} tone="dim">
+              Invalidation is a fixed-% stop, independent of the Arithmetic card&apos;s structural/ATR stop above.
+              It also remains functionally load-bearing, not just a display figure: Send to broker stays disabled
+              (&quot;Invalidation stop required&quot;) whenever this field is missing, regardless of what the
+              Arithmetic card&apos;s stop shows — the two are not just independently-displayed numbers, one of them
+              is a hard submit gate the other has no relationship to.
+            </Text>
+          </section>
+
+        <CollapsibleSection
+          title="Fixed % Ladder Plan"
+          storageKey="bamendjou:tradecard-ladder-collapsed"
+          defaultCollapsed
+          className={styles.fullWidth}
+        >
+          <section className={`${styles.planCard} ${styles.targetsCard}`}>
+            <Text size={14} weight={600}>Sell-to-Close Plan</Text>
+            <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
+            <div className={styles.targetsTable}>
+              {data.exit.targets.map((t, i) => (
+                <EditableTargetRow
+                  key={t.id ?? i}
+                  target={t}
+                  index={i}
+                  editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
+                  entryLimit={overlay.entryLimit}
+
+
+
+
+
+                  premiumStop={overlay.premiumStop}
+                  data={data}
+                  onStockPriceChange={(v) => {
+                    const next = [...overlay.targets];
+                    next[i] = v;
+                    patch({ targets: next });
+                  }}
+                  totalContracts={overlay.contracts}
+                />
+              ))}
+            </div>
+          </section>
+
+          {}
+        </CollapsibleSection>
+
+        {}
+        <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
+          <div className={styles.scoreCardHeader}>
+            <Text size={14} weight={600}>Final Recommendation</Text>
+            <LabeledStatusBadge
+              label="Final Status"
+              status={data.finalStatus}
+              tooltip="Overall recommendation for this trade, combining the stock signal's historical accuracy and the contract's quality verdict — see the Stock Scorecard and Contract panels above."
+            />
+          </div>
+          <div className={styles.scoreCardBody}>
+            {}
+            <MethodPickSelector
+              options={methodPickOptions}
+              pick={methodPick}
+              onChange={applyMethodPick}
+            />
+            {lastRunMethod === 'arithmetic' && exitPlan && (
+              <>
+                <Text size={11} tone="dim">computed via: Arithmetic, {formatHHMM(exitPlan.computedAt)}</Text>
+                <div className={styles.scoreRow}>
+                  <Text size={12} tone="secondary">Bottom (final stop)</Text>
+                  <Data size={14} tone="primary">${exitPlan.stop.price.toFixed(2)}</Data>
+                </div>
+                <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
+                {exitPlan.targets.map((t) => (
+                  <div className={styles.scoreRow} key={t.rrRatio}>
+                    <Text size={12} tone="secondary">{t.rrRatio}:1 target</Text>
+                    <Data size={13} tone="primary">${t.price.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)</Data>
+                  </div>
+                ))}
+                <Text size={10} tone="caution">
+                  This stop price is not automatically monitored by alerts unless copied into the position&apos;s
+                  stop field after opening.
+                </Text>
+              </>
+            )}
+            {lastRunMethod === 'monte_carlo' && firstPassage && (
+              <>
+                <Text size={11} tone="dim">
+                  computed via: Monte Carlo{firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}
+                </Text>
+                {}
+                {estimateIsFresh ? (
+                  firstPassage.targets.map((t, i) => (
+                    <div className={styles.scoreRow} key={`${t.pct}-${i}`}>
+                      <Text size={12} tone="secondary">{`T${Math.round(t.pct * 100)}%`}</Text>
+                      <Data size={13} tone="primary">
+                        ${t.optionPrice.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)
+                      </Data>
+                    </div>
+                  ))
+                ) : (
+                  <Text size={11} tone="caution">
+                    Not re-run this session — click Estimate to price these targets against the
+                    current premium.
+                  </Text>
+                )}
+                {}
+                {firstPassage.race && raceIsShowable ? (
+                  <>
+                    <div className={styles.scoreRow}>
+                      <Text size={12} tone="secondary">Armed stop (whichever fires first)</Text>
+                      <Data size={13} tone="primary">
+                        ${firstPassage.race.premiumStopPrice.toFixed(2)} option / $
+                        {firstPassage.race.stockStopPrice.toFixed(2)} stock
+                      </Data>
+                    </div>
+                    {firstPassage.race.outcomes.map((o) => (
+                      <div className={styles.scoreRow} key={`edge-${o.targetPct}`}>
+                        <Text size={12} tone="secondary">
+                          {`T${Math.round(o.targetPct * 100)}% edge`}
+                        </Text>
+                        <Data size={13} tone="primary">
+                          {o.edgePerContract != null ? money(o.edgePerContract) : '—'}
+                          {o.rrStockStop != null ? ` at ${o.rrStockStop.toFixed(2)}x` : ''}
+                        </Data>
+                      </div>
+                    ))}
+                    <Text size={10} tone="dim">
+                      Edge is per contract, before commissions, and assumes IV is unchanged when a
+                      barrier is reached. See the Barrier Race card above for the full arithmetic.
+                    </Text>
+                  </>
+                ) : null}
+              </>
+            )}
+            {lastRunMethod === null && (
+              <>
+                <Text size={11} tone="caution">
+                  No method explicitly run — showing Fixed % Ladder Plan (default)
+                </Text>
+                {data.exit.targets.map((t, i) => (
+                  <div className={styles.scoreRow} key={t.id ?? i}>
+                    <Text size={12} tone="secondary">{t.id ? t.id.toUpperCase() : `T${i + 1}`}</Text>
+                    <Data size={13} tone="primary">${(t.targetPrice ?? t.stockPrice).toFixed(2)}</Data>
+                  </div>
+                ))}
+                {}
+              </>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {}
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.btnPrimary}`}
+          onClick={onSendToBroker}
+          disabled={sendDisabled || !onSendToBroker}
+        >
+          <Text size={13} weight={500}>{sendLabel ?? 'Send to broker'}</Text>
+        </button>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={() => setChartOpen((v) => !v)}
+          aria-expanded={chartOpen}
+        >
+          <Text size={13} weight={500}>{chartOpen ? 'Hide chart' : 'View chart'}</Text>
+        </button>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={() => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${data.symbol}-trade-card.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          <Text size={13} weight={500}>Export JSON</Text>
+        </button>
+      </div>
+
+      <div className={styles.recIdFooter}>
+        <Text size={11} tone="dim">{displayRecId}</Text>
+      </div>
+
+      <InlineChartPanel
+        open={chartOpen}
+        symbol={data.symbol}
+        onClose={() => setChartOpen(false)}
+      />
+    </div>
+  );
+}
+
+function EditableTargetRow({
+  target,
+  index,
+  editedStockPrice,
+  entryLimit,
+  premiumStop,
+  data,
+  onStockPriceChange,
+  totalContracts,
+}: {
+  target: TargetLevel;
+  index: number;
+  editedStockPrice: number;
+  entryLimit: number;
+  premiumStop: number;
+  data: TradeCardData;
+  onStockPriceChange: (v: number) => void;
+  totalContracts: number;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(editedStockPrice ?? 0));
+
+  const startEdit = useCallback(() => {
+    setDraft(String(editedStockPrice ?? 0));
+    setEditing(true);
+  }, [editedStockPrice]);
+
+  const save = useCallback(() => {
+    const parsed = parseFloat(draft);
+    if (!isNaN(parsed) && parsed > 0) {
+      onStockPriceChange(Math.round(parsed * 100) / 100);
+    }
+    setEditing(false);
+  }, [draft, onStockPriceChange]);
+
+  const handleKey = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') save();
+      if (e.key === 'Escape') setEditing(false);
+    },
+    [save],
+  );
+
+  const originalStockPrice = target.targetPrice ?? target.stockPrice;
+  const isTargetEdited = editedStockPrice !== originalStockPrice;
+
+  const estOptionPrice = isTargetEdited
+    ? recomputeTargetEstOption(editedStockPrice, entryLimit, data)
+    : (target.estimatedOptionPrice ?? 0);
+
+  const rr = rrContribution(estOptionPrice, entryLimit, premiumStop);
+
+  const statusVal = target.status;
+  const rowTone = statusVal === 'HIT' ? 'pass' : statusVal === 'MISSED' ? 'reject' : undefined;
+  const statusClass = statusVal ? styles[`target_${statusVal}`] : styles.target_PENDING;
+  const badgeStatus = statusVal === 'HIT' ? 'PASS' : statusVal === 'MISSED' ? 'REJECT' : 'PENDING';
+  const isScaleOut = target.contractsToSell !== undefined && target.contractsToSell < totalContracts;
+  const label = target.id ? target.id.toUpperCase() : `T${index + 1}`;
+
+  return (
+    <div className={`${styles.targetRow} ${statusClass}`}>
+      <div className={styles.targetMain}>
+        <div className={styles.targetId}>
+          <Text size={12} weight={600} tone={rowTone}>{label}</Text>
+          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} tooltip={targetStatusTooltip(statusVal)} />}
+          {isTargetEdited && (
+            <span className={styles.editBadge}>
+              <Text size={10} tone="accent">edited</Text>
+            </span>
+          )}
+        </div>
+        <div className={styles.targetValues}>
+          <div className={styles.kvRow}>
+            <Text size={12} tone="secondary">Stock price</Text>
+            {editing ? (
+              <input
+                type="number"
+                className={styles.editTargetInput}
+                value={draft}
+                min={0.01}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={save}
+                onKeyDown={handleKey}
+                autoFocus
+                aria-label={`Edit target stock price for ${label}`}
+              />
+            ) : (
+              <span
+                className={styles.editValue}
+                onClick={startEdit}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') startEdit();
+                }}
+                aria-label={`Edit target stock price for ${label}`}
+              >
+                <Data size={13} weight={500} tone={rowTone}>
+                  ${(editedStockPrice ?? 0).toFixed(2)}
+                </Data>
+              </span>
+            )}
+          </div>
+          {estOptionPrice > 0 && (
+            <KV label="Est. option" value={`$${estOptionPrice.toFixed(2)}`} mono tone={rowTone} />
+          )}
+          {estOptionPrice > 0 && entryLimit > 0 && premiumStop > 0 && (
+            <KV label="R:R" value={`${rr.toFixed(1)}x`} mono tone={rr < 0 ? 'reject' : undefined} />
+          )}
+          {target.contractsToSell !== undefined && (
+            <KV label="Contracts" value={`${target.contractsToSell}`} mono />
+          )}
+        </div>
+        {isScaleOut && target.contractsToSell !== undefined && (
+          <Text size={11} tone="caution">
+            Scale out: sell {target.contractsToSell} of {totalContracts}
+          </Text>
+        )}
+      </div>
+      {target.pricingMethod && (
+        <span className={styles.pricingBadge}>
+          <Text size={10} tone="dim">{target.pricingMethod}</Text>
+        </span>
+      )}
+    </div>
+  );
+}
+
+
+export function EditableKV({
+  label,
+  value,
+  onChange,
+  onRevert,
+  min,
+  max,
+  mono,
+  tone,
+  prefix = '',
+  suffix = '',
+  decimals = 2,
+  nullLabel = 'not computed',
+}: {
+  label: string;
+  
+  value: number | null;
+  onChange: (v: number) => void;
+  
+  onRevert?: () => void;
+  min?: number;
+  max?: number;
+  mono?: boolean;
+  tone?: 'pass' | 'caution' | 'reject';
+  prefix?: string;
+  suffix?: string;
+  decimals?: number;
+  
+  nullLabel?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value == null ? '' : String(value));
+
+
+
+
+
+
+
+  const [rejected, setRejected] = useState<string | null>(null);
+
+  
+  const typedRef = useRef(false);
+
+  const startEdit = useCallback(() => {
+    setDraft(value == null ? '' : String(value));
+    setRejected(null);
+    typedRef.current = false;
+    setEditing(true);
+  }, [value]);
+
+  const save = useCallback(() => {
+    if (!typedRef.current) {
+      setEditing(false);
+      return;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    const trimmed = draft.trim();
+    const isCompleteNumber = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(trimmed);
+    if (trimmed !== '' && !isCompleteNumber) {
+
+
+
+
+
+      setRejected(`That is not a complete number — kept the previous value.`);
+      setEditing(false);
+      return;
+    }
+    const parsed = parseFloat(draft);
+    if (isNaN(parsed)) {
+
+
+
+      if (onRevert && draft.trim() === '') onRevert();
+      setEditing(false);
+      return;
+    }
+    const minVal = min ?? -Infinity;
+    const maxVal = max ?? Infinity;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if (parsed === value) {
+      setEditing(false);
+      return;
+    }
+    if (parsed < minVal || parsed > maxVal) {
+      setRejected(
+        maxVal === Infinity
+          ? `Must be at least ${prefix}${minVal.toFixed(decimals)}${suffix} — kept the previous value.`
+          : `Must be between ${prefix}${minVal.toFixed(decimals)}${suffix} and `
+            + `${prefix}${maxVal.toFixed(decimals)}${suffix} — kept the previous value.`,
+      );
+      setEditing(false);
+      return;
+    }
+
+    const scale = 10 ** decimals;
+    const next = Math.round(parsed * scale) / scale;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if (next === value) {
+      setEditing(false);
+      return;
+    }
+    setRejected(null);
+    onChange(next);
+    setEditing(false);
+  }, [draft, min, max, onChange, onRevert, decimals, value, prefix, suffix]);
+
+  const handleKey = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') save();
+      if (e.key === 'Escape') setEditing(false);
+    },
+    [save],
+  );
+
+  const displayValue = value == null
+    ? nullLabel
+    : decimals === 0
+      ? `${prefix}${value}${suffix}`
+      : `${prefix}${value.toFixed(decimals)}${suffix}`;
+
+  return (
+    <div className={`${styles.kvRow} ${styles.kvRowEditable}`}>
+      <Text size={12} tone="secondary">{label}</Text>
+      {editing ? (
+        <input
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          type="text"
+          inputMode="decimal"
+          className={styles.editInput}
+          value={draft}
+          onChange={(e) => { typedRef.current = true; setDraft(e.target.value); }}
+          onBlur={save}
+          onKeyDown={handleKey}
+          autoFocus
+          aria-label={`Edit ${label}`}
+
+
+
+
+
+          title={onRevert ? `Clear to go back to the plan's ${label.toLowerCase()}` : undefined}
+        />
+      ) : (
+        <span
+          className={styles.editValue}
+          onClick={startEdit}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') startEdit();
+          }}
+          aria-label={`Edit ${label}`}
+        >
+          {value == null
+            ? <Text size={13} weight={400} tone="dim">{displayValue}</Text>
+            : mono
+              ? <Data size={13} weight={500} tone={tone}>{displayValue}</Data>
+              : <Text size={13} weight={500}>{displayValue}</Text>}
+        </span>
+      )}
+      {}
+      <span
+        className={rejected ? styles.editRejected : styles.editRejectedEmpty}
+        aria-live="polite"
+      >
+        {rejected ? <Text size={11} tone="caution">{rejected}</Text> : ''}
+      </span>
+    </div>
+  );
+}
+
+function TargetRow({
+  target,
+  index,
+  totalContracts,
+}: {
+  target: TargetLevel;
+  index: number;
+  totalContracts: number;
+}) {
+  const statusVal = target.status;
+  const rowTone = statusVal === 'HIT' ? 'pass' : statusVal === 'MISSED' ? 'reject' : undefined;
+  const statusClass = statusVal ? styles[`target_${statusVal}`] : styles.target_PENDING;
+  const badgeStatus = statusVal === 'HIT' ? 'PASS' : statusVal === 'MISSED' ? 'REJECT' : 'PENDING';
+  const isScaleOut = target.contractsToSell !== undefined && target.contractsToSell < totalContracts;
+  const label = target.id ? target.id.toUpperCase() : `T${index + 1}`;
+
+  return (
+    <div className={`${styles.targetRow} ${statusClass}`}>
+      <div className={styles.targetMain}>
+        <div className={styles.targetId}>
+          <Text size={12} weight={600} tone={rowTone}>{label}</Text>
+          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} tooltip={targetStatusTooltip(statusVal)} />}
+        </div>
+        <div className={styles.targetValues}>
+          <KV label="Stock price" value={`$${(target.targetPrice ?? target.stockPrice).toFixed(2)}`} mono tone={rowTone} />
+          {target.estimatedOptionPrice !== undefined && (
+            <KV label="Est. option" value={`$${target.estimatedOptionPrice.toFixed(2)}`} mono tone={rowTone} />
+          )}
+          {target.rrContribution !== undefined && (
+            <KV label="R:R" value={`${target.rrContribution.toFixed(1)}x`} mono />
+          )}
+          {target.contractsToSell !== undefined && (
+            <KV label="Contracts" value={`${target.contractsToSell}`} mono />
+          )}
+        </div>
+        {isScaleOut && target.contractsToSell !== undefined && (
+          <Text size={11} tone="caution">
+            Scale out: sell {target.contractsToSell} of {totalContracts}
+          </Text>
+        )}
+      </div>
+      {target.pricingMethod && (
+        <span className={styles.pricingBadge}>
+          <Text size={10} tone="dim">{target.pricingMethod}</Text>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function KV({
+  label,
+  value,
+  mono,
+  tone,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  tone?: 'pass' | 'caution' | 'reject';
+}) {
+  return (
+    <div className={styles.kvRow}>
+      <Text size={12} tone="secondary">{label}</Text>
+      {mono
+        ? <Data size={13} weight={500} tone={tone}>{value}</Data>
+        : <Text size={13} weight={500}>{value}</Text>}
+    </div>
+  );
+}
+
+function ProfitTargetRow({
+  target,
+  structuralPaired,
+  structuralPending,
+  structuralUnavailable,
+  structuralZeroRisk,
+  sharedStopPrice,
+}: {
+  target: FirstPassageTarget;
+  
+  structuralPaired: boolean;
+  structuralPending: boolean;
+  structuralUnavailable: boolean;
+  structuralZeroRisk: boolean;
+  
+  sharedStopPrice: number | null;
+}) {
+  const label = `T${Math.round(target.pct * 100)}%`;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const structuralLevelValue = structuralPaired && sharedStopPrice != null
+    ? `$${sharedStopPrice.toFixed(2)}`
+    : structuralPending
+      ? 'Checking…'
+      : structuralUnavailable
+        ? 'No structural stop found'
+        : structuralZeroRisk
+          ? 'N/A (stop = price)'
+          : '—';
+
+  return (
+    <div className={styles.targetRow}>
+      <div className={styles.targetMain}>
+        <div className={styles.targetId}>
+          <Text size={12} weight={600}>{label}</Text>
+        </div>
+        <div className={styles.targetValues}>
+          <KV label="Est. option" value={`$${target.optionPrice.toFixed(2)}`} mono />
+          <KV
+            label="Stock price"
+            value={target.stockPrice != null ? `$${target.stockPrice.toFixed(2)}` : 'not reachable'}
+            mono
+          />
+          <KV label="Probability" value={`${(target.probability * 100).toFixed(0)}%`} mono />
+          <KV
+            label="Expected time"
+            value={target.expectedDays != null ? `~${Math.round(target.expectedDays)}d` : 'unlikely'}
+            mono
+          />
+          <KV label="Structural level found" value={structuralLevelValue} mono />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailCell({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className={styles.detailsCell}>
+      <Text size={10} tone="dim">{label.toUpperCase()}</Text>
+      {mono
+        ? <Data size={13} weight={500}>{value}</Data>
+        : <Text size={13} weight={500}>{value}</Text>}
+    </div>
+  );
+}
+
+
+function MaxLossOverrideEditor({
+  override,
+  limitDollar,
+  onApply,
+}: {
+  override: MaxLossOverride | null;
+  limitDollar: number;
+  onApply: (v: MaxLossOverride | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftMode, setDraftMode] = useState<'dollar' | 'percent'>(override?.mode ?? 'percent');
+  const [draftValue, setDraftValue] = useState(() =>
+    override
+      ? (override.mode === 'percent' ? override.value * 100 : override.value)
+      : 0,
+  );
+
+  const startEdit = () => {
+    setDraftMode(override?.mode ?? 'percent');
+    setDraftValue(override ? (override.mode === 'percent' ? override.value * 100 : override.value) : 0);
+    setEditing(true);
+  };
+
+  const apply = () => {
+    const value = draftMode === 'percent' ? draftValue / 100 : draftValue;
+    onApply({ mode: draftMode, value });
+    setEditing(false);
+  };
+
+  const clear = () => {
+    onApply(null);
+    setEditing(false);
+  };
+
+  return (
+    <div className={styles.structuralStop}>
+      <Text size={10} tone="dim">Max loss budget</Text>
+      <Text size={11} tone="secondary">
+        ${Math.round(limitDollar).toLocaleString('en-US')}
+        {override
+          ? ` (override: ${override.mode === 'percent' ? `${(override.value * 100).toFixed(2)}%` : `$${override.value.toLocaleString('en-US')}`})`
+          : ' (account default)'}
+      </Text>
+      {!editing ? (
+        <button type="button" className={styles.btn} onClick={startEdit}>
+          <Text size={12} weight={500}>{override ? 'Edit override' : 'Set override'}</Text>
+        </button>
+      ) : (
+        <div className={styles.targetPctRow}>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => setDraftMode('percent')}
+            aria-pressed={draftMode === 'percent'}
+          >
+            <Text size={12} weight={draftMode === 'percent' ? 600 : 400}>%</Text>
+          </button>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => setDraftMode('dollar')}
+            aria-pressed={draftMode === 'dollar'}
+          >
+            <Text size={12} weight={draftMode === 'dollar' ? 600 : 400}>$</Text>
+          </button>
+          <input
+            type="number"
+            className={styles.editInput}
+            value={draftValue}
+            min={0}
+            step={draftMode === 'percent' ? 0.25 : 10}
+            onChange={(e) => setDraftValue(Math.max(0, Number(e.target.value) || 0))}
+            aria-label="Max loss override value"
+          />
+          <button type="button" className={styles.btn} onClick={apply} aria-label="Apply max loss override">
+            <Text size={12} weight={500}>Apply</Text>
+          </button>
+          {override && (
+            <button type="button" className={styles.btn} onClick={clear}>
+              <Text size={12} weight={500}>Use default</Text>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export type { EditOverlay, TouchedFields };
+export { triggerDetailText, pullbackDetailText, trendDetailText, eventDetailText, volDetailText };
+
+SOURCE: frontend/components/organisms/BarrierRaceCard/index.tsx
+'use client';
+
+import { Text, Data } from '@/components/primitives';
+import {
+  formatRaceRisk,
+  formatRaceRR,
+  formatRacePremiumRR,
+  formatRaceEdge,
+  premiumStopSourceNote,
+  weightPercents,
+  days,
+  money,
+} from '@/lib/barrierRace';
+import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
+import styles from './BarrierRaceCard.module.css';
+
+export interface BarrierRaceCardProps {
+  
+  race: BarrierRace | null | undefined;
+  
+  premiumStopFromField: boolean;
+  
+  premiumStopField: number | null;
+  
+  isFresh: boolean;
+  
+  barriersChanged?: boolean;
+  
+  stockStopMoved?: boolean;
+  
+  stopCostShown?: boolean;
+  
+  invalidation?: { probability: number; expectedDays: number | null } | null;
+}
+
+function pctLabel(v: number): string {
+  return `${(v * 100).toFixed(0)}%`;
+}
+
+function daysLabel(v: number | null): string {
+  return v == null ? '—' : `~${v.toFixed(0)}d`;
+}
+
+
+export default function BarrierRaceCard({
+  race,
+  premiumStopFromField,
+  premiumStopField,
+  isFresh,
+  barriersChanged = false,
+  stockStopMoved = false,
+  stopCostShown = false,
+  invalidation = null,
+}: BarrierRaceCardProps) {
+  if (race === null) {
+    return (
+      <section className={styles.card}>
+        <Header />
+        <Text size={12} tone="dim">
+          Not simulated — contract expires today. A zero-length simulation has no paths to
+          attribute, and four zeroes would read as a result rather than a refusal.
+        </Text>
+      </section>
+    );
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+  if (!race || !isFresh) return null;
+
+  if (barriersChanged) {
+    return (
+      <section className={styles.card}>
+        <Header />
+        <Text size={12} tone="caution">
+          Barriers changed — re-run the estimate. These bars were measured against a stop that has
+          since moved, so they no longer describe this trade.
+        </Text>
+        {}
+        {}
+        {invalidation && (
+          <Text size={10} tone="dim">
+            {stockStopMoved
+              ? `${(invalidation.probability * 100).toFixed(0)}% of paths touched the stock stop at
+                 some point — but measured against the $${race.stockStopPrice.toFixed(2)} stop this
+                 estimate used, which is no longer the stop. Re-run to measure it against the
+                 current one.`
+              : `The stock-stop probability is unaffected by the premium stop: ${(
+                invalidation.probability * 100).toFixed(0)}% of paths touch the stock stop at some
+                 point${invalidation.expectedDays != null
+                   ? ` (median ~${days(invalidation.expectedDays)})` : ''}. The attribution above is
+                 what needs the re-run.`}
+          </Text>
+        )}
+      </section>
+    );
+  }
+
+
+  return (
+    <section className={styles.card}>
+      <Header />
+
+      {}
+      <div className={styles.block}>
+        <Text size={12} weight={600}>The three barriers</Text>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th scope="col"><Text size={10} tone="dim">Barrier</Text></th>
+              <th scope="col"><Text size={10} tone="dim">Level</Text></th>
+              <th scope="col"><Text size={10} tone="dim">How it is set</Text></th>
+              <th scope="col"><Text size={10} tone="dim">Armed</Text></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><Text size={11}>Profit target</Text></td>
+              <td><Data size={11}>per row below</Data></td>
+              <td><Text size={11} tone="secondary">Your T1/T2/T3 % of premium</Text></td>
+              <td><Text size={11} tone="dim">exit, not a stop</Text></td>
+            </tr>
+            <tr>
+              <td><Text size={11}>Stock stop</Text></td>
+              {}
+              <td><Data size={11}>{money(race.stockStopPrice)} stock</Data></td>
+              <td><Text size={11} tone="secondary">Structural level, or structural + ATR once an Arithmetic Plan has run</Text></td>
+              {}
+              <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
+            </tr>
+            <tr>
+              <td><Text size={11}>Premium stop</Text></td>
+              <td><Data size={11}>{money(race.premiumStopPrice)} option</Data></td>
+              <td>
+                <Text size={11} tone="secondary">
+                  {premiumStopSourceNote(
+                    race.premiumStopPct, premiumStopFromField, premiumStopField, race.premiumUsed,
+                  )}
+                </Text>
+              </td>
+              <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
+            </tr>
+          </tbody>
+        </table>
+        {invalidation && (
+          <Text size={10} tone="dim">
+            Measured on its own, {(invalidation.probability * 100).toFixed(0)}% of paths touch the
+            stock stop at some point
+            {}
+            {invalidation.expectedDays != null
+              ? ` (median ~${days(invalidation.expectedDays)})`
+              : ''}
+            {' '}— ignoring whether the premium stop had already fired. The attribution below is the
+            honest version: the gap between the two is how often you were stopped out on premium
+            before the stock ever got there.
+          </Text>
+        )}
+      </div>
+
+      {}
+      <div className={styles.block}>
+        <Text size={12} weight={600}>Which barrier is reached first</Text>
+        <div className={styles.legend}>
+          <LegendKey className={styles.swatchTarget} label="Target first" />
+          <LegendKey className={styles.swatchStock} label="Stock stop first" />
+          <LegendKey className={styles.swatchPremium} label="Premium stop first" />
+          <LegendKey className={styles.swatchNeither} label="Neither, held to expiry" />
+        </div>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th scope="col"><Text size={10} tone="dim">Target</Text></th>
+              <th scope="col"><Text size={10} tone="dim">Split</Text></th>
+              {}
+              <th scope="col"><Text size={10} tone="dim">Target first</Text></th>
+              <th scope="col"><Text size={10} tone="dim">Stock stop</Text></th>
+              <th scope="col"><Text size={10} tone="dim">Premium stop</Text></th>
+              <th scope="col"><Text size={10} tone="dim">Neither</Text></th>
+              {}
+              <th scope="col"><Text size={10} tone="dim">Median to target</Text></th>
+              <th scope="col"><Text size={10} tone="dim">to stock stop</Text></th>
+              <th scope="col"><Text size={10} tone="dim">to premium stop</Text></th>
+            </tr>
+          </thead>
+          <tbody>
+            {race.outcomes.map((o) => {
+
+
+
+
+
+
+
+
+
+
+
+              const [sTarget, sStock, sPrem, sNone] = weightPercents(o);
+              return (
+                <tr key={o.targetPct}>
+                  <td>
+                    <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
+                    <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
+                  </td>
+                  <td><StackedBar o={o} /></td>
+                  <td><Data size={11}>{sTarget}%</Data></td>
+                  <td><Data size={11}>{sStock}%</Data></td>
+                  <td><Data size={11}>{sPrem}%</Data></td>
+                  <td><Data size={11}>{sNone}%</Data></td>
+                  <td><Data size={11}>{daysLabel(o.daysTarget)}</Data></td>
+                  <td><Data size={11}>{daysLabel(o.daysStockStop)}</Data></td>
+                  <td><Data size={11}>{daysLabel(o.daysPremiumStop)}</Data></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <Text size={10} tone="dim">
+          Every row sums to 100% because each of the {race.nPaths.toLocaleString()} simulated paths
+          is counted once, for whichever barrier it reached first. The Monte Carlo card above
+          measures each barrier on its own, so its numbers can sum past 100%.
+        </Text>
+        <Text size={10} tone="dim">
+          The medians are conditional: &quot;{daysLabel(race.outcomes[0]?.daysTarget ?? null)} to{' '}
+          {pctLabel(race.outcomes[0]?.targetPct ?? 0)}&quot; is the median over the paths that got
+          there first, not over all paths.
+        </Text>
+      </div>
+
+      {}
+      <div className={styles.block}>
+        <Text size={12} weight={600}>Risk and reward, per target</Text>
+        {}
+        {}
+        <Text size={10} tone="dim">
+          Priced at each barrier&apos;s own median day, so time decay is included.
+          {stopCostShown ? (
+            <>
+              {' '}For the immediate figure — what this stop costs if it is hit right now —
+              see &ldquo;Max loss if the stop is hit&rdquo; on the Arithmetic Profit Target
+              card. The two differ by time decay AND by pricing model: that one is a
+              delta-linear estimate at today&apos;s price, capped at the premium, while these
+              are repriced by the simulation. Both are correct; naming only the decay sent a
+              hand-checker looking for a difference decay alone cannot account for.
+            </>
+          ) : null}
+        </Text>
+        {race.outcomes.map((o) => (
+          <div key={o.targetPct} className={styles.chainGroup}>
+            <Text size={11} weight={500}>{pctLabel(o.targetPct)} target</Text>
+            <div className={styles.chain}>
+              <Text size={10} tone="dim">Risk</Text>
+              <Data size={11}>{formatRaceRisk(o, race.premiumUsed)}</Data>
+            </div>
+            <div className={styles.chain}>
+              <Text size={10} tone="dim">R:R vs stock stop</Text>
+              <Data size={11} weight={500}>{formatRaceRR(o)}</Data>
+            </div>
+            <div className={`${styles.chain} ${styles.muted}`}>
+              <Text size={10} tone="dim">R:R vs premium stop</Text>
+              <Data size={11} tone="dim">{formatRacePremiumRR(o)}</Data>
+            </div>
+          </div>
+        ))}
+        {}
+        {race.outcomes.every((o) => o.weightStockStopFirst === 0) && (
+          <Text size={10} tone="caution">
+            On this contract the stock stop wins under 1% of paths, so the bolded R:R above
+            describes an outcome the simulation almost never reached, and its term contributes
+            exactly nothing to the edge below. Largest-remainder allocation can round a genuinely
+            non-zero share down to 0%, so &quot;never&quot; would be too strong; &quot;contributes nothing&quot;
+            is exact, because the edge is weighted with that same allocated 0.
+          </Text>
+        )}
+        {!race.ivSolved && (
+          <Text size={10} tone="caution">
+            The contract&apos;s own implied volatility could not be backed out of its quote, so this
+            simulation ran on a generic fallback volatility. Treat every number on this card as
+            describing a contract the market is not pricing this way — re-check the quote.
+          </Text>
+        )}
+        <Text size={10} tone="dim">
+          Only the first ratio is a measurement. Its risk leg is the premium minus what the
+          contract would still be worth at the stock stop, which depends on strike, spot, time and
+          IV independently — so it genuinely differs between contracts. The greyed one divides two
+          numbers that are both a fixed fraction of premium, so premium cancels out of it
+          entirely and nothing about this contract survives into the result. It is the same on
+          every contract you could pick, which is why it is greyed. Deliberately not written as a
+          division of the two percentages shown above: both are rounded for display while the stop
+          fraction is an arbitrary number, so working it out from them disagrees with the printed
+          ratio on roughly two rows in five.
+        </Text>
+      </div>
+
+      {}
+      <div className={styles.block}>
+        <Text size={12} weight={600}>Edge per contract</Text>
+        {race.outcomes.map((o) => (
+          <div key={o.targetPct} className={styles.chainGroup}>
+            <Text size={11} weight={500}>{pctLabel(o.targetPct)} target</Text>
+            <Data size={11}>{formatRaceEdge(o, race.premiumUsed)}</Data>
+          </div>
+        ))}
+        <Text size={10} tone="dim">
+          The &quot;Neither&quot; term is the mean value of those paths at expiry minus the premium
+          paid. It is signed, not a loss — those paths can end above what you paid.
+        </Text>
+        <Text size={10} tone="dim">
+          Assumes implied volatility is unchanged when a barrier is reached. On a long call that is
+          pessimistic at the stop and optimistic at the target — a real fear bid would leave more
+          premium than shown.
+        </Text>
+      </div>
+    </section>
+  );
+}
+
+function Header() {
+  return (
+    <>
+      <Text size={14} weight={600}>Barrier Race</Text>
+      <Text size={10} tone="dim">
+        Same simulation as the Monte Carlo card above, read differently: every path is attributed to
+        whichever barrier it reached first. It proposes no level of its own.
+      </Text>
+    </>
+  );
+}
+
+function LegendKey({ className, label }: { className: string; label: string }) {
+  return (
+    <span className={styles.legendKey}>
+      <span className={`${styles.swatch} ${className}`} aria-hidden="true" />
+      <Text size={10} tone="dim">{label}</Text>
+    </span>
+  );
+}
+
+
+function StackedBar({ o }: { o: BarrierRaceOutcome }) {
+  const segments: Array<[string, number, string]> = [
+    [styles.swatchTarget, o.pTargetFirst, 'Target first'],
+    [styles.swatchStock, o.pStockStopFirst, 'Stock stop first'],
+    [styles.swatchPremium, o.pPremiumStopFirst, 'Premium stop first'],
+    [styles.swatchNeither, o.pNeither, 'Neither'],
+  ];
+
+
+
+
+
+  const spoken = weightPercents(o);
+  return (
+    <div
+      className={styles.bar}
+      role="img"
+      aria-label={
+        `${(o.targetPct * 100).toFixed(0)}% target: `
+        + segments.map(([, , label], i) => `${label} ${spoken[i]}%`).join(', ')
+      }
+    >
+      {segments.map(([cls, v, label]) => (
+        v > 0 ? (
+          <span
+            key={label}
+            className={`${styles.segment} ${cls}`}
+
+
+
+            style={{ width: `${(v * 100).toFixed(4)}%` }}
+            data-testid={`segment-${label}`}
+          />
+        ) : null
+      ))}
+    </div>
+  );
+}
+
+
+SOURCE: frontend/components/molecules/ScoreCardPanel/index.tsx
+
+
+import { Text, Data } from '@/components/primitives';
+import { ScoreBar } from '@/components/atoms/ScoreBar';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
+import type { Status } from '@/lib/status';
+import styles from './ScoreCardPanel.module.css';
+
+export interface ScoreBarData {
+  label: string;
+  value: number;
+  max?: number;
+  displayValue?: string;
+  detailText?: string;
+}
+
+interface ScoreCardPanelProps {
+  title: string;
+  bars: ScoreBarData[];
+  total: number;
+  totalMax?: number;
+  confidence: Status;
+  
+  confidenceScore?: number | null;
+  confidenceText?: string | null;
+  
+  statusTooltip?: string;
+  
+  statusTooltipAlignRight?: boolean;
+  className?: string;
+}
+
+export function ScoreCardPanel({
+  title,
+  bars,
+  total,
+  totalMax = 100,
+  confidence,
+  confidenceScore,
+  confidenceText,
+  statusTooltip,
+  statusTooltipAlignRight,
+  className,
+}: ScoreCardPanelProps) {
+  return (
+    <div className={[styles.panel, className].filter(Boolean).join(' ')}>
+      <div className={styles.header}>
+        <Text size={14} weight={600}>
+          {title}
+        </Text>
+      </div>
+      <div className={styles.bars}>
+        {bars.map((b) => (
+          <div key={b.label}>
+            <ScoreBar
+              label={b.label}
+              value={b.value}
+              max={b.max}
+              displayValue={b.displayValue}
+            />
+            {b.detailText && (
+              <Text size={11} tone="dim" className={styles.barDetail}>{b.detailText}</Text>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className={styles.footer}>
+        <div className={styles.totalGroup}>
+          <Text size={12} tone="secondary">
+            Score
+          </Text>
+          <Data size={18} weight={500}>
+            {total}/{totalMax}
+          </Data>
+        </div>
+        <div className={styles.statusGroup}>
+          {confidenceScore !== undefined && (
+            <ConfidenceBadge confidence={confidenceScore} title={confidenceText ?? undefined} />
+          )}
+          <StatusBadge
+            status={confidence}
+            tooltip={statusTooltip}
+            tooltipAlign={statusTooltipAlignRight ? 'right' : 'center'}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+SOURCE: frontend/components/molecules/FundamentalHealthCard/index.tsx
+'use client';
+import { Text, Data } from '@/components/primitives';
+import type { DataTone } from '@/components/primitives/Data';
+import { Tooltip } from '@/components/atoms/Tooltip';
+import { fundamentalScoreTooltip, safetyFlagTooltip } from '@/lib/statusTooltips';
+import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
+import type { FundamentalsOut } from '@/types/domain';
+import styles from './FundamentalHealthCard.module.css';
+
+function healthTone(score: number): DataTone {
+
+
+  return toneForScore(score, FUNDAMENTAL_BAND);
+}
+
+export function FundamentalHealthCard({ f }: { f: FundamentalsOut | null | undefined }) {
+  if (!f) {
+    return (
+      <div className={styles.empty}>
+        <Text size={12} tone="dim">Fundamental Health — no data</Text>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.card}>
+      <div className={styles.head}>
+        <Text size={12} weight={500}>Fundamental Health</Text>
+        <Tooltip text={fundamentalScoreTooltip('overall', f.score)}>
+          <Data size={16} tone={healthTone(f.score)}>{f.score}</Data>
+        </Tooltip>
+      </div>
+      <div className={styles.row}>
+        <Text size={11} tone="dim">{f.quality_label} quality · {f.risk_label} risk</Text>
+      </div>
+      <div className={styles.buckets}>
+        <div className={styles.bucket}>
+          <Text size={11} tone="dim">Growth</Text>
+          <Tooltip text={fundamentalScoreTooltip('growth', f.growth_score)}>
+            <Data size={13} tone={healthTone(f.growth_score)}>{f.growth_score}</Data>
+          </Tooltip>
+        </div>
+        <div className={styles.bucket}>
+          <Text size={11} tone="dim">Quality</Text>
+          <Tooltip text={fundamentalScoreTooltip('quality', f.quality_score)}>
+            <Data size={13} tone={healthTone(f.quality_score)}>{f.quality_score}</Data>
+          </Tooltip>
+        </div>
+        <div className={styles.bucket}>
+          <Text size={11} tone="dim">Risk</Text>
+          <Tooltip text={fundamentalScoreTooltip('risk', f.risk_score)}>
+            <Data size={13} tone={healthTone(f.risk_score)}>{f.risk_score}</Data>
+          </Tooltip>
+        </div>
+      </div>
+      {(f.safety_flags ?? []).length > 0 && (
+        <div className={styles.flags}>
+          {(f.safety_flags ?? []).map(flag => (
+            <Tooltip key={flag} text={safetyFlagTooltip(flag)}>
+              <span className={styles.flag}>{flag.replace(/_/g, ' ')}</span>
+            </Tooltip>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+SOURCE: frontend/components/molecules/MarketSentiment/index.tsx
+'use client';
+import { Text, Data } from '@/components/primitives';
+import type { SentimentData } from '@/types/domain';
+import styles from './MarketSentiment.module.css';
+
+const tone = (pct: number): 'pass' | 'caution' | 'reject' =>
+  pct >= 15 ? 'pass' : pct <= -15 ? 'reject' : 'caution';
+
+export function MarketSentiment({ s }: { s: SentimentData | null | undefined }) {
+  if (!s || s.insufficient_data) {
+    return (
+      <div className={styles.empty}>
+        <Text size={12} tone="dim">Market sentiment — insufficient history</Text>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.card}>
+      <div className={styles.head}>
+        <Text size={12} weight={500}>Market Sentiment</Text>
+        <Text size={11} tone="dim">{s.horizon} · {s.timeframe}</Text>
+      </div>
+      <div className={styles.row}>
+        <Text size={12} tone="dim">Conviction</Text>
+        <Data size={16} tone={tone(s.conviction_pct)}>
+          {s.conviction_pct > 0 ? '+' : ''}{s.conviction_pct}%
+        </Data>
+      </div>
+      <Text size={12}>{s.conviction_label} — {s.interpretation}</Text>
+      <div className={styles.row}>
+        <Text size={11} tone="dim">
+          State {s.state} · sticky {Math.round(s.p_stay * 100)}% · ~{s.avg_regime_duration}d
+        </Text>
+        <span className={
+          s.alignment === 'Aligned' ? styles.aligned :
+          s.alignment === 'Diverging' ? styles.diverging :
+          styles.unavail
+        }>
+          {s.alignment === 'Unavailable' ? 'OMM only' : `OMM/HMM ${s.alignment}`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+
+SOURCE: frontend/components/molecules/MethodPickSelector/index.tsx
+'use client';
+
+import { useCallback, useMemo } from 'react';
+import { Text, Data } from '@/components/primitives';
+import type { MethodPick, PickedMethod, PickedStopBasis } from '@/types/domain';
+import styles from './MethodPickSelector.module.css';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export interface MethodPickRow {
+  key: string;
+  label: string;
+  displayPrice: number | null;
+  
+  rowStockPrice: number | null;
+  
+  rowOptionPrice: number | null;
+}
+
+export interface MethodPickOption {
+  method: PickedMethod;
+  label: string;
+  
+  unavailable: string | null;
+  rows: MethodPickRow[];
+}
+
+interface MethodPickSelectorProps {
+  options: MethodPickOption[];
+  pick: MethodPick | null;
+  onChange: (pick: MethodPick | null) => void;
+  
+  now?: () => string;
+}
+
+
+const STOP_BASES: { value: PickedStopBasis; label: string }[] = [
+  { value: 'stock',   label: 'Stock stop' },
+  { value: 'premium', label: 'Premium stop' },
+];
+
+
+const DEFAULT_STOP_BASIS: PickedStopBasis = 'stock';
+
+
+function rowOfPick(rows: MethodPickRow[], pick: MethodPick | null): string | null {
+  if (!pick) return null;
+  if (pick.rowStockPrice == null && pick.rowOptionPrice == null) return null;
+  const hit = rows.find(
+    (r) => Object.is(r.rowStockPrice, pick.rowStockPrice)
+        && Object.is(r.rowOptionPrice, pick.rowOptionPrice),
+  );
+  return hit?.key ?? null;
+}
+
+function priceText(price: number | null): string {
+  return price != null ? `$${price.toFixed(2)}` : '—';
+}
+
+export function MethodPickSelector({ options, pick, onChange, now }: MethodPickSelectorProps) {
+  const stamp = now ?? (() => new Date().toISOString());
+  
+  const active = useMemo(() => {
+    if (!pick) return null;
+    const hit = options.find((o) => o.method === pick.method) ?? null;
+    return hit && hit.unavailable == null ? hit : null;
+  }, [options, pick]);
+  const activeRowKey = rowOfPick(active?.rows ?? [], pick);
+
+  const pickMethod = useCallback((method: PickedMethod) => {
+
+
+
+
+    if (pick?.method === method) return;
+
+
+
+
+    onChange({
+      method,
+      rowStockPrice:  null,
+      rowOptionPrice: null,
+      stopBasis:      pick?.stopBasis ?? DEFAULT_STOP_BASIS,
+      pickedAt:       stamp(),
+    });
+  }, [onChange, pick, stamp]);
+
+  const pickRow = useCallback((row: MethodPickRow) => {
+    if (!pick) return;
+    onChange({
+      ...pick,
+      rowStockPrice:  row.rowStockPrice,
+      rowOptionPrice: row.rowOptionPrice,
+
+
+
+      pickedAt:       stamp(),
+    });
+  }, [onChange, pick, stamp]);
+
+  const pickBasis = useCallback((basis: PickedStopBasis) => {
+
+
+    if (!pick || pick.stopBasis === basis) return;
+    onChange({ ...pick, stopBasis: basis, pickedAt: stamp() });
+  }, [onChange, pick, stamp]);
+
+  return (
+    <div className={styles.wrap}>
+      <div className={styles.head}>
+        <Text size={11} tone="secondary" weight={400}>Exit method for this trade</Text>
+        {pick && (
+          <button type="button" className={styles.clear} onClick={() => onChange(null)}>
+            <Text size={10} tone="dim">Clear</Text>
+          </button>
+        )}
+      </div>
+
+      <div className={styles.row} role="radiogroup" aria-label="Exit method for this trade">
+        {options.map((o) => (
+          <button
+            key={o.method}
+            type="button"
+            role="radio"
+            aria-checked={pick?.method === o.method}
+            aria-label={o.label}
+            disabled={o.unavailable != null}
+            title={o.unavailable ?? undefined}
+            className={pick?.method === o.method ? styles.btnActive : styles.btn}
+            onClick={() => pickMethod(o.method)}
+          >
+            <Text size={11} weight={500}>{o.label}</Text>
+            <Text size={10} tone="dim">
+              {o.unavailable ?? `${o.rows.length} target${o.rows.length === 1 ? '' : 's'}`}
+            </Text>
+          </button>
+        ))}
+      </div>
+
+      {active && active.rows.length > 0 && (
+        <>
+          <Text size={10} tone="dim">Target row</Text>
+          <div className={styles.row} role="radiogroup" aria-label="Target row">
+            {active.rows.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                role="radio"
+                aria-checked={activeRowKey === r.key}
+                aria-label={r.label}
+                className={activeRowKey === r.key ? styles.btnActive : styles.btn}
+                onClick={() => pickRow(r)}
+              >
+                <Text size={11} weight={500}>{r.label}</Text>
+                <Data size={11} weight={400} tone="dim">{priceText(r.displayPrice)}</Data>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <Text size={10} tone="dim">Judged on</Text>
+      <div className={styles.row} role="radiogroup" aria-label="Judged on">
+        {STOP_BASES.map((b) => (
+          <button
+            key={b.value}
+            type="button"
+            role="radio"
+            aria-checked={pick != null && pick.stopBasis === b.value}
+            aria-label={b.label}
+            disabled={pick == null}
+            className={pick?.stopBasis === b.value ? styles.btnActive : styles.btn}
+            onClick={() => pickBasis(b.value)}
+          >
+            <Text size={11} weight={500}>{b.label}</Text>
+          </button>
+        ))}
+      </div>
+      <Text size={10} tone="dim">
+        A record of which stop this trade was judged on. It does not change which alerts fire —
+        the stock stop and the premium stop both keep firing exactly as they do today.
+      </Text>
+    </div>
+  );
+}
+
+export default MethodPickSelector;
+
+
+SOURCE: frontend/components/molecules/CandidateNav/index.tsx
+'use client';
+
+
+
+import { Text, Data } from '@/components/primitives';
+import styles from './CandidateNav.module.css';
+
+interface CandidateNavProps {
+  symbols:       string[];        // ordered candidate list
+  activeSymbol:  string;
+  basket:        string[];        // symbols currently pinned
+  onPrev:        () => void;
+  onNext:        () => void;
+  onSelect:      (symbol: string) => void;
+  onTogglePin:   () => void;
+  onRemovePin:   (symbol: string) => void;
+  
+  pinDisabled?:  boolean;
+  pinDisabledReason?: string;
+}
+
+export function CandidateNav({
+  symbols,
+  activeSymbol,
+  basket,
+  onPrev,
+  onNext,
+  onSelect,
+  onTogglePin,
+  onRemovePin,
+  pinDisabled = false,
+  pinDisabledReason,
+}: CandidateNavProps) {
+  const idx     = symbols.indexOf(activeSymbol);
+  const atFirst = idx <= 0;
+  const atLast  = idx < 0 || idx >= symbols.length - 1;
+  const pinned  = basket.includes(activeSymbol);
+
+  return (
+    <div className={styles.wrap}>
+      <div className={styles.navRow}>
+        <button
+          type="button"
+          className={styles.navBtn}
+          onClick={onPrev}
+          disabled={atFirst}
+          aria-label="Previous candidate"
+        >
+          ← Prev
+        </button>
+
+        <div className={styles.position}>
+          <Data size={14} weight={500}>{activeSymbol}</Data>
+          <Text size={11} tone="secondary">
+            {idx < 0 ? '—' : `${idx + 1} / ${symbols.length}`}
+          </Text>
+        </div>
+
+        <button
+          type="button"
+          className={styles.navBtn}
+          onClick={onNext}
+          disabled={atLast}
+          aria-label="Next candidate"
+        >
+          Next →
+        </button>
+
+        <button
+          type="button"
+          className={`${styles.pinBtn} ${pinned ? styles.pinBtnOn : ''}`}
+          onClick={onTogglePin}
+          aria-pressed={pinned}
+          disabled={pinDisabled && !pinned}
+          title={pinned ? 'Remove from basket' : pinDisabled && pinDisabledReason ? pinDisabledReason : 'Pin to basket'}
+        >
+          {pinned ? '★ Pinned' : '☆ Pin to basket'}
+        </button>
+      </div>
+
+      <div className={styles.basketRow} aria-label="Basket">
+        <Text size={11} tone="dim">
+          BASKET {basket.length > 0 ? `(${basket.length})` : '— empty'}
+        </Text>
+        <div className={styles.chips}>
+          {basket.map((sym) => (
+            <span
+              key={sym}
+              className={`${styles.chip} ${sym === activeSymbol ? styles.chipActive : ''}`}
+            >
+              <button
+                type="button"
+                className={styles.chipSelect}
+                onClick={() => onSelect(sym)}
+              >
+                {sym}
+              </button>
+              <button
+                type="button"
+                className={styles.chipRemove}
+                onClick={() => onRemovePin(sym)}
+                aria-label={`Remove ${sym} from basket`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+SOURCE: frontend/components/molecules/AlternativeContractRow/index.tsx
+import { Text, Data } from '@/components/primitives';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { statusForScore } from '@/lib/status';
+import { resolveIv, formatIv } from '@/lib/ivBasis';
+import { contractBreakdownTooltip } from '@/lib/statusTooltips';
+import type { AlternativeContract } from '@/types/domain';
+import styles from './AlternativeContractRow.module.css';
+
+interface AlternativeContractRowProps {
+  alt: AlternativeContract;
+  rank: number;
+}
+
+export function AlternativeContractRow({ alt, rank }: AlternativeContractRowProps) {
+  const rrStatus = statusForScore(alt.score);
+  const rrTone =
+    rrStatus === 'PASS' ? 'pass' : rrStatus === 'CAUTION' ? 'caution' : rrStatus === 'REJECT' ? 'reject' : undefined;
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.topRow}>
+        <div className={styles.leftGroup}>
+          <Text size={11} tone="dim">Alt {rank}</Text>
+          <Text size={12} tone="primary">
+            {alt.symbol} {alt.strike}{alt.right} {alt.expiry}
+          </Text>
+          <Text size={11} tone="secondary">DTE {alt.dte}</Text>
+        </div>
+        <div className={styles.rightGroup}>
+          <StatusBadge status={alt.contractConfidence} tooltip={contractBreakdownTooltip(alt.contractBreakdown)} tooltipAlign="right" />
+          <Data size={12} weight={500}>{alt.score}</Data>
+        </div>
+      </div>
+
+      <div className={styles.metricsRow}>
+        <Metric label="Mid" value={`$${alt.mid.toFixed(2)}`} />
+        <Metric label="Δ" value={alt.delta.toFixed(2)} />
+        <Metric label="θ" value={`$${alt.theta.toFixed(2)}`} />
+        {}
+        <Metric
+          label={resolveIv(alt).basis === 'rank' ? 'IV rank' : 'IV'}
+          value={formatIv(resolveIv(alt), alt.symbol).text}
+        />
+        <Metric label="R/R" value={`${alt.rrRatio.toFixed(1)}×`} tone={rrTone} />
+      </div>
+
+      <Text size={11} tone="secondary" className={styles.reason}>
+        {alt.reason}
+      </Text>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'pass' | 'caution' | 'reject';
+}) {
+  return (
+    <div className={styles.metric}>
+      <Text size={11} tone="secondary">{label}</Text>
+      <Data size={12} weight={500} tone={tone}>{value}</Data>
+    </div>
+  );
+}
+
+
+SOURCE: frontend/app/(frame)/screener/step-7-trade-card/page.tsx
+'use client';
+
+
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Title, Text } from '@/components/primitives';
+import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
+import { CandidateNav } from '@/components/molecules/CandidateNav';
+import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
+import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
+import { useRiskStore } from '@/lib/riskStore';
+import { contractId as buildContractId } from '@/types/domain';
+import { useScanStore } from '@/lib/scanStore';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
+import { logAudit } from '@/lib/audit';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import type {
+  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride, MethodPick,
+} from '@/types/domain';
+import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
+import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
+import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
+import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
+import {
+  checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
+  checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
+} from '@/lib/risk';
+import { api }               from '@/lib/api';
+import {
+  applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
+  rrOverridesForPlan, withCachedEstimate,
+  cacheStructural, cacheFirstPassage, cacheExitPlan,
+  type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
+} from '@/lib/tradeCardOverride';
+import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
+import { useDirectSendNotesStore, type DirectSendNote } from '@/lib/directSendNotesStore';
+import {
+  brokerLabelFor, classifyDirectFailure, contractLabelFor, directOrderBlock, directSendNoteText,
+  isNotFound, removeConfirmText, whyOf, type DirectOutcome,
+} from './directOrder';
+import styles from '../screener.module.css';
+import toastStyles from './toast.module.css';
+import paperStyles from './page.module.css';
+
+
+const EARNINGS_VETO_MESSAGE = 'Earnings inside the reject window — no send';
+
+function nowISOLocal(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
+function todayISO(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function generateRecId(): string {
+  return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+
+function positiveOrNull(x: number | null | undefined): number | null {
+  return x != null && x > 0 ? x : null;
+}
+
+
+function dropLocal(recId: string): void {
+  usePortfolioStore.setState((s) => ({ positions: s.positions.filter((p) => p.recId !== recId) }));
+}
+
+
+async function removeTrackedRow(recId: string, notFoundIsFinal: boolean): Promise<void> {
+  try {
+    await api.deletePortfolioPosition(recId);
+  } catch (e) {
+    if (!(notFoundIsFinal && isNotFound(e))) throw e;
+  }
+  dropLocal(recId);
+  void usePortfolioStore.getState().syncFromBackend(true).then(() => dropLocal(recId));
+}
+
+function addDirectNote(n: Parameters<ReturnType<typeof useDirectSendNotesStore.getState>['addNote']>[0]): void {
+  useDirectSendNotesStore.getState().addNote(n);
+}
+
+function positionFromOrder(
+  order: DraftOrder,
+  structuralStop: number | null = null,
+  exitPlan: ExitPlan | null = null,
+
+
+
+  maxLossOverride: MaxLossOverride | null = null,
+
+
+
+
+
+
+
+  premiumStopDollar: number | null = null,
+
+
+
+
+  invalidation: number | null = null,
+
+
+
+
+  entryLimit: number | null = null,
+  
+  livePrice: number | null = null,
+
+
+
+
+
+
+
+  pick: MethodPick | null = null,
+): PortfolioPosition {
+  const c   = order.card;
+  const cd  = c.contractDetails;
+  const mid = positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid)
+    ?? positiveOrNull(entryLimit) ?? c.entry.limit;
+  const dte = cd?.dte ?? 24;
+  return {
+    symbol:        c.symbol,
+    contract:      c.contract,
+    direction:     c.direction,
+    entryDate:     todayISO(),
+    expiry:        cd?.expiry ?? new Date(Date.now() + dte * 86_400_000).toISOString().slice(0, 10),
+    dteRemaining:  dte,
+    dteTotal:      dte,
+    entryPrice:    mid,
+    currentPrice:  mid,
+    pnlDollar:     0,
+    pnlPct:        0,
+    stop:          invalidation ?? c.exit.invalidation,
+
+
+    stopIsUserSet: invalidation != null,
+    structuralStop,
+    exitPlan,
+    maxLossOverride,
+
+
+    premiumStopDollar,
+
+
+
+
+    premiumStopPct: premiumStopPctFromDollars(premiumStopDollar, mid) ?? null,
+    targets:       c.exit.targets,
+    status:        c.finalStatus,
+
+
+
+
+    ivRank:        cd?.ivRank,
+    iv:            cd?.iv,
+    delta:         cd?.delta,
+    theta:         cd?.theta,
+    vega:          0.20,
+    contracts:     order.contracts,
+
+    source:        'manual',
+    orderedAt:     nowISOLocal(),
+    recId:         generateRecId(),
+    tradeCardSnapshot: tradeCardSnapshotOf(c),
+    ...pickedFieldsFrom(pick),
+  };
+}
+
+interface ToastState {
+  saved:   number;   // confirmed saved by the backend
+  queued:  number;   // saved locally, pending a backend retry
+
+
+  adjusted: string[];
+}
+
+export default function Step7Page() {
+  const [cards, setCards]         = useState<TradeCardData[]>([]);
+  const [active, setActive]       = useState<string>('');
+  const [basket, setBasket]       = useState<string[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [toast, setToast]         = useState<ToastState | null>(null);
+  const [recIdMap, setRecIdMap]   = useState<Record<string, string>>({});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const [structuralByContract, setStructuralByContract] = useState<Record<string, CachedStructural>>({});
+  
+  const structuralStopPriceFor = (c: TradeCardData): number | null => {
+    const k = contractKeyFor(c);
+    return k ? structuralByContract[k]?.stop?.price ?? null : null;
+  };
+
+
+
+
+  const [estimatesByContract, setEstimatesByContract] = useState<Record<string, CachedFirstPassage>>({});
+
+
+
+
+  const [exitPlanByContract, setExitPlanByContract] = useState<Record<string, CachedExitPlan>>({});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const [orderContractsBySymbol, setOrderContractsBySymbol] = useState<Record<string, number>>({});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const cardEdits = useScanStore((s) => selectCardEdits(s, 'options'));
+  const setCardEdit = useScanStore((s) => s.setCardEdit);
+  const clearCardPick = useScanStore((s) => s.clearCardPick);
+  const premiumStopByContract = cardEdits.premiumStop;
+
+
+
+
+
+
+
+
+
+
+
+
+  const invalidationBySymbol = cardEdits.invalidation;
+
+
+
+  const entryLimitByContract = cardEdits.entryLimit;
+  
+  const [scanEpoch, setScanEpoch] = useState(0);
+  const handleEditsChange = (
+    symbol: string,
+    cardContractKey: string | null,
+    overlay: EditOverlay,
+    meta: { touched: TouchedFields },
+  ) => {
+    setOrderContractsBySymbol((prev) =>
+      prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
+    );
+
+
+
+
+
+    setCardEdit('options', 'invalidation', symbol,
+      meta.touched.invalidation ? overlay.invalidation : null);
+    if (!cardContractKey) return;
+    setCardEdit('options', 'premiumStop', cardContractKey,
+      meta.touched.premiumStop ? overlay.premiumStop : null);
+    setCardEdit('options', 'entryLimit', cardContractKey,
+      meta.touched.entryLimit ? overlay.entryLimit : null);
+  };
+  
+  const editKeyFor = (card: TradeCardData | undefined): string | null => {
+    const strict = contractKeyFor(card);
+    if (strict) return strict;
+    if (!card?.symbol || !card.contract) return null;
+    return `${card.symbol}|${card.contract}`;
+  };
+
+
+
+
+
+  const premiumStopDollarFor = (card: TradeCardData): number | null => {
+    const key = editKeyFor(card);
+    return premiumStopDollarToSend(key ? premiumStopByContract[key] : null);
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const invalidationFor = (card: TradeCardData): number | null =>
+    invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
+
+
+
+
+
+
+
+  const invalidationIsUserSetFor = (card: TradeCardData): boolean =>
+    invalidationBySymbol[card.symbol] != null;
+  
+  const invalidationRawFor = (card: TradeCardData): number | null =>
+    invalidationBySymbol[card.symbol] ?? null;
+
+
+
+  const entryLimitFor = (card: TradeCardData): number => {
+    const key = editKeyFor(card);
+    return (key ? entryLimitByContract[key] : null) ?? card.entry.limit;
+  };
+
+
+
+
+
+
+
+
+
+
+
+  const maxLossOverrideBySymbol = cardEdits.maxLossOverride;
+  const handleMaxLossOverrideChange = (symbol: string, override: MaxLossOverride | null) => {
+    setCardEdit('options', 'maxLossOverride', symbol, override);
+  };
+  
+  const methodPickByContract = cardEdits.picks;
+  const methodPickFor = (card: TradeCardData | undefined): MethodPick | null => {
+    const key = editKeyFor(card);
+    return (key ? methodPickByContract[key] : null) ?? null;
+  };
+  const handleMethodPickChange = (card: TradeCardData, pick: MethodPick | null) => {
+    const key = editKeyFor(card);
+
+
+
+
+    if (!key) return;
+
+
+    if (pick) setCardEdit('options', 'picks', key, pick);
+    else clearCardPick('options', key);
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const handleStructuralStopChange = (
+    key: string | null,
+    stop: StructuralStop | null | undefined,
+    stockPrice: number | null,
+  ) => { if (key) setStructuralByContract((prev) => cacheStructural(prev, key, stop, stockPrice)); };
+  const handleFirstPassageChange = (
+    key: string | null,
+    estimate: FirstPassageEstimate | null | undefined,
+    context: FirstPassageContext | null,
+  ) => setEstimatesByContract((prev) => cacheFirstPassage(prev, key, estimate, context));
+  const handleExitPlanChange = (
+    key: string | null,
+    plan: ExitPlan | null | undefined,
+  ) => setExitPlanByContract((prev) => cacheExitPlan(prev, key, plan));
+
+  useEffect(() => {
+    setRecIdMap((prev) => {
+      const next: Record<string, string> = {};
+      for (const c of cards) {
+        next[c.symbol] = prev[c.symbol] || generateRecId();
+      }
+      return next;
+    });
+  }, [cards]);
+
+  const { selectedBroker, setSelectedBroker } = useAutoTradeStore();
+  const [limitPlacing,   setLimitPlacing]     = useState(false);
+  const [marketPlacing,  setMarketPlacing]    = useState(false);
+
+  const [paperOrderId,   setPaperOrderId]     = useState<{ label: string; id: string } | null>(null);
+  const directNotes = useDirectSendNotesStore((s) => s.notes);
+  const [orderError,     setOrderError]       = useState<string | null>(null);
+
+
+
+
+
+  const [saveNotes, setSaveNotes] = useState<string[]>([]);
+  const addSaveNote = useCallback((note: string) => {
+    setSaveNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
+  }, []);
+
+
+
+
+
+
+  const [basketNotes, setBasketNotes] = useState<string[]>([]);
+
+
+
+
+
+
+
+
+
+  const [basketError, setBasketError] = useState<string | null>(null);
+  const sizeNote = (adjustedQty: number) =>
+    `Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits. The order was sent for ${adjustedQty}.`;
+
+
+
+
+
+  const droppedStopNote = (requested: number | null, reason: PremiumStopDropReason, keptPct?: number) =>
+    premiumStopDropText(requested, reason, keptPct);
+  
+  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number } | null>(null);
+  const [liveStockPrice, setLiveStockPrice]   = useState<{ symbol: string; price: number } | null>(null);
+  const [fetchingQuote,  setFetchingQuote]    = useState(false);
+
+
+
+
+
+
+  const [plansBySymbol, setPlansBySymbol]     = useState<Record<string, { key: string; plan: RecomputedPlanShape }>>({});
+  const [planErrors,    setPlanErrors]        = useState<Record<string, string>>({});
+  const [recomputeTick, setRecomputeTick]     = useState(0);   // bump to force a retry after a failure
+
+
+
+  const requestedPlanKeysRef = useRef<Record<string, string>>({});
+
+  const scanResult          = useScanStore((s) => s.scanResult);
+  const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
+  const pickedContracts     = useScanStore((s) => s.pickedContracts);
+  const contractsBySymbol   = useScanStore((s) => s.contractsBySymbol);
+
+  useEffect(() => {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    setEstimatesByContract({});
+    setStructuralByContract({});
+    setExitPlanByContract({});
+
+
+
+
+    setOrderContractsBySymbol({});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    setScanEpoch((n) => n + 1);
+    if (scanResult?.candidates?.length) {
+      setCards(scanResult.candidates);
+      if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
+    } else {
+      setCards([]);
+      setActive('');
+    }
+  }, [scanResult]);
+
+  useEffect(() => {
+    if (active) setSelectedSymbol(active);
+  }, [active, setSelectedSymbol]);
+
+  useEffect(() => { setPaperOrderId(null); setOrderError(null); setSaveNotes([]); }, [active]);
+
+  const addPosition = usePortfolioStore((s) => s.addPosition);
+  const incrementDaily = useRiskStore((s) => s.incrementDaily);
+
+  const cardIndex = useMemo(
+    () => Object.fromEntries(cards.map((c) => [c.symbol, c])),
+    [cards],
+  );
+  const symbols = cards.map((c) => c.symbol);
+
+  const card = cardIndex[active] ?? cards[0];
+
+  
+  function resolvePickedCard(symbol: string): OverriddenCard | undefined {
+    const raw = cardIndex[symbol];
+    if (!raw) return undefined;
+    const pid = pickedContracts[symbol];
+    const picked = pid ? contractsBySymbol[symbol]?.find((c) => c.id === pid) : undefined;
+    return applyPickedContract(raw, picked);
+  }
+
+
+
+
+  const pickedCard = card ? resolvePickedCard(card.symbol) : undefined;
+  const isOverride = !!pickedCard?._userOverride;
+
+  const liveQcd = pickedCard?.contractDetails;
+  const contractKey = contractKeyFor(pickedCard);
+
+
+
+
+
+  const activePlanEntry = pickedCard ? plansBySymbol[pickedCard.symbol] : undefined;
+  const planForThisContract = isOverride && activePlanEntry?.key === contractKey ? activePlanEntry.plan : null;
+
+
+
+  const planReady = !isOverride || !!planForThisContract;
+  const activePlanError = pickedCard ? planErrors[pickedCard.symbol] : undefined;
+
+  const effectiveCard = pickedCard && planForThisContract ? mergePlan(pickedCard, planForThisContract) : pickedCard;
+
+
+
+
+
+
+
+  const setRailCard = useTradeCardUiStore((s) => s.setActiveCard);
+  useEffect(() => {
+    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady } : null);
+  }, [effectiveCard, planReady, setRailCard]);
+
+
+  useEffect(() => () => setRailCard(null), [setRailCard]);
+
+  
+  const resolvedInvalidationForCard = effectiveCard ? invalidationFor(effectiveCard) : null;
+  const stopMissing = !checkInvalidation(resolvedInvalidationForCard);
+  const editKey = editKeyFor(effectiveCard);
+
+  
+  const resolvedMethodPickForCard = effectiveCard ? methodPickFor(effectiveCard) : null;
+  const pickMissing = !checkMethodPick(resolvedMethodPickForCard);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const cardForDisplay = useMemo(
+    () => withCachedEstimate(
+      effectiveCard,
+      contractKey ? estimatesByContract[contractKey] : undefined,
+      contractKey ? structuralByContract[contractKey] : undefined,
+      contractKey ? exitPlanByContract[contractKey] : undefined,
+    ),
+    [effectiveCard, contractKey, estimatesByContract, structuralByContract, exitPlanByContract],
+  );
+
+
+
+
+
+
+
+  const { cards: basketCards, pending: basketPlansPending } = useMemo(
+    () => resolveBasketCards(basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol, exitPlanByContract),
+    [basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol, exitPlanByContract],
+  );
+
+
+
+
+  const basketPlanErrors = basket
+    .filter((sym) => sym !== pickedCard?.symbol && planErrors[sym])
+    .map((sym) => ({ symbol: sym, error: planErrors[sym]! }));
+
+  
+  function retryPlan(symbol: string) {
+    delete requestedPlanKeysRef.current[symbol];
+    setPlanErrors((prev) => { const next = { ...prev }; delete next[symbol]; return next; });
+    setRecomputeTick((t) => t + 1);
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+  useEffect(() => {
+    if (!contractKey || !pickedCard?.symbol || !liveQcd?.strike || !liveQcd.expiry || !liveQcd.right) {
+      setLiveQuote(null);
+      setFetchingQuote(false);   // an in-flight fetch from a PRIOR invocation is aborted below (or never started for this one) — don't leave "Fetching…" stuck on if this invocation never issues a request of its own.
+      return;
+    }
+    const keyAtRequest = contractKey;
+    const symbol = pickedCard.symbol;
+    const isOverrideAtRequest = isOverride;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if (isOverrideAtRequest && requestedPlanKeysRef.current[symbol] === keyAtRequest) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+
+
+
+    let settled = false;
+    setLiveQuote(null);
+    setLiveStockPrice(null);
+    setFetchingQuote(true);
+
+
+
+
+
+
+    Promise.all([
+      api.getContractQuote(pickedCard.symbol, liveQcd.strike, liveQcd.expiry, liveQcd.right as 'C' | 'P', controller.signal)
+        .catch(() => null),   // silently ignore — scan-time mid used as fallback below
+      api.getStockQuote(pickedCard.symbol, controller.signal)
+        .catch(() => null),   // silently ignore — scan-time price used as fallback below
+    ])
+      .then(([q, sq]) => {
+        if (!controller.signal.aborted) {
+          setLiveQuote(q ? { ...q, key: keyAtRequest } : null);
+          if (sq) setLiveStockPrice({ symbol, price: sq.price });
+        }
+        return [q, sq] as const;
+      })
+      .then(([q, sq]) => {
+        if (controller.signal.aborted) { settled = true; return; }
+        setFetchingQuote(false);
+        if (!isOverrideAtRequest) { settled = true; return; }   // not overridden — no plan to recompute
+        if (requestedPlanKeysRef.current[symbol] === keyAtRequest) { settled = true; return; }   // claimed by a concurrent invocation while this quote was in flight
+        requestedPlanKeysRef.current[symbol] = keyAtRequest;
+
+        api.recomputePlan({
+          symbol,
+          direction:   pickedCard.direction,
+          stock_price: sq?.price ?? pickedCard.price,
+          strike:      liveQcd.strike,
+          dte:         liveQcd.dte,
+          premium:     q?.price ?? liveQcd.mid,
+          delta:       liveQcd.delta,
+          spread:      q?.spread ?? 0,
+
+
+
+          final_stop:  pickedCard.exit.finalStop ?? null,
+          ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+          ...horizonFieldsFrom(useScanStore.getState().context),
+        }, controller.signal)
+          .then((plan) => {
+            settled = true;
+            if (controller.signal.aborted) return;
+            setPlansBySymbol((prev) => ({ ...prev, [symbol]: { key: keyAtRequest, plan } }));
+            setPlanErrors((prev) => { const next = { ...prev }; delete next[symbol]; return next; });
+          })
+          .catch(() => {
+            settled = true;
+            if (controller.signal.aborted) return;
+            setPlanErrors((prev) => ({ ...prev, [symbol]: 'Could not compute the plan for the selected contract. Ordering stays disabled until it succeeds.' }));
+          });
+      });
+
+    return () => {
+      controller.abort();
+
+
+
+
+
+
+
+
+
+
+
+
+      if (!settled && requestedPlanKeysRef.current[symbol] === keyAtRequest) {
+        delete requestedPlanKeysRef.current[symbol];
+      }
+    };
+
+  }, [contractKey, isOverride, recomputeTick]);
+
+
+
+
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+
+
+
+
+
+
+
+    const claimedThisInvocation: { symbol: string; key: string; settled: () => boolean }[] = [];
+    for (const sym of basket) {
+      if (sym === pickedCard?.symbol) continue;   // owned by the active-card effect above
+      const resolved = resolvePickedCard(sym);
+      if (!resolved?._userOverride || !resolved.contractDetails) continue;
+      const key = contractKeyFor(resolved);
+      if (!key || requestedPlanKeysRef.current[sym] === key) continue;
+      requestedPlanKeysRef.current[sym] = key;
+      let settled = false;
+      claimedThisInvocation.push({ symbol: sym, key, settled: () => settled });
+      const cd = resolved.contractDetails;
+      api.recomputePlan({
+        symbol: sym,
+        direction: resolved.direction,
+        stock_price: resolved.price,
+        strike: cd.strike,
+        dte: cd.dte,
+        premium: cd.mid,
+        delta: cd.delta,
+        spread: 0,
+        final_stop: resolved.exit.finalStop ?? null,
+        ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+        ...horizonFieldsFrom(useScanStore.getState().context),
+      }, controller.signal)
+        .then((plan) => {
+          settled = true;
+          if (controller.signal.aborted) return;
+          setPlansBySymbol((prev) => ({ ...prev, [sym]: { key, plan } }));
+          setPlanErrors((prev) => { const next = { ...prev }; delete next[sym]; return next; });
+        })
+        .catch(() => {
+          settled = true;
+          if (!controller.signal.aborted) {
+            setPlanErrors((prev) => ({ ...prev, [sym]: 'Could not compute the plan for this basket contract.' }));
+          }
+        });
+    }
+    return () => {
+      controller.abort();
+      for (const { symbol, key, settled } of claimedThisInvocation) {
+        if (!settled() && requestedPlanKeysRef.current[symbol] === key) {
+          delete requestedPlanKeysRef.current[symbol];
+        }
+      }
+    };
+
+  }, [basket, pickedContracts, contractsBySymbol, cardIndex, pickedCard?.symbol, recomputeTick]);
+
+  
+  function toOptionSymbol(card: TradeCardData): string {
+    const cd = card.contractDetails;
+    if (cd?.strike != null && cd.expiry && cd.right) {
+      return buildContractId(card.symbol, cd.strike, cd.expiry, cd.right);
+    }
+    return card.contract; // fallback (display label — broker may reject, best effort)
+  }
+
+  
+  function exitPlanFor(card: TradeCardData): ExitPlan | null {
+    const key = contractKeyFor(card);
+    return key ? exitPlanByContract[key]?.plan ?? null : null;
+  }
+
+  
+  function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string, livePrice?: number, contracts = 1): PortfolioPosition {
+    const cd  = card.contractDetails;
+    const mid = positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid) ?? entryLimitFor(card);
+    const dte = cd?.dte ?? 24;
+    const brokerLabel = brokerLabelFor(broker);
+    const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
+    return {
+      symbol:        card.symbol,
+      contract:      toOptionSymbol(card),
+      direction:     card.direction,
+      entryDate:     todayISO(),
+      expiry:        cd?.expiry ?? '2026-12-31',
+      dteRemaining:  dte,
+      dteTotal:      dte,
+      entryPrice:    mid,
+      currentPrice:  mid,
+      pnlDollar:     0,
+      pnlPct:        0,
+
+
+
+
+
+      stop:          invalidationFor(card),
+
+
+
+      stopIsUserSet: invalidationIsUserSetFor(card),
+      structuralStop: structuralStopPriceFor(card),
+      exitPlan:      exitPlanFor(card),
+      maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
+
+
+      premiumStopDollar: premiumStopDollarFor(card),
+
+      premiumStopPct: premiumStopPctFromDollars(premiumStopDollarFor(card), mid) ?? null,
+      targets:       card.exit.targets,
+      status:        card.finalStatus,
+      ivRank:        cd?.ivRank,
+      iv:            cd?.iv,
+      delta:         cd?.delta,
+      theta:         cd?.theta,
+      vega:          0.20,
+      contracts,
+      source:        'paper',
+      sourceLabel:   `${brokerLabel} — ${typeLabel} (ID: ${orderId})`,
+      orderedAt:     nowISOLocal(),
+      recId:         generateRecId(),
+      scanStockPrice: card.price,
+      tradeCardSnapshot: tradeCardSnapshotOf(card),
+
+
+
+      ...pickedFieldsFrom(methodPickFor(card)),
+    };
+  }
+
+  
+  async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
+    const card = effectiveCard;
+    if (!card || !selectedBroker) return;
+
+    if (card.earningsVeto === true) return;
+
+
+
+
+    if (!checkInvalidation(invalidationFor(card))) return;
+
+    if (!checkMethodPick(methodPickFor(card))) return;
+
+
+    setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
+    const broker = selectedBroker;
+    const blocked = directOrderBlock(orderType, broker);
+    if (blocked) { setOrderError(blocked); return; }
+    const setPlacing = orderType === 'LMT' ? setLimitPlacing : setMarketPlacing;
+    setPlacing(true);
+    setPaperOrderId(null);
+    let label = card.contract;
+    try {
+
+
+      label = contractLabelFor(card);
+      const brokerLabel = brokerLabelFor(broker);
+
+
+      const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
+
+
+      const optionSymbol = toOptionSymbol(card);
+      const limitPrice = orderType === 'LMT' ? entryLimitFor(card) : null;
+      const pos = buildPaperPosition(card, orderType, broker, 'pending', liveQuoteForCard?.price, contracts);
+      const recId = pos.recId;
+
+
+      if (usePortfolioStore.getState().positions.some((p) => p.contract === pos.contract)) {
+        setOrderError(`${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`);
+        return;
+      }
+
+      const saved = await persistPosition(pos);
+
+
+
+
+
+
+      const bare5xx = !saved.ok && !saved.offline && /^HTTP 5\d\d$/.test(saved.detail ?? '');
+      const unparsed2xx = saved.ok && saved.entryPrice == null;
+      if (saved.offline || bare5xx || unparsed2xx) {
+        setOrderError(unparsed2xx
+          ? `${label}: Portfolio saved it but its reply could not be read, so NO order was sent.`
+          : `${label}: Portfolio tracking could not be confirmed, so NO order was sent.`);
+        addDirectNote({ recId, kind: 'save-unconfirmed', label, brokerLabel, orderId: null });
+        dropLocal(recId);
+        try { await removeTrackedRow(recId, false); } catch {  }
+        return;
+      }
+      if (!saved.ok) {
+
+
+
+        const detail = saved.detail ?? 'not saved';
+        setOrderError(/already exists/.test(detail)
+          ? `${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`
+          : `${label}: No order was sent — ${detail.replace(/\.$/, '')}.`);
+        return;
+      }
+
+
+
+      const orderQty = saved.adjustedQty ?? contracts;
+      const keepRow = (why: string, orderId: string | null) => {
+
+        addDirectNote({ recId, kind: 'order-unknown', label, brokerLabel, orderId });
+        const banner = `${label}: Order status UNKNOWN (${why}).`;
+        setOrderError(banner);
+        try {
+          applyPersistedPosition(
+            saved, { ...pos, contracts: orderQty }, addPosition,
+            (q) => addSaveNote(`${label}: Portfolio sized it to ${q}; the order was requested for ${q}, status unknown.`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
+          );
+        } catch (e) {
+          setOrderError(`${banner} The local view failed to update: ${String(e)}`);
+        }
+      };
+      try {
+        let outcome: DirectOutcome;
+        try {
+          const res = await api.postOptionOrder({
+            broker,
+            symbol:        card.symbol,
+            option_symbol: optionSymbol,
+            action:        'BUY',
+            effect:        'OPEN',
+            quantity:      orderQty,
+            order_type:    orderType,
+            limit_price:   limitPrice,
+            tif:           'DAY',
+          });
+          outcome = classifyDirectFailure({ response: res });
+        } catch (e) {
+          outcome = classifyDirectFailure({ thrown: e });
+        }
+
+        if (outcome.verdict === 'delete') {
+
+          try {
+            await removeTrackedRow(recId, true);
+            setOrderError(`${label}: Order NOT placed: ${outcome.why}. The tracked position was removed.`);
+          } catch {
+            setOrderError(`${label}: Order NOT placed: ${outcome.why}.`);
+            addDirectNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null });
+          }
+          return;
+        }
+        if (outcome.verdict === 'keep') {
+          keepRow(outcome.why, outcome.orderId);
+          return;
+        }
+
+        const orderId = outcome.orderId;
+        try {
+          applyPersistedPosition(
+            saved,
+            { ...pos, contracts: orderQty, sourceLabel: `${brokerLabel} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: ${orderId})` },
+            addPosition,
+            (q) => addSaveNote(`${label}: ${sizeNote(q)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
+          );
+        } catch (e) {
+          setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
+        }
+        setPaperOrderId({ label, id: orderId });
+      } catch (e) {
+
+
+        keepRow(String(e), null);
+      }
+    } catch (e) {
+
+      setOrderError(`${label}: No order was sent — ${String(e)}`);
+    } finally {
+      setPlacing(false);
+    }
+  }
+
+  const placeLimitPaper = () => placeDirectOrder('LMT');
+  const placeMarketNow  = () => placeDirectOrder('MKT');
+
+  
+  async function removeNoteRow(note: DirectSendNote) {
+    if (note.removing) return;
+    if (!window.confirm(removeConfirmText(note))) return;
+    const { patchNote, removeNote } = useDirectSendNotesStore.getState();
+    patchNote(note.recId, { removing: true, status: null });
+    try {
+
+
+
+      await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
+      removeNote(note.recId);
+    } catch (e) {
+      patchNote(note.recId, {
+        removing: false,
+        status: note.kind === 'save-unconfirmed' && isNotFound(e)
+          ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
+          : `Remove failed: ${whyOf(e)}. Try again.`,
+      });
+    }
+  }
+
+  
+  const liveQuoteForCard = liveQuote && liveQuote.key === contractKey ? liveQuote : null;
+  const liveStockPriceForCard =
+    liveStockPrice && liveStockPrice.symbol === effectiveCard?.symbol
+      ? liveStockPrice.price
+      : null;
+
+  const marketBlocked = directOrderBlock('MKT', selectedBroker);
+
+
+
+  const earningsVeto = effectiveCard?.earningsVeto === true;
+
+  const idx = symbols.indexOf(active);
+
+  const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
+  const goNext = () => { if (idx >= 0 && idx < symbols.length - 1) setActive(symbols[idx + 1]!); };
+
+  const togglePin = () => {
+
+    if (earningsVeto && !basket.includes(active)) return;
+    setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
+  };
+  const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
+
+  const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
+    usePortfolioStore.getState().clearSyncError();
+
+
+
+
+
+
+
+
+
+
+
+
+    setSaveNotes([]);
+    setBasketNotes([]);
+    setBasketError(null);
+    setOrderError(null);
+    let saved = 0, queued = 0;
+    const failures: string[] = [];
+    const adjusted: string[] = [];
+
+    for (const o of orders) {
+
+
+      const recId = recIdMap[o.card.symbol] ?? generateRecId();
+      const structuralStop = structuralStopPriceFor(o.card);
+      const orderContractKey = contractKeyFor(o.card);
+      const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
+      const orderMaxLossOverride = maxLossOverrideBySymbol[o.card.symbol] ?? null;
+      const res = await addPosition({
+        ...positionFromOrder(
+          o, structuralStop, orderExitPlan, orderMaxLossOverride,
+          premiumStopDollarFor(o.card), invalidationRawFor(o.card), entryLimitFor(o.card),
+
+
+
+
+
+
+
+          o.card.symbol === effectiveCard?.symbol ? liveQuoteForCard?.price ?? null : null,
+          methodPickFor(o.card),
+        ),
+        recId,
+
+
+
+        scanStockPrice: o.card.price,
+      });
+
+      if (res.status === 'rejected') {
+
+        failures.push(`${o.card.symbol}: ${res.detail ?? 'not saved'}`);
+        continue;
+      }
+
+
+
+
+
+      if (res.premiumStopDropReason != null) {
+        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped ?? null, res.premiumStopDropReason, res.premiumStopKeptPct)}`;
+        setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
+      }
+      if (res.status === 'pending') {
+
+
+
+        queued++;
+        continue;
+      }
+
+      incrementDaily();
+      saved++;
+      if (res.adjustedQty != null) {
+        adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
+      }
+      logAudit('APPROVE', recId, {
+        symbol: o.card.symbol,
+        contract: o.card.contract,
+        contracts: o.contracts,
+      });
+    }
+    setDialogOpen(false);
+    setBasket([]);
+
+
+
+
+    if (saved + queued > 0) {
+      setToast({ saved, queued, adjusted });
+      window.setTimeout(() => setToast(null), 6000);
+    }
+    if (failures.length) {
+      setBasketError(`Some orders were not saved — ${failures.join('; ')}`);
+    }
+  };
+
+  const basketEmpty = basket.length === 0;
+  const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
+
+  return (
+    <div className={styles.main}>
+      <div className={styles.stepHeader}>
+        <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
+        <Title as="h1" size={24}>Trade Card</Title>
+        <Text size={13} tone="secondary">
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
+          places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
+          its card instead of tracking it, or close the tracked row first.
+        </Text>
+      </div>
+
+      <CandidateNav
+        symbols={symbols}
+        activeSymbol={active}
+        basket={basket}
+        onPrev={goPrev}
+        onNext={goNext}
+        onSelect={setActive}
+        onTogglePin={togglePin}
+        onRemovePin={removePin}
+        pinDisabled={earningsVeto}
+        pinDisabledReason={EARNINGS_VETO_MESSAGE}
+      />
+
+      {cards.length === 0 && (
+        <Text size={13} tone="dim">Run a scan to generate trade cards.</Text>
+      )}
+
+      {effectiveCard && (
+        <>
+          {effectiveCard._userOverride && (
+            <StatusBadge status="PENDING" label="User-selected" tooltip="Manually pinned as the active trade card — not a scoring verdict." />
+          )}
+          {}
+          {isOverride && !planReady ? (
+            <div aria-busy={!activePlanError}>
+              {activePlanError ? (
+                <>
+                  <Text size={12} tone="reject">{activePlanError}</Text>
+                  <button
+                    type="button"
+                    className={paperStyles.paperBtnMarket}
+                    onClick={() => retryPlan(effectiveCard.symbol)}
+                  >
+                    Retry
+                  </button>
+                </>
+              ) : (
+                <Text size={12} tone="secondary">Preparing the plan for your selected contract…</Text>
+              )}
+            </div>
+          ) : (
+            <TradeCard
+              data={cardForDisplay ?? effectiveCard}
+              recId={recIdMap[effectiveCard.symbol]}
+              onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
+              sendLabel={sendLabel}
+              sendDisabled={basketEmpty || basketPlansPending}
+              contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+
+
+
+              onEditsChange={(overlay, meta) => handleEditsChange(effectiveCard.symbol, editKeyFor(effectiveCard), overlay, meta)}
+
+
+
+
+
+
+
+
+
+              initialPremiumStop={editKey ? premiumStopByContract[editKey] ?? null : null}
+
+
+
+
+
+              initialEntryLimit={editKey ? entryLimitByContract[editKey] ?? null : null}
+              initialInvalidation={invalidationBySymbol[effectiveCard.symbol] ?? null}
+
+
+
+
+
+              liveStockPrice={liveStockPriceForCard}
+              liveMid={liveQuoteForCard?.price ?? null}
+              resetKey={scanEpoch}
+              onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(contractKey, stop, stockPrice)}
+              onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
+              onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
+              initialMaxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
+              onMaxLossOverrideChange={(v) => handleMaxLossOverrideChange(effectiveCard.symbol, v)}
+              initialMethodPick={methodPickFor(effectiveCard)}
+              onMethodPickChange={(pick) => handleMethodPickChange(effectiveCard, pick)}
+            />
+          )}
+          {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
+            <Text size={11} tone="caution">
+              Computing the plan for an overridden contract in your basket — Track basket enables once it&apos;s ready.
+            </Text>
+          )}
+          {basketPlanErrors.map(({ symbol, error }) => (
+            <div key={symbol} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <Text size={11} tone="reject">{symbol}: {error}</Text>
+              <button type="button" className={paperStyles.paperBtnMarket} onClick={() => retryPlan(symbol)}>
+                Retry {symbol}
+              </button>
+            </div>
+          ))}
+          {fetchingQuote && (
+            <Text size={11} tone="dim">Fetching live price…</Text>
+          )}
+          {liveQuoteForCard && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
+          )}
+          {liveStockPriceForCard != null && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live stock: ${liveStockPriceForCard.toFixed(2)}</Text>
+          )}
+        </>
+      )}
+
+      {}
+      {effectiveCard && (
+        <div className={paperStyles.paperSection}>
+          <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
+          {selectedBroker && (
+            <>
+              <div className={paperStyles.paperButtons}>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnLimit}
+                  onClick={placeLimitPaper}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto}
+                  title={
+                    earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
+                >
+                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
+                </button>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnMarket}
+                  onClick={placeMarketNow}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || marketBlocked != null}
+                  title={
+
+                    marketBlocked != null ? marketBlocked
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
+                >
+                  {marketPlacing ? 'Placing…' : 'Right Now — Market'}
+                </button>
+              </div>
+              {}
+              {earningsVeto && (
+                <Text size={11} tone="reject">
+                  {EARNINGS_VETO_MESSAGE}
+                </Text>
+              )}
+              {!planReady && (
+                <Text size={11} tone="caution">
+                  Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
+                </Text>
+              )}
+              {}
+              {stopMissing && (
+                <Text size={11} tone="reject">
+                  {MISSING_INVALIDATION_MESSAGE}
+                </Text>
+              )}
+              {}
+              {pickMissing && (
+                <Text size={11} tone="reject">
+                  {MISSING_METHOD_PICK_MESSAGE}
+                </Text>
+              )}
+              {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
+              {}
+              {planReady && (
+                <AutoTradeArm
+                  armBlockedReason={earningsVeto ? EARNINGS_VETO_MESSAGE : null}
+
+
+
+
+                  liveMid={liveQuoteForCard?.price ?? null}
+                  card={effectiveCard}
+                  broker={selectedBroker}
+                  contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+
+
+
+                  premiumStopDollar={premiumStopDollarFor(effectiveCard)}
+
+
+
+                  entryLimit={entryLimitFor(effectiveCard)}
+
+
+
+
+
+
+
+                  resolvedInvalidation={resolvedInvalidationForCard}
+
+
+
+
+
+
+
+                  optionSymbol={toOptionSymbol(effectiveCard)}
+                  stopIsUserSet={invalidationIsUserSetFor(effectiveCard)}
+                  structuralStop={structuralStopPriceFor(effectiveCard)}
+                  exitPlan={exitPlanFor(effectiveCard)}
+                  maxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
+
+
+
+
+                  methodPick={resolvedMethodPickForCard}
+                />
+              )}
+            </>
+          )}
+          {}
+          {saveNotes.map((n) => (
+            <Text key={n} size={12} tone="caution">{n}</Text>
+          ))}
+          {basketNotes.map((n) => (
+            <Text key={`basket:${n}`} size={12} tone="caution">{n}</Text>
+          ))}
+          {basketError && <Text size={12} tone="reject">{basketError}</Text>}
+          {orderError && <Text size={12} tone="reject">{orderError}</Text>}
+          {}
+          {directNotes.map((n) => (
+            <div key={`direct:${n.recId}`} className={paperStyles.directNote}>
+              <Text size={12} tone="reject">{directSendNoteText(n)}</Text>
+              <button
+                type="button"
+                className={paperStyles.directNoteRemove}
+                onClick={() => { void removeNoteRow(n); }}
+                disabled={n.removing}
+              >
+                {`Remove (${n.label})`}
+              </button>
+              {n.status && <Text size={11} tone="caution">{n.status}</Text>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {dialogOpen && (
+        <SendToBrokerDialog
+          cards={basketCards}
+          contractsBySymbol={orderContractsBySymbol}
+          overridesBySymbol={maxLossOverrideBySymbol}
+          invalidationBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, invalidationFor(c)]),
+          )}
+          methodPickBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, methodPickFor(c)]),
+          )}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={handleSubmit}
+        />
+      )}
+
+      {toast && (
+        <div className={toastStyles.toast} role="status" aria-live="polite">
+          <div>
+            <Text size={13} weight={500}>{toast.saved + toast.queued} added to Portfolio</Text>
+            <Text size={11} tone="caution">No broker order was placed. Tracked rows reserve their contract — to trade one, close the row and send from its card.</Text>
+            {toast.queued > 0 && <Text size={11} tone="secondary">{toast.queued} awaiting backend sync</Text>}
+            {toast.adjusted.length > 0 && (
+              <Text size={11} tone="caution">
+                Size reduced to fit exposure limits — {toast.adjusted.join(', ')}
+              </Text>
+            )}
+          </div>
+          <Link href="/portfolio" className={toastStyles.link}>
+            View Portfolio →
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+SOURCE: frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx
+'use client';
+
+
+
+import { useEffect, useMemo } from 'react';
+import { RailSection } from '@/components/organisms/ContextRail';
+import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
+import { Text } from '@/components/primitives';
+import { StatusDot } from '@/components/atoms/StatusDot';
+import { useScanStore } from '@/lib/scanStore';
+import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
+import { statusForScore } from '@/lib/status';
+import {
+  useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
+  type HorizonIvThresholds,
+} from '@/lib/ivThresholdsStore';
+import type { ThresholdHorizon } from '@/lib/eventThresholdsStore';
+import { resolveIv, formatIv } from '@/lib/ivBasis';
+import { ScreenerStepGate } from '@/components/organisms/ScreenerStepGate';
+import type { TradeCardData, WatchlistRow } from '@/types/domain';
+import type { Status } from '@/lib/status';
+import styles from './page.module.css';
+
+interface Gate {
+  label:  string;
+  status: 'PASS' | 'CAUTION' | 'REJECT';
+  
+  detail: string;
+}
+
+function buildChecklist(
+  candidate: TradeCardData,
+  wlRow: WatchlistRow | undefined,
+  regime: Status,
+  horizonKey: ThresholdHorizon,
+  ivThresholds: Record<ThresholdHorizon, HorizonIvThresholds> | null,
+  rrPending: boolean,
+  ivOverride: { value: number; yaml: number } | null = null,
+  eventWindow: { reject_days: number; caution_days: number } | undefined = undefined,
+): Gate[] {
+  const gates: Gate[] = [];
+
+  if (regime !== 'PENDING' && regime !== 'NO_DATA') {
+    const regimeStatus: 'PASS' | 'CAUTION' | 'REJECT' =
+      regime === 'PASS' ? 'PASS' : regime === 'CAUTION' ? 'CAUTION' : 'REJECT';
+    gates.push({ label: 'Regime PASS', status: regimeStatus, detail: `Current market regime: ${regime}.` });
+  }
+
+
+
+
+
+  const iv = resolveIv(candidate.contractDetails);
+
+
+
+
+
+
+
+  const gateDisabled = ivThresholds !== null
+    && getIvPassMax(horizonKey, ivThresholds, iv.basis === 'none' ? 'absolute' : iv.basis) === null;
+  if (ivThresholds === null) {
+    gates.push({
+      label: 'IV acceptable',
+      status: 'CAUTION',
+      detail: 'IV thresholds could not be loaded from scoring_rules.yaml — the IV gate was not applied.',
+    });
+  } else if (gateDisabled) {
+    gates.push({
+      label: 'IV acceptable',
+      status: 'PASS',
+      detail: `No IV gate for ${horizonKey}.`,
+    });
+  } else if (iv.basis === 'none') {
+    gates.push({
+      label: 'IV acceptable',
+      status: 'CAUTION',
+      detail: 'No implied-volatility data for this contract — the IV gate could not be applied.',
+    });
+  } else {
+    const ivValue      = iv.value as number;
+    const shown        = formatIv(iv, candidate.symbol);
+    const ivPassMax    = getIvPassMax(horizonKey, ivThresholds, iv.basis);
+    const ivCautionMax = getIvCautionMax(horizonKey, ivThresholds, iv.basis);
+    const noun         = iv.basis === 'rank' ? 'IV rank' : 'IV';
+    const ivStatus: 'PASS' | 'CAUTION' | 'REJECT' =
+      ivPassMax === null    ? 'PASS' :           // Intraday: no IV gate
+      ivValue <= ivPassMax  ? 'PASS' :
+      ivCautionMax !== null && ivValue <= ivCautionMax ? 'CAUTION' :
+      'REJECT';
+    gates.push({
+      label: 'IV acceptable',
+      status: ivStatus,
+      detail: ivPassMax === null
+        ? `${noun} ${shown.text} — no IV gate for ${horizonKey}.`
+        : `${noun} ${shown.text} vs. pass ≤${ivPassMax}${ivCautionMax != null ? ` / caution ≤${ivCautionMax}` : ''}.`
+
+          + (ivOverride !== null && iv.basis === 'absolute'
+            ? ` (session override from Settings; scoring_rules.yaml: ${ivOverride.yaml})` : ''),
+    });
+  }
+
+
+
+
+
+
+
+
+  if (candidate.earningsUnknown) {
+    gates.push(candidate.isEtf
+      ? {
+          label: 'Earnings date',
+          status: 'PASS',
+          detail: 'ETF — no earnings date to check.',
+        }
+      : {
+          label: 'Earnings date',
+          status: 'CAUTION',
+          detail: 'No earnings date on file — the card is capped at CAUTION and auto-trade will not fire a single stock. Check the calendar before sending.',
+        });
+  }
+
+
+
+
+  const days = candidate.earningsDays;
+  if (days != null) {
+    gates.push(eventWindow
+      ? {
+          label: 'Earnings outside reject window',
+          status: days < eventWindow.reject_days ? 'REJECT' : days < eventWindow.caution_days ? 'CAUTION' : 'PASS',
+          detail: `Next event in ${days}d — reject <${eventWindow.reject_days}d, caution <${eventWindow.caution_days}d (this scan's window).`,
+        }
+      : {
+          label: 'Earnings outside reject window',
+          status: 'CAUTION',
+          detail: `Next event in ${days}d — this scan carried no event window; re-run the scan.`,
+        });
+  }
+
+  const minScore = Math.min(candidate.stockScore, candidate.contractScore);
+  gates.push({
+    label: 'Score ≥ 55',
+    status: statusForScore(minScore) as 'PASS' | 'CAUTION' | 'REJECT',
+    detail: `Lower of stock score (${candidate.stockScore}) and contract score (${candidate.contractScore}) = ${minScore}.`,
+  });
+
+
+  if (rrPending) {
+    gates.push({
+      label: 'R:R ≥ 2.0',
+      status: 'CAUTION',
+      detail: 'R:R not yet recomputed for the contract picked in Step 6.',
+    });
+  } else gates.push({
+    label: 'R:R ≥ 2.0',
+    status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',
+    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}× — pass ≥2.0×, caution 1.5-2.0×.`,
+  });
+
+  const spreadScore = candidate.contractBreakdown.spread;
+  gates.push({
+    label: 'Spread < 5% of price',
+    status: spreadScore >= 70 ? 'PASS' : spreadScore >= 40 ? 'CAUTION' : 'REJECT',
+    detail: `Spread quality sub-score ${spreadScore}/100 — pass ≥70, caution 40-69.`,
+  });
+
+  return gates;
+}
+
+export default function TradeCardContextRail() {
+  const published           = useTradeCardUiStore((s) => s.activeCard);
+  const regime              = useScanStore((s) => s.combinedRegime);
+  const horizon             = useScanStore((s) => s.context?.horizon);
+
+  const eventWindow         = useScanStore((s) => s.scanResult?.event_window);
+
+  const ivFetched           = useIvThresholdsStore((s) => s.thresholds);
+  const ivOverrides         = useIvThresholdsStore((s) => s.overrides);
+  const ivThresholds = useMemo(
+    () => effectiveIvThresholds(ivFetched, ivOverrides),
+    [ivFetched, ivOverrides],
+  );
+  useEffect(() => { void useIvThresholdsStore.getState().fetch(); }, []);
+
+  const horizonKey: ThresholdHorizon = horizon?.startsWith('Intraday') ? 'Intraday'
+    : horizon?.startsWith('Position') ? 'Position'
+    : 'Swing';
+
+  const candidate = published?.card;
+
+  const wlRow: WatchlistRow | undefined = candidate
+    ? {
+        symbol: candidate.symbol,
+        company: candidate.company,
+        price: candidate.price,
+        direction: candidate.direction,
+        horizon: 'Swing',
+        score: candidate.stockScore,
+        rankDelta: 0,
+        scoreDelta: 0,
+        status: candidate.status,
+        breakdown: candidate.stockBreakdown,
+        nextEventDays: candidate.nextEventDays,
+        nextEventLabel: candidate.nextEventLabel,
+      }
+    : undefined;
+
+  const gates = candidate ? buildChecklist(
+    candidate, wlRow, regime, horizonKey, ivThresholds, published?.rrPending ?? false,
+    ivOverrideFor(horizonKey, ivFetched, ivOverrides),
+    eventWindow,
+  ) : [];
+
+  return (
+    <ScreenerStepGate>
+      <>
+      <RailSection title={candidate ? `Pre-trade checklist · ${candidate.symbol}` : 'Pre-trade checklist'}>
+        {!candidate ? (
+          <Text size={12} tone="dim">Run a scan to populate the checklist.</Text>
+        ) : (
+          <>
+            <Text size={11} tone="dim">
+              Gates for this candidate. Portfolio-level checks live below.
+            </Text>
+            <div className={styles.checklistStack}>
+              {gates.map((g) => (
+                <div key={g.label} className={styles.checklistRow} data-gate-label={g.label} data-status={g.status}>
+                  <StatusDot tone={g.status} size="sm" title={g.detail} />
+                  <Text size={12} tone={g.status === 'CAUTION' ? 'caution' : 'secondary'}>
+                    {g.label}
+                  </Text>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </RailSection>
+
+      <RailSection title="Historical analogs">
+        <Text size={12} tone="dim">Not yet available.</Text>
+      </RailSection>
+
+      <RailQuickLook />
+      </>
+    </ScreenerStepGate>
+  );
+}
+
+
+SOURCE: frontend/components/organisms/AutoTradeArm/index.tsx
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Text } from '@/components/primitives';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
+import { useRiskStore } from '@/lib/riskStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { useScanStore } from '@/lib/scanStore';
+import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
+import { regimeGateFromCard, MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
+import { api } from '@/lib/api';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { armBookingFieldsFrom, classifyFireFailure } from '@/lib/armBookingFields';
+import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
+import { premiumStopIsSubCent } from '@/lib/premiumStop';
+import { armPickedFieldsFrom } from '@/lib/cardEdits';
+import { checkInvalidation, MISSING_INVALIDATION_TITLE, checkMethodPick, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
+import type { TradeCardData, MethodPick, ExitPlan, MaxLossOverride } from '@/types/domain';
+import styles from './AutoTradeArm.module.css';
+
+interface AutoTradeArmProps {
+  card: TradeCardData;
+  broker: string | null;
+  
+  contracts?: number;
+  
+  premiumStopDollar?: number | null;
+  
+  entryLimit?: number | null;
+  
+  resolvedInvalidation?: number | null;
+  
+  methodPick?: MethodPick | null;
+  
+  liveMid?: number | null;
+  
+  optionSymbol: string;
+  
+  stopIsUserSet: boolean;
+  
+  structuralStop?: number | null;
+  
+  exitPlan?: ExitPlan | null;
+  
+  maxLossOverride?: MaxLossOverride | null;
+  
+  armBlockedReason?: string | null;
+}
+
+const MODE_LABELS: Record<AutoTradeMode, string> = {
+  manual:    'Manual — I press the button',
+  post_scan: 'After scan — fire when next scan finds a PASS',
+  armed:     'Armed — fire on next qualifying condition',
+};
+
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null,
+                               optionSymbol, stopIsUserSet, structuralStop = null, exitPlan = null, maxLossOverride = null,
+                               armBlockedReason = null }: AutoTradeArmProps) {
+  const { autoMode, setAutoMode, armed, armedDirection, armedSymbol, applyArmedStatus,
+          lastOrderId, setLastOrderId } = useAutoTradeStore();
+  const [working, setWorking] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  
+  const [fireNote, setFireNote] = useState<string | null>(null);
+  
+  const [lastFireBooked, setLastFireBooked] = useState<boolean | null>(null);
+
+  const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
+  
+  const [dupWarning, setDupWarning] = useState<{ contracts: number; entryPrice: number } | null>(null);
+
+
+
+
+
+
+
+
+  const statusSeq = useRef(0);
+
+  const refreshStatus = useCallback(async () => {
+    const seq = statusSeq.current;
+    try {
+      const status = await api.getAutoTradeStatus();
+      if (seq !== statusSeq.current) return;   // superseded while in flight
+
+
+
+
+
+
+
+
+
+      applyArmedStatus(status.armed, status.direction, status.symbol);
+      if (status.armed) setAutoMode('armed');
+    } catch {
+
+    }
+  }, [applyArmedStatus, setAutoMode]);
+
+  useEffect(() => { void refreshStatus(); }, [refreshStatus]);
+
+
+
+
+  useEffect(() => { setDupWarning(null); }, [optionSymbol]);
+
+
+
+
+  const entryPremium =
+    (liveMid != null && liveMid > 0 ? liveMid : null)
+    ?? card.contractDetails?.mid ?? entryLimit ?? card.entry.limit;
+
+  
+  const premiumStopAtOrAbovePremium = premiumStopDollar != null
+    && entryPremium > 0 && premiumStopDollar >= entryPremium;
+
+  
+  const premiumStopSubCent = premiumStopDollar != null
+    && entryPremium > 0 && premiumStopDollar > 0 && premiumStopDollar < entryPremium
+    && premiumStopIsSubCent(entryPremium, premiumStopDollar / entryPremium, false);
+
+  
+  const armedStop = resolvedInvalidation ?? card.exit.invalidation;
+
+
+
+  const stopMissing = !checkInvalidation(armedStop);
+  
+  const pickMissing = !checkMethodPick(methodPick);
+  
+  const regimeGate = regimeGateFromCard(card);
+  const gateSnapshotMissing = regimeGate === null;
+  
+  const armBlocked = armBlockedReason != null;
+  const fireBlocked = armBlocked && (armedSymbol == null || armedSymbol === card.symbol);
+  
+
+  
+  async function handleArm(confirmedDuplicate = false) {
+    if (!broker) return;
+
+
+
+
+
+    if (stopMissing) return;
+
+
+
+    if (pickMissing) return;
+
+
+    if (regimeGate === null) return;
+
+
+    if (armBlocked) return;
+
+
+
+
+
+
+
+
+    if (!confirmedDuplicate) {
+      const held = usePortfolioStore.getState().positions.find((p) => p.contract === optionSymbol);
+      if (held) {
+        setDupWarning({ contracts: held.contracts ?? 1, entryPrice: held.entryPrice });
+        return;
+      }
+    }
+    setDupWarning(null);
+    setWorking(true); setError(null); setFireNote(null);
+    try {
+      await api.armAutoTrade({
+        broker,
+        symbol:          card.symbol,
+        option_symbol:   optionSymbol,
+
+
+
+        action:          'BUY',
+
+
+
+
+        direction:       card.direction,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        horizon:         scoringHorizonFromLabel(useScanStore.getState().context?.horizon),
+
+
+
+
+
+
+
+
+        ...regimeGate,
+
+
+
+
+
+
+        quantity:        Math.max(1, contracts),
+        order_type:      'LMT',
+        limit_price:     entryLimit ?? card.entry.limit,
+        entry_premium:   entryPremium,
+
+
+
+
+
+
+        premium_stop_pct: premiumStopPctFromDollars(premiumStopDollar, entryPremium),
+
+
+
+        portfolio_value: useRiskStore.getState().limits.portfolioValue,
+
+
+
+
+
+
+
+
+
+
+
+        ...armPickedFieldsFrom(methodPick ?? null),
+
+
+
+
+
+        ...armBookingFieldsFrom({
+          stop:              armedStop,
+          stopIsUserSet,
+          scanStockPrice:    card.price,
+          structuralStop,
+          exitPlan,
+          targets:           card.exit.targets,
+          dteTotal:          card.contractDetails?.dte,
+          premiumStopDollar,
+          maxLossOverride,
+          tradeCardSnapshot: tradeCardSnapshotOf(card),
+        }),
+      });
+
+
+      statusSeq.current += 1;
+
+
+
+      applyArmedStatus(true, card.direction, card.symbol);
+
+
+
+
+
+      void refreshStatus();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleDisarm() {
+    setWorking(true); setError(null); setFireNote(null);
+    try {
+      await api.disarmAutoTrade();
+      statusSeq.current += 1;
+
+
+      applyArmedStatus(false, null, null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleFireNow() {
+
+    if (fireBlocked) return;
+    setWorking(true); setError(null); setFireNote(null);
+    try {
+      const res = await api.fireAutoTrade();
+      setLastOrderId(res.order_id);
+      setLastFireBooked(res.booked === false ? false : res.booked === true ? true : null);
+      statusSeq.current += 1;
+      applyArmedStatus(false, null, null);
+
+
+
+      if (res.booked === false) {
+
+
+
+        setFireNote(
+          `No position was recorded for this fire: ${res.book_error ?? 'no reason given'}. `
+          + 'Nothing is watching its stop. Check the broker, then record or adjust the position on the Portfolio page.',
+        );
+      } else if (res.booked === true) {
+        if (res.over_exposure === true) {
+          setFireNote(
+            `Booked as ${res.rec_id ?? 'a new position'} at the ordered size, which is past your exposure limit. `
+            + 'Nothing was resized — the portfolio matches the broker.',
+          );
+        }
+
+
+        void usePortfolioStore.getState().syncFromBackend(true);
+      }
+    } catch (e) {
+      if (classifyFireFailure(e) === 'refused') {
+        setError(String(e));
+
+
+
+
+
+
+
+        statusSeq.current += 1;
+        void refreshStatus();
+      } else {
+
+
+
+
+
+        setFireNote(
+          'The fire request did not return a result — the order may or may not have been placed. '
+          + 'Check the broker and your portfolio before firing again.',
+        );
+        statusSeq.current += 1;   // same reason as the refused branch above
+        void refreshStatus();
+        void usePortfolioStore.getState().syncFromBackend(true);
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className={styles.wrap}>
+      <Text size={13} weight={600}>Auto-trade mode</Text>
+
+      <div className={styles.modeRow}>
+        {(Object.keys(MODE_LABELS) as AutoTradeMode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            className={`${styles.modeBtn} ${autoMode === m ? styles.modeBtnActive : ''}`}
+            onClick={() => setAutoMode(m)}
+            disabled={armed}
+          >
+            <Text size={12}>{MODE_LABELS[m]}</Text>
+          </button>
+        ))}
+      </div>
+
+      {autoMode === 'armed' && (
+        <div className={styles.armRow}>
+          {!armed ? (
+            <button type="button" className={`${styles.btn} ${styles.btnArm}`}
+              onClick={() => { void handleArm(); }} disabled={!broker || working || armBlocked || stopMissing || pickMissing || gateSnapshotMissing}
+              title={
+
+
+                armBlocked ? (armBlockedReason as string)
+                : stopMissing ? MISSING_INVALIDATION_TITLE
+                : pickMissing ? MISSING_METHOD_PICK_TITLE
+                : gateSnapshotMissing ? MISSING_REGIME_GATE_SNAPSHOT_TITLE
+                : undefined
+              }>
+              {working ? 'Arming…' : `Arm — ${card.symbol} ${card.direction}`}
+            </button>
+          ) : (
+            <>
+              <StatusBadge status="CAUTION" tooltip="Auto-trade is armed — the next matching signal will submit a live order automatically. Always CAUTION while armed, regardless of scan status, because unattended execution carries elevated risk." />
+              <Text size={12} tone="caution">
+                {}
+                {armedSymbol && armedDirection
+                  ? `Armed ${armedSymbol} ${armedDirection} — waiting for next trigger`
+                  : 'Armed — waiting for next trigger'}
+              </Text>
+              <button type="button" className={styles.btn} onClick={handleDisarm} disabled={working}>
+                Disarm
+              </button>
+              <button type="button" className={styles.btn} onClick={handleFireNow} disabled={working || fireBlocked}
+                title={fireBlocked ? (armBlockedReason as string) : undefined}>
+                Fire now
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {autoMode === 'armed' && !armed && premiumStopAtOrAbovePremium && (
+        <Text size={11} tone="caution">
+          {`Your $${(premiumStopDollar as number).toFixed(2)} premium stop is at or above today's `
+            + `$${entryPremium.toFixed(2)} premium. If the fill is at or below `
+            + `$${(premiumStopDollar as number).toFixed(2)}, the booked position inherits the global stop `
+            + `(${Number((globalPremiumStopPct * 100).toFixed(2))}%); above it, your `
+            + `$${(premiumStopDollar as number).toFixed(2)} stop applies.`}
+        </Text>
+      )}
+
+      {autoMode === 'armed' && !armed && premiumStopSubCent && (
+        <Text size={11} tone="caution">
+          {`Your $${(premiumStopDollar as number).toFixed(2)} premium stop leaves a threshold below $0.01 `
+            + `at today's $${entryPremium.toFixed(2)} premium, so it could never fire. If it is still below `
+            + `$0.01 at the fill, the booked position inherits the global stop `
+            + `(${Number((globalPremiumStopPct * 100).toFixed(2))}%).`}
+        </Text>
+      )}
+
+      {autoMode === 'armed' && !armed && gateSnapshotMissing && (
+        <Text size={11} tone="caution">{MISSING_REGIME_GATE_SNAPSHOT_TITLE}</Text>
+      )}
+
+      {(autoMode === 'armed' || autoMode === 'post_scan') && (
+
+
+
+
+
+
+
+        <Text size={11} tone="caution">
+          When an auto-trade fires, it is booked as a position with the invalidation you typed, or the
+          plan&apos;s invalidation moved with the stock price at booking, and the premium stop and exit plan
+          this card had when you armed it — later edits do not change an armed trade. If the booking is
+          refused you will see it here (Fire now) and get an alert (Gmail/Telegram, if set up).
+        </Text>
+      )}
+
+      {autoMode === 'post_scan' && (
+        <Text size={11} tone="secondary">
+          The system will automatically place this trade when the next scan completes with a PASS candidate.
+          Run or schedule a scan to activate.
+        </Text>
+      )}
+
+      {lastOrderId && (lastFireBooked === false
+
+
+        ? <Text size={12} tone="caution">Order sent — ID: {lastOrderId} (not booked)</Text>
+        : <Text size={12} tone="pass">Auto-trade fired — Order ID: {lastOrderId}</Text>
+      )}
+      {error && <Text size={12} tone="reject">{error}</Text>}
+      {fireNote && <Text size={12} tone="caution">{fireNote}</Text>}
+
+      {dupWarning && (
+        <ConfirmDialog
+          title={`You already hold ${optionSymbol}`}
+          body={
+            `Existing position: ${dupWarning.contracts} contract${dupWarning.contracts === 1 ? '' : 's'} `
+            + `at $${dupWarning.entryPrice.toFixed(2)}. Arming will place a second buy-to-open on this contract `
+            + 'when it fires. That order will NOT be added to your portfolio (a contract is booked once) — '
+            + "you will be alerted, and should adjust the existing position's size by hand."
+          }
+          confirmLabel="Arm anyway"
+          onCancel={() => setDupWarning(null)}
+          onConfirm={() => { setDupWarning(null); void handleArm(true); }}
+        />
+      )}
+    </div>
+  );
+}
+
+
+SOURCE: frontend/components/organisms/BrokerPicker/index.tsx
+'use client';
+
+import { Text } from '@/components/primitives';
+import { useSettingsStore } from '@/lib/settingsStore';
+import type { OptionsBroker } from '@/lib/autoTradeStore';
+import styles from './BrokerPicker.module.css';
+
+interface BrokerPickerProps {
+  selected: OptionsBroker | null;
+  onChange: (b: OptionsBroker) => void;
+}
+
+export function BrokerPicker({ selected, onChange }: BrokerPickerProps) {
+  const { ibkrPaper, tradierPaper, tastytradePaper } = useSettingsStore();
+  const ibkrOk    = !!ibkrPaper.accountId;
+  const tradierOk = !!tradierPaper.token && !!tradierPaper.accountId;
+  const tastyOk   = !!tastytradePaper.clientSecret && !!tastytradePaper.refreshToken && !!tastytradePaper.accountId;
+
+  return (
+    <div className={styles.wrap}>
+      <Text size={11} tone="dim">Execute via</Text>
+      <div className={styles.row}>
+        {([
+          { key: 'ibkr_paper' as OptionsBroker, label: 'IBKR Paper', ok: ibkrOk },
+          { key: 'tradier_paper' as OptionsBroker, label: 'Tradier Paper', ok: tradierOk },
+          { key: 'tastytrade_paper' as OptionsBroker, label: 'Tastytrade Paper', ok: tastyOk },
+        ] as const).map(({ key, label, ok }) => (
+          <button
+            key={key}
+            type="button"
+            className={`${styles.btn} ${selected === key ? styles.btnActive : ''}`}
+            disabled={!ok}
+            onClick={() => onChange(key)}
+            title={!ok ? 'Configure in Settings → Brokers' : undefined}
+          >
+            <Text size={12} weight={selected === key ? 600 : 400}>{label}</Text>
+            {!ok && <Text size={10} tone="dim">Not configured</Text>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
