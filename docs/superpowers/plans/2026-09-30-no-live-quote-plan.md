@@ -19,6 +19,11 @@
     sandbox) base. The sandbox is 15 minutes delayed (`_is_sandbox_base`, `market.py:58`), so any
     quote-age rule must account for it.
   - Only then rewrite 3a/3g against what was seen.
+  - **Status 2026-10-03:** the script exists: `backend/scripts/tradier_chain_raw_sample.py` (tests
+    `backend/tests/test_tradier_chain_raw_sample.py`, run instructions
+    `backend/scripts/README_tradier_chain_raw_sample.md`). **No sample has been taken yet**: it needs
+    Kenneth's production Tradier token, which no agent session has. Nothing below changes until the four
+    samples exist.
 
 ## What is true on main (from the parent plan, §1 item 4)
 
@@ -108,8 +113,9 @@ plus a label).** The reason key is `no_live_quote`; it replaces r1's `quote_stal
 - Such a run can still trigger `maybe_fire_on_scan`, which 3d then refuses for an option strategy.
 
 *3g. Verification gate: before any of fix 3 is built.*
-- The off-hours shape is read from code comments, never observed. Rerun
-  `backend/scripts/contract_liquidity_sample.py` pre-market, after the close and at a weekend. For every row,
+- The off-hours shape is read from code comments, never observed. Run
+  `backend/scripts/tradier_chain_raw_sample.py` (not the old `contract_liquidity_sample.py`, which went
+  through `/api/contracts` and so could not see the case) pre-market, after the close and at a weekend. For every row,
   record `bid`, `ask`, `last`, `volume`, `bid_date`, `ask_date` and `trade_date`.
 - Pass condition: off-hours rows show `bid == 0 or ask == 0`, and in-session rows are two-sided with
   current `bid_date`/`ask_date`.

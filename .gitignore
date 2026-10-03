@@ -95,3 +95,7 @@ llm-contexts/e2e-output.log
 # their own" is the comment-contradicts-code defect this project counts.
 zz-scratch-*
 zzz_*
+
+# Local output of measurement scripts (e.g. NO-LIVE-QUOTE's tradier_chain_raw_sample.py).
+# Raw market-data samples: commit a run deliberately with `git add -f` if it is evidence.
+backend/scripts/out/
