@@ -29,14 +29,6 @@
         }
       ],
       "task": "OPTIONS-CONTRACT-EXPLANATIONS"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/trade-card-parallel-handoff",
-      "claimed_at": "2026-10-03T21:06:48Z",
-      "expires_at": "2026-10-04T00:06:48Z",
-      "note": "User-authorized docs-only publication to origin/main",
-      "task": "TRADE-CARD-PRESENTATION-HANDOFF"
     }
   ]
 }
