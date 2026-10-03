@@ -2,20 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "codex/shortlist-prefix-drift",
-      "claimed_at": "2026-10-03T10:05:56Z",
-      "expires_at": "2026-10-03T13:05:56Z",
-      "note": "User reassigned shortlist prefix fix; validate and independently audit",
-      "previous": [
-        {
-          "branch": "codex/trading-review-phase-b",
-          "claimed_at": "2026-10-03T10:00:07Z"
-        }
-      ],
-      "task": "SHORTLIST-PREFIX-DRIFT"
-    },
-    {
-      "agent": "claude",
       "branch": "codex/server-account-risk",
       "claimed_at": "2026-10-03T10:06:33Z",
       "expires_at": "2026-10-03T13:06:33Z",
