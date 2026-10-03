@@ -59,6 +59,7 @@ strategies:
     exit:
       exit_swing_lookback: 20
       rr_target_mult: 2.0
+      min_signal_rr: 1.0   # review fix #6: skip signals whose first target is < 1R
     search:
       # 35 is included alongside the original [20, 50] grid because
       # active.bearish.ema_period is deliberately hand-tuned to 35 — this

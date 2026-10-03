@@ -58,8 +58,13 @@ def test_entry_start_blocks_entries_before_it(monkeypatch):
 
     monkeypatch.setattr(Backtest, "run", spy)
 
-    full = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
-    late = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish", entry_start=cut)
+    # min_signal_rr=0.0 opts out of the YAML's 1R floor (review fix #6): this test
+    # needs the pre-floor trade set, since the floor removes the pre-`cut` entry.
+    nofloor = {"min_signal_rr": 0.0}
+    full = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                                 params=nofloor)
+    late = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                                 params=nofloor, entry_start=cut)
 
     full_entries, late_entries = entry_times
     # Without the cutoff the strategy does trade before `cut` ...

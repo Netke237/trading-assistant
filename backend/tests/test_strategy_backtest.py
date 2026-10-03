@@ -262,8 +262,11 @@ def test_below_gate_result_preserves_real_trade_stats():
     signals, which silently broke walk-forward optimization on realistic (low)
     trade counts (2026-08 audit)."""
     bars = _synth_bars(400, trend=True)
+    # min_signal_rr=0.0 opts out of the YAML's 1R floor (review fix #6): this test
+    # is about the sub-gate stats path, and the synthetic bars only yield sub-1R setups.
     below_gate = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
-                                        min_trades=1000)  # unreachable gate
+                                        min_trades=1000,  # unreachable gate
+                                        params={"min_signal_rr": 0.0})
     assert below_gate.n_trades > 0, "fixture must produce at least one real trade for this test to be meaningful"
     assert below_gate.passes_gate is False
     assert below_gate.confidence is None
@@ -286,10 +289,12 @@ def test_backtest_result_changes_with_params():
     # default 0.04) — how close price must pull back to the EMA to count as a
     # setup. A near-zero tolerance should fire far fewer (or differently timed)
     # entries than a very loose one.
+    # min_signal_rr=0.0 opts out of the 1R floor (review fix #6) so the synthetic
+    # bars still trade; this test is about params being forwarded, not the floor.
     tight = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
-                                   params={"tolerance": 0.005})
+                                   params={"tolerance": 0.005, "min_signal_rr": 0.0})
     loose = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
-                                   params={"tolerance": 0.15})
+                                   params={"tolerance": 0.15, "min_signal_rr": 0.0})
     # They must not be silently identical, which is what happens if params is
     # never forwarded into the signal function.
     assert tight.n_trades != loose.n_trades or tight.summary_text != loose.summary_text
