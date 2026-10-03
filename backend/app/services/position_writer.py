@@ -96,6 +96,7 @@ from app.schemas import PortfolioPositionCreate
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
 from app.services.portfolio_performance import _contract_multiplier
+from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
 from app.services.portfolio_risk import (
     EXCEEDS_MAX_CONTRACTS,
     check_position_risk,
@@ -536,6 +537,28 @@ async def create_position(
                 # saying the same thing, and an unusable dollar is no reason to
                 # discard a fraction that is independently valid.
                 resolved_premium_stop_pct = body.premiumStopPct
+
+        # STOP-SEMANTICS-2026-10-02 (b): a stop below $0.01 at the PERSISTED
+        # entry can never fire. Checked on the FINAL value, so a sub-cent client
+        # fraction arriving as the fallback above is caught too. Never refuse
+        # the create -- on the broker and auto-trade paths the order may already
+        # be at the broker -- so this falls back exactly as the ratio >= 1
+        # branch does: to the client's fraction when that is itself usable,
+        # else None (inherit the global). The client reads the drop off the
+        # response's null `premiumStopPct` and says why.
+        short_stock = is_short_stock_position(body.contract, body.direction)
+        if resolved_premium_stop_pct is not None and premium_stop_is_sub_cent(
+            entry_price, resolved_premium_stop_pct, short_stock,
+        ):
+            _log.warning(
+                "create_position: premium stop %.6f at the persisted entry %.4f for %s fires below $0.01 "
+                "and could never fire -- not stored",
+                resolved_premium_stop_pct, entry_price, body.contract,
+            )
+            fallback = body.premiumStopPct
+            if fallback is not None and premium_stop_is_sub_cent(entry_price, fallback, short_stock):
+                fallback = None
+            resolved_premium_stop_pct = fallback
 
         # Phase G (piece 5) — seed the post-trade alert basis from the trader's
         # pre-trade pick, so TP_HIT starts life agreeing with the card the trade was

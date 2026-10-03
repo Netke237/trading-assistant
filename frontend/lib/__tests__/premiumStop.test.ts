@@ -361,7 +361,13 @@ describe('premiumStopDollarBounds', () => {
     for (let cents = 2; cents <= 5000; cents++) {
       const { min, max } = premiumStopDollarBounds(cents / 100);
       const wantMin = Math.max(1, Math.ceil(cents * PREMIUM_STOP_MIN_PCT));
-      const wantMax = Math.max(wantMin, Math.floor(cents * PREMIUM_STOP_MAX_PCT));
+      // STOP-SEMANTICS (b): the ceiling is the largest whole cent at or under
+      // the 99% cap whose threshold the engines can still reach at $0.01
+      // (`0.01 <= mid * (1 - d / mid)`, the engines' own comparison, spelled
+      // out here rather than through the helper under test).
+      let wantMax = Math.floor(cents * PREMIUM_STOP_MAX_PCT);
+      while (wantMax >= wantMin && !(0.01 <= (cents / 100) * (1 - (wantMax / 100) / (cents / 100)))) wantMax -= 1;
+      wantMax = Math.max(wantMin, wantMax);
       if (Math.round(min * 100) !== wantMin) offenders.push(`min ${min} on ${cents}c, want ${wantMin}c`);
       if (Math.round(max * 100) !== wantMax) offenders.push(`max ${max} on ${cents}c, want ${wantMax}c`);
     }
@@ -432,5 +438,132 @@ describe('pythonRound4', () => {
     const toFixedOnly = table.filter(([x, py]) => Number(x.toFixed(4)) !== py).length;
     expect(naive).toBeGreaterThan(0);
     expect(toFixedOnly).toBeGreaterThan(0);
+  });
+});
+
+// ── STOP-SEMANTICS-2026-10-02 ───────────────────────────────────────────────
+import * as stopSemantics from '@/lib/premiumStop';
+import subCentFixture from './fixtures/premium_stop_subcent.json';
+
+describe('STOP-SEMANTICS -- the TS twins agree with Python on the shared fixture', () => {
+  const {
+    premiumStopIsSubCent, percentStopThresholdPrice, percentStopFiringPrice,
+    isShortStockPosition, premiumStopSide,
+  } = stopSemantics;
+  const fx = subCentFixture as unknown as {
+    long: [number, number, boolean][]; dollar: [number, number, boolean][]; short: [number, number, number][];
+  };
+
+  it('premiumStopIsSubCent equals Python on every long boundary row', () => {
+    const bad = fx.long.filter(([ec, bp, want]) => premiumStopIsSubCent(ec / 100, bp / 10000, false) !== want);
+    expect(bad.slice(0, 5)).toEqual([]);
+    expect(fx.long.length).toBeGreaterThan(1000);
+  });
+
+  it('...and on the whole e - 1c dollar family (2,878 of them sub-cent: Q4)', () => {
+    const bad = fx.dollar.filter(([ec, dc, want]) => {
+      const e = ec / 100;
+      return premiumStopIsSubCent(e, (dc / 100) / e, false) !== want;
+    });
+    expect(bad.slice(0, 5)).toEqual([]);
+    expect(fx.dollar.filter(([, , s]) => s).length).toBe(2878);
+  });
+
+  it('the short threshold is bit-identical to Python (N6)', () => {
+    const bad = fx.short.filter(([ec, bp, t]) => percentStopThresholdPrice(ec / 100, bp / 10000, true) !== t);
+    expect(bad.slice(0, 5)).toEqual([]);
+  });
+
+  it('a short is never sub-cent, even at a $0.05 entry and 90%', () => {
+    expect(premiumStopIsSubCent(0.05, 0.9, true)).toBe(false);
+    expect(premiumStopIsSubCent(0.05, 0.9, false)).toBe(true);
+  });
+
+  it('isShortStockPosition is Bearish |STOCK only, case-sensitive', () => {
+    expect(isShortStockPosition('AAPL|STOCK', 'Bearish')).toBe(true);
+    expect(isShortStockPosition('AAPL|STOCK', 'Bullish')).toBe(false);
+    expect(isShortStockPosition('AAPL|190|2026-05-16|P', 'Bearish')).toBe(false);
+    expect(isShortStockPosition('AAPL|stock', 'Bearish')).toBe(false);
+    expect(premiumStopSide('AAPL|STOCK', 'Bearish')).toBe('short-stock');
+    expect(premiumStopSide('AAPL|STOCK', 'Bullish')).toBe('long-stock');
+    expect(premiumStopSide('AAPL|190|2026-05-16|P', 'Bearish')).toBe('option');
+  });
+
+  it('percentStopFiringPrice (short) is the SMALLEST 2dp price at or above the computed threshold', () => {
+    const offenders: string[] = [];
+    for (let ec = 1; ec <= 20000; ec += 37) {
+      for (let bp = 1000; bp <= 9900; bp += 125) {
+        const e = ec / 100; const p = bp / 10000;
+        const t = percentStopThresholdPrice(e, p, true);
+        const x = percentStopFiringPrice(e, p, true);
+        // In integer cents: `x - 0.01` is itself a float op and can land on t.
+        const c = Math.round(x * 100);
+        if (!(c / 100 === x && c / 100 >= t && (c - 1) / 100 < t)) offenders.push(`${e} @ ${p}: ${x} vs ${t}`);
+      }
+    }
+    expect(offenders.slice(0, 5)).toEqual([]);
+    // $100.00 at 10%: 110.00000000000001, so the engine fires at $110.01.
+    expect(percentStopFiringPrice(100, 0.1, true)).toBe(110.01);
+    expect(percentStopFiringPrice(10, 0.1, true)).toBe(11);
+    // Long side is the existing helper.
+    expect(percentStopFiringPrice(4, 0.07, false)).toBe(premiumStopFiringPrice(4, 0.07));
+  });
+});
+
+describe('STOP-SEMANTICS -- the editors never offer a stop that cannot fire', () => {
+  const { premiumStopIsSubCent, premiumStopMinWholeCentEntry } = stopSemantics;
+
+  it('premiumStopDollarBounds: for every mid $0.02-$50, max is not sub-cent and max >= min', () => {
+    // Fails on main at 43 mids ($0.03, $0.06, $0.08, $0.09, $0.11, ...).
+    const offenders: string[] = [];
+    for (let cents = 2; cents <= 5000; cents++) {
+      const mid = cents / 100;
+      const { min, max } = premiumStopDollarBounds(mid);
+      if (premiumStopIsSubCent(mid, max / mid, false) || max < min) offenders.push(`${mid}: ${min}-${max}`);
+    }
+    expect(offenders).toEqual([]);
+    expect(premiumStopDollarBounds(0.03).max).toBe(0.01);
+    // The degenerate $0.01 mid is unchanged (TradeCard renders it read-only).
+    expect(premiumStopDollarBounds(0.01)).toEqual({ min: 0.01, max: 0.01 });
+  });
+
+  it('the Settings hint limit is the smallest whole-cent entry that fires, 10.00%-99.00%', () => {
+    // Fails on main's closed form at 80% ($0.05), 90% ($0.10), 98.75% ($0.80).
+    const offenders: string[] = [];
+    for (let bp = 1000; bp <= 9900; bp++) {
+      const pct = bp / 10000;
+      const limit = premiumStopMinWholeCentEntry(pct);
+      const below = Math.round(limit * 100) - 1;
+      if (premiumStopIsSubCent(limit, pct, false)) offenders.push(`${pct}: ${limit} is sub-cent`);
+      if (below >= 1 && !premiumStopIsSubCent(below / 100, pct, false)) offenders.push(`${pct}: ${below}c already fires`);
+    }
+    expect(offenders).toEqual([]);
+    expect(premiumStopMinWholeCentEntry(0.8)).toBe(0.06);
+    expect(premiumStopMinWholeCentEntry(0.9)).toBe(0.11);
+    expect(premiumStopMinWholeCentEntry(0.9875)).toBe(0.81);
+    expect(premiumStopMinWholeCentEntry(0.6)).toBe(0.03);
+  });
+});
+
+describe('STOP-SEMANTICS -- why a create dropped the stop', () => {
+  const { premiumStopDropReason, premiumStopDropText } = stopSemantics;
+
+  it('all four branches', () => {
+    expect(premiumStopDropReason(null, 4)).toBe('below_one_cent');      // fraction-only
+    expect(premiumStopDropReason(2, null)).toBe('unknown');             // no entry reported
+    expect(premiumStopDropReason(2, 0)).toBe('unknown');
+    expect(premiumStopDropReason(4.5, 4.2)).toBe('total_loss');         // ratio >= 1
+    expect(premiumStopDropReason(0.02, 0.03)).toBe('below_one_cent');   // e - 1c noise
+  });
+
+  it('one wording, with and without the dollar', () => {
+    expect(premiumStopDropText(4.5, 'total_loss')).toBe(
+      'Premium stop of $4.50/share could not be applied: at the filled premium it is a total loss — this position inherits the global stop.');
+    expect(premiumStopDropText(0.02, 'below_one_cent')).toBe(
+      'Premium stop of $0.02/share could not be applied: at the filled premium it would fire below $0.01 — this position inherits the global stop.');
+    expect(premiumStopDropText(null, 'below_one_cent')).toBe(
+      'Premium stop could not be applied: at the filled premium it would fire below $0.01 — this position inherits the global stop.');
+    expect(premiumStopDropText(2, 'unknown')).toBe(
+      'Premium stop of $2.00/share could not be applied: (reason unavailable) — this position inherits the global stop.');
   });
 });

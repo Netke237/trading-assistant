@@ -405,6 +405,11 @@ class AlertItem(BaseModel):
     # None on every other alert type, and on any PREMIUM_STOP predating this
     # field -- the Alerts page falls back to resolving it live for those.
     premiumStopPct: Optional[float] = None
+    # PREMIUM_STOP only -- the side rule it fired under: 'short-stock' (fires
+    # on a RISE), 'long-stock' or 'option' (STOP-SEMANTICS-2026-10-02). Also
+    # selects the notifier's dedup key, so a short's rise-side fire never
+    # inherits dedup state written under the old fall-side rule.
+    stopSide: Optional[str] = None
 
 
 # ── Events ───────────────────────────────────────────────────────────────────

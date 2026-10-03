@@ -28,7 +28,7 @@ import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
-import { premiumStopDollarToSend } from '@/lib/premiumStop';
+import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
 import {
   checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
   checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
@@ -547,8 +547,10 @@ export default function Step7Page() {
   // The one place the card can tell the user their premium stop did not survive
   // the save-time re-anchor. The router logs it server-side and the position
   // quietly inherits the global -- a TIGHTER stop than the one asked for.
-  const droppedStopNote = (requested: number) =>
-    `Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`;
+  // STOP-SEMANTICS -- the wording (and the reason it names) is shared with the
+  // Portfolio banner through `premiumStopDropText`.
+  const droppedStopNote = (requested: number | null, reason: PremiumStopDropReason) =>
+    premiumStopDropText(requested, reason);
   /* ROUND 10 finding 1 — the quote CARRIES THE CONTRACT IT IS FOR.
    *
    * These used to be bare values, cleared at the top of the fetch effect. The
@@ -1163,7 +1165,7 @@ export default function Step7Page() {
           applyPersistedPosition(
             saved, { ...pos, contracts: orderQty }, addPosition,
             (q) => addSaveNote(`${label}: Portfolio sized it to ${q}; the order was requested for ${q}, status unknown.`),
-            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+            (r, why) => addSaveNote(`${label}: ${droppedStopNote(r, why)}`),
           );
         } catch (e) {
           setOrderError(`${banner} The local view failed to update: ${String(e)}`);
@@ -1211,7 +1213,7 @@ export default function Step7Page() {
             { ...pos, contracts: orderQty, sourceLabel: `${brokerLabel} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: ${orderId})` },
             addPosition,
             (q) => addSaveNote(`${label}: ${sizeNote(q)}`),
-            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+            (r, why) => addSaveNote(`${label}: ${droppedStopNote(r, why)}`),
           );
         } catch (e) {
           setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
@@ -1337,8 +1339,8 @@ export default function Step7Page() {
       // only two paths that told the user were placeLimitPaper and
       // placeMarketNow. Same fallback, same silence, one of four create paths
       // away. Symbol-qualified because a basket submits several at once.
-      if (res.premiumStopDropped != null) {
-        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped)}`;
+      if (res.premiumStopDropReason != null) {
+        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped ?? null, res.premiumStopDropReason)}`;
         setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
       }
       if (res.status === 'pending') {

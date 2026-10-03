@@ -121,3 +121,87 @@ describe('alertStore', () => {
     });
   });
 });
+// ── STOP-SEMANTICS-2026-10-02 -- a short stock's PREMIUM_STOP has its own key ─
+describe('alertStore -- STOP-SEMANTICS side-aware key', () => {
+  const short = {
+    kind: 'Critical' as const, symbol: 'AAPL', reason: 'Stock stop — AAPL at $110.00',
+    recId: 'REC-S', alertType: 'PREMIUM_STOP' as const, stopSide: 'short-stock' as const,
+  };
+  let fetchMock: jest.Mock;
+
+  beforeEach(() => {
+    fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ sent: true }) });
+    (global as unknown as { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
+    useAlertStore.setState({ toasts: [], config: DEFAULT_CONFIG, firedAlerts: {}, suppressedAlerts: {} });
+  });
+
+  it('legacy fall-side state (acknowledged key, throttle stamp, open row) cannot touch the rise-side fire', () => {
+    const now = Date.now();
+    useAlertStore.setState({
+      suppressedAlerts: { 'REC-S-PREMIUM_STOP': true },
+      firedAlerts: { 'REC-S-PREMIUM_STOP': now },
+      toasts: [{
+        id: 'legacy', kind: 'Critical', symbol: 'AAPL', reason: 'Premium stop — AAPL down 12.0%',
+        recId: 'REC-S', alertType: 'PREMIUM_STOP', dismissed: false, acknowledged: false,
+        firedAt: new Date(now - 3600_000).toISOString(),
+      }],
+    });
+    useAlertStore.getState().addToast(short);
+    const { toasts, firedAlerts } = useAlertStore.getState();
+    expect(toasts).toHaveLength(2);                                   // a NEW row
+    expect(toasts.find((t) => t.id === 'legacy')!.reason).toBe('Premium stop — AAPL down 12.0%');
+    expect(toasts.find((t) => t.id !== 'legacy')!.stopSide).toBe('short-stock');
+    expect(firedAlerts['REC-S-PREMIUM_STOP:short']).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);                       // and it notifies
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    expect(body.stopSide).toBe('short-stock');
+  });
+
+  it('acknowledging the short row suppresses only the :short key, and it refreshes in place', () => {
+    const store = useAlertStore.getState();
+    store.addToast(short);
+    store.addToast({ ...short, reason: 'Stock stop — AAPL at $111.00' });
+    expect(useAlertStore.getState().toasts).toHaveLength(1);
+    expect(useAlertStore.getState().toasts[0].reason).toBe('Stock stop — AAPL at $111.00');
+    store.acknowledgeAlert(useAlertStore.getState().toasts[0].id);
+    expect(useAlertStore.getState().suppressedAlerts).toEqual({ 'REC-S-PREMIUM_STOP:short': true });
+    store.addToast(short);
+    expect(useAlertStore.getState().toasts).toHaveLength(1);           // suppressed
+  });
+
+  it('regression guard: long-stock and option PREMIUM_STOP keep the legacy key', () => {
+    const store = useAlertStore.getState();
+    store.addToast({ ...short, recId: 'REC-L', stopSide: 'long-stock' });
+    store.addToast({ ...short, recId: 'REC-O', stopSide: 'option' });
+    store.addToast({ ...short, recId: 'REC-U', stopSide: undefined });
+    expect(Object.keys(useAlertStore.getState().firedAlerts).sort()).toEqual(
+      ['REC-L-PREMIUM_STOP', 'REC-O-PREMIUM_STOP', 'REC-U-PREMIUM_STOP']);
+  });
+
+  it('hydration keeps one legacy and one short row for the same position', async () => {
+    const now = Date.now();
+    const row = (id: string, over: Record<string, unknown>) => ({
+      id, kind: 'Critical', symbol: 'AAPL', reason: 'x', recId: 'REC-S', alertType: 'PREMIUM_STOP',
+      dismissed: false, acknowledged: false, firedAt: new Date(now - 60_000).toISOString(), ...over,
+    });
+    localStorage.setItem('bamendjou-alerts-v2', JSON.stringify({
+      version: 3,
+      state: {
+        toasts: [row('legacy', {}), row('short', { stopSide: 'short-stock' })],
+        config: DEFAULT_CONFIG, suppressedAlerts: {}, firedAlerts: {},
+      },
+    }));
+    await useAlertStore.persist.rehydrate();
+    expect(useAlertStore.getState().toasts.map((t) => t.id).sort()).toEqual(['legacy', 'short']);
+  });
+
+  it('regression guard (R3-B2): rehydrating a v3 blob leaves STRUCTURAL_STOP_BREACHED off', async () => {
+    const enabledTypes = DEFAULT_CONFIG.enabledTypes.filter((t) => t !== 'STRUCTURAL_STOP_BREACHED');
+    localStorage.setItem('bamendjou-alerts-v2', JSON.stringify({
+      version: 3,
+      state: { toasts: [], config: { ...DEFAULT_CONFIG, enabledTypes }, suppressedAlerts: {}, firedAlerts: {} },
+    }));
+    await useAlertStore.persist.rehydrate();
+    expect(useAlertStore.getState().config.enabledTypes).not.toContain('STRUCTURAL_STOP_BREACHED');
+  });
+});

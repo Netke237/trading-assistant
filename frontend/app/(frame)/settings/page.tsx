@@ -24,7 +24,7 @@ import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { resolveProfileToScanRequest, scheduleRiskIgnored } from '@/lib/scanScheduleResolve';
 import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal, type ScanScheduleEntry, type ScanScheduleRun } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
-import { PREMIUM_STOP_MAX_PCT, premiumStopPctLabel } from '@/lib/premiumStop';
+import { PREMIUM_STOP_MAX_PCT, premiumStopMinWholeCentEntry, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
 
@@ -98,19 +98,23 @@ export default function SettingsPage() {
  *    $0.00, which neither alert engine fires on.
  *  - Above 99% but below 100%: it DOES fire (at entry x (1 - pct)), so no
  *    never-fires claim -- only that saving applies the 99% maximum.
- *  - Below 100%: the entry price under which the threshold is below $0.01,
- *    computed from the RAW value (both engines use it until Settings is
- *    saved), rounded UP to the cent in integer cents. */
+ *  - Below 100%: the smallest whole-cent entry at which the stop is NOT
+ *    sub-cent, computed from the RAW value (both engines use it until
+ *    Settings is saved) THROUGH the sub-cent predicate (STOP-SEMANTICS R2-2):
+ *    the old closed form named a limit that was itself sub-cent at 80%, 90%
+ *    and 98.75%.
+ *  - Shorts are excluded throughout: a short stock's stop fires on a RISE, so
+ *    neither the never-fires note nor the sub-cent hint applies to it. */
 function PremiumStopSettingNotes({ pct }: { pct: number }) {
   if (!Number.isFinite(pct)) return null;
   if (pct >= 1) {
     return (
       <Text size={11} tone="caution">
-        Stored 100% can never fire, in this browser or on the server. Save to apply 99%.
+        Stored 100% can never fire for long positions and options, in this browser or on the server. Save to apply 99%.
       </Text>
     );
   }
-  const limitCents = Math.ceil((0.01 / (1 - pct)) * 100 - 1e-9);
+  const limit = premiumStopMinWholeCentEntry(pct);
   return (
     <>
       {pct > PREMIUM_STOP_MAX_PCT && (
@@ -119,8 +123,11 @@ function PremiumStopSettingNotes({ pct }: { pct: number }) {
         </Text>
       )}
       <Text size={11} tone="dim">
-        {`At ${premiumStopPctLabel(pct)}, an entry below $${(limitCents / 100).toFixed(2)} puts the stop `
-          + 'threshold below $0.01 — fires only on a sub-penny quote.'}
+        {`At ${premiumStopPctLabel(pct)}, for long positions and options an entry below $${limit.toFixed(2)} `
+          + 'puts the stop threshold below $0.01 — it can never fire.'}
+      </Text>
+      <Text size={11} tone="dim">
+        For short stock positions this is how far the price may RISE above entry.
       </Text>
     </>
   );
