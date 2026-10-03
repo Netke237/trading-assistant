@@ -45,6 +45,7 @@ def _real_lookup_and_clean_caches(monkeypatch):
     monkeypatch.setattr(market, "_fundamentals_calendar_cache", {})
     monkeypatch.setattr(market, "_yf_cal_cache", {})
     monkeypatch.setattr(market, "_yf_cal_cache_date", "")
+    monkeypatch.setattr(market, "_yf_cal_fail_until", {})
     monkeypatch.setattr(market, "get_tradier_creds", lambda: ("tok", "https://tradier.test"))
 
 
@@ -114,12 +115,64 @@ def test_strict_yf_lookup_returns_none_for_a_genuinely_empty_calendar(monkeypatc
     assert market._calendar_dates_yf_strict("AAPL") == (None, None)
 
 
-def test_scan_does_not_day_cache_a_failed_lookup(monkeypatch):
+class _Clock:
+    def __init__(self):
+        self.t = 1_000.0
+
+    def __call__(self):
+        return self.t
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    c = _Clock()
+    monkeypatch.setattr(market, "_yf_fail_clock", c)
+    return c
+
+
+def test_scan_does_not_day_cache_a_failed_lookup(monkeypatch, clock):
+    """Round 1, F3: a failure is not cached for the DAY. Round 2, R2-F4: it IS
+    backed off for a short TTL, then asked again."""
     calls: list[str] = []
     _install_yf(monkeypatch, [RuntimeError("rate limited"), {"Earnings Date": [IN_30]}], calls)
     assert asyncio.run(market.fetch_calendar_dates_async("AAPL")) == (None, None)
+    clock.t += market._YF_CAL_FAIL_TTL_S + 1
     assert asyncio.run(market.fetch_calendar_dates_async("AAPL"))[0] == IN_30
     assert len(calls) == 2, "the failure was cached for the day"
+
+
+# ── R2-F4: a failed lookup is backed off briefly, not re-hit on every scan ──
+
+def test_the_failure_backoff_ttl_is_ten_to_fifteen_minutes():
+    assert 10 * 60 <= market._YF_CAL_FAIL_TTL_S <= 15 * 60
+
+
+def test_a_failed_lookup_is_not_re_asked_inside_the_ttl(monkeypatch, clock):
+    calls: list[str] = []
+    _install_yf(monkeypatch, [RuntimeError("rate limited"), {"Earnings Date": [IN_30]}], calls)
+    assert asyncio.run(market.fetch_calendar_dates_async("AAPL")) == (None, None)
+    clock.t += market._YF_CAL_FAIL_TTL_S - 1
+    assert asyncio.run(market.fetch_calendar_dates_async("AAPL")) == (None, None)
+    assert len(calls) == 1, "a re-scan inside the backoff re-hit a rate-limited feed"
+
+
+def test_the_backoff_expires_and_a_real_answer_is_then_day_cached(monkeypatch, clock):
+    calls: list[str] = []
+    _install_yf(monkeypatch, [RuntimeError("rate limited"), {"Earnings Date": [IN_30]}], calls)
+    asyncio.run(market.fetch_calendar_dates_async("AAPL"))
+    clock.t += market._YF_CAL_FAIL_TTL_S + 1
+    assert asyncio.run(market.fetch_calendar_dates_async("AAPL"))[0] == IN_30
+    clock.t += 10 * market._YF_CAL_FAIL_TTL_S
+    assert asyncio.run(market.fetch_calendar_dates_async("AAPL"))[0] == IN_30
+    assert len(calls) == 2
+
+
+def test_the_backoff_is_per_symbol(monkeypatch, clock):
+    calls: list[str] = []
+    _install_yf(monkeypatch, [RuntimeError("rate limited"), {"Earnings Date": [IN_30]}], calls)
+    asyncio.run(market.fetch_calendar_dates_async("AAPL"))
+    assert asyncio.run(market.fetch_calendar_dates_async("MSFT"))[0] == IN_30
+    assert calls == ["AAPL", "MSFT"]
 
 
 def test_scan_does_cache_a_genuine_no_date(monkeypatch):

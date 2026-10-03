@@ -81,6 +81,15 @@ _expirations_cache: dict[str, tuple[list[str], str]] = {}
 # yfinance calendar: reset daily (overnight earnings updates).
 _yf_cal_cache: dict[str, tuple[Optional[date], Optional[date]]] = {}
 _yf_cal_cache_date: str = ""
+# Audit round 2, R2-F4: a FAILED yfinance calendar lookup is backed off per
+# symbol for a short TTL -- not cached for the day (round 1, F3: that pinned a
+# stock at CAUTION all day) and not re-asked on every re-scan either (that
+# re-hit a rate-limited feed with no cool-down and could prolong a ban).
+# symbol -> `_yf_fail_clock()` value until which it is not re-asked. Kept apart
+# from `_yf_cal_cache`, which holds REAL answers only (the fire path reads it).
+_YF_CAL_FAIL_TTL_S: float = 10 * 60
+_yf_cal_fail_until: dict[str, float] = {}
+_yf_fail_clock = time.monotonic   # indirection so a test can move time without moving asyncio's
 
 # Yahoo Finance ticker equivalents for index symbols not served by Tradier quotes.
 _YF_SYMBOL_MAP: dict[str, str] = {
@@ -1352,21 +1361,30 @@ async def fetch_calendar_dates_async(symbol: str) -> tuple[Optional[date], Optio
 
     if symbol in _yf_cal_cache:
         return _yf_cal_cache[symbol]
+    if _yf_fail_clock() < _yf_cal_fail_until.get(symbol, float("-inf")):
+        return None, None   # R2-F4: inside the failure backoff -- not re-asked
 
     async with _get_yf_sem():
         # Double-check after acquiring semaphore — another coroutine may have populated it.
         if symbol in _yf_cal_cache:
             return _yf_cal_cache[symbol]
+        if _yf_fail_clock() < _yf_cal_fail_until.get(symbol, float("-inf")):
+            return None, None
         try:
             result = await asyncio.to_thread(_calendar_dates_yf_strict, symbol)
         except EarningsLookupError:
-            # Audit round 1, F3: a FAILED lookup is not cached. Since D4 was
-            # amended an unknown date caps a stock card at CAUTION, so caching
-            # one transient failure pinned the symbol at CAUTION for the rest
-            # of the day, re-scans included. Only real answers are cached --
-            # a genuine "no date" among them (the `(None, None)` return above).
+            # Audit round 1, F3: a FAILED lookup is not cached for the day.
+            # Since D4 was amended an unknown date caps a stock card at
+            # CAUTION, so day-caching one transient failure pinned the symbol
+            # at CAUTION for the rest of the day, re-scans included. Round 2,
+            # R2-F4: it is backed off for `_YF_CAL_FAIL_TTL_S` instead, so a
+            # re-scan inside that window does not re-hit a rate-limited feed.
+            # Only real answers are day-cached -- a genuine "no date" among
+            # them (the `(None, None)` return above).
+            _yf_cal_fail_until[symbol] = _yf_fail_clock() + _YF_CAL_FAIL_TTL_S
             return None, None
 
+    _yf_cal_fail_until.pop(symbol, None)
     _yf_cal_cache[symbol] = result
     return result
 

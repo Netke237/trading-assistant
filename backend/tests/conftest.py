@@ -268,11 +268,15 @@ def _reset_market_data_caches():
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
+    # R2-F4's yfinance failure backoff: one test's simulated failure must not
+    # make the next test's lookup of the same symbol skip its stub.
+    mkt._yf_cal_fail_until.clear()
     yield
     mkt._candles_cache.clear()
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
+    mkt._yf_cal_fail_until.clear()
 
 
 @pytest.fixture(autouse=True)
