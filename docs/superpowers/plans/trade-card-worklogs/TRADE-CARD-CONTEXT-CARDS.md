@@ -92,3 +92,70 @@ Reviewer preservation evidence:
 Acquired the short-lived state writer claim, fetched latest origin/main, compared local JSON semantically with canonical JSON and verified only the owned task entry changed. Preserved every other backlog item, trade_card_presentation entry, active target, main history, phases, external task state and pre-existing audit counters. Checked state and fetched canonical main again before committing; main remained `c3f6d5195c9595cbd06f286070e3821d1b8245ad`. This branch's task delta must still be reconciled with current canonical JSON by the final integrator, not accepted as a wholesale state snapshot.
 
 Implementation is complete and code-audited clean on the separate branch, unmerged. Both interfaces typecheck with unchanged callers. Final integration owns placement, the complete page's 520-entry reconciliation, real populated session screenshots/fonts and full frontend/build checks. No main merge, deployment or order actions occurred.
+
+## Component landing verification — 2026-10-04
+
+The preceding sections record the implementation session. This continuation
+verified the actual implementation and evidence commits against fetched main
+`c3f6d5195c9595cbd06f286070e3821d1b8245ad`. The recorded binary diff hash
+matches exactly. The implementation branch was merged without source conflicts
+at `6cbb77923012fc770bfd757e79831c88fc5ff995`, preserving original commits
+`739afd1f` and `727f1b3d`. Barrier presentation was combined at `076a5a80`.
+All owned component files remain byte-identical to their implementation commits.
+
+Fresh independent landing-integration audit, round 1 of 3, reviewer
+`/root/component_landing_audit_r1`: CLEAN, zero gate findings, zero fixes,
+zero outstanding findings. Applied both repository audit skills and the bounded
+numeric/persistence gate. Exact target: `git diff origin/main` with HEAD
+`6cbb7792` and the barrier merge staged; base `c3f6d519`; 12 files,
+1,051 additions / 207 deletions; binary diff SHA-256
+`2986373826ad2e9d6168d3bcde7ec05a101aba0214030e17e1bbb52508b8a04f`.
+This separate integration stage does not replace or reset either task's original
+code audit. Reviewer independently passed 5 focused/related suites / 102 tests,
+nonincremental typecheck, diff check and no-drift state verification. Recursive
+state comparison found only the two owned backlog entries changed. Rechecked
+all guard branches, numerical boundaries, warnings, moved information and
+formatter branches; no gate defect or information loss found. Final populated
+page placement/browser acceptance remains outside this landing audit.
+
+Combined frontend verification: nonincremental typecheck passed; full suite
+186 suites / 4,546 tests passed. Normal production build was blocked by this
+environment's HTTP 403 denial for Google Fonts. A separate build with Next.js's
+documented `NEXT_FONT_GOOGLE_MOCKED_RESPONSES` test hook passed compilation,
+lint/type checks and static generation. Mock lives only in `/tmp`; no application
+source, font configuration or dependency lockfile was changed. This proves the
+code build with mocked font assets, not a successful real-font production build.
+GitHub API requests for PRs and branch protection returned Forbidden; hosted
+check results and protection configuration cannot be certified from this session.
+
+Full backend check used an isolated Python 3.11.16 virtual environment:
+4,839 passed / 1 skipped / 2 failed, 537.70 seconds. Failures were
+`test_shortlist_keeps_highest_scores_not_universe_order` and
+`test_trimmed_names_are_recorded_and_counted_once`. Both logged unmocked Yahoo
+Finance CONNECT HTTP 403 failures. A two-test isolated rerun on this checkout
+and a clean archive of `origin/main` produced the same result: ranking passed,
+trim-count failed with exactly `['SYM00', 'SYM01']` versus seven expected names.
+The full-run ranking failure is not reproduced in isolation. Backend Git tree
+is identical on main and landing (`1b02488f4a982d1fd7507981ef67f6d647da70e9`);
+no backend/test changes, skipped assertions or numerical pins were introduced.
+The full backend suite is not claimed green. This network-dependent inherited
+test limitation does not change the independently verified component diff.
+
+Next-task readiness observed against main and live claims:
+
+- CORE: trading-review implementations are ancestors of main through PR #28
+  `93cd1413` and follow-up PR #32 `575de279`. Exact final audited fixes
+  `ce4cfc14`, `7b2dad63` and `93af1728` are present. Read the original audit
+  report and follow-up round ledger; verified current aged earnings guards,
+  scorer/scan/schema additions and relevant fix code. No live
+  TRADING-REVIEW-FIXES or CORE owner. CORE's presentation-only gate is clear;
+  deferred Phase B trading issues remain unchanged.
+- SCORE-EVIDENCE: blocked. Main lacks authoritative contract explanation
+  schema/helper/producer implementation. Branch `codex/options-explanation-fixes`
+  at observed head `a12086fa` is unmerged; its actual task state is reopened,
+  `code_audit.clean: false`, with two recorded outstanding numeric findings.
+  Earlier clean correction evidence does not cover the later fixes. Both
+  OPTIONS-CONTRACT-EXPLANATIONS and OPTIONS-VOL-EVENTS-EXPLANATIONS have live
+  ownership on that branch. Require final exact-diff independent clearance,
+  landed interfaces, and release/disjoint ownership before launch. No external
+  state or CORE/SCORE-EVIDENCE entries were overwritten to express this finding.

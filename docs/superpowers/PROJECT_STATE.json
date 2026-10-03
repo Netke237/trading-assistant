@@ -4210,7 +4210,7 @@
           "frontend/components/molecules/FundamentalHealthCard/**"
         ],
         "owner": "agent",
-        "status": "built",
+        "status": "ready_to_merge",
         "implementation": "complete_unmerged",
         "claim_required": true,
         "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
@@ -4231,7 +4231,7 @@
         },
         "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
         "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
-        "readiness": "code_audited_clean_ready_for_integration",
+        "readiness": "verified_component_landing_ready",
         "branch": "codex/trade-card-context-cards",
         "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
         "implementation_commit": "739afd1fc8c3247475579538c4e4182ffd61315a",
@@ -4243,6 +4243,27 @@
           "state": "PASS: scripts/state.py reports no drift; own-entry-only delta verified against fetched canonical main",
           "browser": "PASS: production components/CSS in SSR fixture using production frame/nav/rail CSS; light/dark at 1200,1366,1440,1920; compact/default colour parity, wrapping, visible safety flags, keyboard disclosure, missing/insufficient/alignment states and long text",
           "limitations": "No live populated scan session or integrated caller placement tested. Existing Frame min-width 1280 causes page overflow at 1200 for both layouts; owned cards fit. Full frontend/build deferred to final integration per handoff."
+        },
+        "landing_verification": {
+          "date": "2026-10-04",
+          "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
+          "merge_commit": "6cbb77923012fc770bfd757e79831c88fc5ff995",
+          "reviewer": "/root/component_landing_audit_r1",
+          "rounds": 1,
+          "clean": true,
+          "gate_findings_by_round": [
+            0
+          ],
+          "fixes": 0,
+          "outstanding_gate_findings": 0,
+          "reviewed_diff_sha256": "2986373826ad2e9d6168d3bcde7ec05a101aba0214030e17e1bbb52508b8a04f",
+          "scope": "Combined frozen component landing diff: base c3f6d519, context merge 6cbb7792 plus staged barrier merge; 12 files, 1051 additions / 207 deletions. Original task code audits preserved.",
+          "independent_tests": "5 suites / 102 tests passed; nonincremental typecheck, diff check and no-drift state verification passed",
+          "frontend_tests": "186 suites / 4546 tests passed",
+          "build": "Normal build blocked by HTTP 403 Google Fonts policy; separate Next font-mock build passed. No source/config/lockfile changes.",
+          "hosted_checks": "GitHub API Forbidden; PR/protection configuration and hosted CI results unavailable",
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md#component-landing-verification--2026-10-04",
+          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green."
         }
       },
       {
@@ -4257,7 +4278,7 @@
           "frontend/components/organisms/BarrierRaceCard/**"
         ],
         "owner": "agent",
-        "status": "implemented on branch claude/zen-newton-o3ix8q (5134201), code r1 CLEAN; NOT merged to main — awaiting Kenneth / final integration",
+        "status": "ready_to_merge",
         "implementation": "complete_unmerged",
         "branch": "claude/zen-newton-o3ix8q",
         "base": "c3f6d51",
@@ -4276,13 +4297,34 @@
           ],
           "fixes": 0,
           "reviewer": "fresh general-purpose subagent / a4230f863de961e65 (bmad-review-adversarial-general, numeric/persistence gate)",
-          "scope": "git diff c3f6d51 5134201 — BarrierRaceCard index.tsx, module.css, __tests__ only",
+          "scope": "git diff c3f6d51 5134201 \u2014 BarrierRaceCard index.tsx, module.css, __tests__ only",
           "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-BARRIER-PRESENTATION.md"
         },
         "validation": "typecheck clean; BarrierRaceCard 39/39; TradeCard/MethodPick/step-7 dependents 274 passed; full frontend 184 suites/4525 tests passed; Playwright width check at 600/900px dark+light, no horizontal overflow",
         "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
         "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
-        "readiness": "startable_after_published_handoff_audit_and_claim"
+        "readiness": "verified_component_landing_ready",
+        "landing_verification": {
+          "date": "2026-10-04",
+          "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
+          "merge_commit": "076a5a80f86933eeb7db28363a235cda70032ca8",
+          "reviewer": "/root/component_landing_audit_r1",
+          "rounds": 1,
+          "clean": true,
+          "gate_findings_by_round": [
+            0
+          ],
+          "fixes": 0,
+          "outstanding_gate_findings": 0,
+          "reviewed_diff_sha256": "2986373826ad2e9d6168d3bcde7ec05a101aba0214030e17e1bbb52508b8a04f",
+          "scope": "Combined frozen component landing diff: base c3f6d519, context merge 6cbb7792 plus staged barrier merge; 12 files, 1051 additions / 207 deletions. Original task code audits preserved.",
+          "independent_tests": "5 suites / 102 tests passed; nonincremental typecheck, diff check and no-drift state verification passed",
+          "frontend_tests": "186 suites / 4546 tests passed",
+          "build": "Normal build blocked by HTTP 403 Google Fonts policy; separate Next font-mock build passed. No source/config/lockfile changes.",
+          "hosted_checks": "GitHub API Forbidden; PR/protection configuration and hosted CI results unavailable",
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md#component-landing-verification--2026-10-04",
+          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green."
+        }
       },
       {
         "id": "TRADE-CARD-SCORE-EVIDENCE",
