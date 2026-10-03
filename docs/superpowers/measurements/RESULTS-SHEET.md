@@ -155,7 +155,9 @@ are listed: O3, S1 and A2 had none, and the C-scans are not listed.
   used") a later A-block would not replace it. Using a later one would need Kenneth to amend §5,
   and even an A2 outside the gap may return 0 candidates. 0 candidates does not make the block
   unusable.
-- Names removed by `max_iv_abs` 70 (`iv_too_high`) before the absolute sample: A1 22, A2 6.
+- Names whose contract-reject reason contains `iv_too_high` (`max_iv_abs` 70): A1 22, A2 6. Every
+  one of them also had contracts rejected for other reasons, so no name was removed by this check
+  alone. No rule reads this count.
 - Structures built: none (0/2 spread build).
 - ATM cross-check pair: WMT, ATM absolute 27.2 vs O1's picked-contract `detail_iv_abs` 28.3
   (rank 31.7).
@@ -201,8 +203,10 @@ How much is calendar, out of each no-chain set:
 - All three O4 picks are the Oct 23 weekly.
 - The expiry lists are cached per symbol per day (`market.py`), so O3/O4 reused the lists O1/O2
   had already fetched successfully.
-- A2 ran about an hour later on a freshly restarted backend, with an empty cache. It fetched the
-  lists again and lost exactly the same 213 names as O3.
+- A2 ran about an hour after O3, on a freshly restarted backend whose cache started empty. A1,
+  which ran just before it, re-fetched the expiry lists of 186 of these 213 names (177 of them got
+  a chain in A1's Position window), and A2 fetched the other 27 itself. A2 lost exactly the same
+  213 names as O3.
 - The cause is inferred from the code at the tag and this pattern. Tradier was not re-queried by
   hand.
 
@@ -224,8 +228,8 @@ liquidity readings compute per day, but the Swing IV rank rows pool across days.
 **What day 2's date changes:**
 - **Not affected:** the stock scans S1–S4, the Position C-scans (C1, C1b, C5, C5b, C6) and the
   Position IV rows.
-- **Affected:** the Swing options scans (O3, O4): their candidates, their min_mult inputs and the
-  Swing IV rank rows.
+- **Affected:** the Swing options scans (O3, O4): their candidates, their min_mult inputs, their
+  `iv_rank_too_high` and 40 / 50 / 60 line reports, and the Swing IV rank rows.
 - **A gap day (any of 10-05 to 10-09)** gives the same weekly-listed-only population as day 1, so
   the two days compare like for like.
 - **From 10-12 on,** monthly-only names come back, and the pooled Swing sample mixes the two
