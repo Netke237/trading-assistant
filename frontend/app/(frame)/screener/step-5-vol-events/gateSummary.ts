@@ -391,7 +391,9 @@ export function formatRowExplanation(args: {
   // IV Observed & Rule Explanation
   let ivObserved = 'Missing';
   if (hasIv && iv.value !== null) {
-    ivObserved = iv.basis === 'rank' ? String(iv.value) : `${iv.value.toFixed(1)}%`;
+    ivObserved = iv.basis === 'rank'
+      ? (Number.isInteger(iv.value) ? String(iv.value) : (iv.value as number).toFixed(2))
+      : `${(iv.value as number).toFixed(1)}%`;
   }
 
   let ivRuleExplanation = '';

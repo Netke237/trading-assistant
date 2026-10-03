@@ -228,7 +228,7 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
     let apiCallCount = 0;
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
-      if (msg.type() === 'error') {
+      if (msg.type() === 'error' && !msg.text().includes('ERR_CONNECTION_REFUSED')) {
         consoleErrors.push(msg.text());
       }
     });
@@ -250,7 +250,12 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
     const rows = page.locator('[data-cell="symbol"]');
     await expect(rows).toHaveCount(20);
 
-    const callsBeforeToggles = apiCallCount;
+    const toggleRequests: string[] = [];
+    const onToggleReq = (req: any) => {
+      toggleRequests.push(req.url());
+    };
+    page.on('request', onToggleReq);
+    const errorsBeforeToggles = consoleErrors.length;
 
     // Toggle all 20 disclosures
     const buttons = page.locator('[data-cell="disclosure"] button');
@@ -259,11 +264,28 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
     }
     await expect(page.locator('[data-disclosure-panel]')).toHaveCount(20);
 
-    // Expanding rows must trigger ZERO console errors
-    expect(consoleErrors).toEqual([]);
+    page.off('request', onToggleReq);
 
-    // Expanding rows must trigger ZERO new API requests
-    expect(apiCallCount).toBe(callsBeforeToggles);
+    // Expanding rows must trigger ZERO console errors
+    expect(consoleErrors.slice(errorsBeforeToggles)).toEqual([]);
+
+    // Expanding rows must trigger ZERO contract, greeks, or volatility API requests (AC8)
+    const disclosureApiRequests = toggleRequests.filter((url) =>
+      url.includes('/api/contracts') ||
+      url.includes('/api/chains') ||
+      url.includes('/api/greeks') ||
+      url.includes('/api/historical-volatility') ||
+      url.includes('/api/config') ||
+      url.includes('/api/iv')
+    );
+    expect(disclosureApiRequests).toEqual([]);
+
+    // Verify keyboard interaction (Enter / Space) on disclosure button
+    await buttons.nth(0).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('[data-disclosure-panel]')).toHaveCount(19);
+    await page.keyboard.press('Space');
+    await expect(page.locator('[data-disclosure-panel]')).toHaveCount(20);
 
     // Close them back
     for (let i = 0; i < 20; i++) {

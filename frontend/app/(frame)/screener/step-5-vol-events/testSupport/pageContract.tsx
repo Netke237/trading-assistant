@@ -534,7 +534,10 @@ export function expectPageCopy() {
       const ivThresholds = effectiveIvThresholds(rawThresholds, ivOverrides);
       const eventThresholds = useEventThresholdsStore.getState().thresholds;
       const ivOverride = ivOverrideFor(horizon, rawThresholds, ivOverrides);
-      const eventWindow = scanEventWindow ?? (eventThresholds ? eventThresholds[horizon] : null);
+      const baseEventWindow = eventThresholds ? eventThresholds[horizon] : null;
+      const eventWindow = baseEventWindow && scanEventWindow
+        ? { ...baseEventWindow, ...scanEventWindow }
+        : (scanEventWindow ?? baseEventWindow);
       const candidates = useScanStore.getState().scanResult?.candidates ?? [];
       const basesPresent = ivBasesOf(candidates.map((x) => x.contractDetails));
       const expected = formatRulesStripData({

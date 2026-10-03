@@ -620,7 +620,15 @@ export default function Step5Page() {
                     <div className={pageStyles.ivTrack}>
                       <div
                         className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
-                        style={{ width: `${Math.max(0, Math.min(1, (iv.value as number) / 100)) * 72}px` }}
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              1,
+                              (typeof iv.value === 'number' && Number.isFinite(iv.value) ? iv.value : 0) / 100,
+                            ),
+                          ) * 72}px`,
+                        }}
                       />
                     </div>
                   )}
@@ -688,12 +696,6 @@ export default function Step5Page() {
                   type="button"
                   className={pageStyles.disclosureBtn}
                   onClick={() => toggleDisclosure(r.symbol)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      toggleDisclosure(r.symbol);
-                    }
-                  }}
                   aria-expanded={isExpanded}
                   aria-controls={`disclosure-${r.symbol}`}
                   aria-label={`${isExpanded ? 'Hide' : 'Explain'} gate details for ${r.symbol}`}
@@ -703,7 +705,7 @@ export default function Step5Page() {
               </div>
 
               {/* Row Band 2 — Secondary detail line */}
-              <div className={pageStyles.rowBand2}>
+              <div role="gridcell" className={pageStyles.rowBand2} style={{ gridColumn: '1 / -1' }}>
                 <div data-cell="reason" className={pageStyles.reasonCell}>
                   <Text size={11} tone="dim">Why this gate: </Text>
                   <Text size={11} tone="secondary" weight={500}>

@@ -477,7 +477,7 @@ describe('AC6: Disclosure interaction, keyboard accessibility, and state isolati
     expectPageCopy();
   });
 
-  it('Keyboard Enter / Space toggles disclosure via standard button events', async () => {
+  it('Keyboard Enter / Space accessible button triggers toggle', async () => {
     const c = makeCandidate('KBD', { ivRank: 20 }, 30);
     setupScan([c]);
     await mount();
@@ -485,16 +485,17 @@ describe('AC6: Disclosure interaction, keyboard accessibility, and state isolati
     const row = tableRowOf('KBD');
     const btn = row.querySelector('[data-cell="disclosure"] button') as HTMLButtonElement;
 
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn.type).toBe('button');
     btn.focus();
     expect(document.activeElement).toBe(btn);
 
-    // Enter press triggers toggle
-    fireEvent.keyDown(btn, { key: 'Enter', code: 'Enter' });
+    // Native buttons trigger click on Enter/Space keyboard activation
+    fireEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('true');
     expect(row.querySelector('[data-disclosure-panel]')).not.toBeNull();
 
-    // Space press triggers toggle back
-    fireEvent.keyDown(btn, { key: ' ', code: 'Space' });
+    fireEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('false');
     expect(row.querySelector('[data-disclosure-panel]')).toBeNull();
 
