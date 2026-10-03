@@ -3,18 +3,24 @@
     {
       "agent": "claude",
       "branch": "codex/trading-review-phase-b",
-      "claimed_at": "2026-10-03T10:00:07Z",
-      "expires_at": "2026-10-03T13:00:07Z",
-      "note": "User authorized fixing inherited CI prefix failure after Phase A merge",
-      "task": "SHORTLIST-PREFIX-DRIFT"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/trading-review-phase-b",
       "claimed_at": "2026-10-03T10:00:11Z",
       "expires_at": "2026-10-03T13:00:11Z",
       "note": "User authorized server-owned account value, persisted daily loss, and multi-year retune",
       "task": "TRADING-REVIEW-PHASE-B"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/shortlist-prefix-drift",
+      "claimed_at": "2026-10-03T10:05:56Z",
+      "expires_at": "2026-10-03T13:05:56Z",
+      "note": "User reassigned shortlist prefix fix; validate and independently audit",
+      "previous": [
+        {
+          "branch": "codex/trading-review-phase-b",
+          "claimed_at": "2026-10-03T10:00:07Z"
+        }
+      ],
+      "task": "SHORTLIST-PREFIX-DRIFT"
     }
   ]
 }
