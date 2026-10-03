@@ -400,3 +400,9 @@ Backend pytest full from `backend/` (Python 3.11); `python3 scripts/state.py` ex
   a newly enabled channel gets still-queued entries (stated design, reverses combined-plan R1-16);
   `test_strategy_watch_router.py:176` `assert_not_called` cannot fail. Clarified while editing step 4:
   a failed probe also leaves `stuck`.
+- **Plan round 2 (overall round 2, plan round 2 of 3), the v1→v2 delta a2dbf02..789d769, fresh independent
+  reviewer: CLEAN (0 gate).** Plan stage closed; the code stage starts at round 3 (code round 1 of 3).
+  Below gate, applied at build time as mechanical consequences of v2: step 4's bullet listed the drop-log
+  arguments in v1 order — the build uses the [R1-2] order (id, failures, channel, reason); three more
+  piece 1 counter assertions not written as `_head(store)[...]` (`test_1b` :123, `test_9` :281, `test_14`
+  :378) are migrated to the readers like the others.
