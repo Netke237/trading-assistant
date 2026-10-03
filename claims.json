@@ -31,6 +31,14 @@
       "expires_at": "2026-10-03T18:16:17Z",
       "note": "Implement Options Step 5 vol + events explanations",
       "task": "OPTIONS-VOL-EVENTS-EXPLANATIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/pipeline-inspector-fixes",
+      "claimed_at": "2026-10-03T15:17:59Z",
+      "expires_at": "2026-10-03T18:17:59Z",
+      "note": "Implement Options Step 6 contract score explanations",
+      "task": "OPTIONS-CONTRACT-EXPLANATIONS"
     }
   ]
 }
