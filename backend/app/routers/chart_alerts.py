@@ -32,7 +32,7 @@ from app.services.composite_trigger_evaluator import (
     hmm_intraday_interval_error, momentum_confirmation_error, momentum_confirmations,
 )
 from app.services.historical_store import get_bars
-from app.services.indicator_compute import compute_indicators_for_conditions
+from app.services.indicator_compute import compute_indicators_for_conditions, parse_indicator_reference
 from app.services.market_structure import compute_structure
 from app.services.notifications.dispatch import dispatch as _dispatch, load_notification_config as _load_notification_config
 from app.services.notifications.alert_notifier import _format_dt, _TZ_LABEL
@@ -87,6 +87,14 @@ class ConditionGroupIn(BaseModel):
     # already has a 0 or out-of-range threshold persisted is NOT retroactively
     # fixed by this; it only stops new bad values from being written going forward.
     n_of_m_threshold: Optional[int] = Field(default=None, ge=1)
+
+    @model_validator(mode='after')
+    def validate_indicator_references(self) -> 'ConditionGroupIn':
+        for condition in self.conditions:
+            if isinstance(condition, dict) and condition.get('kind') == 'indicator':
+                if parse_indicator_reference(condition.get('indicator')) is None:
+                    raise ValueError('Select a supported, parameterized indicator reference')
+        return self
 
     @model_validator(mode='after')
     def validate_threshold_within_condition_count(self) -> 'ConditionGroupIn':

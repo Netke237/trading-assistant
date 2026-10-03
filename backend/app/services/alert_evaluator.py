@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -231,8 +232,9 @@ def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
         current_value = series[idx]['value']
         # Indicator series returns None for warm-up candles (before EMA/RSI
         # period is satisfied). Comparing None with a float raises TypeError —
-        # treat as condition not met rather than crashing the evaluator.
-        if current_value is None:
+        # Non-finite readings also cannot be compared or persisted as JSON.
+        # Treat missing/invalid values as a condition not met.
+        if not isinstance(current_value, (int, float)) or not math.isfinite(current_value):
             return False, trigger_values
         trigger_values[condition.indicator] = current_value
 
@@ -242,14 +244,14 @@ def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
             prev_value = series[idx - 1]['value']
             # P4a B3: the first bar after warm-up has a None previous value;
             # comparing it raised TypeError and skipped the whole batch.
-            if prev_value is None:
+            if not isinstance(prev_value, (int, float)) or not math.isfinite(prev_value):
                 return False, trigger_values
             return current_value > condition.value and prev_value <= condition.value, trigger_values
         if condition.operator == 'crosses_below':
             if idx <= 0:
                 return False, trigger_values
             prev_value = series[idx - 1]['value']
-            if prev_value is None:
+            if not isinstance(prev_value, (int, float)) or not math.isfinite(prev_value):
                 return False, trigger_values
             return current_value < condition.value and prev_value >= condition.value, trigger_values
         return _compare(condition.operator, current_value, condition.value), trigger_values
