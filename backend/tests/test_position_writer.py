@@ -50,9 +50,14 @@ def _body(**overrides) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_a_direct_call_persists_and_reports_what_it_did(Session):
+async def test_a_direct_call_persists_and_reports_what_it_did(Session, monkeypatch):
     """Called without the router -- the booking path's shape. The default
     fetchers are THIS module's, so patching them here is what keeps it offline."""
+    from copy import deepcopy
+    from app.services import portfolio_risk
+    config = deepcopy(portfolio_risk._load_config())
+    config.setdefault("portfolio", {})["portfolio_value"] = 1_000_000
+    monkeypatch.setattr(portfolio_risk, "_load_config", lambda: config)
     quote = AsyncMock(return_value=None)
     with patch("app.services.position_writer.fetch_contract_quote_async", new=quote):
         async with Session() as db:

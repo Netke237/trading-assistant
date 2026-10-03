@@ -263,11 +263,18 @@ async def test_patch_never_refuses_a_short_at_a_sub_penny_entry(api_client):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("qty_body, expected_qty_error", [
     ({"qty": 0}, "qty must be an integer of at least 1."),
-    ({"qty": 5}, "portfolioValue is required to increase qty."),
+    ({"qty": 5}, "Invalid server account value: account value must be finite and positive"),
 ])
 async def test_patch_joins_a_free_text_qty_error_and_the_premium_code(
-        api_client, qty_body, expected_qty_error):
+        api_client, qty_body, expected_qty_error, monkeypatch):
     await _create(api_client, entry=0.05, rec="REC-P4")
+    if qty_body["qty"] > 1:
+        from copy import deepcopy
+        from app.services import portfolio_risk
+        config = deepcopy(portfolio_risk._load_config())
+        config.setdefault("portfolio", {})["portfolio_value"] = 0
+        monkeypatch.setattr(portfolio_risk, "_load_config", lambda: config)
+
     r = await api_client.patch("/api/portfolio/REC-P4",
                                json={"premiumStopPct": 0.90, **qty_body})
     assert r.status_code == 422, r.text

@@ -395,8 +395,14 @@ async def test_rec_id_dual_system_match(db_session, tmp_path, monkeypatch):
 # -- Test 8: Risk gate rejects with 422 when portfolio too small ---------------
 
 @pytest.mark.asyncio
-async def test_portfolio_risk_gate_rejects_422(client):
-    """POST with portfolioValue below min_portfolio_value -> 422."""
+async def test_portfolio_risk_gate_rejects_422(client, monkeypatch):
+    """The server account below min_portfolio_value refuses the position."""
+    from copy import deepcopy
+    from app.services import portfolio_risk
+    config = deepcopy(portfolio_risk._load_config())
+    config.setdefault("portfolio", {})["portfolio_value"] = 1000.0
+    monkeypatch.setattr(portfolio_risk, "_load_config", lambda: config)
+
     payload = dict(_POSITION_PAYLOAD)
     payload["recId"] = "REC-20260508-RISK01"
     payload["portfolioValue"] = 1000.0  # below 5000 min
