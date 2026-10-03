@@ -49,8 +49,16 @@ Reachable through an ordinary fill: $4.50 typed on a $5.20 mid (86.5%), filled a
    `PremiumStopDropNotice` and the `addPosition` result gain an optional `keptPct`;
    `premiumStopDropText(requested, reason, keptPct?)` ends "— this position keeps your
    N% of the premium as its stop instead." when `keptPct` is set, else the existing
-   "inherits the global stop" ending. The Step 7 save notes, the basket note and the Portfolio
-   banner pass `keptPct` through. Percent printed with the existing `premiumStopPctLabel`-style
+   "inherits the global stop" ending. EVERY site that carries a drop passes `keptPct` through
+   (plan round 1 finding: an optional field type-checks when one is forgotten):
+   - `portfolioStore.addPosition`'s result (`~1095-1101`) → the Step 7 basket note (`page.tsx ~1359`);
+   - `applyPersistedPosition`'s `onPremiumStopDropped(requestedDollar, reason, keptPct?)`
+     callback signature (`portfolioStore ~533-544`) → `droppedStopNote` at both direct-send
+     call sites (`page.tsx ~1177, ~1225`);
+   - the pending-row retry in `syncFromBackend` (`portfolioStore ~1339-1354`), which builds the
+     `PremiumStopDropNotice` LITERAL field by field and is the ONLY writer of
+     `premiumStopDropQueue` / `lastPremiumStopDropped` → `keptPct: drop.keptPct` there;
+   - the Portfolio banner (`portfolio/page.tsx ~196-200`) passes `lastPremiumStopDropped.keptPct`. Percent printed with the existing `premiumStopPctLabel`-style
    2dp trim (no rounding to a misleading whole percent).
    Short-stock: card sends are options only; `premiumStopDropOf` passes `shortStock=false`
    as `premiumStopDropReason` already does implicitly.
@@ -84,6 +92,10 @@ Backend:
 Frontend:
 - `premiumStopDropOf`: kept-fraction case, true-drop case, applicable case.
 - `premiumStopDropText` with and without `keptPct`.
+- portfolioStore: a PENDING row carrying a dollar and a fraction, retried by
+  `syncFromBackend` against a 201 that stores the client fraction (dollar ≥ saved entry) →
+  the queued notice carries `keptPct` and `premiumStopDropText` of it says "keeps your N%";
+  `applyPersistedPosition` passes `keptPct` to `onPremiumStopDropped`.
 - Step 7: both send paths post `premiumStopPct = dollar / the stored entryPrice` when touched,
   null when untouched (extend the existing round-9 "two send paths agree" test).
 Each new assertion is shown to fail with its guarded line broken.
