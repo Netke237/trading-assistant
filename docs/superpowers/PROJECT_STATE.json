@@ -1698,6 +1698,21 @@
       "resolves": [
         "ALERT-INDICATOR-ID-MAP"
       ]
+    },
+    {
+      "id": "SHORTLIST-PREFIX-DRIFT",
+      "name": "Use the canonical shortlist prefix in pipeline diagnostics",
+      "status": "shipped",
+      "audit_rounds": 1,
+      "audit_clean": true,
+      "depends_on": [],
+      "verify": {
+        "kind": "present",
+        "path": "frontend/lib/parsePipelineDiagnostics.ts",
+        "pattern": "import \\{ SHORTLIST_REASON_PREFIX \\} from './shortlistCap';",
+        "note": "Presence only; backend guard and parser behavior tests validate the change."
+      },
+      "note": "Implementation 0b49b6f9. Fresh independent reviewer /root/shortlist_prefix_audit_r1 reviewed the complete implementation diff against 6b065c38 and rechecked zero findings. Backend8/parser42/typecheck passed. User reassigned this task and previously authorized merging completed audited work. Audit: docs/superpowers/audits/2026-10-03-shortlist-prefix-drift.md."
     }
   ],
   "already_shipped": [
@@ -3323,12 +3338,7 @@
     "LOGGED 2026-10-02 by STEP3-LIQUIDITY-ZERO code round 2 (NIT 5), NOT FIXED, below the gate: the Step-3 Min option volume / Min open interest hints name only the Preferred floors as soft misses; any soft flag counts toward max_soft_fail_count (3), including no_iv_rank_data from _score_iv_rank, so a thin contract with no IV figure is rejected as too_many_soft_failures even with tight spread and good delta/DTE after the hard floors are lowered. The hint ('too many soft misses') is not false, only incomplete.",
     "LOGGED 2026-10-02 by MACD-EMA-LAG (audit r1 nit, out of scope, pre-existing): standard alert rules built in the UI never get an indicator series on the live WS path. AlertRuleBuilder stores indicator = activeIndicators[i].id ('ema-20', 'rsi-14', 'vol', 'macd-<ts>'), and compute_indicators_for_conditions matches none of those names ('ema20', 'rsi', 'volume', 'macd' ...), so every UI-built indicator condition is never met; only rules saved with the literal backend names (raw API / seed) evaluate. The dry-run path works because it uses frontend-computed values. Fix: map the chart indicator config (type + params) to a backend name at save time or in the dispatch.",
     "LOGGED 2026-10-02 by MACD-EMA-LAG (audit r1 nit): an indicator condition saved with indicator '' (AlertRuleBuilder's empty condition; no save-time check, IndicatorConditionIn accepts it) used to be evaluated against the MACD signal line via the substring dispatch; it now gets no series and silently never fires. Reject an empty indicator in handleSave or in IndicatorConditionIn.",
-    "LOGGED 2026-10-02 by STATE-PROBE-FIXES round 4, OPEN: G3 -- committing a new already_shipped/phase entry and pointing active_phase at it silences the previous piece's undercount and hard cap in scripts/state.py (narrowing drops the rounds before the new entry's introducing commit and nothing else checks them). Two fixes failed review (rounds 3, 4) and were removed; see STATE-PROBE-TARGET-SCOPING's note for the three shapes tried. Workaround documented in STATE_TRACKING.md. Needs Kenneth's call on whether to attempt again.",
-    {
-      "id": "INHERITED-SHORTLIST-PREFIX-TEST-2026-10-03",
-      "question": "Main backend test_stock_shortlist::test_the_frontend_prefix_matches_the_backend_constant fails because parsePipelineDiagnostics.ts duplicates Shortlist cap:; reproduced unchanged origin/main 68ac3292. No alert indicator changes touch these files.",
-      "status": "open"
-    }
+    "LOGGED 2026-10-02 by STATE-PROBE-FIXES round 4, OPEN: G3 -- committing a new already_shipped/phase entry and pointing active_phase at it silences the previous piece's undercount and hard cap in scripts/state.py (narrowing drops the rounds before the new entry's introducing commit and nothing else checks them). Two fixes failed review (rounds 3, 4) and were removed; see STATE-PROBE-TARGET-SCOPING's note for the three shapes tried. Workaround documented in STATE_TRACKING.md. Needs Kenneth's call on whether to attempt again."
   ],
   "authoritative_documents": [
     {
@@ -3668,6 +3678,12 @@
       {
         "q": "P6 UNIT D round 7: state.py reads a digit-string audit_rounds via isdigit(), which accepts superscripts that int() rejects (crash).",
         "a": "FIXED 2026-10-02 by STATE-PROBE-FIXES: isdecimal via _whole_number; pinned by test_a_superscript_digit_audit_rounds_warns_instead_of_raising."
+      },
+      {
+        "id": "INHERITED-SHORTLIST-PREFIX-TEST-2026-10-03",
+        "question": "Main backend test_stock_shortlist::test_the_frontend_prefix_matches_the_backend_constant fails because parsePipelineDiagnostics.ts duplicates Shortlist cap:; reproduced unchanged origin/main 68ac3292. No alert indicator changes touch these files.",
+        "status": "closed",
+        "resolution": "SHORTLIST-PREFIX-DRIFT: parser imports shared shortlistCap constant; backend shortlist 8 passed, parser 42 passed, typecheck passed; independent code round1 clean. Implementation 0b49b6f9."
       }
     ]
   },
