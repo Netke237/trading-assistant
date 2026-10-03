@@ -610,14 +610,22 @@ export default function Step3Page() {
     setHz(context.horizonPreset ?? 'Swing');
     setHoldMin(Math.round(context.holdMin ?? presetByKey('Swing').holdMin));
     setHoldMax(Math.round(context.holdMax ?? presetByKey('Swing').holdMax));
+    // The verdict follows the direction too, once the regime has answered:
+    // StoreHydration can restore a scan's context (STEP3-PARAM-REACH) after
+    // the fetch below resolved, and only handleDirChange recomputed it.
+    if (regimeLoadedRef.current && context.direction) {
+      useScanStore.getState().setCombinedRegime(alignmentVerdict(context.direction, descriptorRef.current));
+    }
   }, [context]);
 
   const descriptorRef = useRef<RegimeDescriptor>('Choppy');
+  const regimeLoadedRef = useRef(false);
 
   useEffect(() => {
     api.getRegime().then((r) => {
       useScanStore.getState().setRegime(r.overall);
       descriptorRef.current = descriptorFromState(r.omm?.state ?? '');
+      regimeLoadedRef.current = true;
       const dir = useScanStore.getState().context?.direction ?? 'Bullish';
       useScanStore.getState().setCombinedRegime(alignmentVerdict(dir, descriptorRef.current));
     }).catch(() => {});

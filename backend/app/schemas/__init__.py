@@ -912,6 +912,16 @@ class DteWindow(BaseModel):
 SCAN_RESULT_SCHEMA_VERSION = 2
 
 
+class ScanRequestContext(BaseModel):
+    """The ScanRequest fields echoed on its ScanResult (see request_context)."""
+    universe:       list[str]
+    direction:      Direction
+    horizon:        Horizon
+    horizon_preset: Optional[str] = None
+    hold_min_days:  Optional[int] = None
+    hold_max_days:  Optional[int] = None
+
+
 class ScanResult(BaseModel):
     scan_id: str
     timestamp: str
@@ -946,6 +956,18 @@ class ScanResult(BaseModel):
     # contract_rules.yaml's. {} = the scan overrode nothing. None = absent:
     # a result from before 2026-09-29, or the recording failed.
     contract_rules: Optional[dict[str, float]] = None
+    # The Reward/Risk overrides (rr_* keys) this scan priced its plans with,
+    # exactly as config_loader.effective_rr_overrides validated them. Step 7's
+    # recompute-plan sends these back rather than live scanOverrides, which can
+    # be edited after the scan (STEP3-PARAM-REACH). {} = the scan overrode
+    # none. None = absent: a result from before 2026-10-02, or recording failed.
+    rr_overrides: Optional[dict[str, float]] = None
+    # The request fields this result was produced from, so a result restored
+    # from /api/scan/last into an empty browser (no persisted ScanContext) can
+    # rebuild the direction and hold days Steps 5-7 read, instead of falling
+    # back to Bullish / Swing (STEP3-PARAM-REACH). None = a result from before
+    # 2026-10-02.
+    request_context: Optional[ScanRequestContext] = None
 
 
 class ScanSessionStatus(BaseModel):
