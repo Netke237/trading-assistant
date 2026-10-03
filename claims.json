@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "codex/trading-review-retune",
-      "claimed_at": "2026-10-03T14:49:26Z",
-      "expires_at": "2026-10-03T17:49:26Z",
-      "note": "Resume interrupted exact parallel retuning audit; full search not started",
-      "task": "TRADING-REVIEW-RETUNE"
-    },
-    {
-      "agent": "claude",
       "branch": "work",
       "claimed_at": "2026-10-03T14:56:04Z",
       "expires_at": "2026-10-03T17:56:04Z",
