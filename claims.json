@@ -15,6 +15,14 @@
       "expires_at": "2026-10-03T14:26:58Z",
       "note": "Piece 3: per-channel watch alert delivery; own plan + audits",
       "task": "WATCH-RESEND-PER-CHANNEL"
+    },
+    {
+      "agent": "claude",
+      "branch": "ccr-711cb93e-qs09dj",
+      "claimed_at": "2026-10-03T11:43:56Z",
+      "expires_at": "2026-10-03T14:43:56Z",
+      "note": "Card sends post user premiumStopPct; auto-trade alert on unapplied dollar stop; own plan + audits",
+      "task": "PREMIUM-STOP-FALLBACK-ALIGN"
     }
   ]
 }
