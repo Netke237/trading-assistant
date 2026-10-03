@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/priceless-jennings-995ab7",
-      "claimed_at": "2026-10-03T05:29:08Z",
-      "expires_at": "2026-10-03T08:29:08Z",
-      "note": "Step 0 measurement script + plan rewrite",
-      "task": "NO-LIVE-QUOTE"
-    },
-    {
-      "agent": "claude",
       "branch": "codex/watch-resend-expiry",
       "claimed_at": "2026-10-03T05:32:40Z",
       "expires_at": "2026-10-03T08:32:40Z",
