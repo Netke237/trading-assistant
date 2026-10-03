@@ -10,27 +10,11 @@
     },
     {
       "agent": "claude",
-      "branch": "codex/watch-resend-per-channel",
-      "claimed_at": "2026-10-03T14:48:55Z",
-      "expires_at": "2026-10-03T17:48:55Z",
-      "note": "Implement and independently audit per-channel watch alert delivery",
-      "task": "WATCH-RESEND-PER-CHANNEL"
-    },
-    {
-      "agent": "claude",
       "branch": "codex/trading-review-retune",
       "claimed_at": "2026-10-03T14:57:27Z",
       "expires_at": "2026-10-03T20:45:00Z",
       "note": "Execute full configured multiyear search and independently verify financial results",
       "task": "TRADING-REVIEW-RETUNE-EVIDENCE"
-    },
-    {
-      "agent": "claude",
-      "branch": "feat/options-vol-events-explanations",
-      "claimed_at": "2026-10-03T15:16:17Z",
-      "expires_at": "2026-10-03T18:16:17Z",
-      "note": "Implement Options Step 5 vol + events explanations",
-      "task": "OPTIONS-VOL-EVENTS-EXPLANATIONS"
     }
   ]
 }
