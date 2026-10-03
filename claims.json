@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "ccr-81bee0d6-mzrvun",
       "claimed_at": "2026-10-03T11:03:29Z",
-      "expires_at": "2026-10-03T14:03:29Z",
+      "expires_at": "2026-10-03T14:26:58Z",
       "note": "Piece 3: per-channel watch alert delivery; own plan + audits",
       "task": "WATCH-RESEND-PER-CHANNEL"
     }
