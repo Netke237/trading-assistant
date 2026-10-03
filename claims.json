@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "codex/trading-review-retune",
-      "claimed_at": "2026-10-03T14:57:27Z",
-      "expires_at": "2026-10-03T22:26:36Z",
-      "note": "Execute full configured multiyear search and independently verify financial results",
-      "task": "TRADING-REVIEW-RETUNE-EVIDENCE"
-    },
-    {
-      "agent": "claude",
       "branch": "codex/options-explanation-fixes",
       "claimed_at": "2026-10-03T19:56:47Z",
       "expires_at": "2026-10-03T22:56:47Z",
