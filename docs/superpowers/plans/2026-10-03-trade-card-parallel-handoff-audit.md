@@ -29,3 +29,7 @@ Post-verdict changes only record this review's evidence/counters, its authoritat
 - git diff --check: pass.
 
 No production numerical/persistence tests run because no application code changed. This review does not certify implementation.
+
+## User-directed publication update
+
+The user subsequently requested all documentation on origin/main. Only publication pointers, launch-base wording, the document index and additional existing reference screenshots/source snapshot were added. Ownership, dependency gates, behaviour contracts and audit verdict are unchanged; the exact review hashes above remain the historical reviewed scope. No production file changed.
