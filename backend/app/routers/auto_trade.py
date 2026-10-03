@@ -266,9 +266,12 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     # check + regime deadline + broker call) does not pin a connection;
     # `book_fired_order` checks one out again.
     await db.rollback()
+    from app.services.daily_risk_hooks import capture_daily_risk_hooks
+    hooks = capture_daily_risk_hooks()
     cf = _FIRE_EXECUTOR.submit(
         auto_trader.fire,
         portfolio_snapshot=portfolio_snapshot,
+        daily_risk_hooks=hooks,
         portfolio_value=None,  # fire() resolves the server account configuration at dispatch
         # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same contract
         # `maybe_fire_on_scan` passes, and for the same reason. This handler

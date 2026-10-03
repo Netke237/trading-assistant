@@ -2368,6 +2368,7 @@ class AutoTradeService:
     """Manages an armed options strategy and fires it on demand or on scan completion."""
 
     def __init__(self) -> None:
+        self._daily_risk_hooks = None
         self._lock = threading.Lock()
         self._state = AutoTradeState(armed=False, strategy=None)
         # THE ATTEMPTS THAT PASSED `fire()`'s DISARM, newest last. Written in
@@ -2423,7 +2424,8 @@ class AutoTradeService:
     def fire(self, portfolio_snapshot: list | None = None,
              portfolio_value: float | None = None,
              attempt_id: str | None = None,
-             expect: ArmedStrategy | None = None) -> FiredOrder:
+             expect: ArmedStrategy | None = None,
+             daily_risk_hooks=None) -> FiredOrder:
         """Execute the armed strategy.
 
         Disarms on the fire attempt (fail-closed). If portfolio_snapshot is
@@ -2729,16 +2731,17 @@ class AutoTradeService:
         with self._lock:
             _history_snapshot = list(self._state.history)
         try:
-            # THE ONE COMPUTATION OF THIS ATTEMPT'S RISK. Two rows below book
-            # `premium_at_risk` as the dollars this check gated on rather than
-            # computing again after the broker call (Q2 hardening,
-            # AUTOTRADE-PIECE-B-DESIGN-LOCKED-AND-Q2-HARDENING-2026-09-23): the
-            # success row (0 instead when the broker's status is a stated
-            # rejection, A9) and the `order_failed` row (A9). A second
-            # computation after the order is the one place where a
-            # disagreement means a placed order with no history row. Since A6
-            # it is the FULL premium -- see `_check_daily_loss`.
+            # The legacy history gate remains an additional conservative check.
+            # The durable reservation uses the actual limit/server quote before
+            # dispatch; its rounded cents become the history amount below.
             this_risk = self._check_daily_loss(strategy, _history_snapshot, pv)
+            hooks = daily_risk_hooks or self._daily_risk_hooks
+            if hooks is None:
+                raise RuntimeError("Daily risk budget has no originating event-loop bridge; nothing submitted")
+            reservation = hooks.reserve(attempt_id, instrument=strategy.option_symbol,
+                                        quantity=strategy.quantity, source="auto", multiplier=100,
+                                        order_type=strategy.order_type, limit_price=strategy.limit_price)
+            this_risk = reservation.reserved_cents / 100
         except RuntimeError as exc:
             with self._lock:
                 self._state.history.append({
@@ -2775,6 +2778,7 @@ class AutoTradeService:
         try:
             result = execute_option_order(strategy)
         except OrderNotSubmittedError as exc:
+            hooks.resolve(attempt_id, definitely_not_submitted=True, outcome="not_submitted")
             # ORDERED ABOVE THE HANDLER BELOW, and it has to be: this is a
             # RuntimeError, so the bare `except Exception` would swallow it and
             # write the `order_failed` row F2 is about. See the class.
@@ -2814,6 +2818,7 @@ class AutoTradeService:
             )
             raise RuntimeError(f"Order not submitted: {exc}") from exc
         except Exception as exc:
+            hooks.resolve(attempt_id, definitely_not_submitted=False, outcome="dispatch_error")
             with self._lock:
                 self._state.history.append({
                     "attempt_id":      attempt_id,
@@ -2846,6 +2851,8 @@ class AutoTradeService:
                 })
             logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
             raise RuntimeError(f"Order failed: {exc}") from exc
+
+        hooks.resolve(attempt_id, definitely_not_submitted=_is_rejected_status(result.status), outcome=str(result.status))
 
         with self._lock:
             self._state.history.append({
@@ -2921,6 +2928,7 @@ class AutoTradeService:
         self,
         portfolio_snapshot: list | None = None,
         portfolio_value: float | None = None,
+        daily_risk_hooks=None,
     ) -> Optional[FiredOrder]:
         """Trigger #2: called after each scan completes. Fires if armed and fresh.
 
@@ -3028,6 +3036,7 @@ class AutoTradeService:
             fired = self.fire(portfolio_snapshot=portfolio_snapshot,
                               portfolio_value=portfolio_value,
                               attempt_id=attempt_id,
+                              daily_risk_hooks=daily_risk_hooks,
                               # FIRE THE ORDER THIS TRIGGER READ, OR NOTHING.
                               # The staleness check above was made against
                               # `strategy`; without this, a re-arm inside the
@@ -3297,11 +3306,11 @@ class AutoTradeService:
     def _check_daily_loss(strategy: ArmedStrategy, history: list[dict], portfolio_value: float) -> float:
         """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit.
 
-        Returns this trade's risk in dollars -- the number the check gated on.
-        `fire()` books the success row's `premium_at_risk` (0 instead on a
-        stated rejection) and the `order_failed` row's with it, so each row
-        records the risk this check allowed, and nothing is computed after the
-        order is placed.
+        Returns the legacy history gate's premium estimate in dollars. This is
+        an additional conservative check. `fire()` then reserves durable budget
+        at the actual limit/server quote and records that reservation's rounded
+        amount in success/ambiguous-failure history, or zero on definite refusal.
+        No monetary calculation occurs after broker dispatch.
 
         FULL PREMIUM, decision A6-FULL-PREMIUM-DAILY-LOSS-2026-09-24 (Kenneth).
         The auto-trader places no protective order, so the declared premium

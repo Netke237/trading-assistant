@@ -437,6 +437,8 @@ async def close_position(
 
     exit_date = body.exitDate or date.today().isoformat()
     dollar, pct = realized_pnl(position.entry_price, float(exit_price), qty_to_close, position.contract)
+    if is_short_stock_position(position.contract, position.direction):
+        dollar, pct = -dollar, -pct
 
     closed = ClosedPositionModel(
         id=uuid.uuid4().hex,
@@ -454,6 +456,9 @@ async def close_position(
         source=getattr(position, "source", None),
     )
     db.add(closed)
+    await db.flush()
+    from app.services.daily_risk import record_realized_loss
+    await record_realized_loss(db, closed)
 
     # Reduce or remove the open position
     if qty_to_close >= position.qty:

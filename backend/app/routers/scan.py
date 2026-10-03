@@ -2134,10 +2134,17 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             _qr = await db.execute(select(PortfolioPositionModel))
             _orm_pos = _qr.scalars().all()
             _portfolio_snapshot = orm_positions_to_risk(_orm_pos)
+            # Scan persistence occurs in _upsert_session below. This read-only
+            # transaction can release its connection while the worker reserves
+            # durable budget in a fresh transaction on the originating loop.
+            await db.rollback()
+            from app.services.daily_risk_hooks import capture_daily_risk_hooks
+            hooks = capture_daily_risk_hooks()
             fired = await asyncio.to_thread(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
                 None,  # fire() resolves the server account configuration at dispatch
+                daily_risk_hooks=hooks,
             )
             # O4 step 5: book the fired order, back ON the event loop with this
             # request's session (it never enters the worker thread). None on
