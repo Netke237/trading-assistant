@@ -212,9 +212,10 @@ def _build_body(fired: FiredOrder, rec_id: str) -> PortfolioPositionCreate:
         pickedRowOptionPrice=s.picked_row_option_price,
         pickedStopBasis=s.picked_stop_basis,
         pickedAt=s.picked_at,
-        # Audit round 1, F1: the order that was placed, so the gates-off
-        # booking judges `over_exposure` on the same fill basis the fire-time
-        # `_check_exposure` used (portfolio_risk.premium_cap_basis).
+        # Audit round 1, F1: the order that was placed. Since round 2 (R2-F6)
+        # the cap basis itself is passed to `create_position` as `cap_basis`
+        # (`auto_trader.armed_cap_basis`, the fire's), so these two are the
+        # record of the order rather than what the booking judges from.
         orderType=s.order_type,
         orderLimitPrice=s.limit_price,
     )
@@ -373,6 +374,11 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
                 exit_plan_cfg_loader=load_exit_plan_cfg,
                 enforce_pre_trade_gates=False,
                 stop_required=True,
+                # Audit round 2, R2-F6: the basis the FIRE judged this order
+                # at -- same function, same armed inputs -- not one re-derived
+                # from the booking-time quote (an arm carries no spread, so
+                # the booking must not invent one).
+                cap_basis=auto_trader_module.armed_cap_basis(fired.strategy),
             )
         except Exception as exc:
             await _rollback(db, "a refused write")

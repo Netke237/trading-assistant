@@ -260,6 +260,23 @@ def _lookup_earnings_date(symbol: str):
     raise market.EarningsLookupError("; ".join(failures.values()))
 
 
+def armed_cap_basis(strategy) -> float:
+    """The per-contract premium an ARMED order is judged at against the D5 cap
+    -- by the fire (`AutoTradeService._check_exposure`) AND by the booking
+    (`auto_trade_booking`, passed to `create_position(cap_basis=...)`).
+
+    Audit round 2, R2-F6: one function on the same armed inputs at both
+    points. The booking used to re-judge at the BOOKING-time live mid plus a
+    live spread the arm never carried, so the gates-off booking could flag
+    `over_exposure` (and page) on an order the fire had just approved. The arm
+    carries no ask or spread, so a MKT arm is judged at its mid at both points
+    (`portfolio_risk.premium_cap_basis` states that understatement); an LMT
+    arm at max(armed mid, limit).
+    """
+    from app.services.portfolio_risk import premium_cap_basis
+    return premium_cap_basis(strategy.entry_premium, strategy.order_type, strategy.limit_price)
+
+
 def _fetch_earnings_date(symbol: str):
     """The symbol's next earnings date, or None when unknown; raises when the
     lookup failed (see `_lookup_earnings_date`, which this calls).
@@ -2987,7 +3004,7 @@ class AutoTradeService:
     @staticmethod
     def _check_exposure(strategy: ArmedStrategy, portfolio_snapshot: list, portfolio_value: float) -> None:
         """Raise RuntimeError if the armed order would breach exposure caps."""
-        from app.services.portfolio_risk import check_position_risk, premium_cap_basis
+        from app.services.portfolio_risk import check_position_risk
         if not strategy.entry_premium > 0:
             # Audit round 2, R2-F2: FAIL CLOSED. `arm()` and ArmRequest
             # (gt=0) both refuse this, so only a strategy put in the armed slot
@@ -3001,8 +3018,9 @@ class AutoTradeService:
         # Audit round 1, F1: judged at the price the order can fill at -- the
         # armed LIMIT when it is above the mid -- not the mid alone. A MKT arm
         # carries no ask or spread, so it is judged at the mid (see
-        # premium_cap_basis); the arm path posts LMT today.
-        basis = premium_cap_basis(strategy.entry_premium, strategy.order_type, strategy.limit_price)
+        # premium_cap_basis); the arm path posts LMT today. Round 2, R2-F6:
+        # the booking judges at this SAME basis (`armed_cap_basis`).
+        basis = armed_cap_basis(strategy)
         result = check_position_risk(
             symbol=strategy.symbol,
             contract_id=strategy.option_symbol,

@@ -215,8 +215,17 @@ async def create_position(
     exit_plan_cfg_loader: Optional[Callable[[], dict]] = None,
     enforce_pre_trade_gates: bool = True,
     stop_required: bool = False,
+    cap_basis: Optional[float] = None,
 ) -> WriteOutcome:
-    """Persist a position from a create request. See the module docstring."""
+    """Persist a position from a create request. See the module docstring.
+
+    `cap_basis`: the per-contract premium the D5 cap is judged at, when the
+    caller has ALREADY judged the order at one -- the auto-trade booking passes
+    the fire's `auto_trader.armed_cap_basis` so the two cannot disagree (audit
+    round 2, R2-F6). None (every other caller): derived here from the stored
+    entry, the order fields and the save-time live spread. The STORED entry is
+    unaffected either way.
+    """
     # Call-time defaults (P1a): the module globals, looked up NOW, so a patch
     # on this module's names lands. See the module docstring.
     if quote_fetcher is None:
@@ -451,9 +460,10 @@ async def create_position(
             if isinstance(live_quote, dict) and live_entry_rounded and live_entry_rounded > 0
             else None
         )
-        cap_basis = premium_cap_basis(
-            entry_price, body.orderType, body.orderLimitPrice, spread=live_spread,
-        )
+        if cap_basis is None:
+            cap_basis = premium_cap_basis(
+                entry_price, body.orderType, body.orderLimitPrice, spread=live_spread,
+            )
         risk = check_position_risk(
             symbol=body.symbol,
             contract_id=body.contract,

@@ -186,3 +186,74 @@ def test_booking_body_carries_the_armed_order():
     )
     assert body.orderType == "LMT"
     assert body.orderLimitPrice == pytest.approx(3.60)
+
+
+# ── Audit round 2, R2-F6: the fire and the booking judge an arm at ONE basis ──
+#
+# The fire judged a MKT arm at the armed mid (an arm carries no spread); the
+# gates-off booking re-judged it at the BOOKING-time live mid + spread/2, so it
+# could flag `over_exposure` -- and page -- on an order the fire had approved.
+# Both now call `auto_trader.armed_cap_basis(strategy)`: the same function on
+# the same armed inputs, and the booking invents no spread.
+
+def test_the_fire_and_the_booking_share_one_basis_function():
+    from app.services.auto_trader import armed_cap_basis
+    s = _strategy(order_type="MKT", limit_price=None)
+    assert armed_cap_basis(s) == pr.premium_cap_basis(3.00, "MKT", None)
+    assert armed_cap_basis(_strategy()) == pytest.approx(3.60)
+
+
+@pytest_asyncio.fixture
+async def session():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:",
+                                 connect_args={"check_same_thread": False})
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with Session() as s:
+        yield s
+    await engine.dispose()
+
+
+async def _book(session, mocker, strategy, quote):
+    from app.data.ibkr_paper import OrderResult
+    from app.services import auto_trade_booking as atb
+    from app.services.auto_trader import FiredOrder
+    mocker.patch.object(atb, "fetch_contract_quote_async", AsyncMock(return_value=quote))
+    mocker.patch.object(atb, "fetch_price_async", AsyncMock(return_value=None))
+    mocker.patch("app.services.notifications.alert_notifier.notify_alert",
+                 AsyncMock(return_value=True))
+    mocker.patch("app.services.notifications.alert_notifier.forget_alerts")
+    mocker.patch("app.services.audit.log_event")
+    fired = FiredOrder(result=OrderResult("777", "Submitted", "ibkr_paper"),
+                       strategy=strategy, attempt_id="A-R2F6")
+    return await atb.book_fired_order(fired, session)
+
+
+@pytest.mark.asyncio
+async def test_a_market_arm_the_fire_approved_is_not_over_exposure_at_booking(session, mocker):
+    s = _strategy(order_type="MKT", limit_price=None, portfolio_value=100_000.0)  # 12 x mid 3.00
+    AutoTradeService._check_exposure(s, [], s.portfolio_value)  # 3,600 <= 3,750: the fire approves
+    out = await _book(session, mocker, s, dict(_QUOTE))     # booking quote: mid 3.00, spread 0.40
+    assert out.booked is True, out
+    assert out.over_exposure is False, "the booking invented a spread the arm never carried"
+
+
+@pytest.mark.asyncio
+async def test_a_limit_arm_is_judged_at_the_armed_basis_not_the_booking_mid(session, mocker):
+    s = _strategy(limit_price=3.10, portfolio_value=100_000.0)  # basis max(3.00, 3.10) = 3.10
+    AutoTradeService._check_exposure(s, [], s.portfolio_value)  # 12 x 310 = 3,720: approved
+    out = await _book(session, mocker, s, {**_QUOTE, "price": 3.40})
+    assert out.booked is True, out
+    assert out.over_exposure is False
+
+
+@pytest.mark.asyncio
+async def test_the_booking_still_flags_an_arm_the_basis_does_not_fit(session, mocker):
+    """The shared basis is not a free pass: the booking (gates off) still
+    reports a breach judged at it -- here the snapshot the fire never saw."""
+    s = _strategy(order_type="MKT", limit_price=None, quantity=13,
+                  portfolio_value=100_000.0)                    # 13 x 300 = 3,900
+    out = await _book(session, mocker, s, dict(_QUOTE))
+    assert out.booked is True
+    assert out.over_exposure is True
