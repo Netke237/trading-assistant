@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "work",
-      "claimed_at": "2026-10-03T04:50:39Z",
-      "expires_at": "2026-10-03T07:50:39Z",
-      "note": "Correct audit record and run required independent adversarial audit",
-      "task": "ALERT-INDICATOR-ID-MAP"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/inspiring-heisenberg-e3gug3",
       "claimed_at": "2026-10-03T05:01:47Z",
       "expires_at": "2026-10-03T08:01:47Z",
