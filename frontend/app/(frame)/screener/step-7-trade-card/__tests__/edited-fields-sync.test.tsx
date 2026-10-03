@@ -862,6 +862,13 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(
       await screen.findByText(/AAA: Premium stop of \$0\.90\/share could not be applied/),
     ).toBeInTheDocument();
+    // STOP-SEMANTICS: the note names the reason. This mock ECHOES the request
+    // (entry $4.00, premiumStopPct null), which a real server never would for
+    // a 22.5% stop -- so the reason is premiumStopDropReason's residual branch.
+    // What is pinned is that the reason reaches the rendered note.
+    expect(screen.getByText(
+      'AAA: Premium stop of $0.90/share could not be applied: at the filled premium it would fire below $0.01 — this position inherits the global stop.',
+    )).toBeInTheDocument();
   });
 
   it('keeps the basket\'s dropped-stop disclosure across Prev/Next until the next send (A8, open_questions[61])', async () => {

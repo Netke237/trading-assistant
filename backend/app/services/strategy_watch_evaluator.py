@@ -138,6 +138,51 @@ def _split_state(last_state: dict) -> tuple[dict, list]:
     return committed, (list(pending) if isinstance(pending, list) else [])
 
 
+_REENABLE_MAX_AGE = timedelta(days=5)
+
+
+async def set_enabled_and_expire(watch_id: str, enabled: bool, *, store=None) -> int | None:
+    """Re-enable under the evaluation lock, committing the expired queue prefix.
+
+    Both PATCH routes pass their imported store, including in reload-based
+    fixtures. Failed persistence propagates without reporting an expiration.
+    """
+    store = strategy_watch_store if store is None else store
+    async with _run_lock():
+        dropped = []
+        cutoff = _utcnow() - _REENABLE_MAX_AGE
+
+        def expire(state: dict) -> dict:
+            committed, pending = _split_state(state)
+            for entry in pending:
+                parsed = _parse_entry(entry)
+                fired_at = entry.get("fired_at") if isinstance(entry, dict) else None
+                at = None
+                if isinstance(fired_at, str):
+                    try:
+                        at = datetime.fromisoformat(fired_at)
+                        if at.tzinfo is None:
+                            at = at.replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        pass
+                if parsed is not None and at is not None and at >= cutoff:
+                    break
+                dropped.append(fired_at)
+                if parsed is not None:
+                    committed = dict(parsed[1])
+            if not dropped:
+                return state
+            rest = pending[len(dropped):]
+            return {**committed, "pending_events": rest} if rest else committed
+
+        if not store.set_enabled(watch_id, enabled, on_reenable=expire):
+            return None
+        for fired_at in dropped:
+            logger.warning("strategy-watch: expired queued alert on re-enable for %s (fired_at=%r)",
+                           watch_id, fired_at)
+        return len(dropped)
+
+
 def _effective_view(w: dict) -> dict:
     """The watch as the evaluators see it: last_state = the effective state; the
     committed state and the queue ride along under private keys, read only by
@@ -643,11 +688,12 @@ async def evaluate_all(sustain_minutes: int = 0, now_ts: float | None = None) ->
     schedule-level setting (not per-watch) — contrast with the standard
     chart-alert rule builder's per-condition sustain_minutes.
     """
-    await _resend_pending(any_channel=False)      # no notify path: commit the queue
-    transitions = await _collect(sustain_minutes, now_ts)
-    for t in transitions:
-        _commit(t)
-    return [t.event for t in transitions]
+    async with _run_lock():
+        await _resend_pending(any_channel=False)      # no notify path: commit the queue
+        transitions = await _collect(sustain_minutes, now_ts)
+        for t in transitions:
+            _commit(t)
+        return [t.event for t in transitions]
 
 
 _SUBJECT_PREFIX = {
@@ -749,8 +795,8 @@ def _channel_status() -> tuple[bool, bool]:
         return True, False
 
 
-# One evaluate_and_notify at a time: the scheduler tick and a manual /evaluate
-# (run_now) could otherwise both see a watch idle and both send its entry.
+# Serialize evaluation and enable/expiry: no run sees an enabled watch until
+# its expired queue prefix is committed, and no two runs send the same entry.
 # Created lazily per running loop -- an asyncio.Lock that once waited is bound
 # to its loop, and pytest runs each test on a fresh one.
 _lock: asyncio.Lock | None = None

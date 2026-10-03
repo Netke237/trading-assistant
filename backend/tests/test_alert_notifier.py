@@ -345,3 +345,79 @@ async def test_dedup_state_persists_across_reload(monkeypatch, tmp_path):
 
     # Same condition must now be SUPPRESSED (deduped), not re-sent.
     assert await an.notify_alert('AAPL', 'STOP_REACHED', 'Stop breached', 'REC-1') is False
+
+
+# ── STOP-SEMANTICS-2026-10-02: side-aware PREMIUM_STOP ──────────────────────
+
+@pytest.fixture
+def premium_captured(captured, monkeypatch):
+    monkeypatch.setattr(
+        an, '_load_delivery_config',
+        lambda: {'masterEnabled': True, 'enabledTypes': ['PREMIUM_STOP', 'STOP_REACHED'],
+                 'reminderIntervalHours': 4},
+    )
+    monkeypatch.setattr(an, '_MIN_DEDUP_SECONDS', 3600)
+    return captured
+
+
+@pytest.mark.parametrize('side, label', [
+    ('short-stock', 'Stock stop hit (short)'),
+    ('long-stock', 'Stock stop hit'),
+    ('option', 'Premium stop hit'),
+    (None, 'Premium stop hit'),
+])
+def test_premium_stop_label_follows_the_side(side, label):
+    subject, plain, _ = an._build_notification('AAPL', 'PREMIUM_STOP', 'r', _TS, stop_side=side)
+    assert subject.endswith(f'AAPL: {label}')
+    assert plain.startswith(f'AAPL — {label}')
+
+
+def test_stop_side_is_ignored_for_other_types():
+    subject, _, _ = an._build_notification('AAPL', 'STOP_REACHED', 'r', _TS, stop_side='short-stock')
+    assert subject.endswith('AAPL: Stop hit')
+    assert an._dedup_key('rec-1', 'STOP_REACHED', 'short-stock') == 'rec-1|STOP_REACHED'
+
+
+async def test_short_fire_ignores_legacy_fall_side_dedup_state(premium_captured):
+    # State written under the old fall-side rule: a live hold AND a first-seen
+    # date. Under one shared key the rise-side fire would be suppressed, or sent
+    # as a "(reminder)" dated at the wrong-side trigger.
+    an._fired['rec-1|PREMIUM_STOP'] = an.time.time()
+    an._first_seen['rec-1|PREMIUM_STOP'] = '2026-01-01T07:00:00+00:00'
+    assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'Stock stop — AAPL at $110.00',
+                                 'rec-1', _TS, stop_side='short-stock') is True
+    [(subject, plain, _)] = premium_captured
+    assert '(reminder)' not in subject
+    assert 'Stock stop hit (short)' in subject
+    assert '01.01.2026' not in plain
+    assert 'rec-1|PREMIUM_STOP:short' in an._fired
+
+
+async def test_legacy_and_unstamped_fires_keep_the_legacy_key(premium_captured):
+    assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-1', _TS) is True
+    assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-2', _TS,
+                                 stop_side='option') is True
+    assert set(an._fired) == {'rec-1|PREMIUM_STOP', 'rec-2|PREMIUM_STOP'}
+
+
+async def test_short_key_survives_a_save_and_reload(premium_captured, monkeypatch, tmp_path):
+    monkeypatch.setattr(an, '_DEDUP_PATH', tmp_path / 'alert_dedup.json')
+    assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-1', _TS,
+                                 stop_side='short-stock') is True
+    an._fired.clear()
+    an._first_seen.clear()
+    an._load_dedup()
+    assert 'rec-1|PREMIUM_STOP:short' in an._fired
+    # ...and so a second fire inside the window stays deduped across a restart.
+    assert await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-1', _TS,
+                                 stop_side='short-stock') is False
+
+
+async def test_forget_alerts_drops_both_keys_of_a_closed_short(premium_captured, monkeypatch, tmp_path):
+    monkeypatch.setattr(an, '_DEDUP_PATH', tmp_path / 'alert_dedup.json')
+    an._fired['rec-1|PREMIUM_STOP'] = an.time.time()
+    an._first_seen['rec-1|PREMIUM_STOP'] = _TS
+    await an.notify_alert('AAPL', 'PREMIUM_STOP', 'r', 'rec-1', _TS, stop_side='short-stock')
+    assert an.forget_alerts({'rec-1'}) is True
+    assert not [k for k in an._fired if k.startswith('rec-1|')]
+    assert not [k for k in an._first_seen if k.startswith('rec-1|')]

@@ -13,156 +13,19 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
-import type { RejectedEntry } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
-import { ScanFunnel } from '@/components/organisms/ScanFunnel';
-import { scanLogTotals, SHORTLIST_REASON_PREFIX } from './scanLogTotals';
+import { PipelineInspector } from '@/components/organisms/PipelineInspector';
+import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
-import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 import {
   HORIZON_PRESETS, presetByKey, previewDteWindow, horizonDisplayString,
-  resolveParamsHorizon, type HorizonKey, type ScoringHorizon,
+  resolveParamsHorizon, type HorizonKey,
 } from '@/lib/horizonPresets';
 import { PARAM_DEFAULTS_PER_HORIZON, type ParamDefaults } from '@/lib/executionParamDefaults';
-
-// ── Scan-log constants ────────────────────────────────────────────────────────
-
-const HORIZON_WEIGHTS: Record<string, Record<string, number>> = {
-  Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5,  vol: 10 },
-  Swing:    { trend: 30, pullback: 20, trigger: 25, event: 15, vol: 10 },
-  Position: { trend: 30, pullback: 20, trigger: 20, event: 20, vol: 10 },
-};
-
-const COMPONENT_LABELS: Record<string, string> = {
-  trend:    'Trend',
-  pullback: 'Pullback',
-  trigger:  'Trigger',
-  event:    'Event',
-  vol:      'Vol',
-};
-
-const COMPONENT_ORDER = ['trend', 'pullback', 'trigger', 'event', 'vol'];
-
-// ── Breakdown row component ───────────────────────────────────────────────────
-
-function BreakdownRow({ compKey, rawScore, weight }: { compKey: string; rawScore: number; weight: number }) {
-  const label = COMPONENT_LABELS[compKey] ?? compKey;
-  const weightedPts = Math.round((rawScore / 100) * weight);
-  const tone: 'pass' | 'caution' | 'reject' =
-    weightedPts >= weight * 0.6 ? 'pass' : weightedPts >= weight * 0.3 ? 'caution' : 'reject';
-  const tooltip = `${label} contributed ${weightedPts} of a possible ${weight} points (${rawScore}/100 raw × ${weight}% weight). `
-    + `${tone === 'pass' ? '≥60% of its weight — pulling the score up.' : tone === 'caution' ? '30-59% of its weight — a mild drag.' : '<30% of its weight — the main reason this symbol was rejected.'}`;
-  return (
-    <div className={formStyles.breakdownRow}>
-      <Text size={11} tone="secondary" weight={400}>{label}</Text>
-      <Data size={11} weight={500}>{rawScore}/100</Data>
-      <Text size={11} tone="dim">{weight}%</Text>
-      <div className={formStyles.miniTrack}>
-        <div className={formStyles.miniFill} style={{ width: `${rawScore}%` }} />
-      </div>
-      <Tooltip text={tooltip} position="top" align="right">
-        <Data size={11} weight={500} tone={tone}>{weightedPts}pt</Data>
-      </Tooltip>
-    </div>
-  );
-}
-
-// ── StockRejectGroup ──────────────────────────────────────────────────────────
-
-function StockRejectGroup({ reason, entries, horizonKey }: { reason: string; entries: RejectedEntry[]; horizonKey: string }) {
-  const [open, setOpen] = useState(false);
-  const weights = HORIZON_WEIGHTS[horizonKey] ?? HORIZON_WEIGHTS['Swing'];
-  const sampleBreakdown = entries.find((e) => e.breakdown)?.breakdown;
-
-  return (
-    <div className={formStyles.rejectGroup}>
-      <button type="button" className={formStyles.rejectGroupHeader} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <Text size={12} tone="reject" weight={500}>{reason}</Text>
-        <Text size={11} tone="dim">{entries.length} symbol{entries.length !== 1 ? 's' : ''}</Text>
-        <span className={`${formStyles.chevron} ${open ? formStyles.chevronOpen : ''}`} aria-hidden>▾</span>
-      </button>
-      {open && (
-        <div className={formStyles.rejectGroupBody}>
-          <div className={formStyles.symbolList}>
-            {entries.map((e) => <Text key={e.symbol} size={11} tone="secondary">{e.symbol}</Text>)}
-          </div>
-          {sampleBreakdown && (
-            <div className={formStyles.breakdownBlock}>
-              <div className={formStyles.breakdownHeader}>
-                <Text size={10} tone="dim">COMPONENT</Text>
-                <Text size={10} tone="dim">RAW</Text>
-                <Text size={10} tone="dim">WT%</Text>
-                <span />
-                <Text size={10} tone="dim">PTS</Text>
-              </div>
-              {COMPONENT_ORDER.map((k) =>
-                sampleBreakdown[k] !== undefined ? (
-                  <BreakdownRow key={k} compKey={k} rawScore={sampleBreakdown[k]} weight={weights[k] ?? 0} />
-                ) : null
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── ScanLog section ───────────────────────────────────────────────────────────
-
-const GROUPED_PREFIXES = ['Pre-screen:', 'Score gate:'];
-
-function ScanLogSection({ entries, horizonKey }: { entries: RejectedEntry[]; horizonKey: string }) {
-  if (entries.length === 0) return null;
-  const stockRejects = entries.filter((e) => GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)));
-  // Names the shortlist cap trimmed were not rejected — they survived every
-  // gate and lost on rank — so they get their own group rather than sitting in
-  // OTHER beside exceptions and direction-conviction rejects.
-  const overCap = entries.filter((e) => e.reason.startsWith(SHORTLIST_REASON_PREFIX));
-  const otherRejects = entries.filter((e) =>
-    !GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)) && !e.reason.startsWith(SHORTLIST_REASON_PREFIX));
-  const byReason = new Map<string, RejectedEntry[]>();
-  for (const e of stockRejects) {
-    const list = byReason.get(e.reason) ?? [];
-    list.push(e);
-    byReason.set(e.reason, list);
-  }
-  return (
-    <div className={formStyles.rejectList}>
-      {Array.from(byReason.entries())
-        .sort((a, b) => b[1].length - a[1].length)
-        .map(([reason, list]) => (
-          <StockRejectGroup key={reason} reason={reason} entries={list} horizonKey={horizonKey} />
-        ))}
-      {overCap.length > 0 && (
-        <div className={formStyles.otherRejects}>
-          <Text size={11} tone="caution" weight={500}>OVER CAP</Text>
-          {overCap.map((e) => (
-            <div key={e.symbol} className={formStyles.otherRejectRow}>
-              <Text size={11} weight={500}>{e.symbol}</Text>
-              <Text size={11} tone="dim">{e.reason.slice(SHORTLIST_REASON_PREFIX.length).trim()}</Text>
-            </div>
-          ))}
-        </div>
-      )}
-      {otherRejects.length > 0 && (
-        <div className={formStyles.otherRejects}>
-          <Text size={11} tone="dim" weight={500}>OTHER</Text>
-          {otherRejects.map((e) => (
-            <div key={e.symbol} className={formStyles.otherRejectRow}>
-              <Text size={11} weight={500}>{e.symbol}</Text>
-              <Text size={11} tone="dim">{e.reason}</Text>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const DIRECTIONS: Direction[] = ['Bullish', 'Bearish'];
 
@@ -747,14 +610,22 @@ export default function Step3Page() {
     setHz(context.horizonPreset ?? 'Swing');
     setHoldMin(Math.round(context.holdMin ?? presetByKey('Swing').holdMin));
     setHoldMax(Math.round(context.holdMax ?? presetByKey('Swing').holdMax));
+    // The verdict follows the direction too, once the regime has answered:
+    // StoreHydration can restore a scan's context (STEP3-PARAM-REACH) after
+    // the fetch below resolved, and only handleDirChange recomputed it.
+    if (regimeLoadedRef.current && context.direction) {
+      useScanStore.getState().setCombinedRegime(alignmentVerdict(context.direction, descriptorRef.current));
+    }
   }, [context]);
 
   const descriptorRef = useRef<RegimeDescriptor>('Choppy');
+  const regimeLoadedRef = useRef(false);
 
   useEffect(() => {
     api.getRegime().then((r) => {
       useScanStore.getState().setRegime(r.overall);
       descriptorRef.current = descriptorFromState(r.omm?.state ?? '');
+      regimeLoadedRef.current = true;
       const dir = useScanStore.getState().context?.direction ?? 'Bullish';
       useScanStore.getState().setCombinedRegime(alignmentVerdict(dir, descriptorRef.current));
     }).catch(() => {});
@@ -847,12 +718,9 @@ export default function Step3Page() {
   const { shownResult, rejectedLog, totalPassed, totalRejected, totalScanned, totalTrimmed } =
     scanLogTotals(scanState, liveRejectedLog, scanResult);
 
-  const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
-
-  // Equivalent to the old ternary for every hz value — consolidated onto the
-  // same helper `defaults` above uses, closing this independent copy of the
-  // decision instead of leaving it to drift on its own.
-  const weightsKey: ScoringHorizon = presetByKey(resolveParamsHorizon(hz, holdMax)).scoringHorizon;
+  // Gated like every other number in the log header: a scan in flight or
+  // failed shows no DTE rather than the previous run's.
+  const enforcedDte = shownResult?.dte_window;
 
   const stocksDefs  = PARAM_DEFS.filter((d) => d.section === 'stocks' || d.section === 'all');
   const optionsDefs = PARAM_DEFS.filter((d) => d.section === 'options' || d.section === 'all');
@@ -1054,49 +922,51 @@ export default function Step3Page() {
         )}
       </div>
 
-      {screenerMode !== 'stocks' && (
-      <div className={formStyles.logSection}>
-        <div className={formStyles.logHeader}>
-          <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
-          <div className={formStyles.logStats}>
-            {totalScanned > 0 && (
-              <>
-                <span className={formStyles.logStat}>
-                  <Text size={11} tone="dim">Scanned</Text>
-                  <span className={formStyles.badge}>{totalScanned}</span>
-                </span>
-                <span className={formStyles.logStat}>
-                  <Text size={11} tone="pass">Passed</Text>
-                  <span className={`${formStyles.badge} ${formStyles.badgePass}`}>{totalPassed}</span>
-                </span>
-                <span className={formStyles.logStat}>
-                  <Text size={11} tone="reject">Rejected</Text>
-                  <span className={`${formStyles.badge} ${formStyles.badgeReject}`}>{totalRejected}</span>
-                </span>
-                {totalTrimmed > 0 && (
+      {screenerMode !== 'stocks' && (totalScanned > 0 || rejectedLog.length > 0) && (
+        <div className={formStyles.logSection}>
+          <div className={formStyles.logHeader}>
+            <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
+            <div className={formStyles.logStats}>
+              {totalScanned > 0 && (
+                <>
                   <span className={formStyles.logStat}>
-                    <Text size={11} tone="caution">Over cap</Text>
-                    <span className={formStyles.badge}>{totalTrimmed}</span>
+                    <Text size={11} tone="dim">Scanned</Text>
+                    <span className={formStyles.badge}>{totalScanned}</span>
                   </span>
-                )}
-                <span className={formStyles.logStat}>
-                  <Text size={11} tone="dim">DTE</Text>
-                  <Text size={11} tone="secondary">
-                    {enforcedDte ? `${enforcedDte.min_dte}–${enforcedDte.max_dte}d` : '—'}
-                  </Text>
-                </span>
-              </>
-            )}
-            {totalScanned === 0 && rejectedLog.length > 0 && (
-              <span className={formStyles.badge}>{rejectedLog.length}</span>
-            )}
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="pass">Passed</Text>
+                    <span className={`${formStyles.badge} ${formStyles.badgePass}`}>{totalPassed}</span>
+                  </span>
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="reject">Rejected</Text>
+                    <span className={`${formStyles.badge} ${formStyles.badgeReject}`}>{totalRejected}</span>
+                  </span>
+                  {totalTrimmed > 0 && (
+                    <span className={formStyles.logStat}>
+                      <Text size={11} tone="caution">Over cap</Text>
+                      <span className={formStyles.badge}>{totalTrimmed}</span>
+                    </span>
+                  )}
+                  <span className={formStyles.logStat}>
+                    <Text size={11} tone="dim">DTE</Text>
+                    <Text size={11} tone="secondary">
+                      {enforcedDte ? `${enforcedDte.min_dte}–${enforcedDte.max_dte}d` : '—'}
+                    </Text>
+                  </span>
+                </>
+              )}
+            </div>
           </div>
+          <PipelineInspector
+            isDrawer={false}
+            isOpen={true}
+            pipeline={shownResult?.pipeline}
+            rejected={rejectedLog}
+            survivors={shownResult?.candidates?.map((c) => c.symbol) ?? []}
+            contractRules={shownResult?.contract_rules}
+            dteWindow={shownResult?.dte_window}
+          />
         </div>
-          {shownResult?.pipeline && (
-            <ScanFunnel mode="options" pipeline={shownResult.pipeline} />
-          )}
-          <ScanLogSection entries={rejectedLog} horizonKey={weightsKey} />
-      </div>
       )}
 
       <RunScanButton />

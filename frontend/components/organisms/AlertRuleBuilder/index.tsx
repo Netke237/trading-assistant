@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { alertIndicatorReference, parseAlertIndicator } from '@/lib/alertIndicators';
 import { useChartStore } from '@/lib/chartStore';
 import { useChartAlertStore, conditionsEqual } from '@/lib/chartAlertStore';
 import { Text } from '@/components/primitives';
@@ -86,10 +87,14 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
   const [expiryDate, setExpiryDate] = useState(seed?.expiry_date ?? '');
   const [error, setError] = useState('');
 
-  const indicatorOptions = activeIndicators.map((i) => ({
-    value: i.id,
-    label: `${i.type}(${Object.values(i.params).join(',') || 'default'})`,
-  }));
+  const indicatorOptions = Array.from(new Set(activeIndicators
+    .map(alertIndicatorReference).filter((r): r is string => r !== null)));
+  // Editing still shows the saved reference after chart indicators are removed.
+  for (const c of conditions) {
+    if (c.kind === 'indicator' && c.indicator && !indicatorOptions.includes(c.indicator)) {
+      indicatorOptions.push(c.indicator);
+    }
+  }
 
   const updateCondition = (idx: number, patch: Partial<Condition>) => {
     setConditions((c) => c.map((cond, i) => (i === idx ? { ...cond, ...patch } as Condition : cond)));
@@ -110,6 +115,10 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
   const handleSave = () => {
     if (!name.trim()) {
       setError('Name is required');
+      return;
+    }
+    if (conditions.some(c => c.kind === 'indicator' && !parseAlertIndicator(c.indicator))) {
+      setError('Select a supported indicator for every indicator condition');
       return;
     }
     setError('');
@@ -271,7 +280,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                   >
                     <option value="">Select...</option>
                     {indicatorOptions.map((o) => (
-                      <option key={o.value} value={o.label}>{o.label}</option>
+                      <option key={o} value={o}>{o}</option>
                     ))}
                   </select>
                   <select

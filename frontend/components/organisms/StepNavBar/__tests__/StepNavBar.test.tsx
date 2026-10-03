@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { StepNavBar } from '@/components/organisms/StepNavBar';
+import { PipelineInspector } from '@/components/organisms/PipelineInspector';
 import { useScanStore } from '@/lib/scanStore';
 
 const mockPush = jest.fn();
@@ -12,6 +13,23 @@ jest.mock('next/navigation', () => ({
 }));
 
 describe('StepNavBar — Step 1 REJECT-gate race (H5)', () => {
+  it('keeps both arrows inside the pipeline drawer and restores navigation after close', () => {
+    mockPush.mockClear();
+    mockPathname = '/screener/step-4-ranking';
+    useScanStore.setState({ combinedRegime: 'PASS', screenerMode: 'options' });
+    const { rerender } = render(<><StepNavBar /><PipelineInspector onClose={() => {}} /></>);
+    const copy = screen.getByRole('button', { name: 'Copy Tree' });
+    copy.focus();
+    fireEvent.keyDown(copy, { key: 'ArrowLeft' });
+    fireEvent.keyDown(copy, { key: 'ArrowRight' });
+    fireEvent.click(screen.getByRole('button', { name: 'Plaintext Tree' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Plaintext Tree' }), { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(mockPush).not.toHaveBeenCalled();
+    rerender(<><StepNavBar /><PipelineInspector isOpen={false} onClose={() => {}} /></>);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(mockPush).toHaveBeenCalledWith('/screener/step-5-vol-events');
+  });
   beforeEach(() => {
     mockPush.mockClear();
     mockPathname = '/screener/step-1-regime';
