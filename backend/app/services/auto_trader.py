@@ -2732,8 +2732,11 @@ class AutoTradeService:
             raise
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
+        # Audit round 2, R2-F2: NOT conditional on `entry_premium > 0` any
+        # more. That condition was the one input that switched the D5 cap off;
+        # `_check_exposure` now refuses a non-positive premium itself.
         pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
-        if portfolio_snapshot is not None and strategy.entry_premium > 0:
+        if portfolio_snapshot is not None:
             try:
                 self._check_exposure(strategy, portfolio_snapshot, pv)
             except RuntimeError as exc:
@@ -2939,6 +2942,16 @@ class AutoTradeService:
     def _check_exposure(strategy: ArmedStrategy, portfolio_snapshot: list, portfolio_value: float) -> None:
         """Raise RuntimeError if the armed order would breach exposure caps."""
         from app.services.portfolio_risk import check_position_risk, premium_cap_basis
+        if not strategy.entry_premium > 0:
+            # Audit round 2, R2-F2: FAIL CLOSED. `arm()` and ArmRequest
+            # (gt=0) both refuse this, so only a strategy put in the armed slot
+            # some other way gets here. Not judged at the limit instead: the
+            # booking refuses a zero-premium fire ("no entry premium was
+            # armed"), so a fired order would also be an untracked one.
+            raise RuntimeError(
+                f"Exposure cap cannot be judged: no entry premium was armed "
+                f"({strategy.entry_premium!r})"
+            )
         # Audit round 1, F1: judged at the price the order can fill at -- the
         # armed LIMIT when it is above the mid -- not the mid alone. A MKT arm
         # carries no ask or spread, so it is judged at the mid (see

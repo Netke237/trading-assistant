@@ -123,7 +123,13 @@ class ArmRequest(BaseModel):
     # without passing through either of them.
     limit_price:     Optional[float] = Field(default=None, gt=0)
     conid:           Optional[int] = None
-    entry_premium:   float = 0.0   # set to actual option mid; exposure check is skipped if 0
+    # The option mid the position books and the D5 cap is judged from.
+    # REQUIRED and gt=0 -- audit round 2, R2-F2. It defaulted to 0.0 ("exposure
+    # check is skipped if 0"): an arm that omitted it reached
+    # `AutoTradeService.arm()`'s ValueError as a 500, and a zero premium was
+    # the one input that turned the fire-time cap check off. A 422 naming the
+    # field, at arm, is the loud failure `direction` and `horizon` already use.
+    entry_premium:   float = Field(..., gt=0, allow_inf_nan=False)
     portfolio_value: float = 50_000.0
     # Piece 4 — the per-trade premium stop from the card being armed. Omitted
     # or null inherits auto_trade.premium_stop_pct. Bounded here as well as on
