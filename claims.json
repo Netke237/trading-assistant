@@ -19,14 +19,6 @@
     {
       "agent": "claude",
       "branch": "work",
-      "claimed_at": "2026-10-03T14:56:04Z",
-      "expires_at": "2026-10-03T17:56:04Z",
-      "note": "Plan and audit Options Step 5 explanations; documentation only",
-      "task": "OPTIONS-VOL-EVENTS-EXPLANATIONS-PLAN"
-    },
-    {
-      "agent": "claude",
-      "branch": "work",
       "claimed_at": "2026-10-03T14:56:06Z",
       "expires_at": "2026-10-03T17:56:06Z",
       "note": "Plan and audit Options Step 6 score explanations; documentation only",
