@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "codex/trading-review-retune",
       "claimed_at": "2026-10-03T14:57:27Z",
-      "expires_at": "2026-10-03T17:57:27Z",
+      "expires_at": "2026-10-03T18:50:10Z",
       "note": "Execute full configured multiyear search and independently verify financial results",
       "task": "TRADING-REVIEW-RETUNE-EVIDENCE"
     },
