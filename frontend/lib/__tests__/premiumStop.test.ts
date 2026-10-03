@@ -566,4 +566,10 @@ describe('STOP-SEMANTICS -- why a create dropped the stop', () => {
     expect(premiumStopDropText(2, 'unknown')).toBe(
       'Premium stop of $2.00/share could not be applied: (reason unavailable) — this position inherits the global stop.');
   });
+
+  it('names the kept fraction when the server stored the card\'s own (PREMIUM-STOP-FALLBACK-ALIGN)', () => {
+    expect(premiumStopDropText(4.5, 'total_loss', 4.5 / 5.2)).toBe(
+      'Premium stop of $4.50/share could not be applied: at the filled premium it is a total loss — this position keeps your 86.54% of the premium as its stop instead.');
+    expect(premiumStopDropText(4.5, 'total_loss', null)).toBe(premiumStopDropText(4.5, 'total_loss'));
+  });
 });

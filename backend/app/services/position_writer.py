@@ -165,11 +165,20 @@ class WriteOutcome:
     the wrong side of the underlying was booked with gates off (None
     otherwise). With gates on that stop raises 422 instead. The caller must
     put it in front of a human; a log line alone hides it.
+
+    `premium_stop_unapplied` (decision PREMIUM-STOP-FALLBACK-USER-FRACTION-
+    2026-10-03) is set when a `premiumStopDollar` was sent and the stored
+    `premium_stop_pct` is NOT its ratio to the persisted entry -- a total loss
+    at that entry, a non-positive entry, or a sub-cent threshold. It names
+    what was stored instead: the client's fraction, or nothing (the global).
+    The auto-trade booking pages it; the card path reads the same fact off the
+    201 itself.
     """
     position:      PortfolioPositionModel
     adjusted_size: Optional[int]
     over_exposure: bool
     wrong_side_stop: Optional[str] = None
+    premium_stop_unapplied: Optional[str] = None
 
 
 def _rescale_rung_shares(targets: list, asked: int, stored: int) -> list:
@@ -495,7 +504,12 @@ async def create_position(
         # The dollar amount wins when both are sent: it is what the user typed on
         # the card, while a client-sent fraction is at best a stale estimate of it.
         resolved_premium_stop_pct = body.premiumStopPct
+        # Set only where the dollar's own ratio is stored; cleared again by the
+        # sub-cent check below. Read for `WriteOutcome.premium_stop_unapplied`.
+        dollar_applied = False
+        dollar_unapplied_why: Optional[str] = None
         if body.premiumStopDollar is not None and entry_price <= 0:
+            dollar_unapplied_why = "the persisted entry is not positive"
             # DEFENCE IN DEPTH, not a live path. `entryPrice` is gt=0 on the create
             # schema and the live re-anchor above now rounds BEFORE testing, so
             # `entry_price` is positive by here on every route currently known. The
@@ -515,7 +529,9 @@ async def create_position(
             ratio = body.premiumStopDollar / entry_price
             if 0 < ratio < 1:
                 resolved_premium_stop_pct = ratio
+                dollar_applied = True
             else:
+                dollar_unapplied_why = "it is a total loss at that entry"
                 # A stop at or above the whole premium is a total loss, which is
                 # unreachable-by-definition rather than a stop, and there is no
                 # representation for it: the column's contract is (0, 1).
@@ -561,10 +577,25 @@ async def create_position(
                 "and could never fire -- not stored",
                 resolved_premium_stop_pct, entry_price, body.contract,
             )
+            if dollar_applied:
+                dollar_applied = False
+                dollar_unapplied_why = "it would fire below $0.01 at that entry"
             fallback = body.premiumStopPct
             if fallback is not None and premium_stop_is_sub_cent(entry_price, fallback, short_stock):
                 fallback = None
             resolved_premium_stop_pct = fallback
+
+        premium_stop_unapplied: Optional[str] = None
+        if body.premiumStopDollar is not None and not dollar_applied:
+            kept = (
+                f"{resolved_premium_stop_pct * 100:.2f}% of the premium (the fraction sent with it) is stored instead"
+                if resolved_premium_stop_pct is not None
+                else "no per-position stop is stored, so it inherits the global premium stop"
+            )
+            premium_stop_unapplied = (
+                f"the ${body.premiumStopDollar:.2f}/share premium stop could not be applied at the "
+                f"booked entry ${entry_price:.2f} ({dollar_unapplied_why or 'reason unavailable'}); {kept}."
+            )
 
         # Phase G (piece 5) — seed the post-trade alert basis from the trader's
         # pre-trade pick, so TP_HIT starts life agreeing with the card the trade was
@@ -706,6 +737,7 @@ async def create_position(
             adjusted_size=risk.adjusted_size,
             over_exposure=over_exposure,
             wrong_side_stop=wrong_side_stop,
+            premium_stop_unapplied=premium_stop_unapplied,
         )
 
 

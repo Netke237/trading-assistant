@@ -87,6 +87,82 @@ def load_notification_config() -> dict:
     return read_notification_config()[0]
 
 
+_CHANNELS = ('gmail', 'telegram')   # send order
+
+
+def _channel_block(cfg: dict, name: str) -> dict:
+    # A channel block that is null or not a mapping (`gmail:` with nothing under
+    # it) counts as DISABLED, and the other channel is still tried. `.get(k, {})`
+    # only covered a MISSING key: a null block raised AttributeError and Telegram
+    # was never attempted.
+    block = cfg.get(name) if isinstance(cfg, dict) else None
+    return block if isinstance(block, dict) else {}
+
+
+def ready_channels(cfg: dict) -> list[str]:
+    """The enabled channels whose credentials are present, in send order.
+
+    WATCH-RESEND-PER-CHANNEL: the same checks send_gmail/send_telegram make
+    before they return False without sending (settings.yaml first, env vars as
+    fallback). An enabled channel that fails them cannot deliver anything, so
+    the strategy-watch evaluator does not wait for it.
+    """
+    ready = []
+    gmail = _channel_block(cfg, 'gmail')
+    if gmail.get('enabled') \
+            and (gmail.get('smtp_user') or os.getenv('BAMENDJOU_GMAIL_USER', '')) \
+            and (gmail.get('smtp_password') or os.getenv('BAMENDJOU_GMAIL_PASSWORD', '')):
+        ready.append('gmail')
+    tg = _channel_block(cfg, 'telegram')
+    if tg.get('enabled') \
+            and (tg.get('bot_token') or os.getenv('BAMENDJOU_TELEGRAM_BOT_TOKEN', '')) \
+            and (tg.get('chat_id') or os.getenv('BAMENDJOU_TELEGRAM_CHAT_ID', '')):
+        ready.append('telegram')
+    return ready
+
+
+async def _send_channels(cfg: dict, subject: str, plain_body: str, html_body: str,
+                         channels=None) -> dict[str, bool]:
+    """Send to each channel enabled in cfg (restricted to `channels` when given);
+    {channel: delivered} for every channel ATTEMPTED."""
+    gmail = _channel_block(cfg, 'gmail')
+    tg = _channel_block(cfg, 'telegram')
+    wanted = _CHANNELS if channels is None else tuple(channels)
+
+    result: dict[str, bool] = {}
+
+    if 'gmail' in wanted and gmail.get('enabled'):
+        result['gmail'] = await dispatch('gmail',
+            _subject=subject,
+            to=gmail.get('to', '') or os.getenv('BAMENDJOU_GMAIL_TO', ''),
+            subject=subject,
+            body=plain_body,
+            smtp_user=gmail.get('smtp_user', '') or os.getenv('BAMENDJOU_GMAIL_USER', ''),
+            smtp_password=gmail.get('smtp_password', ''),  # yaml first, gmail.py falls back to env var if empty
+        )
+
+    if 'telegram' in wanted and tg.get('enabled'):
+        result['telegram'] = await dispatch('telegram',
+            _subject=subject,
+            bot_token=tg.get('bot_token', ''),  # yaml first, telegram.py falls back to env var if empty
+            chat_id=tg.get('chat_id', '') or os.getenv('BAMENDJOU_TELEGRAM_CHAT_ID', ''),
+            text=html_body,
+        )
+
+    return result
+
+
+async def notify_channels(cfg: dict, subject: str, plain_body: str, html_body: str,
+                          channels) -> dict[str, bool]:
+    """Per-channel delivery with an ALREADY-READ config (WATCH-RESEND-PER-CHANNEL).
+
+    Attempts each listed channel that is enabled in cfg, Gmail then Telegram;
+    returns {channel: delivered} for each one attempted. A channel listed but
+    not enabled is not attempted and is absent from the result.
+    """
+    return await _send_channels(cfg, subject, plain_body, html_body, channels)
+
+
 async def notify_enabled_channels(subject: str, plain_body: str, html_body: str) -> bool:
     """Dispatch to each channel that is enabled in settings.yaml.
 
@@ -98,33 +174,4 @@ async def notify_enabled_channels(subject: str, plain_body: str, html_body: str)
     just scheduled.
     """
     cfg = load_notification_config()
-    # A channel block that is null or not a mapping (`gmail:` with nothing under
-    # it) counts as DISABLED, and the other channel is still tried. `.get(k, {})`
-    # only covered a MISSING key: a null block raised AttributeError out of this
-    # function and Telegram was never attempted.
-    gmail = cfg.get('gmail')
-    gmail = gmail if isinstance(gmail, dict) else {}
-    tg = cfg.get('telegram')
-    tg = tg if isinstance(tg, dict) else {}
-
-    delivered = False
-
-    if gmail.get('enabled'):
-        delivered = await dispatch('gmail',
-            _subject=subject,
-            to=gmail.get('to', '') or os.getenv('BAMENDJOU_GMAIL_TO', ''),
-            subject=subject,
-            body=plain_body,
-            smtp_user=gmail.get('smtp_user', '') or os.getenv('BAMENDJOU_GMAIL_USER', ''),
-            smtp_password=gmail.get('smtp_password', ''),  # yaml first, gmail.py falls back to env var if empty
-        ) or delivered
-
-    if tg.get('enabled'):
-        delivered = await dispatch('telegram',
-            _subject=subject,
-            bot_token=tg.get('bot_token', ''),  # yaml first, telegram.py falls back to env var if empty
-            chat_id=tg.get('chat_id', '') or os.getenv('BAMENDJOU_TELEGRAM_CHAT_ID', ''),
-            text=html_body,
-        ) or delivered
-
-    return delivered
+    return any((await _send_channels(cfg, subject, plain_body, html_body)).values())
