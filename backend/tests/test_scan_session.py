@@ -286,6 +286,9 @@ async def test_persisted_request_is_the_one_this_scan_ran(monkeypatch):
         async def execute(self, _q):
             return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))
 
+        async def rollback(self):
+            pass
+
     monkeypatch.setattr(scan_module, "_execute_scan_core", _fake_core)
     monkeypatch.setattr(scan_module, "_upsert_session", _fake_upsert)
     monkeypatch.setattr(scan_module, "_last_request", None)
