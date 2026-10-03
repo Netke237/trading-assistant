@@ -21,7 +21,9 @@ test('chart instance id and parameter insertion order do not change saved MACD r
 test('browser computes rule parameters without any active chart indicators', () => {
   const points = computeAlertIndicatorPoints(candles, [condition('EMA(7)'), condition('MACD(5,12,4)')]);
   expect(points['EMA(7)']).toEqual(calcEMA(candles, 7).map(p => ({ ...p, value: pythonRound4(p.value) })));
-  expect(points['MACD(5,12,4)']).toEqual(calcMACD(candles, 5, 12, 4).macd);
+  const chartMACD = calcMACD(candles, 5, 12, 4).macd;
+  expect(points['MACD(5,12,4)'].map(p => p.time)).toEqual(chartMACD.map(p => p.time));
+  points['MACD(5,12,4)'].forEach((p, i) => expect(p.value).toBeCloseTo(chartMACD[i].value, 10));
 });
 
 test.each(['', 'ema-20', 'macd-1720000000000', 'EMA(0)', 'RSI(1.5)', 'MACD(26,12,9)', 'EMA(' + '1'.repeat(5000) + ')', 'MACD(5,12)', 'SMA(10001)', 'BB_MID(8,nan)', 'BB_UPPER(2,1e308)'])('rejects %s', ref => {
@@ -57,4 +59,18 @@ test('an OR match never includes nonfinite indicator values in persisted trigger
     { 'BB_UPPER(2,2)': [{ time: candle.time, value: Infinity }] }, [], new Date(), 'AAPL', '1h');
   expect(result).toHaveLength(1);
   expect(result[0].trigger_values).toEqual({ close: candle.close });
+});
+
+
+test.each(['>', 'crosses_above'] as const)('EMA backend arithmetic prevents a false %s at a rounding boundary', operator => {
+  const bars = [100.05,99.87,100.46,100.38,100.08,99.69,99.61,99.4,99.96].map((close, i) => ({
+    time: 1720000000 + i * 3600, open: close, high: close + 1, low: close - 1, close, volume: 100,
+  }));
+  const c: IndicatorCondition = { kind: 'indicator', indicator: 'EMA(7)', operator, value: 99.8887 };
+  const points = computeAlertIndicatorPoints(bars, [c]);
+  expect(points['EMA(7)'].at(-1)?.value).toBe(99.8887);
+  const rule: AlertRule = { id: 'boundary', name: 'boundary', symbol: 'AAPL', interval: '1h',
+    enabled: true, group: { logic: 'AND', conditions: [c] }, cooldown_minutes: 0,
+    expiry_date: null, created_at: '2024-01-01', last_triggered_at: null };
+  expect(evaluateRules([rule], bars.at(-1)!, bars, points, [], new Date(), 'AAPL', '1h')).toEqual([]);
 });

@@ -2,7 +2,7 @@
 import { pythonRound4 } from './premiumStop';
 import type { IndicatorConfig } from './chartStore';
 import type { Condition } from '@/types/alerts';
-import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD, calcBB, calcVWAP, type Candle, type Point } from './indicators';
+import { calcSMA, calcRSI, calcATR, calcBB, calcVWAP, type Candle, type Point } from './indicators';
 
 type Spec = { kind: string; params: number[] };
 const defaults: Record<string, number[]> = {
@@ -50,6 +50,37 @@ export function alertIndicatorReference(indicator: IndicatorConfig): string | nu
   return parseAlertIndicator(reference) ? reference : null;
 }
 
+/** Alert arithmetic mirrors backend _ema_seeded, including operation order.
+ * Chart calcEMA uses an algebraically equivalent recurrence whose floating-point
+ * result can round differently at a comparison boundary. */
+function alertEMA(values: number[], period: number): (number | null)[] {
+  const result: (number | null)[] = Array(values.length).fill(null);
+  if (values.length < period) return result;
+  const k = 2 / (period + 1);
+  let ema = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+  result[period - 1] = ema;
+  for (let i = period; i < values.length; i++) {
+    ema = (values[i] - ema) * k + ema;
+    result[i] = ema;
+  }
+  return result;
+}
+
+function emaPoints(candles: Candle[], period: number): Point[] {
+  return alertEMA(candles.map(c => c.close), period).flatMap((value, i) =>
+    value === null ? [] : [{ time: candles[i].time, value }]);
+}
+
+function macdPoints(candles: Candle[], fast: number, slow: number, signal: number, signalLine: boolean): Point[] {
+  const closes = candles.map(c => c.close);
+  const fastEMA = alertEMA(closes, fast);
+  const slowEMA = alertEMA(closes, slow);
+  const start = slow - 1; // The parser requires fast < slow.
+  const line = closes.slice(start).map((_, i) => fastEMA[start + i]! - slowEMA[start + i]!);
+  const values = signalLine ? alertEMA(line, signal) : line;
+  return values.flatMap((value, i) => value === null ? [] : [{ time: candles[start + i].time, value }]);
+}
+
 export function computeAlertIndicatorPoints(candles: Candle[], conditions: Condition[]): Record<string, Point[]> {
   const result: Record<string, Point[]> = {};
   for (const c of conditions) {
@@ -58,13 +89,12 @@ export function computeAlertIndicatorPoints(candles: Candle[], conditions: Condi
     if (!spec) continue;
     const { kind, params: p } = spec;
     let points: Point[];
-    if (kind === 'ema') points = calcEMA(candles, p[0]);
+    if (kind === 'ema') points = emaPoints(candles, p[0]);
     else if (kind === 'sma') points = calcSMA(candles, p[0]);
     else if (kind === 'rsi') points = calcRSI(candles, p[0]);
     else if (kind === 'atr') points = calcATR(candles, p[0]);
     else if (kind === 'macd' || kind === 'macd_signal') {
-      const m = calcMACD(candles, p[0], p[1], p[2]);
-      points = kind === 'macd' ? m.macd : m.signal;
+      points = macdPoints(candles, p[0], p[1], p[2], kind === 'macd_signal');
     } else if (kind.startsWith('bb')) {
       const bb = calcBB(candles, p[0], p[1]);
       points = kind === 'bb_upper' ? bb.upper : kind === 'bb_lower' ? bb.lower : bb.middle;

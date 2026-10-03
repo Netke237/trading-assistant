@@ -26,3 +26,10 @@ Fresh reviewer: `indicator_map_audit_1`; applied `bmad-review-adversarial-genera
 2. Saved `BB_UPPER(2,1e308)` computes infinity from ordinary prices and can persist invalid JSON history. Fixed by bounding the multiplier to 10000 in both parsers and rejecting nonfinite current/previous indicator readings in both evaluators. Invalid readings never enter trigger history, even when another OR condition matches.
 
 Regression evidence: affected backend checks 199 passed. Fresh independent round 2 reviews only these fixes and their interactions. No clean audit declaration yet.
+
+
+## Independent code audit round 2
+
+Fresh reviewer: `indicator_map_audit_2`; reviewed only round-1 fixes against `295fc279` and their interactions. One gate finding: EMA(7) closes `[100.05,99.87,100.46,100.38,100.08,99.69,99.61,99.4,99.96]` compute `99.88875` in chart arithmetic versus `99.88874999999999` in backend arithmetic. Rounding gives 99.8888 versus 99.8887, causing false `>99.8887` and `crosses_above99.8887` triggers. Fixed by using the exact backend EMA recurrence for alert EMA and MACD line/signal rather than the algebraically equivalent chart recurrence. Explicit threshold and crossing tests cover the reproducer.
+
+Fresh independent round 3 reviews only this correction and its interactions. This is the code-stage hard cap. No clean declaration yet.
