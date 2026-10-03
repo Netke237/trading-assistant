@@ -294,15 +294,32 @@ async def run_optimization(
         # folds' date ranges are exactly what they were before the warm-up
         # fetch was added (audit round 1, F5); the earlier bars only feed
         # `slice_with_warmup`'s prefix.
-        symbol_starts = [
-            min((b["_date"] for b in bars if b["_date"] >= window_start), default=None)
-            for bars in basket_bars.values()
-        ]
-        symbol_ends = [max(b["_date"] for b in bars) for bars in basket_bars.values()]
-        if not symbol_starts or None in symbol_starts:
+        #
+        # A symbol with NO bar inside the window (it stopped trading in the
+        # warm-up span the fetch now reaches) is dropped from the basket with a
+        # WARNING naming it, and the rest are used (audit round 2, R2-F5). It
+        # used to skip the whole strategy, silently.
+        for sym in list(basket_bars):
+            if not any(b["_date"] >= window_start for b in basket_bars[sym]):
+                logger.warning(
+                    "WFO %s: dropping %s from the basket -- no bar inside the "
+                    "3-year window (from %s); its bars end %s",
+                    strategy, sym, window_start, max(b["_date"] for b in basket_bars[sym]),
+                )
+                del basket_bars[sym]
+        if not basket_bars:
+            logger.warning(
+                "WFO %s: no basket symbol has a bar inside the 3-year window "
+                "(from %s), skipping", strategy, window_start,
+            )
             done += 1
             progress_cb(done, total_work)
             continue
+        symbol_starts = [
+            min(b["_date"] for b in bars if b["_date"] >= window_start)
+            for bars in basket_bars.values()
+        ]
+        symbol_ends = [max(b["_date"] for b in bars) for bars in basket_bars.values()]
 
         start = max(symbol_starts)  # latest start — intersection
         end = min(symbol_ends)      # earliest end — intersection

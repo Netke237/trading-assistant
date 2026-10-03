@@ -78,3 +78,62 @@ def test_the_folds_own_date_ranges_are_unchanged(monkeypatch):
     assert captured["folds"][0].train_start == first_trading
     # ...and the fetch reached back far enough to hold WARMUP_BARS before it.
     assert all(start < window_start for start, _ in requested)
+
+
+# ── Audit round 2, R2-F5: a basket symbol with warm-up-only bars ─────────────
+#
+# The warm-up fetch reaches 14 months before the 3-year window, so a symbol
+# that stopped trading in that span now returns bars, none inside the window.
+# It used to make `None in symbol_starts` true and silently skip the WHOLE
+# strategy -- no log, no proposal, the healthy symbols unused.
+
+def _run_with(monkeypatch, bars_for):
+    captured: dict = {}
+
+    async def _get_bars(sym, start, end):
+        return bars_for(sym, start, end)
+
+    def _capture(strategy, direction, basket_bars, folds, *a, **kw):
+        captured["bars"], captured["folds"] = basket_bars, folds
+        return None
+
+    monkeypatch.setattr(historical_store, "get_bars", _get_bars)
+    monkeypatch.setattr(opt, "_optimize_strategy_sync", _capture)
+    monkeypatch.setattr("app.services.strategy_param_store.get_search_space",
+                        lambda s: {"x": [1, 2]})
+    asyncio.run(opt.run_optimization(
+        ["pullback_ema"], ["AAA", "GONE", "BBB"],
+        {"train_months": 12, "test_months": 3, "type": "rolling"},
+        {"fee_pct": 0.0, "slippage_pct": 0.0}, lambda done, total: None,
+        direction="Bullish",
+    ))
+    return captured
+
+
+def _delisted_before_the_window(sym, start, end):
+    window_start = date.today() - relativedelta(years=3)
+    if sym == "GONE":
+        return _weekday_bars(start, window_start - timedelta(days=30))
+    return _weekday_bars(start, end)
+
+
+def test_a_symbol_with_no_bar_in_the_window_is_dropped_not_the_strategy(monkeypatch, caplog):
+    caplog.set_level("WARNING", logger=opt.logger.name)
+    captured = _run_with(monkeypatch, _delisted_before_the_window)
+    assert "folds" in captured, "the whole strategy was skipped for one symbol"
+    assert set(captured["bars"]) == {"AAA", "BBB"}
+    assert len(captured["folds"]) >= 5
+    dropped = [r for r in caplog.records if "GONE" in r.getMessage()]
+    assert dropped and dropped[0].levelname == "WARNING"
+
+
+def test_the_strategy_is_skipped_and_logged_only_when_no_symbol_remains(monkeypatch, caplog):
+    caplog.set_level("WARNING", logger=opt.logger.name)
+    window_start = date.today() - relativedelta(years=3)
+    captured = _run_with(
+        monkeypatch,
+        lambda sym, start, end: _weekday_bars(start, window_start - timedelta(days=30)),
+    )
+    assert "folds" not in captured
+    msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("pullback_ema" in m and "skipping" in m for m in msgs), msgs
