@@ -37,14 +37,6 @@
       "expires_at": "2026-10-03T23:56:13Z",
       "note": "Documentation only: register disjoint parallel tasks and new-session handoff; no UI implementation",
       "task": "TRADE-CARD-PRESENTATION-HANDOFF"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/priceless-jennings-995ab7",
-      "claimed_at": "2026-10-03T21:02:56Z",
-      "expires_at": "2026-10-04T00:02:56Z",
-      "note": "Step 0: recording Kenneth's raw Tradier samples",
-      "task": "NO-LIVE-QUOTE"
     }
   ]
 }
