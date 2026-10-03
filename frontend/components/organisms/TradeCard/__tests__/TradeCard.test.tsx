@@ -162,6 +162,23 @@ describe('TradeCard', () => {
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('keeps handling controls and the latest result visible before the method cards', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    const order = screen.getByRole('region', { name: 'Order Entry' });
+    const exit = screen.getByRole('region', { name: 'Exit Plan' });
+    const latest = screen.getByText('Latest calculation');
+    const arithmetic = screen.getByText('Arithmetic Profit Target');
+    expect(order.compareDocumentPosition(exit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(exit.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(latest.compareDocumentPosition(arithmetic) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const label of ['Edit Limit', 'Edit Contracts', 'Edit Invalidation', 'Edit Premium stop']) {
+      expect(screen.getAllByLabelText(label)).toHaveLength(1);
+    }
+    expect(screen.getByText(/No method explicitly run/)).toBeVisible();
+    expect(screen.queryByText('Sell-to-Close Plan')).not.toBeInTheDocument();
+    expect(within(exit).getByText('Time exit')).toBeVisible();
+  });
+
   it('renders the Order Entry strip (Feature 6 — Entry Plan card was folded into this strip)', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Order type')).toBeInTheDocument();
