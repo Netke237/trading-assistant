@@ -36,7 +36,7 @@ import {
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
-  rrOverridesFrom, withCachedEstimate,
+  rrOverridesForPlan, withCachedEstimate,
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
@@ -891,7 +891,7 @@ export default function Step7Page() {
           // endpoint echoes it and builds the plan around it, so an override
           // changes the CONTRACT and nothing about where the stock stop sits.
           final_stop:  pickedCard.exit.finalStop ?? null,
-          ...rrOverridesFrom(useScanStore.getState().scanOverrides),
+          ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
           .then((plan) => {
@@ -964,7 +964,7 @@ export default function Step7Page() {
         delta: cd.delta,
         spread: 0,
         final_stop: resolved.exit.finalStop ?? null,
-        ...rrOverridesFrom(useScanStore.getState().scanOverrides),
+        ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
         .then((plan) => {
