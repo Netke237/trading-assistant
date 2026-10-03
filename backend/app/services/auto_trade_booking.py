@@ -28,6 +28,12 @@ AUTO_TRADE_BOOKED_WRONG_SIDE_STOP. Scope: only USER-SET stops are
 direction-checked by the writer -- a plan-derived armed stop is re-anchored,
 not checked -- and with no live price and no scan price there is no check.
 
+AN UNAPPLIED DOLLAR PREMIUM STOP PAGES TOO (decision PREMIUM-STOP-FALLBACK-
+USER-FRACTION-2026-10-03). When the armed dollar stop is a total loss or
+sub-cent at the booked entry, the writer stores the arm-time fraction (or
+nothing) and `WriteOutcome.premium_stop_unapplied` says so; this module pages
+it as AUTO_TRADE_BOOKED_PREMIUM_STOP_UNAPPLIED.
+
 A FAULT AFTER THE WRITER'S OWN COMMIT (P1a). If `create_position` raises
 something other than its own decided 409/500, the row may already be
 committed. The booking looks it up by its fresh rec_id and contract; if it is
@@ -79,6 +85,8 @@ _ALERT_TYPE_WRONG_SIDE_STOP = "AUTO_TRADE_BOOKED_WRONG_SIDE_STOP"
 _REC_ID_WRONG_SIDE_STOP = "auto-trade-wrong-side-stop"
 _ALERT_TYPE_UNVERIFIED = "AUTO_TRADE_BOOKED_UNVERIFIED"
 _REC_ID_UNVERIFIED = "auto-trade-booked-unverified"
+_ALERT_TYPE_PREMIUM_STOP_UNAPPLIED = "AUTO_TRADE_BOOKED_PREMIUM_STOP_UNAPPLIED"
+_REC_ID_PREMIUM_STOP_UNAPPLIED = "auto-trade-premium-stop-unapplied"
 
 # A dashed ISO date only. `date.fromisoformat` alone accepts the basic format
 # `20261218` on Python 3.11. `option_symbol._PIPE_RE` is NOT reused: its
@@ -103,6 +111,7 @@ class BookingOutcome:
     error:         Optional[str]   # human-readable; always names the order id
     over_exposure: bool
     wrong_side_stop: bool = False   # Q12: booked with a wrong-side user stop (paged)
+    premium_stop_unapplied: bool = False   # the armed dollar stop was not stored (paged)
 
 
 class _Refused(Exception):
@@ -296,13 +305,28 @@ async def _alert_unverified(fired: FiredOrder, rec_id: str) -> None:
     s = fired.strategy
     text = (
         f"{_order_label(fired).capitalize()} for {s.option_symbol} was booked as "
-        f"{rec_id}, but the write failed after its commit, so its stop side and "
-        "exposure were NOT checked — verify both in Portfolio."
+        f"{rec_id}, but the write failed after its commit, so its stop side, "
+        "premium stop and exposure were NOT checked — verify all three in Portfolio."
     )
     await _page(
         s.symbol, "auto-trade booking not verified", text,
         auto_trader_module._per_symbol_rec_id(_REC_ID_UNVERIFIED, s.symbol),
         _ALERT_TYPE_UNVERIFIED,
+    )
+
+
+async def _alert_premium_stop_unapplied(fired: FiredOrder, rec_id: str, detail: str) -> None:
+    # Decision PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03: the booking
+    # cannot tell anyone on screen, so the dollar stop that was not stored pages.
+    s = fired.strategy
+    text = (
+        f"{_order_label(fired).capitalize()} for {s.option_symbol} was booked as "
+        f"{rec_id}, but {detail} Check the premium stop in Portfolio."
+    )
+    await _page(
+        s.symbol, "auto-trade booking with its premium stop not applied", text,
+        auto_trader_module._per_symbol_rec_id(_REC_ID_PREMIUM_STOP_UNAPPLIED, s.symbol),
+        _ALERT_TYPE_PREMIUM_STOP_UNAPPLIED,
     )
 
 
@@ -345,6 +369,7 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
     booked_rec_id: Optional[str] = None
     over_exposure = False
     wrong_side_stop: Optional[str] = None
+    premium_stop_unapplied: Optional[str] = None
     try:
         try:
             _check_refusals(fired)
@@ -407,6 +432,7 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
         booked_rec_id = rec_id
         over_exposure = outcome.over_exposure
         wrong_side_stop = outcome.wrong_side_stop
+        premium_stop_unapplied = outcome.premium_stop_unapplied
         logger.info(
             "auto-trade booking: %s booked as %s (%s x%s%s)",
             _order_label(fired), rec_id, fired.strategy.option_symbol,
@@ -431,17 +457,21 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
             await _alert_over_exposure(fired, rec_id)
         if wrong_side_stop:
             await _alert_wrong_side_stop(fired, rec_id, wrong_side_stop)
+        if premium_stop_unapplied:
+            await _alert_premium_stop_unapplied(fired, rec_id, premium_stop_unapplied)
 
         return BookingOutcome(booked=True, rec_id=rec_id, error=None,
                               over_exposure=over_exposure,
-                              wrong_side_stop=bool(wrong_side_stop))
+                              wrong_side_stop=bool(wrong_side_stop),
+                              premium_stop_unapplied=bool(premium_stop_unapplied))
     except Exception as exc:
         if booked_rec_id is not None:
             logger.error("auto-trade booking: %s is booked, but a later step failed",
                          booked_rec_id, exc_info=True)
             return BookingOutcome(booked=True, rec_id=booked_rec_id, error=None,
                                   over_exposure=over_exposure,
-                                  wrong_side_stop=bool(wrong_side_stop))
+                                  wrong_side_stop=bool(wrong_side_stop),
+                                  premium_stop_unapplied=bool(premium_stop_unapplied))
         logger.error("auto-trade booking: unexpected failure", exc_info=True)
         try:
             return await _refuse(fired, f"unexpected failure: {exc!r}", True)
