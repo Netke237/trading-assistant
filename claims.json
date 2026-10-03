@@ -2,19 +2,19 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "codex/trading-review-retune",
-      "claimed_at": "2026-10-03T10:58:25Z",
-      "expires_at": "2026-10-03T13:58:25Z",
-      "note": "Run independently reviewed multiyear strategy search on captured configured basket, no automatic adoption",
-      "task": "TRADING-REVIEW-RETUNE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/trading-review-fixes",
       "claimed_at": "2026-10-03T13:14:52Z",
       "expires_at": "2026-10-03T16:14:52Z",
       "note": "Phase A trading-review fixes: audit round-1 fix wave, then re-audit + PR",
       "task": "TRADING-REVIEW-FIXES"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/watch-resend-per-channel",
+      "claimed_at": "2026-10-03T14:48:55Z",
+      "expires_at": "2026-10-03T17:48:55Z",
+      "note": "Implement and independently audit per-channel watch alert delivery",
+      "task": "WATCH-RESEND-PER-CHANNEL"
     }
   ]
 }
