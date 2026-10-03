@@ -166,6 +166,11 @@ interface AutoTradeArmProps {
    *  strategy, not the card on screen, so another symbol's arm is not this
    *  card's veto to block. The backend fire refuses a vetoed trade anyway.
    *
+   *  Audit round 1, F8: step 7 also passes a reason for a SINGLE STOCK whose
+   *  earnings date is unknown (`lib/earningsGate.ts`) -- the backend's fire
+   *  would refuse every fire of it, so the Arm is refused up front. Same
+   *  rules: Disarm stays reachable, Fire now follows the symbol rule above.
+   *
    *  Like the regime-gate refusal, the sentence itself is printed by the
    *  CALLER (step 7 shows it beside the direct buttons in the same panel), so
    *  it is not repeated here. */

@@ -22,6 +22,7 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import { statusForScore } from '@/lib/status';
+import { earningsGateFor } from '@/lib/earningsGate';
 import {
   useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
   type HorizonIvThresholds,
@@ -50,6 +51,8 @@ function buildChecklist(
   rrPending: boolean,
   ivOverride: { value: number; yaml: number } | null = null,
   eventWindow: { reject_days: number; caution_days: number } | undefined = undefined,
+  /** Audit round 1, F4 — the scan's timestamp, to age `earningsDays` by. */
+  scanTimestamp: string | undefined = undefined,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -124,7 +127,19 @@ function buildChecklist(
   // STOCK's card at CAUTION and blocks its auto-fire (backend). An ETF has no
   // earnings, so it passes. A card without `isEtf` (pre-deploy scan) reads as
   // a stock -- the same safe direction the backend takes.
-  if (candidate.earningsUnknown) {
+  //
+  // Audit round 1, F4: graded AS OF TODAY through lib/earningsGate.ts -- the
+  // helper Step 7's buttons read -- so a persisted scan reopened days later is
+  // judged on today's distance, and a print that may have passed since the
+  // scan is an unknown date.
+  const eg = earningsGateFor(candidate, scanTimestamp, eventWindow?.reject_days);
+  if (eg.passedSinceScan && !candidate.isEtf) {
+    gates.push({
+      label: 'Earnings date',
+      status: 'CAUTION',
+      detail: `Earnings were ${eg.daysAtScan}d out at the scan, ${eg.ageDays}d ago — the print may already have passed and the next date is unknown. Re-run the scan; auto-trade will not fire a single stock.`,
+    });
+  } else if (eg.unknown) {
     gates.push(candidate.isEtf
       ? {
           label: 'Earnings date',
@@ -141,18 +156,19 @@ function buildChecklist(
   // and dividend, and only earnings veto (D3): a dividend inside the window
   // must not read as an "Earnings" REJECT. Unknown earnings is the CAUTION
   // gate above.
-  const days = candidate.earningsDays;
+  const days = eg.daysNow;
   if (days != null) {
+    const aged = eg.ageDays > 0 ? ` (${eg.daysAtScan}d at the scan, ${eg.ageDays}d ago)` : '';
     gates.push(eventWindow
       ? {
           label: 'Earnings outside reject window',
           status: days < eventWindow.reject_days ? 'REJECT' : days < eventWindow.caution_days ? 'CAUTION' : 'PASS',
-          detail: `Next event in ${days}d — reject <${eventWindow.reject_days}d, caution <${eventWindow.caution_days}d (this scan's window).`,
+          detail: `Earnings in ${days}d${aged} — reject <${eventWindow.reject_days}d, caution <${eventWindow.caution_days}d (this scan's window).`,
         }
       : {
           label: 'Earnings outside reject window',
           status: 'CAUTION',
-          detail: `Next event in ${days}d — this scan carried no event window; re-run the scan.`,
+          detail: `Earnings in ${days}d${aged} — this scan carried no event window; re-run the scan.`,
         });
   }
 
@@ -195,6 +211,8 @@ export default function TradeCardContextRail() {
   const horizon             = useScanStore((s) => s.context?.horizon);
   // Fix #3: the scan's own earnings window, echoed on its result.
   const eventWindow         = useScanStore((s) => s.scanResult?.event_window);
+  // Audit round 1, F4: the earnings distance is aged by the scan's age.
+  const scanTimestamp       = useScanStore((s) => s.scanResult?.timestamp);
   // Two selectors (Zustand v5: never one returning a fresh object).
   const ivFetched           = useIvThresholdsStore((s) => s.thresholds);
   const ivOverrides         = useIvThresholdsStore((s) => s.overrides);
@@ -232,6 +250,7 @@ export default function TradeCardContextRail() {
     candidate, wlRow, regime, horizonKey, ivThresholds, published?.rrPending ?? false,
     ivOverrideFor(horizonKey, ivFetched, ivOverrides),
     eventWindow,
+    scanTimestamp,
   ) : [];
 
   return (

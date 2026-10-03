@@ -52,10 +52,11 @@ import {
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
+import { earningsGateFor, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 
-/** Fix #3 (review). The reason shown beside the disabled send controls when
- *  the backend vetoed the card (earnings inside the scan's reject window). */
-const EARNINGS_VETO_MESSAGE = 'Earnings inside the reject window — no send';
+// Fix #3 (review) / audit round 1 F4+F8: the veto, its sentence and the
+// unknown-earnings arm refusal live in lib/earningsGate.ts, shared with the
+// @contextRail checklist so the rail and these buttons cannot disagree.
 
 function nowISOLocal(): string {
   const d = new Date();
@@ -1090,7 +1091,9 @@ export default function Step7Page() {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
     // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
-    if (card.earningsVeto === true) return;
+    // Audit round 1, F4: judged as of TODAY (the scan's distance aged by the
+    // scan's age), the same reading as `earningsVeto` below.
+    if (earningsGateFor(card, scanResult?.timestamp, scanResult?.event_window?.reject_days).veto) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
     // `disabled` protects the button and this protects the ORDER -- anything
     // that reaches this function by another route inherits the refusal.
@@ -1282,9 +1285,20 @@ export default function Step7Page() {
   const marketBlocked = directOrderBlock('MKT', selectedBroker);
 
   // Fix #3 (review, High). The backend sets `earningsVeto` when earnings fall
-  // inside the scan's reject window (and forces finalStatus REJECT). Strictly
-  // `=== true`: absent/false leaves every send path as it was.
-  const earningsVeto = effectiveCard?.earningsVeto === true;
+  // inside the scan's reject window (and forces finalStatus REJECT).
+  //
+  // Audit round 1, F4 (Kenneth 2026-10-03): that flag is a scan-time snapshot
+  // and the scan result is persisted, so a card reopened days later still
+  // carried the scan day's distance. `earningsGateFor` ages `earningsDays` by
+  // the scan's age in calendar days and re-judges it against the scan's own
+  // window; a distance aged below zero reads as UNKNOWN (D4), not a veto.
+  // F8: `armBlockedReason` also refuses the Arm for a single stock whose date
+  // is unknown -- every fire of it would be refused. The rail reads the same
+  // helper.
+  const earningsGate = earningsGateFor(
+    effectiveCard, scanResult?.timestamp, scanResult?.event_window?.reject_days,
+  );
+  const earningsVeto = earningsGate.veto;
 
   const idx = symbols.indexOf(active);
 
@@ -1572,6 +1586,16 @@ export default function Step7Page() {
                   {EARNINGS_VETO_MESSAGE}
                 </Text>
               )}
+              {/* Audit round 1, F8. AutoTradeArm prints no sentence of its own
+                * (title only -- see its armBlockedReason NOTE), so the
+                * unknown-earnings refusal is said here, beside the veto's.
+                * Manual sends stay enabled: D4 caps the card at CAUTION, it
+                * does not veto it. */}
+              {!earningsVeto && earningsGate.armBlockedReason && (
+                <Text size={11} tone="caution">
+                  {earningsGate.armBlockedReason}
+                </Text>
+              )}
               {!planReady && (
                 <Text size={11} tone="caution">
                   Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
@@ -1607,7 +1631,7 @@ export default function Step7Page() {
                 * sentence is the one printed above. */}
               {planReady && (
                 <AutoTradeArm
-                  armBlockedReason={earningsVeto ? EARNINGS_VETO_MESSAGE : null}
+                  armBlockedReason={earningsGate.armBlockedReason}
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path
