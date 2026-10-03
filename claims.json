@@ -37,14 +37,6 @@
       "expires_at": "2026-10-04T02:07:57Z",
       "note": "Verify and land completed audited component",
       "task": "TRADE-CARD-BARRIER-PRESENTATION"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/trade-card-component-landing",
-      "claimed_at": "2026-10-03T23:20:43Z",
-      "expires_at": "2026-10-04T02:20:43Z",
-      "note": "Record final component validation and publish own-entry reconciliation",
-      "task": "TRADE-CARD-PRESENTATION-STATE"
     }
   ]
 }
