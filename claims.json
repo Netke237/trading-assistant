@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/dazzling-rhodes-a1ab99",
-      "claimed_at": "2026-10-03T05:29:03Z",
-      "expires_at": "2026-10-03T08:29:03Z",
-      "note": "parsePipelineDiagnostics.ts: import SHORTLIST_REASON_PREFIX instead of a local literal",
-      "task": "SHORTLIST-PREFIX-DRIFT"
-    },
-    {
-      "agent": "claude",
       "branch": "codex/watch-resend-expiry",
       "claimed_at": "2026-10-03T05:32:40Z",
       "expires_at": "2026-10-03T08:32:40Z",
