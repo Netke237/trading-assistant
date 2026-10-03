@@ -1,5 +1,56 @@
 /* Step 5 — Volatility + Events */
 
+/* Rules applied strip */
+.rulesStrip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin: 0 var(--space-3) var(--space-3);
+}
+
+.rulesStripHeading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.provenanceTag,
+.horizonTag {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.rulesStripBands {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+}
+
+.ruleItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.overrideText {
+  font-size: 11px;
+  color: var(--caution);
+}
+
 .tableHeader {
   display: grid;
   align-items: center;
@@ -25,6 +76,21 @@
   white-space: nowrap;
 }
 
+/* Cell groups */
+.ivCellGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.eventCellGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 /* IV rank cell: number + mini horizontal bar stacked vertically */
 .ivRankCell {
   display: flex;
@@ -34,7 +100,7 @@
 }
 
 .ivTrack {
-  width: 120px;
+  width: 72px;
   height: 3px;
   background: var(--bg-surface-2);
   border-radius: 2px;
@@ -50,12 +116,141 @@
 .ivFill_PASS    { background: var(--pass);    }
 .ivFill_CAUTION { background: var(--caution); }
 .ivFill_REJECT  { background: var(--reject);  }
+.ivFill_PENDING { background: var(--text-dim); }
+.ivFill_NO_DATA { background: var(--text-dim); }
+
+/* Event indicator with proxStatus coloring */
+.eventIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.eventIndicator_PASS {
+  color: var(--pass);
+}
+
+.eventIndicator_CAUTION {
+  color: var(--caution);
+}
+
+.eventIndicator_REJECT {
+  color: var(--reject);
+}
+
+.eventIndicator_PENDING,
+.eventIndicator_NO_DATA {
+  color: var(--text-dim);
+}
+
+.calendarIcon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
 
 /* Carries the row's two sub-verdicts as data attributes without becoming a grid
    item itself — `display: contents` keeps the StatusBadge the direct child of
    the row grid, so the GATE column measures exactly as it did before. */
 .gateCell {
   display: contents;
+}
+
+/* Row Band 2 — Secondary detail line aligned below Band 1 */
+.rowBand2 {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding-top: var(--space-1);
+  padding-bottom: 2px;
+  border-top: 1px dashed var(--border-subtle);
+  margin-top: 4px;
+}
+
+.reasonCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pctlCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Disclosure button */
+.disclosureBtn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.disclosureBtn:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+
+.disclosureBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Inline disclosure panel */
+.disclosurePanel {
+  grid-column: 1 / -1;
+  padding: var(--space-3);
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.disclosureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.disclosureBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.disclosureBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 4px;
+}
+
+.disclosureRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 /* The table body does not scroll. The shared .stepBody sets `overflow-x: auto`,

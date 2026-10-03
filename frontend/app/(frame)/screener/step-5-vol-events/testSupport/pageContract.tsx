@@ -10,7 +10,7 @@ import { screen } from '@testing-library/react';
 import {
   missingReadingClause, headSentence, causesSentence, ivThresholdSentence,
   eventWindowSentence, thresholdsUnavailableSentence, ivOverrideSentence,
-  MISSING_READING_CLAIM,
+  MISSING_READING_CLAIM, rowDecidingReason,
   type MissingReadingClaim, type GateCause, type GateCounts, type IvBand, type ThresholdsAvail,
 } from '../gateSummary';
 import { STATUS_LABEL, type Status } from '@/lib/status';
@@ -371,6 +371,62 @@ export const CELL_PINS: Record<string, (el: HTMLElement, row: HTMLElement) => vo
       .map((x) => x.textContent).filter((t) => t === STATUS_LABEL[gate]);
     expect(badge.length).toBeGreaterThan(0);
   },
+
+  'iv-status': (el, row) => {
+    const root = page();
+    const avail = root.getAttribute('data-avail') as ThresholdsAvail;
+    const st = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-volatility') as Status;
+    if (avail !== 'ready') {
+      const none: Status = avail === 'failed' ? 'NO_DATA' : 'PENDING';
+      expect(st).toBe(none);
+      return;
+    }
+    const badge = [...el.querySelectorAll('span')].map((x) => x.textContent).filter((t) => t === STATUS_LABEL[st]);
+    expect(badge.length).toBeGreaterThan(0);
+  },
+
+  'event-status': (el, row) => {
+    const root = page();
+    const avail = root.getAttribute('data-avail') as ThresholdsAvail;
+    const st = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-event') as Status;
+    if (avail !== 'ready') {
+      const none: Status = avail === 'failed' ? 'NO_DATA' : 'PENDING';
+      expect(st).toBe(none);
+      return;
+    }
+    const badge = [...el.querySelectorAll('span')].map((x) => x.textContent).filter((t) => t === STATUS_LABEL[st]);
+    expect(badge.length).toBeGreaterThan(0);
+  },
+
+  reason: (el, row) => {
+    const root = page();
+    const avail = root.getAttribute('data-avail') as ThresholdsAvail;
+    if (avail !== 'ready') return;
+    const gate = row.querySelector('[data-cell="gate"]')?.getAttribute('data-gate') as Status;
+    const ivSt = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-volatility') as Status;
+    const evSt = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-event') as Status;
+    const ivCell = row.querySelector('[data-cell="iv"]') as HTMLElement;
+    const basis = ivCell.getAttribute('data-iv-basis') as IvBasis;
+    const ivGated = root.getAttribute('data-iv-gated') === 'true';
+    const d = gateDrivers({
+      ivStatus: ivSt, proxStatus: evSt, gate,
+      hasIv: basis !== 'none',
+      ivGated,
+    });
+    expect(el.textContent).toContain(rowDecidingReason(gate, d, basis));
+  },
+
+  disclosure: (el, row) => {
+    const sym = row.querySelector('[data-cell="symbol"]')?.getAttribute('data-value');
+    const btn = el.querySelector('button');
+    expect(btn).not.toBeNull();
+    expect(btn?.getAttribute('aria-controls')).toBe(`disclosure-${sym}`);
+    expect(btn?.getAttribute('aria-expanded')).toBeDefined();
+  },
+
+  'pctl-context': (el) => {
+    expect(el.textContent).toBe('IV PCTL (Context only):');
+  },
 };
 
 export const PROSE_ATTRS = ['title', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-hidden'] as const;
@@ -417,6 +473,8 @@ export function nodeId(el: HTMLElement): string {
 export const OWNERS: Array<{ name: string; of: (el: HTMLElement) => HTMLElement | null }> = [
   { name: 'part', of: (el) => el.closest('[data-part]') },
   { name: 'colheaders', of: (el) => el.closest('[data-colheaders]') },
+  { name: 'rules-strip', of: (el) => el.closest('[data-rules-strip]') },
+  { name: 'disclosure-panel', of: (el) => el.closest('[data-disclosure-panel]') },
   { name: 'cell', of: (el) => el.closest('[data-cell]') },
   { name: 'row', of: (el) => (el.hasAttribute('data-status') ? el : null) },
 ];
@@ -460,6 +518,21 @@ export function expectPageCopy() {
     } else if (kind === 'colheaders') {
       expect([...owner.children].map((c) => c.textContent).filter((t) => t !== ''))
         .toEqual(JSON.parse(owner.getAttribute('data-colheaders') as string));
+    } else if (kind === 'rules-strip') {
+      const horizon = root.getAttribute('data-horizon') as ThresholdHorizon;
+      const scanEventWindow = useScanStore.getState().scanResult?.event_window;
+      const hasScan = useScanStore.getState().scanResult !== undefined;
+      const expectedProvenance = scanEventWindow
+        ? 'Recorded scan event window'
+        : hasScan
+          ? 'Legacy scan: current configuration fallback'
+          : 'Current backend configuration';
+      expect(owner.querySelector('[data-provenance]')?.textContent).toBe(expectedProvenance);
+      expect(owner.querySelector('[data-horizon-tag]')?.textContent).toBe(`Horizon: ${horizon}`);
+    } else if (kind === 'disclosure-panel') {
+      const sym = owner.getAttribute('data-symbol');
+      expect(owner.getAttribute('id')).toBe(`disclosure-${sym}`);
+      expect(owner.getAttribute('role')).toBe('region');
     } else if (kind === 'cell') {
       const name = owner.getAttribute('data-cell') as string;
       const pin = CELL_PINS[name];

@@ -7,7 +7,9 @@
  */
 import type { Status } from '@/lib/status';
 import type { IvBasis } from '@/lib/ivBasis';
-import type { HorizonEventThresholds } from '@/lib/eventThresholdsStore';
+import type { HorizonEventThresholds, ThresholdHorizon } from '@/lib/eventThresholdsStore';
+import type { HorizonIvThresholds } from '@/lib/ivThresholdsStore';
+import { gateDriverPhrase, type GateDrivers } from '@/lib/statusTooltips';
 
 /* ── THE MISSING-READING CLAIM ──────────────────────────────────
  * THE MEANING IS RENDERED AS DATA. The four fields below go into the DOM as
@@ -205,4 +207,218 @@ export function missingReadingClause(n: number, claim: MissingReadingClaim): str
     `The gate verdict above is the ${of} of that and the event window, ` +
     `so it can be ${travel} still.`
   );
+}
+
+/* ── PURE EXPLANATION PRESENTATION MODELS (AC1 - AC4) ─────────────────────── */
+
+export interface RulesStripData {
+  horizon: ThresholdHorizon;
+  provenance: 'Recorded scan event window' | 'Legacy scan: current configuration fallback' | 'Current backend configuration';
+  rankInterval: string;
+  absInterval: string;
+  eventInterval: string;
+  overrideNotice: string | null;
+}
+
+export function formatRulesStripData(args: {
+  horizon: ThresholdHorizon;
+  ivThresholds: HorizonIvThresholds | null;
+  eventWindow: HorizonEventThresholds | null;
+  scanEventWindow?: HorizonEventThresholds | null;
+  hasScanResult: boolean;
+  ivOverride?: { value: number; yaml: number } | null;
+  basesPresent?: IvBasis[];
+}): RulesStripData {
+  const {
+    horizon,
+    ivThresholds,
+    eventWindow,
+    scanEventWindow,
+    hasScanResult,
+    ivOverride,
+    basesPresent = [],
+  } = args;
+
+  const provenance = scanEventWindow
+    ? 'Recorded scan event window'
+    : hasScanResult
+      ? 'Legacy scan: current configuration fallback'
+      : 'Current backend configuration';
+
+  // Rank interval
+  let rankInterval = 'ungated';
+  if (ivThresholds && ivThresholds.rank_pass_max !== null) {
+    const passMax = ivThresholds.rank_pass_max;
+    const cautionMax = ivThresholds.rank_caution_max;
+    if (cautionMax === null) {
+      rankInterval = `≤ ${passMax} → PASS; above → REJECT`;
+    } else {
+      rankInterval = `≤ ${passMax} → PASS; ≤ ${cautionMax} → CAUTION; above → REJECT`;
+    }
+  }
+
+  // Absolute interval
+  let absInterval = 'ungated';
+  if (ivThresholds && ivThresholds.abs_pass_max !== null) {
+    const passMax = ivThresholds.abs_pass_max;
+    const cautionMax = ivThresholds.abs_caution_max;
+    if (cautionMax !== null && passMax > cautionMax) {
+      absInterval = `≤ ${passMax}% → PASS; > ${passMax}% → REJECT; CAUTION: no reachable interval`;
+    } else if (cautionMax === null) {
+      absInterval = `≤ ${passMax}% → PASS; above → REJECT`;
+    } else {
+      absInterval = `≤ ${passMax}% → PASS; ≤ ${cautionMax}% → CAUTION; above → REJECT`;
+    }
+  }
+
+  // Event interval
+  let eventInterval = 'No event window';
+  if (eventWindow) {
+    eventInterval = `Earnings < ${eventWindow.reject_days}d → REJECT; < ${eventWindow.caution_days}d → CAUTION; else → PASS`;
+  }
+
+  // Override notice
+  let overrideNotice: string | null = null;
+  if (ivOverride) {
+    const notApplicable = basesPresent.length > 0 && !basesPresent.includes('absolute');
+    overrideNotice = `Session override: IV pass ≤ ${ivOverride.value}% (YAML baseline: ${ivOverride.yaml}%)${notApplicable ? ' — not applicable to IV rank values displayed' : ''}`;
+  }
+
+  return {
+    horizon,
+    provenance,
+    rankInterval,
+    absInterval,
+    eventInterval,
+    overrideNotice,
+  };
+}
+
+export function rowDecidingReason(gate: Status, drivers: GateDrivers, ivBasis: IvBasis): string {
+  if (gate === 'PASS') return 'No adverse driver';
+  const ivNoun = ivBasis === 'rank' ? 'IV rank' : 'IV';
+  if (drivers.iv && drivers.event) {
+    const ivText = drivers.ivMissing ? 'no volatility reading' : ivNoun;
+    return `${ivText} and event proximity`;
+  }
+  if (drivers.iv) {
+    return drivers.ivMissing ? 'No volatility reading' : ivNoun;
+  }
+  if (drivers.event) {
+    return 'Event proximity';
+  }
+  return 'No adverse driver';
+}
+
+export function rowCombinationPhrase(
+  ivSt: Status,
+  proxStatus: Status,
+  gate: Status,
+  drivers: GateDrivers,
+  ivBasis: IvBasis,
+): string {
+  if (gate === 'PASS') {
+    return `${ivSt} + ${proxStatus} → PASS`;
+  }
+  const ivNoun = ivBasis === 'rank' ? 'IV rank' : 'IV';
+  const driverText = gateDriverPhrase(drivers, ivNoun);
+  return `${ivSt} + ${proxStatus} → ${gate}, driven by ${driverText}`;
+}
+
+export interface RowExplanation {
+  basisLabel: string;
+  unit: string;
+  decidingReason: string;
+  combination: string;
+  ivObserved: string;
+  ivRuleExplanation: string;
+  eventObserved: string;
+  eventRuleExplanation: string;
+}
+
+export function formatRowExplanation(args: {
+  iv: { basis: IvBasis; value: number | null };
+  hasIv: boolean;
+  ivSt: Status;
+  proxStatus: Status;
+  gate: Status;
+  drivers: GateDrivers;
+  nextEventDays: number | null;
+  nextEventLabel: string | null;
+  horizonKey: ThresholdHorizon;
+  ivThresholds: HorizonIvThresholds | null;
+  eventWindow: HorizonEventThresholds | null;
+  gateDisabled: boolean;
+  pctl: number | null | undefined;
+}): RowExplanation {
+  const {
+    iv,
+    hasIv,
+    ivSt,
+    proxStatus,
+    gate,
+    drivers,
+    nextEventDays,
+    nextEventLabel,
+    ivThresholds,
+    eventWindow,
+    gateDisabled,
+  } = args;
+
+  const basisLabel = iv.basis === 'rank' ? 'IV rank' : iv.basis === 'absolute' ? 'IV' : '—';
+  const unit = iv.basis === 'rank' ? '0–100' : iv.basis === 'absolute' ? '%' : 'none';
+
+  const decidingReason = rowDecidingReason(gate, drivers, iv.basis);
+  const combination = rowCombinationPhrase(ivSt, proxStatus, gate, drivers, iv.basis);
+
+  // IV Observed & Rule Explanation
+  let ivObserved = 'Missing';
+  if (hasIv && iv.value !== null) {
+    ivObserved = iv.basis === 'rank' ? String(iv.value) : `${iv.value.toFixed(1)}%`;
+  }
+
+  let ivRuleExplanation = '';
+  if (gateDisabled) {
+    ivRuleExplanation = 'IV gate disabled for this horizon (ungated)';
+  } else if (!hasIv) {
+    ivRuleExplanation = 'Missing reading on gated horizon → CAUTION';
+  } else if (ivThresholds) {
+    const passMax = iv.basis === 'rank' ? ivThresholds.rank_pass_max : ivThresholds.abs_pass_max;
+    const cautionMax = iv.basis === 'rank' ? ivThresholds.rank_caution_max : ivThresholds.abs_caution_max;
+    const unitSuffix = iv.basis === 'absolute' ? '%' : '';
+
+    if (passMax === null) {
+      ivRuleExplanation = 'Ungated basis → PASS';
+    } else if (cautionMax !== null && passMax > cautionMax) {
+      ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; > ${passMax}${unitSuffix} → REJECT; CAUTION: no reachable interval`;
+    } else if (cautionMax === null) {
+      ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; above → REJECT`;
+    } else {
+      ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; ≤ ${cautionMax}${unitSuffix} → CAUTION; above → REJECT`;
+    }
+  }
+
+  // Event Observed & Rule Explanation
+  let eventObserved = 'No event date available';
+  if (nextEventDays !== null) {
+    eventObserved = `${nextEventDays}d${nextEventLabel ? ` (${nextEventLabel})` : ''}`;
+  }
+
+  let eventRuleExplanation = '';
+  if (nextEventDays === null) {
+    eventRuleExplanation = 'No event date available; existing gate applies no event penalty';
+  } else if (eventWindow) {
+    eventRuleExplanation = `< ${eventWindow.reject_days}d → REJECT; < ${eventWindow.caution_days}d → CAUTION; else → PASS`;
+  }
+
+  return {
+    basisLabel,
+    unit,
+    decidingReason,
+    combination,
+    ivObserved,
+    ivRuleExplanation,
+    eventObserved,
+    eventRuleExplanation,
+  };
 }
