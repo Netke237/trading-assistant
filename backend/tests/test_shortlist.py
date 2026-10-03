@@ -29,7 +29,11 @@ _PASS_RULES = [
     RuleResult("trend",    "PASS", 80, {}),
     RuleResult("pullback", "PASS", 75, {}),
     RuleResult("trigger",  "PASS", 70, {}),
-    RuleResult("event",    "PASS", 85, {}),
+    # A KNOWN earnings date well outside the window: since D4 was amended
+    # (2026-10-03) an unknown date caps a single stock at CAUTION, and these
+    # tests are about ranking, not earnings.
+    RuleResult("event",    "PASS", 85, {"earnings_days": 90, "reject_days": 21,
+                                         "earnings_unknown": False}),
     RuleResult("vol",      "PASS", 80, {}),
 ]
 

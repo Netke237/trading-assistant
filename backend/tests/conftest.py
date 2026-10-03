@@ -276,6 +276,29 @@ def _reset_market_data_caches():
 
 
 @pytest.fixture(autouse=True)
+def _no_network_earnings_lookup_at_fire(monkeypatch):
+    """`AutoTradeService.fire()` looks up the symbol's next earnings date (fix #3
+    part 2, the fire-time event veto) through `auto_trader._fetch_earnings_date`,
+    which calls the network-backed `market._calendar_dates_yf` (yfinance).
+
+    Default it to a date a year out for every test, so no test that reaches
+    `fire()` touches the network or becomes order- and date-dependent. A year
+    out is beyond every horizon's reject window, so the default vetoes nothing.
+    NOT None: since D4 was amended (2026-10-03, Kenneth) an UNKNOWN date refuses
+    a single stock, which would refuse every stock fire in the suite. A test
+    that wants a date (or None) calls `monkeypatch.setattr(at, "_fetch_earnings_date",
+    ...)` itself; that is the SAME function-scoped `monkeypatch` object this
+    fixture uses, so the later setattr simply replaces this one and wins for the
+    rest of the test, and both are undone together at teardown.
+    """
+    import app.services.auto_trader as at
+    from datetime import date, timedelta
+    far = date.today() + timedelta(days=365)
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda symbol: far)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _default_fast_heston_calibration():
     """calibrate_heston became a real, callable name in app.routers.scan once
     the scan pipeline started calibrating it. Default it to an instant canned

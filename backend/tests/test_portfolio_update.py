@@ -252,11 +252,12 @@ async def test_patch_qty_increase_soft_reduces_and_reports_adjusted_qty(client):
     # does via `resp.adjustedQty` — otherwise the drawer shows the qty the
     # user typed while the database quietly holds a smaller one, and the next
     # sync poll would silently snap the input back with zero explanation.
-    # entry=2.00, requested qty=5 (at risk_rules.yaml's
+    # entry=1.50, requested qty=5 (at risk_rules.yaml's
     # sizing.max_contracts_per_trade ceiling, so it isn't clamped further) ->
-    # capital_at_risk=$1,000 against portfolioValue=$10,000 -> 10% exposure,
-    # over the 5% cap -> max_allowed_premium=$500 / $200-per-contract -> 2.
-    await _add(client, rec="REC-QTYUP-SOFT", qty=1, entry=2.00)
+    # capital_at_risk=$750 against portfolioValue=$10,000 -> 7.5% exposure,
+    # over the 3.75% option cap (min of the 5% single cap and the 3.75% loss
+    # limit, review fix #4 / D5) -> max_allowed_premium=$375 / $150-per-contract -> 2.
+    await _add(client, rec="REC-QTYUP-SOFT", qty=1, entry=1.50)
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-SOFT",
         json={"qty": 5, "portfolioValue": 10_000.0},
@@ -324,7 +325,7 @@ async def test_resized_qty_raise_scales_the_rungs_sent_with_it(client):
     # booked 2) with rungs planned for the 5 asked. Stored verbatim they would
     # sell 5 of 2 held; capped by the overflow (_rescale_rung_shares' rounding)
     # 3/2 becomes 1/1.
-    await _add(client, rec="REC-QTYUP-RUNGS", qty=1, entry=2.00)
+    await _add(client, rec="REC-QTYUP-RUNGS", qty=1, entry=1.50)
     rungs = [{"stockPrice": 200.0, "contractsToSell": 3}, {"stockPrice": 210.0, "contractsToSell": 2}]
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-RUNGS",
@@ -344,7 +345,7 @@ async def test_resized_qty_raise_scales_the_rungs_sent_with_it(client):
 async def test_resized_qty_raise_leaves_stored_rungs_alone(client):
     # Rungs NOT sent with the resized PATCH were planned for the smaller
     # pre-raise qty (here 1 of 1); they still fit the booked 2, so they stay.
-    await _add(client, rec="REC-QTYUP-KEEP", qty=1, entry=2.00,
+    await _add(client, rec="REC-QTYUP-KEEP", qty=1, entry=1.50,
                targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-KEEP",
@@ -366,7 +367,7 @@ async def test_resized_qty_raise_keeps_rungs_that_fit_the_booked_qty(client):
     # Delta review B2: a rung edit typed against the held qty can be merged
     # into the same debounced PATCH as the raise. Rungs that already fit the
     # booked 2 are stored as sent -- not scaled by asked/booked (-> 0/0).
-    await _add(client, rec="REC-QTYUP-FIT", qty=1, entry=2.00)
+    await _add(client, rec="REC-QTYUP-FIT", qty=1, entry=1.50)
     body = await _patch_rungs(client, "REC-QTYUP-FIT", {
         "qty": 5, "portfolioValue": 10_000.0,
         "targets": [{"stockPrice": 200.0, "contractsToSell": 1}, {"stockPrice": 210.0, "contractsToSell": 1}],
@@ -420,7 +421,7 @@ async def test_rejected_qty_raise_still_caps_the_rungs_sent_with_it(client):
 
 @pytest.mark.asyncio
 async def test_resized_raise_with_null_targets_stores_none(client):
-    await _add(client, rec="REC-QTYUP-NULL", qty=1, entry=2.00,
+    await _add(client, rec="REC-QTYUP-NULL", qty=1, entry=1.50,
                targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
     body = await _patch_rungs(client, "REC-QTYUP-NULL", {"qty": 5, "portfolioValue": 10_000.0, "targets": None})
     assert body["adjustedQty"] == 2

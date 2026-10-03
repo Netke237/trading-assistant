@@ -156,6 +156,21 @@ interface AutoTradeArmProps {
   /** O4 step 6 — booked as the position's `max_loss_override`. Step 7's
    *  `maxLossOverrideBySymbol[symbol]`, as `buildPaperPosition`. */
   maxLossOverride?: MaxLossOverride | null;
+  /** Task 10c (Kenneth, 2026-10-03) — non-null refuses Arm and Fire now on
+   *  this card, with this sentence as the buttons' `title`. Step 7 passes the
+   *  earnings-veto message for a vetoed card. It used to HIDE the whole
+   *  component instead, which also hid Disarm for a strategy already armed;
+   *  Disarm is never refused on it.
+   *
+   *  Fire now is refused only when the armed trade is THIS card's symbol (or
+   *  the server did not say which symbol is armed): it fires the armed
+   *  strategy, not the card on screen, so another symbol's arm is not this
+   *  card's veto to block. The backend fire refuses a vetoed trade anyway.
+   *
+   *  Like the regime-gate refusal, the sentence itself is printed by the
+   *  CALLER (step 7 shows it beside the direct buttons in the same panel), so
+   *  it is not repeated here. */
+  armBlockedReason?: string | null;
 }
 
 const MODE_LABELS: Record<AutoTradeMode, string> = {
@@ -165,7 +180,8 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
 };
 
 export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null, resolvedInvalidation, methodPick = null,
-                               optionSymbol, stopIsUserSet, structuralStop = null, exitPlan = null, maxLossOverride = null }: AutoTradeArmProps) {
+                               optionSymbol, stopIsUserSet, structuralStop = null, exitPlan = null, maxLossOverride = null,
+                               armBlockedReason = null }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, armedDirection, armedSymbol, applyArmedStatus,
           lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
@@ -271,6 +287,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    * no caller prints a sentence for this one, so this component does. */
   const regimeGate = regimeGateFromCard(card);
   const gateSnapshotMissing = regimeGate === null;
+  /* Task 10c -- see the `armBlockedReason` prop doc. Fire now is blocked only
+   * when the armed trade is this card's (or the server named no symbol). */
+  const armBlocked = armBlockedReason != null;
+  const fireBlocked = armBlocked && (armedSymbol == null || armedSymbol === card.symbol);
   /* NOTE: the disclosure is the CALLER'S, not this component's, and that is a
    * choice rather than an omission. Rendering the refusal sentence here too put
    * it on screen TWICE in one column -- step 7 already prints it a few rows
@@ -300,6 +320,9 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     // Same belt-and-braces shape, on the same reading `gateSnapshotMissing`
     // was derived from. Also narrows `regimeGate` for the spread below.
     if (regimeGate === null) return;
+    // Task 10c: same belt-and-braces shape, on the same reading `armBlocked`
+    // was derived from.
+    if (armBlocked) return;
     // Yaml plan §9.10 (Kenneth, 2026-09-17): arming into a contract already
     // held WARNS, it does not block. Checked here, at arm, because this is the
     // one moment a human consents for BOTH triggers -- the scan trigger fires
@@ -445,6 +468,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
   }
 
   async function handleFireNow() {
+    // Task 10c: belt and braces beside the button's own `disabled`.
+    if (fireBlocked) return;
     setWorking(true); setError(null); setFireNote(null);
     try {
       const res = await api.fireAutoTrade();
@@ -527,9 +552,12 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         <div className={styles.armRow}>
           {!armed ? (
             <button type="button" className={`${styles.btn} ${styles.btnArm}`}
-              onClick={() => { void handleArm(); }} disabled={!broker || working || stopMissing || pickMissing || gateSnapshotMissing}
+              onClick={() => { void handleArm(); }} disabled={!broker || working || armBlocked || stopMissing || pickMissing || gateSnapshotMissing}
               title={
-                stopMissing ? MISSING_INVALIDATION_TITLE
+                // The veto wins, as on step 7's direct buttons: filling a
+                // field cannot cure it.
+                armBlocked ? (armBlockedReason as string)
+                : stopMissing ? MISSING_INVALIDATION_TITLE
                 : pickMissing ? MISSING_METHOD_PICK_TITLE
                 : gateSnapshotMissing ? MISSING_REGIME_GATE_SNAPSHOT_TITLE
                 : undefined
@@ -554,7 +582,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
               <button type="button" className={styles.btn} onClick={handleDisarm} disabled={working}>
                 Disarm
               </button>
-              <button type="button" className={styles.btn} onClick={handleFireNow} disabled={working}>
+              <button type="button" className={styles.btn} onClick={handleFireNow} disabled={working || fireBlocked}
+                title={fireBlocked ? (armBlockedReason as string) : undefined}>
                 Fire now
               </button>
             </>

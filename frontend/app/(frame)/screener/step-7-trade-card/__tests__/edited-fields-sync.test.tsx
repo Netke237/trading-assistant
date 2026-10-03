@@ -762,8 +762,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     //    resolveBasketCards -> positionFromOrder, a different card object.
     await editAllThree();
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
@@ -817,8 +817,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
 
@@ -851,8 +851,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(screen.queryByRole('button', { name: /place limit @/i })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
 
@@ -882,8 +882,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const dailyBefore = useRiskStore.getState().dailyRecommendations;
     await editAllThree();
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
-    let submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
+    let submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
     const NOTE = /AAA: Premium stop of \$0\.90\/share could not be applied/;
@@ -899,8 +899,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // The next send (BBB, no typed premium stop) starts by clearing it.
     fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
     fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /send basket/i }));
-    submit = await screen.findByRole('button', { name: /^(Submit \d orders?|Override & Submit)$/ });
+    fireEvent.click(await screen.findByRole('button', { name: /track basket/i }));
+    submit = await screen.findByRole('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
     await waitFor(() => expect(screen.queryByText(NOTE)).not.toBeInTheDocument());
@@ -918,8 +918,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     render(<Step7TradeCardPage />);
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
 
@@ -943,8 +943,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       render(<Step7TradeCardPage />);
       await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-      fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
-      let submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+      fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
+      let submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
       await waitFor(() => expect(submit).toBeEnabled());
       fireEvent.click(submit);
       expect(await screen.findByText(/Some orders were not saved/)).toBeInTheDocument();
@@ -955,8 +955,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
         ok: true, json: async () => ({}),
       }) as unknown as typeof fetch;
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-      fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
-      submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+      fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
+      submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
       await waitFor(() => expect(submit).toBeEnabled());
       fireEvent.click(submit);
 
@@ -984,8 +984,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   };
   async function sendBasket() {
     fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /send basket/i }));
-    const submit = await screen.findByRole('button', { name: /^(Submit \d orders?|Override & Submit)$/ });
+    fireEvent.click(await screen.findByRole('button', { name: /track basket/i }));
+    const submit = await screen.findByRole('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
   }
@@ -1155,4 +1155,60 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: button })).toBeEnabled());
     });
   }
+  /* Fix #5 (review, D6). The basket places NO broker order: it only saves
+   * Portfolio rows. It used to store them `source: 'broker'` and toast "N sent
+   * to broker", which made phantom positions that look like live fills. */
+  it('an EMPTY basket labels the (disabled) main button "Track basket", never "Send to broker"', async () => {
+    acceptAll();
+    await renderPage();
+    const btn = await screen.findByRole('button', { name: /^Track basket$/ });
+    expect(btn).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^Send to broker$/ })).not.toBeInTheDocument();
+  });
+  it('a basket submit of two saved rows says "added to Portfolio", never "sent to broker", and stores source manual', async () => {
+    const dailyBefore = useRiskStore.getState().dailyRecommendations;
+    // Record what every basket row hands to addPosition. (`source` is a
+    // client-side tag: toBackendPayload does not send it, so the POST body
+    // cannot show it; addPosition's argument is where it is decided.)
+    const realAddPosition = usePortfolioStore.getState().addPosition;
+    const added: Array<{ symbol: string; source?: string }> = [];
+    act(() => {
+      usePortfolioStore.setState({
+        addPosition: ((p: Parameters<typeof realAddPosition>[0]) => {
+          added.push({ symbol: p.symbol, source: p.source });
+          return realAddPosition(p);
+        }) as typeof realAddPosition,
+      });
+    });
+    try {
+      acceptAll();
+      await renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+      await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+      fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /basket \(2\)/i }));
+      const submit = await screen.findByRole('button', { name: /^(Add 2 to Portfolio|Override & Submit)$/ });
+      await waitFor(() => expect(submit).toBeEnabled());
+      fireEvent.click(submit);
+
+      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(2));
+      expect(await screen.findByText('2 added to Portfolio')).toBeInTheDocument();
+      expect(screen.getByText(/No broker order was placed/)).toBeInTheDocument();
+      // The toast must say a tracked row RESERVES its contract (it blocks a later card send).
+      expect(screen.getByText(/Tracked rows reserve their contract/)).toBeInTheDocument();
+      expect(screen.queryByText(/send each one from its card/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/sent to broker/i)).not.toBeInTheDocument();
+      // Every basket row was tagged manual, and none was routed to a broker.
+      expect(added.map((a) => a.symbol).sort()).toEqual(['AAA', 'BBB']);
+      for (const a of added) expect(a.source).toBe('manual');
+      for (const p of usePortfolioStore.getState().positions) expect(p.source).toBe('manual');
+      expect(api.postOptionOrder).not.toHaveBeenCalled();
+    } finally {
+      act(() => {
+        usePortfolioStore.setState({ addPosition: realAddPosition });
+        useRiskStore.setState({ dailyRecommendations: dailyBefore });
+      });
+    }
+  });
 });

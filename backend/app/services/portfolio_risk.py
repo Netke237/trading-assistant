@@ -138,10 +138,20 @@ def check_position_risk(
     single_exposure_pct = capital_at_risk / portfolio_value
     # .get with the decided defaults: a risk_rules.yaml written before
     # STOCK-SENDS has no stock keys, and a KeyError here would refuse every save.
-    max_single = (
-        float(rules.get("max_single_stock_position_pct", STOCK_SINGLE_DEFAULT)) if is_stock
-        else rules["max_single_position_pct"]
-    )
+    if is_stock:
+        max_single = float(rules.get("max_single_stock_position_pct", STOCK_SINGLE_DEFAULT))
+    else:
+        # Fix #4 (decision D5): the auto-trader and the direct send place NO
+        # protective order, so a long option's worst-case loss is its whole
+        # premium. The per-trade loss limit is therefore a premium cap too, and
+        # the effective option cap is the smaller of the two. Stocks keep their
+        # own cap above: they carry a stop, so premium is not their loss.
+        # (risk_rules.yaml loses its comments on every Settings save, so the
+        # rule is recorded here and in docs/architecture.md, not in the YAML.)
+        max_single = min(
+            float(rules["max_single_position_pct"]),
+            float(rules.get("max_loss_per_trade_pct", rules["max_single_position_pct"])),
+        )
 
     if single_exposure_pct > max_single:
         max_allowed_premium = portfolio_value * max_single

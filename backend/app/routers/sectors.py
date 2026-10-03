@@ -9,10 +9,11 @@ from fastapi import APIRouter
 from app.schemas import IndexChangeTile, SectorTile
 from app.data.market import get_tradier_creds, _fetch_daily_yf
 from app.data.sector_names import NORMALIZE
+# The ONE curated ETF set (app/data/etfs.py) owns these lists, so the D4
+# earnings rule and the sector/index tiles cannot drift apart.
+from app.data.etfs import INDEX_ETFS, SECTOR_ETFS
 
 router = APIRouter(prefix='/api', tags=['trading'])
-
-SECTOR_ETFS = ["XLK", "XLC", "XLY", "XLI", "XLF", "XLP", "XLV", "XLB", "XLRE", "XLU", "XLE"]
 
 _ETF_NAME: dict[str, str] = {
     "XLK":  "Technology",
@@ -27,8 +28,6 @@ _ETF_NAME: dict[str, str] = {
     "XLU":  "Utilities",
     "XLE":  "Energy",
 }
-
-INDEX_ETFS = ["SPY", "QQQ"]
 
 _INDEX_NAME: dict[str, str] = {
     "SPY": "S&P 500",

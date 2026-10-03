@@ -152,7 +152,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     fireEvent.click(screen.getByTitle('Pin to basket'));
 
     // Open the basket dialog.
-    fireEvent.click(screen.getByRole('button', { name: /send basket \(2\)/i }));
+    fireEvent.click(screen.getByRole('button', { name: /track basket \(2\)/i }));
 
     await waitFor(() => expect(screen.getByLabelText('Contracts for AAA')).toBeInTheDocument());
     expect(screen.getByLabelText('Contracts for AAA')).toHaveValue(3);

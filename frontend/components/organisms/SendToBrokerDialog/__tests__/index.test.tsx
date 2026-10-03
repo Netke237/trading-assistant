@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
@@ -82,10 +82,11 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
 
   it('names the symbol with the largest loss at stop across the basket, not the first one pinned', () => {
     // Both cards share the same mid (50) and 1 contract, so
-    // capitalAtRisk/exposure is identical and at the maxSingleTradeExposurePct
-    // boundary (5000/100000 = 5%, not > 0.05) for both — the only gate either
-    // trips is max_loss_per_trade_exceeded, isolating exactly the behavior
-    // under test. They differ only in the exit-plan stop's contract price,
+    // capitalAtRisk/exposure is identical for both: 5000/100000 = 5%. That is
+    // within maxSingleTradeExposurePct but above the 3.75% option premium cap
+    // (min with maxLossPerTradePct, review fix #4 / D5), so BOTH cards also
+    // trip single_trade_exposure_too_high; that is asserted below and is not
+    // what is under test. They differ only in the exit-plan stop's contract price,
     // which is what makes AAA's and BBB's loss at stop differ. AAA is pinned
     // first in the basket — the detail line must still name BBB, the worse
     // of the two, not the first match in insertion order.
@@ -114,7 +115,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
 
     render(<SendToBrokerDialog cards={[aaa, bbb]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick(), BBB: pick() }} onClose={noop} onSubmit={noop} />);
 
-    expect(screen.queryByText('Single trade exposure too high')).not.toBeInTheDocument();
+    expect(screen.getByText('Single trade exposure too high')).toBeInTheDocument();
     expect(screen.getByText(/Max loss at stop \(BBB\) ≈ \$4,900 \(limit \$3,750\)/)).toBeInTheDocument();
     expect(screen.queryByText(/Max loss at stop \(AAA\)/)).not.toBeInTheDocument();
   });
@@ -149,7 +150,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
     // (50 - 1) * 100 * 1 = $4,900, which exceeds the $3,750 ACCOUNT-DEFAULT
     // limit — without the override this would show a warning and force a
     // second "Submit" click. A $5,000 override raises the limit above the
-    // $4,900 loss, so the dialog must read straight through as clean.
+    // $4,900 loss, so the stop warning must go away.
     const bbb = makeCard({ symbol: 'BBB' });
 
     const { rerender } = render(
@@ -168,7 +169,10 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
         onSubmit={noop}
       />,
     );
-    expect(screen.getByText('Within risk limits.')).toBeInTheDocument();
+    // The $5,000 premium (5%) still exceeds the 3.75% option premium cap
+    // (review fix #4 / D5), so the dialog is not "clean" any more; what the
+    // override must still do is clear the stop-based warning.
+    expect(screen.getByText('Single trade exposure too high')).toBeInTheDocument();
     expect(screen.queryByText(/Max loss at stop \(BBB\)/)).not.toBeInTheDocument();
   });
 });
@@ -193,7 +197,7 @@ describe('SendToBrokerDialog — the method-pick gate (Phase G piece 5, build st
     );
 
     expect(screen.getByText(/Method pick required/)).toBeInTheDocument();
-    const submitBtn = screen.getByRole('button', { name: /Submit 2 orders/ });
+    const submitBtn = screen.getByRole('button', { name: /Add 2 to Portfolio/ });
     expect(submitBtn).toBeDisabled();
   });
 
@@ -214,5 +218,45 @@ describe('SendToBrokerDialog — the method-pick gate (Phase G piece 5, build st
     );
 
     expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
+  });
+});
+
+describe('SendToBrokerDialog — tracks the basket, places no broker order (review #5, D6)', () => {
+  const noop = () => {};
+  // Within every risk limit, so one click submits (no override step).
+  const cleanCard = () => makeCard({
+    symbol: 'AAA',
+    contractDetails: { strike: 100, expiry: '2026-05-15', right: 'C', mid: 2, delta: 0.45, theta: -0.09, ivRank: 45, dte: 24 },
+    exit: {
+      invalidation: 90, premiumStop: 1.5, timeStopDays: 10, target: 130, targets: [],
+      exitPlan: {
+        computedAt: '2026-08-27T00:00:00.000Z',
+        stop: {
+          price: 90, source: 'structural', contractPrice: 1.5,
+          rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+          structuralPrice: 90, atrFloorPrice: 85, distanceDollar: 5,
+        },
+        targets: [],
+        atr: 3,
+      },
+    },
+  });
+
+  it('renders no Auto-send control and says no broker order is placed', () => {
+    render(<SendToBrokerDialog cards={[cleanCard()]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick() }} onClose={noop} onSubmit={noop} />);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto-send/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no broker order is placed/)).toBeInTheDocument();
+    // A tracked row reserves its contract and symbol, so the card cannot also be sent.
+    expect(screen.getByText(/reserves its contract and symbol/)).toBeInTheDocument();
+    expect(screen.queryByText(/send it from its own card/i)).not.toBeInTheDocument();
+  });
+
+  it('submits drafts that carry no autoSend field', () => {
+    const onSubmit = jest.fn();
+    render(<SendToBrokerDialog cards={[cleanCard()]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick() }} onClose={noop} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to Portfolio' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(Object.keys(onSubmit.mock.calls[0][0][0]).sort()).toEqual(['card', 'contracts']);
   });
 });

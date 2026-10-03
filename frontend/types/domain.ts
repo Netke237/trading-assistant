@@ -694,6 +694,17 @@ export interface TradeCardData {
   rrRatio:  number;
   rrModel:  'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
   finalStatus: Status;
+  /** Fix #3: earnings inside the horizon reject window -> finalStatus REJECT, no send. */
+  earningsVeto?: boolean;
+  /** No known next earnings date (none on file, or only a past one). D4
+   *  amended 2026-10-03: on a single stock the backend caps finalStatus at
+   *  CAUTION and the auto-trader refuses to fire; an ETF is unaffected. */
+  earningsUnknown?: boolean;
+  /** In the backend's curated ETF set (app/data/etfs.py). Absent on pre-deploy
+   *  scans -- read as false, i.e. a single stock (the safe direction). */
+  isEtf?: boolean;
+  /** Days to earnings alone; nextEventDays is the nearer of earnings/dividend. */
+  earningsDays?: number | null;
   /** Signal confidence 0–100 (null when history is too thin to judge). */
   confidence?: number | null;
   confidenceText?: string | null;
@@ -1103,8 +1114,12 @@ export interface RiskLimits {
   maxDailyRecommendations: number;    // e.g. 5
   portfolioValue: number;             // user's total portfolio value in $
   /** Max acceptable $ loss at the exit-plan pipeline's final stop, as a
-   *  fraction of portfolioValue (e.g. 0.0375 = 3.75%). Warning-only — never
-   *  auto-clamps contract count. See docs/superpowers/plans/
+   *  fraction of portfolioValue (e.g. 0.0375 = 3.75%). The stop-based check
+   *  is warning-only and never auto-clamps. It ALSO caps option premium
+   *  (review fix #4, D5): an option order has no protective order, so the
+   *  effective single-position cap is min(maxSingleTradeExposurePct, this),
+   *  enforced server-side in `check_position_risk` and mirrored in
+   *  `checkTradeRisk`. See docs/superpowers/plans/
    *  2026-08-26-exit-plan-pipeline.md Feature C. */
   maxLossPerTradePct: number;
   /** STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): the STOCK caps, on

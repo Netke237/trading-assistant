@@ -82,7 +82,7 @@ class RiskConfig(BaseModel):
         default=None,
         ge=0.0,
         le=1.0,
-        description='Max acceptable loss at the exit-plan final stop, as a fraction of portfolio value (warning-only)',
+        description='Max acceptable loss at the exit-plan final stop, as a fraction of portfolio value. Also caps option premium per trade (min with maxSinglePositionPct)',
     )
     maxTotalExposurePct: Optional[float] = Field(
         default=None,

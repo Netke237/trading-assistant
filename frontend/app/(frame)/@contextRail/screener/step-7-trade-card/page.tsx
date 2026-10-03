@@ -49,6 +49,7 @@ function buildChecklist(
   ivThresholds: Record<ThresholdHorizon, HorizonIvThresholds> | null,
   rrPending: boolean,
   ivOverride: { value: number; yaml: number } | null = null,
+  eventWindow: { reject_days: number; caution_days: number } | undefined = undefined,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -115,14 +116,44 @@ function buildChecklist(
     });
   }
 
-  // Earnings > 7d away
-  const days = wlRow?.nextEventDays;
+  // Fix #3: the scan's own event window (echoed on the scan result), never a
+  // fixed 7/3d. With no window in hand the gate is CAUTION, not PASS -- an
+  // unknown window is not a clean read (same rule as the IV gate above).
+  //
+  // D4 amended 2026-10-03 (Kenneth): an unknown earnings date caps a SINGLE
+  // STOCK's card at CAUTION and blocks its auto-fire (backend). An ETF has no
+  // earnings, so it passes. A card without `isEtf` (pre-deploy scan) reads as
+  // a stock -- the same safe direction the backend takes.
+  if (candidate.earningsUnknown) {
+    gates.push(candidate.isEtf
+      ? {
+          label: 'Earnings date',
+          status: 'PASS',
+          detail: 'ETF — no earnings date to check.',
+        }
+      : {
+          label: 'Earnings date',
+          status: 'CAUTION',
+          detail: 'No earnings date on file — the card is capped at CAUTION and auto-trade will not fire a single stock. Check the calendar before sending.',
+        });
+  }
+  // Graded on EARNINGS distance only. nextEventDays is the nearer of earnings
+  // and dividend, and only earnings veto (D3): a dividend inside the window
+  // must not read as an "Earnings" REJECT. Unknown earnings is the CAUTION
+  // gate above.
+  const days = candidate.earningsDays;
   if (days != null) {
-    gates.push({
-      label: 'Earnings > 7d away',
-      status: days > 7 ? 'PASS' : days >= 3 ? 'CAUTION' : 'REJECT',
-      detail: `Next event in ${days}d — pass >7d, caution 3-7d, reject <3d.`,
-    });
+    gates.push(eventWindow
+      ? {
+          label: 'Earnings outside reject window',
+          status: days < eventWindow.reject_days ? 'REJECT' : days < eventWindow.caution_days ? 'CAUTION' : 'PASS',
+          detail: `Next event in ${days}d — reject <${eventWindow.reject_days}d, caution <${eventWindow.caution_days}d (this scan's window).`,
+        }
+      : {
+          label: 'Earnings outside reject window',
+          status: 'CAUTION',
+          detail: `Next event in ${days}d — this scan carried no event window; re-run the scan.`,
+        });
   }
 
   // Score ≥ 55 (both stock and contract) — thresholds from statusForScore()
@@ -162,6 +193,8 @@ export default function TradeCardContextRail() {
   const published           = useTradeCardUiStore((s) => s.activeCard);
   const regime              = useScanStore((s) => s.combinedRegime);
   const horizon             = useScanStore((s) => s.context?.horizon);
+  // Fix #3: the scan's own earnings window, echoed on its result.
+  const eventWindow         = useScanStore((s) => s.scanResult?.event_window);
   // Two selectors (Zustand v5: never one returning a fresh object).
   const ivFetched           = useIvThresholdsStore((s) => s.thresholds);
   const ivOverrides         = useIvThresholdsStore((s) => s.overrides);
@@ -198,6 +231,7 @@ export default function TradeCardContextRail() {
   const gates = candidate ? buildChecklist(
     candidate, wlRow, regime, horizonKey, ivThresholds, published?.rrPending ?? false,
     ivOverrideFor(horizonKey, ivFetched, ivOverrides),
+    eventWindow,
   ) : [];
 
   return (
