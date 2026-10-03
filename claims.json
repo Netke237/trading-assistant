@@ -23,6 +23,14 @@
       "expires_at": "2026-10-03T08:29:03Z",
       "note": "parsePipelineDiagnostics.ts: import SHORTLIST_REASON_PREFIX instead of a local literal",
       "task": "SHORTLIST-PREFIX-DRIFT"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/priceless-jennings-995ab7",
+      "claimed_at": "2026-10-03T05:29:08Z",
+      "expires_at": "2026-10-03T08:29:08Z",
+      "note": "Step 0 measurement script + plan rewrite",
+      "task": "NO-LIVE-QUOTE"
     }
   ]
 }
