@@ -56,3 +56,17 @@ def test_nonfinite_reading_never_enters_trigger_history_even_with_or_match(inval
         {'BB_UPPER(2,2)': [{'time': bars[-1]['time'], 'value': invalid}]}, [], datetime.now())
     assert len(result) == 1
     assert result[0]['trigger_values'] == {'close': bars[-1]['close']}
+
+
+def test_exact_browser_fixture_stays_pinned_to_supported_backend_readings():
+    import json
+    from pathlib import Path
+    fixture = json.loads((Path(__file__).resolve().parents[2] / 'frontend/lib/__tests__/fixtures/alert_indicator_python311.json').read_text())
+    for case in fixture['cases']:
+        bars = [dict(time=1720000000+i*3600, open=c, close=c, high=c+1, low=c-1, volume=100+i*10)
+                for i,c in enumerate(case['closes'])]
+        conditions = [dict(kind='indicator', indicator=r) for r in case['expected']]
+        points = compute_indicators_for_conditions(bars, conditions)
+        actual = {r: [[p['time'], p['value']] for p in series if p['value'] is not None]
+                  for r,series in points.items()}
+        assert actual == case['expected'], case['name']

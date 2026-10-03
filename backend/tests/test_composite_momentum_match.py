@@ -321,10 +321,10 @@ def test_unknown_kind_and_bad_rows_are_false():
 # by the frontend; all other readings stay pinned on main's output.
 _STANDARD_NAMES = ["ema", "ema9", "ema50", "sma", "sma50", "rsi", "atr",
                    "bb_upper", "bb_lower", "bb_mid", "vwap", "volume", "close"]
-# Re-pinned against unmodified main b036a368: the previous hash no longer
-# matched that baseline. The EMA seed-only normalization below must match
-# the actual pre-ALERT-INDICATOR-ID-MAP output, not a stale historical pin.
-_GOLDEN_SHA = "2d19fee4e444a7c8740742913961f10e6f07c1a9c45ae067f80324eba9653451"
+# Original Python 3.11 baseline pin, matching Docker and CI. Python 3.12
+# changes float summation; that unsupported runtime must not redefine the pin.
+# Normalize only the intentional EMA seed-bar addition below.
+_GOLDEN_SHA = "44eb35e07f3080defb457e052ba76c030b5c0a30917ad7551d9dacc768486b6d"
 
 
 def _golden_payload():

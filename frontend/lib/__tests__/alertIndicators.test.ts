@@ -1,3 +1,4 @@
+import parityFixture from './fixtures/alert_indicator_python311.json';
 import { alertIndicatorReference, computeAlertIndicatorPoints, parseAlertIndicator } from '../alertIndicators';
 import { pythonRound4 } from '../premiumStop';
 import { evaluateRules } from '../chartAlertEngine';
@@ -73,4 +74,18 @@ test.each(['>', 'crosses_above'] as const)('EMA backend arithmetic prevents a fa
     enabled: true, group: { logic: 'AND', conditions: [c] }, cooldown_minutes: 0,
     expiry_date: null, created_at: '2024-01-01', last_triggered_at: null };
   expect(evaluateRules([rule], bars.at(-1)!, bars, points, [], new Date(), 'AAPL', '1h')).toEqual([]);
+});
+
+describe('exact parity with the Docker/CI Python 3.11 runtime', () => {
+  const fixture = parityFixture as unknown as {
+    cases: { name: string; closes: number[]; expected: Record<string, [number, number][]> }[];
+  };
+  test.each(fixture.cases)('$name matches every timestamped backend reading exactly', c => {
+    const bars = c.closes.map((close, i) => ({ time: 1720000000+i*3600,
+      open: close, close, high: close+1, low: close-1, volume: 100+i*10 }));
+    const points = computeAlertIndicatorPoints(bars, Object.keys(c.expected).map(condition));
+    const actual = Object.fromEntries(Object.entries(points).map(([ref, series]) =>
+      [ref, series.map(p => [p.time, p.value])]));
+    expect(actual).toEqual(c.expected);
+  });
 });

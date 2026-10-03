@@ -50,7 +50,8 @@ export function alertIndicatorReference(indicator: IndicatorConfig): string | nu
   return parseAlertIndicator(reference) ? reference : null;
 }
 
-/** Alert arithmetic mirrors backend _ema_seeded, including operation order.
+/** Alert arithmetic mirrors backend _ema_seeded on the pinned Python 3.11 runtime.
+ * Python 3.12 changes sum() semantics; updating the runtime requires parity validation.
  * Chart calcEMA uses an algebraically equivalent recurrence whose floating-point
  * result can round differently at a comparison boundary. */
 function alertEMA(values: number[], period: number): (number | null)[] {

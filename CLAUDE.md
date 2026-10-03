@@ -12,6 +12,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **The rule: nothing is done until an adversarial round comes back clean.**
 
 
+## Backend runtime (all agents)
+
+Python 3.11 is pinned by `.python-version`, Docker and CI. Verify the interpreter is 3.11 before installing backend dependencies, running tests or starting the backend; activate the prepared Python 3.11 virtual environment in cloud tasks. Python 3.12 changes float summation and can alter alert readings. A runtime upgrade requires exact browser/backend parity validation and an independent audit; never regenerate numerical golden pins just to accommodate an unintended runtime.
+
 ## Required audit workflow (all agents)
 
 Before implementing or declaring a target done, read `docs/superpowers/PROJECT_STATE.json`'s `audit_rule` and `.claude/skills/K-adversarial-audit-loop/SKILL.md`. Apply that skill for the required code audit; do not substitute your own review for it.

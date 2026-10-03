@@ -44,3 +44,8 @@ Fresh reviewer: `indicator_map_audit_3`; reviewed the actual delta against `d512
 Code-stage three-round cap reached without a clean round. Audit loop stopped; no fourth round and no unreviewed correction. Task is not done or mergeable. A split/runtime-alignment decision is required before continuing. Latest focused validation: frontend 179 passed, backend 199 passed, typecheck clean; these passing checks do not validate the known failing seed boundary.
 
 Independent tally: round 1 two findings fixed; round 2 one finding fixed; round 3 one finding outstanding.
+
+
+## Subsequent user-authorized resolution
+
+The user authorized a narrower `ALERT-INDICATOR-SEED-PARITY` split and merge after completion. Docker/CI's intended Python3.11 runtime resolves the observed seed difference; the onboarding environment had incorrectly used Python3.12. The original checksum was valid under3.11 and is restored. See `2026-10-03-alert-indicator-seed-parity.md` for two fresh qualifying clean reviews and exact parity evidence. This original code-stage history remains capped at three non-clean rounds and is archived intact in PROJECT_STATE.json; it is not reset or reclassified as clean.
