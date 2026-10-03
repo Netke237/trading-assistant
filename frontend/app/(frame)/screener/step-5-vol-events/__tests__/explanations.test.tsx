@@ -6,7 +6,7 @@
  * and AC6 (pointer/keyboard interaction & zero network calls).
  */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Step5Page from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
@@ -104,12 +104,18 @@ function setupScan(
   });
 }
 
+async function mount() {
+  await act(async () => {
+    render(<Step5Page />);
+  });
+}
+
 describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', () => {
-  it('IV PASS + event CAUTION: event alone decides', () => {
+  it('IV PASS + event CAUTION: event alone decides', async () => {
     // Swing: rank pass <= 34, event reject < 21, caution < 45
     const c = makeCandidate('EVTC', { ivRank: 20 }, 30, 'Earnings');
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('EVTC')).toBe('CAUTION');
     expect(sideVerdict('EVTC', 'volatility')).toBe('PASS');
@@ -122,11 +128,11 @@ describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', 
     expectPageCopy();
   });
 
-  it('IV REJECT + event CAUTION: IV alone decides', () => {
+  it('IV REJECT + event CAUTION: IV alone decides', async () => {
     // Swing: rank > 55 is REJECT; event 30d is CAUTION
     const c = makeCandidate('IVREJ', { ivRank: 60 }, 30, 'Earnings');
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('IVREJ')).toBe('REJECT');
     expect(sideVerdict('IVREJ', 'volatility')).toBe('REJECT');
@@ -140,11 +146,11 @@ describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', 
     expectPageCopy();
   });
 
-  it('IV CAUTION + event CAUTION: tied drivers list both', () => {
+  it('IV CAUTION + event CAUTION: tied drivers list both', async () => {
     // Swing: rank 40 is CAUTION; event 30d is CAUTION
     const c = makeCandidate('TIEDC', { ivRank: 40 }, 30, 'Earnings');
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('TIEDC')).toBe('CAUTION');
     expect(sideVerdict('TIEDC', 'volatility')).toBe('CAUTION');
@@ -157,11 +163,11 @@ describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', 
     expectPageCopy();
   });
 
-  it('IV REJECT + event REJECT: tied reject drivers list both', () => {
+  it('IV REJECT + event REJECT: tied reject drivers list both', async () => {
     // Swing: rank 70 is REJECT; event 10d is REJECT
     const c = makeCandidate('TIEDR', { ivRank: 70 }, 10, 'Earnings');
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('TIEDR')).toBe('REJECT');
     expect(sideVerdict('TIEDR', 'volatility')).toBe('REJECT');
@@ -174,11 +180,11 @@ describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', 
     expectPageCopy();
   });
 
-  it('IV PASS + event PASS: No adverse driver', () => {
+  it('IV PASS + event PASS: No adverse driver', async () => {
     // Swing: rank 20 is PASS; event 60d is PASS
     const c = makeCandidate('ALLP', { ivRank: 20 }, 60, 'Earnings');
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('ALLP')).toBe('PASS');
     expect(sideVerdict('ALLP', 'volatility')).toBe('PASS');
@@ -191,11 +197,11 @@ describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', 
     expectPageCopy();
   });
 
-  it('Missing IV reading on gated horizon: No volatility reading driver', () => {
+  it('Missing IV reading on gated horizon: No volatility reading driver', async () => {
     // Swing: no IV rank, no absolute IV, no event -> IV CAUTION, event PASS
     const c = makeCandidate('NOIV', {}, null);
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('NOIV')).toBe('CAUTION');
     expect(sideVerdict('NOIV', 'volatility')).toBe('CAUTION');
@@ -210,13 +216,13 @@ describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', 
 });
 
 describe('AC2: Exact numeric boundaries across horizons and bases', () => {
-  it('IV boundaries: pass boundary (<= 34), caution boundary (<= 55) on Swing', () => {
+  it('IV boundaries: pass boundary (<= 34), caution boundary (<= 55) on Swing', async () => {
     const c1 = makeCandidate('P34', { ivRank: 34 }, null);
     const c2 = makeCandidate('C3401', { ivRank: 34.01 }, null);
     const c3 = makeCandidate('C55', { ivRank: 55 }, null);
     const c4 = makeCandidate('R5501', { ivRank: 55.01 }, null);
     setupScan([c1, c2, c3, c4]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('P34')).toBe('PASS');
     expect(gateOf('C3401')).toBe('CAUTION');
@@ -226,13 +232,29 @@ describe('AC2: Exact numeric boundaries across horizons and bases', () => {
     expectPageCopy();
   });
 
-  it('Event boundaries: strict < applied (day 21 is CAUTION, day 45 is PASS on Swing 21/45)', () => {
+  it('Absolute IV boundaries: pass boundary (<= 34.00%), caution boundary (<= 55.00%) on Swing', async () => {
+    const c1 = makeCandidate('AP34', { ivRank: null, iv: 34.00 }, null);
+    const c2 = makeCandidate('AC3401', { ivRank: null, iv: 34.01 }, null);
+    const c3 = makeCandidate('AC55', { ivRank: null, iv: 55.00 }, null);
+    const c4 = makeCandidate('AR5501', { ivRank: null, iv: 55.01 }, null);
+    setupScan([c1, c2, c3, c4]);
+    await mount();
+
+    expect(gateOf('AP34')).toBe('PASS');
+    expect(gateOf('AC3401')).toBe('CAUTION');
+    expect(gateOf('AC55')).toBe('CAUTION');
+    expect(gateOf('AR5501')).toBe('REJECT');
+
+    expectPageCopy();
+  });
+
+  it('Event boundaries: strict < applied (day 21 is CAUTION, day 45 is PASS on Swing 21/45)', async () => {
     const c1 = makeCandidate('EV20', { ivRank: 20 }, 20); // 20 < 21 -> REJECT
     const c2 = makeCandidate('EV21', { ivRank: 20 }, 21); // 21 is not < 21 -> CAUTION
     const c3 = makeCandidate('EV44', { ivRank: 20 }, 44); // 44 < 45 -> CAUTION
     const c4 = makeCandidate('EV45', { ivRank: 20 }, 45); // 45 is not < 45 -> PASS
     setupScan([c1, c2, c3, c4]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('EV20')).toBe('REJECT');
     expect(gateOf('EV21')).toBe('CAUTION');
@@ -242,10 +264,23 @@ describe('AC2: Exact numeric boundaries across horizons and bases', () => {
     expectPageCopy();
   });
 
-  it('Intraday horizon: IV is ungated, even with rank 95', () => {
+  it('Coincident event boundaries: reject_days === caution_days leaves no reachable CAUTION interval', async () => {
+    // 30 reject, 30 caution -> < 30 is REJECT, >= 30 is PASS (no caution reachable)
+    const c1 = makeCandidate('COIN29', { ivRank: 20 }, 29); // 29 < 30 -> REJECT
+    const c2 = makeCandidate('COIN30', { ivRank: 20 }, 30); // 30 is not < 30 -> PASS
+    setupScan([c1, c2], 'Swing (5-15d)', { reject_days: 30, caution_days: 30 });
+    await mount();
+
+    expect(gateOf('COIN29')).toBe('REJECT');
+    expect(gateOf('COIN30')).toBe('PASS');
+
+    expectPageCopy();
+  });
+
+  it('Intraday horizon: IV is ungated, even with rank 95', async () => {
     const c = makeCandidate('INTRA', { ivRank: 95 }, 5);
     setupScan([c], 'Intraday (0-2d)');
-    render(<Step5Page />);
+    await mount();
 
     expect(sideVerdict('INTRA', 'volatility')).toBe('PASS');
     expect(gateOf('INTRA')).toBe('PASS');
@@ -253,12 +288,12 @@ describe('AC2: Exact numeric boundaries across horizons and bases', () => {
     expectPageCopy();
   });
 
-  it('Position horizon: uses Position-specific thresholds (IV 44/65, Event 30/60)', () => {
+  it('Position horizon: uses Position-specific thresholds (IV 44/65, Event 30/60)', async () => {
     // 40 IV rank is PASS on Position (<= 44), but would be CAUTION on Swing
     // Event 50 is CAUTION on Position (< 60), but would be PASS on Swing
     const c = makeCandidate('POS', { ivRank: 40 }, 50);
     setupScan([c], 'Position (90-105d)');
-    render(<Step5Page />);
+    await mount();
 
     expect(sideVerdict('POS', 'volatility')).toBe('PASS');
     expect(sideVerdict('POS', 'event')).toBe('CAUTION');
@@ -269,10 +304,10 @@ describe('AC2: Exact numeric boundaries across horizons and bases', () => {
 });
 
 describe('AC3: Edge cases, nulls, zeros, and negative days', () => {
-  it('Rank 0 is a valid reading (cheapest premium), not missing', () => {
+  it('Rank 0 is a valid reading (cheapest premium), not missing', async () => {
     const c = makeCandidate('RNK0', { ivRank: 0 }, null);
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('RNK0')).toBe('PASS');
     const ivCell = tableRowOf('RNK0').querySelector('[data-cell="iv"]');
@@ -282,10 +317,10 @@ describe('AC3: Edge cases, nulls, zeros, and negative days', () => {
     expectPageCopy();
   });
 
-  it('Absolute IV 0 is treated as missing data', () => {
+  it('Absolute IV 0 is treated as missing data', async () => {
     const c = makeCandidate('ABS0', { ivRank: null, iv: 0 }, null);
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(sideVerdict('ABS0', 'volatility')).toBe('CAUTION');
     const ivCell = tableRowOf('ABS0').querySelector('[data-cell="iv"]');
@@ -294,10 +329,10 @@ describe('AC3: Edge cases, nulls, zeros, and negative days', () => {
     expectPageCopy();
   });
 
-  it('Percentile 0 is displayed as context and does not corrupt gate', () => {
+  it('Percentile 0 is displayed as context and does not corrupt gate', async () => {
     const c = makeCandidate('PCTL0', { ivRank: 15, ivPercentile: 0 }, null);
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('PCTL0')).toBe('PASS');
     const pctlCell = tableRowOf('PCTL0').querySelector('[data-cell="pctl"]');
@@ -306,10 +341,10 @@ describe('AC3: Edge cases, nulls, zeros, and negative days', () => {
     expectPageCopy();
   });
 
-  it('Null event date: no penalty applied and correctly described', () => {
+  it('Null event date: no penalty applied and correctly described', async () => {
     const c = makeCandidate('NOEV', { ivRank: 20 }, null, null);
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     expect(sideVerdict('NOEV', 'event')).toBe('PASS');
     expect(gateOf('NOEV')).toBe('PASS');
@@ -324,11 +359,11 @@ describe('AC3: Edge cases, nulls, zeros, and negative days', () => {
     expectPageCopy();
   });
 
-  it('Negative event days: displayed with exact days and evaluated with strict <', () => {
+  it('Negative event days: displayed with exact days and evaluated with strict <', async () => {
     // Next event days = -2 (past event in raw data)
     const c = makeCandidate('NEGD', { ivRank: 20 }, -2, 'Earnings Passed');
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     // -2 < 21 -> REJECT
     expect(sideVerdict('NEGD', 'event')).toBe('REJECT');
@@ -342,10 +377,10 @@ describe('AC3: Edge cases, nulls, zeros, and negative days', () => {
 });
 
 describe('AC4: Rules strip provenance and session overrides', () => {
-  it('Rules strip displays Recorded scan event window when scanResult echoes event_window', () => {
+  it('Rules strip displays Recorded scan event window when scanResult echoes event_window', async () => {
     const c = makeCandidate('REC', { ivRank: 25 }, 40);
     setupScan([c], 'Swing (5-15d)', { reject_days: 10, caution_days: 35 });
-    render(<Step5Page />);
+    await mount();
 
     const strip = screen.getByTestId('step-5').querySelector('[data-rules-strip]');
     expect(strip).not.toBeNull();
@@ -356,11 +391,11 @@ describe('AC4: Rules strip provenance and session overrides', () => {
     expectPageCopy();
   });
 
-  it('Rules strip displays Legacy scan: current configuration fallback when scan has no echo', () => {
+  it('Rules strip displays Legacy scan: current configuration fallback when scan has no echo', async () => {
     const c = makeCandidate('LEG', { ivRank: 25 }, 40);
     // Setup without event_window
     setupScan([c], 'Swing (5-15d)');
-    render(<Step5Page />);
+    await mount();
 
     const strip = screen.getByTestId('step-5').querySelector('[data-rules-strip]');
     expect(strip?.querySelector('[data-provenance]')?.textContent).toBe('Legacy scan: current configuration fallback');
@@ -368,11 +403,11 @@ describe('AC4: Rules strip provenance and session overrides', () => {
     expectPageCopy();
   });
 
-  it('Absolute session override changes absolute pass band only and displays notice', () => {
+  it('Absolute session override changes absolute pass band only and displays notice', async () => {
     const c1 = makeCandidate('OVR', { ivRank: null, iv: 40 }, null); // Absolute IV 40
     // Shipped Swing absolute pass is 34; override to 45 makes 40 PASS
     setupScan([c1], 'Swing (5-15d)', undefined, { Swing: { abs_pass_max: 45 } });
-    render(<Step5Page />);
+    await mount();
 
     expect(gateOf('OVR')).toBe('PASS');
     const strip = screen.getByTestId('step-5').querySelector('[data-rules-strip]');
@@ -380,14 +415,36 @@ describe('AC4: Rules strip provenance and session overrides', () => {
 
     expectPageCopy();
   });
+
+  it('Above-caution session override displays no reachable CAUTION interval', async () => {
+    const c1 = makeCandidate('ABV', { ivRank: null, iv: 58 }, null); // Absolute IV 58
+    // Swing baseline: abs_pass_max 34, abs_caution_max 55.
+    // Override abs_pass_max to 60 (>= caution 55)
+    setupScan([c1], 'Swing (5-15d)', undefined, { Swing: { abs_pass_max: 60 } });
+    await mount();
+
+    expect(gateOf('ABV')).toBe('PASS');
+    const strip = screen.getByTestId('step-5').querySelector('[data-rules-strip]');
+    expect(strip?.textContent).toContain('CAUTION: no reachable interval');
+    expect(strip?.textContent).toContain('≤ 60% → PASS; > 60% → REJECT; CAUTION: no reachable interval');
+
+    // Click explain button to inspect disclosure panel
+    const row = tableRowOf('ABV');
+    const btn = row.querySelector('[data-cell="disclosure"] button') as HTMLButtonElement;
+    fireEvent.click(btn);
+    const panel = row.querySelector('[data-disclosure-panel]');
+    expect(panel?.textContent).toContain('CAUTION: no reachable interval');
+
+    expectPageCopy();
+  });
 });
 
 describe('AC6: Disclosure interaction, keyboard accessibility, and state isolation', () => {
-  it('Toggling disclosure updates aria-expanded, aria-controls, and panel visibility', () => {
+  it('Toggling disclosure updates aria-expanded, aria-controls, and panel visibility', async () => {
     const c1 = makeCandidate('DISC1', { ivRank: 20 }, 30);
     const c2 = makeCandidate('DISC2', { ivRank: 40 }, 50);
     setupScan([c1, c2]);
-    render(<Step5Page />);
+    await mount();
 
     const row1 = tableRowOf('DISC1');
     const row2 = tableRowOf('DISC2');
@@ -420,10 +477,10 @@ describe('AC6: Disclosure interaction, keyboard accessibility, and state isolati
     expectPageCopy();
   });
 
-  it('Keyboard Enter / Space toggles disclosure via standard button events', () => {
+  it('Keyboard Enter / Space toggles disclosure via standard button events', async () => {
     const c = makeCandidate('KBD', { ivRank: 20 }, 30);
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     const row = tableRowOf('KBD');
     const btn = row.querySelector('[data-cell="disclosure"] button') as HTMLButtonElement;
@@ -431,22 +488,23 @@ describe('AC6: Disclosure interaction, keyboard accessibility, and state isolati
     btn.focus();
     expect(document.activeElement).toBe(btn);
 
-    // Enter press triggers click on button
-    fireEvent.click(btn);
+    // Enter press triggers toggle
+    fireEvent.keyDown(btn, { key: 'Enter', code: 'Enter' });
     expect(btn.getAttribute('aria-expanded')).toBe('true');
     expect(row.querySelector('[data-disclosure-panel]')).not.toBeNull();
 
-    fireEvent.click(btn);
+    // Space press triggers toggle back
+    fireEvent.keyDown(btn, { key: ' ', code: 'Space' });
     expect(btn.getAttribute('aria-expanded')).toBe('false');
     expect(row.querySelector('[data-disclosure-panel]')).toBeNull();
 
     expectPageCopy();
   });
 
-  it('Expanding disclosure generates zero API calls and does not mutate scanStore', () => {
+  it('Expanding disclosure generates zero API calls and does not mutate scanStore', async () => {
     const c = makeCandidate('API0', { ivRank: 20 }, 30);
     setupScan([c]);
-    render(<Step5Page />);
+    await mount();
 
     const getIvCallsBefore = (api.getIvThresholds as jest.Mock).mock.calls.length;
     const getEvCallsBefore = (api.getEventThresholds as jest.Mock).mock.calls.length;

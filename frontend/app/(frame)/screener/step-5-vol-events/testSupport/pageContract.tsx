@@ -533,7 +533,7 @@ export function expectPageCopy() {
       const ivOverrides = useIvThresholdsStore.getState().overrides;
       const ivThresholds = effectiveIvThresholds(rawThresholds, ivOverrides);
       const eventThresholds = useEventThresholdsStore.getState().thresholds;
-      const ivOverride = (horizon in ivOverrides) ? ivOverrides[horizon as keyof typeof ivOverrides] ?? null : null;
+      const ivOverride = ivOverrideFor(horizon, rawThresholds, ivOverrides);
       const eventWindow = scanEventWindow ?? (eventThresholds ? eventThresholds[horizon] : null);
       const candidates = useScanStore.getState().scanResult?.candidates ?? [];
       const basesPresent = ivBasesOf(candidates.map((x) => x.contractDetails));
@@ -543,7 +543,7 @@ export function expectPageCopy() {
         eventWindow,
         scanEventWindow,
         hasScanResult: hasScan,
-        ivOverride: ivOverride ? { value: ivOverride.abs_pass_max, yaml: rawThresholds ? (rawThresholds[horizon].abs_pass_max ?? 0) : 0 } : null,
+        ivOverride,
         basesPresent,
       });
       expect(owner.textContent).toContain(expected.rankInterval);
@@ -574,6 +574,7 @@ export function expectPageCopy() {
       expect(owner.textContent).toContain('Volatility Check');
       expect(owner.textContent).toContain('Event Proximity Check');
       expect(owner.textContent).toContain('Gate Decision & Context');
+      expect(owner.textContent).toContain('Company:');
       expect(owner.textContent).toContain(expectedReason);
       expect(owner.textContent).toContain(expectedCombination);
     } else if (kind === 'cell') {

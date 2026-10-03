@@ -620,7 +620,7 @@ export default function Step5Page() {
                     <div className={pageStyles.ivTrack}>
                       <div
                         className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
-                        style={{ width: `${Math.min(1, (iv.value as number) / 100) * 72}px` }}
+                        style={{ width: `${Math.max(0, Math.min(1, (iv.value as number) / 100)) * 72}px` }}
                       />
                     </div>
                   )}
@@ -688,6 +688,12 @@ export default function Step5Page() {
                   type="button"
                   className={pageStyles.disclosureBtn}
                   onClick={() => toggleDisclosure(r.symbol)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleDisclosure(r.symbol);
+                    }
+                  }}
                   aria-expanded={isExpanded}
                   aria-controls={`disclosure-${r.symbol}`}
                   aria-label={`${isExpanded ? 'Hide' : 'Explain'} gate details for ${r.symbol}`}
@@ -767,6 +773,10 @@ export default function Step5Page() {
                         <div className={pageStyles.disclosureBlockHeader}>
                           <Text size={12} weight={600} tone="primary">Gate Decision & Context</Text>
                           <StatusBadge status={gate} />
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Company:</Text>
+                          <Text size={11} tone="primary">{r.company}</Text>
                         </div>
                         <div className={pageStyles.disclosureRow}>
                           <Text size={11} tone="dim">Combination:</Text>

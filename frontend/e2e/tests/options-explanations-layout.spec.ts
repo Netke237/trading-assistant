@@ -226,6 +226,15 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
     );
 
     let apiCallCount = 0;
+    const consoleErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
+    page.on('pageerror', (err) => {
+      consoleErrors.push(err.message);
+    });
     page.on('request', (req) => {
       if (req.url().includes('/api/')) {
         apiCallCount++;
@@ -243,18 +252,21 @@ test.describe('Options Volatility + Events layout & responsiveness (AC7 & AC8)',
 
     const callsBeforeToggles = apiCallCount;
 
-    // Toggle 5 different disclosures
+    // Toggle all 20 disclosures
     const buttons = page.locator('[data-cell="disclosure"] button');
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       await buttons.nth(i).click();
-      await expect(page.locator('[data-disclosure-panel]').nth(i)).toBeVisible();
     }
+    await expect(page.locator('[data-disclosure-panel]')).toHaveCount(20);
+
+    // Expanding rows must trigger ZERO console errors
+    expect(consoleErrors).toEqual([]);
 
     // Expanding rows must trigger ZERO new API requests
     expect(apiCallCount).toBe(callsBeforeToggles);
 
     // Close them back
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       await buttons.nth(i).click();
     }
     await expect(page.locator('[data-disclosure-panel]')).toHaveCount(0);

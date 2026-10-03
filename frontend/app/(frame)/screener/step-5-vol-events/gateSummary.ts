@@ -250,7 +250,9 @@ export function formatRulesStripData(args: {
   if (ivThresholds && ivThresholds.rank_pass_max !== null) {
     const passMax = ivThresholds.rank_pass_max;
     const cautionMax = ivThresholds.rank_caution_max;
-    if (cautionMax === null) {
+    if (cautionMax !== null && passMax >= cautionMax) {
+      rankInterval = `≤ ${passMax} → PASS; > ${passMax} → REJECT; CAUTION: no reachable interval`;
+    } else if (cautionMax === null) {
       rankInterval = `≤ ${passMax} → PASS; above → REJECT`;
     } else {
       rankInterval = `≤ ${passMax} → PASS; ≤ ${cautionMax} → CAUTION; above → REJECT`;
@@ -262,7 +264,7 @@ export function formatRulesStripData(args: {
   if (ivThresholds && ivThresholds.abs_pass_max !== null) {
     const passMax = ivThresholds.abs_pass_max;
     const cautionMax = ivThresholds.abs_caution_max;
-    if (cautionMax !== null && passMax > cautionMax) {
+    if (cautionMax !== null && passMax >= cautionMax) {
       absInterval = `≤ ${passMax}% → PASS; > ${passMax}% → REJECT; CAUTION: no reachable interval`;
     } else if (cautionMax === null) {
       absInterval = `≤ ${passMax}% → PASS; above → REJECT`;
@@ -304,7 +306,7 @@ export function rowDecidingReason(
   if (gate === 'PASS') return 'No adverse driver';
   const ivNoun = ivBasis === 'rank' ? 'IV rank' : 'IV';
   if (drivers.iv && drivers.event) {
-    const ivText = drivers.ivMissing ? 'no volatility reading' : ivNoun;
+    const ivText = drivers.ivMissing ? 'No volatility reading' : ivNoun;
     return `${ivText} and event proximity`;
   }
   if (drivers.iv) {
@@ -406,7 +408,7 @@ export function formatRowExplanation(args: {
 
     if (passMax === null) {
       ivRuleExplanation = 'Ungated basis → PASS';
-    } else if (cautionMax !== null && passMax > cautionMax) {
+    } else if (cautionMax !== null && passMax >= cautionMax) {
       ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; > ${passMax}${unitSuffix} → REJECT; CAUTION: no reachable interval`;
     } else if (cautionMax === null) {
       ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; above → REJECT`;
@@ -428,6 +430,8 @@ export function formatRowExplanation(args: {
     eventRuleExplanation = 'No event date available; existing gate applies no event penalty';
   } else if (eventWindow) {
     eventRuleExplanation = `< ${eventWindow.reject_days}d → REJECT; < ${eventWindow.caution_days}d → CAUTION; else → PASS`;
+  } else {
+    eventRuleExplanation = 'No event window configured for this horizon';
   }
 
   return {
