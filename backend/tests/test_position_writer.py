@@ -120,6 +120,9 @@ async def test_the_router_passes_its_own_fetchers_so_its_patches_land(Session):
     `app.routers.portfolio`. If the router stopped passing them, those patches
     would miss and the suite would reach the network. Pinned here directly."""
     router_quote = AsyncMock(return_value={"price": 11.11})
+    # Asserted below, not relied on to raise: the writer runs its fetches
+    # inside `except Exception`, so a side_effect here would be swallowed.
+    writer_quote = AsyncMock(return_value=None)
 
     async def _get_db() -> AsyncGenerator[AsyncSession, None]:
         async with Session() as s:
@@ -130,13 +133,13 @@ async def test_the_router_passes_its_own_fetchers_so_its_patches_land(Session):
     test_app.dependency_overrides[get_db] = _get_db
     with (
         patch("app.routers.portfolio.fetch_contract_quote_async", new=router_quote),
-        patch("app.services.position_writer.fetch_contract_quote_async",
-              new=AsyncMock(side_effect=AssertionError("the writer's default was used"))),
+        patch("app.services.position_writer.fetch_contract_quote_async", new=writer_quote),
     ):
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://t") as c:
             r = await c.post("/api/portfolio", json=_body())
 
     assert r.status_code == 201, r.text
+    writer_quote.assert_not_awaited()
     assert router_quote.await_count == 1
     assert r.json()["entryPrice"] == 11.11, "the live quote from the router's fetcher is stored"
 
