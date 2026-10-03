@@ -11,6 +11,7 @@ import { contractScoreTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { buildGrading, gradingToCtx } from '@/lib/contractGrading';
+import { missingCardContracts, withCardContract } from '@/lib/step6CardContract';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { contractLabel, type ContractGrading, type OptionContract, type TradeCardData } from '@/types/domain';
@@ -94,6 +95,10 @@ export default function Step6Page() {
   // so a star records exactly the inputs that graded the row on screen even if
   // scanResult is replaced while Step 6 is mounted.
   const [gradingBySymbol, setGradingBySymbol] = useState<Record<string, ContractGrading>>({});
+  // Per symbol, the trade card's own contract when Step 6 had to fetch it
+  // past max price / limit (lib/step6CardContract.ts). Marked in the table,
+  // never Recommended, never auto-picked.
+  const [rescuedBySymbol, setRescuedBySymbol] = useState<Record<string, string[]>>({});
   const [expanded, setExpanded] = useState<string>('');
   const [pick, setPick]         = useState<string>('');
   const [sortKey, setSortKey]   = useState<SortKey>('score');
@@ -147,19 +152,55 @@ export default function Step6Page() {
         }, signal))
       );
       if (signal?.aborted) return;
+      const rows = results.map((r) => r ?? []);
       const bySymbol: Record<string, OptionContract[]> = {};
       const gradingMap: Record<string, ContractGrading> = {};
-      candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; gradingMap[c.symbol] = gradings[i]!; });
+      candidates.forEach((c, i) => { bySymbol[c.symbol] = rows[i] ?? []; gradingMap[c.symbol] = gradings[i]!; });
       setLocalContractsBySymbol(bySymbol);
       setGradingBySymbol(gradingMap);
       setContractsBySymbol(bySymbol);
+      setRescuedBySymbol({});
+      // The selection shown is the user's OWN stored pick whenever there is
+      // one -- it is what Step 7 sends -- even while its row is not (yet) in
+      // the table: a rescued card contract arrives below, and until then (or
+      // if the rescue fails) no row is shown selected rather than a row Step
+      // 7 will not trade. With no stored pick, the auto-pick is from the
+      // FILTERED rows only: a rescued card contract is outside the user's max
+      // price / limit and is never chosen for them. No row: no stale id.
       const firstSymbol = candidates[0]?.symbol ?? '';
       const storedPick = pickedContracts[firstSymbol];
-      const first = storedPick
-        ? bySymbol[firstSymbol]?.find((c) => c.id === storedPick) ?? results[0]?.[0]
-        : results[0]?.[0];
-      if (first) setPick(first.id);
+      setPick(storedPick ?? rows[0]?.[0]?.id ?? '');
       if (candidates[0]) setExpanded(candidates[0].symbol);
+      setRefreshing(false);
+
+      // The card's own contract, when max_price or limit cut it: asked for by
+      // expiry + strike, which the backend exempts from both, with the SAME
+      // grading as its table, and appended once the table is already on
+      // screen. A failure leaves the table as fetched -- it is never what
+      // makes Step 6 read as offline.
+      const missing = missingCardContracts(candidates, rows, right);
+      if (missing.length === 0) return;
+      const rescued = await Promise.all(missing.map((m) =>
+        api.getContracts(candidates[m.index]!.symbol, right, {
+          ...gradingToCtx(gradings[m.index]),
+          direction:     context?.direction ?? 'Bullish',
+          horizon:       context?.horizon ?? 'swing',
+          expiry:        m.expiry,
+          strikes:       [m.strike],
+        }, signal).catch(() => [] as OptionContract[])));
+      if (signal?.aborted) return;
+      const merged: Record<string, OptionContract[]> = { ...bySymbol };
+      const rescuedIds: Record<string, string[]> = {};
+      missing.forEach((m, k) => {
+        const sym = candidates[m.index]!.symbol;
+        const next = withCardContract(merged[sym] ?? [], rescued[k] ?? [], m.id);
+        if (next.length > (merged[sym] ?? []).length) rescuedIds[sym] = [m.id];
+        merged[sym] = next;
+      });
+      if (Object.keys(rescuedIds).length === 0) return;
+      setLocalContractsBySymbol(merged);
+      setContractsBySymbol(merged);
+      setRescuedBySymbol(rescuedIds);
     } catch {
       if (!signal?.aborted) setOffline(true);
     } finally {
@@ -245,8 +286,9 @@ export default function Step6Page() {
             const COLUMNS    = isSpread ? COLUMNS_SPREAD : COLUMNS_SINGLE;
 
             // Recommended is always the highest-score contract regardless of active sort column.
+            const rescuedIds  = rescuedBySymbol[candidate.symbol] ?? [];
             const byScore     = sortContracts(contracts, 'score', 'desc');
-            const recommended = byScore[0];
+            const recommended = byScore.find((c) => !rescuedIds.includes(c.id));
             // User sort applies to the remaining (chain) contracts.
             const sorted = sortContracts(contracts, sortKey, sortDir);
             const chain  = sorted.filter((c) => c.id !== recommended?.id);
@@ -269,7 +311,14 @@ export default function Step6Page() {
                   className={extra?.className}
                 >
                   <ContractStar contractId={c.id} grading={gradingBySymbol[candidate.symbol]} size="sm" />
-                  <Data size={13} weight={500}>{contractLabel(c)}</Data>
+                  <Data size={13} weight={500}>
+                    {contractLabel(c)}
+                    {rescuedIds.includes(c.id) && (
+                      <span title="The trade card's own contract. It was not in the filtered table -- above your max contract price, past the contracts-per-chain limit, or on a different expiry from the one this table lists -- and is shown so you can still see and pick it.">
+                        <Text size={10} tone="caution">{' card · not in filtered table'}</Text>
+                      </span>
+                    )}
+                  </Data>
                   <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
                   <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
                   <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
@@ -326,7 +375,9 @@ export default function Step6Page() {
                         <Text size={10} weight={500}>{badge}</Text>
                       </span>
                     )}
-                    <Text size={11} tone="secondary">{contracts.length} contracts</Text>
+                    <Text size={11} tone="secondary">
+                      {contracts.length - rescuedIds.length} contracts{rescuedIds.length > 0 ? ' + card' : ''}
+                    </Text>
                     <span className={`${tbl.chevron} ${isOpen ? tbl.chevronOpen : ''}`} aria-hidden>&#x203A;</span>
                   </button>
                   <button
