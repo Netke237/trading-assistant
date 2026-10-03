@@ -231,12 +231,16 @@ async def _book(session, mocker, strategy, quote):
 
 
 @pytest.mark.asyncio
-async def test_a_market_arm_the_fire_approved_is_not_over_exposure_at_booking(session, mocker):
+async def test_a_market_arm_with_no_drift_is_not_over_exposure_at_booking(session, mocker):
+    """The fire approved 12 x mid 3.00 and nothing moved by the booking: the
+    booking does not contradict the fire. (Audit round 3, R3-F1 narrowed
+    R2-F6's version of this test, which also carried a 0.40 booking spread --
+    see the MKT tests below.)"""
     s = _strategy(order_type="MKT", limit_price=None, portfolio_value=100_000.0)  # 12 x mid 3.00
     AutoTradeService._check_exposure(s, [], s.portfolio_value)  # 3,600 <= 3,750: the fire approves
-    out = await _book(session, mocker, s, dict(_QUOTE))     # booking quote: mid 3.00, spread 0.40
+    out = await _book(session, mocker, s, {**_QUOTE, "spread": None})  # booking: mid 3.00, no spread
     assert out.booked is True, out
-    assert out.over_exposure is False, "the booking invented a spread the arm never carried"
+    assert out.over_exposure is False
 
 
 @pytest.mark.asyncio
@@ -257,3 +261,93 @@ async def test_the_booking_still_flags_an_arm_the_basis_does_not_fit(session, mo
     out = await _book(session, mocker, s, dict(_QUOTE))
     assert out.booked is True
     assert out.over_exposure is True
+
+
+# ── Audit round 3, R3-F1: a MKT arm's booking still sees the real fill ──────
+#
+# R2-F6 judged EVERY armed order at the armed basis at booking. For a MKT arm
+# that is the armed mid, so a fill hours later (POST /auto-trade/fire has no
+# age bound) at 4.00 x 12 = $4,800 -- 128% of the $3,750 cap -- booked with
+# over_exposure False and no page. A MKT booking is now judged at
+# max(armed basis, booking-time fill basis), the latter from the live quote via
+# premium_cap_basis (ask, else mid + spread/2, else mid). LMT keeps R2-F6's
+# one basis: a fill cannot exceed the limit.
+
+@pytest.mark.asyncio
+async def test_r3f1_a_market_arm_filled_after_drift_is_flagged_and_pages(session, mocker):
+    from app.services import auto_trade_booking as atb
+    s = _strategy(order_type="MKT", limit_price=None, portfolio_value=100_000.0)  # 12 x mid 3.00
+    AutoTradeService._check_exposure(s, [], s.portfolio_value)  # 3,600 <= 3,750: the fire approves
+    page = mocker.spy(atb, "_alert_over_exposure")
+    out = await _book(session, mocker, s, {**_QUOTE, "price": 4.00, "spread": None})
+    assert out.booked is True, out
+    assert out.over_exposure is True, "12 x 4.00 = 4,800 is 128% of the 3,750 cap"
+    assert page.call_count == 1
+    from sqlalchemy import select
+    from app.models import PortfolioPositionModel
+    row = (await session.execute(select(PortfolioPositionModel))).scalars().one()
+    assert row.entry_price == pytest.approx(4.00) and row.qty == 12
+
+
+@pytest.mark.asyncio
+async def test_r3f1_a_market_arm_is_judged_at_the_booking_ask_when_wider(session, mocker):
+    """Booking quote mid 3.00, spread 0.40: a market order fills at the ask
+    (3.20), 12 x 320 = 3,840 > 3,750. This is a real over-cap fill the fire's
+    mid basis understated (premium_cap_basis documents it), so it is flagged."""
+    s = _strategy(order_type="MKT", limit_price=None, portfolio_value=100_000.0)
+    AutoTradeService._check_exposure(s, [], s.portfolio_value)
+    out = await _book(session, mocker, s, dict(_QUOTE))
+    assert out.booked is True, out
+    assert out.over_exposure is True
+
+
+@pytest.mark.asyncio
+async def test_r3f1_a_market_arm_is_never_judged_below_its_armed_basis(session, mocker):
+    """The armed basis is a floor: a booking quote that fell (mid 2.50) does
+    not hide a quantity the armed basis does not fit (13 x 3.00 = 3,900)."""
+    s = _strategy(order_type="MKT", limit_price=None, quantity=13, portfolio_value=100_000.0)
+    out = await _book(session, mocker, s, {**_QUOTE, "price": 2.50, "spread": None})
+    assert out.booked is True, out
+    assert out.over_exposure is True
+
+
+@pytest.mark.asyncio
+async def test_r3f1_a_market_arm_whose_quote_fell_is_not_flagged(session, mocker):
+    s = _strategy(order_type="MKT", limit_price=None, portfolio_value=100_000.0)  # 12 x 3.00
+    out = await _book(session, mocker, s, {**_QUOTE, "price": 2.50, "spread": None})
+    assert out.booked is True, out
+    assert out.over_exposure is False
+
+
+@pytest.mark.asyncio
+async def test_r3f1_a_market_arm_with_no_live_quote_is_judged_at_its_armed_basis(session, mocker):
+    s = _strategy(order_type="MKT", limit_price=None, portfolio_value=100_000.0)  # 12 x 3.00
+    out = await _book(session, mocker, s, None)
+    assert out.booked is True, out
+    assert out.over_exposure is False
+
+
+@pytest.mark.asyncio
+async def test_r3f1_a_limit_arm_keeps_the_one_armed_basis_after_drift(session, mocker):
+    """R2-F6 unchanged for LMT: the booking quote drifted to 4.00 with a 0.40
+    spread, but an LMT order cannot fill above its 3.10 limit, so the booking
+    judges at max(armed mid, limit) = 3.10 -> 12 x 310 = 3,720, not flagged."""
+    from app.services import auto_trade_booking as atb
+    s = _strategy(limit_price=3.10, portfolio_value=100_000.0)
+    AutoTradeService._check_exposure(s, [], s.portfolio_value)
+    page = mocker.spy(atb, "_alert_over_exposure")
+    out = await _book(session, mocker, s, {**_QUOTE, "price": 4.00})
+    assert out.booked is True, out
+    assert out.over_exposure is False
+    assert page.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_create_position_refuses_both_a_basis_and_a_floor(session):
+    from app.services.position_writer import create_position
+    from app.services import auto_trade_booking as atb
+    from app.services.auto_trader import FiredOrder
+    body = atb._build_body(FiredOrder(result=None, strategy=_strategy(), attempt_id="A1"), "REC-X")
+    with pytest.raises(ValueError):
+        await create_position(body, session, cap_basis=3.10, cap_basis_floor=3.00,
+                              enforce_pre_trade_gates=False)

@@ -216,16 +216,27 @@ async def create_position(
     enforce_pre_trade_gates: bool = True,
     stop_required: bool = False,
     cap_basis: Optional[float] = None,
+    cap_basis_floor: Optional[float] = None,
 ) -> WriteOutcome:
     """Persist a position from a create request. See the module docstring.
 
     `cap_basis`: the per-contract premium the D5 cap is judged at, when the
     caller has ALREADY judged the order at one -- the auto-trade booking passes
-    the fire's `auto_trader.armed_cap_basis` so the two cannot disagree (audit
-    round 2, R2-F6). None (every other caller): derived here from the stored
-    entry, the order fields and the save-time live spread. The STORED entry is
-    unaffected either way.
+    the fire's `auto_trader.armed_cap_basis` for an LMT arm so the two cannot
+    disagree (audit round 2, R2-F6). None (every other caller): derived here
+    from the stored entry, the order fields and the save-time live spread.
+
+    `cap_basis_floor`: judge at max(floor, the basis derived here) instead --
+    the auto-trade booking of a MKT arm (audit round 3, R3-F1). A market order
+    fills at the booking-time price, which can be far above the armed mid the
+    fire judged (the manual fire has no age bound), so the derived basis must
+    still be read; the armed basis is the floor so a quote that fell never
+    judges below what the fire approved. Mutually exclusive with `cap_basis`.
+
+    The STORED entry is unaffected either way.
     """
+    if cap_basis is not None and cap_basis_floor is not None:
+        raise ValueError("create_position: pass cap_basis OR cap_basis_floor, not both")
     # Call-time defaults (P1a): the module globals, looked up NOW, so a patch
     # on this module's names lands. See the module docstring.
     if quote_fetcher is None:
@@ -464,6 +475,8 @@ async def create_position(
             cap_basis = premium_cap_basis(
                 entry_price, body.orderType, body.orderLimitPrice, spread=live_spread,
             )
+            if cap_basis_floor is not None:
+                cap_basis = max(float(cap_basis_floor), cap_basis)
         risk = check_position_risk(
             symbol=body.symbol,
             contract_id=body.contract,

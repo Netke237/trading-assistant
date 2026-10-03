@@ -213,9 +213,11 @@ def _build_body(fired: FiredOrder, rec_id: str) -> PortfolioPositionCreate:
         pickedStopBasis=s.picked_stop_basis,
         pickedAt=s.picked_at,
         # Audit round 1, F1: the order that was placed. Since round 2 (R2-F6)
-        # the cap basis itself is passed to `create_position` as `cap_basis`
-        # (`auto_trader.armed_cap_basis`, the fire's), so these two are the
-        # record of the order rather than what the booking judges from.
+        # an LMT arm's cap basis is passed to `create_position` as `cap_basis`
+        # (`auto_trader.armed_cap_basis`, the fire's), so for LMT these two are
+        # only the record of the order. For a MKT arm (round 3, R3-F1) the
+        # armed basis is a floor and `create_position` still derives the
+        # booking-time fill basis from `orderType` and the live quote.
         orderType=s.order_type,
         orderLimitPrice=s.limit_price,
     )
@@ -363,6 +365,17 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
         except Exception as exc:
             return await _refuse(fired, f"the position did not build: {exc}", True)
 
+        # Audit round 2, R2-F6 / round 3, R3-F1: the basis the FIRE judged this
+        # order at -- same function, same armed inputs. An LMT arm is judged at
+        # exactly that (it cannot fill above its limit). A MKT arm fills at the
+        # BOOKING-time price, which can have drifted far above the armed mid
+        # (the manual fire has no age bound), so its armed basis is only a
+        # floor under the basis derived from the booking-time live quote.
+        armed_basis = auto_trader_module.armed_cap_basis(fired.strategy)
+        if fired.strategy.order_type == "MKT":
+            basis_kwargs = {"cap_basis_floor": armed_basis}
+        else:
+            basis_kwargs = {"cap_basis": armed_basis}
         try:
             outcome = await create_position(
                 body, db,
@@ -374,11 +387,7 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
                 exit_plan_cfg_loader=load_exit_plan_cfg,
                 enforce_pre_trade_gates=False,
                 stop_required=True,
-                # Audit round 2, R2-F6: the basis the FIRE judged this order
-                # at -- same function, same armed inputs -- not one re-derived
-                # from the booking-time quote (an arm carries no spread, so
-                # the booking must not invent one).
-                cap_basis=auto_trader_module.armed_cap_basis(fired.strategy),
+                **basis_kwargs,
             )
         except Exception as exc:
             await _rollback(db, "a refused write")

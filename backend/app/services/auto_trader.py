@@ -268,10 +268,16 @@ def armed_cap_basis(strategy) -> float:
     Audit round 2, R2-F6: one function on the same armed inputs at both
     points. The booking used to re-judge at the BOOKING-time live mid plus a
     live spread the arm never carried, so the gates-off booking could flag
-    `over_exposure` (and page) on an order the fire had just approved. The arm
-    carries no ask or spread, so a MKT arm is judged at its mid at both points
-    (`portfolio_risk.premium_cap_basis` states that understatement); an LMT
-    arm at max(armed mid, limit).
+    `over_exposure` (and page) on an order the fire had just approved. An LMT
+    arm is judged at max(armed mid, limit) at both points -- its fill bound.
+
+    Audit round 3, R3-F1: a MKT arm carries no ask or spread, so the fire
+    judges it at its mid (`portfolio_risk.premium_cap_basis` states that
+    understatement), but a market order fills at the BOOKING-time price, and
+    `POST /auto-trade/fire` has no age bound. The booking therefore judges a
+    MKT arm at max(this basis, the basis derived from the booking-time live
+    quote) -- `create_position(cap_basis_floor=...)` -- so a fill after price
+    drift (or at an ask over the cap) is still flagged `over_exposure`.
     """
     from app.services.portfolio_risk import premium_cap_basis
     return premium_cap_basis(strategy.entry_premium, strategy.order_type, strategy.limit_price)
@@ -3019,7 +3025,9 @@ class AutoTradeService:
         # armed LIMIT when it is above the mid -- not the mid alone. A MKT arm
         # carries no ask or spread, so it is judged at the mid (see
         # premium_cap_basis); the arm path posts LMT today. Round 2, R2-F6:
-        # the booking judges at this SAME basis (`armed_cap_basis`).
+        # the booking judges an LMT arm at this SAME basis (`armed_cap_basis`);
+        # round 3, R3-F1: a MKT arm at max(this basis, the booking-time fill
+        # basis), so a fill after price drift is still flagged.
         basis = armed_cap_basis(strategy)
         result = check_position_risk(
             symbol=strategy.symbol,
