@@ -28,3 +28,22 @@ def test_sectors_router_uses_the_shared_lists():
     from app.routers import sectors
     assert sectors.SECTOR_ETFS is SECTOR_ETFS
     assert sectors.INDEX_ETFS is INDEX_ETFS
+
+
+# Audit round 1, F2. A fund that tracks ONE company carries that company's
+# earnings print (leveraged, for most of them) but has no earnings date of its
+# own, so as an "ETF" it was exempt from D4 and auto-fired through the print.
+# These must count as single stocks -- the safe direction.
+SINGLE_STOCK_FUNDS = (
+    "NVDL", "NVDU", "NVDX", "NVDD", "NVDQ", "NVDS",      # NVDA
+    "TSLL", "TSLR", "TSLT", "TSLQ", "TSLS", "TSLZ",      # TSLA
+    "AAPU", "AAPD", "AMZU", "AMZD", "GGLL", "GGLS",      # AAPL, AMZN, GOOGL
+    "METU", "METD", "MSFU", "MSFD", "CONL", "MSTU",      # META, MSFT, COIN, MSTR
+    "MSTX", "MSTZ", "PLTU", "AMDL", "AVL", "NFXL",       # MSTR, PLTR, AMD, AVGO, NFLX
+)
+
+
+def test_single_stock_leveraged_funds_are_not_etfs():
+    assert not is_etf("NVDL") and not is_etf("TSLL")
+    for s in SINGLE_STOCK_FUNDS:
+        assert s not in KNOWN_ETFS, s

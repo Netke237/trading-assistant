@@ -13,6 +13,16 @@ is the safe direction -- a stock wrongly treated as an ETF would PASS and
 auto-fire straight through an earnings print nobody looked up. To stop a
 missing ETF being capped, add it here.
 
+SINGLE-STOCK FUNDS ARE DELIBERATELY NOT HERE (audit round 1, F2). A fund that
+tracks ONE company -- NVDL / TSLL and the other 2x, 3x and inverse single-stock
+products -- has no earnings date of its own, yet its price moves on that
+company's print (leveraged, for most of them). Listing it here would exempt it
+from D4 and let it auto-fire straight through the print, the exact case this
+set's failure direction exists to prevent. It therefore counts as a stock.
+Do not add one. Funds whose largest holding is big but not the whole story
+(EWT/TSMC, EWY/Samsung, XLC/META+GOOGL, FNGU's ten equal-weighted names) stay:
+no single company's earnings drive their price.
+
 `SECTOR_ETFS` and `INDEX_ETFS` keep their order (routers/sectors.py renders the
 sector heatmap and index tiles in it) and are imported from here by that router.
 """
@@ -41,7 +51,8 @@ _OTHER_ETFS: frozenset[str] = frozenset({
     # Leveraged / inverse
     "SQQQ", "TQQQ", "SPXL", "SPXS", "SPXU", "UPRO", "SDS", "SSO", "QLD", "SOXL", "SOXS", "TNA",
     "TZA", "LABU", "LABD", "FAS", "FAZ", "TMF", "TBT", "NUGT", "JNUG", "UCO", "SCO", "BOIL",
-    "KOLD", "YINN", "YANG", "PSQ", "SH", "DOG", "RWM", "TECL", "FNGU", "NVDL", "TSLL",
+    # NOT NVDL / TSLL or any other single-stock fund: see the module docstring.
+    "KOLD", "YINN", "YANG", "PSQ", "SH", "DOG", "RWM", "TECL", "FNGU",
     # Spot crypto / crypto futures
     "IBIT", "FBTC", "GBTC", "ETHE", "BITO",
 })
