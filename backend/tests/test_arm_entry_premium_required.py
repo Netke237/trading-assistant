@@ -70,7 +70,9 @@ async def test_an_arm_with_a_non_positive_entry_premium_is_a_422(premium):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("order_type", ["MKT", "LMT"])
-@pytest.mark.parametrize("token", ["Infinity", "NaN"])
+# NaN / -Infinity are also refused by gt=0 alone; Infinity and 1e309 (parses to
+# inf) are the cases that guard allow_inf_nan=False (audit round 6, R6-F3).
+@pytest.mark.parametrize("token", ["Infinity", "1e309", "NaN", "-Infinity"])
 async def test_r5f1_a_non_finite_limit_price_is_a_422(order_type, token):
     """Audit round 5, R5-F1: the JSON parser accepts `Infinity`/`NaN`, and the
     arm schema let a non-finite limit through; on a MKT arm it reached the
