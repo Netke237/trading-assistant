@@ -161,7 +161,7 @@ describe('Step 6 contract score explanations & compact layout', () => {
     render(<Step6Page />);
     await screen.findByText(/XOM/);
     fireEvent.click(await screen.findByRole('button', { name: /^Explain score/ }));
-    expect(await screen.findByText('Explanation unavailable for this result')).toBeInTheDocument();
+    expect(within(await screen.findByRole('region', { name: 'Contract evaluation breakdown' })).getByText('Explanation unavailable for this result')).toBeInTheDocument();
     expect(screen.queryByText(/Liquidity 0%/)).not.toBeInTheDocument();
   });
 

@@ -168,5 +168,5 @@ export function getExplanationSummaryLine(c: OptionContract): string {
     const name = getComponentDisplayName(topLoss.name);
     return `Largest loss: ${name} (−${topLoss.lost_points.toFixed(1)} pts)`;
   }
-  return `Score ${exp.score}/100 cleared all rules`;
+  return `Score ${exp.score} (${exp.status}); no hard blockers recorded`;
 }

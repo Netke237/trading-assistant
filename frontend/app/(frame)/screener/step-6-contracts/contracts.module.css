@@ -231,3 +231,5 @@
 
 .contractRow > *, .headerRow > * { min-width: 0; overflow-wrap: anywhere; }
 .scoreCell { flex-wrap: wrap; }
+
+.contractRow [role="tooltip"] { overflow-wrap: anywhere; }

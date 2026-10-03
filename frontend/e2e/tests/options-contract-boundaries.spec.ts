@@ -69,3 +69,15 @@ test('normal put wire identity is accepted and below-minimum zoom width stays ga
   await page.setViewportSize({ width: 1200, height: 800 });
   await expect(page.getByRole('dialog', { name: 'Desktop required' })).toBeVisible();
 });
+
+test('score hover uses the same authoritative blocker as the expanded panel', async ({ page }) => {
+  await seed(page, wire.hard_boundary as OptionContract);
+  await page.locator('[role="button"][data-status]').first().getByText('REJECT', { exact: true }).hover();
+  await expect(page.getByRole('tooltip')).toContainText('Blocked: Spread too wide (spread_pct > 0.04761)');
+  const tooltipInside = await page.getByRole('tooltip').evaluate(tip => {
+    const table = tip.closest('[role="table"]')!.getBoundingClientRect();
+    const box = tip.getBoundingClientRect();
+    return box.left >= table.left - 1 && box.right <= table.right + 1;
+  });
+  expect(tooltipInside).toBe(true);
+});

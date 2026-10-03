@@ -241,6 +241,11 @@ describe('contractExplanation helpers', () => {
     };
     expect(getExplanationSummaryLine(withExp)).toContain('Largest loss: IV Attractiveness (−9.9 pts)');
 
+    // Clearing preferred bands does not imply clearing the aggregate PASS boundary.
+    expect(getExplanationSummaryLine({ ...withExp, explanation: {
+      ...mockValidExplanation, score: 64, status: 'CAUTION', largest_losses: [],
+    } })).toBe('Score 64 (CAUTION); no hard blockers recorded');
+
     // Blocked
     const blocked: OptionContract = {
       ...mockContract,

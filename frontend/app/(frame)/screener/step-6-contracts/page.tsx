@@ -9,8 +9,7 @@ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { ContractExplanationToggle } from '@/components/atoms/ContractExplanationToggle';
 import { ContractScoreExplanation } from '@/components/molecules/ContractScoreExplanation';
-import { contractScoreTooltip } from '@/lib/statusTooltips';
-import { validateExplanation } from '@/lib/contractExplanation';
+import { validateExplanation, getExplanationSummaryLine } from '@/lib/contractExplanation';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { buildGrading, gradingToCtx } from '@/lib/contractGrading';
@@ -385,7 +384,7 @@ export default function Step6Page() {
                   <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
                   <div className={tbl.scoreCell}>
                     <Data size={13} weight={500}>{c.score}</Data>
-                    <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
+                    <StatusBadge status={status} tooltip={getExplanationSummaryLine(c)} tooltipAlign="right" />
                   </div>
                   <ContractExplanationToggle
                     isOpen={!!expandedExplanations[c.id]}
