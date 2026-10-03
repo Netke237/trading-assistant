@@ -21,6 +21,14 @@
         }
       ],
       "task": "OPTIONS-CONTRACT-EXPLANATIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/trade-card-ui-core",
+      "claimed_at": "2026-10-03T23:28:02Z",
+      "expires_at": "2026-10-04T02:28:02Z",
+      "note": "CORE presentation only; latest main contains trading-review and verified leaves; no live overlap claim",
+      "task": "TRADE-CARD-UI-CORE"
     }
   ]
 }
