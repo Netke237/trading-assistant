@@ -64,10 +64,10 @@ Pre-freeze, Position parameters for Swing, no C- or A-scans. Regime: conviction 
 
 | Horizon | Dir | scanned | failed_history | failed_score | entered | failed_direction_unmeasured | measured entrants | failed_direction | rate | candidates |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Swing | Bearish (S1) | 518 | 2 | 171 | 345 | 0 | 345 | 7 | 2.0% | 0 |
-| Swing | Bullish (S2) | 518 | 2 | 395 | 121 | 0 | 121 | 4 | 3.3% | 3 |
-| Position | Bearish (S3) | 518 | 2 | 173 | 343 | 0 | 343 | 12 | 3.5% | 1 |
-| Position | Bullish (S4) | 518 | 2 | 328 | 188 | 0 | 188 | 28 | 14.9% | 9 |
+| Swing | Bearish (S1) | 518 | 2 | 171 | 345 | 0 | 345 | 7 | 2.03% | 0 |
+| Swing | Bullish (S2) | 518 | 2 | 395 | 121 | 0 | 121 | 4 | 3.31% | 3 |
+| Position | Bearish (S3) | 518 | 2 | 173 | 343 | 0 | 343 | 12 | 3.50% | 1 |
+| Position | Bullish (S4) | 518 | 2 | 328 | 188 | 0 | 188 | 28 | 14.89% | 9 |
 
 Rejected trend scores: S1 {0: 5, 15: 2}; S2 {0: 3, 15: 1}; S3 {0: 2, 15: 2, 30: 8}; S4 {0: 1, 15: 2, 30: 25}.
 Bearish − bullish gap (information only): Swing −1.3 pt, Position −11.4 pt.
@@ -111,8 +111,8 @@ line, and S1 produced 0 candidates. S3 is 3.5% with 1 candidate. One day decides
 
 **min_mult:** not shown yet. The table is gated on two valid days in different regimes (§5), and this
 day's regime line is above. The inputs below are read from the `*.result.json` files; the
-`scan-funnel.jsonl` rows do not carry candidate sentiment. Only scans with candidates are listed
-(O3 and S1 had none).
+`scan-funnel.jsonl` rows do not carry candidate sentiment. Only base and A-scans with candidates
+are listed: O3, S1 and A2 had none, and the C-scans are not listed.
 
 | Scan | Candidates | No sentiment | Conviction % values | Stability |
 |---|---|---|---|---|
@@ -150,9 +150,12 @@ day's regime line is above. The inputs below are read from the `*.result.json` f
 **A-block (usable):**
 - A1: 2 absolute rows, ROST 31.5 and WMT 27.2. Both sit below 40 / 50 / 60.
 - A2: 0 candidates (as O3). A2 lost the same 213 names to `no option chain` as O3; see the
-  expiry-gap observation below. Plan §5 uses only the first usable A-block, so the report's Swing
-  absolute-IV sample stays empty unless Kenneth repeats the A-block on a day outside the gap.
-  Information, not a rule: 0 candidates does not make the block unusable.
+  expiry-gap observation below. The report's Swing absolute-IV sample is therefore empty. This
+  block is usable, and under §5 ("at most one A-block feeds the report; the first valid one is
+  used") a later A-block would not replace it. Using a later one would need Kenneth to amend §5,
+  and even an A2 outside the gap may return 0 candidates. 0 candidates does not make the block
+  unusable.
+- Names removed by `max_iv_abs` 70 (`iv_too_high`) before the absolute sample: A1 22, A2 6.
 - Structures built: none (0/2 spread build).
 - ATM cross-check pair: WMT, ATM absolute 27.2 vs O1's picked-contract `detail_iv_abs` 28.3
   (rank 31.7).
@@ -185,35 +188,51 @@ Most of the Swing losses come from the expiry calendar:
 
 How much is calendar, out of each no-chain set:
 
-| Scan | No chain | Chain in a Position scan the same day (calendar) | No chain at any DTE (baseline) | Never reached a Position fetch |
+| Scan | No chain | Chain in a Position scan the same day (calendar) | No chain in the Position window (46–100 DTE) either (baseline) | Never reached a Position fetch |
 |---|---|---|---|---|
 | O3 | 213 | 193 | 10 | 10 |
 | O4 | 45 | 32 | 6 | 7 |
 
-- The baseline names are the usual ticker and delisting losses, the same ones O1 and O2 lose.
+- The baseline names also got no chain in the Position scans. Several are renamed, acquired or
+  dotted-class tickers.
   O3's are ANSS, AVB, BF.B, BRK.B, CTRA, EQR, FI, IPG, MMC and NVR; O4's are AXL, CTRA, DAY, EA,
   HOLX and MMC.
 - No name that reached the fetch in both O3 and O4 got a chain in one and not the other.
 - All three O4 picks are the Oct 23 weekly.
-- The cause is inferred from the code at the tag and this cross-scan pattern. Tradier was not
-  re-queried.
+- The expiry lists are cached per symbol per day (`market.py`), so O3/O4 reused the lists O1/O2
+  had already fetched successfully.
+- A2 ran about an hour later on a freshly restarted backend, with an empty cache. It fetched the
+  lists again and lost exactly the same 213 names as O3.
+- The cause is inferred from the code at the tag and this pattern. Tradier was not re-queried by
+  hand.
 
 **The gap repeats around every monthly expiry.** The weekdays with no third-Friday monthly in
-16–40 DTE are:
+16–40 DTE, through February 2027 (the next gap after that is 2027-03-04/05), are:
 - 2026-10-01 to 10-09: **every trading day of the week of 10-05 is a gap day**;
 - 2026-11-05 and 11-06;
 - 2026-12-03 and 12-04;
-- 2026-12-31 to 2027-01-08;
+- 2026-12-31 to 2027-01-08 (01-01 is an NYSE holiday);
 - 2027-02-04 and 02-05.
 
 Outside these, a monthly is in range and monthly-only names come back, for example from 2026-10-12,
 when Nov 20 is at 39 DTE.
 
 So the Swing O-scans' candidates and IV rows depend on the calendar day: in a gap they are
-weekly-listed names only. The day stays valid (§5), and every rule computes within one day. But the
-Swing rank rows pool across days, so a day in the gap and a day outside it feed different name
-populations into the same IV sample. This is for Kenneth's choice of day 2's date. Whether a
-5–15-day hold should accept the 15-DTE monthly is a separate product question, outside the freeze.
+weekly-listed names only. The day stays valid (§5). The floor, confidence, min_stock_score and
+liquidity readings compute per day, but the Swing IV rank rows pool across days.
+
+**What day 2's date changes:**
+- **Not affected:** the stock scans S1–S4, the Position C-scans (C1, C1b, C5, C5b, C6) and the
+  Position IV rows.
+- **Affected:** the Swing options scans (O3, O4): their candidates, their min_mult inputs and the
+  Swing IV rank rows.
+- **A gap day (any of 10-05 to 10-09)** gives the same weekly-listed-only population as day 1, so
+  the two days compare like for like.
+- **From 10-12 on,** monthly-only names come back, and the pooled Swing sample mixes the two
+  populations.
+
+Whether a 5–15-day hold should accept the 15-DTE monthly is a separate product question, outside the
+freeze.
 
 ---
 
