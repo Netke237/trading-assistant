@@ -15,14 +15,6 @@
       "expires_at": "2026-10-03T14:03:29Z",
       "note": "Piece 3: per-channel watch alert delivery; own plan + audits",
       "task": "WATCH-RESEND-PER-CHANNEL"
-    },
-    {
-      "agent": "claude",
-      "branch": "ccr-711cb93e-qs09dj",
-      "claimed_at": "2026-10-03T11:04:15Z",
-      "expires_at": "2026-10-03T14:04:15Z",
-      "note": "O4 cleanup: judged_size on RiskCheckResult, snapshot race, stop channel, test gaps",
-      "task": "POSITION-WRITER-O4-CLEANUP"
     }
   ]
 }
