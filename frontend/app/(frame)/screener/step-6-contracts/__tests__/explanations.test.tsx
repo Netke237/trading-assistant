@@ -26,7 +26,7 @@ const MOCK_EXPLANATION = {
   outcome: 'aggregate' as const,
   score: 72,
   status: 'PASS' as const,
-  weights: { liquidity: 0.25, spread: 0.25, delta: 0.2, dte: 0.15, iv: 0.15 },
+  weights: { liquidity: 0.25, spread: 0.25, delta: 0.2, dte: 0.15, iv_rank: 0.15 },
   pass_threshold: 65,
   caution_threshold: 45,
   unrounded_score: 72.4,
@@ -153,6 +153,16 @@ describe('Step 6 contract score explanations & compact layout', () => {
     expect(
       await screen.findByText(/Rules applied: Evaluation rules vary per contract/),
     ).toBeInTheDocument();
+  });
+
+  it('preserves fractional weights from the backend wire keys', async () => {
+    getContracts.mockResolvedValue([{ ...CONTRACT_A, explanation: {
+      ...MOCK_EXPLANATION,
+      weights: { ...MOCK_EXPLANATION.weights, iv_rank: 0.1525, liquidity: 0.2475 },
+    } }]);
+    setupStore();
+    render(<Step6Page />);
+    expect(await screen.findByText(/Liquidity 24.75%.*IV 15.25%/)).toBeInTheDocument();
   });
 
   it('renders candidate spread snapshot banner for spread candidates', async () => {

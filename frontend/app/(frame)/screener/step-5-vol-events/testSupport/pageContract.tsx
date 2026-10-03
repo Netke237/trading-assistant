@@ -14,7 +14,8 @@ import {
   type MissingReadingClaim, type GateCause, type GateCounts, type IvBand, type ThresholdsAvail,
 } from '../gateSummary';
 import { STATUS_LABEL, type Status } from '@/lib/status';
-import { formatIv, ivBasesOf, type IvBasis } from '@/lib/ivBasis';
+import { ivBasesOf, type IvBasis } from '@/lib/ivBasis';
+import { formatGateIv } from '../gateSummary';
 import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';
 import { useIvThresholdsStore, effectiveIvThresholds, ivOverrideFor } from '@/lib/ivThresholdsStore';
 import {
@@ -300,7 +301,7 @@ export const CELL_PINS: Record<string, (el: HTMLElement, row: HTMLElement) => vo
     const raw = el.getAttribute('data-iv-value') as string;
     const sym = (el.closest('[data-status]')?.querySelector('[data-cell="symbol"]')
       ?.getAttribute('data-value')) as string;
-    const shown = formatIv({ basis, value: raw === '' ? null : Number(raw) } as never, sym);
+    const shown = formatGateIv({ basis, value: raw === '' ? null : Number(raw) } as never, sym);
     expect(el.textContent).toBe(`${shown.text}${shown.suffix}`);
     expect(el.getAttribute('title')).toBe(shown.title);
   },
@@ -625,4 +626,3 @@ export function gateOf(symbol: string): Status {
   if (v === null) throw new Error(`row ${symbol} publishes no gate verdict`);
   return v as Status;
 }
-

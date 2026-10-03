@@ -111,11 +111,11 @@ function getGlobalRulesBanner(contractsBySymbol: Record<string, OptionContract[]
   }
 
   const w = firstExp.weights;
-  const wLiq = Math.round((w.liquidity ?? 0) * 100);
-  const wSpr = Math.round((w.spread ?? 0) * 100);
-  const wDel = Math.round((w.delta ?? 0) * 100);
-  const wDte = Math.round((w.dte ?? 0) * 100);
-  const wIv = Math.round((w.iv ?? 0) * 100);
+  const wLiq = (w.liquidity ?? 0) * 100;
+  const wSpr = (w.spread ?? 0) * 100;
+  const wDel = (w.delta ?? 0) * 100;
+  const wDte = (w.dte ?? 0) * 100;
+  const wIv = (w.iv_rank ?? 0) * 100;
 
   return `Rules applied: Liquidity ${wLiq}% · Spread ${wSpr}% · Delta ${wDel}% · DTE ${wDte}% · IV ${wIv}% | Status: Pass ≥ ${firstPass} · Caution ≥ ${firstCaution} · Reject < ${firstCaution}`;
 }

@@ -163,6 +163,9 @@ describe('contractExplanation helpers', () => {
   test('formatMetricValue handles nulls, percentages, units and bases', () => {
     expect(formatMetricValue(null)).toBe('—');
     expect(formatMetricValue(0.045, '%')).toBe('4.5%');
+    expect(formatMetricValue(2, '%')).toBe('200.0%');
+    expect(formatMetricValue(1, '%')).toBe('100.0%');
+    expect(formatMetricValue(0, '%')).toBe('0.0%');
     expect(formatMetricValue(45, 'days')).toBe('45d');
     expect(formatMetricValue(1500, 'contracts')).toBe('1,500');
     expect(formatMetricValue(35, '', 'rank')).toBe('35 (pctl)');
@@ -173,6 +176,7 @@ describe('contractExplanation helpers', () => {
     expect(formatComparison('<', 50)).toBe('< 50');
     expect(formatComparison('>=', 200)).toBe('≥ 200');
     expect(formatComparison('<=', 0.20, '%')).toBe('≤ 20.0%');
+    expect(formatComparison('<=', 2, '%')).toBe('≤ 200.0%');
   });
 
   test('getBlockingSummary summarizes blockers for blocked outcomes', () => {

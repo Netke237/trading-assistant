@@ -6,7 +6,7 @@
  * its tests import from here.
  */
 import type { Status } from '@/lib/status';
-import type { IvBasis } from '@/lib/ivBasis';
+import { formatIv, type IvBasis, type ResolvedIv } from '@/lib/ivBasis';
 import type { HorizonEventThresholds, ThresholdHorizon } from '@/lib/eventThresholdsStore';
 import type { HorizonIvThresholds } from '@/lib/ivThresholdsStore';
 import { gateDriverPhrase, type GateDrivers } from '@/lib/statusTooltips';
@@ -107,9 +107,33 @@ export type IvBand = { basis: IvBasis; passMax: number; cautionMax: number | nul
  * for the builder and for the rendered page. */
 export function ivThresholdSentence(bands: IvBand[]): string {
   return bands
-    .map((b) => `${b.basis === 'rank' ? 'IV rank' : 'IV'} \u2264 ${b.passMax} \u2192 PASS; `
-      + `\u2264 ${b.cautionMax ?? '\u2014'} \u2192 CAUTION; above \u2192 REJECT.`)
+    .map((b) => `${b.basis === 'rank' ? 'IV rank' : 'IV'} ${ivInterval(b.passMax, b.cautionMax)}.`)
     .join(' ');
+}
+
+function ivInterval(passMax: number, cautionMax: number | null, unit = ''): string {
+  if (cautionMax !== null && passMax >= cautionMax) {
+    return `≤ ${passMax}${unit} → PASS; > ${passMax}${unit} → REJECT; CAUTION: no reachable interval`;
+  }
+  return cautionMax === null
+    ? `≤ ${passMax}${unit} → PASS; above → REJECT`
+    : `≤ ${passMax}${unit} → PASS; ≤ ${cautionMax}${unit} → CAUTION; above → REJECT`;
+}
+
+function eventInterval(w: HorizonEventThresholds): string {
+  return w.reject_days >= w.caution_days
+    ? `< ${w.reject_days}d → REJECT; ≥ ${w.reject_days}d → PASS; CAUTION: no reachable interval`
+    : `< ${w.reject_days}d → REJECT; < ${w.caution_days}d → CAUTION; else → PASS`;
+}
+
+/** Preserve the classifier's observation; retain the usual decimal style when exact. */
+export function formatGateIv(iv: ResolvedIv, symbol?: string): ReturnType<typeof formatIv> {
+  const shown = formatIv(iv, symbol);
+  if (iv.value === null) return shown;
+  const text = iv.basis === 'absolute'
+    ? `${Number.isInteger(iv.value) ? iv.value.toFixed(1) : String(iv.value)}%`
+    : String(iv.value);
+  return { ...shown, text, title: shown.title.replace(shown.text, text) };
 }
 
 /* THE BOUNDARY IS PART OF THE CLAIM, and this sentence got it wrong while
@@ -124,8 +148,7 @@ export function ivThresholdSentence(bands: IvBand[]): string {
  * Stated now as the inequality the stack actually applies, the way the IV
  * sentence above states `<=` and the tooltip states `<`. */
 export function eventWindowSentence(w: HorizonEventThresholds): string {
-  return `Earnings < ${w.reject_days}d \u2192 REJECT; < ${w.caution_days}d \u2192 CAUTION; `
-    + `else \u2192 PASS.`;
+  return `Earnings ${eventInterval(w)}.`;
 }
 
 /** Whether both threshold records are in hand. `ready` does not require the
@@ -250,13 +273,7 @@ export function formatRulesStripData(args: {
   if (ivThresholds && ivThresholds.rank_pass_max !== null) {
     const passMax = ivThresholds.rank_pass_max;
     const cautionMax = ivThresholds.rank_caution_max;
-    if (cautionMax !== null && passMax >= cautionMax) {
-      rankInterval = `≤ ${passMax} → PASS; > ${passMax} → REJECT; CAUTION: no reachable interval`;
-    } else if (cautionMax === null) {
-      rankInterval = `≤ ${passMax} → PASS; above → REJECT`;
-    } else {
-      rankInterval = `≤ ${passMax} → PASS; ≤ ${cautionMax} → CAUTION; above → REJECT`;
-    }
+    rankInterval = ivInterval(passMax, cautionMax);
   }
 
   // Absolute interval
@@ -264,19 +281,13 @@ export function formatRulesStripData(args: {
   if (ivThresholds && ivThresholds.abs_pass_max !== null) {
     const passMax = ivThresholds.abs_pass_max;
     const cautionMax = ivThresholds.abs_caution_max;
-    if (cautionMax !== null && passMax >= cautionMax) {
-      absInterval = `≤ ${passMax}% → PASS; > ${passMax}% → REJECT; CAUTION: no reachable interval`;
-    } else if (cautionMax === null) {
-      absInterval = `≤ ${passMax}% → PASS; above → REJECT`;
-    } else {
-      absInterval = `≤ ${passMax}% → PASS; ≤ ${cautionMax}% → CAUTION; above → REJECT`;
-    }
+    absInterval = ivInterval(passMax, cautionMax, '%');
   }
 
   // Event interval
   let eventInterval = 'No event window';
   if (eventWindow) {
-    eventInterval = `Earnings < ${eventWindow.reject_days}d → REJECT; < ${eventWindow.caution_days}d → CAUTION; else → PASS`;
+    eventInterval = eventWindowSentence(eventWindow).slice(0, -1);
   }
 
   // Override notice
@@ -391,9 +402,7 @@ export function formatRowExplanation(args: {
   // IV Observed & Rule Explanation
   let ivObserved = 'Missing';
   if (hasIv && iv.value !== null) {
-    ivObserved = iv.basis === 'rank'
-      ? (Number.isInteger(iv.value) ? String(iv.value) : (iv.value as number).toFixed(2))
-      : `${(iv.value as number).toFixed(1)}%`;
+    ivObserved = formatGateIv(iv).text;
   }
 
   let ivRuleExplanation = '';
@@ -410,12 +419,8 @@ export function formatRowExplanation(args: {
 
     if (passMax === null) {
       ivRuleExplanation = 'Ungated basis → PASS';
-    } else if (cautionMax !== null && passMax >= cautionMax) {
-      ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; > ${passMax}${unitSuffix} → REJECT; CAUTION: no reachable interval`;
-    } else if (cautionMax === null) {
-      ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; above → REJECT`;
     } else {
-      ivRuleExplanation = `≤ ${passMax}${unitSuffix} → PASS; ≤ ${cautionMax}${unitSuffix} → CAUTION; above → REJECT`;
+      ivRuleExplanation = ivInterval(passMax, cautionMax, unitSuffix);
     }
   }
 
@@ -431,7 +436,7 @@ export function formatRowExplanation(args: {
   } else if (nextEventDays === null) {
     eventRuleExplanation = 'No event date available; existing gate applies no event penalty';
   } else if (eventWindow) {
-    eventRuleExplanation = `< ${eventWindow.reject_days}d → REJECT; < ${eventWindow.caution_days}d → CAUTION; else → PASS`;
+    eventRuleExplanation = eventInterval(eventWindow);
   } else {
     eventRuleExplanation = 'No event window configured for this horizon';
   }

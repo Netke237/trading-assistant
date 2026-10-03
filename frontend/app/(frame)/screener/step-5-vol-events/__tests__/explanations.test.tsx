@@ -216,6 +216,38 @@ describe('AC1: Sub-statuses and deciding reasons for all verdict combinations', 
 });
 
 describe('AC2: Exact numeric boundaries across horizons and bases', () => {
+  it.each([
+    [{ ivRank: null, iv: 34.01 }, '34.01%'],
+    [{ ivRank: 34.001 }, '34.001'],
+  ])('preserves the observed IV across the pass boundary: %j', async (iv, expected) => {
+    setupScan([makeCandidate('PRECISE', iv, null)]);
+    await mount();
+    expect(gateOf('PRECISE')).toBe('CAUTION');
+    const row = tableRowOf('PRECISE');
+    expect(row.querySelector('[data-cell="iv"]')?.textContent).toContain(expected);
+    fireEvent.click(row.querySelector('[data-cell="disclosure"] button')!);
+    expect(row.querySelector('[data-disclosure-panel]')?.textContent).toContain(expected);
+  });
+
+  it('describes null caution consistently in header and disclosure', async () => {
+    setupScan([makeCandidate('DIRECT', { ivRank: null, iv: 35 }, null)]);
+    const thresholds = { ...IV_SHIPPED, Swing: { ...IV_SHIPPED.Swing, abs_caution_max: null } };
+    useIvThresholdsStore.setState({ thresholds });
+    await mount();
+    expect(gateOf('DIRECT')).toBe('REJECT');
+    expect(screen.getByTestId('step-5').querySelector('[data-part="iv-thresholds"]')?.textContent)
+      .toBe('IV ≤ 34 → PASS; above → REJECT.');
+  });
+
+  it('describes a session ceiling above caution consistently in the header', async () => {
+    setupScan([makeCandidate('OVERRIDE', { ivRank: null, iv: 58 }, null)], 'Swing (5-15d)', undefined,
+      { Swing: { abs_pass_max: 60 } });
+    await mount();
+    expect(gateOf('OVERRIDE')).toBe('PASS');
+    expect(screen.getByTestId('step-5').querySelector('[data-part="iv-thresholds"]')?.textContent)
+      .toBe('IV ≤ 60 → PASS; > 60 → REJECT; CAUTION: no reachable interval.');
+  });
+
   it('IV boundaries: pass boundary (<= 34), caution boundary (<= 55) on Swing', async () => {
     const c1 = makeCandidate('P34', { ivRank: 34 }, null);
     const c2 = makeCandidate('C3401', { ivRank: 34.01 }, null);
@@ -273,6 +305,14 @@ describe('AC2: Exact numeric boundaries across horizons and bases', () => {
 
     expect(gateOf('COIN29')).toBe('REJECT');
     expect(gateOf('COIN30')).toBe('PASS');
+    expect(screen.getByTestId('step-5').querySelector('[data-part="event-window"]')?.textContent)
+      .toBe('Earnings < 30d → REJECT; ≥ 30d → PASS; CAUTION: no reachable interval.');
+    expect(screen.getByTestId('step-5').querySelector('[data-rules-strip]')?.textContent)
+      .toContain('Earnings < 30d → REJECT; ≥ 30d → PASS; CAUTION: no reachable interval');
+    const row = tableRowOf('COIN29');
+    fireEvent.click(row.querySelector('[data-cell="disclosure"] button')!);
+    expect(row.querySelector('[data-disclosure-panel]')?.textContent)
+      .toContain('< 30d → REJECT; ≥ 30d → PASS; CAUTION: no reachable interval');
 
     expectPageCopy();
   });

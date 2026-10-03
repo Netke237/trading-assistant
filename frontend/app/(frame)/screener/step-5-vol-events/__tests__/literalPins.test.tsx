@@ -49,9 +49,9 @@ describe('ivThresholdSentence — round 7 F1', () => {
       + 'IV rank ≤ 30 → PASS; ≤ 50 → CAUTION; above → REJECT.',
     );
   });
-  it('no caution ceiling prints a dash', () => {
+  it('no caution ceiling rejects directly after PASS without inventing CAUTION', () => {
     expect(ivThresholdSentence([{ basis: 'rank', passMax: 30, cautionMax: null }]))
-      .toBe('IV rank ≤ 30 → PASS; ≤ — → CAUTION; above → REJECT.');
+      .toBe('IV rank ≤ 30 → PASS; above → REJECT.');
   });
   it('no band, no sentence', () => {
     expect(ivThresholdSentence([])).toBe('');

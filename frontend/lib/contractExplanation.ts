@@ -67,9 +67,8 @@ export function formatMetricValue(
   if (!Number.isFinite(value)) return '—';
 
   if (unit === '%') {
-    // If value is a fraction (e.g. 0.045 for 4.5%, or 1.0 for 100%), multiply by 100
-    const pct = Math.abs(value) <= 1 && value !== 0 ? value * 100 : value;
-    return `${pct.toFixed(1)}%`;
+    // Spread observations use ratios at every magnitude; absolute IV uses its basis below.
+    return `${(value * 100).toFixed(1)}%`;
   }
   if (unit === 'days') {
     return `${Math.round(value)}d`;
@@ -94,7 +93,7 @@ export function formatComparison(operator: string, threshold: number | string, u
   if (!operator && !threshold) return '';
   const opSymbol = operator === '<=' ? '≤' : operator === '>=' ? '≥' : operator;
   let formattedThresh = typeof threshold === 'number' ? threshold.toString() : threshold;
-  if (typeof threshold === 'number' && unit === '%' && threshold <= 1 && threshold > 0) {
+  if (typeof threshold === 'number' && unit === '%') {
     formattedThresh = `${(threshold * 100).toFixed(1)}%`;
   } else if (unit) {
     formattedThresh = `${formattedThresh}${unit === '%' ? '%' : ' ' + unit}`;

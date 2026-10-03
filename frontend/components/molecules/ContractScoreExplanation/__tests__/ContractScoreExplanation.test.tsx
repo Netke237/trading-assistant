@@ -166,4 +166,15 @@ describe('ContractScoreExplanation component', () => {
     expect(screen.getByText('Volume too low')).toBeInTheDocument();
     expect(screen.getByText('volume:')).toBeInTheDocument();
   });
+
+  test('shows a 200 percent spread without changing its ratio unit', () => {
+    render(<ContractScoreExplanation id="spread-exp" contract={{
+      ...mockBaseContract,
+      explanation: { ...mockValidExplanation, components: {
+        ...mockValidExplanation.components,
+        spread: { ...mockValidExplanation.components.spread, observed: 2 },
+      } },
+    }} />);
+    expect(screen.getByText(/200\.0%/)).toBeInTheDocument();
+  });
 });

@@ -27,7 +27,7 @@ import { useScanStore } from '@/lib/scanStore';
 import {
   useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
 } from '@/lib/ivThresholdsStore';
-import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
+import { resolveIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
 import {
   useEventThresholdsStore, getEventWindow, type ThresholdHorizon,
 } from '@/lib/eventThresholdsStore';
@@ -36,7 +36,7 @@ import {
   MISSING_READING_CLAIM, ivThresholdSentence, eventWindowSentence,
   headSentence, causesSentence, missingReadingClause,
   thresholdsUnavailableSentence, ivOverrideSentence,
-  formatRulesStripData, formatRowExplanation,
+  formatRulesStripData, formatRowExplanation, formatGateIv,
   type ThresholdsAvail, type GateCounts, type GateCause, type IvBand, type GateSummary,
 } from './gateSummary';
 import { worstStatus, type Status } from '@/lib/status';
@@ -569,7 +569,7 @@ export default function Step5Page() {
 
         {gatedRows.map(({ r, c, iv, hasIv, ivSt, proxStatus, gate, drivers }) => {
           const pctl = c?.contractDetails?.ivPercentile;
-          const shownIv = formatIv(iv, r.symbol);
+          const shownIv = formatGateIv(iv, r.symbol);
           const isExpanded = expandedSymbols.has(r.symbol);
           const rowExplanation = formatRowExplanation({
             iv,
