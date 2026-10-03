@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "codex/trading-review-fixes",
-      "claimed_at": "2026-10-03T09:49:11Z",
-      "expires_at": "2026-10-03T12:49:11Z",
-      "note": "Continue user-authorized takeover: final independent audit, result records and PR",
-      "task": "TRADING-REVIEW-FIXES"
-    }
-  ]
+  "claims": []
 }
