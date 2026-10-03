@@ -37,14 +37,6 @@
       "expires_at": "2026-10-04T01:39:53Z",
       "note": "Reorganise BarrierRaceCard presentation only (own BarrierRaceCard/** only)",
       "task": "TRADE-CARD-BARRIER-PRESENTATION"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/trade-card-context-cards",
-      "claimed_at": "2026-10-03T22:41:03Z",
-      "expires_at": "2026-10-03T22:50:03Z",
-      "note": "Short context-cards completion update only; reconcile latest origin/main JSON",
-      "task": "TRADE-CARD-PRESENTATION-STATE"
     }
   ]
 }
