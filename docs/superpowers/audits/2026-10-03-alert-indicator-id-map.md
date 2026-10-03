@@ -33,3 +33,14 @@ Regression evidence: affected backend checks 199 passed. Fresh independent round
 Fresh reviewer: `indicator_map_audit_2`; reviewed only round-1 fixes against `295fc279` and their interactions. One gate finding: EMA(7) closes `[100.05,99.87,100.46,100.38,100.08,99.69,99.61,99.4,99.96]` compute `99.88875` in chart arithmetic versus `99.88874999999999` in backend arithmetic. Rounding gives 99.8888 versus 99.8887, causing false `>99.8887` and `crosses_above99.8887` triggers. Fixed by using the exact backend EMA recurrence for alert EMA and MACD line/signal rather than the algebraically equivalent chart recurrence. Explicit threshold and crossing tests cover the reproducer.
 
 Fresh independent round 3 reviews only this correction and its interactions. This is the code-stage hard cap. No clean declaration yet.
+
+
+## Independent code audit round 3 — cap reached, not clean
+
+Fresh reviewer: `indicator_map_audit_3`; reviewed the actual delta against `d51238a4`, including EMA arithmetic and MACD fast/slow/signal seed interactions. One unresolved gate finding:
+
+- `frontend/lib/alertIndicators.ts`, alertEMA seed summation: Python 3.12.14 compensated `sum` differs from JavaScript `reduce`. EMA(8) closes `[99.57,99,99.57,100.89,100.37,100.57,99.64,100.58]` produce browser 100.0238 and backend 100.0237. The actual browser evaluator falsely triggers `>100.0237` and persists the wrong reading. Seed arithmetic must be aligned for EMA and MACD, with the supported runtime resolved first (Docker uses Python 3.11 while this environment uses 3.12.14).
+
+Code-stage three-round cap reached without a clean round. Audit loop stopped; no fourth round and no unreviewed correction. Task is not done or mergeable. A split/runtime-alignment decision is required before continuing. Latest focused validation: frontend 179 passed, backend 199 passed, typecheck clean; these passing checks do not validate the known failing seed boundary.
+
+Independent tally: round 1 two findings fixed; round 2 one finding fixed; round 3 one finding outstanding.

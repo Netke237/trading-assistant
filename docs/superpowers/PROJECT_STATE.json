@@ -1635,7 +1635,7 @@
       "id": "ALERT-INDICATOR-ID-MAP",
       "name": "Stable parameterized indicator references across standard alert rule builder and browser/backend evaluation",
       "status": "shipped",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [],
       "verify": {
@@ -1644,7 +1644,7 @@
         "pattern": "export function computeAlertIndicatorPoints\\(",
         "note": "Presence probe only; behavior is exercised by the regression tests."
       },
-      "note": "BUILT on work, NOT MERGED. AUDIT CORRECTION: prior self-reviews were not qualifying audits under K-adversarial-audit-loop and do not count. Independent code audit round 1 found two gate defects (browser/backend rounding disagreement; nonfinite Bollinger history values), both fixed. Independent round 2 found one remaining gate defect: EMA recurrence operation order differed at a rounding boundary. Alert EMA and MACD now use backend _ema_seeded arithmetic; the exact threshold and crossing reproduction is covered. Fresh independent round 3 reviews this delta; code-stage cap is three. NOT DONE and NOT MERGEABLE until a qualifying round is clean. Evidence: docs/superpowers/audits/2026-10-03-alert-indicator-id-map.md. Saved references include parameters in explicit semantic order, browser evaluation no longer depends on active chart indicators, backend accepts custom periods and MACD parameters, saves reject empty/unsupported references. Opaque stored chart IDs require reselection, not guessed parameters. EMA includes its seed bar (period-1); later values unchanged. Full frontend 173 suites/4273 passed, focused delta 138 passed; full backend 4546 passed/1 skipped/1 stale golden failure, final affected rerun 195 passed after baseline-verified golden correction. Typecheck and API persistence checks passed. Production build remains blocked by Google Fonts network access; environment draft contains required domain additions and tested setup/startup instructions."
+      "note": "BUILT on work, NOT MERGED. NOT DONE / NOT MERGEABLE: independent code audit hit three-round stage cap without a clean round. Prior author self-reviews and initial audit-clean declaration were invalid and withdrawn, and are not counted. Independent round 1 found two gate defects (browser/backend comparison precision and nonfinite Bollinger history), fixed in d51238a4. Round 2 found EMA recurrence rounding-boundary disagreement, fixed in 675f6c1e. Round 3 found remaining seed summation disagreement: EMA(8) closes [99.57,99,99.57,100.89,100.37,100.57,99.64,100.58] gives browser100.0238 vs backend100.0237; >100.0237 incorrectly fires in browser. OPEN: align EMA/MACD seed summation and resolve supported backend runtime (Docker Python3.11 versus onboarding Python3.12.14). Stopped at the cap, no fourth audit or unreviewed fix. Next requires task split/runtime-alignment decision. Details and exact review scope: docs/superpowers/audits/2026-10-03-alert-indicator-id-map.md. Latest focused checks: frontend179 passed, backend199 passed, typecheck clean; these do not close the reproduced parity defect. Production build still blocked by Google Fonts runtime networking; setup/startup instructions and domain additions saved in environment draft."
     }
   ],
   "already_shipped": [
