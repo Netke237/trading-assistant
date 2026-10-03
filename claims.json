@@ -7,6 +7,14 @@
       "expires_at": "2026-10-03T08:01:47Z",
       "note": "Audit + merge day-1 reading (RESULTS-SHEET check, Swing expiry-gap note) to main per Kenneth",
       "task": "MEAS-MARKET-DATA-MEASUREMENT"
+    },
+    {
+      "agent": "claude",
+      "branch": "work",
+      "claimed_at": "2026-10-03T05:03:30Z",
+      "expires_at": "2026-10-03T08:03:30Z",
+      "note": "Make required independent audit workflow explicit in session instructions",
+      "task": "AUDIT-INDEPENDENCE-GUARD"
     }
   ]
 }
