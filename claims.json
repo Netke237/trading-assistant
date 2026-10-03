@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "codex/trading-review-retune",
+      "claimed_at": "2026-10-03T10:58:25Z",
+      "expires_at": "2026-10-03T13:58:25Z",
+      "note": "Run independently reviewed multiyear strategy search on captured configured basket, no automatic adoption",
+      "task": "TRADING-REVIEW-RETUNE"
+    }
+  ]
 }
