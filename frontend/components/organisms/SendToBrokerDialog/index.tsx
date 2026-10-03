@@ -159,8 +159,8 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
           <div>
             <Text size={14} weight={600}>Track basket in Portfolio</Text>
             <Text size={11} tone="secondary">
-              Track basket in Portfolio — no broker order is placed. Each row is saved as a MANUAL
-              position; send it from its own card to trade it.
+              Adds these to Portfolio as tracked rows — no broker order is placed. A tracked row reserves
+              its contract and symbol: to trade it instead, send from the card.
             </Text>
           </div>
           <button

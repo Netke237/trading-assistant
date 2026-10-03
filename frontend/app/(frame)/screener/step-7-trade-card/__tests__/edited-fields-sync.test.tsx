@@ -1151,6 +1151,13 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   /* Fix #5 (review, D6). The basket places NO broker order: it only saves
    * Portfolio rows. It used to store them `source: 'broker'` and toast "N sent
    * to broker", which made phantom positions that look like live fills. */
+  it('an EMPTY basket labels the (disabled) main button "Track basket", never "Send to broker"', async () => {
+    acceptAll();
+    await renderPage();
+    const btn = await screen.findByRole('button', { name: /^Track basket$/ });
+    expect(btn).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^Send to broker$/ })).not.toBeInTheDocument();
+  });
   it('a basket submit of two saved rows says "added to Portfolio", never "sent to broker", and stores source manual', async () => {
     const dailyBefore = useRiskStore.getState().dailyRecommendations;
     // Record what every basket row hands to addPosition. (`source` is a
@@ -1181,6 +1188,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(2));
       expect(await screen.findByText('2 added to Portfolio')).toBeInTheDocument();
       expect(screen.getByText(/No broker order was placed/)).toBeInTheDocument();
+      // The toast must say a tracked row RESERVES its contract (it blocks a later card send).
+      expect(screen.getByText(/Tracked rows reserve their contract/)).toBeInTheDocument();
+      expect(screen.queryByText(/send each one from its card/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/sent to broker/i)).not.toBeInTheDocument();
       // Every basket row was tagged manual, and none was routed to a broker.
       expect(added.map((a) => a.symbol).sort()).toEqual(['AAA', 'BBB']);

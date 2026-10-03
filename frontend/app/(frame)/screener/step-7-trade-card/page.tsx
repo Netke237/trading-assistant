@@ -5,8 +5,10 @@
  * Prev/Next cycles ranked candidates, basket pins multiple. Track basket
  * opens a review dialog; submitting it saves every row to the Portfolio tagged
  * MANUAL. It places NO broker order (review #5, D6) -- a card's own send
- * buttons do that. Successful submits surface a bottom-right toast with a
- * Portfolio link.
+ * buttons do that. A tracked row still reserves its contract and symbol (the
+ * caps and the duplicate refusal count it), so tracking blocks a later send of
+ * the same card until the row is closed. Successful submits surface a
+ * bottom-right toast with a Portfolio link.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -1392,7 +1394,7 @@ export default function Step7Page() {
   };
 
   const basketEmpty = basket.length === 0;
-  const sendLabel = basketEmpty ? 'Send to broker' : `Track basket (${basket.length})`;
+  const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
 
   return (
     <div className={styles.main}>
@@ -1400,8 +1402,9 @@ export default function Step7Page() {
         <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
         <Text size={13} tone="secondary">
-          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio — the
-          basket places no broker order; send each contract from its own card to trade it.
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
+          places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
+          its card instead of tracking it, or close the tracked row first.
         </Text>
       </div>
 
@@ -1495,7 +1498,7 @@ export default function Step7Page() {
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
             <Text size={11} tone="caution">
-              Computing the plan for an overridden contract in your basket — Send basket enables once it&apos;s ready.
+              Computing the plan for an overridden contract in your basket — Track basket enables once it&apos;s ready.
             </Text>
           )}
           {basketPlanErrors.map(({ symbol, error }) => (
@@ -1704,7 +1707,7 @@ export default function Step7Page() {
         <div className={toastStyles.toast} role="status" aria-live="polite">
           <div>
             <Text size={13} weight={500}>{toast.saved + toast.queued} added to Portfolio</Text>
-            <Text size={11} tone="caution">No broker order was placed — send each one from its card to trade it.</Text>
+            <Text size={11} tone="caution">No broker order was placed. Tracked rows reserve their contract — to trade one, close the row and send from its card.</Text>
             {toast.queued > 0 && <Text size={11} tone="secondary">{toast.queued} awaiting backend sync</Text>}
             {toast.adjusted.length > 0 && (
               <Text size={11} tone="caution">

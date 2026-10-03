@@ -247,6 +247,9 @@ describe('SendToBrokerDialog — tracks the basket, places no broker order (revi
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByText(/auto-send/i)).not.toBeInTheDocument();
     expect(screen.getByText(/no broker order is placed/)).toBeInTheDocument();
+    // A tracked row reserves its contract and symbol, so the card cannot also be sent.
+    expect(screen.getByText(/reserves its contract and symbol/)).toBeInTheDocument();
+    expect(screen.queryByText(/send it from its own card/i)).not.toBeInTheDocument();
   });
 
   it('submits drafts that carry no autoSend field', () => {
