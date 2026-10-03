@@ -1789,9 +1789,9 @@
     {
       "id": "TRADING-REVIEW-RETUNE-EVIDENCE",
       "name": "Trading review: configured basket multi-year proposals and evidence report",
-      "status": "in_progress",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "status": "shipped",
+      "audit_rounds": 1,
+      "audit_clean": true,
       "depends_on": [
         "TRADING-REVIEW-RETUNE"
       ],
@@ -1802,7 +1802,7 @@
         "pattern": "^# Multi-year retuning results",
         "note": "Report presence only; completed compute/provenance and independent financial review recorded in audit evidence."
       },
-      "note": "Full60-symbol configuredBullishsearch starting after independentlyclean harness. Separate financial artifact review target (no resetting harness counters). No strategy adoption or floor changes. Review report against raw proposals, hashes, snapshot, skipped grids and qualified cost metrics before completion. Full search launched after code round2 clean,5workers,60symbols,configuredBullish,7folds,570combinations per fold across5supported strategies;3empty grids explicitlyskipped. Completedfolds checkpointed. Raw outputs remain local pending final financial report review."
+      "note": "Completed full60-symbol Bullish run exit0:35folds5proposals,noneeligible;3unsupported emptygrids skipped. Evidence round1 retune_evidence_audit1 independently verified report numbers, costs, hashes, inputs and all checkpoints:zero gate findings. No adoption or RRfloor change. Evidence in docs/superpowers/reports/2026-10-03-multiyear-retuning.md; PR31 stacked on PR30."
     }
   ],
   "already_shipped": [
