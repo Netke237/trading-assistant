@@ -2890,13 +2890,18 @@ class AutoTradeService:
     @staticmethod
     def _check_exposure(strategy: ArmedStrategy, portfolio_snapshot: list, portfolio_value: float) -> None:
         """Raise RuntimeError if the armed order would breach exposure caps."""
-        from app.services.portfolio_risk import check_position_risk
+        from app.services.portfolio_risk import check_position_risk, premium_cap_basis
+        # Audit round 1, F1: judged at the price the order can fill at -- the
+        # armed LIMIT when it is above the mid -- not the mid alone. A MKT arm
+        # carries no ask or spread, so it is judged at the mid (see
+        # premium_cap_basis); the arm path posts LMT today.
+        basis = premium_cap_basis(strategy.entry_premium, strategy.order_type, strategy.limit_price)
         result = check_position_risk(
             symbol=strategy.symbol,
             contract_id=strategy.option_symbol,
             proposed_contracts=strategy.quantity,
-            entry_premium=strategy.entry_premium,
-            current_price=strategy.entry_premium,
+            entry_premium=basis,
+            current_price=basis,
             portfolio=portfolio_snapshot,
             portfolio_value=portfolio_value,
         )

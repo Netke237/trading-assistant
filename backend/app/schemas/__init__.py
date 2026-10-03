@@ -1095,11 +1095,22 @@ class PortfolioPositionCreate(BaseModel):
     pickedRowOptionPrice: Optional[float] = Field(alias="picked_row_option_price", default=None, gt=0, allow_inf_nan=False)
     pickedStopBasis: Optional[PickedStopBasis] = Field(alias="picked_stop_basis", default=None)
     pickedAt: Optional[PickedAt] = Field(alias="picked_at", default=None)
+    # Audit round 1, F1 -- the order this save is about to place, so the D5
+    # premium cap is judged at the price the order can FILL at
+    # (`portfolio_risk.premium_cap_basis`): max(mid, limit) for LMT, the ask
+    # (mid + half the live spread) for MKT. Create-only transport, never
+    # stored. Both None means no order follows the save (a tracked basket row,
+    # an older client): the cap is judged at the mid, as before. The stored
+    # entry price is unaffected either way.
+    orderType: Optional[Literal["LMT", "MKT"]] = Field(alias="order_type", default=None)
+    orderLimitPrice: Optional[float] = Field(alias="order_limit_price", default=None, gt=0, allow_inf_nan=False)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
         mapped = {}
         aliases = {
+            "order_type": "orderType",
+            "order_limit_price": "orderLimitPrice",
             "rec_id": "recId",
             "entry_price": "entryPrice",
             "entry_date": "entryDate",

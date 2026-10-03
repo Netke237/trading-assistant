@@ -378,6 +378,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // where it came from.
         quantity:        Math.max(1, contracts),
         order_type:      'LMT',
+        // Audit round 1, F1: BOTH travel and both matter. `entry_premium` is
+        // the mid the position books; the fire-time cap check judges
+        // max(entry_premium, limit_price) -- what this LMT order can pay --
+        // in `AutoTradeService._check_exposure` (portfolio_risk.premium_cap_basis).
         limit_price:     entryLimit ?? card.entry.limit,
         entry_premium:   entryPremium,
         // Piece 4 — undefined (omitted) rather than null when the card carries

@@ -667,6 +667,26 @@ describe('portfolioStore', () => {
   });
 
   describe('account value for backend POSTs', () => {
+    it('audit round 1 F1: persistPosition carries the order it precedes, so the server judges the premium cap at the fill basis', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-F1-1' }, undefined, { orderType: 'LMT', limitPrice: 3.6 });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.orderType).toBe('LMT');
+      expect(body.orderLimitPrice).toBe(3.6);
+      // The stored entry is untouched: the basis judges the cap only.
+      expect(body.entryPrice).toBe(abt.entryPrice);
+    });
+
+    it('audit round 1 F1: a save with no order sends no order fields (judged at the mid)', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-F1-2' });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.orderType).toBeUndefined();
+      expect(body.orderLimitPrice).toBeUndefined();
+    });
+
     it('persistPosition sends the configured account value, not the sum of premiums', async () => {
       const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
       (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;

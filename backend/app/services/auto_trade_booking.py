@@ -212,6 +212,11 @@ def _build_body(fired: FiredOrder, rec_id: str) -> PortfolioPositionCreate:
         pickedRowOptionPrice=s.picked_row_option_price,
         pickedStopBasis=s.picked_stop_basis,
         pickedAt=s.picked_at,
+        # Audit round 1, F1: the order that was placed, so the gates-off
+        # booking judges `over_exposure` on the same fill basis the fire-time
+        # `_check_exposure` used (portfolio_risk.premium_cap_basis).
+        orderType=s.order_type,
+        orderLimitPrice=s.limit_price,
     )
 
 

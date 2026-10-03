@@ -433,12 +433,22 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = accountValue(),
+  /** Audit round 1, F1 — the order this save precedes (Step 7's direct send).
+   *  The server judges the D5 premium cap at the price that order can FILL at
+   *  (`portfolio_risk.premium_cap_basis`: max(mid, limit) for LMT, the ask for
+   *  MKT), not at the stored mid. Create-only transport, never a field of the
+   *  position. Omitted means no order follows (judged at the mid). */
+  order?: { orderType: 'LMT' | 'MKT'; limitPrice: number | null },
 ): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }> {
   try {
+    const payload = {
+      ...toBackendPayload(p, portfolioValue),
+      ...(order ? { orderType: order.orderType, orderLimitPrice: order.limitPrice } : {}),
+    };
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toBackendPayload(p, portfolioValue)),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));

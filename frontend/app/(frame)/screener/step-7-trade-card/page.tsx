@@ -1130,7 +1130,12 @@ export default function Step7Page() {
         return;
       }
 
-      const saved = await persistPosition(pos);
+      // Audit round 1, F1: the save carries the order it precedes, so the
+      // server judges the D5 premium cap at what this order can PAY -- the
+      // edited limit when it is above the mid, the ask for a market order --
+      // and not at `pos.entryPrice`, the mid it stores. `limitPrice` is the
+      // very value the order below posts.
+      const saved = await persistPosition(pos, undefined, { orderType, limitPrice });
       // Unconfirmed: offline; a bare gateway 5xx (no JSON detail, so the create
       // may still be running); or a 2xx whose body did not parse (the page
       // cannot know whether the server resized). No order is sent. The create

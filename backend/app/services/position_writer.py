@@ -99,6 +99,7 @@ from app.services.portfolio_performance import _contract_multiplier
 from app.services.portfolio_risk import (
     EXCEEDS_MAX_CONTRACTS,
     check_position_risk,
+    premium_cap_basis,
     PortfolioPosition as RiskPosition,
 )
 
@@ -440,12 +441,25 @@ async def create_position(
             for p in db_positions
         ]
 
+        # Audit round 1, F1: the cap is judged at the price the order this
+        # save precedes can FILL at, not at the mid stored as the entry. The
+        # spread is read only from the live quote that set `entry_price`; with
+        # no live quote a MKT order is judged at the mid (premium_cap_basis
+        # documents that understatement). No order fields -> the mid, as before.
+        live_spread = (
+            live_quote.get("spread")
+            if isinstance(live_quote, dict) and live_entry_rounded and live_entry_rounded > 0
+            else None
+        )
+        cap_basis = premium_cap_basis(
+            entry_price, body.orderType, body.orderLimitPrice, spread=live_spread,
+        )
         risk = check_position_risk(
             symbol=body.symbol,
             contract_id=body.contract,
             proposed_contracts=body.qty,
-            entry_premium=entry_price,
-            current_price=entry_price,
+            entry_premium=cap_basis,
+            current_price=cap_basis,
             portfolio=portfolio,
             portfolio_value=body.portfolioValue,
         )
