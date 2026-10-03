@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "codex/watch-resend-expiry",
-      "claimed_at": "2026-10-03T05:32:40Z",
-      "expires_at": "2026-10-03T08:32:40Z",
-      "note": "Plan, build and independently audit queued watch-alert expiry on re-enable",
-      "task": "WATCH-RESEND-EXPIRY-ON-REENABLE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/trading-review-fixes",
       "claimed_at": "2026-10-03T05:41:42Z",
       "expires_at": "2026-10-03T08:41:42Z",
