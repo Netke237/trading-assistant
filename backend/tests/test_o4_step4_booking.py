@@ -773,3 +773,81 @@ async def test_p1a_22_every_booking_page_is_discrete(engine_and_session, env, mo
         await atb.book_fired_order(_fired(stop=None), s)
     assert spy.call_count == 1
     assert spy.call_args.kwargs == {"discrete": True}
+
+
+# ── PREMIUM-STOP-FALLBACK-ALIGN: an unapplied dollar stop pages ───────────
+
+@pytest.mark.asyncio
+async def test_an_armed_dollar_stop_at_or_above_the_fill_pages_and_keeps_the_arm_fraction(
+    engine_and_session, env,
+):
+    """Armed at $2.50 with a $2.25 stop (90%), filled at $2.00: $2.25 is a
+    total loss there, so the arm-time 0.90 is stored and the booking pages."""
+    env.quote.return_value = {"price": 2.00}
+    _, Session = engine_and_session
+    fired = _fired(premium_stop_dollar=2.25, premium_stop_pct=0.90)
+    async with Session() as s:
+        out = await atb.book_fired_order(fired, s)
+    assert out.booked is True and out.premium_stop_unapplied is True
+    [row] = await _rows(Session)
+    assert row.entry_price == 2.00
+    assert row.premium_stop_pct == pytest.approx(0.90)
+    call = next(c for c in env.notify.await_args_list
+                if c.kwargs["alert_type"] == "AUTO_TRADE_BOOKED_PREMIUM_STOP_UNAPPLIED")
+    assert call.kwargs["rec_id"] == "auto-trade-premium-stop-unapplied:AAPL"
+    reason = call.kwargs["reason"]
+    assert out.rec_id in reason and "$2.25" in reason and "$2.00" in reason
+    assert "total loss" in reason and "90.00%" in reason
+
+
+@pytest.mark.asyncio
+async def test_an_applied_dollar_stop_does_not_page_unapplied(engine_and_session, env):
+    env.quote.return_value = {"price": 2.00}
+    _, Session = engine_and_session
+    async with Session() as s:
+        out = await atb.book_fired_order(_fired(premium_stop_dollar=1.00), s)
+    assert out.booked is True and out.premium_stop_unapplied is False
+    assert "AUTO_TRADE_BOOKED_PREMIUM_STOP_UNAPPLIED" not in _alert_types(env.notify)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry, dollar, pct, stored, why, kept", [
+    # total loss at the entry, client fraction kept
+    (2.00, 2.25, 0.90, 0.90, "total loss", "90.00%"),
+    # total loss, no client fraction: inherits the global
+    (2.00, 2.25, None, None, "total loss", "inherits the global"),
+    # the dollar's ratio is sub-cent at the entry ($0.03 - $0.025 < $0.01)
+    (0.03, 0.025, None, None, "below $0.01", "inherits the global"),
+])
+async def test_the_writer_reports_an_unapplied_dollar_stop(
+    engine_and_session, entry, dollar, pct, stored, why, kept,
+):
+    _, Session = engine_and_session
+    body = atb._build_body(
+        _fired(entry_premium=entry, premium_stop_dollar=dollar, premium_stop_pct=pct),
+        "REC-AT-PS",
+    )
+    none = AsyncMock(return_value=None)
+    async with Session() as s:
+        out = await create_position(body, s, quote_fetcher=none, price_fetcher=none,
+                                    exit_plan_cfg_loader=lambda: {})
+    assert out.position.premium_stop_pct == (pytest.approx(stored) if stored else None)
+    assert out.premium_stop_unapplied is not None
+    assert why in out.premium_stop_unapplied and kept in out.premium_stop_unapplied
+
+
+@pytest.mark.asyncio
+async def test_the_writer_reports_nothing_when_the_dollar_applies_or_is_absent(engine_and_session):
+    _, Session = engine_and_session
+    none = AsyncMock(return_value=None)
+    kw = dict(quote_fetcher=none, price_fetcher=none, exit_plan_cfg_loader=lambda: {})
+    async with Session() as s:
+        out = await create_position(
+            atb._build_body(_fired(premium_stop_dollar=1.00), "REC-AT-A"), s, **kw)
+    assert out.position.premium_stop_pct == pytest.approx(0.40)
+    assert out.premium_stop_unapplied is None
+    async with Session() as s:
+        await s.execute(PortfolioPositionModel.__table__.delete())
+        await s.commit()
+        out = await create_position(atb._build_body(_fired(), "REC-AT-B"), s, **kw)
+    assert out.premium_stop_unapplied is None

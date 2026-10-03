@@ -69,11 +69,16 @@ jest.mock('@/lib/api', () => ({
 /* P1b-i -- the direct sends now SAVE FIRST, and a 2xx whose body carries no
  * positive `entryPrice` is treated as unconfirmed (no order is sent). So the
  * persist POST ECHOES its request body back, which carries the `entryPrice`
- * and `recId` the page sent; every other request keeps the old `{}` reply. */
+ * and `recId` the page sent; every other request keeps the old `{}` reply.
+ *
+ * `premiumStopPct` is answered NULL, as it always was before the card began
+ * sending its own fraction (PREMIUM-STOP-FALLBACK-ALIGN): the dropped-stop
+ * disclosure tests below rely on this reply reading as "the server stored no
+ * per-position stop". What the page POSTS is read off the request instead. */
 function echoFetch(): typeof fetch {
   return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
-      const body = JSON.parse(String(init.body));
+      const body = { ...JSON.parse(String(init.body)), premiumStopPct: null };
       return { ok: true, status: 201, json: async () => body };
     }
     return { ok: true, json: async () => ({}) };
@@ -299,6 +304,19 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
 
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     expect(usePortfolioStore.getState().positions[0].stop).toBe(CARD_INVALIDATION);
+  });
+
+  it('posts NO premium-stop fraction while the premium stop is untouched (inherit the global)', async () => {
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    expandLadder();
+    await placeLimit();
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const posts = (global.fetch as jest.Mock).mock.calls.filter(
+      ([url, init]) => String(url).endsWith('/api/portfolio') && (init as RequestInit | undefined)?.method === 'POST',
+    );
+    const body = JSON.parse((posts[posts.length - 1]![1] as RequestInit).body as string);
+    expect([body.premiumStopDollar, body.premiumStopPct]).toEqual([null, null]);
   });
 
   it('posts the EDITED entry limit as the order\'s limit_price, and says so on the button', async () => {
@@ -753,7 +771,17 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       );
       return JSON.parse((posts[posts.length - 1]![1] as RequestInit).body as string).premiumStopDollar;
     };
+    // PREMIUM-STOP-FALLBACK-ALIGN -- the fraction and the entry it is a
+    // fraction OF, as POSTED (the echo mock answers premiumStopPct null).
+    const lastPostedPct = () => {
+      const posts = (global.fetch as jest.Mock).mock.calls.filter(
+        ([url, init]) => String(url).endsWith('/api/portfolio') && (init as RequestInit | undefined)?.method === 'POST',
+      );
+      const b = JSON.parse((posts[posts.length - 1]![1] as RequestInit).body as string);
+      return [b.premiumStopPct, b.entryPrice];
+    };
     const directPremiumStop = lastPostedPremiumStop();
+    const directPct = lastPostedPct();
 
     cleanup();
     act(() => { usePortfolioStore.setState({ positions: [] }); });
@@ -769,6 +797,11 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     const basket = usePortfolioStore.getState().positions[0]!;
     const basketPremiumStop = lastPostedPremiumStop();
+    const basketPct = lastPostedPct();
+    // Both paths post the user's own fraction against the SAME entry they
+    // post: $0.90 of the $4.00 live mid.
+    expect(directPct).toEqual([0.9 / 4.0, 4.0]);
+    expect(basketPct).toEqual([0.9 / 4.0, 4.0]);
 
     // The three threaded fields agree across the two paths...
     expect(basket.stop).toBe(direct.stop);

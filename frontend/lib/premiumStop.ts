@@ -404,12 +404,20 @@ const DROP_REASON_TEXT: Record<PremiumStopDropReason, string> = {
   unknown: '(reason unavailable)',
 };
 
-/** The one wording for a dropped stop -- Step 7's save note and the Portfolio
- *  banner both use it. */
+/** The one wording for a dropped stop -- Step 7's save notes and the Portfolio
+ *  banner all use it.
+ *
+ *  `keptPct` (decision PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03): the
+ *  dollar could not be applied, but the server stored the card's own fraction
+ *  instead of falling back to the global -- so the ending names that fraction. */
 export function premiumStopDropText(
   requestedDollar: number | null | undefined,
   reason: PremiumStopDropReason,
+  keptPct?: number | null,
 ): string {
   const of = requestedDollar != null ? ` of $${requestedDollar.toFixed(2)}/share` : '';
-  return `Premium stop${of} could not be applied: ${DROP_REASON_TEXT[reason]} — this position inherits the global stop.`;
+  const ending = keptPct != null
+    ? `this position keeps your ${premiumStopPctLabel(keptPct)} of the premium as its stop instead.`
+    : 'this position inherits the global stop.';
+  return `Premium stop${of} could not be applied: ${DROP_REASON_TEXT[reason]} — ${ending}`;
 }
