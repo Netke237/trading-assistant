@@ -15,6 +15,14 @@
       "expires_at": "2026-10-03T08:19:26Z",
       "note": "Merge audit-clean review branch to main at user request",
       "task": "STEP3-PARAM-REACH"
+    },
+    {
+      "agent": "claude",
+      "branch": "work",
+      "claimed_at": "2026-10-03T05:20:52Z",
+      "expires_at": "2026-10-03T08:20:52Z",
+      "note": "User-authorized split: align alert seed arithmetic/runtime and audit before merge",
+      "task": "ALERT-INDICATOR-SEED-PARITY"
     }
   ]
 }
