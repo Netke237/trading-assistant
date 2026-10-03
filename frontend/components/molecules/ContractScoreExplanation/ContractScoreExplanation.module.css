@@ -208,3 +208,7 @@
   align-items: center;
   gap: 6px;
 }
+
+/* Exact comparisons and long unknown reason labels remain readable. */
+.blockerDetail, .blockerHeader, .metricRow, .contextualStrip { flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
+.blockerItem, .thresholds, .scorePill { min-width: 0; overflow-wrap: anywhere; }

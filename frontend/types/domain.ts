@@ -810,6 +810,8 @@ export interface ContractExplanation {
   soft_flags: string[];
   soft_fail_count: number;
   max_soft_fail_count: number;
+  hard_bounds?: Record<string, number>;
+  raw_inputs?: Record<string, number | null>;
 }
 
 // --- Option contracts ---

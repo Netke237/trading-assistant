@@ -155,6 +155,16 @@ describe('Step 6 contract score explanations & compact layout', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not fabricate zero weights for incomplete or future snapshots', async () => {
+    getContracts.mockResolvedValue([{ ...CONTRACT_A, explanation: { ...MOCK_EXPLANATION, weights: {} } }]);
+    setupStore();
+    render(<Step6Page />);
+    await screen.findByText(/XOM/);
+    fireEvent.click(await screen.findByRole('button', { name: /^Explain score/ }));
+    expect(await screen.findByText('Explanation unavailable for this result')).toBeInTheDocument();
+    expect(screen.queryByText(/Liquidity 0%/)).not.toBeInTheDocument();
+  });
+
   it('preserves fractional weights from the backend wire keys', async () => {
     getContracts.mockResolvedValue([{ ...CONTRACT_A, explanation: {
       ...MOCK_EXPLANATION,

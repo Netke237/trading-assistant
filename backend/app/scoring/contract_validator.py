@@ -553,7 +553,7 @@ def validate_contract(
                 "code": "spread_too_wide",
                 "label": "Spread too wide",
                 "metric": "spread_pct",
-                "observed": round(spread_pct, 4),
+                "observed": spread_pct,
                 "threshold": hr["max_bid_ask_spread_pct"],
                 "operator": ">",
             })
@@ -562,7 +562,7 @@ def validate_contract(
                 "code": "delta_too_low_far_otm",
                 "label": "Delta too low (far OTM)",
                 "metric": "delta",
-                "observed": round(delta_val, 4),
+                "observed": delta_val,
                 "threshold": hr["min_delta"],
                 "operator": "<",
             })
@@ -571,7 +571,7 @@ def validate_contract(
                 "code": "delta_too_high_deep_itm",
                 "label": "Delta too high (deep ITM)",
                 "metric": "delta",
-                "observed": round(delta_val, 4),
+                "observed": delta_val,
                 "threshold": hr["max_delta"],
                 "operator": ">",
             })
@@ -652,8 +652,8 @@ def validate_contract(
             "wire_name": "liquidity",
             "raw_score": liq_score,
             "weight": liq_w,
-            "contribution": round(liq_score * liq_w, 4),
-            "lost_points": round(liq_w * 100 - (liq_score * liq_w), 4),
+            "contribution": liq_score * liq_w,
+            "lost_points": liq_w * 100 - (liq_score * liq_w),
             "observed": volume,
             "observed_unit": "contracts",
             "basis": None,
@@ -670,9 +670,9 @@ def validate_contract(
             "wire_name": "spread",
             "raw_score": spread_score,
             "weight": spread_w,
-            "contribution": round(spread_score * spread_w, 4),
-            "lost_points": round(spread_w * 100 - (spread_score * spread_w), 4),
-            "observed": round(spread_pct, 4),
+            "contribution": spread_score * spread_w,
+            "lost_points": spread_w * 100 - (spread_score * spread_w),
+            "observed": spread_pct,
             "observed_unit": "%",
             "basis": None,
             "preferred_min": None,
@@ -684,9 +684,9 @@ def validate_contract(
             "wire_name": "delta",
             "raw_score": delta_score,
             "weight": delta_w,
-            "contribution": round(delta_score * delta_w, 4),
-            "lost_points": round(delta_w * 100 - (delta_score * delta_w), 4),
-            "observed": round(delta_val, 4),
+            "contribution": delta_score * delta_w,
+            "lost_points": delta_w * 100 - (delta_score * delta_w),
+            "observed": delta_val,
             "observed_unit": "",
             "basis": None,
             "preferred_min": sr["preferred_delta_min"],
@@ -698,8 +698,8 @@ def validate_contract(
             "wire_name": "dteFit",
             "raw_score": dte_score,
             "weight": dte_w,
-            "contribution": round(dte_score * dte_w, 4),
-            "lost_points": round(dte_w * 100 - (dte_score * dte_w), 4),
+            "contribution": dte_score * dte_w,
+            "lost_points": dte_w * 100 - (dte_score * dte_w),
             "observed": dte,
             "observed_unit": "days",
             "basis": None,
@@ -712,8 +712,8 @@ def validate_contract(
             "wire_name": "ivAttractiveness",
             "raw_score": iv_score,
             "weight": iv_w,
-            "contribution": round(iv_score * iv_w, 4),
-            "lost_points": round(iv_w * 100 - (iv_score * iv_w), 4),
+            "contribution": iv_score * iv_w,
+            "lost_points": iv_w * 100 - (iv_score * iv_w),
             "observed": iv_rank_val,
             "observed_unit": "%" if iv_basis_val == "absolute" else ("percentile" if iv_basis_val == "rank" else ""),
             "basis": iv_basis_val,
@@ -748,7 +748,7 @@ def validate_contract(
             + iv_score * iv_w
         )
         final_score = round(weighted)
-        unrounded_score = round(weighted, 4)
+        unrounded_score = weighted
         rounded_score = final_score
         outcome = "aggregate"
         if final_score >= pass_thresh:
@@ -783,6 +783,13 @@ def validate_contract(
         "soft_flags": list(soft_flags),
         "soft_fail_count": soft_fail_count,
         "max_soft_fail_count": hr["max_soft_fail_count"],
+        "hard_bounds": {
+            key: hr[key] for key in (
+                "min_volume", "min_open_interest", "max_bid_ask_spread_pct",
+                "min_delta", "max_delta", "min_dte", "max_dte", "min_stock_score",
+            )
+        } | {"max_iv": max_iv_val},
+        "raw_inputs": {key: contract.get(key) for key in ("volume", "open_interest", "delta")},
     }
 
     if reject_reasons:

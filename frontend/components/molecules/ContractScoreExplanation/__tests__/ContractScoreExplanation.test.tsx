@@ -167,6 +167,35 @@ describe('ContractScoreExplanation component', () => {
     expect(screen.getByText('volume:')).toBeInTheDocument();
   });
 
+  test('shows the exact blocker operands rather than a false rounded inequality', () => {
+    const observed = (2.15 - 2.05) / ((2.15 + 2.05) / 2);
+    render(<ContractScoreExplanation id="blocker-exp" contract={{ ...mockBaseContract,
+      explanation: { ...mockValidExplanation, outcome: 'blocked', score: 0, status: 'REJECT',
+        unrounded_score: null, rounded_score: null,
+        blockers: [{ code: 'spread_too_wide', label: 'Spread too wide', metric: 'spread_pct', observed, threshold: .04761, operator: '>' }],
+      },
+    }} />);
+    expect(screen.getByText('0.04761904761904767 > 0.04761')).toBeInTheDocument();
+  });
+
+  test('preserves fractional spread and delta boundaries', () => {
+    render(<ContractScoreExplanation id="boundary-exp" contract={{ ...mockBaseContract,
+      explanation: { ...mockValidExplanation, components: { ...mockValidExplanation.components,
+        spread: { ...mockValidExplanation.components.spread, observed: .056, preferred_max: .0555 },
+        delta: { ...mockValidExplanation.components.delta, observed: .45001, preferred_min: .45002, preferred_max: .55003 },
+      } },
+    }} />);
+    expect(screen.getByText('5.6% (≤5.55%)')).toBeInTheDocument();
+    expect(screen.getByText('0.45001 (0.45002–0.55003)')).toBeInTheDocument();
+  });
+
+  test('rejects another contract identity or unsupported snapshot version', () => {
+    render(<ContractScoreExplanation id="foreign" contract={{ ...mockBaseContract,
+      explanation: { ...mockValidExplanation, contract_id: 'OTHER|1|2026-11-20|C' },
+    }} />);
+    expect(screen.getByText('Explanation unavailable for this result')).toBeInTheDocument();
+  });
+
   test('preserves the effective fractional component weight', () => {
     render(<ContractScoreExplanation id="fractional-exp" contract={{
       ...mockBaseContract,

@@ -10,6 +10,7 @@ import { ContractStar } from '@/components/atoms/ContractStar';
 import { ContractExplanationToggle } from '@/components/atoms/ContractExplanationToggle';
 import { ContractScoreExplanation } from '@/components/molecules/ContractScoreExplanation';
 import { contractScoreTooltip } from '@/lib/statusTooltips';
+import { validateExplanation } from '@/lib/contractExplanation';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { buildGrading, gradingToCtx } from '@/lib/contractGrading';
@@ -91,8 +92,9 @@ function spreadBadge(candidate: TradeCardData): string | null {
 /** Derives global rules applied summary from returned contract evaluation snapshots. */
 function getGlobalRulesBanner(contractsBySymbol: Record<string, OptionContract[]>): string | null {
   const allContracts = Object.values(contractsBySymbol).flat();
-  const withExp = allContracts.filter((c) => c.explanation != null);
+  const withExp = allContracts.filter((c) => validateExplanation(c.explanation, c.id));
   if (withExp.length === 0) return null;
+  if (withExp.length !== allContracts.length) return 'Rules applied: Evaluation snapshot unavailable for some contracts; see available per-contract explanations.';
 
   const firstExp = withExp[0].explanation!;
   const firstWeights = JSON.stringify(firstExp.weights);
@@ -111,11 +113,11 @@ function getGlobalRulesBanner(contractsBySymbol: Record<string, OptionContract[]
   }
 
   const w = firstExp.weights;
-  const wLiq = (w.liquidity ?? 0) * 100;
-  const wSpr = (w.spread ?? 0) * 100;
-  const wDel = (w.delta ?? 0) * 100;
-  const wDte = (w.dte ?? 0) * 100;
-  const wIv = (w.iv_rank ?? 0) * 100;
+  const wLiq = w.liquidity * 100;
+  const wSpr = w.spread * 100;
+  const wDel = w.delta * 100;
+  const wDte = w.dte * 100;
+  const wIv = w.iv_rank * 100;
 
   return `Rules applied: Liquidity ${wLiq}% · Spread ${wSpr}% · Delta ${wDel}% · DTE ${wDte}% · IV ${wIv}% | Status: Pass ≥ ${firstPass} · Caution ≥ ${firstCaution} · Reject < ${firstCaution}`;
 }

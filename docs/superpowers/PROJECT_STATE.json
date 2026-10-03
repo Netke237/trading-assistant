@@ -4137,7 +4137,7 @@
           "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md"
         ],
         "summary": "Options Step 6: authoritative weighted-score breakdown and blocking reasons, inline details, no horizontal overflow and measured 200-contract responsiveness.",
-        "status": "ready_to_merge",
+        "status": "in_progress",
         "plan": "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md",
         "plan_audit": {
           "date": "2026-10-03",
@@ -4160,14 +4160,14 @@
         "code_audit": {
           "date": "2026-10-03",
           "rounds": 3,
-          "clean": true,
+          "clean": false,
           "gate_findings_by_round": [
             0,
             1,
             0
           ],
           "findings_fixed": 5,
-          "outstanding_gate_findings": 0,
+          "outstanding_gate_findings": 2,
           "evidence": "docs/superpowers/measurements/options-explanations/STAGE_C_MEASUREMENTS.md",
           "reviewers": [
             "/root/contracts_fix_audit (code round 2)",
@@ -4177,7 +4177,7 @@
           "correction_evidence": "docs/superpowers/audits/2026-10-03-options-explanation-corrections.md",
           "head_commit": "b89a1db65f589d215abfb43ce2796840b38b150d"
         },
-        "note": "Confirmed corrections verified by independent Contracts code round 3 with zero gate findings. This target is ready_to_merge; companion Step5 remains awaiting an explicit audit-cap exception. Nothing is merged into main.",
+        "note": "External audit report c5921ef1 identified two additional numeric defects and acceptance gaps. Reopened; fixes and independent correction review in progress under user takeover authorization.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
@@ -4189,7 +4189,7 @@
             "date": "2026-10-03",
             "other_branch": "fix/options-contract-explanations",
             "other_work": "User relayed that no code fixes, commits, pushes or merges exist. Root reassigned task claim.",
-            "audit_findings": "requested_pending",
+            "audit_findings": "report c5921ef1 received: findings1/2 already fixed;3/4 confirmed pending",
             "release_status": "hold_until_other_audit_findings_compared"
           }
         }

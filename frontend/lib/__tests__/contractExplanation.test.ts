@@ -144,6 +144,16 @@ describe('contractExplanation helpers', () => {
     expect(validateExplanation({ version: '1' })).toBe(false);
   });
 
+  test('rejects future versions, missing weights, wrong identity and nested nonfinite numbers', () => {
+    expect(validateExplanation({ ...mockValidExplanation, version: 2 })).toBe(false);
+    expect(validateExplanation(mockValidExplanation, 'OTHER')).toBe(false);
+    expect(validateExplanation({ ...mockValidExplanation, weights: { liquidity: .25 } })).toBe(false);
+    expect(validateExplanation({ ...mockValidExplanation, components: { ...mockValidExplanation.components,
+      spread: { ...mockValidExplanation.components.spread, observed: Infinity },
+    } })).toBe(false);
+    expect(validateExplanation({ ...mockValidExplanation, blockers: [{ code: 'spread', label: 'Spread', metric: 'spread', operator: '>', observed: NaN, threshold: .1 }] })).toBe(false);
+  });
+
   test('getComponentDisplayName returns formatted component names', () => {
     expect(getComponentDisplayName('liquidity')).toBe('Liquidity');
     expect(getComponentDisplayName('spread')).toBe('Bid-Ask Spread');

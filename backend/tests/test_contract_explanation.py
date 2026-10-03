@@ -46,11 +46,45 @@ def test_authoritative_score_parity_unblocked():
     assert exp["reject_reasons"] == []
 
 
-def test_positive_half_ties_round_to_even():
-    """Verify Python ties-to-even behavior (64.5 -> 64, 65.5 -> 66)."""
-    # Test built-in round directly
-    assert round(64.5) == 64
-    assert round(65.5) == 66
+@pytest.mark.parametrize(("aggregate", "rounded"), [(64.5, 64), (65.5, 66)])
+def test_positive_half_ties_round_to_even(monkeypatch, aggregate, rounded):
+    import copy
+    cfg = copy.deepcopy(_load_config())
+    cfg["weights"] = {"liquidity": aggregate / 100, "spread": 0, "delta": 0, "dte": 0, "iv_rank": 0}
+    monkeypatch.setattr("app.scoring.contract_validator._load_config", lambda: cfg)
+    card = validate_contract(_make_contract(volume=1000, open_interest=5000), 80)
+    assert card.explanation["outcome"] == "aggregate"
+    assert card.explanation["unrounded_score"] == aggregate
+    assert card.explanation["rounded_score"] == card.score == rounded
+
+
+def test_blocker_keeps_actual_spread_guard_operands():
+    card = validate_contract(_make_contract(bid=2.05, ask=2.15), 80,
+                             {"max_bid_ask_spread_pct": .04761})
+    exp = ContractExplanation.model_validate(card.explanation)
+    blocker = next(b for b in exp.blockers if b.code == "spread_too_wide")
+    actual = (2.15 - 2.05) / ((2.15 + 2.05) / 2)
+    assert blocker.observed == actual
+    assert blocker.observed > blocker.threshold == .04761
+    assert exp.components["spread"].observed == actual
+
+
+@pytest.mark.parametrize(("delta", "bound", "code"), [(.200001, .200002, "delta_too_low_far_otm"), (.899999, .899998, "delta_too_high_deep_itm")])
+def test_delta_blockers_preserve_boundary_digits(delta, bound, code):
+    key = "min_delta" if "low" in code else "max_delta"
+    card = validate_contract(_make_contract(delta=delta), 80, {key: bound})
+    blocker = next(b for b in card.explanation["blockers"] if b["code"] == code)
+    assert blocker["observed"] == delta
+    assert blocker["threshold"] == bound
+
+
+def test_snapshot_keeps_nonblocking_hard_bounds_and_missing_inputs():
+    card = validate_contract(_make_contract(volume=None, open_interest=500, delta=None), 80)
+    exp = ContractExplanation.model_validate(card.explanation)
+    assert exp.raw_inputs == {"volume": None, "open_interest": 500, "delta": None}
+    assert exp.components["liquidity"].volume == 0
+    assert exp.hard_bounds["min_volume"] == _load_config()["hard_reject"]["min_volume"]
+    assert "volume_too_low" not in card.reject_reasons
 
 
 def test_fractional_pass_caution_boundaries(monkeypatch):

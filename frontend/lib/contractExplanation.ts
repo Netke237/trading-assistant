@@ -5,28 +5,57 @@
 import type { ContractExplanation, ComponentExplanation, BlockerComparison, OptionContract } from '@/types/domain';
 import type { Status } from '@/lib/status';
 
-/** Validates that an untrusted object meets the ContractExplanation shape. */
-export function validateExplanation(exp: unknown): exp is ContractExplanation {
-  if (!exp || typeof exp !== 'object') return false;
-  const e = exp as Record<string, unknown>;
-  return (
-    typeof e.version === 'number' &&
-    typeof e.contract_id === 'string' &&
-    typeof e.evaluated_at === 'string' &&
-    (e.outcome === 'blocked' || e.outcome === 'aggregate') &&
-    typeof e.score === 'number' &&
-    Number.isFinite(e.score) &&
-    typeof e.pass_threshold === 'number' &&
-    Number.isFinite(e.pass_threshold) &&
-    typeof e.caution_threshold === 'number' &&
-    Number.isFinite(e.caution_threshold) &&
-    typeof e.weights === 'object' &&
-    e.weights !== null &&
-    typeof e.components === 'object' &&
-    e.components !== null &&
-    Array.isArray(e.largest_losses) &&
-    Array.isArray(e.blockers)
-  );
+const componentKeys = ['liquidity', 'spread', 'delta', 'dte', 'iv_rank'] as const;
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string');
+const optionalNumber = (n: unknown) => n == null || finite(n);
+
+/** Reject unsupported or incomplete snapshots instead of fabricating numbers. */
+export function validateExplanation(exp: unknown, contractId?: string): exp is ContractExplanation {
+  if (!record(exp)) return false;
+  const e = exp;
+  if (e.version !== 1 || typeof e.contract_id !== 'string' ||
+      (contractId != null && e.contract_id !== contractId) || typeof e.evaluated_at !== 'string' ||
+      !['blocked', 'aggregate'].includes(String(e.outcome)) ||
+      !['PASS', 'CAUTION', 'REJECT'].includes(String(e.status)) ||
+      !finite(e.score) || !finite(e.pass_threshold) || !finite(e.caution_threshold) ||
+      !optionalNumber(e.unrounded_score) || !optionalNumber(e.rounded_score) ||
+      !finite(e.soft_fail_count) || !finite(e.max_soft_fail_count) ||
+      !strings(e.reject_reasons) || !strings(e.soft_flags) ||
+      !record(e.weights) || !record(e.components)) return false;
+  const validComponent = (c: unknown) => record(c) && typeof c.name === 'string' &&
+    typeof c.wire_name === 'string' && ['raw_score', 'weight', 'contribution', 'lost_points'].every(k => finite(c[k])) &&
+    ['observed', 'preferred_min', 'preferred_max', 'volume', 'open_interest', 'preferred_volume_min', 'preferred_oi_min'].every(k => optionalNumber(c[k])) &&
+    (c.basis == null || ['rank', 'absolute', 'none'].includes(String(c.basis))) && strings(c.flags);
+  const weights = e.weights; const components = e.components;
+  if (!componentKeys.every(k => finite(weights[k]) && validComponent(components[k]))) return false;
+  if (!Array.isArray(e.largest_losses) || !e.largest_losses.every(validComponent) ||
+      !Array.isArray(e.blockers) || !e.blockers.every(b => record(b) &&
+        ['code', 'label', 'metric', 'operator'].every(k => typeof b[k] === 'string') &&
+        (b.observed == null || typeof b.observed === 'string' || finite(b.observed)) &&
+        (typeof b.threshold === 'string' || finite(b.threshold)))) return false;
+  if (e.hard_bounds != null && (!record(e.hard_bounds) || !Object.values(e.hard_bounds).every(finite))) return false;
+  if (e.raw_inputs != null && (!record(e.raw_inputs) || !Object.values(e.raw_inputs).every(optionalNumber))) return false;
+  return true;
+}
+
+/** Keep all significant boundary digits; integer percentages retain one decimal. */
+export function formatPercentRatio(value: number): string {
+  if (value === 0) return '0.0%';
+  const [mantissa, exponent = '0'] = String(value).split('e');
+  const negative = mantissa.startsWith('-');
+  const [whole, fraction = ''] = mantissa.replace('-', '').split('.');
+  const decimals = fraction.length - Number(exponent) - 2;
+  let digits = (whole + fraction).replace(/^0+(?=\d)/, '');
+  let percent: string;
+  if (decimals <= 0) percent = digits + '0'.repeat(-decimals) + '.0';
+  else {
+    digits = digits.padStart(decimals + 1, '0');
+    percent = digits.slice(0, -decimals) + '.' + digits.slice(-decimals);
+    percent = percent.replace(/0+$/, '').replace(/\.$/, '.0');
+  }
+  return `${negative ? '-' : ''}${percent}%`;
 }
 
 /** Display names for the five weighted components. */
@@ -68,7 +97,7 @@ export function formatMetricValue(
 
   if (unit === '%') {
     // Spread observations use ratios at every magnitude; absolute IV uses its basis below.
-    return `${(value * 100).toFixed(1)}%`;
+    return formatPercentRatio(value);
   }
   if (unit === 'days') {
     return `${Math.round(value)}d`;
@@ -77,15 +106,12 @@ export function formatMetricValue(
     return Math.round(value).toLocaleString('en-US');
   }
   if (basis === 'rank') {
-    return `${Math.round(value)} (pctl)`;
+    return `${value} (pctl)`;
   }
   if (basis === 'absolute') {
-    return `${value.toFixed(1)}% IV`;
+    return `${Number.isInteger(value) ? value.toFixed(1) : String(value)}% IV`;
   }
-  if (Math.abs(value) < 1 && value !== 0) {
-    return value.toFixed(2);
-  }
-  return Number.isInteger(value) ? value.toLocaleString('en-US') : value.toFixed(2);
+  return String(value);
 }
 
 /** Formats a threshold and operator for human readability. */
@@ -94,7 +120,7 @@ export function formatComparison(operator: string, threshold: number | string, u
   const opSymbol = operator === '<=' ? '≤' : operator === '>=' ? '≥' : operator;
   let formattedThresh = typeof threshold === 'number' ? threshold.toString() : threshold;
   if (typeof threshold === 'number' && unit === '%') {
-    formattedThresh = `${(threshold * 100).toFixed(1)}%`;
+    formattedThresh = formatPercentRatio(threshold);
   } else if (unit) {
     formattedThresh = `${formattedThresh}${unit === '%' ? '%' : ' ' + unit}`;
   }
@@ -123,7 +149,7 @@ export function getBlockingSummary(explanation?: ContractExplanation | null): {
 
 /** Formats a primary summary line for collapsed view or row badges. */
 export function getExplanationSummaryLine(c: OptionContract): string {
-  if (!c.explanation) {
+  if (!validateExplanation(c.explanation, c.id)) {
     return 'Explanation unavailable for this result';
   }
   const exp = c.explanation;

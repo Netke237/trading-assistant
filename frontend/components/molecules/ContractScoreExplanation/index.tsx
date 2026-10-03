@@ -7,6 +7,7 @@ import {
   getComponentDisplayName,
   getComponentStatus,
   formatMetricValue,
+  formatPercentRatio,
   validateExplanation,
 } from '@/lib/contractExplanation';
 import styles from './ContractScoreExplanation.module.css';
@@ -19,7 +20,7 @@ export interface ContractScoreExplanationProps {
 export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> = ({ id, contract }) => {
   const exp = contract.explanation;
 
-  if (!exp || !validateExplanation(exp)) {
+  if (!exp || !validateExplanation(exp, contract.id)) {
     return (
       <div id={id} role="region" aria-label="Contract evaluation breakdown" className={styles.container}>
         <div className={styles.unavailable}>
@@ -54,7 +55,7 @@ export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> =
             </Data>
             {!isBlocked && exp.unrounded_score != null && (
               <Data size={12} tone="dim">
-                ({exp.unrounded_score.toFixed(2)} unrounded)
+                ({exp.unrounded_score} unrounded)
               </Data>
             )}
           </div>
@@ -167,7 +168,7 @@ export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> =
                     <span className={styles.metricLabel}>Spread %:</span>
                     <Data size={11}>
                       {formatMetricValue(comp.observed, '%')}
-                      {comp.preferred_max ? ` (≤${(comp.preferred_max * 100).toFixed(0)}%)` : ''}
+                      {comp.preferred_max ? ` (≤${formatPercentRatio(comp.preferred_max)})` : ''}
                     </Data>
                   </div>
                 )}
@@ -178,7 +179,7 @@ export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> =
                     <Data size={11}>
                       {formatMetricValue(comp.observed)}
                       {comp.preferred_min != null && comp.preferred_max != null
-                        ? ` (${comp.preferred_min.toFixed(2)}–${comp.preferred_max.toFixed(2)})`
+                        ? ` (${comp.preferred_min}–${comp.preferred_max})`
                         : ''}
                     </Data>
                   </div>
@@ -225,10 +226,10 @@ export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> =
               <div className={styles.pointsSummary}>
                 <span className={styles.metricLabel}>Contribution:</span>
                 <div>
-                  <Data size={11} tone="pass">
+                  <Data size={11} tone="pass" title={`Exact contribution: ${comp.contribution}`}>
                     +{comp.contribution.toFixed(1)}
                   </Data>
-                  <Data size={11} tone={comp.lost_points > 0 ? 'caution' : 'dim'} className={styles.lostPoints}>
+                  <Data size={11} tone={comp.lost_points > 0 ? 'caution' : 'dim'} className={styles.lostPoints} title={`Exact loss: ${comp.lost_points}`}>
                     (−{comp.lost_points.toFixed(1)} lost)
                   </Data>
                 </div>
@@ -238,6 +239,17 @@ export const ContractScoreExplanation: React.FC<ContractScoreExplanationProps> =
         })}
       </div>
 
+      {exp.hard_bounds && Object.keys(exp.hard_bounds).length > 0 && (
+        <div className={styles.contextualStrip} aria-label="Effective hard bounds">
+          <Text size={11}>Effective hard bounds (volume 0 is exempt when OI meets its minimum):</Text>
+          {Object.entries(exp.hard_bounds).map(([key, value]) => (
+            <Text key={key} size={11}>{key.replace(/_/g, ' ')}: {value}</Text>
+          ))}
+        </div>
+      )}
+      {exp.raw_inputs && Object.entries(exp.raw_inputs).some(([, value]) => value == null) && (
+        <Text size={11}>Missing raw inputs: {Object.entries(exp.raw_inputs).filter(([, value]) => value == null).map(([key]) => key.replace(/_/g, ' ')).join(', ')}. Scorer-normalized values are shown above.</Text>
+      )}
       {/* Footer: Largest losses + Contextual strip */}
       <div className={styles.footerSection}>
         {exp.largest_losses.length > 0 && exp.largest_losses[0].lost_points > 0 && (

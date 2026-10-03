@@ -220,7 +220,7 @@ class WatchlistRow(BaseModel):
 
 
 class BlockerComparison(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
     code: str
     label: str
     metric: str
@@ -230,7 +230,7 @@ class BlockerComparison(BaseModel):
 
 
 class ComponentExplanation(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
     name: str
     wire_name: str
     raw_score: int
@@ -250,7 +250,7 @@ class ComponentExplanation(BaseModel):
 
 
 class ContractExplanation(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
     version: int = 1
     contract_id: str
     evaluated_at: str
@@ -269,6 +269,8 @@ class ContractExplanation(BaseModel):
     soft_flags: list[str] = Field(default_factory=list)
     soft_fail_count: int
     max_soft_fail_count: int
+    hard_bounds: dict[str, float] = Field(default_factory=dict)
+    raw_inputs: dict[str, float | None] = Field(default_factory=dict)
 
 
 # ── Contracts ────────────────────────────────────────────────────────────────
