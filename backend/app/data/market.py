@@ -1839,6 +1839,16 @@ def _extract_dividend_date(fund_data: dict | None) -> Optional[date]:
     """Extract next ex-dividend date from pre-fetched fundamentals data (sync, no I/O)."""
     if not fund_data:
         return None
+    ex_date_str = fund_data.get("tables", {}).get("dividend", {}).get("ex_dividend_date")
+    if not ex_date_str:
+        return None
+    try:
+        d = date.fromisoformat(ex_date_str)
+        if d >= date.today():
+            return d
+    except ValueError:
+        pass
+    return None
 
 
 def _first_calendar_result(data) -> dict | None:
@@ -1909,14 +1919,4 @@ def fetch_next_earnings_date(symbol: str) -> Optional[date]:
 
     if failures:
         raise EarningsLookupError("; ".join(failures))
-    return None
-    ex_date_str = fund_data.get("tables", {}).get("dividend", {}).get("ex_dividend_date")
-    if not ex_date_str:
-        return None
-    try:
-        d = date.fromisoformat(ex_date_str)
-        if d >= date.today():
-            return d
-    except ValueError:
-        pass
     return None
