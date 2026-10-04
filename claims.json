@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T13:00:58Z",
       "note": "Dependencies assembled and independently clean; compose audited presentation",
       "task": "TRADE-CARD-PRESENTATION-INTEGRATION"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/stocks-step-merge-s1",
+      "claimed_at": "2026-10-04T11:26:12Z",
+      "expires_at": "2026-10-04T14:26:12Z",
+      "note": "Stage 1: one Stocks strategy picker on Step 4, Step 5 removed; plus ticket-orchestration setup",
+      "task": "STOCKS-STEP-MERGE-S1"
     }
   ]
 }
