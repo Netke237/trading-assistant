@@ -15,6 +15,14 @@
       "expires_at": "2026-10-04T03:35:55Z",
       "note": "Area-3 options: DTE floor hold_max+21, exit-plan T1 target, R/R risk=min(premium stop, structural loss), R-multiple override, Step7 checklist row",
       "task": "AREA3-OPTION-PLAN-CONSISTENCY"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/trade-card-score-evidence",
+      "claimed_at": "2026-10-04T00:36:35Z",
+      "expires_at": "2026-10-04T03:36:35Z",
+      "note": "Short own-entry SCORE-EVIDENCE completion delta; preserve canonical unrelated state",
+      "task": "TRADE-CARD-PRESENTATION-STATE"
     }
   ]
 }
