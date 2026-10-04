@@ -219,6 +219,9 @@ interface ToastState {
 }
 
 export default function Step7Page() {
+  // The controlled method selector is portalled here; AutoTradeArm retains its
+  // original page ownership/predicate even while an override plan is pending.
+  const [decisionTarget, setDecisionTarget] = useState<HTMLDivElement | null>(null);
   const [cards, setCards]         = useState<TradeCardData[]>([]);
   const [active, setActive]       = useState<string>('');
   const [basket, setBasket]       = useState<string[]>([]);
@@ -1436,7 +1439,7 @@ export default function Step7Page() {
   const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
 
   return (
-    <div className={styles.main}>
+    <div className={`${styles.main} ${paperStyles.presentationPage}`}>
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
@@ -1469,6 +1472,8 @@ export default function Step7Page() {
         <Text size={13} tone="dim">Run a scan to generate trade cards.</Text>
       )}
 
+      <div className={paperStyles.presentationLayout}>
+        <div className={paperStyles.cardColumn}>
       {effectiveCard && (
         <>
           {effectiveCard._userOverride && (
@@ -1497,6 +1502,7 @@ export default function Step7Page() {
           ) : (
             <TradeCard
               showMarketSentiment={false}
+              decisionTarget={decisionTarget}
               onRrStaleChange={onRrStaleChange}
               data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}
@@ -1567,9 +1573,13 @@ export default function Step7Page() {
         </>
       )}
 
+        </div>
+
       {/* Paper broker execution */}
       {effectiveCard && (
         <div className={paperStyles.paperSection}>
+          <Text size={14} weight={600}>Decision and execution</Text>
+          <div ref={setDecisionTarget} className={paperStyles.decisionAnchor} />
           <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
           {selectedBroker && (
             <>
@@ -1747,6 +1757,8 @@ export default function Step7Page() {
           ))}
         </div>
       )}
+
+      </div>
 
       {dialogOpen && (
         <SendToBrokerDialog

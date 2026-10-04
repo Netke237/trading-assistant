@@ -10,3 +10,38 @@
 .pageExplanation { font-size: 12px; color: var(--text-secondary); }
 .pageExplanation > summary { cursor: pointer; color: var(--accent); }
 .pageExplanation[open] > summary { margin-bottom: var(--space-2); }
+
+.presentationPage { min-width: 0; }
+
+/* Scope the existing desktop minimum to Step 7's audited 1200px acceptance
+   boundary. The shared frame and every other route retain their own rules. */
+:global(div):has(> :global(main#workspace) .presentationPage) { min-width: 1200px; }
+
+.presentationLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 280px);
+  align-items: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.cardColumn { min-width: 0; }
+
+.presentationLayout > .paperSection {
+  margin-top: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.decisionAnchor { min-width: 0; }
+.paperButtons { flex-wrap: wrap; }
+
+/* Reserve room for both the frame rail and the methods' probability columns.
+   The same controls flow below the card when usable width cannot hold both. */
+@media (max-width: 1440px) {
+  .presentationLayout { grid-template-columns: minmax(0, 1fr); }
+}

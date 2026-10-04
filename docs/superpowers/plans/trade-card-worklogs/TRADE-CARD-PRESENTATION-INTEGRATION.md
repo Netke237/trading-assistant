@@ -172,3 +172,29 @@ Typecheck and209 tests across BarrierRaceCard, TradeCard and method-pick suites
 passed, including absent actions for all early-return states, controlled row
 identity, premium-basis retention, selector equivalence and contract transition.
 Checkpoint B awaits fresh independent review; no audit-clean claim yet.
+
+Checkpoint B reviewed full `71ab258a95f53e44523b2407ab6504b32682040c..87e45af7d6b779c36623e076723f9175ed8c927c` by fresh independent `presentation_b_audit_r1`: zero gate findings after second pass;229 tests in4 suites, typecheck/diffcheck clean. Round1/3 closes B only.
+
+### Checkpoint C — single selector and execution composition
+
+Original MethodPickSelector renders once through an optional DOM portal into
+the page's existing execution section; undefined retains standalone rendering,
+null waits for its anchor. All TradeCard method state/effects/callbacks remain
+in their original owner. AutoTradeArm stays in the original page-level section,
+under identical effectiveCard/selectedBroker/spread predicates and with identical
+props; override-plan pending replaces only TradeCard as before. Broker/order,
+tracking, arm, toast and feedback implementations remain intact. Native CSS
+flows the same execution panel adjacent on wide screens and below at <=1440;
+method cards use usable-width auto-fit, with original probability spacing.
+Original qualification panels move intact below methods/race. Page-scoped CSS
+adjusts frame minimum without touching other routes/shared Frame source.
+
+Typecheck and266 tests in4 suites passed, including portal decision round-trip,
+exactly one selector, anchor settling/unmount cleanup and retained owner state,
+original TradeCard/directOrder/AutoTradeArm checks. Chromium real frame with mocked
+API has no page errors;1366/1440/1920 both themes no document/workspace overflow;
+race table fits598..1022px inner widths without scrolling. These metrics do NOT
+clear1200 visual acceptance: shared MinWidthGate blocks below1280px, contrary to
+audited plan's assertion that baseline is1200.1200 screenshots show its modal.
+User scope decision requested asynchronously; shared gate has NOT been modified.
+State/inventory acceptance remains pending, not certified by these checks.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
@@ -185,6 +186,10 @@ interface TradeCardProps {
   data: TradeCardData;
   /** Step 7 renders this context once above candidate navigation. */
   showMarketSentiment?: boolean;
+  /** Controlled selector may render in the page execution panel. Undefined
+   *  retains standalone placement; null waits for the page DOM anchor. All
+   *  method state and effects remain owned by this single TradeCard. */
+  decisionTarget?: HTMLElement | null;
   recId?: string;
   onSendToBroker?: () => void;
   sendLabel?: string;
@@ -392,6 +397,7 @@ function isRealFailure(controller: AbortController, deadline: RequestDeadline): 
 export function TradeCard({
   data,
   showMarketSentiment = true,
+  decisionTarget,
   recId: propRecId,
   onSendToBroker,
   sendLabel,
@@ -2183,6 +2189,14 @@ export function TradeCard({
     { label: 'Spread', value: data.contractBreakdown.spread, detailText: spreadDetailText(data.contractBreakdown.spreadDetail) },
   ];
 
+  const methodSelector = (
+    <MethodPickSelector
+      options={methodPickOptions}
+      pick={methodPick}
+      onChange={applyMethodPick}
+    />
+  );
+
   return (
     <div className={styles.wrap}>
       {showMarketSentiment && <MarketSentiment s={data.sentiment} compact />}
@@ -2406,11 +2420,8 @@ export function TradeCard({
                  different questions ("what ran last" vs "what did the trader
                  choose"), and the fallback is what a trader sees before
                  picking. */}
-            <MethodPickSelector
-              options={methodPickOptions}
-              pick={methodPick}
-              onChange={applyMethodPick}
-            />
+            {decisionTarget === undefined ? methodSelector
+              : decisionTarget ? createPortal(methodSelector, decisionTarget) : null}
             <Text size={13} weight={500}>Latest calculation</Text>
             <Text size={11} tone="secondary">
               The latest result is displayed below. Choosing a method records your decision;
@@ -2580,29 +2591,6 @@ export function TradeCard({
             )}
           </div>
         </section>
-
-        {/* 3. Stock Scorecard | Contract — side by side */}
-        <ScoreCardPanel
-          title="Stock Scorecard"
-          qualification={{ card: data, kind: 'stock' }}
-          bars={stockBars}
-          total={data.stockScore}
-          confidence={data.stockConfidence}
-          confidenceScore={data.confidence ?? null}
-          confidenceText={data.confidenceText ?? null}
-          statusTooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
-        />
-
-        <ScoreCardPanel
-          title={`Contract — ${data.contract}`}
-          qualification={{ card: data, kind: 'contract' }}
-          bars={contractBars}
-          total={data.contractScore}
-          confidence={data.contractConfidence}
-          statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
-          statusTooltipAlignRight
-        />
-
 
         {/* 5. Contract Details */}
         {data.contractDetails && (
@@ -3179,6 +3167,29 @@ export function TradeCard({
           onSelectTarget={racePickOption?.unavailable == null ? selectRaceTarget : undefined}
           selectedTargetPct={selectedRaceTarget}
         />
+
+        {/* 3. Stock Scorecard | Contract — side by side */}
+        <ScoreCardPanel
+          title="Stock Scorecard"
+          qualification={{ card: data, kind: 'stock' }}
+          bars={stockBars}
+          total={data.stockScore}
+          confidence={data.stockConfidence}
+          confidenceScore={data.confidence ?? null}
+          confidenceText={data.confidenceText ?? null}
+          statusTooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
+        />
+
+        <ScoreCardPanel
+          title={`Contract — ${data.contract}`}
+          qualification={{ card: data, kind: 'contract' }}
+          bars={contractBars}
+          total={data.contractScore}
+          confidence={data.contractConfidence}
+          statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+          statusTooltipAlignRight
+        />
+
 
         <CollapsibleSection
           title="Fixed % Ladder Plan"

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
@@ -372,6 +372,28 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     expect(Number.isFinite(Date.parse(onMethodPickChange.mock.calls.at(-1)[0].pickedAt))).toBe(true);
     rerender(<TradeCard data={{ ...card, contract: 'AAPL 195C 05/15' }} onMethodPickChange={onMethodPickChange} />);
     expect(screen.queryByRole('button', { name: 'Use Barrier Race T20%' })).not.toBeInTheDocument();
+  });
+
+  it('renders one controlled selector in the execution anchor and retains its decision when the anchor settles', () => {
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    const onMethodPickChange = jest.fn();
+    const { container, rerender, unmount } = render(<TradeCard data={card} decisionTarget={anchor} onMethodPickChange={onMethodPickChange} />);
+    expect(within(container).queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
+    fireEvent.click(within(anchor).getByRole('radio', { name: 'Ladder' }));
+    fireEvent.click(within(anchor).getByRole('radio', { name: 'TP1' }));
+    fireEvent.click(within(anchor).getByRole('radio', { name: 'Premium stop' }));
+    expect(onMethodPickChange).toHaveBeenLastCalledWith(expect.objectContaining({ method: 'ladder', rowStockPrice: 200.02, rowOptionPrice: null, stopBasis: 'premium' }));
+    rerender(<TradeCard data={card} decisionTarget={null} onMethodPickChange={onMethodPickChange} />);
+    expect(screen.queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
+    rerender(<TradeCard data={card} decisionTarget={anchor} onMethodPickChange={onMethodPickChange} />);
+    expect(within(anchor).getByRole('radio', { name: 'TP1' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(anchor).getByRole('radio', { name: 'Premium stop' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
+    unmount();
+    expect(anchor).toBeEmptyDOMElement();
+    anchor.remove();
   });
 
   it('leaves lastRunMethod’s display fallback alone (§9.4)', () => {
