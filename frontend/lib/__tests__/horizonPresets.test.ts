@@ -33,6 +33,7 @@ describe('previewDteWindow', () => {
     ['Quarterly',  45,  60,  90,  125],
     ['SemiAnnual', 90,  105, 180, 215],
     ['Annual',     165, 200, 330, 400],
+    ['Custom',     15, 200, 221, 400],
   ])('%s: hold %i-%i -> dte %i-%i', (_label, hMin, hMax, dMin, dMax) => {
     expect(previewDteWindow(hMin as number, hMax as number)).toEqual([dMin, dMax]);
   });

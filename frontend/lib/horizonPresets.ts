@@ -30,6 +30,8 @@ export interface HorizonPreset {
  *  back in ScanResult.dte_window. If the two ever drift, only the preview text
  *  shown before a scan runs is affected, not enforcement. */
 export const DTE_HOLDING_MULTIPLIER = 2.0;
+export const DTE_EXIT_BUFFER_DAYS = 21;
+export const DTE_MIN_WINDOW_SPAN_DAYS = 35;
 
 export const HORIZON_PRESETS: HorizonPreset[] = [
   { key: 'Intraday',   label: 'Intraday',    hint: '0–2 days',     holdMin: 0,   holdMax: 2,   scoringHorizon: 'Intraday' },
@@ -70,8 +72,8 @@ export function resolveParamsHorizon(hz: HorizonKey, holdMax: number): HorizonKe
  * Mirrors backend/app/scoring/dte_window.py exactly.
  */
 export function previewDteWindow(holdMin: number, holdMax: number): [number, number] {
-  const lo = Math.max(1, Math.round(holdMin * DTE_HOLDING_MULTIPLIER), holdMax + 21);
-  const hi = Math.max(lo + 35, Math.round(holdMax * DTE_HOLDING_MULTIPLIER));
+  const lo = Math.max(1, Math.round(holdMin * DTE_HOLDING_MULTIPLIER), holdMax + DTE_EXIT_BUFFER_DAYS);
+  const hi = Math.max(lo + DTE_MIN_WINDOW_SPAN_DAYS, Math.round(holdMax * DTE_HOLDING_MULTIPLIER));
   return [lo, hi];
 }
 

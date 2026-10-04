@@ -159,3 +159,16 @@ Normal build failed on denied Google Fonts fetches. Separate environment-only
 NEXT_FONT_GOOGLE_MOCKED_RESPONSES build compiled, typechecked and generated30
 routes successfully; mock font is not production-font or exact visual evidence.
 Final corrected full frontend and full backend runs remain in progress.
+
+Final plan-completeness check found B4's captured risk-basis checklist text and
+named preview constants still missing. Added the source label without changing
+thresholds/statuses or absent-data text, recorded UNMEASURED threshold comment,
+and named existing21/35 constants. Expanded tests to pin the seventh Custom
+window, both risk labels, captured active/basket target provenance and legacy
+omission, authoritative captured-row/premium-fallback/restoration values, and
+portfolio stored2.5R multiple with selected-row re-stamp. These additions follow
+the clean first checkpoint, so the frontend stage is reopened for its bounded
+round2 (same cap3; no counter reset). Typecheck passed; amendment3 suites48
+checks plus2 suites259 tests passed. Source changes are only risk-basis text,
+comment and equivalent named constants. Final full frontend before amendment:
+192 suites/4612 tests passed; final-source full rerun remains due.

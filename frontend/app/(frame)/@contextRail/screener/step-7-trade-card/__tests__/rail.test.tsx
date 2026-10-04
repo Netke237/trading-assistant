@@ -301,3 +301,10 @@ it('withholds numeric R/R when its measured stock stop moved', () => {
   expect(screen.getByText(/Stock stop moved since R\/R was measured/)).toBeInTheDocument();
   expect(screen.queryByText(/Projected reward:risk/)).not.toBeInTheDocument();
 });
+
+
+it.each(['stock_stop', 'premium_stop'] as const)('names captured %s risk without changing its thresholds', (basis) => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: { ...PICKED, exit: { ...PICKED.exit, rrRiskBasis: basis } }, rrPending: false } }); });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText(new RegExp(`risking the ${basis === 'stock_stop' ? 'stock stop' : 'premium stop'}`))).toBeInTheDocument();
+});

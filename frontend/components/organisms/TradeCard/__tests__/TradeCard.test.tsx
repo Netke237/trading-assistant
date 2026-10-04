@@ -4080,3 +4080,16 @@ describe('AREA3 captured stock-risk freshness', () => {
     expect(report).toHaveBeenLastCalledWith(false);
   });
 });
+
+it('AREA3 ladder uses authoritative captured ratio, then premium risk when the stop moves', () => {
+  const card = { ...mockTradeCard, exit: { ...mockTradeCard.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64,
+    targets: [{ ...mockTradeCard.exit.targets[0], rrContribution: 5.0 }] } };
+  const { rerender } = render(<TradeCard data={card} />);
+  expandLadder();
+  expect(screen.getByText('5.0x')).toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, exit: { ...card.exit, invalidation: 179.65 } }} />);
+  expect(screen.getByText('1.7x')).toBeInTheDocument();
+  expect(screen.queryByText('5.0x')).not.toBeInTheDocument();
+  rerender(<TradeCard data={card} />);
+  expect(screen.getByText('5.0x')).toBeInTheDocument();
+});

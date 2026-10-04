@@ -173,6 +173,32 @@ describe('step-7-trade-card -- recompute-plan sends the scan\'s rr_* (STEP3-PARA
     expect(rrOf(callFor('AAA'))).toEqual(RECORDED);
   });
 
+  it('round-trips captured target provenance for active and basket overrides', async () => {
+    seed(RECORDED);
+    act(() => {
+      const result = useScanStore.getState().scanResult!;
+      useScanStore.setState({ scanResult: { ...result, candidates: result.candidates.map((card) => ({
+        ...card, exit: { ...card.exit, target: 164.23, targetSource: 'structural_snap' as const },
+      })) } });
+    });
+    (api.recomputePlan as jest.Mock).mockReturnValueOnce(new Promise(() => {}));
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(callFor('AAA')).toMatchObject({ target_stock_price: 164.23, target_source: 'structural_snap', rr_target_r_multiple: 2.5 }));
+    fireEvent.click(await screen.findByTitle('Pin to basket'));
+    (api.recomputePlan as jest.Mock).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+    await waitFor(() => expect(callFor('BBB')).toMatchObject({ target_stock_price: 164.23, target_source: 'structural_snap' }));
+    await waitFor(() => expect(callFor('AAA')).toMatchObject({ target_stock_price: 164.23, target_source: 'structural_snap' }));
+  });
+
+  it('omits old flat target from a card without captured provenance', async () => {
+    seed(RECORDED);
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(callFor('AAA')).toBeDefined());
+    expect(callFor('AAA')).not.toHaveProperty('target_stock_price');
+    expect(callFor('AAA')).not.toHaveProperty('target_source');
+  });
+
   it('a scan that overrode none sends none, whatever Step 3 says now', async () => {
     seed({});
     render(<Step7TradeCardPage />);
