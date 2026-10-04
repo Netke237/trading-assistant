@@ -273,6 +273,49 @@ class ContractExplanation(BaseModel):
     raw_inputs: dict[str, float | None] = Field(default_factory=dict)
 
 
+class StockComponentEvidence(BaseModel):
+    name: str
+    wire_name: str
+    raw_score: int
+    status: Status
+    measured: bool
+    weight: float
+    contribution: float
+    detail: dict
+    config: dict
+
+
+class StockCapEvidence(BaseModel):
+    name: str
+    status: Status
+    before: Status
+    after: Status
+    detail: dict
+    config: dict
+
+
+class StockExplanation(BaseModel):
+    """Read-only scan-time evidence; absent on legacy cards, never backfilled."""
+    version: Literal[1] = 1
+    symbol: str
+    direction: Direction
+    horizon: Horizon
+    scoring_mode: Literal["stock", "options"]
+    iv_basis: str
+    evaluated_at: str
+    score: int
+    status: Status
+    raw_status: Status
+    unrounded_score: float
+    rounding: Literal["python_round_ties_to_even"]
+    pass_threshold: float
+    caution_threshold: float
+    weights: dict[str, float]
+    components: dict[str, StockComponentEvidence]
+    caps: list[StockCapEvidence]
+    gate_config: dict[str, dict | None]
+
+
 # ── Contracts ────────────────────────────────────────────────────────────────
 
 class OptionContract(BaseModel):
@@ -648,6 +691,7 @@ class AlternativeContract(BaseModel):
     score:              int
     contractConfidence: Status
     contractBreakdown:  ContractScoreBreakdown
+    contractExplanation: Optional[ContractExplanation] = None
     rrRatio:            float
     rrModel:            RrModel
     reason:             str
@@ -683,10 +727,12 @@ class TradeCardData(BaseModel):
     stockScore: int
     stockConfidence: Status
     stockBreakdown: ScoreBreakdown
+    stockExplanation: Optional[StockExplanation] = None
     contract: str
     contractScore: int
     contractConfidence: Status
     contractBreakdown: ContractScoreBreakdown
+    contractExplanation: Optional[ContractExplanation] = None
     contractDetails: Optional[ContractDetails] = None
     entry: TradeEntry
     exit: TradeExit

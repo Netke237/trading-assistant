@@ -77,6 +77,8 @@ def _candidates(client, symbol="MSFT", *, strike_mult=1.0, dte=45, extra_patches
     candles = _candles(symbol)
     price = candles[-1]["close"]
     contract = _contract(price, strike_mult=strike_mult, dte=dte)
+    contract["symbol"] = symbol
+    contract["id"] = f"{symbol}|{contract['strike']}|{contract['expiry']}|{contract['right']}"
     if iv is not None:
         contract["iv"] = iv
     chain = [contract]
@@ -135,6 +137,81 @@ def test_every_candidate_carries_the_gate(client):
         assert c["stopCostPct"] is not None, "gate did not compute on a healthy fixture"
         assert c["stopCostStatus"] in ("PASS", "CAUTION")
         assert 0.0 <= c["stopCostPct"] <= 100.0
+
+
+def test_scan_evidence_is_authoritative_and_survives_db_restore(client, monkeypatch):
+    import asyncio
+    import json
+    import app.routers.scan as scan_module
+    from app.models.scan_session import ScanSession
+    from app.schemas import ContractExplanation, TradeCardData
+    from sqlalchemy import select
+    from tests.conftest import _TestSession
+
+    stock_results, contract_results = [], []
+    real_stock, real_contract = scan_module.score_stock, scan_module.validate_contract
+
+    def capture_stock(*args, **kwargs):
+        card = real_stock(*args, **kwargs)
+        stock_results.append(card)
+        return card
+
+    def capture_contract(*args, **kwargs):
+        card = real_contract(*args, **kwargs)
+        contract_results.append(card)
+        return card
+
+    cands, _, _ = _candidates(client, extra_patches=(
+        patch("app.routers.scan.score_stock", side_effect=capture_stock),
+        patch("app.routers.scan.validate_contract", side_effect=capture_contract),
+    ))
+    card = cands[0]
+    # Compare the complete producer snapshots, rather than deriving another score.
+    assert card["stockExplanation"] == stock_results[-1].explanation
+    picked = next(c for c in contract_results if c.contract_id == card["contract"])
+    assert card["contractExplanation"] == ContractExplanation.model_validate(picked.explanation).model_dump(mode="json")
+    assert card["stockExplanation"]["score"] == card["stockScore"]
+    assert card["stockExplanation"]["status"] == card["stockConfidence"]
+    assert card["contractExplanation"]["score"] == card["contractScore"]
+    assert card["contractExplanation"]["status"] == card["contractConfidence"]
+
+    async def stored_and_restored():
+        async with _TestSession() as session:
+            row = (await session.execute(select(ScanSession).where(ScanSession.id == "current"))).scalar_one()
+            stored = json.loads(row.last_result_json)["candidates"][0]
+        monkeypatch.setattr(scan_module, "AsyncSessionLocal", _TestSession)
+        monkeypatch.setattr(scan_module, "_last_result", None)
+        assert await scan_module.restore_from_db() == "complete"
+        return stored, scan_module._last_result.candidates[0].model_dump(mode="json")
+
+    stored, restored = asyncio.run(stored_and_restored())
+    assert stored == restored == card
+    assert client.get("/api/scan/last").json()["candidates"][0] == card
+    legacy = {k: v for k, v in card.items() if k not in ("stockExplanation", "contractExplanation")}
+    restored_legacy = TradeCardData.model_validate(legacy).model_dump(mode="json")
+    assert restored_legacy["stockExplanation"] is None
+    assert restored_legacy["contractExplanation"] is None
+    assert {k: v for k, v in restored_legacy.items() if k in legacy} == legacy
+
+
+def test_scan_alternatives_keep_their_own_contract_evidence(client):
+    candles = _candles("MSFT")
+    price = candles[-1]["close"]
+    chain = [_contract(price, strike_mult=m) for m in (0.95, 1.0, 1.05)]
+    for contract in chain:
+        contract["symbol"] = "MSFT"
+        contract["id"] = f"MSFT|{contract['strike']}|{contract['expiry']}|C"
+    cards, _, _ = _candidates(client, extra_patches=(
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain)),
+    ))
+    card = cards[0]
+    assert card["alternativesCount"] == 2
+    for alternative in card["alternatives"]:
+        evidence = alternative["contractExplanation"]
+        assert evidence["contract_id"] == f"MSFT|{alternative['strike']}|{alternative['expiry']}|C"
+        assert evidence["contract_id"] != card["contract"]
+        assert evidence["score"] == alternative["score"]
+        assert evidence["status"] == alternative["contractConfidence"]
 
 
 def test_gate_is_priced_at_the_structural_stop_not_a_flat_percentage(client):

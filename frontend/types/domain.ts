@@ -619,12 +619,14 @@ export interface TradeCardData {
   stockScore:    number;
   stockConfidence: Status;
   stockBreakdown:  ScoreBreakdown;
+  /** Scan-time evidence. Missing/null means not captured; re-run the scan. */
+  stockExplanation?: StockExplanation | null;
   contract:      string;
   contractScore: number;
   contractConfidence: Status;
   contractBreakdown: ContractScoreBreakdown;
   /** Authoritative evaluation explanation for the picked contract, if available */
-  contractExplanation?: ContractExplanation;
+  contractExplanation?: ContractExplanation | null;
   /** Alternative contracts (FR-28) — zero to N alternatives to the best contract. */
   alternatives?: AlternativeContract[];
   alternativesCount?: number;
@@ -820,6 +822,50 @@ export interface ContractExplanation {
   raw_inputs?: Record<string, number | null>;
 }
 
+export type ScoreEvidenceValue = string | number | boolean | null | ScoreEvidenceValue[] | { [key: string]: ScoreEvidenceValue };
+
+export interface StockComponentEvidence {
+  name: string;
+  wire_name: string;
+  raw_score: number;
+  status: Status;
+  measured: boolean;
+  weight: number;
+  contribution: number;
+  detail: Record<string, ScoreEvidenceValue>;
+  config: Record<string, ScoreEvidenceValue>;
+}
+
+export interface StockCapEvidence {
+  name: string;
+  status: Status;
+  before: Status;
+  after: Status;
+  detail: Record<string, ScoreEvidenceValue>;
+  config: Record<string, ScoreEvidenceValue>;
+}
+
+export interface StockExplanation {
+  version: 1;
+  symbol: string;
+  direction: Direction;
+  horizon: Horizon;
+  scoring_mode: 'stock' | 'options';
+  iv_basis: string;
+  evaluated_at: string;
+  score: number;
+  status: Status;
+  raw_status: Status;
+  unrounded_score: number;
+  rounding: 'python_round_ties_to_even';
+  pass_threshold: number;
+  caution_threshold: number;
+  weights: Record<string, number>;
+  components: Record<string, StockComponentEvidence>;
+  caps: StockCapEvidence[];
+  gate_config: Record<string, Record<string, ScoreEvidenceValue> | null>;
+}
+
 // --- Option contracts ---
 
 export type OptionRight = 'C' | 'P';
@@ -899,6 +945,7 @@ export interface AlternativeContract {
   score:        number;
   contractConfidence: Status;
   contractBreakdown:  ContractScoreBreakdown;
+  contractExplanation?: ContractExplanation | null;
   rrRatio:      number;
   rrModel:      'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
   reason:       string;

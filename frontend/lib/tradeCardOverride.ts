@@ -9,6 +9,7 @@
  */
 import type {
   TradeCardData, OptionContract, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan,
+  StockExplanation, ContractExplanation,
 } from '@/types/domain';
 
 export type OverriddenCard = TradeCardData & { _userOverride?: boolean };
@@ -19,6 +20,30 @@ export type RecomputedPlanShape = {
   rrModel: TradeCardData['rrModel'];
 };
 export type PlanEntry = { key: string; plan: RecomputedPlanShape };
+
+export type ScoreEvidence<T> =
+  | { state: 'captured'; explanation: T }
+  | { state: 'not_captured'; message: 'Not captured — re-run scan' };
+
+/** Read evidence only when it belongs to this authoritative result. Repricing
+ *  a plan does not score a contract; mergePlan must retain the picked row's
+ *  evidence. Legacy absence is explicit and never filled from live settings. */
+export function scoreEvidenceFor(card: TradeCardData): {
+  stock: ScoreEvidence<StockExplanation>;
+  contract: ScoreEvidence<ContractExplanation>;
+} {
+  const absent = { state: 'not_captured', message: 'Not captured — re-run scan' } as const;
+  const stock = card.stockExplanation;
+  const contract = card.contractExplanation;
+  return {
+    stock: stock && stock.symbol === card.symbol && stock.direction === card.direction
+      && stock.score === card.stockScore && stock.status === card.stockConfidence
+      ? { state: 'captured', explanation: stock } : absent,
+    contract: contract && contract.contract_id === card.contract
+      && contract.score === card.contractScore && contract.status === card.contractConfidence
+      ? { state: 'captured', explanation: contract } : absent,
+  };
+}
 
 /** Swap the auto-picked contract's details for a user-selected one from the
  *  Step 6 chain. Only the Contract Details block changes here — Entry/Exit/RR
