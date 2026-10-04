@@ -315,6 +315,12 @@ export async function runStockScan(
   // carry a catch for a rejection that gets past even this (`setScanState`
   // itself throwing), and both reset scanState there.
   let reachedRequest = false;
+  // True only while the request is being BUILT from the saved stores. A throw
+  // in that window (not ScanSizingError, which carries its own message) is a
+  // malformed saved setting -- A5d's STOCK_SCAN_SETTINGS_INVALID, moved here
+  // from Step 5 so Step 4 and the floating Run button say it too. A store
+  // write failing before the build is NOT that, hence a flag of its own.
+  let building = false;
   try {
     store.setActiveStrategy(strategy);
     store.setStockScanResult(null);
@@ -325,6 +331,7 @@ export async function runStockScan(
     store.setStockScanError(null);
     store.setScanState('SCANNING');
 
+    building = true;
     const saved = useScanParamsStore.getState();
     const p = { ...saved, ...overrides };
     const context = store.context;
@@ -348,6 +355,7 @@ export async function runStockScan(
       accountSize: sizing.accountSize,
       riskPct: sizing.riskPct,
     });
+    building = false;
 
     reachedRequest = true;
     const result = await api.postStockScan(requestBody);
@@ -370,8 +378,12 @@ export async function runStockScan(
     // and then writes storage, so a QuotaExceededError out of the first write
     // would skip the second — and the one that must not be skipped is FAILED,
     // which is what re-enables the Run button.
+    const settingsUnreadable = building && !(err instanceof ScanSizingError);
+    if (settingsUnreadable) console.error('runStockScan: building the stock-scan request failed', err);
     try {
-      store.setStockScanError(stockScanFailureReason(err, reachedRequest));
+      store.setStockScanError(
+        settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest),
+      );
     } catch { /* see above — the null return is the signal that survives */ }
     try {
       store.setScanState('FAILED');
