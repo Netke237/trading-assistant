@@ -42,7 +42,7 @@ Kenneth answered on 2026-10-04:
 | T3 | Stale adjustment-factor detection and refresh | T1 | `backend/app/services/historical_store.py`, `backend/app/routers/historical_data.py`, `backend/tests/test_adjustment_refresh.py` |
 | T4 | WFO selects and scores on net results | T1 | `backend/app/services/walk_forward.py`, `backend/app/services/strategy_param_optimizer.py`, `scripts/retune_archived_basket.py`, `backend/tests/test_walk_forward.py`, `backend/tests/test_wfo_net_costs.py` |
 | T5 | WFO evidence floor pooled across the basket | T4 | `backend/app/services/strategy_param_optimizer.py`, `backend/config/strategy_params.yaml`, `backend/tests/test_wfo_evidence_floor.py` |
-| T6 | DAY semantics for backtest entry limits | T1 | `backend/app/services/strategy_backtest.py`, `backend/tests/test_backtest_day_limits.py` |
+| T6 | DAY semantics for backtest entry limits | T1 | `backend/app/services/strategy_backtest.py`, `backend/tests/test_backtest_day_limits.py`, `backend/tests/test_strategy_backtest.py` (`test_backtest_result_changes_with_params` only; build-time amendment) |
 | T7 | Stock trigger honours `setup_window_bars` | T1 | `backend/app/scoring/stock_scorer.py`, `SCORING_RULES.md`, `backend/tests/test_trigger_setup_window.py` |
 | T8 | **Withdrawn** (plan round 1, F1). The live de-overlap moves to C4; the harness measures it (T11) | — | — |
 | T9 | **Moved** to `TRADING-REVIEW-PHASE-C-RR` (Kenneth, 2026-10-04, after the plan-stage cap) | — | — |
@@ -230,6 +230,12 @@ for o in list(self.orders):
 ```
 
 A one-line comment explains that live entries are DAY orders, so a limit lives for exactly the bar after its signal. `next()` runs after bar t closes, the order is tried on bar t+1, and at `next()` for t+1 it is cancelled if unfilled.
+
+**Existing test whose fixture loses its fills (build-time amendment, 2026-10-04).** The first T6 implementer found that `backend/tests/test_strategy_backtest.py::test_backtest_result_changes_with_params` fails with T6 applied. Its `_synth_bars(500, trend=True)` staircase produces pullback_ema fills only through stale limits, so both param sets now trade 0 times and the test can no longer tell whether `params` reaches the signal function. This is T6's own mechanism, so the test is in T6's scope. Repair that one test so it still proves what its docstring says, that `params` is forwarded into the signal function, without depending on stale fills. Two acceptable ways:
+- wrap `app.services.strategy_engine.pullback_ema_signal` with a recorder that delegates to the real function, and assert that the recorded `tolerance` equals each passed value;
+- or use a fixture whose limits fill on the next bar.
+
+Do not make the assertion vacuous, and do not delete the test. Any **other** existing test that fails because of T6 still follows the global rule: re-pin a numeric golden pin, or stop and report.
 
 **Commit:** `fix(backtest): entry limits live one bar like live DAY orders (Phase C T6, review M3)`
 
