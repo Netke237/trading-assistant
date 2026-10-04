@@ -7,7 +7,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -43,6 +43,7 @@ class StockScoreCard:
     status: Status                      # derived from score via thresholds
     rules: list[RuleResult] = field(default_factory=list)
     volume_bonus: bool = False          # True if volume confirmation earned
+    explanation: dict | None = None    # additive scan-time evidence, never a scoring input
 
 
 # ---------------------------------------------------------------------------
@@ -1181,17 +1182,27 @@ def score_stock(
     weighted_score = sum(r.score * name_to_weight[r.name] for r in rules)
     final_score    = round(weighted_score)
     final_status   = _status_from_score(final_score, thresholds)
+    raw_status = final_status
+    caps: list[dict] = []
+
+    def record_cap(name: str, cap: Status, before: Status, detail: dict, config: dict):
+        caps.append({"name": name, "status": cap, "before": before,
+                     "after": final_status, "detail": copy.deepcopy(detail),
+                     "config": copy.deepcopy(config)})
 
     # Pullback timing veto: a REJECT pullback means the setup timing is wrong.
     # Cap at CAUTION so the candidate remains visible but cannot PASS.
     _pb = next((r for r in rules if r.name == "pullback"), None)
     if _pb is not None and _pb.status == "REJECT":
+        before = final_status
         final_status = _worse(final_status, "CAUTION")
+        record_cap("pullback_timing", "CAUTION", before, _pb.detail, {})
 
     # Confidence gate: demote-only. Append a confidence RuleResult and cap status.
     if confidence_gate is not None:
         from app.scoring.signal_confidence import status_cap, interpret
         cap = status_cap(confidence, confidence_gate)
+        before = final_status
         final_status = _worse(final_status, cap)
         rules.append(RuleResult(
             name="confidence",
@@ -1205,10 +1216,12 @@ def score_stock(
                 ),
             },
         ))
+        record_cap("confidence", cap, before, rules[-1].detail, confidence_gate)
 
     # Regime gate: demote-only. Appends a regime RuleResult with score=0 and caps status.
     if regime_signal is not None and regime_gate is not None:
         cap = _regime_cap(regime_signal["conviction_pct"], regime_signal["stability"], regime_gate)
+        before = final_status
         final_status = _worse(final_status, cap)
         rules.append(RuleResult(
             name="regime",
@@ -1216,6 +1229,7 @@ def score_stock(
             score=0,
             detail={**regime_signal},
         ))
+        record_cap("regime", cap, before, rules[-1].detail, regime_gate)
 
     # Fundamentals gate (demote-only, Swing/Position only)
     if fundamentals is not None and fundamentals_gate is not None:
@@ -1224,6 +1238,7 @@ def score_stock(
         is_intraday = str(horizon).lower() == "intraday"
 
         if gate_enabled and not is_intraday:
+            before = final_status
             health_score = fundamentals.score
             caution_below = fundamentals_gate.get("cautionBelow", 45)
             reject_below = fundamentals_gate.get("rejectBelow", 30)
@@ -1262,6 +1277,39 @@ def score_stock(
                 score=health_score,
                 detail=fundamentals.detail,
             ))
+            record_cap("fundamentals", fund_status, before,
+                       {**fundamentals.detail, "score": health_score,
+                        "safety_flags": list(fundamentals.safety_flags)}, fundamentals_gate)
+
+    # Snapshot the resolved objects and RuleResults used above. Keep the
+    # original weighted sum/rounding and all gate decisions authoritative.
+    # Gate RuleResults are not weighted components, even when they have scores.
+    components = {}
+    for r in rules[:5]:
+        rule_config = copy.deepcopy(cfg[r.name])
+        if r.name == "trend":
+            rule_config["crossover"]["ma_type"] = ma_type
+        elif r.name == "vol" and scoring_mode == "stock":
+            rule_config = {"volume_lookback_bars": cfg["trigger"]["volume_lookback_bars"],
+                           "rvol_bands": [2.0, 1.2, 0.8]}
+        components[r.name] = {
+            "name": r.name, "wire_name": "volatility" if r.name == "vol" else r.name,
+            "raw_score": r.score, "status": r.status, "measured": r.measured,
+            "weight": name_to_weight[r.name],
+            "contribution": r.score * name_to_weight[r.name],
+            "detail": copy.deepcopy(r.detail), "config": rule_config,
+        }
+    explanation = {
+        "version": 1, "symbol": symbol, "direction": direction, "horizon": horizon,
+        "scoring_mode": scoring_mode, "iv_basis": iv_basis,
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
+        "score": final_score, "status": final_status, "raw_status": raw_status,
+        "unrounded_score": weighted_score, "rounding": "python_round_ties_to_even",
+        "pass_threshold": thresholds["pass"], "caution_threshold": thresholds["caution"],
+        "weights": dict(name_to_weight), "components": components, "caps": caps,
+        "gate_config": copy.deepcopy({"confidence": confidence_gate, "regime": regime_gate,
+                                      "fundamentals": fundamentals_gate}),
+    }
 
     return StockScoreCard(
         symbol=symbol,
@@ -1271,4 +1319,5 @@ def score_stock(
         status=final_status,
         rules=rules,
         volume_bonus=vol_bonus,
+        explanation=explanation,
     )
