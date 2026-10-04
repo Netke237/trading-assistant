@@ -1,0 +1,360 @@
+{
+  "browser": "151.0.7922.173",
+  "fixture": "deterministic20symbols10rows",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "variants": [
+    {
+      "label": "release_functional",
+      "panels": 200,
+      "runs": [
+        {
+          "functional": {
+            "lastPaint": {
+              "visible": true,
+              "height": 422.515625,
+              "scoreVisible": true
+            },
+            "keyboardCloseOpen": true,
+            "starPreserves200": true,
+            "refreshCalls": 20,
+            "refreshPreserves200": true
+          },
+          "run": 0,
+          "load": 767,
+          "mounted": 200,
+          "initialChainRequests": [
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM01&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118433
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM02&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118436
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM03&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118439
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM04&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118440
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM05&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118441
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM06&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118448
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM07&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118449
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM08&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118449
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM09&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118450
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM10&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118454
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM11&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118455
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM12&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118455
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM13&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118456
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM14&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118459
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM15&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118460
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM16&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118460
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM17&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118461
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM18&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118464
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM19&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118465
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM20&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118465
+            }
+          ],
+          "allApiRequests": [
+            {
+              "url": "http://localhost:8000/api/portfolio",
+              "at": 1791072118083
+            },
+            {
+              "url": "http://localhost:8000/api/watchlist",
+              "at": 1791072118086
+            },
+            {
+              "url": "http://localhost:8000/api/config/health",
+              "at": 1791072118087
+            },
+            {
+              "url": "http://localhost:8000/api/stock-scan/last",
+              "at": 1791072118088
+            },
+            {
+              "url": "http://localhost:8000/api/watchlist",
+              "at": 1791072118116
+            },
+            {
+              "url": "http://localhost:8000/api/data-sources",
+              "at": 1791072118118
+            },
+            {
+              "url": "http://localhost:8000/api/data-sources",
+              "at": 1791072118123
+            },
+            {
+              "url": "http://localhost:8000/api/scan/last-run",
+              "at": 1791072118123
+            },
+            {
+              "url": "http://localhost:8000/api/stock-scan/last-run",
+              "at": 1791072118145
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM01&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118433
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM02&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118436
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM03&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118439
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM04&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118440
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM05&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118441
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM06&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118448
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM07&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118449
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM08&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118449
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM09&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118450
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM10&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118454
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM11&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118455
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM12&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118455
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM13&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118456
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM14&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118459
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM15&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118460
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM16&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118460
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM17&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118461
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM18&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118464
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM19&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118465
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM20&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072118465
+            },
+            {
+              "url": "http://localhost:8000/api/watched-contracts",
+              "at": 1791072126322
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM01&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126490
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM02&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126492
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM03&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126493
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM04&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126494
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM05&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126495
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM06&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126496
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM07&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126496
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM08&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126497
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM09&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126497
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM10&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126498
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM11&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126499
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM12&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126500
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM13&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126500
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM14&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126501
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM15&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126502
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM16&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126507
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM17&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126508
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM18&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126509
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM19&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126510
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM20&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791072126511
+            }
+          ],
+          "chainAfter": 40,
+          "interactionHttp": [],
+          "preparation": {
+            "duration": 7041.89999999851,
+            "tasks": [
+              {
+                "start": 821,
+                "duration": 50
+              }
+            ]
+          },
+          "interactions": {
+            "sort": 110.60000000149012,
+            "pick": 18.800000000745058,
+            "toggle": 31.100000001490116
+          },
+          "tasks": [
+            {
+              "start": 8901.699999999255,
+              "duration": 74
+            }
+          ]
+        }
+      ],
+      "stats": {
+        "load": {
+          "runs": [
+            767
+          ]
+        },
+        "sort": {
+          "runs": [
+            110.60000000149012
+          ]
+        },
+        "pick": {
+          "runs": [
+            18.800000000745058
+          ]
+        },
+        "toggle": {
+          "runs": [
+            31.100000001490116
+          ]
+        }
+      }
+    }
+  ]
+}

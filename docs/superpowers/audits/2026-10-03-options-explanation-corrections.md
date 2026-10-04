@@ -1,3 +1,5 @@
+Current takeover outcome and final qualification are in [the reconciliation report](2026-10-03-options-takeover-reconciliation.md). The record below describes the earlier correction checkpoint; its pending-report and release-hold statements are historical.
+
 # Options explanation corrections
 
 Initial correction commit: `283c2cbbb8d6593ff8bacbe7c37b39f49ed24e85`, parent integration commit `66561e26`. Follow-up correction: `b89a1db65f589d215abfb43ce2796840b38b150d`. Existing implementation heads: Step 5 `9b8a2971`, Contracts `ac39b841`; both histories were integrated in the existing checkout on `codex/options-explanation-fixes`. This branch has not been merged into main.

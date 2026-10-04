@@ -4104,7 +4104,7 @@
           "docs/superpowers/plans/2026-10-03-options-vol-events-explanations-plan.md"
         ],
         "summary": "Options Step 5: visible applied thresholds, per-check statuses, deciding gate drivers and inline explanations without horizontal overflow.",
-        "status": "in_progress",
+        "status": "ready_to_merge",
         "plan": "docs/superpowers/plans/2026-10-03-options-vol-events-explanations-plan.md",
         "plan_audit": {
           "date": "2026-10-03",
@@ -4124,12 +4124,13 @@
         "implementation": "completed",
         "code_audit": {
           "date": "2026-10-03",
-          "rounds": 6,
+          "rounds": 7,
           "clean": true,
           "gate_findings_by_round": [
             13,
             12,
             6,
+            0,
             0,
             0,
             0
@@ -4142,11 +4143,12 @@
             "16fd8e54-4833-4952-8a3f-564df43bd3f5 (Round 3)",
             "37453f69-9bd6-4ed5-b775-a234dfaf163c (Round 4)",
             "/root/vol_events_corrections_audit (authorized code round 5)",
-            "/root/options_upstream_merge_review (authorized latest-main merge correction round)"
+            "/root/options_upstream_merge_review (authorized latest-main merge correction round)",
+            "/root/options_merge_test_scope_review (authorized selector correction round7)"
           ],
           "head_commit": "283c2cbbb8d6593ff8bacbe7c37b39f49ed24e85",
           "reviewed_diff": "66561e266c30bd752a833df49093d125b216985e..283c2cbbb8d6593ff8bacbe7c37b39f49ed24e85",
-          "correction_evidence": "docs/superpowers/audits/2026-10-03-options-explanation-corrections.md",
+          "correction_evidence": "docs/superpowers/audits/2026-10-03-options-takeover-reconciliation.md",
           "merge_review": {
             "parents": [
               "a12086fa6510c94592bda600b98e87e4acaaaa68",
@@ -4155,15 +4157,20 @@
             "scope": "Staged Step5 dividend note resolution and event regressions; additive schema/domain/override/API/earnings-gate interactions Steps5-7; upstream state reconciliation. No re-audit of inherited main changes.",
             "gate_findings": 0,
             "step5_sha256": "26a273e08655979cec041417ac678a0b8bca5d4fa99537a7889113c82bfe4728"
+          },
+          "selector_review": {
+            "diff": "2ef6c900 plus two eventGate assertions",
+            "gate_findings": 0,
+            "independent_tests": 20
           }
         },
-        "note": "All correction and latest-main merge reviews independently clean. Final merged runtime acceptance recording pending.",
+        "note": "Unified takeover complete: external report reconciled, latest-main conflicts resolved, independent correction reviews clean, merged build/typecheck249frontend78backend33browser tests and10000score-card parity passed. No merge into main.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
           "historical_rounds_preserved": 4,
           "known_defects_fixed": 3,
-          "independent_verdict": "clean_authorized_code_round_5",
+          "independent_verdict": "clean_all_final_correction_scopes",
           "note": "Fresh reviewer traced effective threshold endpoints, overrides, backend strict event boundaries and unchanged Contracts navigation. Scope verified; 37 independent tests passed.",
           "audit_cap_exception": {
             "date": "2026-10-03",
@@ -4175,7 +4182,24 @@
             "other_branch": "fix/options-contract-explanations",
             "other_work": "User relayed that no code fixes, commits, pushes or merges exist. Root reassigned task claim.",
             "audit_findings": "Report c5921ef1 imported and all four numeric findings reconciled; no other-session application edits existed.",
-            "release_status": "hold_for_final_merged_runtime_acceptance"
+            "release_status": "ready_to_merge",
+            "upstream_main": "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585"
+          },
+          "final_validation": {
+            "merge_source": "2ef6c900",
+            "typecheck": "pass",
+            "production_build": "pass",
+            "frontend_tests": 249,
+            "frontend_suites": 14,
+            "backend_python": "3.11.16",
+            "backend_tests": 78,
+            "production_browser_tests": 33,
+            "exact_scorer_parity_cases": 10000,
+            "runtime_evidence": "docs/superpowers/measurements/options-explanations/TAKEOVER_PRODUCTION_REPORT.md",
+            "performance_source": "a12086fa",
+            "interaction_p95_max_ms": 108.5,
+            "interaction_long_task_max_ms": 76,
+            "zero_interaction_http": true
           }
         }
       },
@@ -4186,7 +4210,7 @@
           "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md"
         ],
         "summary": "Options Step 6: authoritative weighted-score breakdown and blocking reasons, inline details, no horizontal overflow and measured 200-contract responsiveness.",
-        "status": "in_progress",
+        "status": "ready_to_merge",
         "plan": "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md",
         "plan_audit": {
           "date": "2026-10-03",
@@ -4251,25 +4275,42 @@
             "step5_sha256": "26a273e08655979cec041417ac678a0b8bca5d4fa99537a7889113c82bfe4728"
           }
         },
-        "note": "All correction and latest-main merge reviews independently clean. Final merged runtime acceptance recording pending.",
+        "note": "Unified takeover complete: external report reconciled, latest-main conflicts resolved, independent correction reviews clean, merged build/typecheck249frontend78backend33browser tests and10000score-card parity passed. No merge into main.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
           "historical_rounds_preserved": 1,
           "known_defects_fixed": 5,
-          "independent_verdict": "clean_authorized_code_round_7",
+          "independent_verdict": "clean_all_final_correction_scopes",
           "note": "Original history retained. Round2 found one fractional card-weight defect; fixed, and fresh round3 verified the fix and its interactions. Exact scope and evidence are in correction_evidence.",
           "cross_session_reconciliation": {
             "date": "2026-10-03",
             "other_branch": "fix/options-contract-explanations",
             "other_work": "User relayed that no code fixes, commits, pushes or merges exist. Root reassigned task claim.",
             "audit_findings": "Report c5921ef1 imported and all four numeric findings reconciled; no other-session application edits existed.",
-            "release_status": "hold_for_final_merged_runtime_acceptance"
+            "release_status": "ready_to_merge",
+            "upstream_main": "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585"
           },
           "audit_cap_exception": {
             "date": "2026-10-03",
             "authorization": "User instructed root to take over both pages and ensure both are audited and fixed after the explicit audit-cap discussion, then supplied the other audit report for reconciliation.",
             "scope": "Additional independent correction reviews for newly confirmed external-report defects and their compatibility/performance follow-up. Preserve the complete historical code round tally."
+          },
+          "final_validation": {
+            "merge_source": "2ef6c900",
+            "typecheck": "pass",
+            "production_build": "pass",
+            "frontend_tests": 249,
+            "frontend_suites": 14,
+            "backend_python": "3.11.16",
+            "backend_tests": 78,
+            "production_browser_tests": 33,
+            "exact_scorer_parity_cases": 10000,
+            "runtime_evidence": "docs/superpowers/measurements/options-explanations/TAKEOVER_PRODUCTION_REPORT.md",
+            "performance_source": "a12086fa",
+            "interaction_p95_max_ms": 108.5,
+            "interaction_long_task_max_ms": 76,
+            "zero_interaction_http": true
           }
         }
       },

@@ -198,7 +198,7 @@ describe('audit round 1 F9 — a dividend-only REJECT says it is not a send veto
   it('dividend 5d out, earnings 90d out: REJECT, with the note', () => {
     setupRow({ nextEventLabel: 'Dividend', earningsDays: 90 });
     render(<Step5Page />);
-    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('REJECT');
     expect(screen.getByText(NOTE)).toBeInTheDocument();
   });
 
@@ -211,7 +211,7 @@ describe('audit round 1 F9 — a dividend-only REJECT says it is not a send veto
   it('earnings 5d out: no note — that one IS a veto', () => {
     setupRow({ nextEventLabel: 'Earnings', earningsDays: 5 });
     render(<Step5Page />);
-    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('REJECT');
     expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
   });
 
