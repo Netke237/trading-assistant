@@ -135,6 +135,10 @@ def run_strategy_backtest(
             pass
 
         def next(self):
+            # Live entries are DAY orders: an entry limit lives for the one bar after its signal (T6, M3).
+            for o in list(self.orders):
+                if not o.is_contingent:
+                    o.cancel()
             n = len(self.data.Close)
             if n < 60:
                 return
