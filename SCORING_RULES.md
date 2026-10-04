@@ -134,6 +134,8 @@ Three bands, driven by `pullback.atr_pass_min`/`atr_pass_max`/`atr_caution_max` 
 | All signals must occur within | 8 daily bars of each other |
 | RSI divergence window (`rsi_div_window_bars`) | 15 bars — the only windowed divergence parameter in code; the Stochastic K/D check is a same-bar/prior-bar crossover, not a windowed divergence |
 
+`setup_window_bars`: a momentum event counts if it occurred within the last N bars and its state still holds.
+
 ### Scoring
 | Condition | Status |
 |---|---|
