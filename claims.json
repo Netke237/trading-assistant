@@ -2,10 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "work",
-      "claimed_at": "2026-10-04T13:48:48Z",
-      "expires_at": "2026-10-04T16:48:48Z",
-      "note": "Document Stock and Pre-Breakout design decisions before mockup approval and implementation",
+      "branch": "codex/stock-presentation-spec",
+      "claimed_at": "2026-10-04T16:49:54Z",
+      "expires_at": "2026-10-04T19:49:54Z",
+      "note": "Specification and parallel coordinator ticket graph on latest main; documentation only",
       "task": "STOCK-DESIGN-GRILLING"
     }
   ]
