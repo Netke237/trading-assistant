@@ -47,7 +47,7 @@ class ContractQuoteResponse(BaseModel):
     price: float   # mid price
     delta: float
     theta: float
-    # A TRUE PERCENTILE, or None when no rank source answered -- which is the
+    # An IV RANK, or None when no rank source answered -- which is the
     # common case, and was already reachable before the Phase A split via
     # fetch_contract_quote_async's price-only fallback path
     # (PHASE-A-NULL-IVRANK-2026-09-06). The absolute level rides in `iv`.
@@ -277,7 +277,7 @@ async def get_contracts(
             for c in raw_chain:
                 if not c.get("iv"):
                     # An inversion yields an ABSOLUTE volatility, never a
-                    # percentile — it can only ever feed `iv`.
+                    # rank — it can only ever feed `iv`.
                     c["iv"] = round(_iv_bs * 100, 1)
                     c["implied_volatility"] = round(_iv_bs, 4)
 
@@ -311,7 +311,7 @@ async def get_contracts(
             delta=float(augmented.get("delta", 0)),
             theta=float(c.get("theta", 0)),
             # Send the two quantities RAW and unresolved: `ivRank` only ever
-            # a percentile, `iv` only ever an absolute level, either or both
+            # a rank, `iv` only ever an absolute level, either or both
             # None. `augmented["iv_rank"]` is the RESOLVED figure the scorer
             # needed and would blur the two back together on the wire
             # (PHASE-A-NULL-IVRANK-2026-09-06).
