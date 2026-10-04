@@ -70,3 +70,48 @@ commits, claim integration and proceed through audited checkpoints.
 Full 520-entry reconciliation, supported widths/themes, legacy/refusal/override/
 contract-switch/race-freshness cases, frontend tests/typecheck/build and Python
 3.11 parity checks have not been run. No deploy, main merge or orders.
+
+## Dependency assembly — 2026-10-04, before integration claim
+
+User supplied original AREA3 logs, explicitly reassigned it and authorized one
+extra plan correction audit. Recovered and completed AREA3 on its own branch:
+source246b4853, closeout454d84c6, backend3/3 clean and frontend2/3 clean;
+claim released. Full frontend192 suites4619 tests/typecheck passed; full Python
+3.11 backend4895 passed/1 skipped/2 inherited Yahoo-network shortlist failures;
+normal Google-font build blocked, separate environment-mocked build passed.
+Exact original plan cap history and reviewer evidence are in its worklog.
+Integration does not re-author those scoring/plan changes as layout work.
+
+Latest main dff659c662f5c7c38f183326238e6cd1ba0664e7 incorporated through AREA3
+merge into this integration branch. Original integration preflight commit and
+AREA3 history preserved. Live claims now empty. No integration claim yet.
+
+Read each prerequisite worklog, audited implementation diff and approved
+presentation plan/audit, design screenshot/preview and520-entry inventory.
+Current interfaces: context components compact?:boolean defaultfalse; barrier
+props unchanged; qualification optional {card,kind}; original panel bars,
+total/status must remain paired with that same effective card. Score snapshots
+are captured read-only and absent/mismatched legacy snapshots remain explicit.
+
+Missing audited code cherry-picked from qualification's existing dependency
+chain, avoiding duplicate score implementations:
+-08ce063c (be05094f patch) ->2ffa9315;
+-27418757 (fe198ab5 patch) ->179523f3;
+-2d8c1c87 ->0a1df7be;
+-94692888 ->ab87be3a;
+-UI core08d416c2 ->fab1a9de and45f83c26 ->93983992.
+All six zero-context stable patch IDs match their audited source commits.
+No conflicts or manual source resolutions. Context739afd1f and barrier51342019
+are main ancestors and their full owned source dirs are byte-identical to
+original implementation commits. Their original and landing audits remain
+clean. External contract explanations e1751e15 are ancestors; read exact
+correction/landing ledger and10,000-card parity evidence. Latest IV display
+correction0a6cffb0 is also retained with its audit evidence.
+
+Copied only three missing task worklogs byte-for-byte from their published
+branches for local reviewer access. No feature-branch canonical state copied;
+current PROJECT_STATE.json parses exactly equal to fetched origin/main.
+UI/score/qualification branch own-entry state deltas will be recorded as
+verified prerequisite evidence within our own integration entry; original
+user instruction permits no edits to their canonical entries. Full-page
+integration source edits and integration claim still await assembly clearance.
