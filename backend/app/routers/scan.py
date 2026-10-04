@@ -1197,6 +1197,7 @@ async def _process_symbol(
         status=card.status,
         stockScore=card.score,
         stockConfidence=card.status,
+        stockExplanation=card.explanation,
         stockBreakdown=ScoreBreakdown(
             trend=_rule_score(card, "trend"),
             pullback=_rule_score(card, "pullback"),
@@ -1214,6 +1215,7 @@ async def _process_symbol(
         contract=f"{symbol}|{int(strike)}|{contract.get('expiry','TBD')}|{'C' if direction=='Bullish' else 'P'}",
         contractScore=contract_card.score,
         contractConfidence=contract_card.status,
+        contractExplanation=contract_card.explanation,
         contractBreakdown=ContractScoreBreakdown(
             dteFit=contract_card.breakdown.dte_score,
             delta=contract_card.breakdown.delta_score,
@@ -1356,6 +1358,7 @@ async def _process_symbol(
             iv=opt_float(alt_c.get("iv")),
             score=alt_card.score,
             contractConfidence=alt_card.status,
+            contractExplanation=alt_card.explanation,
             contractBreakdown=ContractScoreBreakdown(
                 dteFit=alt_card.breakdown.dte_score,
                 delta=alt_card.breakdown.delta_score,
