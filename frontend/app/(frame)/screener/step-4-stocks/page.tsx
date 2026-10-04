@@ -23,6 +23,7 @@ import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPane
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
+import { HistoryPrefetchRow } from './HistoryPrefetchRow';
 import styles from './page.module.css';
 
 function _startOfDay(d: Date): number {
@@ -370,6 +371,8 @@ export default function Step4StocksPage() {
           </button>
         )}
       </div>
+
+      <HistoryPrefetchRow />
 
       {error && <Text size={12} tone="reject">{error}</Text>}
       {notice && <Text size={12} tone="caution">{notice}</Text>}
