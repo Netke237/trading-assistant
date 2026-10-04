@@ -14,7 +14,7 @@
  * schema enforces this (it's nullable at the DB level, necessarily, since
  * `note` entries forbid it).
  *
- * `strategy_tag` is free text (the 7 step-5-strategy names are offered only
+ * `strategy_tag` is free text (the 7 step-4-stocks strategy names are offered only
  * as <datalist> suggestions, not a closed <select>) — options trades and
  * off-strategy stock trades need to write something else in.
  *
