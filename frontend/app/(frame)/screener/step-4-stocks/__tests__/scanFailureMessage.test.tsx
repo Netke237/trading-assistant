@@ -23,6 +23,8 @@ jest.mock('@/components/organisms/StockSendDialog', () => ({ StockSendDialog: ()
 jest.mock('@/components/organisms/StrategyParamsPanel', () => ({ StrategyParamsPanel: () => null }));
 jest.mock('@/components/organisms/ScanFunnel', () => ({ ScanFunnel: () => null }));
 jest.mock('@/components/atoms/WatchStar', () => ({ WatchStar: () => null }));
+// This suite does not mock @/lib/api; the row would call the real backend.
+jest.mock('../HistoryPrefetchRow', () => ({ HistoryPrefetchRow: () => null }));
 
 /**
  * Replace a store method with one that throws, and hand back the undo.

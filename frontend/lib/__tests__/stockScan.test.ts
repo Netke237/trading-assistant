@@ -1,7 +1,11 @@
-import { runStockScan, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
+import {
+  runStockScan, stockPositionCardKey, stockScanFailureReason,
+  STOCK_SCAN_SETTINGS_INVALID, SCAN_RISK_ZERO_MESSAGE,
+} from '@/lib/stockScan';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
+import { useRiskStore } from '@/lib/riskStore';
 import type { PositionCardData } from '@/types/stockDomain';
 
 jest.mock('@/lib/api', () => ({
@@ -257,6 +261,55 @@ describe('runStockScan', () => {
     const singleArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
     expect(singleArg.mean_reversion_variants).toBeUndefined();
     expect(singleArg.mean_reversion_min_confirmations).toBeUndefined();
+  });
+
+  describe('a throw while building the request (moved from Step 5, A5d)', () => {
+    let consoleError: jest.SpyInstance;
+    beforeEach(() => { consoleError = jest.spyOn(console, 'error').mockImplementation(() => {}); });
+    afterEach(() => consoleError.mockRestore());
+
+    it('confidenceGate: null stores the settings message, posts nothing, logs once', async () => {
+      useSettingsStore.setState({ confidenceGate: null } as never);
+      expect(await runStockScan('breakout_base')).toBeNull();
+      expect(api.postStockScan).not.toHaveBeenCalled();
+      expect(useScanStore.getState().stockScanError).toBe(STOCK_SCAN_SETTINGS_INVALID);
+      expect(useScanStore.getState().scanState).toBe('FAILED');
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError.mock.calls[0][0]).toBe('runStockScan: building the stock-scan request failed');
+      expect(consoleError.mock.calls[0][1]).toBeInstanceOf(TypeError);
+    });
+
+    it('a malformed non-null gate { enabled: true } gets the same message', async () => {
+      useSettingsStore.setState({ confidenceGate: { enabled: true } } as never);
+      await runStockScan('breakout_base');
+      expect(useScanStore.getState().stockScanError).toBe(STOCK_SCAN_SETTINGS_INVALID);
+    });
+
+    it('a 0% max loss keeps its own message and is not logged', async () => {
+      // Restore the store's real value (riskStore's DEFAULT_LIMITS, 0.0375),
+      // read before the change rather than guessed.
+      const priorMaxLoss = useRiskStore.getState().limits.maxLossPerTradePct;
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, maxLossPerTradePct: 0 } }));
+      try {
+        await runStockScan('breakout_base');
+        expect(useScanStore.getState().stockScanError).toBe(SCAN_RISK_ZERO_MESSAGE);
+        expect(consoleError).not.toHaveBeenCalled();
+      } finally {
+        useRiskStore.setState((s) => ({ limits: { ...s.limits, maxLossPerTradePct: priorMaxLoss } }));
+      }
+    });
+
+    it('a store write failing BEFORE the build keeps its own text, not the settings message', async () => {
+      const original = useScanStore.getState().setStockScanResult;
+      useScanStore.setState({ setStockScanResult: () => { throw new Error('QuotaExceededError'); } } as never);
+      try {
+        await runStockScan('breakout_base');
+        expect(useScanStore.getState().stockScanError).toBe('QuotaExceededError');
+        expect(consoleError).not.toHaveBeenCalled();
+      } finally {
+        useScanStore.setState({ setStockScanResult: original } as never);
+      }
+    });
   });
 });
 

@@ -80,3 +80,33 @@
 }
 .modeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 .modeBtnActive { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+
+.prefetchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.prefetchLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prefetchBtn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.prefetchBtn:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}

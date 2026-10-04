@@ -80,7 +80,7 @@ export default function Step6BacktestPage() {
   if (!result) {
     return (
       <div className={styles.main}>
-        <Text size={13} tone="dim">No stock scan result. Go back to Step 5 and run a scan.</Text>
+        <Text size={13} tone="dim">No stock scan result. Go back to Step 4 (Strategy) and run a scan.</Text>
       </div>
     );
   }
@@ -108,7 +108,7 @@ export default function Step6BacktestPage() {
   return (
     <div className={styles.main}>
       <div className={styles.header}>
-        <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
+        <Text size={11} tone="dim" weight={500}>STEP 5 OF 6</Text>
         <Title as="h1" size={24}>Backtest Gate</Title>
         <Text size={13} tone="secondary">
           {/* No "N failed" — candidates.length - passing.length is always 0,

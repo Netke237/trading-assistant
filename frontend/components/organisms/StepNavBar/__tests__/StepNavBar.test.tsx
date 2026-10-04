@@ -100,3 +100,30 @@ describe('StepNavBar — Step 1 REJECT-gate race (H5)', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 });
+
+describe('StepNavBar — Stocks mode is 6 steps (STOCKS-STEP-MERGE-S1)', () => {
+  beforeEach(() => {
+    mockPush.mockClear();
+    useScanStore.setState({ combinedRegime: 'PASS', screenerMode: 'stocks' } as any);
+  });
+
+  it('on Backtest: STEP 5 OF 6, Back to Step 4, Next to Position', () => {
+    mockPathname = '/screener/step-6-backtest';
+    render(<StepNavBar />);
+    expect(screen.getByText('STEP 5 OF 6')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(mockPush).toHaveBeenLastCalledWith('/screener/step-4-stocks');
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    expect(mockPush).toHaveBeenLastCalledWith('/screener/step-7-position-card');
+  });
+
+  it('on Position: STEP 6 OF 6, Back to Backtest, Next disabled', () => {
+    mockPathname = '/screener/step-7-position-card';
+    render(<StepNavBar />);
+    expect(screen.getByText('STEP 6 OF 6')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(mockPush).toHaveBeenLastCalledWith('/screener/step-6-backtest');
+    const nextBtn = screen.getByRole('button', { name: /done|next/i });
+    expect(nextBtn).toBeDisabled();
+  });
+});
