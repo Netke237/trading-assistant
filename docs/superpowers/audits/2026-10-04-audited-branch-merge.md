@@ -51,5 +51,62 @@ Source-only69556bff was typechecked before commit; no audit was fabricated.
 
 New integration stage max3 rounds independently audits actual latest-main
 interactions and conflict resolutions. Original clean feature stage counters
-are not reset. Current integration round0, clean false; not ready to merge
+are not reset. Before fresh review, integration round0, clean false; not ready to merge
 pending fresh review and checks. No deploy/orders/arm/fire/save requests.
+
+## Integration round1/3 clean — frozen3ad48ff0
+
+Fresh independent /root/remaining_merge_audit_r1 applied K/BMad against
+b73ada8abc20b29d7204f5257d52579294cd88c6..
+3ad48ff037b16b917ea77e29c862807c1dc6802d. Whole scope verified and second
+adversarial pass zero gate findings, no fixes/deferred findings. Traced all
+three conflict resolutions, AREA3 capture, ordered quantity/booking/freshness,
+trigger identity/cancellation/scan persistence, durable exact-quote reservations,
+UTC retry/concurrency/gross losses and post-dispatch resolution. Existing JSON
+entries/roots unchanged: exactly four phases and one IV shipped record added.
+Harness/tests and all seven report/archive artifacts match audited branch
+byte-for-byte; original hashes match, no active parameters/optimizer changed.
+Liquidity excluded and original hold/counters unchanged. Original features
+remain at their closed clean stages; this integration stage closes at1/3.
+
+Independent Python3.11.16, backend cwd:
+- ../.venv/bin/python -m pytest -q tests/test_daily_risk.py tests/test_daily_risk_integration.py tests/test_account_value.py tests/test_position_writer_gates.py tests/test_retune_archived_basket.py tests/test_stop_semantics.py tests/test_phase_g_arm_pick.py:161passed1skip,12.24s, toolchunk5d6636. Real archive absent initially.
+- ../.venv/bin/python -m pytest -q tests/test_arm_entry_premium_required.py tests/test_premium_cap_basis.py tests/test_p1a_callers_through_source_cap.py tests/test_o4_step4_booking.py tests/test_o4_step3_arm_fields.py tests/test_area3_plan_consistency.py tests/test_scan_session.py tests/test_manual_ibkr_confirm_as_error.py:196passed9.03s, chunk30cc6e.
+- Extracted committed archive to expected local path, verified all60 input
+SHA hashes; ../.venv/bin/python -m pytest -q tests/test_retune_archived_basket.py:
+12passed/no skips7.03s, chunke4b54a, real spawned-worker training/OOS parity.
+- ../.venv/bin/python -m alembic -c migrations/alembic.ini heads:
+f62a9e1b4c70 only head, chunk6ec36f. State renderer exits0.
+
+Author frontend199 suites4664passed175.429s; typecheck/build30routes passed.
+Warm font cache retains environment-only mocked font metrics limitation from
+prior integration; no font/config change. Full backend run has two failures
+pending final traceback and unchanged-main comparison. Overall merge remains
+pending validation record despite independently clean code integration.
+
+## Final merge validation
+
+Full Python3.11.16 backend:5016passed,1skipped,2failed640.68s. Failures exactly
+test_shortlist_keeps_highest_scores_not_universe_order and
+test_trimmed_names_are_recorded_and_counted_once; market Yahoo requests denied
+CONNECT403. Detached UNCHANGED origin/main b73ada8a full shortlist module:
+17passed, same2failed157.07s, matching network refusals. Initial two-test baseline
+probe1passed/1failed49.28s demonstrates order/network sensitivity; full module
+comparison confirms both failures on unchanged main. No tests/numeric golden
+expectations changed to hide failures. No claim of a fully green backend suite.
+All other5016 backend tests passed, including new ledger/account/retuning checks.
+
+Frontend199 suites4664passed175.429s; normal build30routes, typecheck/state and
+diff check passed. Exact validation log hashes:
+- backend full: /tmp/remaining-full-backend.log, SHA256 8b6b6e8c8ab04fe4a4d3858874c6301c9bbce695a754b0a400bf7ab79cdb7e8a
+- unchanged-main shortlist module: /tmp/remaining-baseline-shortlist-module.log, SHA256 850464ca6477f1856b95eb9ecb5b08b39030f40bec5e113c0b390d4d359b3126
+- frontend full: /tmp/remaining-full-frontend.log, SHA256 21155f32a8a2538edfe88435c36b98c6b6726306594c77275558c611e9039965
+- build: /tmp/remaining-build.log, SHA256 f6c42f892d0d97d22ad903b95e2bc9cad2ec5cd625cb435dfbe5f09cd67a28a6
+- typecheck before freeze: /tmp/remaining-freeze-typecheck.log, SHA256 257bbdae53ffb556b617d7f8709922683b663071ae7a0efdd5d96ba59785f62c
+
+Merge ready: three audited branch targets included once; liquidity explicitly
+excluded under unresolved NO-LIVE-QUOTE hold. Current-main unchanged b73ada8a
+confirmed before closeout. Only added four audited phases and one IV shipped
+record; all unrelated main JSON equals fetched origin/main. Original audit
+counters retained. User-authorized main push follows final documentation commit.
+No deployment command, live orders, arm/fire/save or strategy adoption.
