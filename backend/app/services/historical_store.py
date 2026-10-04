@@ -219,8 +219,8 @@ async def _read_bars(
 ) -> list[dict]:
     """Read all stored bars for `symbol` between `start` and `end` (inclusive).
 
-    Returns fully-adjusted close: raw_close × adj_factor.
-    If adj_factor is NULL (legacy tiingo_legacy rows), close is returned as-is.
+    Returns fully adjusted OHLC (each raw price × adj_factor; volume raw).
+    If adj_factor is NULL (legacy tiingo_legacy rows), all four prices are returned as-is.
     """
     result = await db.execute(
         select(OhlcvDailyModel)
@@ -234,15 +234,18 @@ async def _read_bars(
     rows = result.scalars().all()
     out = []
     for row in rows:
-        raw_close = float(row.close)
         adj = float(row.adj_factor) if row.adj_factor is not None else None
-        fully_adj_close = round(raw_close * adj, 6) if adj is not None else raw_close
+
+        def _px(raw) -> float:
+            x = float(raw)
+            return round(x * adj, 6) if adj is not None else x
+
         out.append({
             "time":   row.date.isoformat(),
-            "open":   float(row.open),
-            "high":   float(row.high),
-            "low":    float(row.low),
-            "close":  fully_adj_close,
+            "open":   _px(row.open),
+            "high":   _px(row.high),
+            "low":    _px(row.low),
+            "close":  _px(row.close),
             "volume": int(row.volume),
         })
     return out
