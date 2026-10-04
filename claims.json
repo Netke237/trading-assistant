@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T16:48:48Z",
       "note": "Document Stock and Pre-Breakout design decisions before mockup approval and implementation",
       "task": "STOCK-DESIGN-GRILLING"
+    },
+    {
+      "agent": "claude",
+      "branch": "main",
+      "claimed_at": "2026-10-04T16:28:06Z",
+      "expires_at": "2026-10-04T19:28:06Z",
+      "note": "Integrate user-authorized clean IV wording, server risk and retuning; retain liquidity merge hold",
+      "task": "AUDITED-BRANCH-MERGE"
     }
   ]
 }
