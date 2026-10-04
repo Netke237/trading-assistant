@@ -92,7 +92,11 @@ export default function Step4StocksPage() {
   const direction      = context?.direction ?? 'Bullish';
   const bearish        = direction === 'Bearish';
   const STRATEGIES     = bearish ? STRATEGIES_BEARISH : STRATEGIES_BULLISH;
-  const activeStrategy = useScanStore((s) => s.activeStrategy);
+  const activeStrategy    = useScanStore((s) => s.activeStrategy);
+  const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
+  // The request of the run whose rows are on screen (A5). With the row's own
+  // strategy as fallback, this is StockPositionCard's strategyKey below.
+  const scannedRequestStrategy = useScanStore((s) => s.stockScanRequest?.strategy ?? null);
   const combinedRegime = useScanStore((s) => s.combinedRegime);
   const result         = useScanStore((s) => s.stockScanResult);
   const previous       = useScanStore((s) => s.previousStockScanResult);
@@ -130,7 +134,6 @@ export default function Step4StocksPage() {
   useEffect(() => setMounted(true), []);
 
   const [params, setParams] = useState<StrategyParams>(() => ({ ...savedParams }));
-  const [selected, setSelected] = useState<string | null>(activeStrategy);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
@@ -186,7 +189,7 @@ export default function Step4StocksPage() {
   }
 
   async function onRun() {
-    if (!selected) return;
+    if (!activeStrategy) return;
     setError(null);
     setNotice(null);
     // The catch is for a throw runStockScan could not convert into a null
@@ -197,7 +200,7 @@ export default function Step4StocksPage() {
     // for the rest of the session.
     let res: StockScanResult | null;
     try {
-      res = await runStockScan(selected, params);
+      res = await runStockScan(activeStrategy, params);
     } catch (err) {
       // Reason FIRST: this catch exists for a throw runStockScan could not
       // convert into a null return — `setScanState` itself failing — so
@@ -279,8 +282,8 @@ export default function Step4StocksPage() {
             <button
               key={s.key}
               type="button"
-              className={`${styles.card} ${selected === s.key ? styles.cardActive : ''}`}
-              onClick={() => setSelected(s.key)}
+              className={`${styles.card} ${activeStrategy === s.key ? styles.cardActive : ''}`}
+              onClick={() => setActiveStrategy(s.key)}
             >
               <div className={styles.cardHeader}>
                 <Text size={14} weight={500}>{strategyLabel[s.key] ?? s.label}</Text>
@@ -307,7 +310,7 @@ export default function Step4StocksPage() {
         onReset={() => setParams({ ...savedParams })}
       />
 
-      {selected === 'mean_reversion_multi' && (
+      {activeStrategy === 'mean_reversion_multi' && (
         <MeanReversionConfirmPanel
           variants={meanReversionVariants}
           minConfirmations={meanReversionMinConfirm}
@@ -327,11 +330,11 @@ export default function Step4StocksPage() {
           type="button"
           className={styles.runBtn}
           onClick={onRun}
-          disabled={!selected || scanning || (selected === 'mean_reversion_multi' && meanReversionVariants.length === 0)}
+          disabled={!activeStrategy || scanning || (activeStrategy === 'mean_reversion_multi' && meanReversionVariants.length === 0)}
           title={
-            !selected
+            !activeStrategy
               ? 'Select a strategy first'
-              : selected === 'mean_reversion_multi' && meanReversionVariants.length === 0
+              : activeStrategy === 'mean_reversion_multi' && meanReversionVariants.length === 0
               ? 'Select at least one confirmation signal'
               : undefined
           }
@@ -469,7 +472,11 @@ export default function Step4StocksPage() {
                       // own overlay-reset effect only fires on a symbol change.
                       key={stockPositionCardKey(c)}
                       card={c}
-                      strategyKey={selected ?? ''}
+                      // The strategy this row was scanned with: NOT the current selection, which
+                      // can change after the scan, and NOT lastStockScanStrategy, which can name
+                      // another tab's or device's scan (plan audit P1-F1). StockAutoTradeArm
+                      // persists a strategy watch with this key.
+                      strategyKey={scannedRequestStrategy ?? c.strategy.strategy}
                       afterScanArmed={afterScanArmedSymbols.has(c.symbol)}
                       onAfterScanToggle={onAfterScanToggle}
                     />
