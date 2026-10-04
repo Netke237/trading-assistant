@@ -16,6 +16,7 @@ Both are separate targets and out of scope here.
 | D3 | The option R/R **risk** is the loss at whichever stop fires first: `premium × min(premium_stop_pct, stop_cost.fraction)`. `stop_cost.fraction` is the existing Black-Scholes-at-today loss at the resolved stock stop (`scoring/stop_cost.py`). When it is not computed, risk = `premium × premium_stop_pct` (today's behaviour). |
 | D4 | The Step 3 `Bullish/Bearish target %` overrides become one **R-multiple** override. The same multiple drives the option R/R target **and** the exit-plan card's target rows. Saved values of the old keys are dropped on load and a one-time notice is shown. |
 | D5 | The Step 7 checklist's R/R row reads the new number. Its 2.0 / 1.5 thresholds are unchanged and recorded as UNMEASURED (checked by `AREA3-OPTIONS-MEASUREMENT`). |
+| D6 | (2026-10-04, answering plan round 2's R2-F3) A bearish target's deepest level on each surface is held at ≥ 10% of the entry price by lowering that symbol's effective multiple, and the card is flagged "capped". |
 
 Amendment to Kenneth's approved fallback (D2), stated so the plan audit can check it: the
 approved fallback for "the price data can't form a target" was an ATR move. In code, that
@@ -96,11 +97,20 @@ def resolve_t1_target(
 
 * If `stock_stop is not None and stock_stop.source == "final_stop"`, it returns `compute_target_row(candles, direction, entry_price, stock_stop.final_stop, stock_stop.atr, r_multiple, snap_atr_multiplier)`, giving `(row.price, row.tp_source)`.
 * Otherwise it returns `entry ± r_multiple × |entry − stop_price|`, giving `(price, "flat_fallback")` (amendment above).
-* **Bearish floor on every branch (R1-F4).** A stock target at or below $0 is never a real level. A 10% stop × a 5R multiple would otherwise put T1 at −50%, and `bs_price(S≤0)` then drops to the flat-delta guess and inflates the R/R.
-  * `compute_target_row` floors its bearish `arithmetic_price` at $0.01 before the snap test. This is one place, and it also covers `/contracts/exit-plan` rows and `/api/stocks/exit-plan` (stock mode gains the same floor; a negative stock target is wrong there too).
-  * The flat-fallback branch floors identically.
-  * `estimate_targets` floors its bearish T2/T3 extensions (`stock_price − 1.5·move`, `− 2·move`) at $0.01.
-  * Test: final-stop branch, bearish, 10% stop distance, m=10 gives T1 = 0.01. The ladder T2/T3 are 0.01, never ≤ 0.
+* **Bearish target cap (R1-F4, revised by R2-F3; decision D6, Kenneth 2026-10-04).** A bearish target can reach $0 or below with a big multiple or a wide stop: a 25% stop at the default 2R already puts ladder T3 (4R) at −100%. A floor at $0.01 does not help, because a put priced at S = $0.01 is worth nearly its strike and the R/R reads ~30× PASS. **D6: on each surface, the deepest bearish target is held at or above 10% of the entry price, by lowering that symbol's effective multiple, and the card is flagged "capped".** One constant, `BEARISH_MIN_TARGET_FRACTION = 0.10`, lives in `exit_plan.py`.
+  * **Ladder surface (scan + recompute).** Its deepest level is `estimate_targets`' T3 = `entry − 2 × (entry − T1)`. So `build_trade_plan` caps a bearish T1 move at `(1 − 0.10) / 2 = 45%` of `stock_price`:
+    ```python
+    max_move = stock_price * (1 - BEARISH_MIN_TARGET_FRACTION) / 2
+    if not is_call and stock_price - target_price > max_move:
+        target_price = stock_price - max_move; target_source = "capped"
+    ```
+    This is equivalent to lowering the multiple to `max_move / stop_distance` for this symbol, with the snap result simply replaced. It lives in `build_trade_plan`, **the one function both callers go through**, so a round-tripped `target_stock_price` and the recompute's own arithmetic target are capped by the same line. `targetSource` gains the value `"capped"`. T2 = entry − 1.5·move ≥ 32.5% of entry and T3 ≥ 10% follow by construction, so `estimate_targets` needs no floor of its own, and none is added.
+  * **Exit-plan rows surface** (`compute_target_row`, used by `/contracts/exit-plan` and `/api/stocks/exit-plan`). The rows are independent levels, so the deepest row is the last one. `compute_target_row` clamps a bearish `arithmetic_price` below `0.10 × entry_price` up to `0.10 × entry_price` **before** the snap test, and appends quality reason `"target_capped"` (so `quality_good` is False and the row is flagged on screen). Every row stays a real positive price and the row count is unchanged, so the positional TP mapping (A6) is unaffected. Two rows clamped to the same price tie, and `picked_method` then degrades to the ladder, which is safe (verified in round 2). Stock mode inherits the same clamp, as intended: a stock short target below 10% of price is equally not a level.
+  * Tests:
+    * bearish, 25% stop, default 2R gives T1 = 0.55 × entry, T3 = 0.10 × entry, `targetSource == "capped"`, and `rrRatio` priced at T1 = 0.55 × entry;
+    * the same input as a round-tripped `target_stock_price` 0.40 × entry is capped identically in recompute;
+    * exit-plan rows with m = 10 are clamped to 0.10 × entry with `"target_capped"`;
+    * bullish is never capped.
 
 `r_multiple` resolution, in a new function `config_loader.resolve_target_r_multiple(overrides) -> float`:
 * The per-request override `rr_target_r_multiple` if present. It must be finite and in (0, 10]; otherwise it raises ValueError and the endpoint returns 422, as the existing `rr_*` overrides do.
@@ -138,11 +148,18 @@ risk = current_premium * frac
 `TradeExit` (`schemas/__init__.py:605`, `frontend/types/domain.ts`) gains three optional fields:
 * `stockStopLoss: float | None`, in dollars per share of premium;
 * `rrRiskBasis: Literal["premium_stop","stock_stop"] | None`;
-* `targetSource: Literal["structural_snap","arithmetic","flat_fallback"] | None`.
+* `targetSource: Literal["structural_snap","arithmetic","flat_fallback","capped"] | None`;
+* `stockStopLossAt: float | None`: the stock stop, rounded to cents, at which `stockStopLoss` was priced (R2-F1).
 
 All three default to None, so persisted pre-change cards still validate. Putting them on `exit` matters: Step 7's `mergePlan` (`tradeCardOverride.ts:91-97`) replaces `exit` wholesale, so a Step 6 recompute carries all three with it and they can never describe a different contract from `rrRatio`.
 
-**The ladder's client-side R:R must use the same risk (R1-F1).** `EditableTargetRow` computes `rrContribution(estOptionPrice, entryLimit, premiumStop)` in the browser (`TradeCard/index.tsx:121-130, 3257`), dividing by `overlay.premiumStop`. Left alone, ladder T1 would show 1.0× beside a checklist 1.5× on the same contract. Slice B changes its risk leg to `min(overlay.premiumStop, data.exit.stockStopLoss ?? Infinity)`. That is the same "whichever stop fires first" rule as D3, and a trader-edited premium stop still participates. `premiumStop` itself stays the alert level. The backend `TargetLevel.rrContribution` (A3) uses the same min, so the two agree when nothing is edited.
+**The ladder's client-side R:R must use the same risk (R1-F1).** `EditableTargetRow` computes `rrContribution(estOptionPrice, entryLimit, premiumStop)` in the browser (`TradeCard/index.tsx:121-130, 3257`), dividing by `overlay.premiumStop`. Left alone, ladder T1 would show 1.0× beside a checklist 1.5× on the same contract. Slice B changes its risk leg to `min(overlay.premiumStop, data.exit.stockStopLoss)`, but **only while the stock leg is still valid**. That is the same "whichever stop fires first" rule as D3, and a trader-edited premium stop still participates. `premiumStop` itself stays the alert level. The backend `TargetLevel.rrContribution` (A3) uses the same min, so the two agree when nothing is edited.
+
+**The stock leg goes stale when the card's stock stop moves (R2-F1).** The card's stock stop can move after the plan was priced: an Invalidation edit (`TradeCard:2840-2843`), or a Check-structure / Arithmetic-Plan click via `sharedStop`. The card already treats a moved stop as invalidating anything measured against it (`stockStopMoved`, `:1836-1847`). Rule:
+* `stockLegValid = exit.stockStopLoss != null && exit.stockStopLossAt != null && |currentStop − exit.stockStopLossAt| < 0.005`, where `currentStop = sharedStop?.price ?? overlay.invalidation` (the same expression `stockStopMoved` uses).
+* Ladder risk = `stockLegValid ? min(premiumStop, stockStopLoss) : premiumStop`. When the leg was dropped, the ladder's R:R header reads "premium-stop basis — stock stop moved". Premium-stop-only risk is ≥ the true min, so the dropped-leg figure is conservative, never inflated.
+* `rrStale = exit.stockStopLoss != null && !stockLegValid`. TradeCard reports it through a new optional callback `onRrStaleChange?(stale: boolean)`. Step 7's page publishes it into `tradeCardUiStore` beside `rrPending` (ephemeral, cleared on unmount). The checklist row then reads **CAUTION, with no number**: "R:R was measured at the stop $X; the card's stop has moved — re-run the plan to re-measure". This is the same treatment as `rrPending`, so the checklist never grades a figure priced at a stop that is no longer on the card.
+* A pre-change card (`stockStopLoss` absent) is never stale and keeps its premium-stop-only behaviour.
 
 ### A4. Scan pipeline: `routers/scan.py` `_process_symbol`, around lines 1040–1180
 
@@ -199,7 +216,7 @@ Tests:
 
 * `test_reward_risk.py` / `test_multi_target.py`: `risk_fraction` None gives a byte-identical result to today (regression pin). With `risk_fraction` 0.40 and premium_stop 0.60, risk = 0.40 × premium and `risk_basis == "stock_stop"`. With 0.77, risk = 0.60 × premium and `risk_basis == "premium_stop"`. 0 / NaN / negative behave like None.
 * `test_trade_plan.py`: `target_price` is required (TypeError without it); `stop_cost_fraction` flows to both rr and targets.
-* `test_exit_plan.py`: `resolve_t1_target` final-stop path equals `compute_target_row(...).price`. Flat-fallback path arithmetic: bullish and bearish, bearish floored at 0.01.
+* `test_exit_plan.py`: `resolve_t1_target` final-stop path equals `compute_target_row(...).price`. Flat-fallback path arithmetic: bullish and bearish, uncapped. The D6 cap is `build_trade_plan`'s job and is tested there (A2), so `resolve_t1_target` is not a second cap site.
 * Scan integration (an existing scan fixture test): the card's `exit.target` equals `resolve_t1_target`'s price for the fixture's candles. `rrRatio` equals `estimate_rr` recomputed by hand from the fixture's stop-cost fraction. The stop cost is computed exactly once per symbol (assert by patch count).
 * Recompute: round-tripping `target_stock_price` and `final_stop` reproduces the scan card's `rrRatio` exactly for the same contract. This is the drift test that matters.
 * Exit-plan: override 2.5 gives rows [2.5, 3.5]; absent gives [2.0, 3.0].
@@ -228,7 +245,9 @@ Tests:
 * `step-7-trade-card/page.tsx`: the two `recomputePlan` effects (`:896-910`, `:972-983`) add `rr_target_r_multiple` via `rrOverridesForPlan`. They add `target_stock_price: card.exit.target` and `target_source: card.exit.targetSource` **only when `card.exit.targetSource != null`** (R1-F2).
 * `TradeCard` has two edits, the only two in this target:
   1. The `getExitPlan` call adds `target_r_multiple` from the scan's recorded `rr_overrides` (via `rrOverridesForPlan`, the same rule as recompute), absent when not overridden.
-  2. `EditableTargetRow`'s risk leg becomes `min(premiumStop, data.exit.stockStopLoss ?? Infinity)` (R1-F1). `rrContribution`'s doc comment is updated to state the min.
+  2. `EditableTargetRow`'s risk leg becomes `stockLegValid ? min(premiumStop, data.exit.stockStopLoss) : premiumStop` (R1-F1, R2-F1). `rrContribution`'s doc comment is updated to state the rule. The new `onRrStaleChange` callback fires on change of `rrStale` (A3).
+* `step-7-trade-card/page.tsx` passes `onRrStaleChange` and writes it to `tradeCardUiStore` (new ephemeral `rrStale: boolean`, cleared with `activeCard` on unmount).
+* **Portfolio drawer re-compute keeps the position's multiple (R2-F2).** `EditDrawer.tsx` `ExitPlanEditor.compute` (`:620-663`) calls `api.getExitPlan` with no multiple, so the rows come back at the configured 2R/3R, and the same patch re-stamps `resolved_tp_price` from row 0/1. Under an R-multiple override, the price the trader picked at 2.5R would then be replaced by the 2.0R row. The fix: send `target_r_multiple: position.exitPlan.targets[0].rrRatio` when that value is a finite number in (0, 10] (it equals the multiple the stored rows were built with, by A6's row rule), else omit it. A test: a position with stored rows 2.5R/3.5R and `exit_plan_2r` re-computes at 2.5R/3.5R, and `resolved_tp_price` is re-stamped from the 2.5R row. A plan with no stored rows sends nothing.
   Coordinate with the active `TRADE-CARD-SCORE-EVIDENCE` claim: merge `origin/main` right before slice B.
 
 ### B4. Checklist row (D5): `@contextRail/screener/step-7-trade-card/page.tsx`
@@ -239,7 +258,7 @@ A code comment records the thresholds as UNMEASURED, pending `AREA3-OPTIONS-MEAS
 
 ### B5. Tests (frontend)
 
-The `previewDteWindow` table; the searchProfiles v4 migration (non-default value sets the flag, default 0.08 doesn't, other overrides untouched, a store frozen at v1/v2 still lands on v4, the flag survives `partialize`); the recompute payload carries `rr_target_r_multiple` and carries `target_stock_price`/`target_source` **only** for a card with `exit.targetSource` (a pre-change card omits both); the `EditableTargetRow` R:R uses `min(premiumStop, stockStopLoss)` and equals the backend `rrContribution` for an unedited row; `getExitPlan` payload; checklist text for both bases and the absent case. `npm run typecheck` and `npm run test` must be clean.
+The `previewDteWindow` table; the searchProfiles v4 migration (non-default value sets the flag, default 0.08 doesn't, other overrides untouched, a store frozen at v1/v2 still lands on v4, the flag survives `partialize`); the recompute payload carries `rr_target_r_multiple` and carries `target_stock_price`/`target_source` **only** for a card with `exit.targetSource` (a pre-change card omits both); the `EditableTargetRow` R:R uses `min(premiumStop, stockStopLoss)` and equals the backend `rrContribution` for an unedited row; an edited Invalidation drops the stock leg, fires `onRrStaleChange(true)`, and the checklist row reads CAUTION with no number; restoring the stop clears it; the EditDrawer re-compute sends the stored multiple; `getExitPlan` payload; checklist text for both bases and the absent case. `npm run typecheck` and `npm run test` must be clean.
 
 ---
 
@@ -272,3 +291,9 @@ The plan audit is clean, then slice A's code audit is clean, then slice B's code
 * **R1-F4 (medium).** Bearish targets can go ≤ $0 on the final-stop branch and in the T2/T3 extensions. Fix: a $0.01 floor in `compute_target_row`, the flat fallback and `estimate_targets` (A2).
 
 Non-gate corrections also applied (factual): `scanStore` does not persist `scanOverrides` (the migration was moved to `searchProfilesStore` only); the 422 point is `scan.py:1623`; `_rr` lives in `_process_symbol`; the exit-plan `estimate_rr` sites are 2, not 3. The new fields were moved onto `TradeExit` so `mergePlan` carries them.
+
+### Plan round 2 (plan stage 2 of 3): fresh independent subagent running `bmad-review-adversarial-general`; reviewed diff 144b68d..6e90513 (the round-1 fixes only)
+3 gate-level findings, all accepted and fixed in the revision that follows 6e90513:
+* **R2-F1 (medium).** The R1-F1 fix made the ladder and checklist R:R depend on a stock stop the trader can move afterwards (Invalidation edit, Check-structure, Arithmetic Plan). Fix: `exit.stockStopLossAt`; the stock leg is used only while the card's stop equals it; otherwise the ladder uses premium-stop-only risk and the checklist goes CAUTION with no number via `onRrStaleChange` → `tradeCardUiStore.rrStale` (A3, B3, B5).
+* **R2-F2 (medium, persisted data).** The Portfolio drawer's exit-plan re-compute did not send the multiple, so it re-stamped `resolved_tp_price` from a 2.0R row on a position picked at 2.5R. Fix: send the stored rows' first `rrRatio` (B3).
+* **R2-F3 (medium-low).** The $0.01 floor did not fix the inflated R/R. Kenneth chose D6 (cap at 10% of entry by lowering the effective multiple). Fix: a 45%-move cap on the bearish T1 in `build_trade_plan` (the ladder's deepest level T3 then sits ≥ 10%), and a 10% per-row clamp with the `"target_capped"` quality reason in `compute_target_row`. The $0.01 floors from round 1 are replaced (A2).
