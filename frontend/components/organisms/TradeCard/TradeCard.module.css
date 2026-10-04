@@ -557,3 +557,25 @@
 .methodDetails[open] > summary {
   margin-bottom: var(--space-2);
 }
+
+.identityFacts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+.identityFacts > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contractIdentity {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: var(--space-4);
+}
+@media (max-width: 1366px) {
+  .identityFacts { grid-template-columns: minmax(0, 1fr); }
+  .contractIdentity { border-left: 0; padding-left: 0; }
+}

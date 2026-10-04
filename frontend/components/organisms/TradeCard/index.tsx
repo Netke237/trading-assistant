@@ -183,6 +183,8 @@ function structuralStopSourceLabel(source: 'order_block' | 'swing_low' | 'swing_
 
 interface TradeCardProps {
   data: TradeCardData;
+  /** Step 7 renders this context once above candidate navigation. */
+  showMarketSentiment?: boolean;
   recId?: string;
   onSendToBroker?: () => void;
   sendLabel?: string;
@@ -389,6 +391,7 @@ function isRealFailure(controller: AbortController, deadline: RequestDeadline): 
 
 export function TradeCard({
   data,
+  showMarketSentiment = true,
   recId: propRecId,
   onSendToBroker,
   sendLabel,
@@ -2161,6 +2164,7 @@ export function TradeCard({
 
   return (
     <div className={styles.wrap}>
+      {showMarketSentiment && <MarketSentiment s={data.sentiment} compact />}
       {/* 1. Header */}
       <div className={styles.headerCard}>
         <div className={styles.headerRow}>
@@ -2191,7 +2195,23 @@ export function TradeCard({
             </Tooltip>
           )}
         </div>
+        <div className={styles.identityFacts}>
+          <div>
+            <Text size={12}>Stock score {data.stockScore}/100 · {data.stockConfidence}</Text>
+            <Text size={11} tone="secondary">Backtested confidence: {data.confidence == null ? 'not supplied' : `${data.confidence}%`}</Text>
+          </div>
+          <div className={styles.contractIdentity}>
+            <Text size={11} tone="dim">Selected contract</Text>
+            <Text size={16} weight={500}>{data.contractDetails
+              ? `$${data.contractDetails.strike} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'} · ${data.contractDetails.expiry}`
+              : data.contract}</Text>
+            <Data size={11}>{data.contract}</Data>
+            <Text size={12}>Contract score {data.contractScore}/100 · {data.contractConfidence}</Text>
+            {data.contractDetails && <Text size={11} tone="secondary">${data.contractDetails.mid.toFixed(2)} mid / share · {data.contractDetails.dte}d DTE · ${car.toFixed(0)} CaR</Text>}
+          </div>
+        </div>
       </div>
+      <FundamentalHealthCard f={data.fundamentals} compact />
 
       <div className={styles.grid}>
 
@@ -2539,14 +2559,11 @@ export function TradeCard({
             )}
           </div>
         </section>
-        {/* 2. Market Sentiment — full-width top bar */}
-        <div className={styles.fullWidth}>
-          <MarketSentiment s={data.sentiment} />
-        </div>
 
         {/* 3. Stock Scorecard | Contract — side by side */}
         <ScoreCardPanel
           title="Stock Scorecard"
+          qualification={{ card: data, kind: 'stock' }}
           bars={stockBars}
           total={data.stockScore}
           confidence={data.stockConfidence}
@@ -2557,6 +2574,7 @@ export function TradeCard({
 
         <ScoreCardPanel
           title={`Contract — ${data.contract}`}
+          qualification={{ card: data, kind: 'contract' }}
           bars={contractBars}
           total={data.contractScore}
           confidence={data.contractConfidence}
@@ -2564,10 +2582,6 @@ export function TradeCard({
           statusTooltipAlignRight
         />
 
-        {/* 4. Fundamental Health — full-width bar below scorecards */}
-        <div className={styles.fullWidth}>
-          <FundamentalHealthCard f={data.fundamentals} />
-        </div>
 
         {/* 5. Contract Details */}
         {data.contractDetails && (

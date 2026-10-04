@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
@@ -1439,12 +1440,17 @@ export default function Step7Page() {
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
+        <details className={paperStyles.pageExplanation}>
+          <summary>How this page works</summary>
         <Text size={13} tone="secondary">
           Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
           places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
           its card instead of tracking it, or close the tracked row first.
         </Text>
+        </details>
       </div>
+
+      {effectiveCard && <MarketSentiment s={effectiveCard.sentiment} compact />}
 
       <CandidateNav
         symbols={symbols}
@@ -1490,6 +1496,7 @@ export default function Step7Page() {
             </div>
           ) : (
             <TradeCard
+              showMarketSentiment={false}
               onRrStaleChange={onRrStaleChange}
               data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}

@@ -115,3 +115,42 @@ UI/score/qualification branch own-entry state deltas will be recorded as
 verified prerequisite evidence within our own integration entry; original
 user instruction permits no edits to their canonical entries. Full-page
 integration source edits and integration claim still await assembly clearance.
+
+### Assembly clearance and integration claim
+
+Fresh independent `/root/presentation_dependency_audit`, assembly round1/3,
+reviewed `454d84c6..93983992` source and documentation throughcbef99eb,
+all task worklogs/clean audit evidence and AREA3/main interactions. Zero gate
+findings after second-pass scope verification. Independently verified all six
+patch IDs, unchanged leaf trees, main/external/AREA3 ancestry, canonical JSON
+identity and empty live claims. Independently75 qualification/override tests,
+186 TradeCard/direct-order tests,60 Python3.11 override/stop-cost tests passed;
+state renderer/diff check passed. Author assembled125 backend tests,16 frontend
+suites459 tests and typecheck passed. Assembly clearance certifies prerequisites
+in checkout; it does not certify final composition or full visual acceptance.
+
+Claimed only TRADE-CARD-PRESENTATION-INTEGRATION at10:00:58UTC after clearance.
+AREA3 and all prerequisite ownership claims are released. No dependency source
+was replaced with preview numerics and no canonical task update yet.
+
+### Checkpoint A — context, identity and captured qualification
+
+Page description moves into native How this page works disclosure, staying
+mounted with exact tracking/order explanation. Existing compact MarketSentiment
+now appears directly beneath it before CandidateNav. TradeCard's optional
+showMarketSentiment defaults true for standalone callers; page explicitly
+false so only one context card mounts. Compact FundamentalHealth follows
+identity once, with original missing/safety/tooltip states. Identity adds
+readable strike/right/expiry alongside original identifier, supplied stock and
+contract score/verdict/confidence, mid/DTE and existing CaR expression.
+Original SymbolHeader/status/direction, edited indicator/tooltip and all
+Contract Details fields remain. No formatter, score or quantity change.
+
+Both original ScoreCardPanel calls receive qualification={card:data,kind},
+where data is the page's effective displayed card. Bars, total, status and
+confidenceScore/text/tooltip are unchanged. No evaluator duplicated.
+Typecheck passed;13 existing focused suites354 tests passed. Two new targeted
+presentation assertions passed, pairing qualification with original bars/results
+and verifying page/standalone market ownership. Initial new test used a guessed
+missing-state string; corrected to actual retained source text, no product fix.
+Checkpoint A awaits independent code audit before further dependent composition.

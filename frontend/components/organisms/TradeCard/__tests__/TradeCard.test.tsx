@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import * as React from 'react';
 import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
+import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
@@ -31,9 +32,9 @@ jest.mock('@/components/molecules/SymbolHeader', () => ({
 }))
 
 jest.mock('@/components/molecules/ScoreCardPanel', () => ({
-  ScoreCardPanel: ({ title }: { title: string }) => (
+  ScoreCardPanel: jest.fn(({ title }: { title: string }) => (
     <div data-testid="score-panel">{title}</div>
-  ),
+  )),
 }));
 
 jest.mock('@/components/molecules/LabeledStatusBadge', () => ({
@@ -4109,4 +4110,28 @@ it('AREA3 ladder uses authoritative captured ratio, then premium risk when the s
   expect(screen.queryByText('5.0x')).not.toBeInTheDocument();
   rerender(<TradeCard data={card} />);
   expect(screen.getByText('5.0x')).toBeInTheDocument();
+});
+
+
+it('presentation wires each qualification panel to its unchanged result and bars', () => {
+  (ScoreCardPanel as jest.Mock).mockClear();
+  render(<TradeCard data={mockTradeCard} />);
+  const calls = (ScoreCardPanel as jest.Mock).mock.calls.map(([props]) => props);
+  expect(calls.find((props) => props.title === 'Stock Scorecard')).toMatchObject({
+    qualification: { card: mockTradeCard, kind: 'stock' }, total: mockTradeCard.stockScore,
+    confidence: mockTradeCard.stockConfidence, bars: [{ value: 85 }, { value: 78 }, { value: 72 }, { value: 90 }, { value: 65 }],
+  });
+  expect(calls.find((props) => props.title === `Contract — ${mockTradeCard.contract}`)).toMatchObject({
+    qualification: { card: mockTradeCard, kind: 'contract' }, total: mockTradeCard.contractScore,
+    confidence: mockTradeCard.contractConfidence,
+  });
+  expect(screen.getByText('$190 Call · 2026-05-15')).toBeInTheDocument();
+  expect(screen.getByText(mockTradeCard.contract)).toBeInTheDocument();
+});
+
+it('presentation can hand market context to the page without mounting a second card', () => {
+  const { rerender } = render(<TradeCard data={mockTradeCard} showMarketSentiment={false} />);
+  expect(screen.queryByText(/Market sentiment — insufficient history/)).not.toBeInTheDocument();
+  rerender(<TradeCard data={mockTradeCard} />);
+  expect(screen.getByText(/Market sentiment — insufficient history/)).toBeInTheDocument();
 });
