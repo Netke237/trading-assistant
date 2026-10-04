@@ -4613,8 +4613,8 @@
           "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/**"
         ],
         "owner": "codex/trade-card-presentation-integration",
-        "status": "completed_on_branch",
-        "implementation": "implemented_code_audited_clean_not_merged",
+        "status": "shipped",
+        "implementation": "complete_merged",
         "claim_required": true,
         "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
         "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
@@ -4703,7 +4703,7 @@
         },
         "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
         "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
-        "readiness": "ready_for_review_not_merged",
+        "readiness": "merged_to_origin_main",
         "branch": "codex/trade-card-presentation-integration",
         "source_commit": "765bf49152fd118bcca1d3c6f2c9802d7bbe578b",
         "reviewed_head": "31d5bcb096c105b499dc19b87dba909ef68a5012",
@@ -4797,7 +4797,14 @@
             "Remote Google font metrics unverified; visual checks/build use warmed environment-only local font mock cache.",
             "Earlier AREA3 full-backend network-dependent failures remain recorded;249 relevant parity checks do not certify that full suite."
           ],
-          "external_actions": "No deploy, merge into main, orders, arm/fire or position-save requests."
+          "external_actions": "User-authorized origin/main merge completed; no deploy command, orders, arm/fire or position-save requests."
+        },
+        "merge": {
+          "authorization": "User explicitly requested merge on origin main,2026-10-04",
+          "method": "Fast-forward audited integration history; no source changes or conflict resolutions",
+          "previous_main": "e4d4d80ef6ae16ac8fc6eaca3a53e6d1c88846bf",
+          "merged_commit": "abb990e0e88c9b3c6c03b245e62a83a17b778db6",
+          "deployment": "No deployment command issued"
         }
       }
     ]

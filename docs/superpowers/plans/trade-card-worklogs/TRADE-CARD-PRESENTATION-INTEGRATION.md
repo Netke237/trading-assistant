@@ -347,3 +347,17 @@ context/barrier/external/AREA3 evidence recorded inside own dependency record;
 other task entries and all unrelated JSON compare exactly equal to main.
 Final typecheck/state/diffcheck and push/release follow this closeout record.
 No deploy, merge into main or orders.
+
+### Authorized origin/main merge — 2026-10-04
+
+User explicitly requested merge on origin main. Fetched main; it remained
+e4d4d80ef6ae16ac8fc6eaca3a53e6d1c88846bf, already an ancestor of audited
+integration HEAD. Pre-merge typecheck and state renderer passed; clean checkout.
+GitHub API PR calls were denied by environment network policy; Git push works.
+Fast-forwarded origin/main to abb990e0e88c9b3c6c03b245e62a83a17b778db6;
+push confirmed successful. No source edits, conflicts or merge resolutions.
+Under reacquired TRADE-CARD-PRESENTATION-STATE lock, only own canonical entry
+changed to shipped/complete_merged, recording actual merge commit. All unrelated
+JSON still equals freshly fetched main. Existing independent audit scope remains
+unchanged; this closeout modifies documentation/state only. No deploy command
+issued; no orders, arm/fire or position-save requests.
