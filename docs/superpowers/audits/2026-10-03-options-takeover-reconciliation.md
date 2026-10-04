@@ -70,3 +70,7 @@ Latest-main integration preserves upstream dividend-only rejection explanation u
 - Latest origin/main6cce7364 is an ancestor of the feature branch; merge-tree against it completes without conflicts. Both original implementation heads are ancestors. The other session’s report-only commit was reconciled without duplicate application changes.
 
 Historical audit counters remain intact: Step5 findings[13,12,6,0,0,0,0], Contracts[0,1,0,0,0,0,0,0]. No gate findings remain outstanding. This is a reviewable feature branch, not a production deployment or merge into main. Existing unrelated STATE-PROBE audit warnings are outside these targets.
+
+## Main merge
+
+On2026-10-04, the user explicitly authorized merging to main. Main fast-forwarded from6cce7364 to the exact audited feature head `e1751e1596215052b6811b5a239fae4e4a8a7c37`; GitHub remote main was verified at that commit. No new application changes or conflict resolutions were needed. Both task statuses are now shipped; audit history and evidence remain intact. Earlier no-merge statements above describe pre-merge checkpoints. No production deployment was performed.

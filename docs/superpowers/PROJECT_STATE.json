@@ -4104,7 +4104,7 @@
           "docs/superpowers/plans/2026-10-03-options-vol-events-explanations-plan.md"
         ],
         "summary": "Options Step 5: visible applied thresholds, per-check statuses, deciding gate drivers and inline explanations without horizontal overflow.",
-        "status": "ready_to_merge",
+        "status": "shipped",
         "plan": "docs/superpowers/plans/2026-10-03-options-vol-events-explanations-plan.md",
         "plan_audit": {
           "date": "2026-10-03",
@@ -4164,7 +4164,7 @@
             "independent_tests": 20
           }
         },
-        "note": "Unified takeover complete: external report reconciled, latest-main conflicts resolved, independent correction reviews clean, merged build/typecheck249frontend78backend33browser tests and10000score-card parity passed. No merge into main.",
+        "note": "Merged to main at e1751e15 after user authorization; independent audits clean and final runtime acceptance passed. Publication verified with remote branch ref. No production deployment performed.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
@@ -4182,7 +4182,7 @@
             "other_branch": "fix/options-contract-explanations",
             "other_work": "User relayed that no code fixes, commits, pushes or merges exist. Root reassigned task claim.",
             "audit_findings": "Report c5921ef1 imported and all four numeric findings reconciled; no other-session application edits existed.",
-            "release_status": "ready_to_merge",
+            "release_status": "merged_to_main",
             "upstream_main": "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585"
           },
           "final_validation": {
@@ -4201,6 +4201,14 @@
             "interaction_long_task_max_ms": 76,
             "zero_interaction_http": true
           }
+        },
+        "merge": {
+          "date": "2026-10-04",
+          "branch": "main",
+          "commit": "e1751e1596215052b6811b5a239fae4e4a8a7c37",
+          "method": "fast-forward",
+          "authorization": "User explicitly instructed merge to main",
+          "remote_verified": true
         }
       },
       {
@@ -4210,7 +4218,7 @@
           "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md"
         ],
         "summary": "Options Step 6: authoritative weighted-score breakdown and blocking reasons, inline details, no horizontal overflow and measured 200-contract responsiveness.",
-        "status": "ready_to_merge",
+        "status": "shipped",
         "plan": "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md",
         "plan_audit": {
           "date": "2026-10-03",
@@ -4275,7 +4283,7 @@
             "step5_sha256": "26a273e08655979cec041417ac678a0b8bca5d4fa99537a7889113c82bfe4728"
           }
         },
-        "note": "Unified takeover complete: external report reconciled, latest-main conflicts resolved, independent correction reviews clean, merged build/typecheck249frontend78backend33browser tests and10000score-card parity passed. No merge into main.",
+        "note": "Merged to main at e1751e15 after user authorization; independent audits clean and final runtime acceptance passed. Publication verified with remote branch ref. No production deployment performed.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
@@ -4288,7 +4296,7 @@
             "other_branch": "fix/options-contract-explanations",
             "other_work": "User relayed that no code fixes, commits, pushes or merges exist. Root reassigned task claim.",
             "audit_findings": "Report c5921ef1 imported and all four numeric findings reconciled; no other-session application edits existed.",
-            "release_status": "ready_to_merge",
+            "release_status": "merged_to_main",
             "upstream_main": "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585"
           },
           "audit_cap_exception": {
@@ -4312,6 +4320,14 @@
             "interaction_long_task_max_ms": 76,
             "zero_interaction_http": true
           }
+        },
+        "merge": {
+          "date": "2026-10-04",
+          "branch": "main",
+          "commit": "e1751e1596215052b6811b5a239fae4e4a8a7c37",
+          "method": "fast-forward",
+          "authorization": "User explicitly instructed merge to main",
+          "remote_verified": true
         }
       },
       {
