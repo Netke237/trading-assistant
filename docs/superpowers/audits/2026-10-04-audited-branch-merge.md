@@ -110,3 +110,12 @@ confirmed before closeout. Only added four audited phases and one IV shipped
 record; all unrelated main JSON equals fetched origin/main. Original audit
 counters retained. User-authorized main push follows final documentation commit.
 No deployment command, live orders, arm/fire/save or strategy adoption.
+
+## Main merge confirmed
+
+User-authorized fast-forward origin/main 65c395470fc2267a3857eef5ab240a479ee6544f confirmed by fetch.
+Includes audited source58c8b471 and69556bff, reviewed frozen3ad48ff0, and
+validation closeout65c39547. Four new phase merge records and IV shipped note
+now mark actual main inclusion; original audit counters retained. Local main
+synchronization and claim release follow this documentation-only confirmation.
+Liquidity remains unmerged. No deployment command issued.

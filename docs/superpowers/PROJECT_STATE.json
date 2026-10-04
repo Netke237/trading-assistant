@@ -1813,7 +1813,7 @@
         "pattern": "^def account_value\\(",
         "note": "Presence only; behavioral evidence in audit report."
       },
-      "note": "Built, independently audited clean; not yet merged. PLAN rounds1/2:2 findings fixed then0. CODE rounds1/2:2 findings fixed then0. Gate proof and reviewed blobs in docs/superpowers/audits/2026-10-03-server-owned-account-value.md. Focused407passed; fix45passed; reviewer28passed; frontendtypecheckpassed. Finalcombinedbackend4797passed1skipped0failed. B2 dailyledger remains separate.",
+      "note": "Built, independently audited clean; not yet merged. PLAN rounds1/2:2 findings fixed then0. CODE rounds1/2:2 findings fixed then0. Gate proof and reviewed blobs in docs/superpowers/audits/2026-10-03-server-owned-account-value.md. Focused407passed; fix45passed; reviewer28passed; frontendtypecheckpassed. Finalcombinedbackend4797passed1skipped0failed. B2 dailyledger remains separate. ||2026-10-04: user-authorized origin/main merge confirmed at65c395470fc2267a3857eef5ab240a479ee6544f; current-main integration independently clean round1/3. Original stage counters unchanged. Full backend5016passed/1skip/2unchanged-main network shortlist failures; frontend4664/typecheck/build passed.",
       "merge_integration": {
         "branch": "codex/audited-branch-merge-2026-10-04",
         "reviewer": "/root/remaining_merge_audit_r1",
@@ -1823,7 +1823,8 @@
         "gate_findings": 0,
         "reviewed_diff": "b73ada8abc20b29d7204f5257d52579294cd88c6..3ad48ff037b16b917ea77e29c862807c1dc6802d",
         "evidence": "docs/superpowers/audits/2026-10-04-audited-branch-merge.md",
-        "readiness": "audited_ready_for_user_authorized_main_merge"
+        "readiness": "merged_to_origin_main",
+        "merged_commit": "65c395470fc2267a3857eef5ab240a479ee6544f"
       }
     },
     {
@@ -1842,7 +1843,7 @@
         "pattern": "^class DailyRiskService:",
         "note": "Presence only; audit and behavioral evidence recorded separately."
       },
-      "note": "Built and independently audited clean, not yet merged. PLAN rounds1/2:2 gate findings fixed then0; CODE rounds1/2:3 gate findings fixed then0. Reviewed hashes/proof in docs/superpowers/audits/2026-10-03-persisted-daily-risk-budget.md. Core30/integration23 independently53passed; author115focusedpassed. Frontend183suites4486tests/typecheck/build passed; finalcombinedbackend4797passed1skipped0failed. Retuning data verified for all60configuredsymbols; fullsearchseparatework; min_signal_rr remains0.0, no strategy parameters adopted.",
+      "note": "Built and independently audited clean, not yet merged. PLAN rounds1/2:2 gate findings fixed then0; CODE rounds1/2:3 gate findings fixed then0. Reviewed hashes/proof in docs/superpowers/audits/2026-10-03-persisted-daily-risk-budget.md. Core30/integration23 independently53passed; author115focusedpassed. Frontend183suites4486tests/typecheck/build passed; finalcombinedbackend4797passed1skipped0failed. Retuning data verified for all60configuredsymbols; fullsearchseparatework; min_signal_rr remains0.0, no strategy parameters adopted. ||2026-10-04: user-authorized origin/main merge confirmed at65c395470fc2267a3857eef5ab240a479ee6544f; current-main integration independently clean round1/3. Original stage counters unchanged. Full backend5016passed/1skip/2unchanged-main network shortlist failures; frontend4664/typecheck/build passed.",
       "merge_integration": {
         "branch": "codex/audited-branch-merge-2026-10-04",
         "reviewer": "/root/remaining_merge_audit_r1",
@@ -1852,7 +1853,8 @@
         "gate_findings": 0,
         "reviewed_diff": "b73ada8abc20b29d7204f5257d52579294cd88c6..3ad48ff037b16b917ea77e29c862807c1dc6802d",
         "evidence": "docs/superpowers/audits/2026-10-04-audited-branch-merge.md",
-        "readiness": "audited_ready_for_user_authorized_main_merge"
+        "readiness": "merged_to_origin_main",
+        "merged_commit": "65c395470fc2267a3857eef5ab240a479ee6544f"
       }
     },
     {
@@ -1873,7 +1875,7 @@
         "pattern": "^class ParallelTrainer:",
         "note": "Presence means helper built only; completed search/report requires separately recorded evidence."
       },
-      "note": "Unfinished, not ready to use proposals. PLAN round1:2 findings (snapshot drift and false net cost labels), fixed; PLAN round2 retune_plan_audit2 clean. Code parity validation in progress; independent CODE review pending. Captured60configuredsymbols753adjustedsettledbars each2023-10-03..2026-10-02. FullconfiguredBullishsearchdefault; no grid pruning/adoption/livechanges. Phase B PR30 https://github.com/Netke237/trading-assistant/pull/30 open and validated4797backendpassed/1skipped, frontend4486passed/typecheck/build. Retuning data/cache instructions saved in cloud draft; saving is not publication. CODE round1 retune_code_audit1 interrupted by usage limit: counted, not clean. Before interruption found hidden Backtest.run failures returned as empty results without diagnostic errors. Reproduction/fix underway; next independent code round2. No full search started. CODE round2 retune_code_audit2 completed original scope and fix:zero gate findings;12tests independentlypassed, realAAPL exacttraining/OOSparity and swallowedfailure diagnostics. Reviewedblob script1f9a70e839d97e5f00e0547254b6ac60afe993d1/tests6273d6bc7d15586b537de2da7bcca42f185da209. Harness complete; fullsearch/results are separate unfinished TRADING-REVIEW-RETUNE-EVIDENCE target. Full branch backend4809passed1skipped0failed;frontendtypecheckpassed. Financial evidence remains separately unfinished.",
+      "note": "Unfinished, not ready to use proposals. PLAN round1:2 findings (snapshot drift and false net cost labels), fixed; PLAN round2 retune_plan_audit2 clean. Code parity validation in progress; independent CODE review pending. Captured60configuredsymbols753adjustedsettledbars each2023-10-03..2026-10-02. FullconfiguredBullishsearchdefault; no grid pruning/adoption/livechanges. Phase B PR30 https://github.com/Netke237/trading-assistant/pull/30 open and validated4797backendpassed/1skipped, frontend4486passed/typecheck/build. Retuning data/cache instructions saved in cloud draft; saving is not publication. CODE round1 retune_code_audit1 interrupted by usage limit: counted, not clean. Before interruption found hidden Backtest.run failures returned as empty results without diagnostic errors. Reproduction/fix underway; next independent code round2. No full search started. CODE round2 retune_code_audit2 completed original scope and fix:zero gate findings;12tests independentlypassed, realAAPL exacttraining/OOSparity and swallowedfailure diagnostics. Reviewedblob script1f9a70e839d97e5f00e0547254b6ac60afe993d1/tests6273d6bc7d15586b537de2da7bcca42f185da209. Harness complete; fullsearch/results are separate unfinished TRADING-REVIEW-RETUNE-EVIDENCE target. Full branch backend4809passed1skipped0failed;frontendtypecheckpassed. Financial evidence remains separately unfinished. ||2026-10-04: user-authorized origin/main merge confirmed at65c395470fc2267a3857eef5ab240a479ee6544f; current-main integration independently clean round1/3. Original stage counters unchanged. Full backend5016passed/1skip/2unchanged-main network shortlist failures; frontend4664/typecheck/build passed.",
       "merge_integration": {
         "branch": "codex/audited-branch-merge-2026-10-04",
         "reviewer": "/root/remaining_merge_audit_r1",
@@ -1883,7 +1885,8 @@
         "gate_findings": 0,
         "reviewed_diff": "b73ada8abc20b29d7204f5257d52579294cd88c6..3ad48ff037b16b917ea77e29c862807c1dc6802d",
         "evidence": "docs/superpowers/audits/2026-10-04-audited-branch-merge.md",
-        "readiness": "audited_ready_for_user_authorized_main_merge"
+        "readiness": "merged_to_origin_main",
+        "merged_commit": "65c395470fc2267a3857eef5ab240a479ee6544f"
       }
     },
     {
@@ -1902,7 +1905,7 @@
         "pattern": "^# Multi-year retuning results",
         "note": "Report presence only; completed compute/provenance and independent financial review recorded in audit evidence."
       },
-      "note": "Completed full60-symbol Bullish run exit0:35folds5proposals,noneeligible;3unsupported emptygrids skipped. Evidence round1 retune_evidence_audit1 independently verified report numbers, costs, hashes, inputs and all checkpoints:zero gate findings. No adoption or RRfloor change. Evidence in docs/superpowers/reports/2026-10-03-multiyear-retuning.md; PR31 stacked on PR30.",
+      "note": "Completed full60-symbol Bullish run exit0:35folds5proposals,noneeligible;3unsupported emptygrids skipped. Evidence round1 retune_evidence_audit1 independently verified report numbers, costs, hashes, inputs and all checkpoints:zero gate findings. No adoption or RRfloor change. Evidence in docs/superpowers/reports/2026-10-03-multiyear-retuning.md; PR31 stacked on PR30. ||2026-10-04: user-authorized origin/main merge confirmed at65c395470fc2267a3857eef5ab240a479ee6544f; current-main integration independently clean round1/3. Original stage counters unchanged. Full backend5016passed/1skip/2unchanged-main network shortlist failures; frontend4664/typecheck/build passed.",
       "merge_integration": {
         "branch": "codex/audited-branch-merge-2026-10-04",
         "reviewer": "/root/remaining_merge_audit_r1",
@@ -1912,7 +1915,8 @@
         "gate_findings": 0,
         "reviewed_diff": "b73ada8abc20b29d7204f5257d52579294cd88c6..3ad48ff037b16b917ea77e29c862807c1dc6802d",
         "evidence": "docs/superpowers/audits/2026-10-04-audited-branch-merge.md",
-        "readiness": "audited_ready_for_user_authorized_main_merge"
+        "readiness": "merged_to_origin_main",
+        "merged_commit": "65c395470fc2267a3857eef5ab240a479ee6544f"
       }
     }
   ],
@@ -2213,7 +2217,7 @@
         "pattern": "IV rank \\(position in its 52-week IV range\\) above the ceiling",
         "note": "PRESENCE ONLY: pins the corrected user-visible string. The rest of the change is comments and one docstring."
       },
-      "note": "Built 2026-10-04 on claude/contract-iv-pill-label (claim CONTRACT-IV-PILL-LABEL) as commit ea1a28e9 on base dff659c6 (origin/main). Comment/docstring-only plus one diagnostic string in frontend/lib/parsePipelineDiagnostics.ts ('IV rank (a true percentile) above the ceiling.' -> 'IV rank (position in its 52-week IV range) above the ceiling.'); 15 lines in config.py, schemas/__init__.py, stock_scorer.py, step-5 and step-6 pages, ivThresholdsStore.ts, scanStore.ts, settingsStore.ts, parsePipelineDiagnostics.ts. No logic, threshold, YAML or persisted-store change. CONTEXT: this branch first built its own Step-6 component-badge fix (rule-based badges, commit 912d2910, independent round CLEAN) but IV-COMPONENT-DISPLAY landed on main first with a different, audited design (badges removed); 912d2910 was dropped unmerged (kept locally as backup/contract-iv-pill-label-912d2910), only this residual wording was carried over. || CODE ROUND 1 CLEAN 2026-10-04: fresh independent general-purpose subagent applying bmad-review-adversarial-general under the numeric/persistence gate (plus mechanism-comment correctness), over exactly `git show ea1a28e9` (9 files, +15/-15). ZERO gate-level findings. Reviewer verified: all 15 replacements sit in comments/docstrings or the one explanation string; ast.parse OK on the 3 Python files; each reworded comment true against tastytrade_iv.py (implied_volatility_index_rank vs implied_volatility_percentile), ibkr.py (fields 7308/7309) and contract_validator.py's basis split; no test/snapshot/e2e pins the old string; tsc clean; parsePipelineDiagnostics 42/42. Fixes: none. Outstanding: none. Local validation: tsc clean; tests/test_docc4_config_health.py + tests/test_contract_explanation.py 104 passed (Python 3.11.9). ||2026-10-04: integrated as69556bff; current-main merge round1 clean by /root/remaining_merge_audit_r1, whole scope/second pass verified. User-authorized merge ready; evidence2026-10-04-audited-branch-merge.md."
+      "note": "Built 2026-10-04 on claude/contract-iv-pill-label (claim CONTRACT-IV-PILL-LABEL) as commit ea1a28e9 on base dff659c6 (origin/main). Comment/docstring-only plus one diagnostic string in frontend/lib/parsePipelineDiagnostics.ts ('IV rank (a true percentile) above the ceiling.' -> 'IV rank (position in its 52-week IV range) above the ceiling.'); 15 lines in config.py, schemas/__init__.py, stock_scorer.py, step-5 and step-6 pages, ivThresholdsStore.ts, scanStore.ts, settingsStore.ts, parsePipelineDiagnostics.ts. No logic, threshold, YAML or persisted-store change. CONTEXT: this branch first built its own Step-6 component-badge fix (rule-based badges, commit 912d2910, independent round CLEAN) but IV-COMPONENT-DISPLAY landed on main first with a different, audited design (badges removed); 912d2910 was dropped unmerged (kept locally as backup/contract-iv-pill-label-912d2910), only this residual wording was carried over. || CODE ROUND 1 CLEAN 2026-10-04: fresh independent general-purpose subagent applying bmad-review-adversarial-general under the numeric/persistence gate (plus mechanism-comment correctness), over exactly `git show ea1a28e9` (9 files, +15/-15). ZERO gate-level findings. Reviewer verified: all 15 replacements sit in comments/docstrings or the one explanation string; ast.parse OK on the 3 Python files; each reworded comment true against tastytrade_iv.py (implied_volatility_index_rank vs implied_volatility_percentile), ibkr.py (fields 7308/7309) and contract_validator.py's basis split; no test/snapshot/e2e pins the old string; tsc clean; parsePipelineDiagnostics 42/42. Fixes: none. Outstanding: none. Local validation: tsc clean; tests/test_docc4_config_health.py + tests/test_contract_explanation.py 104 passed (Python 3.11.9). ||2026-10-04: integrated as69556bff; current-main merge round1 clean by /root/remaining_merge_audit_r1, whole scope/second pass verified. User-authorized merge ready; evidence2026-10-04-audited-branch-merge.md. || User-authorized origin/main merge confirmed at65c395470fc2267a3857eef5ab240a479ee6544f."
     }
   ],
   "decisions": [
