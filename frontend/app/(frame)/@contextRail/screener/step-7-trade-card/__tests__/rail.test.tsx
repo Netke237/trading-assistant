@@ -294,3 +294,17 @@ describe('audit round 1 F4 — the earnings gate is aged by the scan\'s age', ()
     expect(screen.queryByText(EARNINGS_LABEL)).not.toBeInTheDocument();
   });
 });
+
+it('withholds numeric R/R when its measured stock stop moved', () => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: PICKED, rrPending: false, rrStale: true } }); });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText(/Stock stop moved since R\/R was measured/)).toBeInTheDocument();
+  expect(screen.queryByText(/Projected reward:risk/)).not.toBeInTheDocument();
+});
+
+
+it.each(['stock_stop', 'premium_stop'] as const)('names captured %s risk without changing its thresholds', (basis) => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: { ...PICKED, exit: { ...PICKED.exit, rrRiskBasis: basis } }, rrPending: false } }); });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText(new RegExp(`risking the ${basis === 'stock_stop' ? 'stock stop' : 'premium stop'}`))).toBeInTheDocument();
+});

@@ -156,11 +156,11 @@ export function resolveBasketCards(
 }
 
 const RR_OVERRIDE_KEYS = [
-  'rr_bullish_target_pct', 'rr_bearish_target_pct',
+  'rr_target_r_multiple',
   'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct',
 ] as const;
 
-/** Pull just the four Reward/Risk override keys out of scanOverrides, dropping
+/** Pull just the Reward/Risk override keys out of scanOverrides, dropping
  *  any that aren't set (so recomputePlan's optional fields stay optional). */
 export function rrOverridesFrom(
   scanOverrides: Record<string, number | boolean | string>,

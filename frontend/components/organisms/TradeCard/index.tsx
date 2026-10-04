@@ -22,6 +22,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
+import { rrOverridesForPlan } from '@/lib/tradeCardOverride';
 import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
 import { premiumStopDollarBounds } from '@/lib/premiumStop';
@@ -123,10 +124,8 @@ function rrContribution(
   entryLimit: number,
   riskBasis: number,
 ): number {
-  // Risk basis is the planned dollar stop (entryLimit * premium_stop_pct,
-  // already computed backend-side and surfaced as overlay.premiumStop) —
-  // NOT the full entry price. Matches the backend's own reward_risk.py
-  // estimate_targets(): risk_basis = current_premium * premium_stop_pct.
+  // Risk basis is the smaller captured stock-stop loss / planned premium stop
+  // while its stock barrier matches; otherwise the planned premium stop.
   // Mirrors the backend's reward_risk.py M2 fix: a negative reward's sign/
   // magnitude is preserved, not flattened to 0 — a target priced below entry
   // is a real loss the trader should see, not an indistinguishable "no data".
@@ -196,6 +195,7 @@ interface TradeCardProps {
    *  field whenever `mergePlan` lands, and a user is free to type the seed's own
    *  value deliberately. See `premiumStopDollarToSend` and `TouchedFields`. */
   onEditsChange?: (overlay: EditOverlay, meta: { touched: TouchedFields }) => void;
+  onRrStaleChange?: (stale: boolean) => void;
   /** Fired whenever the "Check structure" result changes for the current contract
    *  (including being reset to `undefined` on a contract switch, or `null` when no
    *  structural level was found) — lets the parent capture the level so it can be
@@ -395,6 +395,7 @@ export function TradeCard({
   sendDisabled,
   contracts: initialContracts = 1,
   onEditsChange,
+  onRrStaleChange,
   onStructuralStopChange,
   onFirstPassageChange,
   onExitPlanChange,
@@ -872,6 +873,7 @@ export function TradeCard({
         dte: cd.dte,
         premium,
         trend_score: data.stockBreakdown.trend,
+        target_r_multiple: rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides).rr_target_r_multiple,
         horizon_preset: gateHorizon ?? undefined,
       }, controller.signal);
       if (isFinished(controller)) {
@@ -1833,6 +1835,15 @@ export function TradeCard({
   // is the one that stayed put. With a single boolean it was rendered after a
   // Check-structure or Arithmetic-Plan click too, quoting a probability
   // measured against a level that is no longer on screen anywhere.
+  const capturedStockRisk = data.exit.stockStopLoss;
+  const capturedStop = data.exit.stockStopLossAt;
+  const currentRrStop = sharedStop?.price ?? overlay.invalidation;
+  const hasCapturedStockRisk = typeof capturedStockRisk === 'number' && Number.isFinite(capturedStockRisk) && capturedStockRisk > 0;
+  const rrStale = hasCapturedStockRisk && (typeof capturedStop !== 'number' || !Number.isFinite(capturedStop)
+    || typeof currentRrStop !== 'number' || !Number.isFinite(currentRrStop) || Math.abs(currentRrStop - capturedStop) >= 0.005);
+  const ladderRisk = hasCapturedStockRisk && !rrStale ? Math.min(overlay.premiumStop, capturedStockRisk) : overlay.premiumStop;
+  useEffect(() => { onRrStaleChange?.(rrStale); }, [onRrStaleChange, rrStale]);
+
   const stockStopMoved = useMemo(() => {
     if (raceBarriers == null || firstPassage?.race == null) return false;
     // `overlay.invalidation` for the same reason `resolvedStockStop` uses it:
@@ -2670,7 +2681,7 @@ export function TradeCard({
                           />
                         </div>
                         <Text size={10} tone={compareState === 'beyond' ? 'caution' : 'dim'}>
-                          {targetCompareLabel(compareState)}
+                          {t.qualityReasons.includes('target_capped') ? 'Bearish target capped at the price floor. ' : ''}{targetCompareLabel(compareState)}
                         </Text>
                       </div>
                     </div>
@@ -2918,6 +2929,10 @@ export function TradeCard({
         >
           <section className={`${styles.planCard} ${styles.targetsCard}`}>
             <Text size={14} weight={600}>Sell-to-Close Plan</Text>
+            <Text size={10} tone={rrStale ? 'caution' : 'dim'}>{rrStale
+              ? 'Stock stop moved — R/R uses the premium stop until the plan is remeasured.'
+              : hasCapturedStockRisk ? `R/R risk: ${capturedStockRisk < overlay.premiumStop ? 'stock-stop loss' : 'premium stop'} (smaller risk leg).` : 'R/R risk: premium stop (stock-stop loss unavailable).'}</Text>
+            {data.exit.targetSource === 'capped' && <Text size={10} tone="caution">Bearish target capped to keep stock targets above the price floor.</Text>}
             <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
             <div className={styles.targetsTable}>
               {data.exit.targets.map((t, i) => (
@@ -2932,7 +2947,8 @@ export function TradeCard({
                   // (estimatedOptionPrice - entryLimit) is on the SCAN basis.
                   // A live-mid risk over a scan-mid reward mis-states the
                   // ratio by scanMid / liveMid.
-                  premiumStop={overlay.premiumStop}
+                  premiumStop={ladderRisk}
+                  authoritativeRr={hasCapturedStockRisk && !rrStale && overlay.entryLimit === data.entry.limit && overlay.premiumStop === data.exit.premiumStop ? t.rrContribution : undefined}
                   data={data}
                   onStockPriceChange={(v) => {
                     const next = [...overlay.targets];
@@ -3210,6 +3226,7 @@ function EditableTargetRow({
   editedStockPrice,
   entryLimit,
   premiumStop,
+  authoritativeRr,
   data,
   onStockPriceChange,
   totalContracts,
@@ -3219,6 +3236,7 @@ function EditableTargetRow({
   editedStockPrice: number;
   entryLimit: number;
   premiumStop: number;
+  authoritativeRr?: number;
   data: TradeCardData;
   onStockPriceChange: (v: number) => void;
   totalContracts: number;
@@ -3254,7 +3272,7 @@ function EditableTargetRow({
     ? recomputeTargetEstOption(editedStockPrice, entryLimit, data)
     : (target.estimatedOptionPrice ?? 0);
 
-  const rr = rrContribution(estOptionPrice, entryLimit, premiumStop);
+  const rr = !isTargetEdited && authoritativeRr !== undefined ? authoritativeRr : rrContribution(estOptionPrice, entryLimit, premiumStop);
 
   const statusVal = target.status;
   const rowTone = statusVal === 'HIT' ? 'pass' : statusVal === 'MISSED' ? 'reject' : undefined;

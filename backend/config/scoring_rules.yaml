@@ -116,14 +116,14 @@ horizons:
       #   iv_abs_*  judge ABSOLUTE implied volatility 0-100 (Tradier per-strike,
       #             or the Black-Scholes inversion). This is the path most
       #             symbols take, since only Tradier returns a per-contract IV.
-      #   iv_rank_* judge a TRUE PERCENTILE, available only when IBKR or
+      #   iv_rank_* judge an IV RANK, available only when IBKR or
       #             tastytrade answered.
       # The iv_abs_* numbers are the ones this rule has ACTUALLY been applying
       # since before the split -- raw IV was written into a field named for a
-      # percentile -- so keeping them here preserves today's behaviour exactly
+      # rank -- so keeping them here preserves today's behaviour exactly
       # rather than silently changing which candidates pass.
       # The iv_rank_* numbers are seeded to match and are UNMEASURED: nobody has
-      # checked that a percentile deserves the same cut-offs as a level. Logged
+      # checked that a rank deserves the same cut-offs as a level. Logged
       # as an open question alongside Q7.
       iv_abs_compressed_caution: 5
       iv_abs_pass_max: 34      # IV <= this -> PASS; mirrors frontend ivThresholds.ts
@@ -386,14 +386,14 @@ horizons:
       #   iv_abs_*  judge ABSOLUTE implied volatility 0-100 (Tradier per-strike,
       #             or the Black-Scholes inversion). This is the path most
       #             symbols take, since only Tradier returns a per-contract IV.
-      #   iv_rank_* judge a TRUE PERCENTILE, available only when IBKR or
+      #   iv_rank_* judge an IV RANK, available only when IBKR or
       #             tastytrade answered.
       # The iv_abs_* numbers are the ones this rule has ACTUALLY been applying
       # since before the split -- raw IV was written into a field named for a
-      # percentile -- so keeping them here preserves today's behaviour exactly
+      # rank -- so keeping them here preserves today's behaviour exactly
       # rather than silently changing which candidates pass.
       # The iv_rank_* numbers are seeded to match and are UNMEASURED: nobody has
-      # checked that a percentile deserves the same cut-offs as a level. Logged
+      # checked that a rank deserves the same cut-offs as a level. Logged
       # as an open question alongside Q7.
       iv_abs_compressed_caution: 5
       iv_abs_pass_max: 44      # IV <= this -> PASS; mirrors frontend ivThresholds.ts

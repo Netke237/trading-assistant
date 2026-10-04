@@ -24,6 +24,7 @@ import json as _json
 # target %, etc.). Shared with app.routers.contracts's recompute endpoint so
 # both build a trade plan off the same numbers.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
+from app.services.config_loader import resolve_target_r_multiple
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 from app.services.config_loader import effective_rr_overrides
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
@@ -71,7 +72,7 @@ from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
-from app.scoring.exit_plan import resolve_stock_stop, final_stop_out
+from app.scoring.exit_plan import resolve_stock_stop, final_stop_out, resolve_t1_target
 from app.scoring.stock_scorer import _atr
 from app.scoring.stop_cost import compute_stop_cost
 from app.services.config_loader import load_exit_plan_cfg
@@ -800,13 +801,13 @@ async def _process_symbol(
     # ── Final score with the volatility figure from the chain ────────────────
     # TWO DIFFERENT QUANTITIES, and which one we have decides which thresholds
     # judge it (PHASE-A-NULL-IVRANK-2026-09-06):
-    #   ivRank -- a TRUE PERCENTILE, present only when IBKR or tastytrade
-    #             answered. Judged against the percentile thresholds.
+    #   ivRank -- an IV RANK, present only when IBKR or tastytrade
+    #             answered. Judged against the rank thresholds.
     #   iv     -- ABSOLUTE implied volatility, 0-100, from Tradier per strike
     #             (or the Black-Scholes inversion below). Judged against the
     #             absolute thresholds, which is what the 34/55/70 numbers have
     #             actually been judging all along.
-    # Prefer the rank: a percentile says where this vol sits for THIS name,
+    # Prefer the rank: a rank says where this vol sits for THIS name,
     # which an absolute level cannot.
     atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
     c0 = atm[0] if atm else None
@@ -818,7 +819,7 @@ async def _process_symbol(
         iv_rank, iv_basis = float(c0["iv"]), "absolute"
 
     # No vendor IV at all — invert Black-Scholes for the ATM contract. This
-    # yields an ABSOLUTE volatility, never a percentile, so it can only ever
+    # yields an ABSOLUTE volatility, never a rank, so it can only ever
     # feed the absolute path.
     if iv_rank is None and c0 is not None:
         iv_bs = _compute_iv_bs(
@@ -1064,33 +1065,6 @@ async def _process_symbol(
             else price * (1 + _flat_fallback_pct)
         )
 
-    _plan = build_trade_plan(
-        direction=direction,
-        stock_price=price,
-        strike=strike,
-        dte=int(contract.get("dte", 30)),
-        premium=premium,
-        entry_bid=float(contract.get("bid", 0)),
-        entry_ask=float(contract.get("ask", 0)),
-        entry_mid=float(contract.get("price", 0)),
-        rr_cfg=_rr,
-        heston_params=heston_params,
-        horizon_preset=horizon_preset,
-        hold_min=hold_min_days,
-        hold_max=hold_max_days,
-        final_stop_price=_stock_stop_price,
-    )
-    entry = _plan.entry
-    target_price = _plan.target_price
-    invalidation_price = _plan.invalidation_price
-    rr = SimpleNamespace(rr_ratio=_plan.rr_ratio, model_used=_plan.rr_model)
-    targets = _plan.targets
-    # Unrounded target/invalidation for the runner-up alternatives' estimate_rr
-    # (see below) — feeding the rounded values would drift their R/R vs the
-    # pre-refactor behaviour.
-    _target_raw = _plan.target_price_raw
-    _invalidation_raw = _plan.invalidation_price_raw
-
     # ── Stop-vs-premium gate, priced at scan time (Phase B3) ──────────────────
     # Spec §2.3, decision B3-SCOPED-STOP-2026-09-08. The ranking table is the
     # last surface with no gate on it; this computes the verdict here, where
@@ -1108,6 +1082,7 @@ async def _process_symbol(
     # resolved stop, so this block reads `_stock_stop` above rather than
     # computing a second one. The badge and the card's Invalidation field
     # therefore grade the same level by construction.
+    _stop_cost_fraction = None
     stop_cost_pct: float | None = None
     stop_cost_status: str | None = None
     try:
@@ -1126,7 +1101,7 @@ async def _process_symbol(
                 stock_price=price,
                 strike=strike,
                 dte=int(contract.get("dte", 30)),
-                premium=premium,
+                premium=round(premium, 2),
                 is_call=(direction == "Bullish"),
                 # ALWAYS None -- invert this contract's OWN mid with the
                 # bracketed solver, which is compute_stop_cost's normal basis.
@@ -1147,13 +1122,14 @@ async def _process_symbol(
                 # names the hazard: "a caller-supplied iv_pct need not
                 # reproduce the contract's own mid".
                 #
-                # Never `iv_rank` either: it holds a PERCENTILE whenever
-                # iv_basis == "rank", and feeding a percentile to a function
+                # Never `iv_rank` either: it holds an IV RANK whenever
+                # iv_basis == "rank", and feeding a rank to a function
                 # taking absolute volatility is the conflation Phase A ended.
                 iv_pct=None,
                 horizon_preset=horizon_preset,
             )
             if _scan_cost is not None:
+                _stop_cost_fraction = _scan_cost.fraction
                 stop_cost_pct = round(_scan_cost.fraction * 100, 1)
                 stop_cost_status = _scan_cost.status
     except Exception as exc:
@@ -1162,6 +1138,48 @@ async def _process_symbol(
         # Heston, confidence) degrades the same way, and this one carries less:
         # the row simply reads "not computed".
         _log.warning("Scan-time stop cost failed for %s: %s", symbol, exc)
+
+    _r_multiple = resolve_target_r_multiple(overrides)
+    try:
+        _t1_price, _t1_source = await asyncio.to_thread(
+            resolve_t1_target, candles, direction, price, _stock_stop,
+            _stock_stop_price, _r_multiple,
+            load_exit_plan_cfg()["target"]["structural_snap"]["atr_multiplier"],
+        )
+    except Exception as exc:
+        _log.warning("Scan target resolution failed for %s: %s", symbol, exc)
+        _t1_price = price + (1 if direction == "Bullish" else -1) * _r_multiple * abs(price - _stock_stop_price)
+        _t1_source = "flat_fallback"
+
+    _plan = build_trade_plan(
+        direction=direction,
+        stock_price=price,
+        strike=strike,
+        dte=int(contract.get("dte", 30)),
+        premium=premium,
+        entry_bid=float(contract.get("bid", 0)),
+        entry_ask=float(contract.get("ask", 0)),
+        entry_mid=float(contract.get("price", 0)),
+        rr_cfg=_rr,
+        heston_params=heston_params,
+        horizon_preset=horizon_preset,
+        hold_min=hold_min_days,
+        hold_max=hold_max_days,
+        final_stop_price=_stock_stop_price,
+        target_price=_t1_price,
+        target_source=_t1_source,
+        stop_cost_fraction=_stop_cost_fraction,
+    )
+    entry = _plan.entry
+    target_price = _plan.target_price
+    invalidation_price = _plan.invalidation_price
+    rr = SimpleNamespace(rr_ratio=_plan.rr_ratio, model_used=_plan.rr_model)
+    targets = _plan.targets
+    # Unrounded target/invalidation for the runner-up alternatives' estimate_rr
+    # (see below) — feeding the rounded values would drift their R/R vs the
+    # pre-refactor behaviour.
+    _target_raw = _plan.target_price_raw
+    _invalidation_raw = _plan.invalidation_price_raw
 
     # ── Build TradeCardData ────────────────────────────────────────────────────
     from datetime import date as _date
@@ -1250,6 +1268,10 @@ async def _process_symbol(
             target=target_price,
             targets=targets,
             finalStop=_final_stop_block,
+            stockStopLoss=_plan.stock_stop_loss,
+            stockStopLossAt=_plan.stock_stop_loss_at,
+            rrRiskBasis=_plan.rr_risk_basis,
+            targetSource=_plan.target_source,
         ),
         rrRatio=rr.rr_ratio,
         rrModel=rr.model_used,
@@ -1332,6 +1354,18 @@ async def _process_symbol(
         alt_strike = float(alt_c.get("strike", price))
         alt_expiry_years = alt_c.get("dte", 30) / 365.0
         alt_premium = float(alt_c.get("price", 0.10))
+        alt_stop_fraction = None
+        if _stock_stop is not None and _stock_stop.source == "final_stop":
+            try:
+                alt_cost = compute_stop_cost(
+                    stop_price=round(_stock_stop.price, 2), stock_price=price,
+                    strike=alt_strike, dte=int(alt_c["dte"]), premium=round(alt_premium, 2),
+                    is_call=direction == "Bullish", iv_pct=None, horizon_preset=horizon_preset,
+                )
+                if alt_cost is not None:
+                    alt_stop_fraction = alt_cost.fraction
+            except Exception as exc:
+                _log.warning("Alternative stop cost failed for %s: %s", symbol, exc)
         alt_rr = estimate_rr(
             stock_price=price,
             target_price=_target_raw,
@@ -1342,6 +1376,7 @@ async def _process_symbol(
             is_call=(direction == "Bullish"),
             heston_params=heston_params,
             premium_stop_pct=_rr["premium_stop_pct"],
+            risk_fraction=alt_stop_fraction,
         )
         alts.append(AlternativeContract(
             symbol=symbol,
@@ -1488,7 +1523,7 @@ async def restore_from_db() -> str | None:
             # A result stored under an older schema carries at least one field
             # whose name no longer describes what it holds, with nothing on the
             # record saying so -- v0's `ivRank` held raw implied volatility
-            # under a percentile's name; v1's `exit.invalidation` held a flat
+            # under a rank's name; v1's `exit.invalidation` held a flat
             # percentage move under the resolved structural+2xATR stop's name.
             # Serving either puts a wrong number on the card the user acts
             # from, and the frontend cannot repair it: its own migrations only
@@ -1622,6 +1657,7 @@ async def _execute_scan_core(
     # dict is validated here first).
     try:
         _merge_rr_cfg(req.overrides)
+        resolve_target_r_multiple(req.overrides)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 

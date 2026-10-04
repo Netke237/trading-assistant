@@ -710,13 +710,10 @@ def _nearest_expiration_in_window(
     tolerance margin.
 
     `min_dte_floor` is the contract validator's hard-reject floor
-    (dte_window.widened_min_dte: never below hold_max + 1). Expiries under it
-    are dropped BEFORE the centre-nearest pick. Without this the fetch could
-    choose an expiry the validator is certain to reject as dte_too_short, and
-    because only one expiry is fetched, that rejected the whole symbol even
-    when a valid expiry was listed: a Custom 15-200d hold (window 30-400,
-    centre 215, floor 201) picked a 199d monthly; Intraday (window 1-4, floor 3)
-    picked Friday's weekly from Wednesday on.
+    (dte_window.widened_min_dte: at least hold_max + 21 when a hold is supplied).
+    Drop expiries below it before choosing the nearest window centre, so the
+    one fetched expiry can pass the same validator floor. Custom 15-200d has
+    window 221-400 and floor221; Intraday 0-2d has window23-58 and floor23.
     """
     lo, hi = bounds
     centre = (lo + hi) / 2
@@ -1629,12 +1626,12 @@ async def fetch_option_chain_async(
                 # and tastytrade return a symbol-level RANK, a different
                 # quantity (where today's IV sits in its own 52-week range).
                 # Until 2026-09-06 this value was written into `ivRank`, so a
-                # name at 45% IV scored as though it sat at the 45th percentile
+                # name at 45% IV scored as though it had IV rank 45
                 # of its own range -- failing iv_rank_pass_max: 34 -- and a name
                 # at 75% was HARD-REJECTED at max_iv_rank: 70 even when 75% is
                 # low for it. See PHASE-A-NULL-IVRANK-2026-09-06.
                 "iv": round(iv * 100, 1) if iv > 0 else None,
-                # A TRUE PERCENTILE, or None. None means "no rank source
+                # An IV RANK, or None. None means "no rank source
                 # answered" -- a distinct state from any number, and what tells
                 # the scorer to judge `iv` against the ABSOLUTE thresholds
                 # instead. Only the IBKR and tastytrade branches below fill it.
@@ -1676,7 +1673,7 @@ async def fetch_option_chain_async(
 
         # Counts contracts with no ABSOLUTE IV, which is what the yfinance
         # backfill below supplies. Reading `ivRank` was only correct while that
-        # field held raw IV; now that it holds a percentile or None, a
+        # field held raw IV; now that it holds a rank or None, a
         # Tradier-only chain would have read 0-of-N and skipped the backfill.
         zero_iv = sum(1 for c in result if not c.get("iv"))
         if zero_iv > len(result) * 0.5 and result:
@@ -1686,7 +1683,7 @@ async def fetch_option_chain_async(
                 if not c.get("iv"):
                     yf_val = yf_iv.get(float(c["strike"]))
                     if yf_val:
-                        # yfinance supplies an ABSOLUTE IV, never a percentile.
+                        # yfinance supplies an ABSOLUTE IV, never a rank.
                         c["iv"] = round(yf_val * 100, 1)
                         c["implied_volatility"] = round(yf_val, 4)
 

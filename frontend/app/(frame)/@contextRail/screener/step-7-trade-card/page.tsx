@@ -53,6 +53,7 @@ function buildChecklist(
   eventWindow: { reject_days: number; caution_days: number } | undefined = undefined,
   /** Audit round 1, F4 — the scan's timestamp, to age `earningsDays` by. */
   scanTimestamp: string | undefined = undefined,
+  rrStale: boolean = false,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -180,6 +181,7 @@ function buildChecklist(
     detail: `Lower of stock score (${candidate.stockScore}) and contract score (${candidate.contractScore}) = ${minScore}.`,
   });
 
+  // Thresholds remain UNMEASURED pending AREA3-OPTIONS-MEASUREMENT.
   // R:R ≥ 2.0. While the picked contract's plan is loading (or failed) the
   // card's rrRatio is still the auto-pick's -- CAUTION, never that figure.
   if (rrPending) {
@@ -188,10 +190,14 @@ function buildChecklist(
       status: 'CAUTION',
       detail: 'R:R not yet recomputed for the contract picked in Step 6.',
     });
-  } else gates.push({
+  } else if (rrStale) gates.push({
+    label: 'R:R ≥ 2.0', status: 'CAUTION',
+    detail: 'Stock stop moved since R/R was measured. Recompute the plan before using its ratio.',
+  });
+  else gates.push({
     label: 'R:R ≥ 2.0',
     status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',
-    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}× — pass ≥2.0×, caution 1.5-2.0×.`,
+    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}×${candidate.exit.rrRiskBasis ? ` to the target, risking the ${candidate.exit.rrRiskBasis === 'stock_stop' ? 'stock stop' : 'premium stop'} (whichever is hit first)` : ''} — pass ≥2.0×, caution 1.5-2.0×.`,
   });
 
   // Spread score ≥ 70 (higher = tighter spread)
@@ -251,6 +257,7 @@ export default function TradeCardContextRail() {
     ivOverrideFor(horizonKey, ivFetched, ivOverrides),
     eventWindow,
     scanTimestamp,
+    published?.rrStale ?? false,
   ) : [];
 
   return (

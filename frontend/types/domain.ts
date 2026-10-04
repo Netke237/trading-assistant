@@ -547,7 +547,7 @@ export interface PortfolioPosition {
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
-  /** A TRUE PERCENTILE (today's IV vs this name's own 52-week range), or
+  /** An IV RANK (today's IV vs this name's own 52-week range), or
    *  absent when no rank source answered — which is the common case. The
    *  absolute level lives in `iv`. Resolve the two via lib/ivBasis.ts;
    *  never print one under the other's label. */
@@ -636,7 +636,7 @@ export interface TradeCardData {
     mid:    number;              // premium, $
     delta:  number;
     theta:  number;              // $/day
-    /** TRUE PERCENTILE, or null when no rank source answered. See lib/ivBasis.ts. */
+    /** IV RANK, or null when no rank source answered. See lib/ivBasis.ts. */
     ivRank: number | null;
     /** ABSOLUTE implied volatility 0–100, or null. See lib/ivBasis.ts. */
     iv?:    number | null;
@@ -659,6 +659,10 @@ export interface TradeCardData {
      *  scan refills it. The backend never sends null. */
     invalidation: number | null;
     premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[];
+    stockStopLoss?: number | null;
+    stockStopLossAt?: number | null;
+    rrRiskBasis?: 'premium_stop' | 'stock_stop';
+    targetSource?: 'structural_snap' | 'arithmetic' | 'flat_fallback' | 'capped';
     /** Where `invalidation` came from — rendered by the "Bottom (final stop)"
      *  row before the user has pressed Compute Arithmetic Plan. Sent by the
      *  scan and echoed by /contracts/recompute-plan so a Step 6 contract
@@ -831,7 +835,7 @@ export interface OptionContract {
   price:        number;
   delta:        number;
   theta:        number;
-  /** TRUE PERCENTILE, or null when no rank source answered — the common case.
+  /** IV RANK, or null when no rank source answered — the common case.
    *  The absolute level is in `iv`. Resolve via lib/ivBasis.ts. */
   ivRank:       number | null;
   /** ABSOLUTE implied volatility, 0–100, for this strike, or null. */
@@ -889,7 +893,7 @@ export interface AlternativeContract {
   mid:          number;
   delta:        number;
   theta:        number;
-  /** TRUE PERCENTILE or null; absolute level in `iv`. See lib/ivBasis.ts. */
+  /** IV RANK or null; absolute level in `iv`. See lib/ivBasis.ts. */
   ivRank:       number | null;
   iv?:          number | null;
   score:        number;

@@ -151,6 +151,9 @@ def test_step6_grades_the_scans_contract_as_the_trade_card_does(client, monkeypa
     """Same contract, same score and status, on the path Step 6 actually takes:
     the UI always sends hold days, so the DTE widening is applied on top of
     the recorded rules on both sides."""
+    if hold:
+        expiry = (date.today() + timedelta(days=68)).isoformat()
+        contract = {**contract, "expiry": expiry, "dte": 68, "dteTotal": 68}
     monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [contract])  # restored after the test
     hold_body = {"hold_min_days": hold[0], "hold_max_days": hold[1]} if hold else {}
     with _scan_patches():
@@ -187,8 +190,10 @@ def test_an_empty_rule_set_is_the_yaml(client):
     assert _get_contracts(client, 80, {}).json() == _get_contracts(client, 80).json()
 
 
-def test_recorded_rules_are_widened_for_hold_days_as_the_scan_widens_them(client):
+def test_recorded_rules_are_widened_for_hold_days_as_the_scan_widens_them(client, monkeypatch):
     """A recorded min_dte is replaced by the hold-days window on both sides."""
+    # hold25+buffer21 requires at least46 days; use68 near widened band centre on this hold path.
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_THIN, "expiry": (date.today()+timedelta(days=68)).isoformat(), "dte":68, "dteTotal":68}])
     url = ("/api/contracts?symbol=XOM&right=C&stock_score=80&hold_min_days=20&hold_max_days=25"
            "&contract_rules=" + quote(json.dumps({**_LOOSE, "min_dte": 200})))
     with _contracts_patches():
@@ -294,7 +299,7 @@ def test_a_mixed_chain_names_both_the_hard_and_the_score_rejects(client, monkeyp
 
 def test_zero_floors_reach_the_validator_on_the_hold_window_path(client, monkeypatch):
     """The UI always sends hold days, so the DTE-widened overrides are the real path."""
-    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "expiry": (date.today()+timedelta(days=68)).isoformat(), "dte":68, "dteTotal":68}])
     default = _scan(client, {}, hold=(20, 25))
     assert "volume_too_low(1)" in default["rejected"][0]["reason"]
     zeroed = _scan(client, _ZERO_FLOORS, hold=(20, 25))

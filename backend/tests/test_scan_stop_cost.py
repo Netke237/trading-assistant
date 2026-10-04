@@ -321,3 +321,26 @@ def test_supplying_an_iv_would_have_changed_the_answer(client):
     assert round(with_atm_vol.fraction * 100, 1) == pytest.approx(81.0, abs=0.5)
     assert round(from_own_mid.fraction * 100, 1) == pytest.approx(50.0, abs=0.5)
     assert with_atm_vol.status == "CAUTION" and from_own_mid.status == "PASS"
+
+
+def test_area3_scan_target_and_risk_recompute_parity(client):
+    """Same contract/stop/target must reproduce the complete plan risk basis."""
+    cards, price, _ = _candidates(client, extra_patches=(patch("app.routers.scan._HESTON_PRICING_ENABLED", False),))
+    card = cards[0]
+    leg = card['contractDetails']; exit = card['exit']
+    assert exit['targetSource'] in ('arithmetic', 'structural_snap', 'flat_fallback', 'capped')
+    if exit['stockStopLoss'] is not None:
+        assert exit['stockStopLossAt'] == exit['invalidation']
+    response = client.post('/api/contracts/recompute-plan', json={
+        'symbol': card['symbol'], 'direction': card['direction'],
+        'stock_price': price, 'strike': leg['strike'],
+        'dte': leg['dte'], 'premium': leg['mid'],
+        'final_stop': exit['finalStop'], 'target_stock_price': exit['target'],
+        'target_source': exit['targetSource'],
+    })
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['exit']['target'] == exit['target']
+    assert result['exit']['stockStopLoss'] == exit['stockStopLoss']
+    assert result['exit']['rrRiskBasis'] == exit['rrRiskBasis']
+    assert result['rrRatio'] == card['rrRatio']

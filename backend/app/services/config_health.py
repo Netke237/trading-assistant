@@ -161,7 +161,7 @@ RISK_KEYS: dict = {
         "max_total_stock_exposure_pct", "max_loss_per_trade_pct")},
     "sizing": {"max_contracts_per_trade": None},
     "reward_risk": {k: None for k in (
-        "bullish_target_pct", "bearish_target_pct", "bullish_invalidation_pct",
+        "bullish_invalidation_pct",
         "bearish_invalidation_pct", "premium_stop_pct", "target_t1_pct", "target_t2_pct",
         "target_t3_pct")},
     "exit_plan": {

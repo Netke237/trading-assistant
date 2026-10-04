@@ -67,24 +67,23 @@ def _dates(today, *dtes):
     return [(today + timedelta(days=n)).isoformat() for n in dtes]
 
 
-def test_custom_15_200_hold_skips_an_expiry_below_the_201_floor():
+def test_custom_15_200_hold_skips_an_expiry_below_the_221_floor():
     today = date(2026, 9, 29)
     # Custom 15-200d at multiplier 2: window (30, 400), centre 215, floor 201.
-    floor = widened_min_dte(30, 200)
-    assert floor == 201
+    floor = widened_min_dte(221, 200)
+    assert floor == 221
     dates = _dates(today, 199, 263, 381)
     assert _nearest_expiration_in_window(dates, (30, 400), today) == _dates(today, 199)[0]  # the old pick
     assert _nearest_expiration_in_window(dates, (30, 400), today, min_dte_floor=floor) == _dates(today, 263)[0]
 
 
-def test_intraday_on_a_wednesday_skips_fridays_2_day_weekly():
-    today = date(2026, 9, 30)  # a Wednesday
-    floor = widened_min_dte(1, 2)  # Intraday: window (1, 4), hold_max 2
-    assert floor == 3
-    dates = _dates(today, 2, 9, 16)
-    assert _nearest_expiration_in_window(dates, (1, 4), today) == _dates(today, 2)[0]  # the old pick
-    # Nothing in [3, 4]; the tolerance margin reaches 14, so next Friday (9d).
-    assert _nearest_expiration_in_window(dates, (1, 4), today, min_dte_floor=floor) == _dates(today, 9)[0]
+def test_intraday_on_a_wednesday_skips_expiries_under_23_days():
+    today = date(2026, 9, 30)
+    # hold2 + buffer21 sets floor23; ideal span35 gives window23-58.
+    floor = widened_min_dte(23, 2)
+    assert floor == 23
+    dates = _dates(today, 2, 9, 23, 44)
+    assert _nearest_expiration_in_window(dates, (23, 58), today, min_dte_floor=floor) == _dates(today, 44)[0]
 
 
 def test_no_floor_keeps_the_old_behaviour():

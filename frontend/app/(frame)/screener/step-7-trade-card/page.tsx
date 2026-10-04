@@ -717,10 +717,16 @@ export default function Step7Page() {
   // auto-pick's (override plan loading or failed). This page does not subscribe
   // to the store, so publishing on every render of an overridden card (whose
   // identity changes each render) re-renders the rail only, never this page.
+  const rrIdentity = effectiveCard ? `${effectiveCard.symbol}|${effectiveCard.contract}` : '';
+  const [rrStaleState, setRrStaleState] = useState<{ key: string; stale: boolean }>({ key: '', stale: false });
+  const onRrStaleChange = useCallback((stale: boolean) => {
+    setRrStaleState((prev) => prev.key === rrIdentity && prev.stale === stale ? prev : { key: rrIdentity, stale });
+  }, [rrIdentity]);
+  const rrStale = rrStaleState.key === rrIdentity && rrStaleState.stale;
   const setRailCard = useTradeCardUiStore((s) => s.setActiveCard);
   useEffect(() => {
-    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady } : null);
-  }, [effectiveCard, planReady, setRailCard]);
+    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady, rrStale } : null);
+  }, [effectiveCard, planReady, rrStale, setRailCard]);
   // Cleared on unmount, so a later visit never shows the previous visit's
   // contract before its first publish.
   useEffect(() => () => setRailCard(null), [setRailCard]);
@@ -906,6 +912,7 @@ export default function Step7Page() {
           // endpoint echoes it and builds the plan around it, so an override
           // changes the CONTRACT and nothing about where the stock stop sits.
           final_stop:  pickedCard.exit.finalStop ?? null,
+          ...(pickedCard.exit.targetSource ? { target_stock_price: pickedCard.exit.target, target_source: pickedCard.exit.targetSource } : {}),
           ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
@@ -979,6 +986,7 @@ export default function Step7Page() {
         delta: cd.delta,
         spread: 0,
         final_stop: resolved.exit.finalStop ?? null,
+          ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
         ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
@@ -1482,6 +1490,7 @@ export default function Step7Page() {
             </div>
           ) : (
             <TradeCard
+              onRrStaleChange={onRrStaleChange}
               data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}
               onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}

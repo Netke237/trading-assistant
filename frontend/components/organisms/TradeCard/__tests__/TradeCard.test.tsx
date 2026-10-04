@@ -4061,3 +4061,35 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
     expect(staleNotice()).toBeInTheDocument();
   });
 });
+
+describe('AREA3 captured stock-risk freshness', () => {
+  it('reports moved stop and restoration without automatically repricing', () => {
+    const report = jest.fn();
+    const card = { ...mockTradeCard, exit: { ...mockTradeCard.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64 } };
+    const { rerender } = render(<TradeCard data={card} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(false);
+    const moved = { ...card, exit: { ...card.exit, invalidation: 179.65 } };
+    rerender(<TradeCard data={moved} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(true);
+    rerender(<TradeCard data={card} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(false);
+  });
+  it('legacy cards without captured loss never claim a stale captured ratio', () => {
+    const report = jest.fn();
+    render(<TradeCard data={mockTradeCard} initialInvalidation={170} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(false);
+  });
+});
+
+it('AREA3 ladder uses authoritative captured ratio, then premium risk when the stop moves', () => {
+  const card = { ...mockTradeCard, exit: { ...mockTradeCard.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64,
+    targets: [{ ...mockTradeCard.exit.targets[0], rrContribution: 5.0 }] } };
+  const { rerender } = render(<TradeCard data={card} />);
+  expandLadder();
+  expect(screen.getByText('5.0x')).toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, exit: { ...card.exit, invalidation: 179.65 } }} />);
+  expect(screen.getByText('1.7x')).toBeInTheDocument();
+  expect(screen.queryByText('5.0x')).not.toBeInTheDocument();
+  rerender(<TradeCard data={card} />);
+  expect(screen.getByText('5.0x')).toBeInTheDocument();
+});

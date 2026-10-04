@@ -251,3 +251,15 @@ async def test_p1a_13b_a_same_contract_race_answers_409_never_422(FileSession):
     assert 201 in results, results
     [other] = [r for r in results if r != 201]
     assert other[0] == 409 and "already exists" in other[1], results
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('row,method',[(0,'exit_plan_2r'),(1,'exit_plan_3r')])
+async def test_area3_tp_seed_uses_shown_override_ratios(Session,row,method):
+    targets=[{'rrRatio':2.5,'price':110},{'rrRatio':3.5,'price':115}]
+    body=PortfolioPositionCreate(**_body(pickedMethod='arithmetic',pickedRowStockPrice=targets[row]['price'],exitPlan={'targets':targets}))
+    with patch('app.services.position_writer.fetch_contract_quote_async',new=AsyncMock(return_value=None)):
+        async with Session() as db:
+            outcome=await create_position(body,db)
+    assert outcome.position.active_tp_method == method
+    assert outcome.position.resolved_tp_price == targets[row]['price']
