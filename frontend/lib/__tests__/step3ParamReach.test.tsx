@@ -102,11 +102,11 @@ describe('resultMatchesContext', () => {
 });
 
 describe('rrOverridesForPlan', () => {
-  const LIVE = { rr_bullish_target_pct: 0.5, rr_bearish_target_pct: 0.4, fast_ema: 12 };
+  const LIVE = { rr_target_r_multiple: 3, fast_ema: 12 };
 
   it('sends the scan\'s recorded overrides, not live Step-3 values', () => {
-    expect(rrOverridesForPlan({ rr_overrides: { rr_bullish_target_pct: 0.12 } }, LIVE))
-      .toEqual({ rr_bullish_target_pct: 0.12 });
+    expect(rrOverridesForPlan({ rr_overrides: { rr_target_r_multiple: 2.5 } }, LIVE))
+      .toEqual({ rr_target_r_multiple: 2.5 });
   });
 
   it('a scan that overrode none sends none, even with live edits', () => {
@@ -117,11 +117,11 @@ describe('rrOverridesForPlan', () => {
     ['absent', {}],
     ['null', { rr_overrides: null }],
   ])('a result with the record %s falls back to live scanOverrides', (_l, result) => {
-    expect(rrOverridesForPlan(result, LIVE)).toEqual({ rr_bullish_target_pct: 0.5, rr_bearish_target_pct: 0.4 });
+    expect(rrOverridesForPlan(result, LIVE)).toEqual({ rr_target_r_multiple: 3 });
   });
 
   it('no result at all falls back to live scanOverrides', () => {
-    expect(rrOverridesForPlan(null, LIVE)).toEqual({ rr_bullish_target_pct: 0.5, rr_bearish_target_pct: 0.4 });
+    expect(rrOverridesForPlan(null, LIVE)).toEqual({ rr_target_r_multiple: 3 });
   });
 });
 

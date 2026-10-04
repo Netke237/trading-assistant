@@ -636,6 +636,8 @@ function ExitPlanEditor({
         dte: position.dteRemaining,
         premium: position.currentPrice,
         trend_score: 50,
+        ...(Number.isFinite(position.exitPlan?.targets[0]?.rrRatio) && position.exitPlan!.targets[0].rrRatio > 0 && position.exitPlan!.targets[0].rrRatio <= 10
+          ? { target_r_multiple: position.exitPlan!.targets[0].rrRatio } : {}),
       });
       const plan = { ...res, computedAt: new Date().toISOString() };
       // Feature D: a re-computed plan re-stamps the TP snapshot when one of its
@@ -723,6 +725,7 @@ function ExitPlanEditor({
               {!t.qualityGood && (
                 <Text size={10} tone="caution">
                   {t.qualityReasons.includes('stop_widened') ? 'Stop ATR-widened. ' : ''}
+                  {t.qualityReasons.includes('target_capped') ? 'Bearish target capped at the price floor. ' : ''}
                   {t.qualityReasons.includes('target_beyond_structural') ? 'Target overshoots structural level.' : ''}
                 </Text>
               )}

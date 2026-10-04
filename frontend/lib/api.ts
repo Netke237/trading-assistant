@@ -448,8 +448,9 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
-    rr_bullish_target_pct?: number;
-    rr_bearish_target_pct?: number;
+    rr_target_r_multiple?: number;
+    target_stock_price?: number;
+    target_source?: TradeCardData['exit']['targetSource'];
     rr_bullish_invalidation_pct?: number;
     rr_bearish_invalidation_pct?: number;
     /** Feed the reprice-horizon fallback behind the Fixed % Ladder. Same field,
@@ -542,6 +543,7 @@ export const api = {
     dte: number;
     premium: number;
     trend_score: number;
+    target_r_multiple?: number;
     /** Same meaning as on `getStructuralStop` — the stop-vs-premium gate is
      *  per-horizon and this is where the line comes from. */
     horizon_preset?: string;

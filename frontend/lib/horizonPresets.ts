@@ -70,8 +70,8 @@ export function resolveParamsHorizon(hz: HorizonKey, holdMax: number): HorizonKe
  * Mirrors backend/app/scoring/dte_window.py exactly.
  */
 export function previewDteWindow(holdMin: number, holdMax: number): [number, number] {
-  const lo = Math.max(1, Math.round(holdMin * DTE_HOLDING_MULTIPLIER));
-  const hi = Math.max(lo, Math.round(holdMax * DTE_HOLDING_MULTIPLIER));
+  const lo = Math.max(1, Math.round(holdMin * DTE_HOLDING_MULTIPLIER), holdMax + 21);
+  const hi = Math.max(lo + 35, Math.round(holdMax * DTE_HOLDING_MULTIPLIER));
   return [lo, hi];
 }
 

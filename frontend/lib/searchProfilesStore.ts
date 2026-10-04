@@ -11,6 +11,8 @@ function genId(): string {
 
 interface SearchProfilesState {
   profiles: SearchProfile[];
+  legacyTargetPctDropped: boolean;
+  dismissLegacyTargetPctNotice: () => void;
   /** Schedule-entry ids whose automatic re-sync push (see resyncScheduleEntriesForProfile
    *  below) failed after retries — the Settings UI reads this to show a
    *  "may be out of date" badge per entry rather than failing silently. */
@@ -26,6 +28,8 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
   persist(
     (set, get) => ({
       profiles: [],
+      legacyTargetPctDropped: false,
+      dismissLegacyTargetPctNotice: () => set({ legacyTargetPctDropped: false }),
       staleScheduleEntryIds: [],
       saveProfile: (name, snapshot) => {
         const now = new Date().toISOString();
@@ -63,7 +67,7 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 3,
+      version: 4,
       migrate: (persistedState, version) => {
         const st = { ...((persistedState ?? {}) as Record<string, unknown>) };
         // ROUND 5 finding 3. `seedOverrides` was appended to the `version < 2`
@@ -158,9 +162,27 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
             };
           });
         }
+        if (version < 4) {
+          let dropped = st.legacyTargetPctDropped === true;
+          st.profiles = (Array.isArray(st.profiles) ? st.profiles : []).map((raw) => {
+            if (!raw || typeof raw !== 'object') return raw;
+            const profile = raw as Record<string, unknown>;
+            const original = profile.scanOverrides;
+            if (!original || typeof original !== 'object' || Array.isArray(original)) return raw;
+            const overrides = { ...(original as Record<string, unknown>) };
+            for (const key of ['rr_bullish_target_pct', 'rr_bearish_target_pct']) {
+              if (key in overrides) {
+                if (overrides[key] !== 0.08) dropped = true;
+                delete overrides[key];
+              }
+            }
+            return { ...profile, scanOverrides: overrides };
+          });
+          st.legacyTargetPctDropped = dropped;
+        }
         return st as unknown as SearchProfilesState;
       },
-      partialize: (state) => ({ profiles: state.profiles }),
+      partialize: (state) => ({ profiles: state.profiles, legacyTargetPctDropped: state.legacyTargetPctDropped }),
     },
   ),
 );

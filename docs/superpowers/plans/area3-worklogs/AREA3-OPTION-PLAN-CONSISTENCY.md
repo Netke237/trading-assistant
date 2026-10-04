@@ -109,3 +109,35 @@ fix); fetched and inspected its file scope. Merge/reconcile into this feature
 branch remains due after frozen backend review, before frontend stage. AREA3
 claim expired during the pause with no replacement owner; retaken09:23UTC
 using normal claim.py take. No other claim changed.
+
+### Backend stage clearance and upstream incorporation
+
+Final backend code round3 reviewer `/root/area3_backend_audit_r3` reviewed
+`93b98e54..5dc0c88be76eeb38f55ceca9e5ba8ad39a0866e7` and interactions,
+confirmed scope and both audit skills: zero gate findings. Independently passed
+138 tests under Python3.11.16 and a76-case captured call/put half-cent matrix;
+four unmeasured zero-loss cases retain legacy behavior. Backend stage is clean
+at round3/3; no extra code round run. Original plan exception remains plan-only.
+
+Merged origin/main dff659c662f5c7c38f183326238e6cd1ba0664e7 into this feature
+at4af9d089, without conflicts, preserving latest unrelated canonical JSON.
+68 focused AREA3/contract-explanation/scan-stop-cost tests passed after merge
+under Python3.11.16. Full backend rerun remains due.
+
+### Frontend checkpoint awaiting code audit
+
+Composed DTE preview21-day residual/35-day ideal span, Target(R-multiple)
+default2, retired override filtering, profile v4 migration and persisted
+nondefault-removal notice. Contract recompute carries original target and source
+when source exists; portfolio preserves first stored target multiple. Card
+ladder selects smaller valid captured stock loss/premium stop, retains server
+ratios on untouched measured rows, and falls back when stop moves by >=0.005.
+Rail reports CAUTION without numeric stale R/R; candidate/contract identity
+keys ephemeral stale publication. Arithmetic targets show capped-floor notice.
+No order/premium-stop persistence behavior changed.
+
+Typecheck passed; focused frontend8 suites/249 tests passed, including actual
+profile hydration/dismissal and moved/restored/legacy stop cases. Initial plural
+Jest filtering accidentally selected full suites; those duplicate incomplete
+runs were stopped, not counted as final full-suite verification. Fresh frontend
+code stage round1 pending against the frontend checkpoint; work unfinished.

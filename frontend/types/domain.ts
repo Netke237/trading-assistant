@@ -659,6 +659,10 @@ export interface TradeCardData {
      *  scan refills it. The backend never sends null. */
     invalidation: number | null;
     premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[];
+    stockStopLoss?: number | null;
+    stockStopLossAt?: number | null;
+    rrRiskBasis?: 'premium_stop' | 'stock_stop';
+    targetSource?: 'structural_snap' | 'arithmetic' | 'flat_fallback' | 'capped';
     /** Where `invalidation` came from — rendered by the "Bottom (final stop)"
      *  row before the user has pressed Compute Arithmetic Plan. Sent by the
      *  scan and echoed by /contracts/recompute-plan so a Step 6 contract
