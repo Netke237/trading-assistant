@@ -7,14 +7,6 @@
       "expires_at": "2026-10-04T16:48:48Z",
       "note": "Document Stock and Pre-Breakout design decisions before mockup approval and implementation",
       "task": "STOCK-DESIGN-GRILLING"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/trade-card-presentation-integration",
-      "claimed_at": "2026-10-04T14:49:31Z",
-      "expires_at": "2026-10-04T17:49:31Z",
-      "note": "Resume own branch; Step7-only1200 exception and final pending independent acceptance review",
-      "task": "TRADE-CARD-PRESENTATION-INTEGRATION"
     }
   ]
 }
