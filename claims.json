@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T16:48:48Z",
       "note": "Document Stock and Pre-Breakout design decisions before mockup approval and implementation",
       "task": "STOCK-DESIGN-GRILLING"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/audited-branch-merge-2026-10-04",
+      "claimed_at": "2026-10-04T16:28:47Z",
+      "expires_at": "2026-10-04T19:28:47Z",
+      "note": "User-authorized clean branches: preserve current risk guards through merge resolution",
+      "task": "AUDITED-BRANCH-MERGE"
     }
   ]
 }
