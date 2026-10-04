@@ -15,6 +15,14 @@
       "expires_at": "2026-10-04T03:42:16Z",
       "note": "Optional audited qualification evidence presentation",
       "task": "TRADE-CARD-QUALIFICATION-PRESENTATION"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/trade-card-qualification-presentation",
+      "claimed_at": "2026-10-04T00:48:38Z",
+      "expires_at": "2026-10-04T03:48:38Z",
+      "note": "Publish own qualification completion evidence only",
+      "task": "TRADE-CARD-PRESENTATION-STATE"
     }
   ]
 }
