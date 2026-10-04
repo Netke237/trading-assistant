@@ -73,7 +73,7 @@ def initialize_worker(snapshot, basket, contents=None):
 
 
 def evaluate_job(job):
-    strategy, direction, symbol, combo, fold = job
+    strategy, direction, symbol, combo, fold, costs = job
     train_bars, n_scored = wf.slice_with_warmup(_BASKET[symbol], fold.train_start, fold.train_end)
     if n_scored < wf.MIN_SCORED_BARS or len(train_bars) < 100:
         return symbol, None, [], None
@@ -81,8 +81,10 @@ def evaluate_job(job):
     with capture_failures(OOSFailures(failures)), warnings.catch_warnings(record=True) as observed:
         warnings.simplefilter('always')
         try:
+            # Net of per-leg costs, exactly as production train_fold (Phase C T4).
             result = wf.run_strategy_backtest(train_bars, strategy=strategy, direction=direction,
-                                              params=combo, entry_start=fold.train_start)
+                                              params=combo, commission=wf.commission_for(costs),
+                                              entry_start=fold.train_start)
         except Exception as exc:
             result = None
             failures.add('errors', [f'{symbol}: {type(exc).__name__}: {exc}'])
@@ -163,7 +165,7 @@ class ParallelTrainer:
         self.progress(strategy, key, 'started')
         for index, combo in enumerate(wf.param_combos(search_space)):
             sharpes, combo_results = [], {}
-            jobs = ((strategy, direction, symbol, combo, fold) for symbol in basket_bars)
+            jobs = ((strategy, direction, symbol, combo, fold, costs) for symbol in basket_bars)
             for symbol, result, observed, error in ordered_bounded_map(self.pool, evaluate_job, jobs, self.pending_limit):
                 local.add('warnings', observed)
                 if error:

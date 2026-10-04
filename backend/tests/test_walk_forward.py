@@ -1,6 +1,6 @@
 """Tests for walk-forward optimization fold construction."""
 from datetime import date, timedelta
-from app.services.walk_forward import build_folds, param_combos, apply_costs, consensus, precompute_bar_dates
+from app.services.walk_forward import build_folds, param_combos, consensus, precompute_bar_dates
 
 
 def _synth_bars_for_walk_forward(n=400, start=date(2020, 1, 1), trend=True):
@@ -52,11 +52,14 @@ def test_param_combos_cartesian():
     assert {"a": 1, "b": 10} in combos
 
 
-def test_apply_costs_reduces_return():
-    # one round trip, 0.1% per leg (fee + slippage) => 0.4% drag on a 1.0% gross trade return
-    net = apply_costs(gross_return_pct=1.0, fee_pct=0.001, slippage_pct=0.001)
-    assert net < 1.0
-    assert abs(net - (1.0 - 0.4)) < 0.05
+def test_apply_costs_is_gone():
+    """TRADING-REVIEW-PHASE-C T4: costs are charged per trade leg inside the
+    backtest (commission=fee+slippage), so the flat once-per-window `apply_costs`
+    must not come back — it would charge every window a second time."""
+    from app.services import walk_forward, strategy_param_optimizer
+
+    assert not hasattr(walk_forward, "apply_costs")
+    assert not hasattr(strategy_param_optimizer, "apply_costs")
 
 
 def test_consensus_median_and_mode():

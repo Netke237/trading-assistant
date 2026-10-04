@@ -107,19 +107,14 @@ def param_combos(search_space: dict) -> list[dict]:
     return [dict(zip(keys, vals)) for vals in itertools.product(*(search_space[k] for k in keys))]
 
 
-def apply_costs(*, gross_return_pct: float, fee_pct: float, slippage_pct: float) -> float:
-    """Subtract round-trip cost (entry + exit legs) as a percentage drag.
+def commission_for(costs: dict) -> float:
+    """Per-leg commission (fee + slippage, as a decimal) for `run_strategy_backtest`.
 
-    Args:
-        gross_return_pct: Gross return percentage.
-        fee_pct: Fee per leg (as decimal, e.g., 0.001 = 0.1%).
-        slippage_pct: Slippage per leg (as decimal, e.g., 0.001 = 0.1%).
-
-    Returns:
-        Net return percentage after subtracting round-trip costs.
+    TRADING-REVIEW-PHASE-C T4 (review M1): the backtest charges it on every entry
+    and exit leg of every trade, so WFO selects and scores folds net of costs that
+    scale with turnover (it used to subtract one flat round trip per window).
     """
-    drag_pct = (fee_pct + slippage_pct) * 2 * 100.0
-    return gross_return_pct - drag_pct
+    return costs.get("fee_pct", 0.001) + costs.get("slippage_pct", 0.001)
 
 
 def precompute_bar_dates(bars: list[dict]) -> None:
@@ -218,7 +213,8 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
         basket_bars: Dict mapping symbol to list of OHLCV bars.
         fold: Fold object with train/test date ranges.
         search_space: Dict mapping parameter names to lists of values.
-        costs: Dict with 'fee_pct' and 'slippage_pct' keys.
+        costs: Dict with 'fee_pct' and 'slippage_pct' keys, charged per trade leg
+            inside the backtest (see `commission_for`), so the ranking is net.
 
     Returns:
         (winning_params, {symbol: BacktestResult}) for the winning combo. The results map
@@ -228,6 +224,7 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
     """
     best, best_score = None, float("-inf")
     best_results: dict[str, object] = {}
+    commission = commission_for(costs)
     for combo in param_combos(search_space):
         sharpes = []
         combo_results: dict[str, object] = {}
@@ -237,7 +234,8 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
                 continue
             try:
                 res = run_strategy_backtest(train_bars, strategy=strategy, direction=direction,
-                                            params=combo, entry_start=fold.train_start)
+                                            params=combo, commission=commission,
+                                            entry_start=fold.train_start)
             except Exception as exc:
                 logger.debug("Train-fold backtest failed for %s: %s", sym, exc)
                 continue

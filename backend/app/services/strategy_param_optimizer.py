@@ -7,7 +7,7 @@ from datetime import date
 from typing import Callable
 
 from app.services.walk_forward import (
-    apply_costs, consensus, consistency, degradation_pct,
+    commission_for, consensus, consistency, degradation_pct,
     build_folds, train_fold, slice_with_warmup, MIN_SCORED_BARS, WARMUP_BARS,
 )
 
@@ -104,6 +104,9 @@ def _optimize_strategy_sync(
     all_win_rates: list[float] = []
     all_expectancies: list[float] = []
     all_drawdowns: list[float] = []
+    # Per-leg cost charged inside every backtest, IS (train_fold) and OOS alike,
+    # so every window return below is already net (Phase C T4, review M1).
+    commission = commission_for(costs)
 
     for fold in folds:
         winner, winner_results = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
@@ -123,12 +126,7 @@ def _optimize_strategy_sync(
         is_returns: list[float] = []
         for sym, res in winner_results.items():
             if res.n_trades > 0:
-                net = apply_costs(
-                    gross_return_pct=res.total_return_pct,
-                    fee_pct=costs.get("fee_pct", 0.001),
-                    slippage_pct=costs.get("slippage_pct", 0.001),
-                )
-                is_returns.append(net)
+                is_returns.append(res.total_return_pct)
         in_sample_fold_returns.append(
             sum(is_returns) / len(is_returns) if is_returns else 0.0
         )
@@ -143,19 +141,12 @@ def _optimize_strategy_sync(
                 try:
                     res = run_strategy_backtest(
                         test_bars, strategy=strategy, direction=direction, params=winner,
-                        entry_start=fold.test_start,
+                        commission=commission, entry_start=fold.test_start,
                     )
-                    # Only include windows where the strategy actually traded.
-                    # Applying cost drag to a zero-trade window injects a false
-                    # negative return (~−0.4%), unfairly suppressing consistency.
+                    # Only include windows where the strategy actually traded: a
+                    # zero-trade window has no evidence and would dilute consistency.
                     if res.n_trades > 0:
-                        gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
-                        net = apply_costs(
-                            gross_return_pct=gross,
-                            fee_pct=costs.get("fee_pct", 0.001),
-                            slippage_pct=costs.get("slippage_pct", 0.001),
-                        )
-                        test_returns.append(net)
+                        test_returns.append(res.total_return_pct)
                         total_n_trades += res.n_trades
                         contributing_symbols.add(sym)
                         all_sharpes.append(getattr(res, "sharpe", 0.0))
@@ -184,8 +175,9 @@ def _optimize_strategy_sync(
         logger.warning("No valid fold winners for %s — all folds empty, skipping", strategy)
         return None
 
-    # apply_costs returns net_return in the same percent units as total_return_pct.
-    # No ×100 here — the values are already percent (e.g., 5.0 = 5%).
+    # Window returns are total_return_pct from backtests run with the per-leg
+    # commission, so they are already net of costs on every trade, in percent
+    # units (e.g., 5.0 = 5%). No ×100 and no further cost deduction here.
     in_sample_return = (
         sum(valid_is_fold_returns) / len(valid_is_fold_returns)
         if valid_is_fold_returns
