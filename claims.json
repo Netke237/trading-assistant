@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T16:22:42Z",
       "note": "Stage 1: one Stocks strategy picker on Step 4, Step 5 removed; plus ticket-orchestration setup",
       "task": "STOCKS-STEP-MERGE-S1"
+    },
+    {
+      "agent": "claude",
+      "branch": "work",
+      "claimed_at": "2026-10-04T13:48:48Z",
+      "expires_at": "2026-10-04T16:48:48Z",
+      "note": "Document Stock and Pre-Breakout design decisions before mockup approval and implementation",
+      "task": "STOCK-DESIGN-GRILLING"
     }
   ]
 }
