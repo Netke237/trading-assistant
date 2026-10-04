@@ -30,6 +30,7 @@ from app.models.alert import AlertRuleModel, AlertHistoryModel  # noqa: F401
 from app.models.drawing import DrawingModel  # noqa: F401
 from app.models.fundamentals import FundamentalsModel  # noqa: F401
 from app.models.position_alert import PositionAlertHistoryModel  # noqa: F401
+from app.models.daily_risk import DailyRiskBudget, DailyRiskAttempt, DailyRiskLoss  # noqa: F401
 
 settings = get_settings()
 config = context.config

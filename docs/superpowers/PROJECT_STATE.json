@@ -1796,6 +1796,80 @@
         "note": "PRESENCE ONLY: Backtest is Stocks step 5, i.e. Step 5 (Strategy) is out of the Stocks step list. Behaviour is pinned by Stepper.test.tsx and the step-4-stocks tests listed in the plan. || BUILD 2026-10-04: T1-T7 (#34-#40) closed by fresh ticket-implementer subagents, each re-verified by the coordinator (typecheck clean; full jest green apart from the inherited BarrierRaceCard en-DE locale failure). Commits 1cff3e18, ae8cc5ba, 9fd701ce, 23464f70, f966eec6, 8891d805, c2f692c1 (plan correction: Task 7 status shipped_unaudited, since state.py treats in_progress as drift once the probe string exists; records only), b36b9f64. || ROUND 3 (code round 1), 2026-10-04: fresh independent gate-auditor subagent applying bmad-review-adversarial-general, gate-briefed, scope = WHOLE integrated diff git diff dff659c6..b36b9f64 (dff659c6 = origin/main = merge base), checked against the plan and the real code. GATE FINDINGS: 0. Scope verified: it compared the old Step 5 runScan body with runStockScan(activeStrategy, params) field by field (panelParamsOf == Step 5's 16-field list, requireChoppyRegime ?? false, mean-reversion fields still sent only for mean_reversion_multi), traced the hydration sync against StoreHydration's single rehydrate caller, traced strategyKey -> StockAutoTradeArm -> addStrategyWatch with stockScanRequest written only alongside its result (row strategy == request key for all 7 strategies incl. resolve_multi_signal), every activeStrategy consumer, the building/ScanSizingError boundary, currentStepFromPath callers and ScreenerStepGate index 4, and ran 15 suites (117/117). CODE STAGE CLEAN; audit_clean true. Status stays shipped_unaudited (code built and audited, NOT merged; state.py needs a shipped-family status once the probe string exists, and the contract reserves shipped for after the merge) -> set shipped at merge. || Logged against main, below the gate, not fixed here: inherited verbatim from Step 5 in HistoryPrefetchRow -- .prefetchBtn:hover uses the undefined token --border-default; an unmount while startHistoryPrefetch is pending leaves a 5 s poll running; the button lacks type=button. Stale comments: scanStoreCardEdits.test.ts:102, searchProfileSnapshot.test.ts:78, ScreenerStepGate/index.tsx:7, the Stepper '7-step' header, the StepNavBar 'Step X of 7' header, the KeyboardShortcuts '1..7' header. frontend/tsconfig.json paths lacks @/app/* although jest maps it. The BarrierRaceCard test assumes an en-US locale (toLocaleString). || MERGED 2026-10-04 (Kenneth: 'merge'): PR #42 merged to main with a merge commit; written immediately before that merge. Status shipped (audit_clean true). CI on the PR: backend, frontend, test all passed. Tracking issue #33 closes with the PR. Stage 2 (Q8-Q12) gets its own plan."
       },
       "note": "Decision STOCKS-STEP-MERGE-2026-10-04. Coordinated through GitHub tickets under the user-level k-ticket-coordinator skill (docs/agents/ticket-orchestration.md): tickets are build units, the phase is the audit target. Branch claude/stocks-step-merge-s1, claim STOCKS-STEP-MERGE-S1. Plan stage: 0 rounds. || ROUND 1 (plan round 1), 2026-10-04: independent general-purpose subagent applying bmad-review-adversarial-general, gate-briefed, scope = plan file @ 09628cbd checked against code. 2 gate findings, both fixed in the plan: P1-F1 Task 2's strategyKey fallback to lastStockScanStrategy could persist a strategy watch under another tab's/device's strategy when stockScanRequest is null (fix: stockScanRequest?.strategy ?? row's own strategy.strategy; test 4 re-pinned); P1-F2 Task 6 renumbering broke StepNavBar/Stepper, which read the step from the slug digit (Back/Next dead on Backtest and Position) (fix: currentStepFromPath(pathname, steps) resolves by slug in the active list; Stocks-mode StepNavBar pins added; F9 corrected). Not clean; round 2 reviews only these fixes. || ROUND 2 (plan round 2), 2026-10-04: fresh independent general-purpose subagent applying bmad-review-adversarial-general, gate-briefed, scope = git diff 09628cbd..327d6a46 of the plan (round 1 fixes) + interactions with code. GATE FINDINGS: 0 (scope verified: it traced stockScanRequest pairing via setStockScanResult/StoreHydration scan_id match, row strategy == request key for all 7 strategies, every currentStepFromPath caller). PLAN STAGE CLEAN; code stage starts at round 1 of 3. audit_clean stays false until the code stage is clean. Logged against main, below gate, not fixed here: (1) pre-existing -- strategy_watch_store VALID_STRATEGIES lacks mean_reversion_vwap and mean_reversion_multi, so arming those rows returns HTTP 400 (nothing persisted); (2) shared Step 1-3 headers say 'STEP n OF 7' in Stocks and Pre-Breakout modes (cosmetic). || TICKETS 2026-10-04: tracking issue #33; T1-T7 = #34-#40 (plan Tasks 1-7), T8 = #41 (orchestrator: verify, code audit, PR). Native sub-issues + blocked-by edges set."
+    },
+    {
+      "id": "TRADING-REVIEW-ACCOUNT-VALUE",
+      "name": "Trading review B1: server-owned account value at risk and dispatch boundaries",
+      "status": "shipped",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "depends_on": [
+        "TRADING-REVIEW-FIXES-A"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-03-server-owned-account-value.md",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/portfolio_risk.py",
+        "pattern": "^def account_value\\(",
+        "note": "Presence only; behavioral evidence in audit report."
+      },
+      "note": "Built, independently audited clean; not yet merged. PLAN rounds1/2:2 findings fixed then0. CODE rounds1/2:2 findings fixed then0. Gate proof and reviewed blobs in docs/superpowers/audits/2026-10-03-server-owned-account-value.md. Focused407passed; fix45passed; reviewer28passed; frontendtypecheckpassed. Finalcombinedbackend4797passed1skipped0failed. B2 dailyledger remains separate."
+    },
+    {
+      "id": "TRADING-REVIEW-DAILY-BUDGET",
+      "name": "Trading review B2: durable daily opening risk and gross loss budget",
+      "status": "shipped",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "depends_on": [
+        "TRADING-REVIEW-ACCOUNT-VALUE"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-03-persisted-daily-risk-budget.md",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/daily_risk.py",
+        "pattern": "^class DailyRiskService:",
+        "note": "Presence only; audit and behavioral evidence recorded separately."
+      },
+      "note": "Built and independently audited clean, not yet merged. PLAN rounds1/2:2 gate findings fixed then0; CODE rounds1/2:3 gate findings fixed then0. Reviewed hashes/proof in docs/superpowers/audits/2026-10-03-persisted-daily-risk-budget.md. Core30/integration23 independently53passed; author115focusedpassed. Frontend183suites4486tests/typecheck/build passed; finalcombinedbackend4797passed1skipped0failed. Retuning data verified for all60configuredsymbols; fullsearchseparatework; min_signal_rr remains0.0, no strategy parameters adopted."
+    },
+    {
+      "id": "TRADING-REVIEW-RETUNE",
+      "name": "Trading review: exact parallel retuning execution harness",
+      "status": "shipped",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "depends_on": [
+        "TRADING-REVIEW-FIXES-A",
+        "TRADING-REVIEW-ACCOUNT-VALUE",
+        "TRADING-REVIEW-DAILY-BUDGET"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-03-multiyear-retuning-plan.md",
+      "verify": {
+        "kind": "present",
+        "path": "scripts/retune_archived_basket.py",
+        "pattern": "^class ParallelTrainer:",
+        "note": "Presence means helper built only; completed search/report requires separately recorded evidence."
+      },
+      "note": "Unfinished, not ready to use proposals. PLAN round1:2 findings (snapshot drift and false net cost labels), fixed; PLAN round2 retune_plan_audit2 clean. Code parity validation in progress; independent CODE review pending. Captured60configuredsymbols753adjustedsettledbars each2023-10-03..2026-10-02. FullconfiguredBullishsearchdefault; no grid pruning/adoption/livechanges. Phase B PR30 https://github.com/Netke237/trading-assistant/pull/30 open and validated4797backendpassed/1skipped, frontend4486passed/typecheck/build. Retuning data/cache instructions saved in cloud draft; saving is not publication. CODE round1 retune_code_audit1 interrupted by usage limit: counted, not clean. Before interruption found hidden Backtest.run failures returned as empty results without diagnostic errors. Reproduction/fix underway; next independent code round2. No full search started. CODE round2 retune_code_audit2 completed original scope and fix:zero gate findings;12tests independentlypassed, realAAPL exacttraining/OOSparity and swallowedfailure diagnostics. Reviewedblob script1f9a70e839d97e5f00e0547254b6ac60afe993d1/tests6273d6bc7d15586b537de2da7bcca42f185da209. Harness complete; fullsearch/results are separate unfinished TRADING-REVIEW-RETUNE-EVIDENCE target. Full branch backend4809passed1skipped0failed;frontendtypecheckpassed. Financial evidence remains separately unfinished."
+    },
+    {
+      "id": "TRADING-REVIEW-RETUNE-EVIDENCE",
+      "name": "Trading review: configured basket multi-year proposals and evidence report",
+      "status": "shipped",
+      "audit_rounds": 1,
+      "audit_clean": true,
+      "depends_on": [
+        "TRADING-REVIEW-RETUNE"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-03-multiyear-retuning-plan.md",
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/reports/2026-10-03-multiyear-retuning.md",
+        "pattern": "^# Multi-year retuning results",
+        "note": "Report presence only; completed compute/provenance and independent financial review recorded in audit evidence."
+      },
+      "note": "Completed full60-symbol Bullish run exit0:35folds5proposals,noneeligible;3unsupported emptygrids skipped. Evidence round1 retune_evidence_audit1 independently verified report numbers, costs, hashes, inputs and all checkpoints:zero gate findings. No adoption or RRfloor change. Evidence in docs/superpowers/reports/2026-10-03-multiyear-retuning.md; PR31 stacked on PR30."
     }
   ],
   "already_shipped": [

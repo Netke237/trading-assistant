@@ -101,6 +101,7 @@ from app.services.portfolio_performance import _contract_multiplier
 from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
 from app.services.portfolio_risk import (
     EXCEEDS_MAX_CONTRACTS,
+    account_value, AccountValueError, RiskCheckResult,
     check_position_risk,
     premium_cap_basis,
     PortfolioPosition as RiskPosition,
@@ -489,15 +490,20 @@ async def create_position(
             )
             if cap_basis_floor is not None:
                 cap_basis = max(float(cap_basis_floor), cap_basis)
-        risk = check_position_risk(
-            symbol=body.symbol,
-            contract_id=body.contract,
-            proposed_contracts=body.qty,
-            entry_premium=cap_basis,
-            current_price=cap_basis,
-            portfolio=portfolio,
-            portfolio_value=body.portfolioValue,
-        )
+        try:
+            risk = check_position_risk(
+                symbol=body.symbol,
+                contract_id=body.contract,
+                proposed_contracts=body.qty,
+                entry_premium=cap_basis,
+                current_price=cap_basis,
+                portfolio=portfolio,
+                portfolio_value=account_value(),
+            )
+        except AccountValueError as exc:
+            if enforce_pre_trade_gates:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            risk = RiskCheckResult(approved=False, reasons=[str(exc)])
         if not risk.approved and enforce_pre_trade_gates:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

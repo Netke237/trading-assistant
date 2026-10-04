@@ -2426,9 +2426,13 @@ async def stock_exit_plan(req: StockExitPlanRequest) -> StockExitPlanResponse:
             detail="insufficient price history to compute an exit plan",
         )
 
+    try:
+        server_value = portfolio_risk.account_value()
+    except portfolio_risk.AccountValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     portfolio_cfg = portfolio_risk._load_config().get("portfolio", {})
     risk_budget = round(
-        float(portfolio_cfg.get("portfolio_value", 0.0))
+        server_value
         * float(portfolio_cfg.get("max_loss_per_trade_pct", 0.0)),
         2,
     )

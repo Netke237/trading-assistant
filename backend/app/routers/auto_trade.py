@@ -133,7 +133,7 @@ class ArmRequest(BaseModel):
     # the one input that turned the fire-time cap check off. A 422 naming the
     # field, at arm, is the loud failure `direction` and `horizon` already use.
     entry_premium:   float = Field(..., gt=0, allow_inf_nan=False)
-    portfolio_value: float = 50_000.0
+    portfolio_value: float = 100_000.0  # Ignored compatibility field; server config is authoritative
     # Piece 4 — the per-trade premium stop from the card being armed. Omitted
     # or null inherits auto_trade.premium_stop_pct. Bounded here as well as on
     # the portfolio schemas: this endpoint reaches the same sizing arithmetic
@@ -275,10 +275,13 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     # check + regime deadline + broker call) does not pin a connection;
     # `book_fired_order` checks one out again.
     await db.rollback()
+    from app.services.daily_risk_hooks import capture_daily_risk_hooks
+    hooks = capture_daily_risk_hooks()
     cf = _FIRE_EXECUTOR.submit(
         auto_trader.fire,
         portfolio_snapshot=portfolio_snapshot,
-        portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
+        daily_risk_hooks=hooks,
+        portfolio_value=None,  # fire() resolves the server account configuration at dispatch
         # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same contract
         # `maybe_fire_on_scan` passes, and for the same reason. This handler
         # reads the armed slot, decides something about what it read (the 400

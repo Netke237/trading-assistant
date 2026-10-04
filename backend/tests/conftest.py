@@ -559,3 +559,52 @@ def shipped_scoring_doc(drop: tuple = (), **overrides) -> dict:
         doc.pop(name, None)
     doc.update(copy.deepcopy(overrides))
     return doc
+
+@pytest.fixture(autouse=True)
+def _explicit_legacy_daily_risk_hooks(request, monkeypatch):
+    """Existing isolated order tests inject a fake durable service explicitly.
+
+    Ledger integration tests exercise the real database/bridge and opt out.
+    Legacy auto numeric fixtures retain their separately tested historical gate
+    amount; these tests do not claim to validate durable budget calculations.
+    """
+    if 'daily_risk' in request.node.path.name:
+        return
+    import threading
+    from types import SimpleNamespace
+    from app.services import auto_trader as at
+    from app.services import daily_risk_hooks, daily_risk
+    local = threading.local()
+    class LegacyHooks:
+        def reserve(self, attempt_id, **kwargs):
+            cents = round(getattr(local, 'risk', (kwargs.get('limit_price') or 1) * kwargs['quantity'] * kwargs['multiplier']) * 100)
+            return SimpleNamespace(reserved_cents=cents)
+        def resolve(self, *args, **kwargs):
+            pass
+    hooks = LegacyHooks()
+    original_check = at.AutoTradeService._check_daily_loss
+    def check(*args, **kwargs):
+        risk = original_check(*args, **kwargs)
+        local.risk = risk
+        return risk
+    monkeypatch.setattr(at.AutoTradeService, '_check_daily_loss', staticmethod(check))
+    original_init = at.AutoTradeService.__init__
+    def init(self):
+        original_init(self)
+        self._daily_risk_hooks = hooks
+    monkeypatch.setattr(at.AutoTradeService, '__init__', init)
+    monkeypatch.setattr(at.auto_trader, '_daily_risk_hooks', hooks)
+    monkeypatch.setattr(daily_risk_hooks, 'capture_daily_risk_hooks', lambda: hooks)
+    # Legacy tests mock BrokerRouter.execute; preserve that explicit fake seam
+    # while production dispatch uses resolve-before-reserve/place_order.
+    from unittest.mock import Mock
+    from app.routers import broker
+    selected = broker._selected_adapter
+    def legacy_adapter(router, key):
+        if isinstance(router, Mock):
+            return SimpleNamespace(place_order=lambda order: router.execute(key, order))
+        return selected(router, key)
+    monkeypatch.setattr(broker, '_selected_adapter', legacy_adapter)
+    async def record_loss(*args, **kwargs):
+        pass
+    monkeypatch.setattr(daily_risk, 'record_realized_loss', record_loss)

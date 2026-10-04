@@ -26,6 +26,17 @@ from app.schemas import PortfolioPositionCreate
 from app.services.portfolio_risk import RiskCheckResult
 from app.services.position_writer import create_position
 
+
+@pytest.fixture(autouse=True)
+def _server_account_for_legacy_risk_scenarios(monkeypatch):
+    """Server account supplies the intended cap; payload values are ignored."""
+    from copy import deepcopy
+    from app.services import portfolio_risk
+    config = deepcopy(portfolio_risk._load_config())
+    config.setdefault("portfolio", {})["portfolio_value"] = 1_000_000
+    monkeypatch.setattr(portfolio_risk, "_load_config", lambda: config)
+
+
 _RISK = "app.services.position_writer.check_position_risk"
 _LOGGER = "app.services.position_writer"
 
