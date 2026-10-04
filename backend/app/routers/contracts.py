@@ -38,6 +38,7 @@ from app.scoring.stock_scorer import _atr
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import load_first_passage_cfg as _fp_cfg
 from app.services.config_loader import load_exit_plan_cfg as _ep_cfg
+from app.services.config_loader import resolve_target_r_multiple
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -417,8 +418,9 @@ class RecomputePlanRequest(BaseModel):
     # scan endpoint accepts in ScanRequest.overrides, so a contract override
     # recompute (Step 6/7) honors whatever R/R tuning the trader set on Step 3
     # instead of silently reverting to risk_rules.yaml's defaults.
-    rr_bullish_target_pct: float | None = Field(default=None, gt=0, le=2.0)
-    rr_bearish_target_pct: float | None = Field(default=None, gt=0, le=2.0)
+    rr_target_r_multiple: float | None = Field(default=None, gt=0, le=10, allow_inf_nan=False)
+    target_stock_price: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    target_source: Literal["structural_snap", "arithmetic", "flat_fallback", "capped"] | None = None
     rr_bullish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
     rr_bearish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
     # The HOLDING preset key and typed hold range, feeding the repricing
@@ -462,8 +464,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
 
     _rr_overrides = {
         k: v for k, v in {
-            "rr_bullish_target_pct":       req.rr_bullish_target_pct,
-            "rr_bearish_target_pct":       req.rr_bearish_target_pct,
+            "rr_target_r_multiple": req.rr_target_r_multiple,
             "rr_bullish_invalidation_pct": req.rr_bullish_invalidation_pct,
             "rr_bearish_invalidation_pct": req.rr_bearish_invalidation_pct,
         }.items() if v is not None
@@ -517,6 +518,22 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
             else req.stock_price * (1 + _flat_fallback_pct)
         )
 
+    _multiple = resolve_target_r_multiple(_rr_overrides)
+    _target = req.target_stock_price
+    _source = req.target_source if _target is not None else None
+    if _target is None:
+        _target = req.stock_price + (1 if req.direction == "Bullish" else -1) * _multiple * abs(req.stock_price - _stock_stop_price)
+        _source = "arithmetic" if req.final_stop is not None else "flat_fallback"
+    _cost_fraction = None
+    if req.final_stop is not None:
+        cost = compute_stop_cost(
+            stop_price=round(req.final_stop.price, 2), stock_price=req.stock_price,
+            strike=req.strike, dte=req.dte, premium=req.premium,
+            is_call=req.direction == "Bullish", iv_pct=None, horizon_preset=req.horizon_preset,
+        )
+        if cost is not None:
+            _cost_fraction = cost.fraction
+
     plan = build_trade_plan(
         direction=req.direction,
         stock_price=req.stock_price,
@@ -531,6 +548,9 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         hold_min=req.hold_min,
         hold_max=req.hold_max,
         final_stop_price=_stock_stop_price,
+        target_price=_target,
+        target_source=_source or "arithmetic",
+        stop_cost_fraction=_cost_fraction,
     )
 
     return RecomputePlanResponse(
@@ -546,6 +566,10 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
             target=plan.target_price,
             targets=plan.targets,
             finalStop=req.final_stop,
+            stockStopLoss=plan.stock_stop_loss,
+            stockStopLossAt=plan.stock_stop_loss_at,
+            rrRiskBasis=plan.rr_risk_basis,
+            targetSource=plan.target_source,
         ),
         rrRatio=plan.rr_ratio,
         rrModel=plan.rr_model,
@@ -982,6 +1006,7 @@ def _race_out(race: Optional[BarrierRaceResult]) -> Optional[BarrierRaceOut]:
 
 
 class ExitPlanRequest(BaseModel):
+    target_r_multiple: float | None = Field(default=None, gt=0, le=10, allow_inf_nan=False)
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]
     entry_price: float = Field(..., gt=0)
@@ -1135,7 +1160,11 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
     )
 
     targets_out: list[ExitPlanTargetRowOut] = []
-    for rr_ratio in ep_cfg["target"]["rr_ratios"]:
+    ratios = ep_cfg["target"]["rr_ratios"]
+    if req.target_r_multiple is not None:
+        step = ratios[1] - ratios[0] if len(ratios) > 1 else 1.0
+        ratios = [req.target_r_multiple + step * i for i in range(len(ratios))]
+    for rr_ratio in ratios:
         row = compute_target_row(
             candles, req.direction, req.entry_price, final_stop, atr,
             rr_ratio, ep_cfg["target"]["structural_snap"]["atr_multiplier"],

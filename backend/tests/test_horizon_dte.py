@@ -95,8 +95,8 @@ def test_widened_min_dte_floors_at_hold_max_for_narrow_horizons():
     drop below hold_max_days + 1."""
     from app.scoring.dte_window import widened_min_dte
 
-    assert widened_min_dte(10, hold_max_days=15) == 16  # Swing
-    assert widened_min_dte(30, hold_max_days=45) == 46   # Position
+    assert widened_min_dte(10, hold_max_days=15) == 36  # hold15 + buffer21
+    assert widened_min_dte(30, hold_max_days=45) == 66   # hold45 + buffer21
 
 
 def test_widened_min_dte_matches_flat_tolerance_for_wide_horizons():
@@ -105,7 +105,7 @@ def test_widened_min_dte_matches_flat_tolerance_for_wide_horizons():
     10-day tolerance) is unaffected by the narrow-horizon guard."""
     from app.scoring.dte_window import widened_min_dte
 
-    assert widened_min_dte(90, hold_max_days=60) == 80    # Quarterly
+    assert widened_min_dte(90, hold_max_days=60) == 81    # hold60 + buffer21
     assert widened_min_dte(180, hold_max_days=105) == 170  # Semi-annual
     assert widened_min_dte(330, hold_max_days=200) == 320  # Annual
 
@@ -212,9 +212,9 @@ def test_position_hold_rejects_the_reported_22_dte_contract():
     assert "dte_too_short" in card.reject_reasons
 
 
-def test_position_hold_accepts_a_60_dte_contract():
+def test_position_hold_accepts_a_66_dte_contract():
     min_dte, max_dte = dte_window(15, 45, 2.0)
-    card = validate_contract(_make_contract(days=60), 70,
+    card = validate_contract(_make_contract(days=66), 70,
                              overrides={"min_dte": min_dte, "max_dte": max_dte,
                                         "preferred_dte_min": min_dte, "preferred_dte_max": max_dte})
     assert "dte_too_short" not in card.reject_reasons
@@ -423,8 +423,8 @@ def test_get_contracts_rejects_inverted_hold_range(monkeypatch):
 
 def test_get_contracts_passes_the_validator_floor_to_the_expiry_pick(monkeypatch):
     """The fetch picks ONE expiry. If it may pick below the validator's floor
-    (hold_max + 1), every contract comes back dte_too_short. A Custom 15-200d
-    hold is window (30, 400) at multiplier 2, floor 201: the fetch must be told."""
+    (hold_max + 21), every contract comes back dte_too_short. A Custom 15-200d
+    hold is window (221, 400) at multiplier 2, floor 221: the fetch must be told."""
     calls = []
     async def _fake_fetch(client, symbol, expiry=None, option_type="C", dte_bounds=None, min_dte_floor=None, dte_limits=None):
         calls.append((dte_bounds, min_dte_floor, dte_limits))
@@ -436,4 +436,4 @@ def test_get_contracts_passes_the_validator_floor_to_the_expiry_pick(monkeypatch
     client = TestClient(app)
     client.get("/api/contracts", params={"symbol": "AAPL", "right": "C",
                                           "hold_min_days": 15, "hold_max_days": 200})
-    assert calls == [((30, 400), 201, None)]  # hold window: no dte_limits
+    assert calls == [((221, 400), 221, None)]  # hold window: no dte_limits

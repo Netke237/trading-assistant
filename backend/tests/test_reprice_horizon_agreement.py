@@ -58,6 +58,8 @@ def _plan(preset, dte=30, hold_min=15.0, hold_max=45.0):
         entry_ask=5.30,
         entry_mid=5.20,
         rr_cfg=RR_CFG,
+        target_price=185 * 1.05,  # caller-provided historical target: this suite checks only horizon
+        stop_cost_fraction=None,
         # Piece 3: the stop is received, not derived. These tests are about the
         # repricing HORIZON, which the stop plays no part in -- a fixed level
         # keeps them measuring only what they claim to.

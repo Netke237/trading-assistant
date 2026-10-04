@@ -18,6 +18,7 @@ class RrResult:
     rr_ratio: float
     model_used: RrModel
     estimated_exit_premium: float
+    risk_basis: Literal["premium_stop", "stock_stop"] = "premium_stop"
 
 
 def _derive_fallback_sigma(
@@ -111,7 +112,7 @@ def _default_reprice_years(expiry_years: float) -> float:
 def estimate_rr(
     stock_price: float,
     target_price: float,
-    invalidation_price: float,   # reserved: kept for call-site symmetry; risk is now premium * premium_stop_pct, not invalidation-based
+    invalidation_price: float,   # kept for call-site symmetry; risk_fraction supplies the independently priced stock-stop loss
     strike: float,
     expiry_years: float,
     current_premium: float,
@@ -120,6 +121,7 @@ def estimate_rr(
     heston_params: HestonParams | None = None,
     sigma_fallback: float = 0.25,
     premium_stop_pct: float = 0.60,   # fraction of premium at risk (stop-loss basis)
+    risk_fraction: float | None = None,
     reprice_years: float | None = None,   # remaining_years_at_barrier(...); None = historical half-life
 ) -> RrResult:
     model_used: RrModel
@@ -145,17 +147,20 @@ def estimate_rr(
 
     exit_premium = max(exit_premium, 0.01)
 
-    risk = current_premium * premium_stop_pct   # only risk the stop-loss fraction
+    frac = resolved_risk_fraction(premium_stop_pct, risk_fraction)
+    risk = current_premium * frac
+    basis = "stock_stop" if frac < premium_stop_pct else "premium_stop"
     reward = exit_premium - current_premium
 
     if risk <= 0:
-        return RrResult(rr_ratio=0.0, model_used=model_used, estimated_exit_premium=round(exit_premium, 2))
+        return RrResult(rr_ratio=0.0, model_used=model_used, estimated_exit_premium=round(exit_premium, 2), risk_basis=basis)
 
     rr_ratio = round(reward / risk, 2)
     return RrResult(
         rr_ratio=rr_ratio,
         model_used=model_used,
         estimated_exit_premium=round(exit_premium, 2),
+        risk_basis=basis,
     )
 
 
@@ -170,6 +175,7 @@ def estimate_targets(
     heston_params: HestonParams | None = None,
     sigma_fallback: float = 0.25,
     premium_stop_pct: float = 0.60,
+    risk_fraction: float | None = None,
     reprice_years: float | None = None,   # remaining_years_at_barrier(...); None = historical half-life
 ) -> list:
     """
@@ -178,7 +184,7 @@ def estimate_targets(
     For Bearish puts:  T2 = stock_price - 1.5 * (stock_price - T1)
     Each level repriced via Heston if available, else delta approximation.
 
-    premium_stop_pct: fraction of current_premium used as risk basis for R/R (default 0.60).
+    premium_stop_pct: premium risk ceiling; a valid risk_fraction can lower it.
     """
     from app.schemas import TargetLevel as TargetLevelSchema, PricingMethod
 
@@ -339,7 +345,7 @@ def estimate_targets(
         prev_display_price = opt_price
 
         reward = opt_price - current_premium
-        risk_basis = current_premium * premium_stop_pct
+        risk_basis = current_premium * resolved_risk_fraction(premium_stop_pct, risk_fraction)
         rr = round(reward / risk_basis, 2) if risk_basis > 0 else 0.0
 
         results.append(TargetLevelSchema(
@@ -351,3 +357,9 @@ def estimate_targets(
         ))
 
     return results
+
+def resolved_risk_fraction(premium_stop_pct: float, risk_fraction: float | None) -> float:
+    """Use today's computed stock-stop loss when valid and smaller than premium risk."""
+    if risk_fraction is not None and math.isfinite(risk_fraction) and risk_fraction > 0:
+        return min(premium_stop_pct, risk_fraction)
+    return premium_stop_pct

@@ -225,9 +225,8 @@ def _no_db_leak():
     )
 
 
-def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
-    """Without the override, target = price * 1.08 (risk_rules.yaml default).
-    With rr_bullish_target_pct=0.20, target = price * 1.20 instead."""
+def test_scan_rr_target_r_multiple_override_changes_target_price(client):
+    """A 3R target is resolved off the same stock stop as the default 2R."""
     fetch_quotes_patch, get_bars_patch = _no_db_leak()
     with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
                              company="Apple Inc."), \
@@ -237,7 +236,7 @@ def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
         })
         r_override = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
-            "overrides": {"rr_bullish_target_pct": 0.20},
+            "overrides": {"rr_target_r_multiple": 3},
         })
     default_candidates = r_default.json()["candidates"]
     override_candidates = r_override.json()["candidates"]
@@ -246,7 +245,7 @@ def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
     default_target = default_candidates[0]["exit"]["target"]
     override_target = override_candidates[0]["exit"]["target"]
     assert override_target > default_target
-    assert round(override_target, 2) == round(185.0 * 1.20, 2)
+    assert round(override_target, 2) == round(185 + 3 * abs(185 - override_candidates[0]["exit"]["invalidation"]), 2)
 
 
 # A feed that cannot form a single true range: 30 bars with open == high ==
@@ -380,11 +379,11 @@ def test_scan_rr_negative_target_override_fails_fast_422(client):
                              company="Apple Inc."), _force_passing_stock_score():
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
-            "overrides": {"rr_bullish_target_pct": -1},
+            "overrides": {"rr_target_r_multiple": -1},
         })
     assert r.status_code == 422, r.text
     detail = r.json()["detail"]
-    assert "rr_bullish_target_pct" in detail
+    assert "rr_target_r_multiple" in detail
     assert "-1" in detail
 
 

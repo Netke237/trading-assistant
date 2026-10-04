@@ -615,6 +615,10 @@ class TradeExit(BaseModel):
     # ABSENT means "this card predates piece 3" — a scan session persisted
     # before it shipped, replayed through /scan/last-run. It must never render
     # as a computed stop; the card reads "not computed — re-run the scan".
+    stockStopLoss: float | None = None
+    stockStopLossAt: float | None = None
+    rrRiskBasis: Literal["premium_stop", "stock_stop"] | None = None
+    targetSource: Literal["structural_snap", "arithmetic", "flat_fallback", "capped"] | None = None
     finalStop: Optional[FinalStopOut] = None
 
 

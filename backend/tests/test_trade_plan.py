@@ -32,6 +32,9 @@ def _plan(**overrides):
     )
     base.update(overrides)
     base.setdefault("entry_mid", base["premium"])
+    # Explicit caller target retains these pricing-only characterization pins.
+    base.setdefault("target_price", base["stock_price"] * (1.08 if base["direction"] == "Bullish" else .92))
+    base.setdefault("stop_cost_fraction", None)
     return build_trade_plan(**base)
 
 
@@ -204,6 +207,8 @@ def test_recompute_endpoint_matches_helper():
         entry_bid=max(0.01, premium - half), entry_ask=premium + half,
         entry_mid=premium, rr_cfg=_rr_cfg(),
         final_stop_price=318.73 * (1 - _rr_cfg()["bullish_invalidation_pct"]),
+        target_price=318.73 * (1 + 2 * _rr_cfg()["bullish_invalidation_pct"]),
+        stop_cost_fraction=None,
     )
 
     app = FastAPI()
@@ -291,6 +296,8 @@ def test_recompute_endpoint_horizon_preset_reaches_build_trade_plan():
         premium=7.47, entry_bid=max(0.01, 7.47 - 0.125), entry_ask=7.47 + 0.125,
         entry_mid=7.47, rr_cfg=_rr_cfg(), horizon_preset="Annual",
         final_stop_price=318.73 * (1 - _rr_cfg()["bullish_invalidation_pct"]),
+        target_price=318.73 * (1 + 2 * _rr_cfg()["bullish_invalidation_pct"]),
+        stop_cost_fraction=None,
     )
     assert annual_targets == [t.estimatedOptionPrice for t in expected_annual.targets]
 
@@ -309,7 +316,7 @@ def test_recompute_endpoint_rejects_nonpositive_premium():
 
 # ── Finding 2c: rr_* bounds on RecomputePlanRequest itself ────────────────────
 
-def test_recompute_endpoint_rejects_negative_rr_target_pct():
+def test_recompute_endpoint_rejects_negative_rr_target_multiple():
     from app.routers.contracts import router
     app = FastAPI()
     app.include_router(router)
@@ -317,12 +324,12 @@ def test_recompute_endpoint_rejects_negative_rr_target_pct():
     r = client.post("/api/contracts/recompute-plan", json={
         "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
         "strike": 375, "dte": 185, "premium": 7.47, "spread": 0.25,
-        "rr_bullish_target_pct": -1,
+        "rr_target_r_multiple": -1,
     })
     assert r.status_code == 422
 
 
-def test_recompute_endpoint_rejects_rr_target_pct_above_cap():
+def test_recompute_endpoint_rejects_rr_target_multiple_above_cap():
     from app.routers.contracts import router
     app = FastAPI()
     app.include_router(router)
@@ -330,6 +337,6 @@ def test_recompute_endpoint_rejects_rr_target_pct_above_cap():
     r = client.post("/api/contracts/recompute-plan", json={
         "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
         "strike": 375, "dte": 185, "premium": 7.47, "spread": 0.25,
-        "rr_bullish_target_pct": 5.0,
+        "rr_target_r_multiple": 10.01,
     })
     assert r.status_code == 422

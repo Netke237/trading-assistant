@@ -78,6 +78,8 @@ with no stop there has no invalidation and no STOP_REACHED alert at all.
 """
 from __future__ import annotations
 
+import math
+
 import asyncio
 import weakref
 from dataclasses import dataclass
@@ -660,6 +662,13 @@ async def create_position(
         # ladder, which is where the alert fired before G) and never 500 the create.
         try:
             _rr_ratios = exit_plan_cfg_loader().get("target", {}).get("rr_ratios")
+            _shown = body.exitPlan.get("targets") if isinstance(body.exitPlan, dict) else None
+            if isinstance(_shown, list) and _shown and all(
+                isinstance(row, dict) and isinstance(row.get("rrRatio"), (int, float))
+                and not isinstance(row["rrRatio"], bool) and math.isfinite(row["rrRatio"])
+                for row in _shown
+            ):
+                _rr_ratios = [row["rrRatio"] for row in _shown]
         except Exception:
             _rr_ratios = None
             _log.warning(
@@ -671,9 +680,7 @@ async def create_position(
             body.pickedMethod,
             body.pickedRowStockPrice,
             exit_plan=body.exitPlan,
-            # From config, never a literal. `rr_ratios` is configurable, so a 1.5R
-            # first row must map to `exit_plan_2r` and a 2.0R pick must fall through
-            # when 2.0 is not configured.
+            # Prefer the ratios on the shown rows; config is the legacy fallback.
             rr_ratios=_rr_ratios,
         )
 
