@@ -288,3 +288,28 @@ new unrelated JSON is retained intact. Main merge commit preceded the resume
 typecheck; subsequent typecheck passed before own source commit. Final full
 checks are rerun because shared shell code and the authorized gate changed.
 No merge into main, deployment or order occurred.
+
+### E clearance and refreshed final preservation evidence
+
+Checkpoint E765bf49152fd118bcca1d3c6f2c9802d7bbe578b independently clean: fresh
+reviewer presentation_minwidth_audit_r1, stage E round1/3, complete three-file
+d49dc5b6..765bf491 diff; first pass and second adversarial re-check zero gate
+findings. Independently7/7 guard tests and typecheck passed. Reviewer traced
+exact route/boundaries, listener cleanup, child DOM/edit retention, root pathname
+provider compatibility and unchanged order/scoring/sizing/persistence. Scope
+verified; this clears E only, not D.
+
+Resumed full frontend:199 suites4664 tests passed (134.932s), typecheck passed,
+normal production build passed30 routes. Build retains previously warmed local
+font mock cache; remote font metrics remain unverified. Existing Python3.11.16
+backend parity147 and evidence102 checks remain applicable: no backend source
+changed in latest-main merge or E. Exact log hashes recorded in checks.json.
+
+Production browser refreshed1200/1366/1440/1920 both themes with explicit
+Desktop-required absence assertion and page/workspace/table overflow assertions;
+all8 cases passed. Native125% physical1920/CSS1536 both themes also passed.
+Thirty refreshed screenshots show actual visible Step7, including1200 identity,
+method and race regions; the historical D1200 blocker is now resolved by E.
+520 entries reconciled against current source hashes/regions;141 TradeCard and
+129 page existing function ASTs still match assembled baseline. Final D audit
+remains pending; no overall clean or completion claim is made yet.

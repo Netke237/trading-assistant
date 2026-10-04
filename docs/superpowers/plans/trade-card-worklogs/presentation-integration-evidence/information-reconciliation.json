@@ -1,5 +1,5 @@
 {
-  "source_commit": "e937b8e1cd9b1eb82af5b0812c90668acb628ac6",
+  "source_commit": "765bf49152fd118bcca1d3c6f2c9802d7bbe578b",
   "entry_count": 520,
   "method": "Per-entry production rendering region/state review. Group suites and named browser cases are supporting evidence; not a claim of520 distinct runtime assertions.",
   "entries": [
@@ -96,11 +96,11 @@
         {
           "path": "frontend/components/MinWidthGate/index.tsx",
           "start": 1,
-          "end": 42,
-          "sha256": "7f5864ac2ad5c59242a90de219ce292285137e5cfdf781c28374b61e19494f5a"
+          "end": 50,
+          "sha256": "b28d4f91fc394f78eb7d9ba877ce4e4a00fdb6dfd57323804389ae855d93cc53"
         }
       ],
-      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; actual shared1280 blocks1200 pending user scope decision.",
+      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; authorized exact Options Step7 exception supports1200; all other routes retain1280; gate listener and children lifecycle independently audited.",
       "evidence": {
         "source_review": "field/branch inspected in production source; unchanged callbacks/formatters checked separately",
         "test_suites": [
@@ -132,11 +132,11 @@
         {
           "path": "frontend/components/MinWidthGate/index.tsx",
           "start": 1,
-          "end": 42,
-          "sha256": "7f5864ac2ad5c59242a90de219ce292285137e5cfdf781c28374b61e19494f5a"
+          "end": 50,
+          "sha256": "b28d4f91fc394f78eb7d9ba877ce4e4a00fdb6dfd57323804389ae855d93cc53"
         }
       ],
-      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; actual shared1280 blocks1200 pending user scope decision.",
+      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; authorized exact Options Step7 exception supports1200; all other routes retain1280; gate listener and children lifecycle independently audited.",
       "evidence": {
         "source_review": "field/branch inspected in production source; unchanged callbacks/formatters checked separately",
         "test_suites": [
@@ -168,11 +168,11 @@
         {
           "path": "frontend/components/MinWidthGate/index.tsx",
           "start": 1,
-          "end": 42,
-          "sha256": "7f5864ac2ad5c59242a90de219ce292285137e5cfdf781c28374b61e19494f5a"
+          "end": 50,
+          "sha256": "b28d4f91fc394f78eb7d9ba877ce4e4a00fdb6dfd57323804389ae855d93cc53"
         }
       ],
-      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; actual shared1280 blocks1200 pending user scope decision.",
+      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; authorized exact Options Step7 exception supports1200; all other routes retain1280; gate listener and children lifecycle independently audited.",
       "evidence": {
         "source_review": "field/branch inspected in production source; unchanged callbacks/formatters checked separately",
         "test_suites": [
@@ -204,11 +204,11 @@
         {
           "path": "frontend/components/MinWidthGate/index.tsx",
           "start": 1,
-          "end": 42,
-          "sha256": "7f5864ac2ad5c59242a90de219ce292285137e5cfdf781c28374b61e19494f5a"
+          "end": 50,
+          "sha256": "b28d4f91fc394f78eb7d9ba877ce4e4a00fdb6dfd57323804389ae855d93cc53"
         }
       ],
-      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; actual shared1280 blocks1200 pending user scope decision.",
+      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; authorized exact Options Step7 exception supports1200; all other routes retain1280; gate listener and children lifecycle independently audited.",
       "evidence": {
         "source_review": "field/branch inspected in production source; unchanged callbacks/formatters checked separately",
         "test_suites": [
@@ -240,11 +240,11 @@
         {
           "path": "frontend/components/MinWidthGate/index.tsx",
           "start": 1,
-          "end": 42,
-          "sha256": "7f5864ac2ad5c59242a90de219ce292285137e5cfdf781c28374b61e19494f5a"
+          "end": 50,
+          "sha256": "b28d4f91fc394f78eb7d9ba877ce4e4a00fdb6dfd57323804389ae855d93cc53"
         }
       ],
-      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; actual shared1280 blocks1200 pending user scope decision.",
+      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; authorized exact Options Step7 exception supports1200; all other routes retain1280; gate listener and children lifecycle independently audited.",
       "evidence": {
         "source_review": "field/branch inspected in production source; unchanged callbacks/formatters checked separately",
         "test_suites": [
@@ -276,11 +276,11 @@
         {
           "path": "frontend/components/MinWidthGate/index.tsx",
           "start": 1,
-          "end": 42,
-          "sha256": "7f5864ac2ad5c59242a90de219ce292285137e5cfdf781c28374b61e19494f5a"
+          "end": 50,
+          "sha256": "b28d4f91fc394f78eb7d9ba877ce4e4a00fdb6dfd57323804389ae855d93cc53"
         }
       ],
-      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; actual shared1280 blocks1200 pending user scope decision.",
+      "state_basis": "Original shell/provider lifecycle retained. Inventory wrongly assumed1200 gate; authorized exact Options Step7 exception supports1200; all other routes retain1280; gate listener and children lifecycle independently audited.",
       "evidence": {
         "source_review": "field/branch inspected in production source; unchanged callbacks/formatters checked separately",
         "test_suites": [

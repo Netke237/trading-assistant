@@ -68,6 +68,5 @@
         }
       ]
     }
-  ],
-  "zoom": "Native Chromium default zoom125%, set in isolated profile via chrome.settingsPrivate; physical window1920, CSS viewport1536."
+  ]
 }

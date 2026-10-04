@@ -5,9 +5,9 @@
     "/api/watchlist",
     "/api/config/health",
     "/api/stock-scan/last",
-    "/api/scan/last-run",
     "/api/config/iv-thresholds",
     "/api/data-sources",
+    "/api/scan/last-run",
     "/api/stock-scan/last-run",
     "/api/quote/option",
     "/api/quote/stock",
@@ -19,6 +19,8 @@
     {
       "width": 1200,
       "theme": "dark",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1200,
       "scroll": 1200,
       "workspaceClient": 680,
@@ -36,13 +38,13 @@
           "parent": 598,
           "scroll": 598
         }
-      ],
-      "desktop_gate_blocked": true,
-      "accepted": false
+      ]
     },
     {
       "width": 1200,
       "theme": "light",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1200,
       "scroll": 1200,
       "workspaceClient": 680,
@@ -60,13 +62,13 @@
           "parent": 598,
           "scroll": 598
         }
-      ],
-      "desktop_gate_blocked": true,
-      "accepted": false
+      ]
     },
     {
       "width": 1366,
       "theme": "dark",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1366,
       "scroll": 1366,
       "workspaceClient": 846,
@@ -84,13 +86,13 @@
           "parent": 764,
           "scroll": 764
         }
-      ],
-      "desktop_gate_blocked": false,
-      "accepted": true
+      ]
     },
     {
       "width": 1366,
       "theme": "light",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1366,
       "scroll": 1366,
       "workspaceClient": 846,
@@ -108,13 +110,13 @@
           "parent": 764,
           "scroll": 764
         }
-      ],
-      "desktop_gate_blocked": false,
-      "accepted": true
+      ]
     },
     {
       "width": 1440,
       "theme": "dark",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1440,
       "scroll": 1440,
       "workspaceClient": 920,
@@ -132,13 +134,13 @@
           "parent": 838,
           "scroll": 838
         }
-      ],
-      "desktop_gate_blocked": false,
-      "accepted": true
+      ]
     },
     {
       "width": 1440,
       "theme": "light",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1440,
       "scroll": 1440,
       "workspaceClient": 920,
@@ -156,13 +158,13 @@
           "parent": 838,
           "scroll": 838
         }
-      ],
-      "desktop_gate_blocked": false,
-      "accepted": true
+      ]
     },
     {
       "width": 1920,
       "theme": "dark",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1920,
       "scroll": 1920,
       "workspaceClient": 1400,
@@ -180,13 +182,13 @@
           "parent": 1022,
           "scroll": 1022
         }
-      ],
-      "desktop_gate_blocked": false,
-      "accepted": true
+      ]
     },
     {
       "width": 1920,
       "theme": "light",
+      "desktopGateBlocked": false,
+      "accepted": true,
       "client": 1920,
       "scroll": 1920,
       "workspaceClient": 1400,
@@ -204,14 +206,7 @@
           "parent": 1022,
           "scroll": 1022
         }
-      ],
-      "desktop_gate_blocked": false,
-      "accepted": true
+      ]
     }
-  ],
-  "limitations": [
-    "1200 blocked by actual shared1280 gate, pending user scope decision.",
-    "Isolated API fixtures; no market/live-order validation.",
-    "Google font downloads denied; local font mock. Browser screenshots at100% zoom."
   ]
 }

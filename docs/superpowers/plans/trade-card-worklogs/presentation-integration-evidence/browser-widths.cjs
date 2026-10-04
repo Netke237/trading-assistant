@@ -40,6 +40,8 @@ const exitPlan={stop:{price:180,source:'atr_widened',contractPrice:.65,rrModel:'
    await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;document.querySelectorAll('*').forEach(e=>{if(e.scrollTop)e.scrollTop=0})},theme);
    await page.waitForTimeout(150);
    await page.evaluate(()=>document.querySelectorAll('*').forEach(e=>{if(e.scrollTop)e.scrollTop=0}));
+   const desktopGateBlocked=await page.getByRole('dialog',{name:'Desktop required'}).count()>0;
+   if(desktopGateBlocked) throw new Error(`Desktop gate blocks ${width}/${theme}`);
    await page.screenshot({path:`/tmp/integration-${width}-${theme}-top.png`});
    const top=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,workspaceClient:document.querySelector('#workspace').clientWidth,workspaceScroll:document.querySelector('#workspace').scrollWidth}));
    await page.getByText('Arithmetic Profit Target',{exact:true}).evaluate(el=>el.scrollIntoView({block:'start'}));
@@ -47,7 +49,8 @@ const exitPlan={stop:{price:180,source:'atr_widened',contractPrice:.65,rrModel:'
    await page.getByRole('button',{name:'Use Barrier Race T20%'}).scrollIntoViewIfNeeded();
    await page.screenshot({path:`/tmp/integration-${width}-${theme}-race.png`});
    const overflow=await page.evaluate(()=>[...document.querySelectorAll('table')].filter(e=>e.getBoundingClientRect().width>0).map(e=>({text:e.innerText.slice(0,80),width:e.getBoundingClientRect().width,parent:e.parentElement.clientWidth,scroll:e.parentElement.scrollWidth})));
-   results.push({width,theme,...top,tables:overflow});
+   if(top.scroll>top.client || top.workspaceScroll>top.workspaceClient || overflow.some(t=>t.scroll>t.parent)) throw new Error(`Overflow ${width}/${theme}`);
+   results.push({width,theme,desktopGateBlocked,accepted:true,...top,tables:overflow});
  }
  fs.writeFileSync('/tmp/integration-browser-widths.json',JSON.stringify({errors,urls:[...urls],results,text:await page.locator('body').innerText()},null,2));
  console.log(JSON.stringify({errors,results}));

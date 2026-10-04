@@ -43,11 +43,11 @@ Browser cases use isolated fixtures and Chromium, with the real frame and rail:
   execution;1366/1440 methods stack and execution flows below. Outcome tables
   fit without horizontal scrolling. Broker buttons wrap with readable labels.
 
-**Open acceptance blocker:** actual shared MinWidthGate is1280px, contrary to
-plan's assumed1200px baseline.1200 screenshots deliberately show the blocking
-modal; neither underlying DOM metrics nor passing tests certify1200 acceptance.
-User scope decision is pending before modifying that shared component outside
-the task allowlist. No gate override has been implemented.
+**Resolved width discrepancy:** the original shared gate was1280, contrary to
+plan's assumed1200 baseline. Following user authorization, independently audited
+checkpoint E selects1200 only on Options Step7 and retains1280 everywhere else.
+The refreshed production-build screenshots and metrics verify no desktop overlay
+or document/workspace/table overflow at all four widths in both themes.
 
 Browser images use an environment-only local font mock because direct Google
 font downloads were denied earlier. 24 baseline screenshots are100% zoom. Native125% zoom is additionally
