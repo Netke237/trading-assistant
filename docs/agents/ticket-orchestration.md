@@ -1,12 +1,12 @@
 # Ticket orchestration — trading-assistant contract
 
-The `K-ticket-orchestrator` skill (`.claude/skills/K-ticket-orchestrator/`) runs multi-ticket builds here. This file holds the repo-specific values it reads; where it and the skill differ, **this file wins**.
+The user-level `k-ticket-coordinator` skill (Kenneth's `~/.claude/skills/` and claude.ai account; deliberately not stored in this repo) runs multi-ticket builds here. This file holds the repo-specific values it reads; where it and the skill differ, **this file wins**.
 
 ## Who does what
 
-- **Orchestrator** = the session Kenneth is talking to. Only it edits `docs/superpowers/PROJECT_STATE.json`, the tracking issue, and runs audits.
-- **Implementer** = `.claude/agents/ticket-implementer.md`, one fresh subagent per ticket.
-- **Gate auditor** = `.claude/agents/gate-auditor.md`, one fresh subagent per audit round, applying `.claude/skills/bmad-review-adversarial-general/SKILL.md`.
+- **Coordinator** = the session Kenneth is talking to. Only it edits `docs/superpowers/PROJECT_STATE.json`, the tracking issue, and runs audits.
+- **Implementer** = the `ticket-implementer` agent type where installed (user level), else `general-purpose` with the skill's implementer brief; one fresh subagent per ticket.
+- **Gate auditor** = the `gate-auditor` agent type where installed, else `general-purpose` with the skill's auditor brief; one fresh subagent per audit round, applying `.claude/skills/bmad-review-adversarial-general/SKILL.md`.
 
 ## Units
 

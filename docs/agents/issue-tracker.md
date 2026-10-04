@@ -25,15 +25,15 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
-## Orchestrated builds (K-ticket-orchestrator)
+## Coordinated builds (k-ticket-coordinator)
 
-Multi-ticket builds are coordinated by the `K-ticket-orchestrator` skill under one **tracking issue**. Repo-specific rules: `docs/agents/ticket-orchestration.md`.
+Multi-ticket builds are coordinated by the user-level `k-ticket-coordinator` skill under one **tracking issue**. Repo-specific rules: `docs/agents/ticket-orchestration.md`.
 
 Labels:
 
 | Label | Meaning |
 |---|---|
-| `tracking` | The one coordination issue for a phase. Kenneth reads this; only the orchestrator edits it. |
+| `tracking` | The one coordination issue for a phase. Kenneth reads this; only the coordinator edits it. |
 | `ready-for-agent` | Child ticket with every blocker closed, waiting for an implementer. |
 | `agent-in-progress` | An implementer subagent is working it. |
 | `blocked` | Stopped; the reason is in a comment and under "Needs Kenneth" in the tracking issue. |

@@ -401,7 +401,7 @@ Single-context (`GLOSSARY.md` + `docs/adr/` at the root, created lazily; neither
 
 ### Ticket orchestration (multi-ticket builds)
 
-A plan with more than one task is built through the `K-ticket-orchestrator` skill: one **tracking issue** per phase is the single place Kenneth looks; the orchestrator session cuts the tickets, spawns one fresh `ticket-implementer` subagent per ticket (blockers first, sequential unless files are disjoint), verifies each itself, and finishes with the independent code audit via `gate-auditor`. Repo contract: `docs/agents/ticket-orchestration.md`.
+A plan with more than one task is built through the user-level `k-ticket-coordinator` skill (on Kenneth's machine and his claude.ai account, so also in cloud containers; not stored in this repo): one **tracking issue** per phase is the single place Kenneth looks; the coordinator session cuts the tickets, spawns one fresh implementer subagent per ticket (blockers first, sequential unless files are disjoint), verifies each itself, and finishes with the independent code audit by a fresh gate-auditor subagent per round. Repo contract: `docs/agents/ticket-orchestration.md`.
 
 - **A ticket is a build unit; the phase is the audit target.** Per-ticket checks are never audit rounds. Implementers never edit `audit_rounds` / `audit_clean` and never put `round N` in a commit subject.
 - The plan audit is clean **before** tickets are cut; the code audit runs once over the integrated diff after the last ticket closes, cap three rounds per stage (`audit_rule`).
