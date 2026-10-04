@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/stocks-step-merge-s1",
       "claimed_at": "2026-10-04T11:26:12Z",
-      "expires_at": "2026-10-04T14:42:05Z",
+      "expires_at": "2026-10-04T14:54:42Z",
       "note": "Stage 1: one Stocks strategy picker on Step 4, Step 5 removed; plus ticket-orchestration setup",
       "task": "STOCKS-STEP-MERGE-S1"
     }
