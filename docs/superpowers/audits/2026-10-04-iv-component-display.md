@@ -28,3 +28,5 @@ Existing _score_iv_rank jumps from 0 at preferred maximum 55 to approximately 20
 ## Merge and deployment authorization
 
 On 2026-10-04 the user authorized merge and deployment. Remote main was verified equal to reviewed base ba0bed953164f5737e180017977bb4f4d2bfdf53; no conflict resolution or application changes are required. Typecheck and 100 focused tests passed as recorded above. An additional production build failed solely at next/font Google Fonts fetches (DM Sans, Sora, JetBrains Mono); this environment cannot fetch those hosts. Repository workflows run CI but contain no deployment job. Deployment target and access are requested from the user; no installation was deployed.
+
+Main fast-forwarded to 0a6cffb01fedecba36272f90c4a5ee9aa0faaf4e and was pushed; git ls-remote verified the exact remote main commit. The user then narrowed the instruction to merging into origin/main only, canceling deployment.
