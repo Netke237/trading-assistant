@@ -4180,22 +4180,63 @@
           "frontend/components/molecules/TradeCardPresentation/**"
         ],
         "owner": "agent",
-        "status": "not_started",
-        "implementation": "not_started",
+        "status": "implemented_on_branch",
+        "implementation": "complete_unmerged",
         "claim_required": true,
         "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
         "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
         "code_audit": {
-          "rounds": 0,
-          "clean": false
+          "rounds": 2,
+          "clean": true,
+          "gate_findings_by_round": [
+            0,
+            0
+          ],
+          "fixes": 0,
+          "outstanding_gate_findings": 0,
+          "scope": "Two independently reviewed planned slices; each code round1 of max3. Original plan/handoff audits unchanged.",
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-UI-CORE.md",
+          "stages": [
+            {
+              "slice": 3,
+              "rounds": 1,
+              "clean": true,
+              "reviewer": "/root/core_slice3_audit",
+              "reviewed_diff": "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585..08d416c282aaf867dd7ccab966beea18dcd02cd4",
+              "diff_sha256": "adbf2351d7109d41811e56542bb5078f62641fc22063673f0dca7d8826a1816c"
+            },
+            {
+              "slice": 4,
+              "rounds": 1,
+              "clean": true,
+              "reviewer": "/root/core_slice4_audit",
+              "reviewed_diff": "08d416c282aaf867dd7ccab966beea18dcd02cd4..45f83c26bdb439103f48e63508988d66cbc6b9b7",
+              "diff_sha256": "f04f9e1b139d14f391fd2f49d3d13243e6f9d997d3d36906e803d3e6a8050e3d"
+            }
+          ]
         },
         "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
         "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
-        "readiness": "blocked_until_trading_review_overlap_is_landed_and_released_or_documented_scope_transfer",
+        "readiness": "code_audited_clean_on_branch_awaiting_integration",
         "external_shared_owners": [
           "TRADING-REVIEW-FIXES"
         ],
-        "dependency_gate": "Shipped/code audit-clean phase flag alone is insufficient when its PR is recorded open; verify checkout and live-owner clearance."
+        "dependency_gate": "Shipped/code audit-clean phase flag alone is insufficient when its PR is recorded open; verify checkout and live-owner clearance.",
+        "branch": "codex/trade-card-ui-core",
+        "base_commit": "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585",
+        "implementation_commit": "45f83c26bdb439103f48e63508988d66cbc6b9b7",
+        "implementation_commits": [
+          "08d416c282aaf867dd7ccab966beea18dcd02cd4",
+          "45f83c26bdb439103f48e63508988d66cbc6b9b7"
+        ],
+        "work_log": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-UI-CORE.md",
+        "dependency_clearance": "Relevant trading-review commits 93cd1413/575de279 and verified leaf merges 6cbb7792/076a5a80 are ancestors; no overlapping live owner at takeover.",
+        "validation": {
+          "typecheck": "PASS",
+          "focused_tests": "12 suites / 403 tests passed",
+          "browser": "Actual Step7 production frame with fixture API/scan: light/dark 1200,1366,1440,1920; probability columns unclipped, responsive stack/two columns and zero-size Apply disabled",
+          "limitations": "Inherited shared Frame min-width1280 overflows1200; denied Google Fonts causes fallback; no live populated scan. Full frontend/build/backend parity and 520-entry reconciliation deferred to integration."
+        }
       },
       {
         "id": "TRADE-CARD-CONTEXT-CARDS",
