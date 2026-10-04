@@ -656,6 +656,10 @@ export default function Step5Page() {
                   ) : (
                     <Text size={11} tone="dim">—</Text>
                   )}
+                  {proxStatus === 'REJECT' && r.nextEventLabel === 'Dividend'
+                    && !(c?.earningsDays != null && evReject != null && c.earningsDays < evReject) && (
+                    <Text size={10} tone="dim">Dividend — score penalty, not a send veto</Text>
+                  )}
                 </span>
                 <span data-cell="event-status">
                   <StatusBadge status={proxStatus} />

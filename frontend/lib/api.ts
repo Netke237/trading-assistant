@@ -703,7 +703,9 @@ export const api = {
     regime_headwind_caution_pct?: number;
     regime_headwind_reject_pct?: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
-    entry_premium?: number;
+    /** REQUIRED and > 0 on the backend (audit round 2, R2-F2): it is what the
+     *  D5 cap is judged from at fire, and an arm without it is a 422. */
+    entry_premium: number;
     portfolio_value?: number;
     /** Piece 4 — the per-trade premium stop as a FRACTION of `entry_premium`.
      *  Omitted inherits `auto_trade.premium_stop_pct`. Declared here because

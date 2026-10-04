@@ -1,7 +1,7 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree. | `active_phase` names the phase OR the `already_shipped` entry (by its `name`) that the working branch is currently building -- BOTH pools, since 2026-09-16, because a scoped piece is not a phase and had nowhere to point. scripts/state.py's audit-bookkeeping probe scopes its git comparison to THAT target: rounds counted from `origin/main..HEAD` belong to the work this branch is doing, and to nothing else. Update it when the branch moves to new work. If it is missing, or names something in neither list, the probe NO LONGER STAYS SILENT -- it reports the rounds git can see as UNAUDITED work (a warning below three rounds, drift at three, matching audit_rule's HARD CAP). Silence there is exactly how four rounds ran under a rendered \"No drift\". | The probe takes its base ref FROM GIT, never from the `main` field below: that field is prose for a human reader, and when it stopped being a sha at 2242f36 the probe went silently dead for a week.",
   "updated": "2026-10-03",
-  "updated_by": "Codex: registered independently audited Options Step 5 and Step 6 explanation plans; implementation not started, existing phase statuses and audit counters preserved.",
+  "updated_by": "claude/trading-review-fixes: TRADING-REVIEW-FIXES-A-AUDIT merge to main recorded (PR #32, 575de279).",
   "main": "WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
   "working_branch": "ccr-711cb93e-qs09dj",
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE GATE BELOW. Rewritten 2026-09-07 (AUDIT-RULE-V2) after Phase A ran SIX rounds without converging and Phase D took THIRTEEN. The intent is unchanged -- do not ship uncontrolled -- but the previous version could not terminate. Three defects, three fixes. || (1) THE GATE IS THE ONLY THING THAT COUNTS, AND THE REVIEWER IS TOLD SO. A finding blocks only if it can put a WRONG NUMBER in front of a user or on a broker order, or CORRUPT PERSISTED DATA. Everything else -- wording, comments, test hygiene, dead code, stale records, latent defects with no reachable path -- is not a finding for this purpose, and the audit brief must instruct the reviewer NOT TO REPORT IT AT ALL. Round 6 returned 16 findings of which 5 were real bugs; the other 11 cost triage time and are now recorded forever. An adversarial reviewer with no severity floor ALWAYS finds something, so 'clean' was unreachable by construction. || (2) THE TARGET SHRINKS, IT DOES NOT GROW. Round 1 reviews the whole change. Round N>1 reviews ONLY what changed since round N-1 -- the previous round's fixes -- plus any interaction those fixes have with already-reviewed code. Re-auditing the cumulative diff every round is what turned each round's fixes into the next round's findings: 9 of round 5's 15 findings sat in round 3-4 FIX CODE, including BOTH BLOCKING, while the original Phase A implementation produced ZERO BLOCKING across rounds 4 and 5. The feature was converging; the fixing was not. || (3) THE EXIT IS OBJECTIVE, NOT THE REVIEWER'S SILENCE. audit_clean is true when a round returns ZERO gate-level findings. Such a round triggers no fixes, so there is nothing new for a further round to look at -- and the round that reviewed the last batch of fixes was already the second look. One zero-finding round ends it. || HARD CAP: if a phase reaches THREE rounds without going clean, STOP AUDITING AND TELL KENNETH. (COUNTED PER STAGE -- decision AUDIT-CAP-PER-STAGE-2026-09-25: the PLAN rounds and the CODE rounds each have their own cap of three; a clean plan round closes the plan stage and the code stage starts at round 1 of 3. Phase records keep numbering rounds continuously, e.g. 'round 3 (code round 1)'.) That is evidence the batch is too big to audit, not that it needs a fourth round. || BATCH SIZE is the root cause the gate merely exposes. Phase A was 62 files across every layer of the app; nothing that size audits to clean. Split work so one change touches one layer, or roughly 500 lines. A change that size clears in one round. || FIXING: only gate-level findings are fixed in-branch. Nothing else -- not 'while I am here', not a one-line nit. Everything else is logged against main. Rounds 4 and 5 fixed 10 and 12 findings against a rule that already said this, and that non-compliance is a large part of why the loop stayed alive. || audit_rounds counts rounds RUN. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is. || *** (1b) THE COMMENT-TRUTH EXCEPTION -- NARROWED, AND WRITTEN DOWN FOR THE FIRST TIME. Kenneth, 2026-09-22, answering pending_kenneth on AUTOTRADE-2B-MEASUREMENT-CORE: 'fix the rule, not the target'. *** Clause (1) above excludes 'wording, comments' from the gate, but PRACTICE HAD OPENED AN UNWRITTEN EXCEPTION TO IT: round 1 of the measurement core faulted F-5 on a comment claim, and from then on every round of that target counted comment claims as gate-level BY PRECEDENT, with no clause anywhere saying so and no bound on what qualified. UNBOUNDED, IT REPRODUCED AUDIT-RULE-V1'S NON-TERMINATION THROUGH THE ONE DOORWAY V2 LEFT OPEN -- three rounds, three findings, each an under-qualified claim inside the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). A dense docstring manufactures one finding per round forever, because each correction adds new prose carrying new claims. || THE EXCEPTION IS KEPT, BECAUSE A COMMENT THAT MISSTATES MECHANISM GETS ACTED ON, AND IT IS NOW BOUNDED: A COMMENT CLAIM IS GATE-LEVEL ONLY IF A COMPETENT READER, ACTING ON IT, WOULD WRITE A WRONG CHANGE -- i.e. only when it misstates MECHANISM: what the code does, which function is authoritative, what a guard is actually testing, which failure mode is live, or what is safe to change. THOSE STILL BLOCK, and the price-probe-versus-hours-test confusion that started this whole target is exactly one of them. || A COMMENT CLAIM IS *NOT* GATE-LEVEL when it is an ARITHMETIC WORKED-EXAMPLE, an ENUMERATION, or an ILLUSTRATIVE FIGURE inside a RESIDUALS, LIMITATIONS or WORKED-EXAMPLE block -- host-offset tables, DST hour counts, 'four hours daily', sample timestamps. Those ILLUSTRATE a mechanism stated elsewhere; they do not state it. PER CLAUSE (1), THE AUDIT BRIEF MUST INSTRUCT THE REVIEWER NOT TO REPORT THEM AT ALL. The one carve-back: if such a figure is wrong AND no correct statement of the mechanism appears nearby, the reader has nothing right to act on, so it IS a mechanism finding and blocks. THE TEST IS WHAT THE READER WOULD DO, NOT WHETHER THE ARITHMETIC CHECKS OUT. || THE TIEBREAK, so this is not re-litigated every round: IF A REVIEWER CANNOT DECIDE WHICH SIDE A CLAIM FALLS ON, IT IS NOT GATE-LEVEL -- log it against main, do not fix it in-branch. AND A PROSE FINDING NEVER BY ITSELF KEEPS A TARGET OPEN WHOSE BEHAVIOURAL AUDIT HAS ALREADY CONVERGED. || COROLLARY ON THE HARD CAP, which follows from the above and is flagged as an addition beyond the literal words Kenneth approved -- STRIKE THIS SENTENCE IF UNWANTED: the cap's stated reason is 'the batch is too big to audit'. WHEN A TARGET'S BEHAVIOURAL AUDIT HAS RETURNED ZERO GATE-LEVEL FINDINGS AND THE ONLY UNCONVERGED FINDINGS ARE PROSE, THE CAP'S USUAL REMEDY (SPLIT THE BATCH) IS A MISDIAGNOSIS. Say so and take it to Kenneth rather than splitting. Acting on a misdiagnosis is how a fifth split gets invented.",
@@ -1731,7 +1731,7 @@
         "pattern": "^def normalize_direction\\(",
         "note": "Presence only; other implementation symbols and behavioral evidence are recorded in the audit report."
       },
-      "note": "PR28 https://github.com/Netke237/trading-assistant/pull/28 OPEN, NOT merged. 2026-10-03 BUILT and code audit CLEAN on codex/trading-review-fixes, NOT merged. User explicitly reassigned the active task; recovered original branch and integrated main6b065c38 at77431943. Code round1 /root/audit_round1 reviewed full6b065c38..77431943:1 gate finding, untrained-fold OOS metrics contaminated adoption evidence; fixed ce4cfc14 with two regressions failing before fix. Round2 interrupted with no final report; counted, not marked clean. FINAL code round3 /root/audit_round3 reviewed only77431943..ce4cfc14 and interactions:0 gate findings,3 optimizer tests and six permutations/empty/contributor probes passed. No fourth round. Full backend before fix4710passed/1skipped/1 inherited shortlist-prefix failure; after fix56focused passed. Frontend183suites/4486tests/typecheck/build passed. State quiet verification passed; inherited nonquiet rendering KeyError remains. D4 unknown stock earnings blocks auto-fire, ETFs exempt; vetoed card keeps Disarm; D7 min_signal_rr ships0.0 pending retune. Formal k-trading-software-reviewer skill unavailable; scoped original-report follow-up and new fixture measurements saved in docs/superpowers/audits/2026-10-03-trading-review-fixes.md. PhaseB remains separate."
+      "note": "MERGED TO MAIN 2026-10-03T10:00Z via PR #28 (merge 93cd1413). Its own 3 Codex rounds covered b036a368..dadf3133 + ce4cfc14; the four adversarial rounds claude/trading-review-fixes ran on the same base after dadf3133 found further defects, landed as follow-up TRADING-REVIEW-FIXES-A-AUDIT. || PR28 https://github.com/Netke237/trading-assistant/pull/28 OPEN, NOT merged. 2026-10-03 BUILT and code audit CLEAN on codex/trading-review-fixes, NOT merged. User explicitly reassigned the active task; recovered original branch and integrated main6b065c38 at77431943. Code round1 /root/audit_round1 reviewed full6b065c38..77431943:1 gate finding, untrained-fold OOS metrics contaminated adoption evidence; fixed ce4cfc14 with two regressions failing before fix. Round2 interrupted with no final report; counted, not marked clean. FINAL code round3 /root/audit_round3 reviewed only77431943..ce4cfc14 and interactions:0 gate findings,3 optimizer tests and six permutations/empty/contributor probes passed. No fourth round. Full backend before fix4710passed/1skipped/1 inherited shortlist-prefix failure; after fix56focused passed. Frontend183suites/4486tests/typecheck/build passed. State quiet verification passed; inherited nonquiet rendering KeyError remains. D4 unknown stock earnings blocks auto-fire, ETFs exempt; vetoed card keeps Disarm; D7 min_signal_rr ships0.0 pending retune. Formal k-trading-software-reviewer skill unavailable; scoped original-report follow-up and new fixture measurements saved in docs/superpowers/audits/2026-10-03-trading-review-fixes.md. PhaseB remains separate."
     },
     {
       "id": "POSITION-WRITER-O4-CLEANUP",
@@ -1762,6 +1762,24 @@
         "note": "Presence only; the frontend half is edited-fields-sync's lastPostedPct assertions and p2PortfolioStore's keptPct tests."
       },
       "note": "Branch ccr-711cb93e-qs09dj. Decision PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03 (option C + page). Plan docs/superpowers/plans/2026-10-03-premium-stop-fallback-align-plan.md. Plan round 1 (fresh independent subagent, bmad-review-adversarial-general, gate-briefed): 1 gate finding -- the pending-row retry in syncFromBackend builds the drop notice field by field and would lose keptPct, so the Portfolio banner would say 'inherits the global' for a position on the user's fraction; fixed in 948e077 by naming every drop site. Plan round 2 (fresh subagent, scoped to that fix): CLEAN, 0. Code 896323f (backend: WriteOutcome.premium_stop_unapplied, set by an explicit dollar_applied flag -- nothing stored changes; auto_trade_booking pages AUTO_TRADE_BOOKED_PREMIUM_STOP_UNAPPLIED, rec id auto-trade-premium-stop-unapplied:<SYM>; the UNVERIFIED text now names the premium stop) and 9b6d674 (frontend: buildPaperPosition/positionFromOrder post premiumStopPct = touched dollar / the posted entry; premiumStopDropOf returns keptPct when the dollar is a total loss or sub-cent at the saved entry but the server kept the client fraction; threaded through addPosition, applyPersistedPosition, the syncFromBackend retry queue, the Step 7 notes and the Portfolio banner). Two pinned tests changed deliberately: p2PortfolioStore 'server keeping the CLIENT fraction is not a drop' now expects the kept-fraction notice; edited-fields-sync's echo mock answers premiumStopPct null so the dropped-stop disclosure tests keep their meaning. Mutation checks (all red, reverted): dollar_applied never set; sub-cent branch not clearing it; page call removed; positionFromOrder fraction nulled; buildPaperPosition fraction forced; retry dropping keptPct. Branch verification (Python 3.11.15): backend 4719 passed/1 skipped; frontend typecheck clean, 183 suites/4491 tests passed. Code round 1 (= round 3; fresh independent subagent, bmad-review-adversarial-general, gate-briefed) on c1b274a..9b6d674: CLEAN, 0 gate-level findings; scope verified (read the full diff, traced every premiumStopPct reader incl. alertEngine/EditDrawer/merge path, re-ran 1072 backend + 667 frontend related tests). DONE AS WORK on the branch; MERGED to main at 9e0d8a3 2026-10-03 (Kenneth: 'Merge to main'); merged-main backend 4719 passed/1 skipped, frontend 183 suites/4491 passed. Out of scope, unchanged: a dollar >= the LIVE mid on the card sends no fraction and still inherits the global with the existing note."
+    },
+    {
+      "id": "TRADING-REVIEW-FIXES-A-AUDIT",
+      "name": "Trading-review Phase A follow-up: audit rounds 1-5 fixes on top of PR #28 (premium-cap fill basis, single-stock ETFs, bounded fire-time earnings lookup, aged Step-7 veto, warm WFO folds, required entry_premium, MKT booking basis)",
+      "status": "shipped",
+      "audit_rounds": 6,
+      "audit_clean": true,
+      "depends_on": [
+        "TRADING-REVIEW-FIXES-A"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-03-trading-review-fixes-plan.md",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/auto_trader.py",
+        "pattern": "^def armed_cap_basis\\(",
+        "note": "PRESENCE ONLY: pins the shared armed cap basis (R2-F6/R3-F1). Behaviour is pinned by tests/test_premium_cap_basis.py, test_arm_entry_premium_required.py, test_extract_dividend_date.py, test_earnings_lookup_fire.py, test_wfo_train_warmup.py and frontend/lib/__tests__/earningsGate.test.ts."
+      },
+      "note": "MERGED TO MAIN 2026-10-03T21:20Z via PR #32 (merge 575de279; CI backend/frontend/test green; Kenneth: 'merge as soon as CI is done'). || BUILT 2026-10-03 on claude/trading-review-fixes (claim TRADING-REVIEW-FIXES, released), follow-up PR #32 to #28. Kenneth's decisions 2026-10-03 (in chat): D7 min_signal_rr ships 0.0 until the multi-year re-tune; D4 amended -- unknown earnings (none / lookup failed / past) on a NON-ETF caps the options card at CAUTION and refuses auto-fire, ETFs (curated app/data/etfs.py) exempt; a vetoed card keeps Disarm reachable; audit F4 closed client-side only (Step 7 ages earningsDays by the scan's age, frontend/lib/earningsGate.ts); F6 deferred; F3 fire lookup stays fail-closed with source chain + retry + timeout. ROUND 1 (fresh subagent, bmad-review-adversarial-general, b036a368..dadf3133) NOT CLEAN 0C/0H/6M/5L: F1 D5 cap judged at the mid not the fill basis (premium_cap_basis: LMT max(mid,limit), MKT ask/mid+spread/2/mid, server-side only); F2 NVDL/TSLL counted as ETFs; F3+F11 yfinance-only fire lookup, failures day-cached, no timeout (EarningsLookupError, Tradier-then-yfinance chain); F4 stale scan snapshot; F5 early WFO train folds cold (14-month warm-up fetch); F7-F10 docs/arm/Step-5 wording; F6 deferred (A1-F6). ROUND 2 NOT CLEAN 1H/6L: R2-F1 HIGH the F3 fix pasted three functions into _extract_dividend_date, which then returned None for every input (Tradier dividends never scored) -- restored + AST guard test; R2-F2 entry_premium required gt=0; R2-F3 per-source deadlines (Tradier 5s, yfinance 7s, worst case 24s); R2-F4 10-min yfinance failure backoff; R2-F5 a symbol with no bar in the window is dropped with a WARNING; R2-F6 one armed basis for fire and booking; R2-F7 deferred (A2-F7). ROUND 3 CLEAN AT THE GATE 0C/0H/0M/2L (both fixed): R3-F1 R2-F6 silenced the booking's over-exposure flag for a MKT arm filled after drift -- MKT booking now judged at max(armed basis, booking fill basis) via create_position(cap_basis_floor=); R3-F2 open_questions entry_premium closed here. ROUND 4 CLEAN (0C/0H/0M; 2 Low bookkeeping/test-comment items fixed in 46b0ff52; A4-F1 MKT fire-time gap to Phase B). PR #28 (Codex) merged dadf3133+ce4cfc14 to main while this branch was mid-loop; cb021709 merged origin/main 1c8b94ff (no textual conflicts). ROUND 5 (scoped to the merge interactions + origin/main..HEAD) CLEAN AT THE GATE 0C/0H/0M/2L (both fixed): R5-F1 a non-finite limit_price on a MKT arm reached the broker then failed booking -- ArmRequest.limit_price allow_inf_nan=False, MKT booking records no limit (7b2dad63); R5-F2 this state bookkeeping (575283ec). ROUND 6 (scoped to 7b2dad63 + 575283ec, Kenneth authorised exactly one more round) CLEAN: 0C/0H/0M/3L, all fixed -- R6-F1 rounds 3/5 verdicts recorded here, R6-F2 closed_questions._note shift line, R6-F3 NaN arm-limit test cases did not guard the fix (Infinity/1e309 added). Follow-up PR next, not merged. Phase B additions in the plan backlog: A1-F6, A1-F4b, A2-F7, A4-F1. Ledger + audit reports: .superpowers/sdd/2026-10-03-trading-review-fixes-plan/ (gitignored, local to the machine that ran it)."
     }
   ],
   "already_shipped": [
@@ -3416,7 +3434,6 @@
     "LOGGED BY P3c (2026-09-27): relative_strength residual -- a DB-miss name (bars from the provider) against a DB benchmark can end on a different day; _aligned_benchmark then leaves its trend unmeasured and the options scan removes it. Counted per scan in the 'rs_benchmark: misaligned=N of M' INFO line.",
     "UPDATED 2026-09-30 by WP0-HOUSEKEEPING: BACKEND-INTERMITTENT-TEST (the T7 chart-WS race fix) MERGED to main 2026-09-29. Only residue, why this stays open: whether the uncaptured 2026-09-28 failure was that test is unproven. || LOGGED 2026-09-28 (CHART-RULE-OFFLINE-SAVE-MARK pre-merge run): one backend test failed once (3723 passed) and passed on a full re-run (3724); the branch touched no backend file, so it is an intermittent test already on main. Its name was not captured (the run printed only the summary line). Find it: run the backend suite with -rf a few times and record the name. || 2026-09-28 FOUND on claude/bold-ride-7nf8wj: see phase BACKEND-INTERMITTENT-TEST (T7 chart-WS race, fixed test-side; audit round 1 CLEAN -- resolved on the branch; still not proven to be the same test as the uncaptured one).",
     "LOGGED 2026-09-29 by WATCH-RULE-BAR-PARITY plan r6 (decision WATCH-RULE-BAR-PARITY-Q-H-FETCH-RULE-2026-09-28), NOT FIXED BY CHOICE: fetch day D once it has settled. With unsettled daily rows never stored (plan 2.10), a stale-DB symbol first read on day D before 16:30 ET stores through D-1 and get_bars' unchanged staleness rule does not fetch D until nightly ingestion or D+1; after the close scans end at D-1 while the auto-trade gate keeps D. Cost of fixing: ~500 fetches on the first post-settle scan (Alpaca-rate-limited, ~2-3 min) and changed post-close scan results for every symbol.",
-    "LOGGED BY P6 UNIT A CODE ROUND 1 (2026-09-30), NOT FIXED, below the gate (direct API only; JSON.stringify cannot emit Infinity): ArmRequest.entry_premium (backend/app/routers/auto_trade.py) is still an unbounded float, so a hand-built arm with entry_premium=Infinity could place an order and then fail booking. Same allow_inf_nan=False remedy as A1 if taken; outside P6's named fields.",
     "RESCUED 2026-09-30 by WP0-HOUSEKEEPING from claude/unclaimed-tasks-xb6tiz (an earlier WATCH-UNDELIVERED-EVENT-RESEND build, superseded by the 09-27 rebuild on main), RE-VERIFIED against main 96763b29 (the file is unchanged at 599b9da2): a message a channel always rejects blocks its watch's LATER alerts (stop hits included) -- services/strategy_watch_evaluator.py _resend_watch returns at the first failed send (the queue is resent oldest first, one watch at a time), and _queue evicts only above _QUEUE_CAP = 20 (the branch's note said 50). A give-up cannot tell a rejection from an outage because notify_enabled_channels returns only a bool. The branch recorded two further points, NOT re-verified here: partial delivery (one channel up, one down) counts as delivered, and a queued event has no expiry (a watch disabled for weeks sends weeks-old Delayed alerts when re-enabled). The branch had ACCEPTED these ('revisit if dispatch.py returns a per-channel reason'); main's ledger had no entry for them. Its superseded decisions WATCH-RESEND-QUEUE-2026-09-26 / WATCH-RESEND-BUILD-FROM-R4-2026-09-26 were not carried (main has WATCH-RESEND-QUEUE-2026-09-27).",
     "WATCH-RESEND-TWO-STUCK-IN-A-ROW (2026-10-02, from WATCH-RESEND-HEAD-OF-LINE piece 1 plan round 3, N1; round 2 rated it gate): with skip on proof, two undeliverable alerts in a row in one watch still block it -- the probe (the second) fails too and reads as an outage. Using another watch's successful delivery in the same run as proof would unblock it but goes beyond decision WATCH-RESEND-SPLIT-2026-10-02's 'the next alert'. Kenneth to decide: accept as a residual, or allow cross-watch proof (later piece).",
     "LOGGED 2026-10-02 by STEP3-LIQUIDITY-ZERO code round 1 (NIT 6), NOT FIXED, outside the change: components/organisms/ScanLog is imported only by its own test (dead in the app). Its ContractRejectionSection filters reason.startsWith('all contracts') and parses a '[reason\u00d7n, ...]' format the backend never sends (the backend sends 'contracts rejected: reason(n), ...'). Since STEP3-LIQUIDITY-ZERO the score-only case no longer reads 'all contracts rejected', so even that one match is gone. No user-visible effect today; anyone reviving the component must rewrite its parser. Decide: delete it or fix it.",
@@ -3430,7 +3447,8 @@
     "LOGGED BY POSITION-WRITER-O4-CLEANUP (2026-10-03; re-logged from O4 steps 4+5 round 2 item 12): a CancelledError (shutdown) after create_position's commit propagates past book_fired_order, leaving the booked row unlinked from its history row (record_booking) and unpaged.",
     "LOGGED BY POSITION-WRITER-O4-CLEANUP (2026-10-03; P1a plan s8 re-logs never applied at its merge, re-verified today): (a) /auto-trade/arm accepts quantity > max_contracts_per_trade (ArmRequest.quantity ge=1 only) -- the fire check refuses it later; (b) TradeCard's Contracts EditableKV has min=1 and no max; (c) lib/risk.ts has no contract cap; (d) portfolioRejection.REJECTION_LABELS has no exceeds_max_contracts_per_trade label, and a gates-on 422 detail carrying the cap sentence plus ' Also: <code>' renders only the mapped code's label.",
     "LOGGED BY PREMIUM-STOP-FALLBACK-ALIGN (2026-10-03; plan section 4 said 'logged' but it was only in the phase note): a dollar premium stop >= the LIVE mid on the card sends no fraction (premiumStopPctFromDollars refuses >= 1), so the position inherits the global, with the existing dropped-stop note. Below the gate (disclosed on screen; the stop is an alert, not a broker order). Option C's 'keep the user's fraction' does not reach this case.",
-    "LOGGED BY WATCH-RESEND-PER-CHANNEL (2026-10-03, below the gate, NOT FIXED; plan s7 + audit record): (a) dispatch.ready_channels checks Gmail smtp_user/smtp_password only, not the recipient (`to` / BAMENDJOU_GMAIL_TO): Gmail enabled with an empty `to` is a ready channel that always fails, so every watch alert waits for it (plan residual 1: committed phase pill lags, cap 20 evicts with ERROR) while Telegram still gets each alert at once -- one-line fix if wanted; (b) test gaps from code round 1 mutations: M25 (a delivered probe not clearing `stuck`) and M33 (commit mode committing a fresh event behind a non-empty queue) survive -- code correct, no test pins them; (c) test_strategy_watch_router.py:176 assert_not_called cannot fail (no channel configured in that test); (d) frontend /strategy-watch shows only the committed phase, not queued alerts (pre-existing follow-up, now also reachable when ONE channel keeps failing). Related open question WATCH-RESEND-TWO-STUCK-IN-A-ROW is unchanged (now per channel)."
+    "LOGGED BY WATCH-RESEND-PER-CHANNEL (2026-10-03, below the gate, NOT FIXED; plan s7 + audit record): (a) dispatch.ready_channels checks Gmail smtp_user/smtp_password only, not the recipient (`to` / BAMENDJOU_GMAIL_TO): Gmail enabled with an empty `to` is a ready channel that always fails, so every watch alert waits for it (plan residual 1: committed phase pill lags, cap 20 evicts with ERROR) while Telegram still gets each alert at once -- one-line fix if wanted; (b) test gaps from code round 1 mutations: M25 (a delivered probe not clearing `stuck`) and M33 (commit mode committing a fresh event behind a non-empty queue) survive -- code correct, no test pins them; (c) test_strategy_watch_router.py:176 assert_not_called cannot fail (no channel configured in that test); (d) frontend /strategy-watch shows only the committed phase, not queued alerts (pre-existing follow-up, now also reachable when ONE channel keeps failing). Related open question WATCH-RESEND-TWO-STUCK-IN-A-ROW is unchanged (now per channel).",
+    "LOGGED BY TRADING-REVIEW-FIXES-A-AUDIT AUDIT ROUND 6 (2026-10-03), NOT FIXED, out of that round's scope, present on main: ArmRequest fields stop, scan_stock_price, structural_stop, premium_stop_dollar, portfolio_value and regime_headwind_* have no allow_inf_nan=False, and PortfolioPositionCreate accepts the same values, so a hand-built arm (or POST /portfolio) can store non-finite numbers. Not the R5-F1 'placed then refused at booking' failure (both schemas agree). Direct API only."
   ],
   "authoritative_documents": [
     {
@@ -3504,6 +3522,26 @@
     {
       "path": "docs/superpowers/plans/2026-10-03-options-contract-score-explanations-plan.md",
       "role": "Options Step 6: authoritative weighted-score breakdown and blocking reasons, inline details, no horizontal overflow and measured 200-contract responsiveness. Implementation plan and historical independent plan-review evidence; canonical status is in task_backlog."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+      "role": "Audited original Step-7 plan; scheduling amended only by parallel handoff. Canonical status in trade_card_presentation/task_backlog."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+      "role": "Fresh-session read-first, exclusive ownership, dependencies and launch instructions. Canonical status in trade_card_presentation/task_backlog."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-03-trade-card-presentation/preview.html",
+      "role": "Approved visual proposal with green Bullish and slim top cards; design reference, not production data."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff-audit.md",
+      "role": "Independent parallel-handoff/state audit evidence, separate from original plan and future code audits."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-03-trade-card-presentation/README.md",
+      "role": "Implementation/design document index; current launch status is canonical JSON, not the original sequential roadmap."
     }
   ],
   "traps": [
@@ -3547,10 +3585,10 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase": "PREMIUM-STOP-FALLBACK-ALIGN",
-  "active_phase_note": "PREMIUM-STOP-FALLBACK-ALIGN merged to main at 9e0d8a3 (plan r2 + code r1 CLEAN).",
+  "active_phase": "TRADING-REVIEW-FIXES-A-AUDIT",
+  "active_phase_note": "2026-10-03: TRADING-REVIEW-FIXES-A-AUDIT merged to main at 575de279 via PR #32 (audit round 6 CLEAN). Next: re-run k-trading-software-reviewer against main (scope from Kenneth), then a Phase B plan. || PREVIOUS: 2026-10-03: TRADING-REVIEW-FIXES-A-AUDIT audit round 6 CLEAN; follow-up PR to #28 open, not merged. || PREVIOUS: PREMIUM-STOP-FALLBACK-ALIGN merged to main at 9e0d8a3 (plan r2 + code r1 CLEAN).",
   "closed_questions": {
-    "_note": "APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
+    "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [
       "CLOSED 2026-09-25 by P2-PREMIUM-STOP-POSITION-EDITING (plan clean by owner decision after 5 rounds; code round 2 = round 7 CLEAN; branch claude/exciting-wozniak-dqdqy8 at cfe4090): Q9/P2-04: stored ratios outside 10-99% are accepted as stored and fire as stored; the drawer shows a caution (p2EditDrawer.test.tsx P2-04). premiumStop.ts band doc points at Q9. FORMERLY open_questions[34]: The editors' 10%-99% band cannot be an invariant on STORED values: the backend derives the ratio against the FILL, not the mid the card bounded the dollar against, so an in-band typed dollar stores out-of-band routinely. Clamp the ratio server-side and log it, or accept that the band governs editors only (as premiumStop.ts now documents)? (R1-3)",
       "CLOSED 2026-09-25 by P2-PREMIUM-STOP-POSITION-EDITING (plan clean by owner decision after 5 rounds; code round 2 = round 7 CLEAN; branch claude/exciting-wozniak-dqdqy8 at cfe4090): Q8/P2-03: the card no longer prints 'Time stop {N}d'; it prints 'Time exit: 3 DTE' from TIME_STOP_DTE, shared with alertEngine's comparison and the drawer's text (alertEngine.test.ts boundary test; TradeCard.test.tsx). FORMERLY open_questions[33]: Round 7 finding 3, second half: the card prints 'Time stop 18d' (data.exit.timeStopDays) while the alert bearing that name fires on a hardcoded dteRemaining <= 3 (frontend/lib/alertEngine.ts). A trader reads an 18-day exit off the card and gets a 3-DTE one. Making the alert honour the card needs a persisted per-position field -- i.e. the deferred build -- so round 7 only removed the edit affordance. Relabel the row, build the field, or accept the disagreement?",
@@ -3795,7 +3833,8 @@
       "CLOSED 2026-10-03 by POSITION-WRITER-O4-CLEANUP (verify-and-close; code round 1 CLEAN): CLOSED: (1) record-only, no action; (2) decided by AUDIT-CAP-PER-STAGE-2026-09-25; (3) test_the_arms_boundary_values_survive_the_create_schema; (4) test_each_bound_refuses_at_arm_and_only_the_bound asserts detail[*].loc[-1]; (5) _build_body deep-copies exitPlan/targets/maxLossOverride/tradeCardSnapshot, pinned by test_the_containers_are_copied_not_shared. || FORMERLY open_questions: LOGGED BY O4 STEP 3 ROUND 2 (2026-09-24), NOT FIXED, below the gate: (1) plan s7 says 'an already_shipped phase entry' but it went into phases, matching steps 1 and 2. (2) The plan round counts toward audit_rounds, so under audit_rule's cap a step whose plan was audited has one fewer code round -- decide whether plan rounds count. (3) Test 4 pins that each of the ten has a PortfolioPositionCreate counterpart, not that the create schema ACCEPTS what the arm accepts; a later tightening there would stay green -- step 4 should push the arm's boundary values through PortfolioPositionCreate.model_validate. (4) The bounds test's `name in resp.text` is a loose substring ('stop' is inside 'structural_stop'); harmless because the remove-and-200 half proves the bound -- could assert on detail[*].loc[-1]. (5) Frozen is shallow: _dc_replace shares targets and the dicts between pre- and post-sizing objects; step 4 must copy before mutating.",
       "CLOSED 2026-10-03 by POSITION-WRITER-O4-CLEANUP (verify-and-close; code round 1 CLEAN): CLOSED: (1) test_p1a_19a; (2) test_p1a_19b; (3) test_p1a_20 (frozen 21:30 ET); (4) containers test pins all four; (5) test_p1a_17 strike/expiry/refusal 5; (6) test_p1a_22 discrete=True; (7) accepted, unreachable (one row per attempt_id); (8) P1a post-commit recovery -> AUTO_TRADE_BOOKED_UNVERIFIED (test_p1a_15); (9) close-at-broker remedy only (test_p1a_16); (10) _DASHED_DATE (test_p1a_17); (11) handled by O4 step 6: AutoTradeArm's classifyFireFailure 'unknown' branch says the order may or may not have been placed and never invites a blind retry; (12) re-logged by this target; (13) _order_label strips (test_p1a_18). || FORMERLY open_questions: LOGGED BY O4 STEPS 4+5 ROUND 2 (2026-09-24), NOT FIXED, below the gate (code correct; mostly unpinned guards): (1) the rollback after a failed write is untested -- no test puts the session into pending-rollback (mutant M5 survives); (2) same for the rollback after a failed log_approval (M6); (3) test 1's MARKET_TZ date check only discriminates 00:00-04:00 UTC -- pin with a fixed 21:30 ET instant (M4); (4) test 14 pins only exitPlan's deepcopy, pydantic already rebuilds targets/maxLossOverride/tradeCardSnapshot (M3b-d); (5) refusal 4's strike and expiry sub-checks and refusal 5 have no test cases (M13-15); (6) discrete=True on the booking alerts is unpinned -- assert forget_alerts (M18); (7) record_booking's newest-first search is unpinned (unreachable: one row per attempt_id); (8) = re-plan s8 item 1, a fault after create_position's own commit reads as not booked -- fix would SELECT by rec_id before refusing; (9) the duplicate-contract (409) page says 'add it by hand', which will 409 again -- the remedy is to adjust the existing row's qty; (10) = s8 item 3, an undashed expiry passes refusal 4 -- reuse option_symbol._PIPE_RE; (11) /fire now waits on the quote fetch (<=8s) and alert delivery, so step 6 must treat a /fire timeout as 'unknown, check status', never retry blind; (12) a CancelledError after the commit leaves the row unlinked and unpaged (shutdown edge); (13) _order_label treats a whitespace-only id as real while refusal 1 treats it as none -- cosmetic.",
       "CLOSED 2026-10-03 by POSITION-WRITER-O4-CLEANUP (verify-and-close; code round 1 CLEAN): CLOSED: (1) re-logged by this target as a Kenneth question (behaviour choice, not a defect: the writer's documented fallback is the client's fraction); (2) accepted, stored only; (3) and (5) fixed by P2-18c/P2-18b; (4) accepted, harmless (fire() disarms under the lock); (6) FIXED by this target (717a738): a8-rail-and-structural-cache arms after Check structure + Compute arithmetic plan and pins structural_stop/exit_plan on the arm body, red under each mutant; (7) accepted, a note on re-plan s10 wording. || FORMERLY open_questions: ANNOTATED 2026-09-25 by P2 (partly fixed): item (1) dollar stop >= premium now shows a pre-arm caution (P2-18a); item 3's wording now names the typed-or-moved invalidation (P2-18c); the green 'Auto-trade fired' line beside a not-booked fire is now a caution 'Order sent -- ID ... (not booked)' (P2-18b). NOT P2's: item 1's backend _build_body (P3b/P1 files), 2 (stored only), 4 (harmless), 6 (step-7 call-site mutants, P1 tests), 7 (note). || LOGGED BY O4 STEP 6 ROUND 2 (2026-09-24), NOT FIXED, below the gate: (1) a dollar premium stop >= the entry persisted at fire makes the ARMED path fall back to its arm-time premium_stop_pct while the card path falls back to the global (backend _build_body passes premiumStopPct; not step 6's diff); (2) dte_total is frozen at arm from the scan-time DTE -- stored only; (3) AutoTradeArm's caution says the fire books 'the invalidation this card had when you armed it', but an untyped stop is still re-anchored by (live - scan) at booking, as on the card path; (4) an unknown Fire-now result plus a failed status read leaves Fire now enabled -- harmless, fire() disarms under the lock so a second press 400s; (5) the pre-existing green 'Auto-trade fired -- Order ID' line still shows beside a not-booked caution; (6) mutants structuralStop={null} / exitPlan={null} at the step-7 call site survive -- no test pins those two props; (7) = re-plan s10 item 1, the duplicate check reads the persisted store plus the mount sync, not a 30s poll, on the screener.",
-      "CLOSED 2026-10-03 by PREMIUM-STOP-FALLBACK-ALIGN (896323f, 9b6d674; code round 1 CLEAN): card sends now post the user's fraction, so both paths fall back to it; the auto-trade booking pages AUTO_TRADE_BOOKED_PREMIUM_STOP_UNAPPLIED. Pinned by test_o4_step4_booking.py's PREMIUM-STOP-FALLBACK-ALIGN tests and p2PortfolioStore/edited-fields-sync. FORMERLY: LOGGED BY POSITION-WRITER-O4-CLEANUP (2026-10-03; re-logged from O4 step 6 round 2 item 1, DECIDED 2026-10-03: PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03, to be built as task PREMIUM-STOP-FALLBACK-ALIGN): when a dollar premium stop is >= the entry persisted at booking, the ARMED path falls back to its arm-time premium_stop_pct (the dollar's ratio at arm) while the card path, which sends no fraction, falls back to the global. Both follow position_writer's documented fallback; making them agree is a behaviour change."
+      "CLOSED 2026-10-03 by PREMIUM-STOP-FALLBACK-ALIGN (896323f, 9b6d674; code round 1 CLEAN): card sends now post the user's fraction, so both paths fall back to it; the auto-trade booking pages AUTO_TRADE_BOOKED_PREMIUM_STOP_UNAPPLIED. Pinned by test_o4_step4_booking.py's PREMIUM-STOP-FALLBACK-ALIGN tests and p2PortfolioStore/edited-fields-sync. FORMERLY: LOGGED BY POSITION-WRITER-O4-CLEANUP (2026-10-03; re-logged from O4 step 6 round 2 item 1, DECIDED 2026-10-03: PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03, to be built as task PREMIUM-STOP-FALLBACK-ALIGN): when a dollar premium stop is >= the entry persisted at booking, the ARMED path falls back to its arm-time premium_stop_pct (the dollar's ratio at arm) while the card path, which sends no fraction, falls back to the global. Both follow position_writer's documented fallback; making them agree is a behaviour change.",
+      "CLOSED 2026-10-03 by TRADING-REVIEW-FIXES-A-AUDIT (574d50c0, audit round 2 R2-F2; R3-F2): ArmRequest.entry_premium is required, gt=0 and allow_inf_nan=False; limit_price gained allow_inf_nan=False in 7b2dad63 (R5-F1). FORMERLY open_questions[39]: LOGGED BY P6 UNIT A CODE ROUND 1 (2026-09-30), NOT FIXED, below the gate (direct API only; JSON.stringify cannot emit Infinity): ArmRequest.entry_premium (backend/app/routers/auto_trade.py) is still an unbounded float, so a hand-built arm with entry_premium=Infinity could place an order and then fail booking. Same allow_inf_nan=False remedy as A1 if taken; outside P6's named fields."
     ]
   },
   "archived_round_records": {
@@ -3939,10 +3978,9 @@
         "owner": "agent",
         "covers": [
           "open_questions: P3c auto_trader docstrings",
-          "open_questions: P3c run_scan maybe_fire_on_scan cancellation gap",
-          "open_questions: P6 unit A ArmRequest.entry_premium unbounded"
+          "open_questions: P3c run_scan maybe_fire_on_scan cancellation gap"
         ],
-        "summary": "Scan-triggered fire cancellation gap, stale docstrings, allow_inf_nan=False on entry_premium.",
+        "summary": "Scan-triggered fire cancellation gap, stale docstrings. (entry_premium bound done by TRADING-REVIEW-FIXES-A-AUDIT, 2026-10-03.)",
         "weight": "med"
       },
       {
@@ -4066,7 +4104,7 @@
           "docs/superpowers/plans/2026-10-03-options-vol-events-explanations-plan.md"
         ],
         "summary": "Options Step 5: visible applied thresholds, per-check statuses, deciding gate drivers and inline explanations without horizontal overflow.",
-        "status": "ready_to_merge",
+        "status": "in_progress",
         "plan": "docs/superpowers/plans/2026-10-03-options-vol-events-explanations-plan.md",
         "plan_audit": {
           "date": "2026-10-03",
@@ -4086,12 +4124,13 @@
         "implementation": "completed",
         "code_audit": {
           "date": "2026-10-03",
-          "rounds": 5,
+          "rounds": 6,
           "clean": true,
           "gate_findings_by_round": [
             13,
             12,
             6,
+            0,
             0,
             0
           ],
@@ -4102,13 +4141,23 @@
             "b17133ca-0e32-461b-8d8f-7de4a423bca1 (Round 2)",
             "16fd8e54-4833-4952-8a3f-564df43bd3f5 (Round 3)",
             "37453f69-9bd6-4ed5-b775-a234dfaf163c (Round 4)",
-            "/root/vol_events_corrections_audit (authorized code round 5)"
+            "/root/vol_events_corrections_audit (authorized code round 5)",
+            "/root/options_upstream_merge_review (authorized latest-main merge correction round)"
           ],
           "head_commit": "283c2cbbb8d6593ff8bacbe7c37b39f49ed24e85",
           "reviewed_diff": "66561e266c30bd752a833df49093d125b216985e..283c2cbbb8d6593ff8bacbe7c37b39f49ed24e85",
-          "correction_evidence": "docs/superpowers/audits/2026-10-03-options-explanation-corrections.md"
+          "correction_evidence": "docs/superpowers/audits/2026-10-03-options-explanation-corrections.md",
+          "merge_review": {
+            "parents": [
+              "a12086fa6510c94592bda600b98e87e4acaaaa68",
+              "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585"
+            ],
+            "scope": "Staged Step5 dividend note resolution and event regressions; additive schema/domain/override/API/earnings-gate interactions Steps5-7; upstream state reconciliation. No re-audit of inherited main changes.",
+            "gate_findings": 0,
+            "step5_sha256": "26a273e08655979cec041417ac678a0b8bca5d4fa99537a7889113c82bfe4728"
+          }
         },
-        "note": "All three confirmed corrections independently verified with zero gate findings in the user-authorized extra round; original history retained. Combined release reconciliation still awaits the other Contracts audit findings.",
+        "note": "All correction and latest-main merge reviews independently clean. Final merged runtime acceptance recording pending.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
@@ -4125,8 +4174,8 @@
             "date": "2026-10-03",
             "other_branch": "fix/options-contract-explanations",
             "other_work": "User relayed that no code fixes, commits, pushes or merges exist. Root reassigned task claim.",
-            "audit_findings": "requested_pending",
-            "release_status": "hold_until_other_audit_findings_compared"
+            "audit_findings": "Report c5921ef1 imported and all four numeric findings reconciled; no other-session application edits existed.",
+            "release_status": "hold_for_final_merged_runtime_acceptance"
           }
         }
       },
@@ -4159,40 +4208,344 @@
         "implementation": "completed",
         "code_audit": {
           "date": "2026-10-03",
-          "rounds": 3,
-          "clean": false,
+          "rounds": 8,
+          "clean": true,
           "gate_findings_by_round": [
             0,
             1,
+            0,
+            0,
+            0,
+            0,
+            0,
             0
           ],
-          "findings_fixed": 5,
-          "outstanding_gate_findings": 2,
+          "findings_fixed": 7,
+          "outstanding_gate_findings": 0,
           "evidence": "docs/superpowers/measurements/options-explanations/STAGE_C_MEASUREMENTS.md",
           "reviewers": [
             "/root/contracts_fix_audit (code round 2)",
-            "/root/contracts_final_audit (code round 3)"
+            "/root/contracts_final_audit (code round 3)",
+            "/root/contracts_handoff_fix_review (authorized code round 4)",
+            "/root/contracts_final_handoff_review (authorized code round 5)",
+            "/root/contracts_minimum_layout_review (authorized code round 6)",
+            "/root/contracts_tooltip_retry_review (authorized code round 7)",
+            "/root/options_upstream_merge_review (authorized latest-main merge correction round)"
           ],
-          "reviewed_diff": "283c2cbbb8d6593ff8bacbe7c37b39f49ed24e85..b89a1db65f589d215abfb43ce2796840b38b150d",
-          "correction_evidence": "docs/superpowers/audits/2026-10-03-options-explanation-corrections.md",
-          "head_commit": "b89a1db65f589d215abfb43ce2796840b38b150d"
+          "reviewed_diff": "9a0ad23f8ba1df8db04516aa62547d43a0ed1bf3..a12086fa6510c94592bda600b98e87e4acaaaa68",
+          "correction_evidence": "docs/superpowers/audits/2026-10-03-options-takeover-reconciliation.md",
+          "head_commit": "a12086fa6510c94592bda600b98e87e4acaaaa68",
+          "aborted_reviews": [
+            {
+              "reviewer": "/root/contracts_authoritative_tooltip_review",
+              "reason": "Model usage limit; no verdict. Not counted as a completed round."
+            }
+          ],
+          "merge_review": {
+            "parents": [
+              "a12086fa6510c94592bda600b98e87e4acaaaa68",
+              "6cce7364a47e9f23e3bf09cb6d0f9ffbf23bb585"
+            ],
+            "scope": "Staged Step5 dividend note resolution and event regressions; additive schema/domain/override/API/earnings-gate interactions Steps5-7; upstream state reconciliation. No re-audit of inherited main changes.",
+            "gate_findings": 0,
+            "step5_sha256": "26a273e08655979cec041417ac678a0b8bca5d4fa99537a7889113c82bfe4728"
+          }
         },
-        "note": "External audit report c5921ef1 identified two additional numeric defects and acceptance gaps. Reopened; fixes and independent correction review in progress under user takeover authorization.",
+        "note": "All correction and latest-main merge reviews independently clean. Final merged runtime acceptance recording pending.",
         "correction_verification": {
           "date": "2026-10-03",
           "branch": "codex/options-explanation-fixes",
           "historical_rounds_preserved": 1,
-          "known_defects_fixed": 3,
-          "independent_verdict": "clean_code_round_3",
+          "known_defects_fixed": 5,
+          "independent_verdict": "clean_authorized_code_round_7",
           "note": "Original history retained. Round2 found one fractional card-weight defect; fixed, and fresh round3 verified the fix and its interactions. Exact scope and evidence are in correction_evidence.",
           "cross_session_reconciliation": {
             "date": "2026-10-03",
             "other_branch": "fix/options-contract-explanations",
             "other_work": "User relayed that no code fixes, commits, pushes or merges exist. Root reassigned task claim.",
-            "audit_findings": "report c5921ef1 received: findings1/2 already fixed;3/4 confirmed pending",
-            "release_status": "hold_until_other_audit_findings_compared"
+            "audit_findings": "Report c5921ef1 imported and all four numeric findings reconciled; no other-session application edits existed.",
+            "release_status": "hold_for_final_merged_runtime_acceptance"
+          },
+          "audit_cap_exception": {
+            "date": "2026-10-03",
+            "authorization": "User instructed root to take over both pages and ensure both are audited and fixed after the explicit audit-cap discussion, then supplied the other audit report for reconciliation.",
+            "scope": "Additional independent correction reviews for newly confirmed external-report defects and their compatibility/performance follow-up. Preserve the complete historical code round tally."
           }
         }
+      },
+      {
+        "id": "TRADE-CARD-UI-CORE",
+        "summary": "Main trade-card handling and method presentation; no leaf or shared data edits",
+        "depends_on": [
+          "TRADING-REVIEW-FIXES-A"
+        ],
+        "parallel_group": "initial_disjoint",
+        "original_slices": [
+          2,
+          3,
+          4,
+          7
+        ],
+        "allowed_paths": [
+          "frontend/components/organisms/TradeCard/**",
+          "frontend/app/(frame)/screener/step-7-trade-card/**",
+          "frontend/components/molecules/TradeCardPresentation/**"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_until_trading_review_overlap_is_landed_and_released_or_documented_scope_transfer",
+        "external_shared_owners": [
+          "TRADING-REVIEW-FIXES"
+        ],
+        "dependency_gate": "Shipped/code audit-clean phase flag alone is insufficient when its PR is recorded open; verify checkout and live-owner clearance."
+      },
+      {
+        "id": "TRADE-CARD-CONTEXT-CARDS",
+        "summary": "Optional compact MarketSentiment and FundamentalHealthCard variants; no page placement",
+        "depends_on": [],
+        "parallel_group": "initial_disjoint",
+        "original_slices": [
+          2
+        ],
+        "allowed_paths": [
+          "frontend/components/molecules/MarketSentiment/**",
+          "frontend/components/molecules/FundamentalHealthCard/**"
+        ],
+        "owner": "agent",
+        "status": "shipped",
+        "implementation": "complete_merged",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 1,
+          "clean": true,
+          "gate_findings_by_round": [
+            0
+          ],
+          "fixes": 0,
+          "outstanding_gate_findings": 0,
+          "reviewer": "/root/context_cards_code_audit_r1",
+          "reviewed_diff": "c3f6d5195c9595cbd06f286070e3821d1b8245ad..739afd1fc8c3247475579538c4e4182ffd61315a",
+          "diff_sha256": "4e15d5f9b6c2571a8f12e0cacc1b792830572f9fbea79aca989eda5c0f4d9b05",
+          "scope": "Whole code target: 6 owned files, 264 additions / 4 deletions; zero-finding recheck verified; separate from plan/handoff audits.",
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md"
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "landed_code_audited_clean_awaiting_final_composition",
+        "branch": "codex/trade-card-context-cards",
+        "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
+        "implementation_commit": "739afd1fc8c3247475579538c4e4182ffd61315a",
+        "work_log": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md",
+        "validation": {
+          "typecheck": "PASS: npm run typecheck; independent npm run typecheck -- --incremental false",
+          "focused_tests": "PASS: 2 suites / 21 tests in owned dirs",
+          "related_tests": "PASS: TradeCard.methodPick 11 tests; statusTooltips.literal 120 tests",
+          "state": "PASS: scripts/state.py reports no drift; own-entry-only delta verified against fetched canonical main",
+          "browser": "PASS: production components/CSS in SSR fixture using production frame/nav/rail CSS; light/dark at 1200,1366,1440,1920; compact/default colour parity, wrapping, visible safety flags, keyboard disclosure, missing/insufficient/alignment states and long text",
+          "limitations": "No live populated scan session or integrated caller placement tested. Existing Frame min-width 1280 causes page overflow at 1200 for both layouts; owned cards fit. Full frontend/build deferred to final integration per handoff."
+        },
+        "landing_verification": {
+          "date": "2026-10-04",
+          "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
+          "merge_commit": "6cbb77923012fc770bfd757e79831c88fc5ff995",
+          "reviewer": "/root/component_landing_audit_r1",
+          "rounds": 1,
+          "clean": true,
+          "gate_findings_by_round": [
+            0
+          ],
+          "fixes": 0,
+          "outstanding_gate_findings": 0,
+          "reviewed_diff_sha256": "2986373826ad2e9d6168d3bcde7ec05a101aba0214030e17e1bbb52508b8a04f",
+          "scope": "Combined frozen component landing diff: base c3f6d519, context merge 6cbb7792 plus staged barrier merge; 12 files, 1051 additions / 207 deletions. Original task code audits preserved.",
+          "independent_tests": "5 suites / 102 tests passed; nonincremental typecheck, diff check and no-drift state verification passed",
+          "frontend_tests": "186 suites / 4546 tests passed",
+          "build": "Normal build blocked by HTTP 403 Google Fonts policy; separate Next font-mock build passed. No source/config/lockfile changes.",
+          "hosted_checks": "GitHub API Forbidden; PR/protection configuration and hosted CI results unavailable",
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md#component-landing-verification--2026-10-04",
+          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green.",
+          "landed_on": "origin/main",
+          "publication_commit": "4acb1e74",
+          "publication_note": "Verified normal push to origin/main; original source/evidence commits retained as ancestors. Hosted CI remains unverified due API access denial."
+        }
+      },
+      {
+        "id": "TRADE-CARD-BARRIER-PRESENTATION",
+        "summary": "Standalone BarrierRaceCard presentation using original props, guards and formatters; no selection shortcut yet",
+        "depends_on": [],
+        "parallel_group": "initial_disjoint",
+        "original_slices": [
+          5
+        ],
+        "allowed_paths": [
+          "frontend/components/organisms/BarrierRaceCard/**"
+        ],
+        "owner": "agent",
+        "status": "shipped",
+        "implementation": "complete_merged",
+        "branch": "claude/zen-newton-o3ix8q",
+        "base": "c3f6d51",
+        "commits": [
+          "5134201",
+          "589bbb6"
+        ],
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 1,
+          "clean": true,
+          "gate_findings_by_round": [
+            0
+          ],
+          "fixes": 0,
+          "reviewer": "fresh general-purpose subagent / a4230f863de961e65 (bmad-review-adversarial-general, numeric/persistence gate)",
+          "scope": "git diff c3f6d51 5134201 \u2014 BarrierRaceCard index.tsx, module.css, __tests__ only",
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-BARRIER-PRESENTATION.md"
+        },
+        "validation": "typecheck clean; BarrierRaceCard 39/39; TradeCard/MethodPick/step-7 dependents 274 passed; full frontend 184 suites/4525 tests passed; Playwright width check at 600/900px dark+light, no horizontal overflow",
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "landed_code_audited_clean_awaiting_final_composition",
+        "landing_verification": {
+          "date": "2026-10-04",
+          "base_commit": "c3f6d5195c9595cbd06f286070e3821d1b8245ad",
+          "merge_commit": "076a5a80f86933eeb7db28363a235cda70032ca8",
+          "reviewer": "/root/component_landing_audit_r1",
+          "rounds": 1,
+          "clean": true,
+          "gate_findings_by_round": [
+            0
+          ],
+          "fixes": 0,
+          "outstanding_gate_findings": 0,
+          "reviewed_diff_sha256": "2986373826ad2e9d6168d3bcde7ec05a101aba0214030e17e1bbb52508b8a04f",
+          "scope": "Combined frozen component landing diff: base c3f6d519, context merge 6cbb7792 plus staged barrier merge; 12 files, 1051 additions / 207 deletions. Original task code audits preserved.",
+          "independent_tests": "5 suites / 102 tests passed; nonincremental typecheck, diff check and no-drift state verification passed",
+          "frontend_tests": "186 suites / 4546 tests passed",
+          "build": "Normal build blocked by HTTP 403 Google Fonts policy; separate Next font-mock build passed. No source/config/lockfile changes.",
+          "hosted_checks": "GitHub API Forbidden; PR/protection configuration and hosted CI results unavailable",
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-CONTEXT-CARDS.md#component-landing-verification--2026-10-04",
+          "backend_tests": "Python 3.11.16: 4839 passed / 1 skipped / 2 shortlist failures; unmocked Yahoo Finance HTTP 403. Isolated main/landing reruns both ranking PASS, trim-count FAIL with identical assertion; backend tree byte-identical. Full backend not green.",
+          "landed_on": "origin/main",
+          "publication_commit": "4acb1e74",
+          "publication_note": "Verified normal push to origin/main; original source/evidence commits retained as ancestors. Hosted CI remains unverified due API access denial."
+        }
+      },
+      {
+        "id": "TRADE-CARD-SCORE-EVIDENCE",
+        "summary": "Reuse external authoritative contract explanation; add missing stock evidence and Step-7 provenance propagation",
+        "depends_on": [
+          "OPTIONS-CONTRACT-EXPLANATIONS",
+          "TRADING-REVIEW-FIXES-A"
+        ],
+        "parallel_group": "after_external_contract_evidence",
+        "original_slices": [
+          1
+        ],
+        "allowed_paths": [
+          "backend/app/scoring/stock_scorer.py",
+          "backend/app/routers/scan.py",
+          "backend/app/schemas/__init__.py",
+          "frontend/types/domain.ts",
+          "frontend/lib/tradeCardOverride.ts",
+          "frontend/lib/scanStore.ts"
+        ],
+        "external_shared_owners": [
+          "OPTIONS-CONTRACT-EXPLANATIONS",
+          "OPTIONS-VOL-EVENTS-EXPLANATIONS",
+          "TRADING-REVIEW-FIXES"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_until_external_contract_evidence_lands_or_explicit_ownership_transfer"
+      },
+      {
+        "id": "TRADE-CARD-QUALIFICATION-PRESENTATION",
+        "summary": "Controlled qualification/score evidence view and backtested-confidence explanation; no main-card edits",
+        "depends_on": [
+          "TRADE-CARD-SCORE-EVIDENCE"
+        ],
+        "parallel_group": "after_evidence",
+        "original_slices": [
+          6
+        ],
+        "allowed_paths": [
+          "frontend/components/molecules/ScoreCardPanel/**",
+          "frontend/components/molecules/TradeCardQualification/**",
+          "frontend/lib/tradeCardQualification*"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_on_score_evidence"
+      },
+      {
+        "id": "TRADE-CARD-PRESENTATION-INTEGRATION",
+        "summary": "Serial final composition, guarded selection shortcut, execution panel and full information/parity reconciliation",
+        "depends_on": [
+          "TRADE-CARD-UI-CORE",
+          "TRADE-CARD-CONTEXT-CARDS",
+          "TRADE-CARD-BARRIER-PRESENTATION",
+          "TRADE-CARD-SCORE-EVIDENCE",
+          "TRADE-CARD-QUALIFICATION-PRESENTATION"
+        ],
+        "parallel_group": "serial_final_integration",
+        "original_slices": [
+          2,
+          5,
+          6,
+          7
+        ],
+        "allowed_paths": [
+          "Prior task paths only after ownership release",
+          "frontend/components/molecules/MethodPickSelector/**",
+          "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/**"
+        ],
+        "owner": "agent",
+        "status": "not_started",
+        "implementation": "not_started",
+        "claim_required": true,
+        "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+        "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+        "code_audit": {
+          "rounds": 0,
+          "clean": false
+        },
+        "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
+        "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
+        "readiness": "blocked_on_all_five_internal_tasks_and_dependency_audits"
       }
     ]
   },
@@ -4440,5 +4793,64 @@
     "finding_f3_1": "auto_trader.py, the SAME host-ahead limb. The round-2 fix correctly introduced 'a UTC host is +4 in EDT and +5 in EST' and then, one sentence later, derived the window as 'a real NY 20:00-24:00 every evening, four hours daily'. 20:00 IS THE +4 (EDT) ANSWER ONLY. Feeding the block's own formula with the +5 it had just given for EST yields NY 19:00-24:00 -- FIVE hours. Verified empirically, not reasoned: 2026-09-22 (EDT) = 240 minutes, 2026-01-15 (EST) = 300 minutes, the EST stretch being ~Nov 1 - Mar 7, about a third of the year. The commit MESSAGE carried the 'EDT' qualifier; the DOCSTRING dropped it. Conclusion survives again (19:00 and 20:00 are both after the 16:00 close; 5 <= 8 exactly as 4 <= 8), so no number moves and no test changes. FIXED at the commit following dcff1667 -- AND THAT FIX IS UNAUDITED, because the cap fired.",
     "claims_checked_and_confirmed_true_do_not_re_derive": "THE DST ARITHMETIC WAS CHECKED IN BOTH DIRECTIONS against real `zoneinfo` transitions. 'Every offset in this block is NY-relative' is TRUE for every bare offset (+6, +4/+5, <=+8, +13, -3); the one UTC-relative figure ('UTC+2 in summer') is explicitly labelled as such. UTC host +4 EDT / +5 EST TRUE both ways. Berlin +6 TRUE as qualified -- and THE EU/US TRANSITION-MISMATCH WEEKS WERE HUNTED: in 2026 Berlin is NY-relative +5 from Mar 8-28 and Oct 25-31, which is SMALLER and so satisfies `offset <= +8` more comfortably; not a finding. Tokyo +13 in NY-summer, +14 in NY-winter, both >= +9, and Tokyo is not a deployment. US-west -3 TRUE YEAR-ROUND (US zones switch together). Window `[24:00 - offset, 24:00)` TRUE, confirmed minute-by-minute. || CLAIM 8'S MECHANISM TRACED THROUGH THE REAL CALL SITE: in the host-ahead window `last_day` is the NY date and `today` is NY+1, so the first conjunct is False, Python SHORT-CIRCUITS, and the trim body and the session test are both unreached -- and it is the END trim only; the START cutoff and the stale-feed net still run, exactly as the comment says. || CLAIM 9 ('keeping the bar is the right answer throughout') TRUE AT EVERY INSTANT: the real helper was driven over every minute of NY 20:00-24:00 (EDT) and 19:00-24:00 (EST) -- ZERO instants read unclosed, so the kept bar is closed by the guard's own criterion and the outcome agrees whether the trim is skipped or reached.",
     "the_cap_fired_and_what_it_actually_means": "*** DO NOT RUN ROUND 4. *** The audit rule's cap is three rounds without a clean, and its stated reading is 'the batch is too big to audit'. THAT READING DOES NOT FIT HERE AND THE NEXT SESSION SHOULD NOT ACT ON IT. The BEHAVIOURAL audit converged: round 2 returned ZERO behavioural gate-level findings over a 29-mutant battery, and round 3's target was a comment-only diff with no executable line in it. What is not converging is THE PROSE. Rounds 1, 2 and 3 each returned exactly one finding of the SAME SPECIES -- an under-qualified claim in the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). The comment-truth exception, applied to a docstring this dense, MANUFACTURES A FINDING EVERY ROUND, because each correction adds new prose carrying new claims. That is audit-rule-v1's non-termination reappearing through the COMMENT EXCEPTION instead of through the severity floor -- the exact failure v2 was written to kill, in the one doorway v2 left open. KENNETH'S CALL, and the options are recorded in pending_kenneth."
+  },
+  "trade_card_presentation": {
+    "id": "TRADE-CARD-PRESENTATION",
+    "scope": "User-approved Step-7 presentation; preserve every information item and all trading logic; new sessions implement only their owned tasks.",
+    "implementation": "not_started",
+    "original_plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
+    "original_plan_audit": {
+      "rounds": 1,
+      "clean": true,
+      "gate_findings_by_round": [
+        0
+      ],
+      "reviewer": "Bernoulli / 01a10383-5e4a-7249-b358-33d5f4979049",
+      "sha256": "eb63bc8f348bb49ba9ee5ca0e88ee7bcc2ea2100acefc05f38e3b256e200dbc4",
+      "evidence": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan-audit.md"
+    },
+    "parallel_handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
+    "handoff_audit": {
+      "rounds": 1,
+      "clean": true,
+      "gate_findings_by_round": [
+        0
+      ],
+      "fixes": 0,
+      "reviewer": "Confucius / 01a10390-df99-738d-869a-e1838b03405d",
+      "scope": "Final parallel handoff and state delta including external trading-review ownership gate; original-plan audit is separate.",
+      "evidence": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff-audit.md"
+    },
+    "approved_design": "docs/superpowers/specs/2026-10-03-trade-card-presentation/preview.html",
+    "information_mapping": "docs/superpowers/specs/2026-10-03-trade-card-presentation/information-mapping.md",
+    "task_ids": [
+      "TRADE-CARD-UI-CORE",
+      "TRADE-CARD-CONTEXT-CARDS",
+      "TRADE-CARD-BARRIER-PRESENTATION",
+      "TRADE-CARD-SCORE-EVIDENCE",
+      "TRADE-CARD-QUALIFICATION-PRESENTATION",
+      "TRADE-CARD-PRESENTATION-INTEGRATION"
+    ],
+    "start_together": [
+      "TRADE-CARD-CONTEXT-CARDS",
+      "TRADE-CARD-BARRIER-PRESENTATION"
+    ],
+    "external_dependencies": [
+      "OPTIONS-CONTRACT-EXPLANATIONS",
+      "TRADING-REVIEW-FIXES-A"
+    ],
+    "external_claim_observation": "2026-10-03: OPTIONS-CONTRACT-EXPLANATIONS and OPTIONS-VOL-EVENTS-EXPLANATIONS actively claimed by codex/options-explanation-fixes. Recheck live claims at every session start. Do not trust their old backlog not_started status over active claims. TRADING-REVIEW-FIXES is also active on claude/trading-review-fixes; its plan overlaps Step7/stock scorer/schemas and its phase note records open PR28. CORE and SCORE-EVIDENCE must clear that owner/landing gate.",
+    "state_writer_lock": "TRADE-CARD-PRESENTATION-STATE",
+    "shared_state_rule": "Acquire lock for short JSON update; reconcile latest canonical JSON and update only your own task entry. Preserve unrelated phases/active target/audit counters. No stale wholesale state replacement.",
+    "source_branch": "main",
+    "publication": {
+      "remote": "origin",
+      "branch": "main",
+      "launch_requirement": "Fetch latest origin/main and create a separate implementation branch per task. Read canonical handoff/state and recheck dependencies plus live owners before edits.",
+      "authorisation": "User explicitly requested all implementation documents on origin/main."
+    },
+    "colour_contract": "Existing tokens/helpers only: PASS/Bullish green, CAUTION amber, REJECT/Bearish red, existing neutral unknown/pending. Preserve score/segment semantics.",
+    "note": "Two independent leaf tasks can start together; CORE can join only after its external overlap gate. Evidence reuses external contract explanation and waits both overlapping owners. Shared-file final wiring is serial. Original plan audit is separate from concurrency audit.",
+    "potential_third_parallel_task": "TRADE-CARD-UI-CORE after external overlap clearance"
   }
 }

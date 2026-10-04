@@ -175,19 +175,19 @@ describe('earnings gate uses the scan-echoed window, not a fixed 7/3 days', () =
     expect(screen.getByText(EARNINGS_LABEL)).toBeInTheDocument();
     expect(screen.queryByText('Earnings > 7d away')).not.toBeInTheDocument();
     expect(earningsStatus()).toBe('REJECT');
-    expect(screen.getByText("Next event in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    expect(screen.getByText("Earnings in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
     first.unmount();
 
     publish({ earningsDays: 30 });
     const second = render(<TradeCardContextRail />);
     expect(earningsStatus()).toBe('CAUTION');
-    expect(screen.getByText("Next event in 30d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    expect(screen.getByText("Earnings in 30d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
     second.unmount();
 
     publish({ earningsDays: 60 });
     render(<TradeCardContextRail />);
     expect(earningsStatus()).toBe('PASS');
-    expect(screen.getByText("Next event in 60d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    expect(screen.getByText("Earnings in 60d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
   });
 
   it('shows CAUTION, naming a re-run, when the scan echoed no window', () => {
@@ -197,7 +197,7 @@ describe('earnings gate uses the scan-echoed window, not a fixed 7/3 days', () =
     // 30d would be PASS under 7/3; with no window in hand it is never PASS.
     expect(screen.getByText(EARNINGS_LABEL)).toBeInTheDocument();
     expect(earningsStatus()).toBe('CAUTION');
-    expect(screen.getByText('Next event in 30d — this scan carried no event window; re-run the scan.')).toBeInTheDocument();
+    expect(screen.getByText('Earnings in 30d — this scan carried no event window; re-run the scan.')).toBeInTheDocument();
   });
 
   it('does not grade a nearer DIVIDEND as an Earnings gate (nextEventDays is the nearer of the two)', () => {
@@ -213,7 +213,7 @@ describe('earnings gate uses the scan-echoed window, not a fixed 7/3 days', () =
     publish({ nextEventDays: 2, nextEventLabel: 'Dividend', earningsDays: 10 });
     render(<TradeCardContextRail />);
     expect(earningsStatus()).toBe('REJECT');
-    expect(screen.getByText("Next event in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    expect(screen.getByText("Earnings in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
   });
 
   it('shows CAUTION "Earnings date" when a single stock has no known earnings date', () => {
@@ -244,5 +244,53 @@ describe('earnings gate uses the scan-echoed window, not a fixed 7/3 days', () =
     render(<TradeCardContextRail />);
     expect(earningsStatus()).toBe('PASS');
     expect(screen.getByText('ETF — no earnings date to check.')).toBeInTheDocument();
+  });
+});
+
+/* Audit round 1, F4 — the rail grades the distance AS OF TODAY, through the
+ * same helper (lib/earningsGate.ts) Step 7's buttons read, so the two agree. */
+describe('audit round 1 F4 — the earnings gate is aged by the scan\'s age', () => {
+  function daysAgo(days: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00:00`;
+  }
+  function scanAgo(days: number) {
+    act(() => {
+      useScanStore.setState({
+        scanResult: {
+          scan_id: 's', timestamp: daysAgo(days), candidates: [AUTO],
+          event_window: { reject_days: 21, caution_days: 45 },
+        } as any,
+      } as any);
+    });
+  }
+
+  it('Thursday: a Monday scan at 23d is graded at 20d — REJECT, saying both numbers', () => {
+    scanAgo(3);
+    publish({ earningsDays: 23, earningsVeto: false, isEtf: false });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('REJECT');
+    expect(screen.getByText(
+      "Earnings in 20d (23d at the scan, 3d ago) — reject <21d, caution <45d (this scan's window).",
+    )).toBeInTheDocument();
+  });
+
+  it('Monday: the same card the same day is CAUTION at 23d', () => {
+    scanAgo(0);
+    publish({ earningsDays: 23, earningsVeto: false, isEtf: false });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('CAUTION');
+  });
+
+  it('a print that may have passed since the scan is an unknown date — CAUTION for a stock', () => {
+    scanAgo(5);
+    publish({ earningsDays: 3, earningsVeto: true, isEtf: false });
+    render(<TradeCardContextRail />);
+    expect(screen.getByText('Earnings date')).toBeInTheDocument();
+    expect(earningsStatus()).toBe('CAUTION');
+    expect(screen.getByText(/may already have passed/)).toBeInTheDocument();
+    expect(screen.queryByText(EARNINGS_LABEL)).not.toBeInTheDocument();
   });
 });

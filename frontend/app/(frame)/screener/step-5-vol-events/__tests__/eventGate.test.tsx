@@ -181,3 +181,43 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
     expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
   });
 });
+
+/* Audit round 1, F9 — Step 5 grades the NEARER of earnings and dividend, so a
+ * dividend inside the window paints REJECT here while Step 7 (D3: only earnings
+ * veto) lets it send. The row must say a dividend is not a send veto. */
+describe('audit round 1 F9 — a dividend-only REJECT says it is not a send veto', () => {
+  const NOTE = /Dividend — score penalty, not a send veto/;
+
+  function setupRow(over: Partial<TradeCardData>) {
+    setup(5, 'Swing (5-15d)');
+    useScanStore.setState((s: any) => ({
+      scanResult: { ...s.scanResult, candidates: [makeCandidate({ nextEventDays: 5, ...over })] },
+    }));
+  }
+
+  it('dividend 5d out, earnings 90d out: REJECT, with the note', () => {
+    setupRow({ nextEventLabel: 'Dividend', earningsDays: 90 });
+    render(<Step5Page />);
+    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it('dividend 5d out with no earnings date: still the note (the dividend is what rejected it)', () => {
+    setupRow({ nextEventLabel: 'Dividend', earningsDays: null });
+    render(<Step5Page />);
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it('earnings 5d out: no note — that one IS a veto', () => {
+    setupRow({ nextEventLabel: 'Earnings', earningsDays: 5 });
+    render(<Step5Page />);
+    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it('dividend 5d out but earnings 10d out (also inside the 21d window): no note', () => {
+    setupRow({ nextEventLabel: 'Dividend', earningsDays: 10 });
+    render(<Step5Page />);
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+});

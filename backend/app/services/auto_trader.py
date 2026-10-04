@@ -167,13 +167,130 @@ class EventVetoError(RuntimeError):
         self.unknown = unknown
 
 
-def _fetch_earnings_date(symbol: str):
-    """The symbol's next earnings date, or None when unknown.
+# Audit round 1, F11: the fire-time earnings lookup runs on the ONE fire worker
+# (`routers/auto_trade.py::_FIRE_EXECUTOR`, max_workers=1) or the scan
+# trigger's thread, and yfinance has no timeout of its own, so a hung call
+# held the worker indefinitely. Each call is abandoned at a deadline (the
+# regime fetch's pattern).
+#
+# Audit round 2, R2-F3: the deadline is PER SOURCE. Round 1 gave one 12s
+# deadline to the whole chain and justified it as "above the 8s Tradier
+# timeout" -- but httpx's timeout is per phase, not a total, so a slow Tradier
+# could spend all 12s and leave yfinance none. Now Tradier gets its own 5s
+# (its httpx timeout sits under that: `market._TRADIER_CALENDAR_HTTP_TIMEOUT`)
+# and yfinance its own 7s, whatever the other did.
+_TRADIER_LOOKUP_DEADLINE_S = 5.0
+_YF_LOOKUP_DEADLINE_S = 7.0
+# Worst case: both sources fail FAST on the first attempt (so both are
+# retried), then both hang on the retry. A source that timed out on the first
+# attempt is not retried, so the realistic bound is one of each, 12s.
+_EARNINGS_LOOKUP_WORST_CASE_S = 2 * (_TRADIER_LOOKUP_DEADLINE_S + _YF_LOOKUP_DEADLINE_S)
 
-    Network-backed (yfinance). Module-level so a test can replace it, which the
-    suite does for every test (tests/conftest.py)."""
-    from app.data.market import _calendar_dates_yf
-    return _calendar_dates_yf(symbol)[0]
+
+class _SourceTimeout(Exception):
+    """One earnings source did not answer within its own deadline."""
+
+
+def _call_source_with_deadline(fn, symbol: str, deadline: float):
+    import concurrent.futures
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(fn, symbol).result(timeout=deadline)
+    except concurrent.futures.TimeoutError:
+        raise _SourceTimeout from None
+    finally:
+        # The abandoned thread keeps running, as the regime fetch's does; it
+        # cannot touch any state the fire reads (only the two same-day caches,
+        # and only with real answers).
+        ex.shutdown(wait=False)
+
+
+def _lookup_earnings_date(symbol: str):
+    """The symbol's next earnings date, or None when every source ANSWERED with
+    no future date. Raises `EarningsLookupError` when no source dated it and at
+    least one FAILED (so the refusal can say "lookup failed", not "none on
+    file"). One source failing while the other dates it is not a failure.
+
+    Audit round 1, F3 + F11 (Kenneth 2026-10-03), and round 2, R2-F3:
+      - the scan's source chain, not yfinance alone: Tradier fundamentals,
+        then yfinance only when Tradier gave no date, each reusing the scan's
+        same-day answer (`market.tradier_next_earnings_date`,
+        `market.yfinance_next_earnings_date`);
+      - EACH SOURCE under its OWN deadline, so a slow Tradier cannot starve
+        yfinance;
+      - ONE retry when the first attempt failed, which re-asks only a source
+        that failed FAST (an error). A source that timed out is skipped -- it
+        would spend its whole deadline again, the starvation this replaced --
+        and one that answered is not re-asked: its answer stands.
+    Bounded by `_EARNINGS_LOOKUP_WORST_CASE_S` (24s).
+    """
+    from app.data import market
+    # Looked up at call time, so a test patch on either module lands.
+    sources = (
+        ("Tradier fundamentals", market.tradier_next_earnings_date, _TRADIER_LOOKUP_DEADLINE_S),
+        ("yfinance calendar", market.yfinance_next_earnings_date, _YF_LOOKUP_DEADLINE_S),
+    )
+    outcome: dict[str, str] = {}     # name -> "answered" | "timeout" | "error"
+    failures: dict[str, str] = {}    # name -> why, for the sources still failed
+    for attempt in range(2):
+        for name, fn, deadline in sources:
+            if attempt == 1 and outcome.get(name) != "error":
+                continue
+            try:
+                found = _call_source_with_deadline(fn, symbol, deadline)
+            except _SourceTimeout:
+                outcome[name] = "timeout"
+                failures[name] = f"{name}: no answer within {deadline:g}s"
+                continue
+            except Exception as exc:  # noqa: BLE001 -- any source fault is a failed lookup
+                outcome[name] = "error"
+                failures[name] = str(exc)
+                continue
+            outcome[name] = "answered"
+            failures.pop(name, None)
+            if found is not None:
+                return found
+        if not failures:
+            return None
+        retry = attempt == 0 and "error" in outcome.values()
+        logger.warning("Event veto: earnings lookup for %s failed (%s)%s", symbol,
+                       "; ".join(failures.values()), "; retrying once" if retry else "")
+        if not retry:
+            break
+    raise market.EarningsLookupError("; ".join(failures.values()))
+
+
+def armed_cap_basis(strategy) -> float:
+    """The per-contract premium an ARMED order is judged at against the D5 cap
+    -- by the fire (`AutoTradeService._check_exposure`) AND by the booking
+    (`auto_trade_booking`, passed to `create_position(cap_basis=...)`).
+
+    Audit round 2, R2-F6: one function on the same armed inputs at both
+    points. The booking used to re-judge at the BOOKING-time live mid plus a
+    live spread the arm never carried, so the gates-off booking could flag
+    `over_exposure` (and page) on an order the fire had just approved. An LMT
+    arm is judged at max(armed mid, limit) at both points -- its fill bound.
+
+    Audit round 3, R3-F1: a MKT arm carries no ask or spread, so the fire
+    judges it at its mid (`portfolio_risk.premium_cap_basis` states that
+    understatement), but a market order fills at the BOOKING-time price, and
+    `POST /auto-trade/fire` has no age bound. The booking therefore judges a
+    MKT arm at max(this basis, the basis derived from the booking-time live
+    quote) -- `create_position(cap_basis_floor=...)` -- so a fill after price
+    drift (or at an ask over the cap) is still flagged `over_exposure`.
+    """
+    from app.services.portfolio_risk import premium_cap_basis
+    return premium_cap_basis(strategy.entry_premium, strategy.order_type, strategy.limit_price)
+
+
+def _fetch_earnings_date(symbol: str):
+    """The symbol's next earnings date, or None when unknown; raises when the
+    lookup failed (see `_lookup_earnings_date`, which this calls).
+
+    Module-level so a test can replace it, which the suite does for every test
+    (tests/conftest.py); tests/test_earnings_lookup_fire.py drives the real
+    lookup underneath it."""
+    return _lookup_earnings_date(symbol)
 
 
 def _apply_event_veto(strategy) -> None:
@@ -2684,8 +2801,11 @@ class AutoTradeService:
             raise
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
+        # Audit round 2, R2-F2: NOT conditional on `entry_premium > 0` any
+        # more. That condition was the one input that switched the D5 cap off;
+        # `_check_exposure` now refuses a non-positive premium itself.
         pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
-        if portfolio_snapshot is not None and strategy.entry_premium > 0:
+        if portfolio_snapshot is not None:
             try:
                 self._check_exposure(strategy, portfolio_snapshot, pv)
             except RuntimeError as exc:
@@ -2891,12 +3011,30 @@ class AutoTradeService:
     def _check_exposure(strategy: ArmedStrategy, portfolio_snapshot: list, portfolio_value: float) -> None:
         """Raise RuntimeError if the armed order would breach exposure caps."""
         from app.services.portfolio_risk import check_position_risk
+        if not strategy.entry_premium > 0:
+            # Audit round 2, R2-F2: FAIL CLOSED. `arm()` and ArmRequest
+            # (gt=0) both refuse this, so only a strategy put in the armed slot
+            # some other way gets here. Not judged at the limit instead: the
+            # booking refuses a zero-premium fire ("no entry premium was
+            # armed"), so a fired order would also be an untracked one.
+            raise RuntimeError(
+                f"Exposure cap cannot be judged: no entry premium was armed "
+                f"({strategy.entry_premium!r})"
+            )
+        # Audit round 1, F1: judged at the price the order can fill at -- the
+        # armed LIMIT when it is above the mid -- not the mid alone. A MKT arm
+        # carries no ask or spread, so it is judged at the mid (see
+        # premium_cap_basis); the arm path posts LMT today. Round 2, R2-F6:
+        # the booking judges an LMT arm at this SAME basis (`armed_cap_basis`);
+        # round 3, R3-F1: a MKT arm at max(this basis, the booking-time fill
+        # basis), so a fill after price drift is still flagged.
+        basis = armed_cap_basis(strategy)
         result = check_position_risk(
             symbol=strategy.symbol,
             contract_id=strategy.option_symbol,
             proposed_contracts=strategy.quantity,
-            entry_premium=strategy.entry_premium,
-            current_price=strategy.entry_premium,
+            entry_premium=basis,
+            current_price=basis,
             portfolio=portfolio_snapshot,
             portfolio_value=portfolio_value,
         )

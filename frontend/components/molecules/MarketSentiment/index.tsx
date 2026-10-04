@@ -6,7 +6,10 @@ import styles from './MarketSentiment.module.css';
 const tone = (pct: number): 'pass' | 'caution' | 'reject' =>
   pct >= 15 ? 'pass' : pct <= -15 ? 'reject' : 'caution';
 
-export function MarketSentiment({ s }: { s: SentimentData | null | undefined }) {
+export function MarketSentiment({ s, compact = false }: {
+  s: SentimentData | null | undefined;
+  compact?: boolean;
+}) {
   if (!s || s.insufficient_data) {
     return (
       <div className={styles.empty}>
@@ -15,7 +18,7 @@ export function MarketSentiment({ s }: { s: SentimentData | null | undefined }) 
     );
   }
   return (
-    <div className={styles.card}>
+    <div className={compact ? `${styles.card} ${styles.compact}` : styles.card}>
       <div className={styles.head}>
         <Text size={12} weight={500}>Market Sentiment</Text>
         <Text size={11} tone="dim">{s.horizon} · {s.timeframe}</Text>

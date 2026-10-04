@@ -159,9 +159,16 @@ def _earnings_veto(card) -> bool:
 
 def _earnings_unknown_caps(card, symbol: str) -> bool:
     """D4 as amended 2026-10-03 (Kenneth): a SINGLE STOCK whose next earnings
-    date is unknown (none on file, or only a past one) is capped at CAUTION --
-    a CAUTION card never auto-fires on the scan, and the fire path refuses it
-    too (`auto_trader._apply_event_veto`). The score is unchanged.
+    date is unknown (none on file, or only a past one) is capped at CAUTION.
+    The score is unchanged.
+
+    THE CAP IS DISPLAY AND RANKING ONLY; IT DOES NOT STOP AN AUTO-FIRE (audit
+    round 1, F7). Nothing on the fire path reads this card: neither
+    `/auto-trade/arm` nor `maybe_fire_on_scan` checks `finalStatus`, so an
+    armed trade fires whatever the next scan grades it. What actually protects
+    auto-fire is the fire path's OWN lookup in `auto_trader._apply_event_veto`,
+    which refuses a single stock whose date it cannot establish. These are not
+    two independent guards -- there is one, at fire time.
 
     An ETF (`app.data.etfs.is_etf`) has no earnings and is never capped. A
     symbol missing from that curated set counts as a stock: the safe direction.
