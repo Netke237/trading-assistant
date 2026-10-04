@@ -44,6 +44,7 @@ Thumbs.db
 # Session / tool metadata (local settings/cache) — but track project-scoped skills so they travel with the repo
 .claude/*
 !.claude/skills/
+!.claude/agents/
 # The SessionStart hook and its registration MUST be tracked: they are how every
 # future session (and Kenneth's second account) gets the project-state check and
 # the dependency install. Ignored, they exist only in whichever container made
