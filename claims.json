@@ -7,20 +7,6 @@
       "expires_at": "2026-10-04T03:54:29Z",
       "note": "Step 6 IV Attractiveness: rule-based component pill + rank (not pctl) label",
       "task": "CONTRACT-IV-PILL-LABEL"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/area3-option-plan-consistency",
-      "claimed_at": "2026-10-04T01:01:14Z",
-      "expires_at": "2026-10-04T04:01:14Z",
-      "note": "User reassigned AREA3; recover published plan and prior audit logs, finish plan and implementation",
-      "previous": [
-        {
-          "branch": "claude/cool-babbage-6i83la",
-          "claimed_at": "2026-10-04T00:21:44Z"
-        }
-      ],
-      "task": "AREA3-OPTION-PLAN-CONSISTENCY"
     }
   ]
 }
