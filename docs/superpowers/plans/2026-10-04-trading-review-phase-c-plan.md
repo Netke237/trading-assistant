@@ -38,13 +38,13 @@ Kenneth answered on 2026-10-04:
 | Task | Title | Blocked by | Files (exclusive within the phase unless noted) |
 |---|---|---|---|
 | T1 | Consistent bar basis in `_read_bars` | — | `backend/app/services/historical_store.py`, `backend/tests/test_historical_store_guard.py` |
-| T2 | Bar-derived cache keys carry a basis version | T1 | `backend/app/data/confidence_cache.py`, `backend/app/routers/stock_scan.py` (cache key only), `backend/tests/test_confidence_cache_basis_version.py` |
+| T2 | Bar-derived cache keys carry a basis version | T1, T7 | `backend/app/data/confidence_cache.py`, `backend/app/routers/stock_scan.py` (cache key only), `backend/tests/test_confidence_cache_basis_version.py` |
 | T3 | Stale adjustment-factor detection and refresh | T1 | `backend/app/services/historical_store.py`, `backend/app/routers/historical_data.py`, `backend/tests/test_adjustment_refresh.py` |
 | T4 | WFO selects and scores on net results | T1 | `backend/app/services/walk_forward.py`, `backend/app/services/strategy_param_optimizer.py`, `scripts/retune_archived_basket.py`, `backend/tests/test_walk_forward.py`, `backend/tests/test_wfo_net_costs.py` |
 | T5 | WFO evidence floor pooled across the basket | T4 | `backend/app/services/strategy_param_optimizer.py`, `backend/config/strategy_params.yaml`, `backend/tests/test_wfo_evidence_floor.py` |
 | T6 | DAY semantics for backtest entry limits | T1 | `backend/app/services/strategy_backtest.py`, `backend/tests/test_backtest_day_limits.py` |
 | T7 | Stock trigger honours `setup_window_bars` | T1 | `backend/app/scoring/stock_scorer.py`, `SCORING_RULES.md`, `backend/tests/test_trigger_setup_window.py` |
-| T8 | Confidence replay de-overlapped | T2, T7 | `backend/app/scoring/signal_confidence.py`, `backend/tests/test_confidence_deoverlap.py` |
+| T8 | **Withdrawn** (plan round 1, F1). The live de-overlap moves to C4; the harness measures it (T11) | — | — |
 | T9 | Options R/R at the full-premium loss basis | — | `backend/app/scoring/reward_risk.py`, `backend/app/scoring/trade_plan.py`, `backend/app/routers/scan.py` (alt R/R call only), `frontend/components/organisms/TradeCard/index.tsx`, `frontend/types/domain.ts`, `frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx`, tests named in the task |
 | T10 | Stocks After-scan auto-execute fires on PASS only | — | `frontend/app/(frame)/screener/step-4-stocks/page.tsx`, its test |
 | T11 | Evidence harness: shared loader + bar-basis check + score calibration | T1, T3 | `scripts/evidence/__init__.py`, `scripts/evidence/_bars.py`, `scripts/evidence/bar_basis_check.py`, `scripts/evidence/score_calibration.py`, `backend/tests/test_evidence_harness.py` |
@@ -57,7 +57,7 @@ Serialisation:
 - T4 and T5 share `strategy_param_optimizer.py`, so they are serial.
 - T11 and T12 share the test file, so they are serial.
 - T9 and T10 are disjoint from everything else and may run in parallel worktrees.
-- T7 touches `stock_scorer.py`, which T8's replay calls, so T8 waits for T7.
+- T2 waits for T7 so the single version bump covers both basis changes that move cached confidence: T1 bars and T7 trigger.
 
 ---
 
@@ -84,7 +84,7 @@ Run them. Tests 1 and 2 must fail (open/high/low unscaled).
 
 **Mechanism today.**
 
-- `confidence_cache` persists in SQLite with a 7-day TTL (`app/data/confidence_cache.py:14,47-80`). Its key is `SYMBOL|direction|horizon|mult|mode` (`:42`). After T1, and later T7 and T8, a cached confidence computed on mixed bars or the old replay would be served for up to 7 days.
+- `confidence_cache` persists in SQLite with a 7-day TTL (`app/data/confidence_cache.py:14,47-80`). Its key is `SYMBOL|direction|horizon|mult|mode` (`:42`). After T1 and T7, a cached confidence computed on mixed bars or the old replay would be served for up to 7 days.
 - `stock_scan._BACKTEST_CACHE` is in memory (24h) and is cleared by a restart, but it is keyed without a version.
 
 **Test first.** `backend/tests/test_confidence_cache_basis_version.py`:
@@ -95,7 +95,7 @@ Run them. Tests 1 and 2 must fail (open/high/low unscaled).
 
 **Code.**
 
-- Add `BARS_BASIS_VERSION = "b2"` in `confidence_cache.py`, with a comment naming T1, T7 and T8 as the reasons it last moved, and append `|{BARS_BASIS_VERSION}` to `cache_key`.
+- Add `BARS_BASIS_VERSION = "b2"` in `confidence_cache.py`, with a comment naming T1 and T7 as the reasons it last moved, and append `|{BARS_BASIS_VERSION}` to `cache_key`.
 - In `stock_scan.py`, add the same token to the backtest cache key.
 - Old rows expire naturally. No migration and no delete.
 
@@ -105,22 +105,34 @@ Run them. Tests 1 and 2 must fail (open/high/low unscaled).
 
 **Mechanism today.** `adj_factor` is the provider's `adjClose/close` **as of the fetch date** (`data/tiingo.py:50`, `data/alpaca.py:109`).
 
-- The nightly Alpaca ingestion re-fetches the whole window and upserts (`ingestion_job.py:108-138`).
-- Rows stored by `get_bars`' delta fetch, or gap-filled by Tiingo or yfinance, are never re-fetched.
-- So after a later ex-date, the older rows' factors are stale. In a consistent fetch the factor steps only at ex-dates, inside one batch. A stale series shows a factor step between two **consecutive rows from different fetch batches** while the raw close is continuous.
+- The nightly Alpaca ingestion re-fetches the whole window for every symbol Alpaca returns and upserts (`ingestion_job.py:108-138`), so those rows are refreshed nightly.
+- Symbols Alpaca does not return are gap-filled through `get_bars`, which fetches only `last+1 .. end` (`historical_store.py:375-379`).
+- So rows stored in **earlier batches** keep the factor they had when they were fetched.
 
-**Test first.** `backend/tests/test_adjustment_refresh.py`, in-memory SQLite:
+**There is no single stale signature.** Plan round 1, F3: a "factor step at a batch boundary" misses the commonest case. Daily one-row batches each fetch a factor of ≈ 1.0, and a split or ex-date arriving as the first row of a new batch leaves no factor step anywhere. Detection therefore flags a symbol if **any** of these holds:
 
-1. `find_stale_adjustment(symbol, db)` returns `None` for a series stored in one `_store_bars` call (one `fetched_at`), even when it contains a dividend step in `adj_factor`.
-2. It returns the earliest stored date when two consecutive rows have **different `fetched_at` dates** and `abs(adj_next / adj_prev − 1) > 1e-4`.
-   - Construct it with two `_store_bars` calls with factors 0.98 and 1.0, monkeypatching `_utcnow` so the `fetched_at` values differ.
-3. `refresh_adjustments(["SYM"], fetch=fake)` calls `fake(symbol, first_stored_date, last_stored_date)` once for a stale symbol and zero times for a clean one, and upserts the returned bars, so afterwards `find_stale_adjustment` is `None`.
-4. Refresh never deletes rows: the row count is the same before and after.
-5. `POST /api/historical/refresh-adjustments` with `{"symbols": ["SYM"]}` returns `{"checked": 1, "stale": [...], "refreshed": [...], "failed": [...]}`, using the app test client with the fetch monkeypatched.
+- **(a) Unexplained jump.** The **adjusted** close (`raw × factor`, or raw when the factor is NULL) moves more than `_JUMP_THRESHOLD = 0.40` close-to-close. A consistent series absorbs a split into the factor, so a 40% adjusted move left in the series is either a real crash or a missed split. Re-fetching a real crash is harmless.
+- **(b) Fetched before a later corporate action.** A row's `fetched_at` date is earlier than the date of a later row with `div_cash ≠ 0` or `split_factor ≠ 1` (Tiingo rows carry both).
+- **(c) Batch-boundary factor step.** Two consecutive rows have different `fetched_at` dates and `abs(adj_next / adj_prev − 1) > 1e-4`.
+- **(d) Mixed basis in one series.** NULL-factor rows sit next to non-NULL rows, or more than one `source` appears, for example yfinance's pre-adjusted rows next to raw Alpaca/Tiingo rows.
+
+**Residual, recorded rather than fixed.** A dividend-only staleness on a yfinance-only or Alpaca-sourced series between nightly refreshes has no detectable signature, and its effect is the size of one dividend (usually < 1%). T11's report lists it.
+
+**Test first.** `backend/tests/test_adjustment_refresh.py`, in-memory SQLite. Use `_store_bars` once per batch and monkeypatch `_utcnow` so `fetched_at` differs between batches.
+
+1. A series stored in one batch, containing a dividend step in `adj_factor`, is **not** flagged.
+2. **(a)** Daily one-row batches, all with factor 1.0, plus a raw ×8 jump on the first row of a later batch (a GE 2021-08-02 style reverse split) are flagged.
+3. **(b)** Daily one-row batches, all with factor 1.0, followed by a later Tiingo row with `div_cash 0.5`: every earlier row is flagged, and the earliest flagged date is the first row.
+4. **(c)** Two batches with factors 0.98 and 1.0 at the boundary and a continuous raw close are flagged.
+5. **(d)** NULL-factor rows followed by factored rows are flagged; a series with sources `yfinance` and `alpaca` is flagged.
+6. A real 15% move in one batch with factor 1.0 is not flagged.
+7. `refresh_adjustments(["SYM"], fetch=fake)` calls `fake(symbol, first_stored_date, last_stored_date)` once for a flagged symbol and zero times for a clean one, and upserts the result. Afterwards, with the fake returning one consistent batch, the symbol is not flagged.
+8. Refresh never deletes rows: the row count is the same before and after.
+9. `POST /api/historical/refresh-adjustments` with `{"symbols": ["SYM"]}` returns `{"checked": 1, "stale": [{"symbol", "reasons", "earliest"}], "refreshed": [...], "failed": [...]}`, using the app test client with the fetch monkeypatched.
 
 **Code** in `historical_store.py`:
 
-- `async def find_stale_adjustment(symbol, db) -> date | None`: one ordered SELECT of `(date, adj_factor, fetched_at)`, skipping NULL factors, comparing consecutive rows.
+- `async def find_stale_adjustment(symbol, db) -> StaleReport | None`: one ordered SELECT of `(date, close, adj_factor, split_factor, div_cash, source, fetched_at)`, then a pure `stale_reasons(rows) -> StaleReport | None`. `StaleReport` has `reasons: list[str]` (a subset of `jump`, `pre_action_fetch`, `batch_step`, `mixed_basis`) and `earliest: date`. The pure function carries the rules, so T11 reuses it.
 - `async def refresh_adjustments(symbols, fetch=None) -> dict`:
   - For each stale symbol, re-fetch `[first_stored_date, last_stored_date]` through the same provider order `get_bars` uses (Alpaca → Tiingo → yfinance). Factor the provider chain out of `get_bars` into `_fetch_chain(symbol, start, end)`; `get_bars` behaviour must stay identical (its existing tests must pass unchanged).
   - Store through `_store_bars` (upsert).
@@ -249,23 +261,19 @@ A one-line comment explains that live entries are DAY orders, so a limit lives f
 
 **Code.** A helper `_crossed_within(series_prev_cur_predicate, n, W)` or three small loops. The window is bounded by the series length. Keep `detail` keys unchanged, and add `"setup_window_bars": W` to `detail`. Update `SCORING_RULES.md` trigger section, one line: "`setup_window_bars`: a momentum event counts if it occurred within the last N bars and its state still holds."
 
-**Suite.** Scores move on fixtures where an event happened 2 to W bars ago. Re-pin those under the global rule and list them. This also moves `signal_confidence` replays (T8 runs after T7).
+**Suite.** Scores move on fixtures where an event happened 2 to W bars ago. Re-pin those under the global rule and list them. This also moves `signal_confidence` replays (the live confidence gate re-scores through `score_stock`), which is why T2's cache-version bump waits for T7.
 
 **Commit:** `feat(scorer): count momentum events within setup_window_bars (Phase C T7, review M4)`
 
-## T8 — Confidence replay de-overlapped (Phase-B #11)
+## T8 — Withdrawn (plan round 1, F1)
 
-**Mechanism today.** `compute_confidence` (`signal_confidence.py:264-285`) scores every bar `i`. Consecutive PASS bars share most of the same `n_days` forward window, so one move is counted up to `n_days` times and `decisive` overstates the sample.
+De-overlapping the **live** confidence replay is **not** done in this phase. `aggregate` returns `confidence=None` when `decisive < min_samples` (`signal_confidence.py:150-151`), and `status_cap(None)` returns **PASS** (`:175-179`). The stock scan's REJECT drop and CAUTION cap both skip a None (`routers/stock_scan.py:1326-1338`).
 
-**Test first.** `backend/tests/test_confidence_deoverlap.py`:
+- `min_samples: 20` was calibrated on overlapping counts.
+- On the options window (~306 bars) a Swing replay yields at most ~23 non-overlapping fires, and a Position replay at most ~5.
+- So de-overlap would turn the gate off and promote REJECT/CAUTION candidates to PASS.
 
-1. Monkeypatch `score_stock` to return PASS on every bar, with `n_days = 10` and 100 replay bars after warm-up. The number of `evaluate_fire` calls is `ceil(100 / 10)` (non-overlapping), not 100.
-2. With PASS only on bars `{70, 72, 85}` and `n_days = 10`, fires are evaluated at 70 and 85, and 72 is skipped.
-3. `aggregate` is unchanged. Re-run the existing `tests/test_signal_confidence*.py`; any count-based pins that move are re-pinned under the global rule.
-
-**Code.** In the loop, keep `next_allowed = warmup`. Skip `i < next_allowed`. After a PASS fire at `i`, set `next_allowed = i + n_days`. The comment explains that each fire's forward window `bars[i+1 : i+1+n_days]` must not overlap the next. Scoring is skipped for `i < next_allowed`, which also makes the replay faster.
-
-**Commit:** `fix(confidence): replay fires on non-overlapping forward windows (Phase C T8)`
+Fixing it needs either a de-overlapped `min_samples` (a threshold, so Kenneth's decision) or a None → CAUTION fail-closed policy. Both are C4 decisions. T11's calibration harness reports the non-overlapping sample counts per horizon, so Kenneth decides on numbers.
 
 ## T9 — Options R/R at the full-premium loss basis (fixes M7, D5)
 
@@ -292,7 +300,11 @@ A one-line comment explains that live entries are DAY orders, so a limit lives f
    - With `protective_stop_order=True`, the result equals today's value: compute the expected value in the test from `resolved_risk_dollars`.
 2. The same pair for `estimate_targets(...)[i].rrContribution`.
 3. `build_trade_plan` (`trade_plan.py`) passes no flag, so its `rr_ratio` uses the full premium and `premium_stop` is still `premium × 0.60`.
-4. Frontend, `TradeCard` test (find the existing test file for `TradeCard`): when a target is edited, `rrContribution` uses `entryLimit` as the risk basis, not `premiumStop`. Today `index.tsx:3351` passes `premiumStop`.
+4. Frontend, `TradeCard` tests (find the existing test files for `TradeCard`). Plan round 1, F2: `index.tsx:3351` serves **every** row without an `authoritativeRr`, not only edited ones. `authoritativeRr` is passed only when `hasCapturedStockRisk && !rrStale` and the entry limit and premium stop are unedited (`:3221`). Otherwise the row divides by `ladderRisk` (`:1853`), which is `overlay.premiumStop` or `min(premiumStop, capturedStockRisk)`. Tests, all on the full-premium basis (risk leg = `overlay.entryLimit`):
+   - (i) an **un-edited** row on a card with **no** `stockStopLoss`: premium 2.00, estimate 3.50 → 0.8 (today 1.3);
+   - (ii) an edited target row;
+   - (iii) a card with a captured stock risk after the entry limit is edited;
+   - (iv) `rrStale` true.
 5. Frontend, the step-7 context-rail checklist row: with `rrRiskBasis: 'full_premium'`, the detail text says "risking the full premium (no protective stop order)".
 
 **Code.**
@@ -305,8 +317,9 @@ A one-line comment explains that live entries are DAY orders, so a limit lives f
   - `routers/contracts.py:1128,1172` use `estimate_rr` only for `estimated_exit_premium`. Confirm that by reading the code, and leave them unchanged. If either reads `rr_ratio`, stop and report a plan defect.
 - Frontend:
   - `types/domain.ts:666` union gains `'full_premium'`.
-  - The `TradeCard` edited-target path divides by `entryLimit`.
-  - Update the comment at `index.tsx:129-131` accordingly.
+  - `TradeCard`: `ladderRisk` becomes `overlay.entryLimit` (the full premium at the overlay's own entry). It no longer reads `premiumStop` or `capturedStockRisk` for R/R. `authoritativeRr` passes the backend's `rrContribution` only while the entry limit is unedited. The stock-stop conditions are no longer relevant because the backend no longer uses that basis.
+  - The `premiumStop` **field** itself (the editable alert level) is unchanged.
+  - Update the comment at `index.tsx:129-131`, the comment at `:3214-3218`, and the caption at `:3202-3204`, which becomes: "R/R risk: full premium (no protective stop order)." Keep the `rrStale` caption only if `rrStale` still changes anything; it does not for R/R, so remove that branch from the caption only.
   - The step-7 rail text gains the third branch.
 - The schema for `rrRiskBasis` in `backend/app/schemas` (find it with `grep -n rrRiskBasis backend/app/schemas`) gains the literal.
 
@@ -347,14 +360,15 @@ A one-line comment explains that live entries are DAY orders, so a limit lives f
 - `scripts/evidence/_bars.py`: `async load_bars(symbols, start, end) -> dict[str, list[dict]]`, plus `report_header(...)`.
 - `scripts/evidence/bar_basis_check.py`:
   - Per symbol, the share of bars with `close ∉ [low, high]` or `open ∉ [low, high]`.
-  - Per symbol, `find_stale_adjustment` (T3).
+  - Per symbol, T3's pure `stale_reasons(rows)` on the full row set from a read-only SELECT. It lists the reasons and the earliest date, plus the documented dividend-only residual.
   - Close-to-close jumps above 40%.
   - Pure core: `basis_violations(bars) -> dict`, `big_jumps(bars, threshold) -> list`.
 - `scripts/evidence/score_calibration.py`:
   - For each symbol, horizon (CLI, default Swing) and direction, replay `score_stock` over bars, as `compute_confidence` does.
   - For every bar, the status bucket (PASS / CAUTION / REJECT).
   - The forward outcome in R, using `evaluate_fire`'s barriers (horizon `atr_mult_target/stop`, `n_days`): win = +target/stop R, loss = −1R, flat = the close-to-close move ÷ stop distance at the window end.
-  - **Distinct setups only**, using the same non-overlap rule as T8, applied per bucket.
+  - **Distinct setups only.** After a counted bar `i` in a bucket, the next counted bar in that bucket is ≥ `i + n_days`, so forward windows never overlap.
+  - **Also report**, per horizon and direction, the confidence replay's sample count both ways: overlapping (today's `compute_confidence` rule) and non-overlapping, against `min_samples`. This is the number Kenneth needs for the C4 decision that T8's withdrawal deferred.
   - Output per bucket: n, mean R, bootstrap 95% CI (2,000 resamples, fixed seed 7), plus the all-bars base rate.
   - Pure core: `calibrate(bars_by_symbol, horizon, direction, scorer=score_stock) -> list[BucketStat]`.
 
