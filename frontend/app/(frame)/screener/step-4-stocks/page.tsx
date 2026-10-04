@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
-import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
@@ -87,6 +87,21 @@ const BADGE_CLASS: Record<RegimeFit, string> = {
   REJECT:  styles.regimeBadgeReject,
 };
 
+/** The panel's slice of the saved scan params. One list, used by the
+ *  selector, Reset and the post-hydration sync, so they cannot drift. */
+function panelParamsOf(s: ScanParams): StrategyParams {
+  return {
+    pullbackTolerancePct: s.pullbackTolerancePct, pullbackEmaPeriod: s.pullbackEmaPeriod,
+    pullbackTrendEma: s.pullbackTrendEma, pullbackMaType: s.pullbackMaType,
+    maCrossoverFast: s.maCrossoverFast, maCrossoverSlow: s.maCrossoverSlow,
+    maCrossoverLookback: s.maCrossoverLookback, breakoutVolumeMult: s.breakoutVolumeMult,
+    rsiPeriod: s.rsiPeriod, rsiOversold: s.rsiOversold, rsiTrendSma: s.rsiTrendSma,
+    requireChoppyRegime: s.requireChoppyRegime ?? false,
+    btMinTrades: s.btMinTrades, btMinWinRate: s.btMinWinRate,
+    eventFilter: s.eventFilter, stockShortlistMax: s.stockShortlistMax,
+  };
+}
+
 export default function Step4StocksPage() {
   const context        = useScanStore((s) => s.context);
   const direction      = context?.direction ?? 'Bullish';
@@ -102,16 +117,7 @@ export default function Step4StocksPage() {
   const previous       = useScanStore((s) => s.previousStockScanResult);
   const scanState      = useScanStore((s) => s.scanState);
 
-  const savedParams = useScanParamsStore(useShallow((s) => ({
-    pullbackTolerancePct: s.pullbackTolerancePct, pullbackEmaPeriod: s.pullbackEmaPeriod,
-    pullbackTrendEma: s.pullbackTrendEma, pullbackMaType: s.pullbackMaType,
-    maCrossoverFast: s.maCrossoverFast, maCrossoverSlow: s.maCrossoverSlow,
-    maCrossoverLookback: s.maCrossoverLookback, breakoutVolumeMult: s.breakoutVolumeMult,
-    rsiPeriod: s.rsiPeriod, rsiOversold: s.rsiOversold, rsiTrendSma: s.rsiTrendSma,
-    requireChoppyRegime: s.requireChoppyRegime ?? false,
-    btMinTrades: s.btMinTrades, btMinWinRate: s.btMinWinRate,
-    eventFilter: s.eventFilter, stockShortlistMax: s.stockShortlistMax,
-  })));
+  const savedParams = useScanParamsStore(useShallow(panelParamsOf));
   const scanOverrides   = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
 
@@ -134,6 +140,16 @@ export default function Step4StocksPage() {
   useEffect(() => setMounted(true), []);
 
   const [params, setParams] = useState<StrategyParams>(() => ({ ...savedParams }));
+  // If this page mounts before useScanParamsStore finishes rehydrating from
+  // localStorage (skipHydration: true — see StoreHydration), the useState
+  // initializer captures the store's module defaults instead of the persisted
+  // params. Sync once hydration actually finishes (moved from Step 5, which
+  // fixed this as Critical finding #8, 2026-07-15 audit).
+  useEffect(() => {
+    const sync = () => setParams(panelParamsOf(useScanParamsStore.getState()));
+    if (useScanParamsStore.persist.hasHydrated()) sync();
+    return useScanParamsStore.persist.onFinishHydration(sync);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
@@ -307,7 +323,7 @@ export default function Step4StocksPage() {
       <StrategyParamsPanel
         params={params}
         setParams={setParams}
-        onReset={() => setParams({ ...savedParams })}
+        onReset={() => setParams(panelParamsOf(useScanParamsStore.getState()))}
       />
 
       {activeStrategy === 'mean_reversion_multi' && (
