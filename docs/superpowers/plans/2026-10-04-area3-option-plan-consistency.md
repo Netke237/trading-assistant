@@ -1,6 +1,6 @@
 # AREA3-OPTION-PLAN-CONSISTENCY — implementation plan
 
-Status: PLAN, unaudited. Branch `claude/cool-babbage-6i83la`. Claim `AREA3-OPTION-PLAN-CONSISTENCY`.
+Status: Implemented on `codex/area3-option-plan-consistency`; plan authorized round4 clean, backend code round3 clean, frontend code round2 clean. Original owner/audit history below is preserved. Exact source, checks and remaining network/legacy limitations: [AREA3 worklog](area3-worklogs/AREA3-OPTION-PLAN-CONSISTENCY.md). No main merge or deployment.
 
 Origin: the area-3 (options contract selection) review rated CAUTION with four Medium
 findings. This target closes findings 1, 2 and 3. Finding 4 (spreads) is

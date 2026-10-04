@@ -172,3 +172,38 @@ round2 (same cap3; no counter reset). Typecheck passed; amendment3 suites48
 checks plus2 suites259 tests passed. Source changes are only risk-basis text,
 comment and equivalent named constants. Final full frontend before amendment:
 192 suites/4612 tests passed; final-source full rerun remains due.
+
+### Final AREA3 closeout — 2026-10-04
+
+Frontend code round2 fresh reviewer `/root/area3_frontend_audit_r2` reviewed
+exact `22da4b52c211238ecd5bff0356cec6e9dcc96eb3..246b48533ad6b3289187cd3fd99875df04b51b81`
+and amendment interactions; both skills and canonical gate applied. Zero gate
+findings; independently5 suites/307 tests passed. Backend remains clean at3/3;
+frontend clean at2/3. No fourth code round or reset. Plan's authorized extra
+round remains separate and original capped evidence is preserved.
+
+Final production source commit `246b48533ad6b3289187cd3fd99875df04b51b81`:
+- Full frontend:192 suites/4619 tests passed; typecheck passed.
+- Full backend from backend cwd, Python3.11.16:4895 passed/1 skipped/2 failed,
+  606.19s. Both failures are shortlist ranking/trim-count with unmocked Yahoo
+  CONNECT403. Trim expected7 names but got2, identical to isolated latest-main
+  dff659c6 reproduction. Ranking expectedSYM09/08/07 but gotSYM04/03/02 during
+  full suite; ranking passes isolated main. Both failures are also documented
+  in unchanged-main component landing verification. No full-backend-green claim.
+  Existing asyncio/aiosqlite teardown warnings remain; no out-of-scope rewrite.
+- Final-source environment-only mocked-font production build: compilation,
+  lint/type checks and30 static routes passed. Normal build remains blocked by
+  Google Fonts policy; no source/dependency/font configuration changed for mock.
+- Original legacy scans keep their old R/R basis until a fresh scan. A contract
+  recompute lacking targetSource omits its old flat target and uses the new
+  multiple. Black-Scholes-at-today stock risk vs hold-horizon target repricing
+  is the user's accepted asymmetry. Absent captured stock loss retains legacy
+  premium-only path. R/R thresholds remain UNMEASURED; spreads/measurement
+  targets are outside this task. No exact-font/populated live-session acceptance.
+
+Implementation and evidence are pushed on `codex/area3-option-plan-consistency`.
+No AREA3 canonical task entry exists on latest main; no unrelated/global JSON
+entry was created or overwritten. User's original presentation instruction
+permits only the own integration entry mutation, deferred to that closeout.
+Claim release follows successful push; source is available for the original
+presentation integration. No deployment, merge into main or orders.
