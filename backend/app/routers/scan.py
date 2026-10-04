@@ -1101,7 +1101,7 @@ async def _process_symbol(
                 stock_price=price,
                 strike=strike,
                 dte=int(contract.get("dte", 30)),
-                premium=premium,
+                premium=round(premium, 2),
                 is_call=(direction == "Bullish"),
                 # ALWAYS None -- invert this contract's OWN mid with the
                 # bracketed solver, which is compute_stop_cost's normal basis.
@@ -1359,7 +1359,7 @@ async def _process_symbol(
             try:
                 alt_cost = compute_stop_cost(
                     stop_price=round(_stock_stop.price, 2), stock_price=price,
-                    strike=alt_strike, dte=int(alt_c["dte"]), premium=alt_premium,
+                    strike=alt_strike, dte=int(alt_c["dte"]), premium=round(alt_premium, 2),
                     is_call=direction == "Bullish", iv_pct=None, horizon_preset=horizon_preset,
                 )
                 if alt_cost is not None:

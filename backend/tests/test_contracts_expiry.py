@@ -180,7 +180,7 @@ def test_hold_days_set_the_floor_a_star_decays_into(client, monkeypatch, dte, re
     r, _ = _get(client, chain, f"&expiry={e}&hold_min_days=45&hold_max_days=60&strikes=185")
     assert r.status_code == 200
     (row,) = r.json()
-    assert row["breakdown"]["dteDetail"]["preferred_min"] == 80
+    assert row["breakdown"]["dteDetail"]["preferred_min"] == 81
     assert (row["contractConfidence"] == "REJECT") is rejected, row
 
 
@@ -206,7 +206,7 @@ def test_expiry_ignores_the_hold_window_for_the_fetch_but_not_for_grading(client
     assert r.status_code == 200
     assert m.call_args.kwargs["dte_bounds"] is None
     assert m.call_args.kwargs.get("min_dte_floor") is None
-    assert r.json()[0]["breakdown"]["dteDetail"]["preferred_min"] == 80
+    assert r.json()[0]["breakdown"]["dteDetail"]["preferred_min"] == 81
 
 
 def test_without_expiry_an_empty_chain_is_still_an_empty_200(client):

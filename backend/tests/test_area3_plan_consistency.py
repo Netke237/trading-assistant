@@ -91,3 +91,21 @@ def test_captured_dollar_risk_and_visible_option_price_agree(premium,stop):
         browser_rr=round((row.estimatedOptionPrice-premium)/min(plan.premium_stop,plan.stock_stop_loss),2)
         assert row.rrContribution == browser_rr
     assert plan.rr_ratio == plan.targets[0].rrContribution
+
+
+@pytest.mark.parametrize('mid,target',[(.195,101),(1.235,101.5),(5.005,105.99)])
+def test_captured_half_cent_mid_matches_serialized_premium(mid,target):
+    from app.scoring.stop_cost import compute_stop_cost
+    canonical=round(mid,2)
+    cost=compute_stop_cost(stop_price=99.5,stock_price=100,strike=105,dte=45,premium=canonical,is_call=True)
+    assert cost is not None
+    args=dict(direction='Bullish',stock_price=100,strike=105,dte=45,entry_bid=mid-.005,entry_ask=mid+.005,entry_mid=mid,rr_cfg={'premium_stop_pct':.6},final_stop_price=99.5,target_price=target,stop_cost_fraction=cost.fraction)
+    original=build_trade_plan(premium=mid,**args)
+    replay=build_trade_plan(premium=canonical,**args)
+    assert original.targets == replay.targets
+    assert original.rr_ratio == replay.rr_ratio
+    assert original.stock_stop_loss == replay.stock_stop_loss
+    assert original.entry.limit_price == canonical
+    for row in original.targets:
+        ratio=(row.estimatedOptionPrice-canonical)/min(original.premium_stop,original.stock_stop_loss)
+        assert row.rrContribution == pytest.approx(ratio,abs=.005000001)

@@ -146,6 +146,9 @@ def build_trade_plan(
     invalidation_price = max(float(final_stop_price), 0.01)
 
     entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid)
+    # Captured plans price the cents midpoint that is displayed and replayed.
+    if captured_stock_risk(premium, stop_cost_fraction) is not None:
+        premium = round(premium, 2)
 
     rr = estimate_rr(
         stock_price=stock_price,

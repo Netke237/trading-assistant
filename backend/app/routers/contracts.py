@@ -528,7 +528,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     if req.final_stop is not None:
         cost = compute_stop_cost(
             stop_price=round(req.final_stop.price, 2), stock_price=req.stock_price,
-            strike=req.strike, dte=req.dte, premium=req.premium,
+            strike=req.strike, dte=req.dte, premium=round(req.premium, 2),
             is_call=req.direction == "Bullish", iv_pct=None, horizon_preset=req.horizon_preset,
         )
         if cost is not None:

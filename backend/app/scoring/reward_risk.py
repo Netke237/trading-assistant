@@ -124,6 +124,8 @@ def estimate_rr(
     risk_fraction: float | None = None,
     reprice_years: float | None = None,   # remaining_years_at_barrier(...); None = historical half-life
 ) -> RrResult:
+    if captured_stock_risk(current_premium, risk_fraction) is not None:
+        current_premium = round(current_premium, 2)
     model_used: RrModel
     heston_ok = False
     dte_at_target = reprice_years if reprice_years is not None else _default_reprice_years(expiry_years)
@@ -189,6 +191,9 @@ def estimate_targets(
     premium_stop_pct: premium risk ceiling; a valid risk_fraction can lower it.
     """
     from app.schemas import TargetLevel as TargetLevelSchema, PricingMethod
+
+    if captured_stock_risk(current_premium, risk_fraction) is not None:
+        current_premium = round(current_premium, 2)
 
     move = abs(base_target_price - stock_price)
     direction_sign = 1 if base_target_price > stock_price else -1
@@ -365,7 +370,7 @@ def estimate_targets(
 def captured_stock_risk(premium: float, risk_fraction: float | None) -> float | None:
     """Cents-valued stop loss published to the card; sub-cent zero is unmeasured."""
     if risk_fraction is not None and math.isfinite(risk_fraction) and risk_fraction > 0:
-        amount = round(premium * risk_fraction, 2)
+        amount = round(round(premium, 2) * risk_fraction, 2)
         if amount > 0:
             return amount
     return None
