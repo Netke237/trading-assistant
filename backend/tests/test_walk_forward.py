@@ -170,8 +170,10 @@ def test_optimizer_builds_proposal_shape():
         fold_winners=[{"ema_period": 50, "trend_ema": 200}],
         fold_test_returns=[0.05, 0.02, -0.01],
         in_sample_return=30.0, walk_forward_return=12.0,
+        # Re-pinned by TRADING-REVIEW-PHASE-C T5: eligibility also needs n_symbols >= min_symbols (3).
         oos_metrics={"sharpe": 0.8, "expectancy": 0.3, "win_rate": 0.55,
-                     "total_return": 12.0, "max_drawdown": -8.0, "n_trades": 40},
+                     "total_return": 12.0, "max_drawdown": -8.0, "n_trades": 40,
+                     "n_symbols": 3},
         min_trades=20,
     )
     assert prop["proposed"]["ema_period"] == 50

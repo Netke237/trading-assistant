@@ -95,8 +95,10 @@ def test_empty_training_winner_cannot_inflate_proposal_evidence(monkeypatch):
         search_space={"ema_period": [20]}, costs={"fee_pct": 0, "slippage_pct": 0},
         min_trades=20, min_consistency=0.5,
     )
+    # Re-pinned by TRADING-REVIEW-PHASE-C T5: oos_metrics gains n_trades_per_symbol and n_symbols (pooled floor).
     assert proposal["oos_metrics"] == {
-        "n_trades": 1, "total_return": 3.0, "sharpe": 0.25,
+        "n_trades": 1, "n_trades_per_symbol": 1, "n_symbols": 1,
+        "total_return": 3.0, "sharpe": 0.25,
         "win_rate": 0.5, "expectancy": 0.1, "max_drawdown": -2.0,
     }
     assert proposal["eligible"] is False

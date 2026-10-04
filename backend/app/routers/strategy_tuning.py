@@ -84,6 +84,7 @@ async def _run_optimization_job(job_id: str) -> None:
             direction=store.get_direction(),
             min_trades=opt_cfg.get("min_trades", 20),
             min_consistency=opt_cfg.get("min_consistency", 0.5),
+            min_symbols=opt_cfg.get("min_symbols", 3),
         )
         _JOBS[job_id].update(status="completed", proposals=proposals)
         _evict_old_jobs(store.get_job_retention().get("max_completed", 100))

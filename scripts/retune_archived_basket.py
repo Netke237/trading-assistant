@@ -304,7 +304,8 @@ def run(args):
                     warnings.simplefilter('always')
                     proposal = optimizer._optimize_strategy_sync(strategy, direction, basket, folds, search, costs,
                                                                cfg.get('optimization', {}).get('min_trades', 20),
-                                                               cfg.get('optimization', {}).get('min_consistency', .5))
+                                                               cfg.get('optimization', {}).get('min_consistency', .5),
+                                                               cfg.get('optimization', {}).get('min_symbols', 3))
                 oos_diagnostics.add('warnings', [f'{w.category.__name__}: {w.message}' for w in observed])
                 if proposal is None:
                     skipped[strategy] = 'all production training-fold winners empty'
