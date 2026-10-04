@@ -145,7 +145,7 @@ export default function Step5Page() {
   const evCaution = eventWindow?.caution_days ?? null;
   const ivOverride = avail === 'ready' ? ivOverrideFor(horizonKey, ivFetched, ivOverrides) : null;
 
-  // The volatility figure behind each row is EITHER a true percentile
+  // The volatility figure behind each row is EITHER an IV rank
   // (`ivRank`, present only when IBKR or tastytrade answered) OR an absolute
   // implied volatility (`iv`), and each is judged by its own threshold set
   // (PHASE-A-NULL-IVRANK-2026-09-06). Thresholds are therefore resolved
@@ -371,7 +371,7 @@ export default function Step5Page() {
       // attributions over 21 rows -- while the same 10 overlapping rows with 9
       // unreadable ones printed the cue. The overlap was byte-identical; two
       // unrelated rows removed the warning. On this app that is the COMMON
-      // case, because a true percentile needs IBKR or tastytrade to answer.
+      // case, because an IV rank needs IBKR or tastytrade to answer.
       const driven = count((g) => (g.drivers.iv && !g.drivers.ivMissing) || g.drivers.event);
       causesPart = { list: causes, overlap: sum > driven };
     }

@@ -927,7 +927,7 @@ def _rule_vol(
     iv_rank: float | None,
     cfg: dict,
     *,
-    # Which quantity iv_rank holds: "rank" (a true percentile),
+    # Which quantity iv_rank holds: "rank" (an IV rank),
     # "absolute" (IV 0-100), or "none". Defaults to "absolute" because that is
     # what every pre-2026-09-06 caller was in fact passing -- raw IV x 100
     # written into a field named for a percentile.
@@ -953,7 +953,7 @@ def _rule_vol(
     # ── Options mode: volatility ─────────────────────────────────────────────
     # `iv_basis` says WHICH QUANTITY `iv_rank` holds, and therefore which
     # thresholds may judge it (PHASE-A-NULL-IVRANK-2026-09-06):
-    #   "rank"     -- a true percentile from IBKR/tastytrade -> iv_rank_* keys
+    #   "rank"     -- an IV rank from IBKR/tastytrade -> iv_rank_* keys
     #   "absolute" -- absolute IV 0-100 from Tradier or the BS inversion
     #                 -> iv_abs_* keys, which carry the numbers this rule has
     #                    actually been applying all along
@@ -974,7 +974,7 @@ def _rule_vol(
         # `iv_basis` is carried even here. Not scoring the figure does not stop
         # it being RENDERED: _safe(VolDetail, ...) keeps `iv_rank`, and
         # volDetailText prints it. Omitting the basis let VolDetail's default
-        # answer instead, which reads "absolute" -- so a true percentile from a
+        # answer instead, which reads "absolute" -- so an IV rank from a
         # rank source printed as "IV 45%" rather than "IV Rank 45" whenever the
         # horizon left iv_rank_pass_max unset. Same mislabel as
         # PHASE-A-NULL-IVRANK-2026-09-06, pointing the other way.

@@ -651,7 +651,7 @@ export const useScanStore = create<ScanStoreState>()(
           };
         }
         if (version < 13) {
-          // Phase A split `ivRank` (a true percentile) from `iv` (the absolute
+          // Phase A split `ivRank` (an IV rank) from `iv` (the absolute
           // level). A blob stored before that carries one number of unknown
           // basis under the percentile's name, and rehydrating it prints
           // "IV rank 45" for a 45% absolute IV on the card the user acts from

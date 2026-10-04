@@ -66,7 +66,7 @@ function sortContracts(
   return rows;
 }
 
-/** The IV cell. Shows a TRUE PERCENTILE when one exists and an ABSOLUTE
+/** The IV cell. Shows an IV RANK when one exists and an ABSOLUTE
  *  implied volatility otherwise, and says which — the two are different
  *  quantities and printing one under the other's name is the defect Phase A
  *  exists to fix (PHASE-A-NULL-IVRANK-2026-09-06). Most chains have no rank

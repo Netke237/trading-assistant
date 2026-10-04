@@ -20,7 +20,7 @@ def get_iv_thresholds() -> dict:
               a percentile -- the default configuration -- and it carries the
               34/55 and 44/65 numbers this gate has in fact been applying all
               along.
-      rank_*  judge a TRUE PERCENTILE. UNMEASURED: seeded from the absolute
+      rank_*  judge an IV RANK. UNMEASURED: seeded from the absolute
               set, and nobody has checked whether a percentile deserves the
               same cut-offs.
 
