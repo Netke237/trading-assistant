@@ -2087,6 +2087,27 @@ export function TradeCard({
     onMethodPickChange?.(next);
   }, [onMethodPickChange]);
 
+  // Same authoritative rows and stricter availability gate as the selector.
+  // A race premium is NEVER promoted into a stock price, and the existing stop
+  // basis survives this shortcut just as it survives a selector method change.
+  const racePickOption = methodPickOptions.find((o) => o.method === 'barrier_race');
+  const selectRaceTarget = (targetPct: number) => {
+    if (!racePickOption || racePickOption.unavailable != null) return;
+    const row = racePickOption.rows.find((r) => r.key === `race-${targetPct}`);
+    if (!row) return;
+    applyMethodPick({
+      method: 'barrier_race',
+      rowStockPrice: row.rowStockPrice,
+      rowOptionPrice: row.rowOptionPrice,
+      stopBasis: methodPick?.stopBasis ?? 'stock',
+      pickedAt: new Date().toISOString(),
+    });
+  };
+  const selectedRaceTarget = methodPick?.method === 'barrier_race'
+    ? firstPassage?.race?.outcomes.find((o) =>
+      methodPick.rowStockPrice === null && methodPick.rowOptionPrice === o.targetOptionPrice)?.targetPct ?? null
+    : null;
+
   /** §6.1 — "picking a method whose numbers then go stale clears the pick".
    *
    *  STATED AS "THE PICKED METHOD IS NO LONGER SELECTABLE", which is wider than
@@ -3155,6 +3176,8 @@ export function TradeCard({
           isFresh={estimateIsFresh}
           barriersChanged={raceBarriersMoved}
           stockStopMoved={stockStopMoved}
+          onSelectTarget={racePickOption?.unavailable == null ? selectRaceTarget : undefined}
+          selectedTargetPct={selectedRaceTarget}
         />
 
         <CollapsibleSection

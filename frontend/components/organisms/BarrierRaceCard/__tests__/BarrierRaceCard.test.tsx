@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
 import { formatRaceRR, formatRaceEdge } from '@/lib/barrierRace';
@@ -579,5 +579,29 @@ describe('the inline disclosure', () => {
       <BarrierRaceCard race={null} premiumStopFromField premiumStopField={PREMIUM_STOP_FIELD} isFresh />,
     );
     expect(refused.container.querySelector('details')).toBeNull();
+  });
+});
+
+
+describe('controlled race shortcut', () => {
+  it('has no action for shared callers unless explicitly supplied', () => {
+    renderCard();
+    expect(screen.queryByRole('button', { name: /Use Barrier Race/ })).not.toBeInTheDocument();
+  });
+
+  it('emits only the target identity and renders the controlled selection', () => {
+    const onSelectTarget = jest.fn();
+    renderCard({ onSelectTarget, selectedTargetPct: 0.35 });
+    expect(screen.getByRole('button', { name: 'Use Barrier Race T35%' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Use Barrier Race T20%' }));
+    expect(onSelectTarget).toHaveBeenCalledWith(0.2);
+  });
+
+  it.each([
+    { race: null }, { race: undefined }, { isFresh: false },
+    { barriersChanged: true }, { barriersChanged: true, stockStopMoved: true },
+  ])('retains refusal/freshness early returns with a callback: %p', (props) => {
+    renderCard({ ...props, onSelectTarget: jest.fn() });
+    expect(screen.queryByRole('button', { name: /Use Barrier Race/ })).not.toBeInTheDocument();
   });
 });

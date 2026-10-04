@@ -154,3 +154,21 @@ presentation assertions passed, pairing qualification with original bars/results
 and verifying page/standalone market ownership. Initial new test used a guessed
 missing-state string; corrected to actual retained source text, no product fix.
 Checkpoint A awaits independent code audit before further dependent composition.
+
+Checkpoint A reviewed exact `cbef99eba59b0d33dfc9160787a9946989556ddb..71ab258a95f53e44523b2407ab6504b32682040c` by fresh independent `presentation_a_audit_r1`: zero gate findings, second-pass scope verified. Independent151 TradeCard plus9 qualification/panel tests passed and diff check clean. Round1/3 closes A only; no acceptance claim for later composition.
+
+### Checkpoint B — controlled race-row shortcut
+
+BarrierRaceCard gains optional controlled target selection, default absent for
+shared callers. Buttons render inside existing target cells only after original
+refusal/freshness/changed-barrier early returns; no new wide outcome column.
+TradeCard resolves the exact existing barrier_race methodPickOptions row and
+checks its unavailable gate both before supplying the callback and on click.
+It calls original applyMethodPick, preserving current stopBasis (stock default),
+original option price, null stock price and current ISO timestamp. No pricing,
+formatter, stop monitoring, lastRunMethod, evaluator or order changes.
+
+Typecheck and209 tests across BarrierRaceCard, TradeCard and method-pick suites
+passed, including absent actions for all early-return states, controlled row
+identity, premium-basis retention, selector equivalence and contract transition.
+Checkpoint B awaits fresh independent review; no audit-clean claim yet.

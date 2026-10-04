@@ -15,6 +15,10 @@ import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
 import styles from './BarrierRaceCard.module.css';
 
 export interface BarrierRaceCardProps {
+  /** Controlled shortcut; the owner supplies it only while its existing method
+   *  availability gate is clear. No method or stop state lives in this card. */
+  onSelectTarget?: (targetPct: number) => void;
+  selectedTargetPct?: number | null;
   /** `undefined` while nothing has been run, `null` when the simulation was
    *  refused (dte < 1). The two render differently and neither renders bars. */
   race: BarrierRace | null | undefined;
@@ -95,6 +99,8 @@ export default function BarrierRaceCard({
   stockStopMoved = false,
   stopCostShown = false,
   invalidation = null,
+  onSelectTarget,
+  selectedTargetPct = null,
 }: BarrierRaceCardProps) {
   if (race === null) {
     return (
@@ -304,6 +310,17 @@ export default function BarrierRaceCard({
                       <div className={styles.targetCell}>
                         <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
                         <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
+                        {onSelectTarget && (
+                          <button
+                            type="button"
+                            className={styles.selectTarget}
+                            aria-label={`Use Barrier Race T${Math.round(o.targetPct * 100)}%`}
+                            aria-pressed={selectedTargetPct === o.targetPct}
+                            onClick={() => onSelectTarget(o.targetPct)}
+                          >
+                            {selectedTargetPct === o.targetPct ? 'Selected' : 'Use target'}
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className={styles.splitCell}><StackedBar o={o} /></td>
