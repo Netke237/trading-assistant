@@ -35,7 +35,7 @@
 | F6 | Step 4 passes its local `selected` as `strategyKey` to `StockPositionCard` → `StockAutoTradeArm`, which calls `api.addStrategyWatch(symbol, strategyKey, direction)`. Selecting another card after a scan therefore arms a **persisted strategy watch with a strategy the row was not scanned with**. Pre-existing; Q5 makes it easier to hit. | `step-4-stocks/page.tsx:472`, `StockPositionCard/index.tsx:1362-1368`, `StockAutoTradeArm/index.tsx:40` |
 | F7 | `scanStore.stockScanRequest` holds the exact body of the run whose result is on screen (A5), including `strategy`. | `lib/scanStore.ts:393, 576`, `lib/resolveStockScanRequest.ts:110` |
 | F8 | `ScreenerStepGate` bounces any `step-*` slug not in the active mode's list to that mode's index-4 step — **only if the route exists**; a deleted folder is a Next 404 before the gate runs. | `ScreenerStepGate/index.tsx:97-114` |
-| F9 | `StepNavBar` renders `STEP {current} OF {steps.length}` from `getSteps(mode)`; page headers hard-code "STEP n OF 7". | `StepNavBar/index.tsx:27,119`; `step-4-stocks/page.tsx:264`, `step-6-backtest/page.tsx:111`, `step-7-position-card/page.tsx:186` |
+| F9 | `StepNavBar` renders `STEP {current} OF {steps.length}` from `getSteps(mode)`; page headers hard-code "STEP n OF 7". **`current` is the slug digit** (`currentStepFromPath`, regex `step-(\d)`), and both `StepNavBar` (`prev = steps[current - 2]`, `next = steps[current]`, the counter) and `Stepper` (completed/current highlighting vs `s.index`) use it. That is correct today only because every list's slug digit equals its `index`. | `Stepper/index.tsx:58-62,67-74`; `StepNavBar/index.tsx:24,31-32,119`; `step-4-stocks/page.tsx:264`, `step-6-backtest/page.tsx:111`, `step-7-position-card/page.tsx:186` |
 | F10 | Two `state.py` PRESENCE probes point at `step-5-strategy/page.tsx`: phase `A5B-STEP5-SHARED-REQUEST` (`buildStockScanRequestBody\(\{`) and `A5D-STEP5-READABLE-SCAN-ERROR` (`STOCK_SCAN_SETTINGS_INVALID`). Deleting the page makes `state.py` exit non-zero. | `PROJECT_STATE.json` `phases[37].verify`, `phases[50].verify` |
 | F11 | Step 5 tests: `a5bSharedRequest` (T1 parity, T2–T5 literal pins), `a5dReadableScanError` (T1–T5), `p3aScanSizing` (also covers `runStockScan`, Analysis, Pre-Breakout). | `step-5-strategy/__tests__/` |
 | F12 | Stepper test pins the Stocks list at 7 slugs incl. `step-5-strategy`. `ScreenerStepGate` tests use `/screener/step-5-strategy` as a **cross-mode** path in prebreakout mode — still valid after this change (it is still a `step-*` slug not in that mode's list). | `Stepper/__tests__/Stepper.test.tsx:36-45`, `ScreenerStepGate/__tests__/*` |
@@ -59,7 +59,8 @@
 | `frontend/app/(frame)/screener/step-4-stocks/__tests__/readableScanError.test.tsx` | Create (ported from `a5dReadableScanError`) | F2 page-level pins |
 | `frontend/app/(frame)/screener/step-5-strategy/page.tsx` | Replace with a redirect | Keeps old links working |
 | `frontend/app/(frame)/screener/step-5-strategy/page.module.css`, `__tests__/` | Delete (after ports land) | — |
-| `frontend/components/organisms/Stepper/index.tsx` + test | Modify | Stocks list = 6 steps |
+| `frontend/components/organisms/Stepper/index.tsx` + test | Modify | Stocks list = 6 steps; `currentStepFromPath(pathname, steps)` resolves the step by slug in the active list |
+| `frontend/components/organisms/StepNavBar/index.tsx` + test | Modify | Passes the active list to `currentStepFromPath`; Stocks-mode Back/Next pins |
 | `frontend/app/(frame)/screener/step-6-backtest/page.tsx`, `step-7-position-card/page.tsx` | Header/empty-state text | Correct step numbers |
 | `docs/superpowers/PROJECT_STATE.json`, `CLAUDE.md`, two code comments | Modify | Records + docs |
 
@@ -266,8 +267,9 @@ git commit -m "fix(stock-scan): runStockScan shows the readable saved-settings m
 - Test (create): `frontend/app/(frame)/screener/step-4-stocks/__tests__/pickerSelection.test.tsx`
 
 **Interfaces:**
-- Consumes: `useScanStore` `activeStrategy`, `setActiveStrategy`, `stockScanRequest`, `lastStockScanStrategy`.
-- Produces: Step 4 has **no local `selected` state**; selection == `scanStore.activeStrategy`. `StockPositionCard` receives `strategyKey = stockScanRequest?.strategy ?? lastStockScanStrategy ?? ''`.
+- Consumes: `useScanStore` `activeStrategy`, `setActiveStrategy`, `stockScanRequest`; the candidate's own `strategy.strategy` (`PositionCardData.strategy`, `types/stockDomain.ts:5,23`).
+- Produces: Step 4 has **no local `selected` state**; selection == `scanStore.activeStrategy`. `StockPositionCard` receives `strategyKey = stockScanRequest?.strategy ?? c.strategy.strategy` (the row's own scanned strategy; for single strategies it equals the request key, for multi the backend sets `mean_reversion_multi`).
+- **Never** fall back to `lastStockScanStrategy` (plan audit P1-F1): it is refreshed on every load from the backend's last request, which can be another tab's/device's scan or a still-running one, and `StoreHydration` leaves `stockScanRequest` null precisely when that last request's `scan_id` differs from the result on screen.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -344,14 +346,15 @@ it('the position card gets the strategy the rows were scanned with, not the curr
   expect(mockCardProps).toHaveBeenLastCalledWith(expect.objectContaining({ strategyKey: 'pullback_ema' }));
 });
 
-it('falls back to lastStockScanStrategy when no request is on record', () => {
+it("with no request on record, uses the row's own strategy, never a mismatching lastStockScanStrategy (P1-F1)", () => {
   useScanStore.setState({
+    activeStrategy: 'breakout_base',
     stockScanResult: { scan_id: 'S', timestamp: 't', candidates: [CANDIDATE], rejected: [] },
     stockScanRequest: null, lastStockScanStrategy: 'ma_crossover',
   } as never);
   render(<Step4StocksPage />);
   fireEvent.click(screen.getByText('AAPL').closest('button')!);
-  expect(mockCardProps).toHaveBeenLastCalledWith(expect.objectContaining({ strategyKey: 'ma_crossover' }));
+  expect(mockCardProps).toHaveBeenLastCalledWith(expect.objectContaining({ strategyKey: 'pullback_ema' }));
 });
 ```
 Before running, check `CANDIDATE` against `PositionCardData` in `types/stockDomain.ts` and `computeStockDeltas`/`splitStockRejected` inputs; add any field the page reads so the row renders.
@@ -359,22 +362,29 @@ Before running, check `CANDIDATE` against `PositionCardData` in `types/stockDoma
 - [ ] **Step 2: Run, expect FAIL**
 
 Run: `npm run test -- --testPathPattern=step-4-stocks/__tests__/pickerSelection`
-Expected: tests 1, 2 and 3 FAIL (selection is local; the card gets the selection). Test 4 FAILs too (strategyKey is `''` when nothing is selected).
+Expected: tests 1, 2 and 3 FAIL (selection is local; the card gets the selection). Test 4 FAILs too (the card gets the local selection, initialised from `activeStrategy` = `breakout_base`, not the row's `pullback_ema`).
 
 - [ ] **Step 3: Implement** in `step-4-stocks/page.tsx`:
 
 ```tsx
   const activeStrategy    = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
-  // The strategy the rows on screen were scanned with — NOT the current
-  // selection, which can change after the scan. StockAutoTradeArm persists a
-  // strategy watch with this key, so it must name the scan's strategy.
-  const scannedStrategy = useScanStore((s) => s.stockScanRequest?.strategy ?? s.lastStockScanStrategy ?? '');
+  // The request of the run whose rows are on screen (A5). With the row's own
+  // strategy as fallback, this is StockPositionCard's strategyKey below.
+  const scannedRequestStrategy = useScanStore((s) => s.stockScanRequest?.strategy ?? null);
+```
+and at the `StockPositionCard` render (inside the candidate map; check the row variable's real name at L472):
+```tsx
+  // The strategy this row was scanned with: NOT the current selection, which
+  // can change after the scan, and NOT lastStockScanStrategy, which can name
+  // another tab's or device's scan (plan audit P1-F1). StockAutoTradeArm
+  // persists a strategy watch with this key.
+  strategyKey={scannedRequestStrategy ?? c.strategy.strategy}
 ```
 - Delete `const [selected, setSelected] = useState<string | null>(activeStrategy);` and replace every `selected` with `activeStrategy` (L189, L282, L310, L330, L332, L334).
 - Card `onClick={() => setActiveStrategy(s.key)}`.
 - `onRun`: `if (!activeStrategy) return; … runStockScan(activeStrategy, params)`.
-- `<StockPositionCard … strategyKey={scannedStrategy} />`.
+- `<StockPositionCard … strategyKey={scannedRequestStrategy ?? c.strategy.strategy} />` (as above).
 
 - [ ] **Step 4: Run, expect PASS**; then run `scanFailureMessage`, `autoExecute.methodPickExempt`, `RunScanButton` and `searchProfile` suites:
 
@@ -599,7 +609,7 @@ git commit -m "test: move Step 5's request and sizing pins onto runStockScan / S
 ### Task 6: Remove Step 5 from the Stocks path (Q6, Q7, F8, F9, F12)
 
 **Files:**
-- Modify: `frontend/components/organisms/Stepper/index.tsx:32-40`, `Stepper/__tests__/Stepper.test.tsx:36-45`
+- Modify: `frontend/components/organisms/Stepper/index.tsx:32-40,58-74`, `Stepper/__tests__/Stepper.test.tsx:36-45`, `frontend/components/organisms/StepNavBar/index.tsx:22-32` + its test
 - Replace: `frontend/app/(frame)/screener/step-5-strategy/page.tsx`
 - Delete: `step-5-strategy/page.module.css`, `step-5-strategy/__tests__/a5bSharedRequest.test.tsx`, `a5dReadableScanError.test.tsx`
 - Modify: header/empty-state text in `step-4-stocks/page.tsx:264-271`, `step-6-backtest/page.tsx:83,111`, `step-7-position-card/page.tsx:118,186`
@@ -644,7 +654,29 @@ export const SCREENER_STEPS_STOCKS: ScreenerStep[] = [
   { index: 6, slug: 'step-7-position-card', label: 'Position'      },
 ];
 ```
-Before this edit, grep for any consumer that derives a step from its **slug number** rather than `index` (`grep -rn "slug.match\|step-(\\\\d" frontend/components frontend/lib frontend/app`) and list them in the commit body; the gate uses `index === 4`, which still resolves to `step-4-stocks`.
+**Step-from-slug fix (plan audit P1-F2), required.** After renumbering, `step-6-backtest` is index 5 and `step-7-position-card` index 6, but `currentStepFromPath` returns the slug digit (6, 7). Without this fix, on Backtest `prev` is Backtest itself and Next is disabled ("Done"), the counter reads "STEP 6 OF 6" / "STEP 7 OF 6", and the Stepper highlights the wrong step. Change `Stepper/index.tsx`:
+
+```ts
+/** The current step's 1-based INDEX in `steps`, resolved by slug in the active
+ *  mode's list: the slug digit and the index differ in Stocks mode since Step 5
+ *  was merged into Step 4 (STOCKS-STEP-MERGE-S1). Falls back to the slug digit
+ *  only for a slug not in the list (e.g. a cross-mode path before
+ *  ScreenerStepGate bounces it), which is what every caller got before. */
+export function currentStepFromPath(pathname: string | null, steps?: ScreenerStep[]): number {
+  if (!pathname) return 1;
+  const m = pathname.match(/\/screener\/(step-[^/?#]+)/);
+  if (!m) return 1;
+  const hit = steps?.find((s) => s.slug === m[1]);
+  if (hit) return hit.index;
+  const d = m[1]!.match(/^step-(\d)/);
+  return d ? parseInt(d[1]!, 10) : 1;
+}
+```
+Pass the list at both call sites: in `Stepper` and in `StepNavBar`, move `const steps = getSteps(mode);` above `current` and use `currentStepFromPath(pathname, steps)`. Add to the failing tests of Step 1:
+- `Stepper.test.tsx`: `currentStepFromPath('/screener/step-6-backtest', SCREENER_STEPS_STOCKS)` is `5`; `'/screener/step-7-position-card'` is `6`; `('/screener/step-6-contracts', SCREENER_STEPS_OPTIONS)` is `6`; with no list, the slug digit (unchanged behaviour).
+- StepNavBar test, Stocks mode (`screenerMode: 'stocks'`): on `/screener/step-6-backtest` the counter reads `STEP 5 OF 6`, Back pushes `/screener/step-4-stocks`, Next pushes `/screener/step-7-position-card`; on `/screener/step-7-position-card` the counter reads `STEP 6 OF 6`, Back pushes `/screener/step-6-backtest`, Next is disabled. Mirror the existing StepNavBar tests' router/pathname mocks.
+
+Then grep for any other consumer that derives a step from the slug number (`grep -rn "currentStepFromPath\|step-(\\d" frontend --include=*.ts --include=*.tsx`); each one found must also pass the list. List them in the commit body. The gate uses `index === 4`, which still resolves to `step-4-stocks`.
 
 `step-5-strategy/page.tsx` (whole file, server component):
 ```tsx
@@ -669,12 +701,12 @@ Delete the two Step 5 tests and the CSS:
 git rm "frontend/app/(frame)/screener/step-5-strategy/page.module.css" "frontend/app/(frame)/screener/step-5-strategy/__tests__/a5bSharedRequest.test.tsx" "frontend/app/(frame)/screener/step-5-strategy/__tests__/a5dReadableScanError.test.tsx"
 ```
 
-- [ ] **Step 4: Run** `npm run test -- --testPathPattern="Stepper|ScreenerStepGate|step-5-strategy|StepNavBar"` → PASS. Then full `npm run typecheck` and `npm run test`; grep the remaining tests for `step-5-strategy` and `STEP 5 OF 7`/`STEP 6 OF 7`/`STEP 7 OF 7` in Stocks pages and fix any assertion that pinned the old text.
+- [ ] **Step 4: Run** `npm run test -- --testPathPattern="Stepper|ScreenerStepGate|step-5-strategy|StepNavBar|KeyboardShortcuts"` → PASS. Then full `npm run typecheck` and `npm run test`; grep the remaining tests for `step-5-strategy` and `STEP 5 OF 7`/`STEP 6 OF 7`/`STEP 7 OF 7` in Stocks pages and fix any assertion that pinned the old text.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A "frontend/components/organisms/Stepper" "frontend/app/(frame)/screener"
+git add -A "frontend/components/organisms/Stepper" "frontend/components/organisms/StepNavBar" "frontend/app/(frame)/screener"
 git commit -m "feat(screener): Stocks path is 6 steps; Step 5 redirects to the Step 4 strategy picker"
 ```
 
@@ -711,7 +743,7 @@ git commit -m "docs: Stocks path is 6 steps; re-point A5b/A5d probes to runStock
 
 - [ ] **Step 1:** `npm run typecheck` and `npm run test` from `frontend/` — record the suite/test counts.
 - [ ] **Step 2:** Run the app (`run` skill / `.claude/launch.json`) and check by hand, in Stocks mode:
-  1. The stepper shows 6 steps; Step 4 reads "STEP 4 OF 6 — Strategy".
+  1. The stepper shows 6 steps; Step 4 reads "STEP 4 OF 6 — Strategy"; on Backtest and Position, Back/Next and the arrow keys go to the neighbouring Stocks steps and the nav counter matches the page header.
   2. Clicking a card highlights it without scanning; the floating Run button on Step 3 then runs that strategy.
   3. Run Stock Scan works; results, inline card, auto-execute toggle and Send basket behave as before.
   4. After a scan, select a different card, open a row: the card's "Watch SYMBOL — strategy" button names the **scanned** strategy.
@@ -729,4 +761,4 @@ git commit -m "docs: Stocks path is 6 steps; re-point A5b/A5d probes to runStock
 - **Spec coverage:** Q1 (stage split) — Global Constraints + Task 0; Q2 — Tasks 1, 3, 4; Q3 — unchanged Step 4 behaviour, pinned by Task 2 test 1; Q4 — Step 4 already conditional (L310), kept; Q5 — Task 2; Q6 — Task 6; Q7 — Task 6 redirect; Q8–Q12 — recorded in Task 0 for Stage 2, explicitly out of scope here. Kenneth's "lose nothing": every Step-5-only item in F2–F4 has a task; Step 5's "always-visible multi panel" is intentionally changed by Q4; Step 5's click-to-run is intentionally changed by Q3; Step 5's auto-navigation to Backtest is intentionally deferred to Stage 2 (Q8).
 - **Known behaviour change beyond the decisions:** the readable settings message now also reaches the Step 1–3 floating Run button's toast (it shares `runStockScan`). It is the same message Step 5 already showed, on the same condition.
 - **Placeholders:** none. Three steps say "check X first" (riskStore default, `PositionCardData` fields, `@/` alias for `app/`); each names the file to read and what to do with the answer.
-- **Type/name consistency:** `panelParamsOf`, `HistoryPrefetchRow`, `scannedStrategy`, `settingsUnreadable`, `building` are each defined once and used under the same name; the Task 7 probe pattern `settingsUnreadable \? STOCK_SCAN_SETTINGS_INVALID` matches the Task 1 code line.
+- **Type/name consistency:** `panelParamsOf`, `HistoryPrefetchRow`, `scannedRequestStrategy`, `settingsUnreadable`, `building` are each defined once and used under the same name; the Task 7 probe pattern `settingsUnreadable \? STOCK_SCAN_SETTINGS_INVALID` matches the Task 1 code line.
