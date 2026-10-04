@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T02:59:02Z",
       "note": "CORE presentation only; latest main contains trading-review and verified leaves; no live overlap claim",
       "task": "TRADE-CARD-UI-CORE"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/options-explanation-fixes",
+      "claimed_at": "2026-10-04T00:05:17Z",
+      "expires_at": "2026-10-04T03:05:17Z",
+      "note": "Finish authorized unified Options takeover audit and evidence",
+      "task": "OPTIONS-VOL-EVENTS-EXPLANATIONS"
     }
   ]
 }
