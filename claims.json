@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T16:48:48Z",
       "note": "Document Stock and Pre-Breakout design decisions before mockup approval and implementation",
       "task": "STOCK-DESIGN-GRILLING"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/trade-card-presentation-integration",
+      "claimed_at": "2026-10-04T15:41:02Z",
+      "expires_at": "2026-10-04T18:41:02Z",
+      "note": "User-authorized main merge and own integration merged-state closeout",
+      "task": "TRADE-CARD-PRESENTATION-STATE"
     }
   ]
 }
