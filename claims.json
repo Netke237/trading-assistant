@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T03:35:55Z",
       "note": "Area-3 options: DTE floor hold_max+21, exit-plan T1 target, R/R risk=min(premium stop, structural loss), R-multiple override, Step7 checklist row",
       "task": "AREA3-OPTION-PLAN-CONSISTENCY"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/contract-iv-pill-label",
+      "claimed_at": "2026-10-04T00:54:29Z",
+      "expires_at": "2026-10-04T03:54:29Z",
+      "note": "Step 6 IV Attractiveness: rule-based component pill + rank (not pctl) label",
+      "task": "CONTRACT-IV-PILL-LABEL"
     }
   ]
 }
