@@ -313,3 +313,37 @@ method and race regions; the historical D1200 blocker is now resolved by E.
 520 entries reconciled against current source hashes/regions;141 TradeCard and
 129 page existing function ASTs still match assembled baseline. Final D audit
 remains pending; no overall clean or completion claim is made yet.
+
+### Final D clearance and canonical closeout
+
+Fresh independent reviewer /root/presentation_d_final_audit_r1: D round1/3
+clean, zero gate findings after second adversarial re-check. Exact frozen HEAD
+31d5bcb096c105b499dc19b87dba909ef68a5012 against assembled baseline
+939839924d436ae01a85704b46c7ce7edf93751d; includes D page CSS
+e937b8e1..c0fcc141b8d00ea687d8f2a9147a90a16cc074d8 and all final evidence,
+composed A/B/C/E interactions and latest-main shared shell. Unrelated Stocks
+implementation excluded. Scope verified:520 ordered original items/groups,54
+valid source regions,25 source-file hashes, suite paths and all141+129 existing
+callback ASTs. Independently239 tests across6 suites, typecheck/state/diffcheck,
+15 production preservation assertions,5 override assertions, all8 width/theme
+cases and native125% both themes passed; all5 test/build/backend log hashes match.
+Reviewer traced original AutoTradeArm predicate/pending suppression, one portal
+selector, race freshness/price units, qualification inputs, disclosures and
+unchanged order/persistence callbacks. No invented spread gate. No gate fixes,
+no outstanding findings or non-gate findings; remote-font limitation remains.
+
+Post-E author browser reruns also passed all five committed case scripts; exact
+logs /tmp/integration-resumed-browser-{cases,override,expired,spread,evidence}.log.
+No order/arm/fire/save requests. Temporary duplicate screenshot names introduced
+in d732562d were removed by31d5bcb0, which replaced the original30 captures.
+
+All five composition stages A/B/C/E/D independently clean at1/3 each; assembly
+separately1/3 clean. Initial failed D service call counts0 qualifying reviews.
+No cap reset/fourth audit. Integration source finished on branch, not merged.
+At15:08UTC took TRADE-CARD-PRESENTATION-STATE lock, fetched main
+e4d4d80ef6ae16ac8fc6eaca3a53e6d1c88846bf; canonical was exactly latest main.
+Only own task entry updated. UI/score/qualification completed branch deltas and
+context/barrier/external/AREA3 evidence recorded inside own dependency record;
+other task entries and all unrelated JSON compare exactly equal to main.
+Final typecheck/state/diffcheck and push/release follow this closeout record.
+No deploy, merge into main or orders.

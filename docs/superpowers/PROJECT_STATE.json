@@ -4612,19 +4612,193 @@
           "frontend/components/molecules/MethodPickSelector/**",
           "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/**"
         ],
-        "owner": "agent",
-        "status": "not_started",
-        "implementation": "not_started",
+        "owner": "codex/trade-card-presentation-integration",
+        "status": "completed_on_branch",
+        "implementation": "implemented_code_audited_clean_not_merged",
         "claim_required": true,
         "plan": "docs/superpowers/plans/2026-10-03-trade-card-presentation-plan.md",
         "handoff": "docs/superpowers/plans/2026-10-03-trade-card-parallel-handoff.md",
         "code_audit": {
-          "rounds": 0,
-          "clean": false
+          "rounds": 5,
+          "clean": true,
+          "round_count_basis": "Five independently clean composition stages, each1/3; separate prerequisite assembly1/3. Failed original D reviewer performed no review and counts0.",
+          "stages": [
+            {
+              "stage": "A",
+              "rounds": 1,
+              "cap": 3,
+              "clean": true,
+              "gate_findings_by_round": [
+                0
+              ],
+              "fixes": 0,
+              "outstanding_gate_findings": 0,
+              "reviewer": "/root/presentation_a_audit_r1",
+              "reviewed_diff": "cbef99eba59b0d33dfc9160787a9946989556ddb..71ab258a95f53e44523b2407ab6504b32682040c",
+              "scope_verified": true,
+              "second_pass_verified": true
+            },
+            {
+              "stage": "B",
+              "rounds": 1,
+              "cap": 3,
+              "clean": true,
+              "gate_findings_by_round": [
+                0
+              ],
+              "fixes": 0,
+              "outstanding_gate_findings": 0,
+              "reviewer": "/root/presentation_b_audit_r1",
+              "reviewed_diff": "71ab258a95f53e44523b2407ab6504b32682040c..87e45af7d6b779c36623e076723f9175ed8c927c",
+              "scope_verified": true,
+              "second_pass_verified": true
+            },
+            {
+              "stage": "C",
+              "rounds": 1,
+              "cap": 3,
+              "clean": true,
+              "gate_findings_by_round": [
+                0
+              ],
+              "fixes": 0,
+              "outstanding_gate_findings": 0,
+              "reviewer": "/root/presentation_c_audit_r1",
+              "reviewed_diff": "87e45af7d6b779c36623e076723f9175ed8c927c..e937b8e1cd9b1eb82af5b0812c90668acb628ac6",
+              "scope_verified": true,
+              "second_pass_verified": true
+            },
+            {
+              "stage": "E",
+              "rounds": 1,
+              "cap": 3,
+              "clean": true,
+              "gate_findings_by_round": [
+                0
+              ],
+              "fixes": 0,
+              "outstanding_gate_findings": 0,
+              "reviewer": "/root/presentation_minwidth_audit_r1",
+              "reviewed_diff": "d49dc5b6dd474e8010353a4adb0a7974e93935d8..765bf49152fd118bcca1d3c6f2c9802d7bbe578b",
+              "scope_verified": true,
+              "second_pass_verified": true
+            },
+            {
+              "stage": "D",
+              "rounds": 1,
+              "cap": 3,
+              "clean": true,
+              "gate_findings_by_round": [
+                0
+              ],
+              "fixes": 0,
+              "outstanding_gate_findings": 0,
+              "reviewer": "/root/presentation_d_final_audit_r1",
+              "reviewed_diff": "939839924d436ae01a85704b46c7ce7edf93751d..31d5bcb096c105b499dc19b87dba909ef68a5012",
+              "scope_verified": true,
+              "second_pass_verified": true
+            }
+          ],
+          "evidence": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-PRESENTATION-INTEGRATION.md"
         },
         "coordination": "Only documented presentation/provenance work; shared state lock required; live claim ledger overrides stale backlog status.",
         "test_scope": "Named focused tests inside owned dirs or pre-existing relevant test files; exact additional test paths require reconciliation with shared owners before edits.",
-        "readiness": "blocked_on_all_five_internal_tasks_and_dependency_audits"
+        "readiness": "ready_for_review_not_merged",
+        "branch": "codex/trade-card-presentation-integration",
+        "source_commit": "765bf49152fd118bcca1d3c6f2c9802d7bbe578b",
+        "reviewed_head": "31d5bcb096c105b499dc19b87dba909ef68a5012",
+        "worklog": "docs/superpowers/plans/trade-card-worklogs/TRADE-CARD-PRESENTATION-INTEGRATION.md",
+        "scope_extension": {
+          "authorization": "User continue after explicit Step7-only1200 exception question,2026-10-04",
+          "paths": [
+            "frontend/components/MinWidthGate/index.tsx",
+            "frontend/components/MinWidthGate/__tests__/MinWidthGate.test.tsx"
+          ],
+          "behavior": "Exact Options Step7 route1200; every other route retains1280. Stateful children retain original lifecycle."
+        },
+        "dependency_verification": {
+          "assembly_reviewer": "/root/presentation_dependency_audit",
+          "assembly_rounds": 1,
+          "clean": true,
+          "source_diff": "454d84c6..93983992",
+          "documentation_through": "cbef99eba59b0d33dfc9160787a9946989556ddb",
+          "ownership": "All prerequisites released before integration claim; no claim taken on their tasks.",
+          "state_reconciliation": "UI/score/qualification canonical entries remain unchanged. Their completed branch-only deltas are reconciled here without replacing main JSON.",
+          "tasks": [
+            {
+              "id": "TRADE-CARD-UI-CORE",
+              "branch": "codex/trade-card-ui-core",
+              "published_head": "505551bdf911f27346d4c60b569609625553c4db",
+              "verified_branch_state": "implemented; two clean independent audits;403 tests/typecheck; released",
+              "integrated_commits": [
+                "fab1a9de",
+                "93983992"
+              ]
+            },
+            {
+              "id": "TRADE-CARD-SCORE-EVIDENCE",
+              "branch": "codex/trade-card-score-evidence",
+              "published_head": "0fb354ecc82316036d285f8eb057be04f9a17b43",
+              "verified_branch_state": "implemented; two clean audits;314 backend214 frontend; released",
+              "integrated_commits": [
+                "2ffa9315",
+                "179523f3"
+              ],
+              "deduplication": "Used qualification-carried identical patches once."
+            },
+            {
+              "id": "TRADE-CARD-QUALIFICATION-PRESENTATION",
+              "branch": "codex/trade-card-qualification-presentation",
+              "published_head": "030a2a198c8a9a07d023b57069f469fb3cca0546",
+              "verified_branch_state": "implemented; two clean audits;87 focused tests/typecheck; released",
+              "integrated_commits": [
+                "0a1df7be",
+                "ab87be3a"
+              ]
+            },
+            {
+              "id": "TRADE-CARD-CONTEXT-CARDS",
+              "branch": "codex/trade-card-context-cards",
+              "published_head": "727f1b3defb95335349f60f100a2a973b02caf7e",
+              "implementation_commit": "739afd1fc8c3247475579538c4e4182ffd61315a",
+              "verified_state": "merged main; original and landing audits clean; ownership released"
+            },
+            {
+              "id": "TRADE-CARD-BARRIER-PRESENTATION",
+              "branch": "claude/zen-newton-o3ix8qe5049f43",
+              "implementation_commit": "51342019",
+              "verified_state": "merged main via076a5a80; original and landing audits clean; ownership released"
+            },
+            {
+              "id": "OPTIONS-CONTRACT-EXPLANATIONS",
+              "implementation_commit": "e1751e15",
+              "verified_state": "merged audited main; correction/landing ledger and10000-card parity verified; IV correction0a6cffb0 retained"
+            },
+            {
+              "id": "AREA3-OPTION-PLAN-CONSISTENCY",
+              "branch": "codex/area3-option-plan-consistency",
+              "source_commit": "246b48533ad6b3289187cd3fd99875df04b51b81",
+              "closeout_commit": "454d84c6",
+              "verified_state": "backend3/3 clean; frontend2/3 clean; ownership released; recovered overlap completed separately"
+            }
+          ]
+        },
+        "validation": {
+          "frontend": "199 suites4664 tests passed; typecheck passed; production build30 routes passed",
+          "backend": "Python3.11.16:147 relevant parity +102 contract explanation/repricing tests passed",
+          "information_entries": 520,
+          "existing_function_ast_parity": {
+            "TradeCard": 141,
+            "Step7_page": 129
+          },
+          "browser": "1200/1366/1440/1920 both themes; native125% physical1920/CSS1536 both themes; legacy/refusal/override/contract-switch/race freshness cases passed",
+          "evidence_directory": "docs/superpowers/plans/trade-card-worklogs/presentation-integration-evidence",
+          "limitations": [
+            "Remote Google font metrics unverified; visual checks/build use warmed environment-only local font mock cache.",
+            "Earlier AREA3 full-backend network-dependent failures remain recorded;249 relevant parity checks do not certify that full suite."
+          ],
+          "external_actions": "No deploy, merge into main, orders, arm/fire or position-save requests."
+        }
       }
     ]
   },
