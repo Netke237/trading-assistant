@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "codex/options-explanation-fixes",
-      "claimed_at": "2026-10-04T00:05:19Z",
-      "expires_at": "2026-10-04T03:05:19Z",
-      "note": "Finish authorized unified Options takeover audit and evidence",
-      "task": "OPTIONS-CONTRACT-EXPLANATIONS"
-    }
-  ]
+  "claims": []
 }
