@@ -16,7 +16,7 @@
 //   abs_*   judge ABSOLUTE implied volatility 0-100 — the set that applies on
 //           any chain where neither IBKR nor tastytrade supplied a percentile,
 //           i.e. the default configuration.
-//   rank_*  judge a TRUE PERCENTILE. UNMEASURED — seeded from the absolute set.
+//   rank_*  judge an IV RANK. UNMEASURED — seeded from the absolute set.
 // There is deliberately no unqualified `pass_max`: a caller must say which
 // quantity it is about to judge, which is exactly what the old name did not.
 //

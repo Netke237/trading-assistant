@@ -151,7 +151,7 @@ class DeltaDetail(BaseModel):
 
 class IvRankDetail(BaseModel):
     iv_rank: float | None = None
-    # Which quantity `iv_rank` holds: "rank" (a true percentile from IBKR or
+    # Which quantity `iv_rank` holds: "rank" (an IV rank from IBKR or
     # tastytrade), "absolute" (implied volatility 0-100), or "none". Lets the
     # UI label the figure honestly rather than printing an absolute IV under
     # the words "IV rank" (PHASE-A-NULL-IVRANK-2026-09-06).
@@ -289,7 +289,7 @@ class OptionContract(BaseModel):
     theta: float
     # TWO DIFFERENT QUANTITIES, either of which may be absent
     # (PHASE-A-NULL-IVRANK-2026-09-06):
-    #   ivRank -- a TRUE PERCENTILE, where today's IV sits in this name's own
+    #   ivRank -- an IV RANK, where today's IV sits in this name's own
     #             52-week range. Only IBKR and tastytrade supply one, so it is
     #             None on most chains.
     #   iv     -- ABSOLUTE implied volatility, 0-100, for THIS strike.
@@ -820,7 +820,7 @@ class ScanRequest(BaseModel):
     # Bearish spread construction params (used by Pass 2 for bearish candidates)
     spread_width:        float = 5.0
     short_leg_delta:     float = 0.30
-    iv_rank_threshold:   float = 50.0   # applies when a TRUE PERCENTILE is in hand
+    iv_rank_threshold:   float = 50.0   # applies when an IV RANK is in hand
     # Applies when only an ABSOLUTE IV is in hand, which is most chains. It is a
     # separate knob because 50% IV and the 50th percentile are different claims.
     # UNMEASURED, like the percentile seeds and Q7.
@@ -1307,7 +1307,7 @@ class PortfolioPositionSchema(BaseModel):
     dteRemaining: int = 0
     delta: Optional[float] = None
     theta: Optional[float] = None
-    # A TRUE PERCENTILE, or None when no rank source answered. Before
+    # An IV RANK, or None when no rank source answered. Before
     # 2026-09-06 this field carried the ABSOLUTE IV instead, so the portfolio
     # table printed an absolute level under "IV RANK"; the absolute figure now
     # rides in `iv` and the two are labelled apart

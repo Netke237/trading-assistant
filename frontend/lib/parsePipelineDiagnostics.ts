@@ -263,7 +263,7 @@ function contractSubRuleDefs(rules: Record<string, number> | null | undefined): 
     thresholdRule('iv-abs', 'Absolute IV Above Ceiling', 'max_iv_abs',
       (v) => `> ${fmtNum(v)}`, 'Absolute implied volatility above the ceiling.'),
     thresholdRule('iv-rank', 'IV Rank Above Ceiling', 'max_iv_rank',
-      (v) => `> ${fmtNum(v)}`, 'IV rank (a true percentile) above the ceiling.'),
+      (v) => `> ${fmtNum(v)}`, 'IV rank (position in its 52-week IV range) above the ceiling.'),
     { id: 'dte', label: 'Expiry Outside DTE Limits',
       explanation: 'Contract expiry shorter or longer than the validator\'s DTE limits (adjusted for the hold window when the scan has one).' },
     { id: 'low-score', label: 'Contract Score Below Caution',
