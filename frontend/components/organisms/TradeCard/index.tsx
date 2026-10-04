@@ -2658,24 +2658,7 @@ export function TradeCard({
           </div>
         )}
 
-        {/* Arithmetic Profit Target (Feature 3) — the primary method, expanded
-             by default, full width matching the Monte Carlo card below. */}
-        <section className={`${styles.planCard} ${styles.fullWidth}`}>
-          <div className={styles.scoreCardHeader}>
-            <Text size={14} weight={600}>Arithmetic Profit Target</Text>
-            <Text size={11} tone="secondary">{data.direction}</Text>
-          </div>
-          <div className={styles.kvRow}>
-            <Text size={12} tone="secondary">Stock entry price</Text>
-            {/* Adversarial-audit finding 2 — shows the SAME live-refreshed
-                 quote the Check Structure / Compute Arithmetic Plan buttons
-                 below use, once either has actually run this mount; falls
-                 back to the scan-time data.price snapshot until then, same
-                 as those buttons' own stockQuote?.price ?? data.price. */}
-            <Data size={13} weight={500}>${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}</Data>
-          </div>
-          <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
-
+        <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Max loss budget">
           {/* Feature 5 — pre-trade max-loss override. Feeds recommendedSize
                (and therefore Risk-derived size / Apply below) immediately.
                `key` is tied to the candidate identity so the editor fully
@@ -2698,6 +2681,27 @@ export function TradeCard({
             limitDollar={maxLossLimitDollar}
             onApply={applyMaxLossOverride}
           />
+
+        </section>
+
+        <div className={styles.methodGrid}>
+        {/* Arithmetic Profit Target (Feature 3) — the primary method, expanded
+             by default, alongside Monte Carlo when the card has enough width. */}
+        <section className={styles.planCard}>
+          <div className={styles.scoreCardHeader}>
+            <Text size={14} weight={600}>Arithmetic Profit Target</Text>
+            <Text size={11} tone="secondary">{data.direction}</Text>
+          </div>
+          <div className={styles.kvRow}>
+            <Text size={12} tone="secondary">Stock entry price</Text>
+            {/* Adversarial-audit finding 2 — shows the SAME live-refreshed
+                 quote the Check Structure / Compute Arithmetic Plan buttons
+                 below use, once either has actually run this mount; falls
+                 back to the scan-time data.price snapshot until then, same
+                 as those buttons' own stockQuote?.price ?? data.price. */}
+            <Data size={13} weight={500}>${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}</Data>
+          </div>
+          <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
 
           {/* Standalone Check Structure — runs independently of the full
                compute below; its result shows on its own. Reuses the same
@@ -2950,8 +2954,24 @@ export function TradeCard({
                             {t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}
                           </Text>
                         </div>
+                        <div className={styles.resultColumns}>
                         <div className={styles.targetValues}>
                           <KV label="Arithmetic price" value={`$${t.arithmeticPrice.toFixed(2)}`} mono />
+                          <KV label="Contract price" value={`$${t.contractPrice.toFixed(2)}`} mono />
+                          <KV label="Pricing" value={t.rrModel} mono />
+                        </div>
+                        <div className={styles.probabilityColumn}>
+                          <KV label="Probability before expiry" value={`${(t.probability * 100).toFixed(0)}%`} mono />
+                          <KV
+                            label="Expected time"
+                            value={t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}
+                            mono
+                          />
+                        </div>
+                        </div>
+                        <details className={styles.methodDetails}>
+                          <summary>Target geometry</summary>
+                          <div className={styles.targetValues}>
                           <KV
                             label="Nearest structural level"
                             value={t.structuralPrice != null ? `$${t.structuralPrice.toFixed(2)}` : 'No structural stop found'}
@@ -2963,15 +2983,8 @@ export function TradeCard({
                             mono
                           />
                           <KV label="Tolerance" value={`$${t.toleranceDollar.toFixed(2)}`} mono />
-                          <KV label="Contract price" value={`$${t.contractPrice.toFixed(2)}`} mono />
-                          <KV label="Pricing" value={t.rrModel} mono />
-                          <KV label="Probability before expiry" value={`${(t.probability * 100).toFixed(0)}%`} mono />
-                          <KV
-                            label="Expected time"
-                            value={t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}
-                            mono
-                          />
-                        </div>
+                          </div>
+                        </details>
                         <Text size={10} tone={compareState === 'beyond' ? 'caution' : 'dim'}>
                           {t.qualityReasons.includes('target_capped') ? 'Bearish target capped at the price floor. ' : ''}{targetCompareLabel(compareState)}
                         </Text>
@@ -2985,7 +2998,7 @@ export function TradeCard({
         </section>
 
         {/* Monte Carlo Profit Target (Feature 2 — renamed from "Profit Targets") */}
-        <section className={`${styles.planCard} ${styles.fullWidth}`}>
+        <section className={styles.planCard}>
           <Text size={14} weight={600}>Monte Carlo Profit Target</Text>
           <Text size={10} tone="dim">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
           <div className={styles.targetPctRow}>
@@ -3096,6 +3109,8 @@ export function TradeCard({
             </Text>
           )}
         </section>
+
+        </div>
 
         {/* Barrier Race (barrier-race spec section 3.2) — its own card, directly
              below Monte Carlo, off the SAME simulation and the same click. It
@@ -3789,6 +3804,7 @@ function ProfitTargetRow({
         <div className={styles.targetId}>
           <Text size={12} weight={600}>{label}</Text>
         </div>
+        <div className={styles.resultColumns}>
         <div className={styles.targetValues}>
           <KV label="Est. option" value={`$${target.optionPrice.toFixed(2)}`} mono />
           <KV
@@ -3796,13 +3812,16 @@ function ProfitTargetRow({
             value={target.stockPrice != null ? `$${target.stockPrice.toFixed(2)}` : 'not reachable'}
             mono
           />
+          <KV label="Structural level found" value={structuralLevelValue} mono />
+        </div>
+        <div className={styles.probabilityColumn}>
           <KV label="Probability" value={`${(target.probability * 100).toFixed(0)}%`} mono />
           <KV
             label="Expected time"
             value={target.expectedDays != null ? `~${Math.round(target.expectedDays)}d` : 'unlikely'}
             mono
           />
-          <KV label="Structural level found" value={structuralLevelValue} mono />
+        </div>
         </div>
       </div>
     </div>

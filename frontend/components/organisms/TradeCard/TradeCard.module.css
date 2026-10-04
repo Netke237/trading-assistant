@@ -499,3 +499,61 @@
 .handlingGrid .orderStripItem {
   flex-basis: 100%;
 }
+
+/* Stack methods according to the card's usable width, including the frame rail. */
+.methodGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 540px), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.grid > *,
+.methodGrid > *,
+.targetMain {
+  min-width: 0;
+}
+
+.resultColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(145px, 0.7fr);
+  gap: var(--space-4);
+}
+
+.probabilityColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.resultColumns .kvRow {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.targetPctRow {
+  flex-wrap: wrap;
+}
+
+.targetPctInput {
+  flex: 1 1 100px;
+  min-width: 0;
+}
+
+.targetPctInput .editInput {
+  min-width: 0;
+}
+
+.methodDetails > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.methodDetails[open] > summary {
+  margin-bottom: var(--space-2);
+}
