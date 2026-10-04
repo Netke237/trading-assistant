@@ -1,7 +1,6 @@
 import {
   validateExplanation,
   getComponentDisplayName,
-  getComponentStatus,
   formatMetricValue,
   formatComparison,
   getBlockingSummary,
@@ -162,14 +161,6 @@ describe('contractExplanation helpers', () => {
     expect(getComponentDisplayName('iv_rank')).toBe('IV Attractiveness');
   });
 
-  test('getComponentStatus classifies PASS, CAUTION, REJECT bands', () => {
-    expect(getComponentStatus(80)).toBe('PASS');
-    expect(getComponentStatus(65)).toBe('PASS');
-    expect(getComponentStatus(64)).toBe('CAUTION');
-    expect(getComponentStatus(45)).toBe('CAUTION');
-    expect(getComponentStatus(44)).toBe('REJECT');
-  });
-
   test('formatMetricValue handles nulls, percentages, units and bases', () => {
     expect(formatMetricValue(null)).toBe('—');
     expect(formatMetricValue(0.045, '%')).toBe('4.5%');
@@ -178,7 +169,7 @@ describe('contractExplanation helpers', () => {
     expect(formatMetricValue(0, '%')).toBe('0.0%');
     expect(formatMetricValue(45, 'days')).toBe('45d');
     expect(formatMetricValue(1500, 'contracts')).toBe('1,500');
-    expect(formatMetricValue(35, '', 'rank')).toBe('35 (pctl)');
+    expect(formatMetricValue(35, '', 'rank')).toBe('35 (rank)');
     expect(formatMetricValue(42.5, '', 'absolute')).toBe('42.5% IV');
   });
 

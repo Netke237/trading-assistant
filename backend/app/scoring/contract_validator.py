@@ -117,15 +117,15 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
         reasons.append("dte_too_short")
     if dte > hr["max_dte"]:
         reasons.append("dte_too_long")
-    # `iv_rank` holds EITHER a true percentile OR an absolute IV, and
+    # `iv_rank` holds EITHER an IV rank OR an absolute IV, and
     # `iv_basis` (set in app/data/augment.py) says which -- so pick the ceiling
     # that judges the quantity we actually have
     # (PHASE-A-NULL-IVRANK-2026-09-06). Judging a 75% absolute IV against a
-    # percentile ceiling is what used to hard-reject names whose vol was in
+    # rank ceiling is what used to hard-reject names whose vol was in
     # fact low FOR THEM. Basis "none" means no vol figure at all, and
     # `iv_rank is None` already skips the gate.
     _iv_key = "max_iv_rank" if contract.get("iv_basis") == "rank" else "max_iv_abs"
-    # Fall back to the percentile key rather than skipping the gate outright,
+    # Fall back to the rank key rather than skipping the gate outright,
     # so a hand-built cfg carrying only the old key still hard-rejects.
     max_iv = hr.get(_iv_key, hr.get("max_iv_rank"))
     if max_iv is not None and iv_rank is not None and iv_rank > max_iv:
@@ -133,7 +133,7 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
         # the reason was a fixed string, and scan.py aggregates these verbatim
         # into the rejected-candidate list the user reads ("iv_rank_too_high(7)").
         # On the default path that reported "absolute IV above max_iv_abs" under
-        # the percentile's name -- the same mislabel this phase exists to remove,
+        # the rank's name -- the same mislabel this phase exists to remove,
         # in the text explaining why a candidate was thrown away.
         reasons.append(
             "iv_rank_too_high" if contract.get("iv_basis") == "rank" else "iv_too_high"
@@ -280,7 +280,7 @@ def _preferred_iv_max(contract: dict, cfg: dict) -> float:
     """The soft ceiling matching the quantity `iv_rank` actually holds.
 
     `iv_basis` is set by app/data/augment.py and is "rank" only when IBKR or
-    tastytrade supplied a true percentile; every other chain carries an
+    tastytrade supplied an IV rank; every other chain carries an
     absolute IV, which the `preferred_iv_abs_max` numbers have in fact been
     judging all along (PHASE-A-NULL-IVRANK-2026-09-06).
     """
@@ -290,7 +290,7 @@ def _preferred_iv_max(contract: dict, cfg: dict) -> float:
         if contract.get("iv_basis") == "rank"
         else "preferred_iv_abs_max"
     )
-    # Fall back to the percentile key so a caller passing a hand-built cfg
+    # Fall back to the rank key so a caller passing a hand-built cfg
     # (the unit tests do) keeps working without the absolute key present.
     return float(sr[key] if key in sr else sr["preferred_iv_rank_max"])
 
@@ -303,8 +303,8 @@ def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
         return 50, ["no_iv_rank_data"]  # neutral
 
     # Same basis split as the hard-reject ceiling above: score the absolute
-    # level against the absolute soft ceiling, a percentile against the
-    # percentile one (PHASE-A-NULL-IVRANK-2026-09-06).
+    # level against the absolute soft ceiling, a rank against the
+    # rank one (PHASE-A-NULL-IVRANK-2026-09-06).
     max_pref = _preferred_iv_max(contract, cfg)
     if iv_rank <= max_pref:
         # Denominator guard: max_pref == 0 divides by zero when iv_rank <= 0
@@ -715,7 +715,7 @@ def validate_contract(
             "contribution": iv_score * iv_w,
             "lost_points": iv_w * 100 - (iv_score * iv_w),
             "observed": iv_rank_val,
-            "observed_unit": "%" if iv_basis_val == "absolute" else ("percentile" if iv_basis_val == "rank" else ""),
+            "observed_unit": "%" if iv_basis_val == "absolute" else ("rank" if iv_basis_val == "rank" else ""),
             "basis": iv_basis_val,
             "preferred_min": None,
             "preferred_max": _preferred_iv_max(contract, cfg),

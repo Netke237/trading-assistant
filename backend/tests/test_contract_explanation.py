@@ -27,6 +27,15 @@ def _make_contract(days_out: int = 35, **overrides):
     return c
 
 
+@pytest.mark.parametrize(("basis", "value", "unit"), [("rank", 35.2, "rank"), ("absolute", 35.2, "%"), ("none", None, "")])
+def test_iv_explanation_identifies_the_scored_quantity(basis, value, unit):
+    card = validate_contract(_make_contract(iv_basis=basis, iv_rank=value), stock_score=80)
+    component = card.explanation["components"]["iv_rank"]
+    assert component["basis"] == basis
+    assert component["observed"] == value
+    assert component["observed_unit"] == unit
+
+
 # ── AC1: Authoritative score parity, fractional boundaries, rounding ──────────
 
 def test_authoritative_score_parity_unblocked():

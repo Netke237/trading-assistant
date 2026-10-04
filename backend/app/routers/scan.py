@@ -801,13 +801,13 @@ async def _process_symbol(
     # ── Final score with the volatility figure from the chain ────────────────
     # TWO DIFFERENT QUANTITIES, and which one we have decides which thresholds
     # judge it (PHASE-A-NULL-IVRANK-2026-09-06):
-    #   ivRank -- a TRUE PERCENTILE, present only when IBKR or tastytrade
-    #             answered. Judged against the percentile thresholds.
+    #   ivRank -- an IV RANK, present only when IBKR or tastytrade
+    #             answered. Judged against the rank thresholds.
     #   iv     -- ABSOLUTE implied volatility, 0-100, from Tradier per strike
     #             (or the Black-Scholes inversion below). Judged against the
     #             absolute thresholds, which is what the 34/55/70 numbers have
     #             actually been judging all along.
-    # Prefer the rank: a percentile says where this vol sits for THIS name,
+    # Prefer the rank: a rank says where this vol sits for THIS name,
     # which an absolute level cannot.
     atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
     c0 = atm[0] if atm else None
@@ -819,7 +819,7 @@ async def _process_symbol(
         iv_rank, iv_basis = float(c0["iv"]), "absolute"
 
     # No vendor IV at all — invert Black-Scholes for the ATM contract. This
-    # yields an ABSOLUTE volatility, never a percentile, so it can only ever
+    # yields an ABSOLUTE volatility, never a rank, so it can only ever
     # feed the absolute path.
     if iv_rank is None and c0 is not None:
         iv_bs = _compute_iv_bs(
@@ -1122,8 +1122,8 @@ async def _process_symbol(
                 # names the hazard: "a caller-supplied iv_pct need not
                 # reproduce the contract's own mid".
                 #
-                # Never `iv_rank` either: it holds a PERCENTILE whenever
-                # iv_basis == "rank", and feeding a percentile to a function
+                # Never `iv_rank` either: it holds an IV RANK whenever
+                # iv_basis == "rank", and feeding a rank to a function
                 # taking absolute volatility is the conflation Phase A ended.
                 iv_pct=None,
                 horizon_preset=horizon_preset,
@@ -1523,7 +1523,7 @@ async def restore_from_db() -> str | None:
             # A result stored under an older schema carries at least one field
             # whose name no longer describes what it holds, with nothing on the
             # record saying so -- v0's `ivRank` held raw implied volatility
-            # under a percentile's name; v1's `exit.invalidation` held a flat
+            # under a rank's name; v1's `exit.invalidation` held a flat
             # percentage move under the resolved structural+2xATR stop's name.
             # Serving either puts a wrong number on the card the user acts
             # from, and the frontend cannot repair it: its own migrations only

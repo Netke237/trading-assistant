@@ -5,7 +5,6 @@ import { Data } from '@/components/primitives/Data';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import {
   getComponentDisplayName,
-  getComponentStatus,
   formatMetricValue,
   formatPercentRatio,
   validateExplanation,
@@ -115,7 +114,6 @@ const ContractScoreExplanationContent: React.FC<ContractScoreExplanationProps> =
       {/* Five weighted component cards */}
       <div className={styles.componentsGrid}>
         {componentsList.map((comp) => {
-          const compStatus = getComponentStatus(comp.raw_score);
           const isLiq = comp.name === 'liquidity';
           const isSpread = comp.name === 'spread';
           const isDelta = comp.name === 'delta';
@@ -128,12 +126,9 @@ const ContractScoreExplanationContent: React.FC<ContractScoreExplanationProps> =
                 <Text size={12} weight={500}>
                   {getComponentDisplayName(comp.name)}
                 </Text>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Data size={12} weight={500}>
-                    {comp.raw_score}
-                  </Data>
-                  <StatusBadge status={compStatus} />
-                </div>
+                <Data size={12} weight={500} title="Component score out of 100">
+                  {comp.raw_score}/100
+                </Data>
               </div>
 
               <div className={styles.cardMetrics}>
@@ -200,28 +195,36 @@ const ContractScoreExplanationContent: React.FC<ContractScoreExplanationProps> =
                 {isIv && (
                   <>
                     <div className={styles.metricRow}>
-                      <span className={styles.metricLabel}>IV:</span>
+                      <span className={styles.metricLabel}>{comp.basis === 'rank' ? 'Underlying IV Rank:' : 'IV:'}</span>
                       <Data size={11}>{formatMetricValue(comp.observed, '', comp.basis)}</Data>
                     </div>
-                    {comp.preferred_max != null && (
+                    {comp.preferred_max != null && comp.basis !== 'none' && (
                       <div className={styles.metricRow}>
-                        <span className={styles.metricLabel}>Ceiling:</span>
+                        <span className={styles.metricLabel}>Preferred maximum:</span>
                         <Data size={11}>
                           ≤{' '}
                           {comp.basis === 'absolute'
                             ? `${comp.preferred_max}% IV`
-                            : `${comp.preferred_max} pctl`}
+                            : `${comp.preferred_max} rank`}
                         </Data>
                       </div>
                     )}
                     {comp.basis === 'none' && (
                       <Text size={10} tone="dim">
-                        Neutral 50 applied (no IV rank data)
+                        Neutral 50 applied (no IV data)
                       </Text>
                     )}
                   </>
                 )}
               </div>
+
+              {comp.flags.length > 0 && comp.basis !== 'none' && (
+                <Text size={10} tone="caution">
+                  Rule notes: {comp.flags.map(flag => flag === 'iv_rank_elevated'
+                    ? (comp.basis === 'rank' ? 'IV rank above preferred maximum' : 'IV above preferred maximum')
+                    : flag.replace(/_/g, ' ')).join(', ')}
+                </Text>
+              )}
 
               <div className={styles.pointsSummary}>
                 <span className={styles.metricLabel}>Contribution:</span>

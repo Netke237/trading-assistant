@@ -3,7 +3,6 @@
  * Evaluates no rules, performs no regrading, and preserves authoritative server numbers.
  */
 import type { ContractExplanation, ComponentExplanation, BlockerComparison, OptionContract } from '@/types/domain';
-import type { Status } from '@/lib/status';
 
 const componentKeys = ['liquidity', 'spread', 'delta', 'dte', 'iv_rank'] as const;
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
@@ -78,13 +77,6 @@ export function getComponentDisplayName(name: string): string {
   }
 }
 
-/** Status classification for an individual 0-100 component sub-score. */
-export function getComponentStatus(score: number): Status {
-  if (score >= 65) return 'PASS';
-  if (score >= 45) return 'CAUTION';
-  return 'REJECT';
-}
-
 /** Formats an observed metric value with appropriate unit and decimal precision. */
 export function formatMetricValue(
   value: number | string | null | undefined,
@@ -106,7 +98,7 @@ export function formatMetricValue(
     return Math.round(value).toLocaleString('en-US');
   }
   if (basis === 'rank') {
-    return `${value} (pctl)`;
+    return `${value} (rank)`;
   }
   if (basis === 'absolute') {
     return `${Number.isInteger(value) ? value.toFixed(1) : String(value)}% IV`;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { ContractScoreExplanation } from '../index';
 import type { OptionContract, ContractExplanation } from '@/types/domain';
 
@@ -146,6 +146,47 @@ describe('ContractScoreExplanation component', () => {
     // Contextual metrics
     expect(screen.getByText(/Contextual Metrics/)).toBeInTheDocument();
     expect(screen.getByText(/2\.50/)).toBeInTheDocument();
+  });
+
+  test('low IV component score preserves the overall PASS and distinct rank/percentile', () => {
+    render(<ContractScoreExplanation id="rank-exp" contract={{ ...mockBaseContract, ivPercentile: 53,
+      explanation: { ...mockValidExplanation, components: { ...mockValidExplanation.components,
+        iv_rank: { ...mockValidExplanation.components.iv_rank, raw_score: 36, observed: 35.2,
+          basis: 'rank', contribution: 5.4, lost_points: 9.6, flags: [] },
+      } },
+    }} />);
+    expect(screen.getAllByText('PASS')).toHaveLength(1);
+    expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
+    expect(screen.queryByText('CAUTION')).not.toBeInTheDocument();
+    expect(screen.getByText('36/100')).toBeInTheDocument();
+    expect(screen.getByText('35.2 (rank)')).toBeInTheDocument();
+    expect(screen.getByText('≤ 55 rank')).toBeInTheDocument();
+    expect(screen.getByText('53')).toBeInTheDocument();
+    const card = screen.getByText('IV Attractiveness').closest('div')!.parentElement!;
+    expect(within(card).getByText('+5.4')).toBeInTheDocument();
+    expect(within(card).getByText('(−9.6 lost)')).toBeInTheDocument();
+  });
+
+  test('absolute IV keeps its own unit and a rule warning', () => {
+    render(<ContractScoreExplanation id="absolute-exp" contract={{ ...mockBaseContract,
+      explanation: mockValidExplanation,
+    }} />);
+    expect(screen.getByText('65.0% IV')).toBeInTheDocument();
+    expect(screen.getByText('≤ 55% IV')).toBeInTheDocument();
+    expect(screen.getByText('Rule notes: IV above preferred maximum')).toBeInTheDocument();
+  });
+
+  test('missing IV shows a neutral score without inventing a rank threshold', () => {
+    render(<ContractScoreExplanation id="missing-exp" contract={{ ...mockBaseContract, ivPercentile: null,
+      explanation: { ...mockValidExplanation, components: { ...mockValidExplanation.components,
+        iv_rank: { ...mockValidExplanation.components.iv_rank, raw_score: 50, observed: null,
+          basis: 'none', flags: ['no_iv_rank_data'] },
+      } },
+    }} />);
+    expect(screen.getByText('50/100')).toBeInTheDocument();
+    expect(screen.getByText('Neutral 50 applied (no IV data)')).toBeInTheDocument();
+    expect(screen.queryByText('Preferred maximum:')).not.toBeInTheDocument();
+    expect(screen.queryByText(/pctl/)).not.toBeInTheDocument();
   });
 
   test('renders blocked banner when contract is hard-rejected', () => {

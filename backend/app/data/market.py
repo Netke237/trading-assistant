@@ -1626,12 +1626,12 @@ async def fetch_option_chain_async(
                 # and tastytrade return a symbol-level RANK, a different
                 # quantity (where today's IV sits in its own 52-week range).
                 # Until 2026-09-06 this value was written into `ivRank`, so a
-                # name at 45% IV scored as though it sat at the 45th percentile
+                # name at 45% IV scored as though it had IV rank 45
                 # of its own range -- failing iv_rank_pass_max: 34 -- and a name
                 # at 75% was HARD-REJECTED at max_iv_rank: 70 even when 75% is
                 # low for it. See PHASE-A-NULL-IVRANK-2026-09-06.
                 "iv": round(iv * 100, 1) if iv > 0 else None,
-                # A TRUE PERCENTILE, or None. None means "no rank source
+                # An IV RANK, or None. None means "no rank source
                 # answered" -- a distinct state from any number, and what tells
                 # the scorer to judge `iv` against the ABSOLUTE thresholds
                 # instead. Only the IBKR and tastytrade branches below fill it.
@@ -1673,7 +1673,7 @@ async def fetch_option_chain_async(
 
         # Counts contracts with no ABSOLUTE IV, which is what the yfinance
         # backfill below supplies. Reading `ivRank` was only correct while that
-        # field held raw IV; now that it holds a percentile or None, a
+        # field held raw IV; now that it holds a rank or None, a
         # Tradier-only chain would have read 0-of-N and skipped the backfill.
         zero_iv = sum(1 for c in result if not c.get("iv"))
         if zero_iv > len(result) * 0.5 and result:
@@ -1683,7 +1683,7 @@ async def fetch_option_chain_async(
                 if not c.get("iv"):
                     yf_val = yf_iv.get(float(c["strike"]))
                     if yf_val:
-                        # yfinance supplies an ABSOLUTE IV, never a percentile.
+                        # yfinance supplies an ABSOLUTE IV, never a rank.
                         c["iv"] = round(yf_val * 100, 1)
                         c["implied_volatility"] = round(yf_val, 4)
 
