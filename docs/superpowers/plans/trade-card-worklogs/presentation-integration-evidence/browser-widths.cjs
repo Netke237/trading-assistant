@@ -1,0 +1,55 @@
+const fs=require('fs');
+const ts=require(require.resolve('typescript',{paths:[process.cwd()]}));
+const Module=require('module');
+const {chromium}=require(require.resolve('playwright',{paths:[process.cwd()]}));
+const fixturePath=require('path').resolve(process.cwd(),'e2e/fixtures/api-mocks.ts');
+const fixtureMod=new Module(fixturePath);fixtureMod.filename=fixturePath;fixtureMod.paths=Module._nodeModulePaths(process.cwd());
+fixtureMod._compile(ts.transpileModule(fs.readFileSync(fixturePath,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,fixturePath);
+const fixture=fixtureMod.exports;
+const card=JSON.parse(JSON.stringify(fixture.MOCK_SCAN_CANDIDATE).replaceAll('2025-05-16','2026-12-18'));
+card.contractDetails.dte=75;card.exit.target=194.25;card.confidence=72;card.confidenceText='Historical entry signals: 64 samples.';
+card.sentiment={horizon:'Swing',timeframe:'Daily',state:'Bullish',p_stay:0.73,stability:0.72,regime_age_days:8,avg_regime_duration:12,conviction_pct:73,conviction_label:'Bullish',interpretation:'Measured market context for this horizon.',alignment:'Aligned'};
+card.fundamentals={score:74,quality_label:'Strong',risk_label:'Low',growth_score:80,quality_score:75,risk_score:65,safety_flags:['High debt'],detail:{}};
+const race={premiumStopPrice:1.15,premiumStopPct:.465,stockStopPrice:180,premiumUsed:2.15,ivSolved:true,nPaths:2000,outcomes:[.2,.35,.5].map((pct,i)=>({targetPct:pct,targetOptionPrice:Number((2.15*(1+pct)).toFixed(2)),pTargetFirst:.4,pStockStopFirst:.2,pPremiumStopFirst:.3,pNeither:.1,weightTargetFirst:.4,weightStockStopFirst:.2,weightPremiumStopFirst:.3,weightNeither:.1,daysTarget:7+i*3,daysStockStop:8,daysPremiumStop:9,daysAnyPathReachedStop:10,repriceDaysStockStop:10,terminalMean:2,rewardDollar:Number((2.15*pct).toFixed(2)),stopRepricedValue:.65,riskStockStop:1.5,riskPremiumStop:1,rrStockStop:2.15*pct/1.5,rrPremiumStop:2.15*pct,edgePerContract:-30}))};
+const first={targets:race.outcomes.map((o,i)=>({pct:o.targetPct,stockPrice:195+i*4,optionPrice:o.targetOptionPrice,probability:.5-i*.1,expectedDays:o.daysTarget})),invalidation:{probability:.3,expectedDays:10},race};
+const exitPlan={stop:{price:180,source:'atr_widened',contractPrice:.65,rrModel:'Heston repriced',structuralSource:'order_block',structuralConfidence:75,structuralPrice:182,atrFloorPrice:180,distanceDollar:2},targets:[2,3].map((rr,i)=>({rrRatio:rr,arithmeticPrice:195+i*5,price:195+i*5,tpSource:'arithmetic',structuralPrice:null,contractPrice:3.7+i,rrModel:'Heston repriced',probability:.5-i*.1,expectedDays:9+i*4,qualityGood:true,qualityReasons:[],distanceDollar:null,toleranceDollar:1})),atr:4};
+(async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+ const context=await browser.newContext({viewport:{width:1440,height:1100}});const page=await context.newPage();
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));const urls=new Set();
+ await fixture.setupApiMocks(page);
+ await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;urls.add(path);let body;
+ if(path.includes('/quote/stock')) body={symbol:'AAPL',price:185.2};
+ else if(path.includes('/quote/option')) body={price:2.15,delta:.52,theta:-.05,ivRank:null,iv:42,spread:.02,volume:1250};
+ else if(path.includes('/structural-stop')) body={available:true,price:180,source:'order_block',confidence:75,distancePct:2.8};
+ else if(path.includes('/first-passage')) body=first;
+ else if(path.includes('/exit-plan')) body=exitPlan;
+ else if(path.includes('/scan/last')||path.includes('/stocks/scan/last')) body=null;
+ else {await route.fallback();return;}
+ await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+ });
+ await page.addInitScript(({card})=>localStorage.setItem('bamendjou-scan-store',JSON.stringify({version:17,state:{scanResult:{scan_id:'presentation-browser-fixture',timestamp:new Date().toISOString(),candidates:[card],rejected:[],contract_rules:{}},context:{universe:'SP500',direction:'Bullish',horizon:'Swing (5–15d)',horizonPreset:'Swing',holdMin:5,holdMax:15},scanState:'COMPLETED',scanAt:new Date().toISOString(),screenerMode:'options',pickedContracts:{},contractsBySymbol:{}}})),{card});
+ await page.goto('http://127.0.0.1:3001/screener/step-7-trade-card');
+ await page.getByRole('button',{name:/Compute Arithmetic Plan/i}).waitFor({timeout:120000});
+ await page.getByRole('button',{name:/Compute Arithmetic Plan/i}).click();
+ await page.getByRole('button',{name:/Run Monte Carlo Estimate/i}).click();
+ await page.getByRole('button',{name:'Use Barrier Race T20%'}).waitFor();
+ const results=[];
+ for (const width of [1200,1366,1440,1920]) for (const theme of ['dark','light']) {
+   await page.setViewportSize({width,height:1100});
+   await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;document.querySelectorAll('*').forEach(e=>{if(e.scrollTop)e.scrollTop=0})},theme);
+   await page.waitForTimeout(150);
+   await page.evaluate(()=>document.querySelectorAll('*').forEach(e=>{if(e.scrollTop)e.scrollTop=0}));
+   await page.screenshot({path:`/tmp/integration-${width}-${theme}-top.png`});
+   const top=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,workspaceClient:document.querySelector('#workspace').clientWidth,workspaceScroll:document.querySelector('#workspace').scrollWidth}));
+   await page.getByText('Arithmetic Profit Target',{exact:true}).evaluate(el=>el.scrollIntoView({block:'start'}));
+   await page.screenshot({path:`/tmp/integration-${width}-${theme}-methods.png`});
+   await page.getByRole('button',{name:'Use Barrier Race T20%'}).scrollIntoViewIfNeeded();
+   await page.screenshot({path:`/tmp/integration-${width}-${theme}-race.png`});
+   const overflow=await page.evaluate(()=>[...document.querySelectorAll('table')].filter(e=>e.getBoundingClientRect().width>0).map(e=>({text:e.innerText.slice(0,80),width:e.getBoundingClientRect().width,parent:e.parentElement.clientWidth,scroll:e.parentElement.scrollWidth})));
+   results.push({width,theme,...top,tables:overflow});
+ }
+ fs.writeFileSync('/tmp/integration-browser-widths.json',JSON.stringify({errors,urls:[...urls],results,text:await page.locator('body').innerText()},null,2));
+ console.log(JSON.stringify({errors,results}));
+ await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});

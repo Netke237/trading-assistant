@@ -45,3 +45,12 @@
 @media (max-width: 1440px) {
   .presentationLayout { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* BrokerPicker is the original sibling after the controlled decision anchor.
+   Its unchanged flex row wraps within the execution panel rather than squeezing
+   configured/disabled labels into a few pixels. */
+.decisionAnchor + :global(div) > :global(div) { flex-wrap: wrap; }
+.decisionAnchor + :global(div) :global(button) {
+  flex: 1 1 180px;
+  min-width: 0;
+}

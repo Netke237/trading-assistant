@@ -181,8 +181,9 @@ Original MethodPickSelector renders once through an optional DOM portal into
 the page's existing execution section; undefined retains standalone rendering,
 null waits for its anchor. All TradeCard method state/effects/callbacks remain
 in their original owner. AutoTradeArm stays in the original page-level section,
-under identical effectiveCard/selectedBroker/spread predicates and with identical
-props; override-plan pending replaces only TradeCard as before. Broker/order,
+under identical effectiveCard/selectedBroker/planReady predicates and with identical
+props. A pending override suppresses AutoTradeArm through original planReady gate;
+this composition does not introduce any additional arm lifecycle transition. Broker/order,
 tracking, arm, toast and feedback implementations remain intact. Native CSS
 flows the same execution panel adjacent on wide screens and below at <=1440;
 method cards use usable-width auto-fit, with original probability spacing.
@@ -198,3 +199,70 @@ clear1200 visual acceptance: shared MinWidthGate blocks below1280px, contrary to
 audited plan's assertion that baseline is1200.1200 screenshots show its modal.
 User scope decision requested asynchronously; shared gate has NOT been modified.
 State/inventory acceptance remains pending, not certified by these checks.
+
+Checkpoint C independently reviewed by fresh `presentation_c_audit_r1`, exact
+`87e45af7d6b779c36623e076723f9175ed8c927c..e937b8e1cd9b1eb82af5b0812c90668acb628ac6`, all six files. Zero gate findings, scope and second pass verified. Independent370 tests in8 suites, typecheck/diffcheck passed. Round1/3 closes behavioral stage C.1200 remains blocked pending user scope decision. Screenshot inspection additionally found BrokerPicker's original nowrap flex row squeezed labels in the new narrow panel; subsequent scoped CSS correction is pending its own final review.
+
+### Checkpoint D — visual correction and final preservation evidence
+
+Scoped page CSS makes original BrokerPicker's row wrap within the execution
+panel; configured/disabled labels no longer squeeze into vertical letters.
+No shared broker component or behavior changed. Native wide frame1920 shows
+both method cards side by side;1366/1440 stack methods and flow the same panel
+below. Probability/time columns retain original spacing and minimums. Original
+qualification bars and factor colours, gate badges, bullish/bearish direction
+and active safety/refusal notes stay in the retained token styles.
+
+Recorded `presentation-integration-evidence/information-reconciliation.json`:
+all520 original entries individually mapped to actual source rendering regions,
+state predicates, live destinations and named supporting tests. Inventory
+corrections are explicit: target percentages/ratios/row counts are dynamic,
+missing third legacy rows not fabricated; Retry note is original safety-checked
+Remove; provenance reads captured metadata; right rail stays original provider;
+stock-barrier movement retains explicit stale measured-against statistic.
+A count/path existence check is supporting structure validation, not proof of
+runtime completeness. Named browser cases and source review are distinguished.
+
+TypeScript AST comparison (comments excluded) verifies all141 pre-existing
+TradeCard and129 page nested functions/callbacks equal assembled baseline
+93983992; top-level render functions excluded because presentation changed.
+Only extra TradeCard functions are guarded race selection lookups/callbacks.
+Independent A/B/C reviews separately checked prop/owner interactions.
+
+Final frontend: `npm test -- --runInBand`,194 suites4646 tests passed155.097s
+(`/tmp/integration-final-frontend.log`); `npm run typecheck` passed. Normal
+`npm run build` passed compilation, lint/type validity, all30 static routes and
+final output. Build used warm cache after local-font-mocked dev; a fresh Google
+font download is not certified. Original lint/React act warnings remain; no
+scoring/store/API/order changes were made to quiet them.
+
+Python3.11.16 from prepared `.venv`, backend cwd:
+- `../.venv/bin/python -m pytest -q tests/test_first_passage.py tests/test_first_passage_alert_compatibility.py tests/test_exit_plan.py tests/test_stop_cost_gate.py tests/test_scan_stop_cost.py tests/test_stock_scorer_events.py tests/test_stock_scorer_stock_mode.py`:147 passed9.90s.
+- `../.venv/bin/python -m pytest -q tests/test_contract_explanation.py tests/test_reprice_horizon.py tests/test_reprice_horizon_agreement.py`:102 passed2.36s.
+Relevant final parity total249 passed; not a claim that AREA3's previously
+recorded full-backend network-dependent failures disappeared.
+
+Browser fixture errors0 for named cases: expiry refusal, legacy not-captured,
+custom captured thresholds, hard contract rejection, no-IV fallback, median-null,
+Step6 override pending/ready, spread/alternatives, premium-only race change,
+restoration, stock-barrier change and ready candidate/contract switch.
+Original AutoTradeArm planReady suppression checked on pending override; one
+instance after readiness; same DOM owner across ready-to-ready candidate switch.
+No order/arm/fire/position-save request. Tracking opened/cancelled only.
+24 actual-frame screenshots and width/table metrics stored in evidence folder;
+production-built server repeated width checks with identical metrics/error0.
+
+Remaining acceptance limits: actual shared1280 MinWidthGate blocks1200 and
+needs user-coordinated outside-allowlist scope change.1200 screenshots are
+explicitly blocked, not accepted. Remote font downloading unavailable; local
+mock changes screenshot font metrics, not source/config.100% browser zoom is
+verified; native zoom is not yet certified. Overall readiness remains false.
+Checkpoint D is frozen for fresh independent review; not audit-clean yet.
+
+Further native zoom verification completed before freezing D: isolated Chromium
+profile `chrome.settingsPrivate.setDefaultZoom(1.25)` confirms outerWidth1920,
+innerWidth1536, devicePixelRatio1.25; production-built populated Step7 in both
+themes has no desktop overlay, document/workspace overflow or race table scroll.
+Six additional native125% screenshots and exact metrics/scripts are stored in
+`browser-zoom125.json`. Native125% at this supported CSS width is now verified;
+remote font metrics and shared1200 gate remain the stated limitations.

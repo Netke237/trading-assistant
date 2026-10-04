@@ -1,0 +1,11 @@
+{
+  "scenario": "override",
+  "errors": [],
+  "results": [
+    "override pending preserves original planReady AutoTradeArm gate",
+    "override pending does not render old plan selector",
+    "one original AutoTradeArm once override plan ready",
+    "Step6 override displays selected identity",
+    "override missing evidence does not borrow original contract provenance"
+  ]
+}

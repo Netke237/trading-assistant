@@ -1,0 +1,217 @@
+{
+  "errors": [],
+  "urls": [
+    "/api/portfolio",
+    "/api/watchlist",
+    "/api/config/health",
+    "/api/stock-scan/last",
+    "/api/scan/last-run",
+    "/api/config/iv-thresholds",
+    "/api/data-sources",
+    "/api/stock-scan/last-run",
+    "/api/quote/option",
+    "/api/quote/stock",
+    "/api/contracts/exit-plan",
+    "/api/contracts/structural-stop",
+    "/api/contracts/first-passage"
+  ],
+  "results": [
+    {
+      "width": 1200,
+      "theme": "dark",
+      "client": 1200,
+      "scroll": 1200,
+      "workspaceClient": 680,
+      "workspaceScroll": 680,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 598,
+          "parent": 598,
+          "scroll": 598
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 598,
+          "parent": 598,
+          "scroll": 598
+        }
+      ],
+      "desktop_gate_blocked": true,
+      "accepted": false
+    },
+    {
+      "width": 1200,
+      "theme": "light",
+      "client": 1200,
+      "scroll": 1200,
+      "workspaceClient": 680,
+      "workspaceScroll": 680,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 598,
+          "parent": 598,
+          "scroll": 598
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 598,
+          "parent": 598,
+          "scroll": 598
+        }
+      ],
+      "desktop_gate_blocked": true,
+      "accepted": false
+    },
+    {
+      "width": 1366,
+      "theme": "dark",
+      "client": 1366,
+      "scroll": 1366,
+      "workspaceClient": 846,
+      "workspaceScroll": 846,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 764,
+          "parent": 764,
+          "scroll": 764
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 764,
+          "parent": 764,
+          "scroll": 764
+        }
+      ],
+      "desktop_gate_blocked": false,
+      "accepted": true
+    },
+    {
+      "width": 1366,
+      "theme": "light",
+      "client": 1366,
+      "scroll": 1366,
+      "workspaceClient": 846,
+      "workspaceScroll": 846,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 764,
+          "parent": 764,
+          "scroll": 764
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 764,
+          "parent": 764,
+          "scroll": 764
+        }
+      ],
+      "desktop_gate_blocked": false,
+      "accepted": true
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "client": 1440,
+      "scroll": 1440,
+      "workspaceClient": 920,
+      "workspaceScroll": 920,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 838,
+          "parent": 838,
+          "scroll": 838
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 838,
+          "parent": 838,
+          "scroll": 838
+        }
+      ],
+      "desktop_gate_blocked": false,
+      "accepted": true
+    },
+    {
+      "width": 1440,
+      "theme": "light",
+      "client": 1440,
+      "scroll": 1440,
+      "workspaceClient": 920,
+      "workspaceScroll": 920,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 838,
+          "parent": 838,
+          "scroll": 838
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 838,
+          "parent": 838,
+          "scroll": 838
+        }
+      ],
+      "desktop_gate_blocked": false,
+      "accepted": true
+    },
+    {
+      "width": 1920,
+      "theme": "dark",
+      "client": 1920,
+      "scroll": 1920,
+      "workspaceClient": 1400,
+      "workspaceScroll": 1400,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 1022,
+          "parent": 1022,
+          "scroll": 1022
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 1022,
+          "parent": 1022,
+          "scroll": 1022
+        }
+      ],
+      "desktop_gate_blocked": false,
+      "accepted": true
+    },
+    {
+      "width": 1920,
+      "theme": "light",
+      "client": 1920,
+      "scroll": 1920,
+      "workspaceClient": 1400,
+      "workspaceScroll": 1400,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 1022,
+          "parent": 1022,
+          "scroll": 1022
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 1022,
+          "parent": 1022,
+          "scroll": 1022
+        }
+      ],
+      "desktop_gate_blocked": false,
+      "accepted": true
+    }
+  ],
+  "limitations": [
+    "1200 blocked by actual shared1280 gate, pending user scope decision.",
+    "Isolated API fixtures; no market/live-order validation.",
+    "Google font downloads denied; local font mock. Browser screenshots at100% zoom."
+  ]
+}
