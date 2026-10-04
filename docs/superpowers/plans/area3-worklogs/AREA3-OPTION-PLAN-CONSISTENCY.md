@@ -48,3 +48,16 @@ Presentation integration remains blocked until AREA3 resolves or an explicit
 shared-file boundary is approved. No tests or typecheck needed for these
 Markdown-only changes; git diff --check passed. No deployment, main merge or
 orders.
+
+## Authorized plan round 4 — clean
+
+User authorized the R3-F1 fix and one additional independent plan round. Fix
+commit `defe90ff2f8d27fa885f695af76102e2b39ea503`; exact reviewed diff
+`e2eec075..defe90ff2f8d27fa885f695af76102e2b39ea503`.
+Fresh reviewer `/root/area3_plan_authorized_r4` applied both audit skills and
+canonical numeric/persistence gate, traced exit_plan.py, structural_stop.py,
+contracts.py, stock_scan.py and picked_method.py, and rechecked adjacent
+unclamped/floor cases and diagnostic-price leakage. Verdict: zero gate
+findings, clean for correction and interactions. R3-F1 closed; original rounds
+preserved, no further plan review authorized. Backend code stage begins at
+round 1 of 3, independently of the plan exception.
