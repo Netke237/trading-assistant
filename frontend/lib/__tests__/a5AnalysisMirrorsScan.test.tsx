@@ -14,7 +14,7 @@ import { api } from '@/lib/api';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-  usePathname: () => '/screener/step-5-strategy',
+  usePathname: () => '/screener/step-4-stocks',
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -30,6 +30,14 @@ jest.mock('@/lib/api', () => ({
   getLastDataRefresh: jest.fn(() => Promise.resolve({ last_refresh: null })),
   API_BASE_URL: 'http://localhost:8000',
 }));
+
+// Step 4 Stocks page's heavy children, mocked as its own __tests__ do (the
+// page writer below renders Step 4 since Step 5 was merged into it).
+jest.mock('@/components/organisms/StockPositionCard', () => ({ StockPositionCard: () => null }));
+jest.mock('@/components/organisms/StockSendDialog', () => ({ StockSendDialog: () => null }));
+jest.mock('@/components/organisms/ScanFunnel', () => ({ ScanFunnel: () => null }));
+jest.mock('@/components/atoms/WatchStar', () => ({ WatchStar: () => null }));
+jest.mock('../../app/(frame)/screener/step-4-stocks/HistoryPrefetchRow', () => ({ HistoryPrefetchRow: () => null }));
 
 const m = (f: unknown) => f as jest.Mock;
 const RESULT = (id: string) => ({ scan_id: id, timestamp: '2026-09-24T10:00:00+00:00', rejected: [], candidates: [] });
@@ -212,15 +220,17 @@ describe('T-F4 — StoreHydration attaches the backend record only on scan_id ma
   });
 });
 
-describe('Step 5 writer', () => {
+// Was 'Step 5 writer'; retargeted to Step 4 when Step 5 was merged into it
+// (STOCKS-STEP-MERGE-S1). Selecting a card no longer scans, so Run is clicked.
+describe('Step 4 writer', () => {
   it('stores the exact body it posted with its result', async () => {
-    const Step5 = (await import('../../app/(frame)/screener/step-5-strategy/page')).default;
-    m(api.postStockScan).mockResolvedValue(RESULT('S5'));
-    render(<Step5 />);
-    const btn = screen.getAllByText(/Breakout from tight base/i)
-      .map((el) => el.closest('button')).find((b) => b !== null)!;
-    fireEvent.click(btn);
-    await waitFor(() => expect(useScanStore.getState().stockScanResult?.scan_id).toBe('S5'));
+    const Step4 = (await import('../../app/(frame)/screener/step-4-stocks/page')).default;
+    m(api.postStockScan).mockResolvedValue(RESULT('S4'));
+    render(<Step4 />);
+    // Bearish context: Step 4 labels breakout_base by direction.
+    fireEvent.click(screen.getByText(/^Breakdown from tight base$/).closest('button')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Stock Scan' }));
+    await waitFor(() => expect(useScanStore.getState().stockScanResult?.scan_id).toBe('S4'));
     const body = m(api.postStockScan).mock.calls[0][0];
     expect(useScanStore.getState().stockScanRequest).toEqual(body);
     expect(body.strategy).toBe('breakout_base');

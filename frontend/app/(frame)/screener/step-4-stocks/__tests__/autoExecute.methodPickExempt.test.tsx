@@ -44,6 +44,8 @@ jest.mock('@/components/organisms/StrategyParamsPanel', () => ({
 }));
 jest.mock('@/components/organisms/ScanFunnel', () => ({ ScanFunnel: () => null }));
 jest.mock('@/components/atoms/WatchStar', () => ({ WatchStar: () => null }));
+// This suite does not mock @/lib/api; the row would call the real backend.
+jest.mock('../HistoryPrefetchRow', () => ({ HistoryPrefetchRow: () => null }));
 
 function makeCandidate(symbol: string): PositionCardData {
   return {

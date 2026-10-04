@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
-import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
@@ -23,6 +23,7 @@ import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPane
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { Direction } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
+import { HistoryPrefetchRow } from './HistoryPrefetchRow';
 import styles from './page.module.css';
 
 function _startOfDay(d: Date): number {
@@ -87,18 +88,10 @@ const BADGE_CLASS: Record<RegimeFit, string> = {
   REJECT:  styles.regimeBadgeReject,
 };
 
-export default function Step4StocksPage() {
-  const context        = useScanStore((s) => s.context);
-  const direction      = context?.direction ?? 'Bullish';
-  const bearish        = direction === 'Bearish';
-  const STRATEGIES     = bearish ? STRATEGIES_BEARISH : STRATEGIES_BULLISH;
-  const activeStrategy = useScanStore((s) => s.activeStrategy);
-  const combinedRegime = useScanStore((s) => s.combinedRegime);
-  const result         = useScanStore((s) => s.stockScanResult);
-  const previous       = useScanStore((s) => s.previousStockScanResult);
-  const scanState      = useScanStore((s) => s.scanState);
-
-  const savedParams = useScanParamsStore(useShallow((s) => ({
+/** The panel's slice of the saved scan params. One list, used by the
+ *  selector, Reset and the post-hydration sync, so they cannot drift. */
+function panelParamsOf(s: ScanParams): StrategyParams {
+  return {
     pullbackTolerancePct: s.pullbackTolerancePct, pullbackEmaPeriod: s.pullbackEmaPeriod,
     pullbackTrendEma: s.pullbackTrendEma, pullbackMaType: s.pullbackMaType,
     maCrossoverFast: s.maCrossoverFast, maCrossoverSlow: s.maCrossoverSlow,
@@ -107,7 +100,25 @@ export default function Step4StocksPage() {
     requireChoppyRegime: s.requireChoppyRegime ?? false,
     btMinTrades: s.btMinTrades, btMinWinRate: s.btMinWinRate,
     eventFilter: s.eventFilter, stockShortlistMax: s.stockShortlistMax,
-  })));
+  };
+}
+
+export default function Step4StocksPage() {
+  const context        = useScanStore((s) => s.context);
+  const direction      = context?.direction ?? 'Bullish';
+  const bearish        = direction === 'Bearish';
+  const STRATEGIES     = bearish ? STRATEGIES_BEARISH : STRATEGIES_BULLISH;
+  const activeStrategy    = useScanStore((s) => s.activeStrategy);
+  const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
+  // The request of the run whose rows are on screen (A5). With the row's own
+  // strategy as fallback, this is StockPositionCard's strategyKey below.
+  const scannedRequestStrategy = useScanStore((s) => s.stockScanRequest?.strategy ?? null);
+  const combinedRegime = useScanStore((s) => s.combinedRegime);
+  const result         = useScanStore((s) => s.stockScanResult);
+  const previous       = useScanStore((s) => s.previousStockScanResult);
+  const scanState      = useScanStore((s) => s.scanState);
+
+  const savedParams = useScanParamsStore(useShallow(panelParamsOf));
   const scanOverrides   = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
 
@@ -130,7 +141,16 @@ export default function Step4StocksPage() {
   useEffect(() => setMounted(true), []);
 
   const [params, setParams] = useState<StrategyParams>(() => ({ ...savedParams }));
-  const [selected, setSelected] = useState<string | null>(activeStrategy);
+  // If this page mounts before useScanParamsStore finishes rehydrating from
+  // localStorage (skipHydration: true — see StoreHydration), the useState
+  // initializer captures the store's module defaults instead of the persisted
+  // params. Sync once hydration actually finishes (moved from Step 5, which
+  // fixed this as Critical finding #8, 2026-07-15 audit).
+  useEffect(() => {
+    const sync = () => setParams(panelParamsOf(useScanParamsStore.getState()));
+    if (useScanParamsStore.persist.hasHydrated()) sync();
+    return useScanParamsStore.persist.onFinishHydration(sync);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
@@ -186,7 +206,7 @@ export default function Step4StocksPage() {
   }
 
   async function onRun() {
-    if (!selected) return;
+    if (!activeStrategy) return;
     setError(null);
     setNotice(null);
     // The catch is for a throw runStockScan could not convert into a null
@@ -197,7 +217,7 @@ export default function Step4StocksPage() {
     // for the rest of the session.
     let res: StockScanResult | null;
     try {
-      res = await runStockScan(selected, params);
+      res = await runStockScan(activeStrategy, params);
     } catch (err) {
       // Reason FIRST: this catch exists for a throw runStockScan could not
       // convert into a null return — `setScanState` itself failing — so
@@ -261,8 +281,8 @@ export default function Step4StocksPage() {
   return (
     <div className={styles.main}>
       <div className={styles.header}>
-        <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
-        <Title as="h1" size={24}>Stocks</Title>
+        <Text size={11} tone="dim" weight={500}>STEP 4 OF 6</Text>
+        <Title as="h1" size={24}>Strategy</Title>
         <Text size={13} tone="secondary">
           Pick a strategy, run the scan, and act on the results — all on this page.
         </Text>
@@ -279,8 +299,8 @@ export default function Step4StocksPage() {
             <button
               key={s.key}
               type="button"
-              className={`${styles.card} ${selected === s.key ? styles.cardActive : ''}`}
-              onClick={() => setSelected(s.key)}
+              className={`${styles.card} ${activeStrategy === s.key ? styles.cardActive : ''}`}
+              onClick={() => setActiveStrategy(s.key)}
             >
               <div className={styles.cardHeader}>
                 <Text size={14} weight={500}>{strategyLabel[s.key] ?? s.label}</Text>
@@ -304,10 +324,10 @@ export default function Step4StocksPage() {
       <StrategyParamsPanel
         params={params}
         setParams={setParams}
-        onReset={() => setParams({ ...savedParams })}
+        onReset={() => setParams(panelParamsOf(useScanParamsStore.getState()))}
       />
 
-      {selected === 'mean_reversion_multi' && (
+      {activeStrategy === 'mean_reversion_multi' && (
         <MeanReversionConfirmPanel
           variants={meanReversionVariants}
           minConfirmations={meanReversionMinConfirm}
@@ -327,11 +347,11 @@ export default function Step4StocksPage() {
           type="button"
           className={styles.runBtn}
           onClick={onRun}
-          disabled={!selected || scanning || (selected === 'mean_reversion_multi' && meanReversionVariants.length === 0)}
+          disabled={!activeStrategy || scanning || (activeStrategy === 'mean_reversion_multi' && meanReversionVariants.length === 0)}
           title={
-            !selected
+            !activeStrategy
               ? 'Select a strategy first'
-              : selected === 'mean_reversion_multi' && meanReversionVariants.length === 0
+              : activeStrategy === 'mean_reversion_multi' && meanReversionVariants.length === 0
               ? 'Select at least one confirmation signal'
               : undefined
           }
@@ -351,6 +371,8 @@ export default function Step4StocksPage() {
           </button>
         )}
       </div>
+
+      <HistoryPrefetchRow />
 
       {error && <Text size={12} tone="reject">{error}</Text>}
       {notice && <Text size={12} tone="caution">{notice}</Text>}
@@ -469,7 +491,11 @@ export default function Step4StocksPage() {
                       // own overlay-reset effect only fires on a symbol change.
                       key={stockPositionCardKey(c)}
                       card={c}
-                      strategyKey={selected ?? ''}
+                      // The strategy this row was scanned with: NOT the current selection, which
+                      // can change after the scan, and NOT lastStockScanStrategy, which can name
+                      // another tab's or device's scan (plan audit P1-F1). StockAutoTradeArm
+                      // persists a strategy watch with this key.
+                      strategyKey={scannedRequestStrategy ?? c.strategy.strategy}
                       afterScanArmed={afterScanArmedSymbols.has(c.symbol)}
                       onAfterScanToggle={onAfterScanToggle}
                     />

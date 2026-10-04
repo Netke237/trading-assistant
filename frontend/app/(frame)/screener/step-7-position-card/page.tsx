@@ -115,7 +115,7 @@ export default function Step7PositionCardPage() {
   if (!card) {
     return (
       <div className={styles.main}>
-        <Text size={13} tone="dim">No passing candidates. Go back to Step 6.</Text>
+        <Text size={13} tone="dim">No passing candidates. Go back to Step 5 (Backtest).</Text>
       </div>
     );
   }
@@ -183,7 +183,7 @@ export default function Step7PositionCardPage() {
   return (
     <div className={styles.main}>
       <div className={styles.header}>
-        <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
+        <Text size={11} tone="dim" weight={500}>STEP 6 OF 6</Text>
         <Title as="h1" size={24}>Position Card</Title>
       </div>
 

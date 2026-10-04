@@ -1,23 +1,19 @@
 /**
- * A5b — a stock scan started from Step 5 builds its request with the same
- * builder as Steps 3/4 (decision A5B-A5C-LOCKED-2026-09-24, item 1), so it
- * carries every Step-3 setting. Plan:
- * docs/superpowers/plans/2026-09-24-a5b-step5-shared-request-plan.md
+ * A5b literal pins, moved from step-5-strategy on its removal
+ * (STOCKS-STEP-MERGE-S1). A stock scan builds its request with the shared
+ * builder (decision A5B-A5C-LOCKED-2026-09-24, item 1), so it carries every
+ * Step-3 setting. With one scan path left (runStockScan), the old Step-5 vs
+ * Steps 3/4 parity test (T1) is structural and was dropped; T2–T5 pin the
+ * body literally. Plans:
+ * docs/superpowers/plans/2026-09-24-a5b-step5-shared-request-plan.md,
+ * docs/superpowers/plans/2026-10-04-stocks-step-merge-stage1-plan.md
  */
-import '@testing-library/jest-dom';
-import { render, fireEvent, waitFor, screen, cleanup } from '@testing-library/react';
 import { runStockScan } from '@/lib/stockScan';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
-import Step5 from '../page';
-
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-  usePathname: () => '/screener/step-5-strategy',
-}));
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -40,16 +36,6 @@ const STEP3 = {
   confidence_atr_mult_target: 3.25,
   confidence_atr_mult_stop: 1.75,
   pullback_require_reversal: true,
-};
-
-const STRATEGY_LABELS: Record<string, RegExp> = {
-  pullback_ema: /^Pullback to \d+-(EMA|SMA)$/,
-  breakout_base: /^Breakout from tight base$/,
-  ma_crossover: /^MA Crossover \d+\/\d+$/,
-  mean_reversion_rsi: /^Mean Reversion RSI \/ \d+-SMA$/,
-  mean_reversion_bb: /^Mean Reversion BB$/,
-  mean_reversion_vwap: /^Mean Reversion VWAP \(15m\)$/,
-  mean_reversion_multi: /^Mean Reversion Multi-Signal$/,
 };
 
 function reset(portfolioValue = 50_000) {
@@ -85,24 +71,6 @@ function reset(portfolioValue = 50_000) {
   useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue } }));
 }
 
-function strategyButton(key: string): HTMLButtonElement {
-  const el = screen.getAllByText(STRATEGY_LABELS[key])
-    .map((e) => e.closest('button')).find((b) => b !== null);
-  if (!el) throw new Error(`no button for ${key}`);
-  return el as HTMLButtonElement;
-}
-
-async function step5Body(key: string, edit?: () => void) {
-  render(<Step5 />);
-  edit?.();
-  fireEvent.click(strategyButton(key));
-  await waitFor(() => expect(m(api.postStockScan)).toHaveBeenCalledTimes(1));
-  const body = m(api.postStockScan).mock.calls[0][0];
-  await waitFor(() => expect(useScanStore.getState().stockScanRequest).toEqual(body));
-  cleanup();
-  return body;
-}
-
 async function step34Body(key: string, overrides = {}) {
   m(api.postStockScan).mockClear();
   await runStockScan(key, overrides);
@@ -110,20 +78,10 @@ async function step34Body(key: string, overrides = {}) {
 }
 
 beforeEach(() => reset());
-afterEach(cleanup);
 
-describe('T1 — a Step-5 body equals the Step-3/4 body, every strategy', () => {
-  it.each(Object.keys(STRATEGY_LABELS))('%s', async (key) => {
-    const s5 = await step5Body(key);
-    const s34 = await step34Body(key);
-    expect(s5).toEqual(s34);
-    expect(s5.strategy).toBe(key);
-  });
-});
-
-describe('T2 — literal pins (so T1 cannot pass with both paths wrong)', () => {
+describe('T2 — literal pins', () => {
   it('carries every Step-3 setting', async () => {
-    const b = await step5Body('mean_reversion_rsi');
+    const b = await step34Body('mean_reversion_rsi');
     expect(b.universe).toEqual(['NDX100']);
     expect(b.direction).toBe('Bearish');
     expect(b.horizon).toBe('Position');
@@ -147,7 +105,7 @@ describe('T2 — literal pins (so T1 cannot pass with both paths wrong)', () => 
   });
 
   it('mean_reversion_multi carries its four fields from the store', async () => {
-    const b = await step5Body('mean_reversion_multi');
+    const b = await step34Body('mean_reversion_multi');
     expect(b.mean_reversion_variants).toEqual(['mean_reversion_rsi', 'mean_reversion_bb']);
     expect(b.mean_reversion_min_confirmations).toBe(2);
     expect(b.vwap_lookback).toBe(15);
@@ -158,29 +116,26 @@ describe('T2 — literal pins (so T1 cannot pass with both paths wrong)', () => 
 describe('T3 — confidence gate disabled', () => {
   it('sends no confidence thresholds', async () => {
     useSettingsStore.setState({ confidenceGate: { ...DEFAULT_CONFIDENCE_GATE, enabled: false } });
-    const b = await step5Body('pullback_ema');
+    const b = await step34Body('pullback_ema');
     expect(b.confidence_caution_below).toBeUndefined();
     expect(b.confidence_reject_below).toBeUndefined();
   });
 });
 
 describe('T4 — the panel\'s unsaved edits win', () => {
-  it('an edited, unsaved field is sent; nothing else differs from Step 3/4', async () => {
-    const b5 = await step5Body('pullback_ema', () => {
-      const input = screen.getByText('Pullback EMA period').closest('label')!.querySelector('input')!;
-      fireEvent.change(input, { target: { value: '34' } });
-    });
+  // The overrides argument is how Step 4 passes the panel's unsaved edits
+  // (runStockScan(activeStrategy, params)).
+  it('an edited, unsaved field is sent without being saved', async () => {
+    const b = await step34Body('pullback_ema', { pullbackEmaPeriod: 34 });
     expect(useScanParamsStore.getState().pullbackEmaPeriod).toBe(21);   // not saved
-    expect(b5.pullback_ema_period).toBe(34);
-    const b34 = await step34Body('pullback_ema');
-    expect(b5).toEqual({ ...b34, pullback_ema_period: 34 });
+    expect(b.pullback_ema_period).toBe(34);
   });
 });
 
 describe('T5 — account size stays the user\'s portfolio value', () => {
   it('sends riskStore portfolioValue, not a hardcoded 50k', async () => {
     reset(123_456);
-    const b = await step5Body('breakout_base');
+    const b = await step34Body('breakout_base');
     expect(b.account_size).toBe(123_456);
   });
 });

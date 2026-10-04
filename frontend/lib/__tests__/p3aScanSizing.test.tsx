@@ -2,8 +2,10 @@
  * P3a item 1 (decision Q2): every MANUAL scan path sizes from Settings → Risk,
  * and a 0% max loss per trade stops the scan with a message instead of posting
  * a request the backend refuses (decision P3A-SCAN-RISK-ZERO-STOPS-2026-09-25).
- * Four paths: Steps 3/4 runStockScan, Step 5, Analysis (current-settings
- * basis), Step-4 Pre-Breakout pullback.
+ * Four paths: Steps 3/4 runStockScan, Step 4 Stocks page, Analysis
+ * (current-settings basis), Step-4 Pre-Breakout pullback. Moved here from
+ * step-5-strategy/__tests__ on Step 5's removal, its Step-5 block retargeted
+ * to the Step 4 Stocks page (STOCKS-STEP-MERGE-S1).
  */
 import '@testing-library/jest-dom';
 import { render, fireEvent, waitFor, screen, cleanup } from '@testing-library/react';
@@ -12,8 +14,8 @@ import { useAnalysisStore } from '@/lib/analysisStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
-import Step5 from '../page';
-import PreBreakout from '../../step-4-prebreakout/page';
+import Step4StocksPage from '../../app/(frame)/screener/step-4-stocks/page';
+import PreBreakout from '../../app/(frame)/screener/step-4-prebreakout/page';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
@@ -31,6 +33,14 @@ jest.mock('@/lib/api', () => ({
   getLastDataRefresh: jest.fn(() => Promise.resolve({ last_refresh: null })),
   API_BASE_URL: 'http://localhost:8000',
 }));
+
+// Step 4 Stocks page's heavy children, mocked as its own __tests__ do.
+// StrategyParamsPanel and runStockScan are deliberately NOT mocked.
+jest.mock('@/components/organisms/StockPositionCard', () => ({ StockPositionCard: () => null }));
+jest.mock('@/components/organisms/StockSendDialog', () => ({ StockSendDialog: () => null }));
+jest.mock('@/components/organisms/ScanFunnel', () => ({ ScanFunnel: () => null }));
+jest.mock('@/components/atoms/WatchStar', () => ({ WatchStar: () => null }));
+jest.mock('../../app/(frame)/screener/step-4-stocks/HistoryPrefetchRow', () => ({ HistoryPrefetchRow: () => null }));
 
 const m = (f: unknown) => f as jest.Mock;
 
@@ -66,11 +76,14 @@ describe('Steps 3/4 — runStockScan', () => {
   });
 });
 
-describe('Step 5', () => {
-  const pick = () => fireEvent.click(screen.getByText(/^Breakout from tight base$/).closest('button')!);
+describe('Step 4 Stocks', () => {
+  const pick = () => {
+    fireEvent.click(screen.getByText(/^Breakout from tight base$/).closest('button')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Stock Scan' }));
+  };
   it('sends the user\'s account value and max loss', async () => {
     setup(73_000, 0.02);
-    render(<Step5 />);
+    render(<Step4StocksPage />);
     pick();
     await waitFor(() => expect(m(api.postStockScan)).toHaveBeenCalledTimes(1));
     const b = m(api.postStockScan).mock.calls[0][0];
@@ -79,9 +92,9 @@ describe('Step 5', () => {
   });
   it('at 0% posts nothing and shows the message', async () => {
     setup(73_000, 0);
-    render(<Step5 />);
+    render(<Step4StocksPage />);
     pick();
-    expect(await screen.findByText(SCAN_RISK_ZERO_MESSAGE)).toBeInTheDocument();
+    expect(await screen.findByText(`Scan failed — ${SCAN_RISK_ZERO_MESSAGE}`)).toBeInTheDocument();
     expect(m(api.postStockScan)).not.toHaveBeenCalled();
   });
 });
