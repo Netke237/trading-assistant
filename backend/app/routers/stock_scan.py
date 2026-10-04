@@ -62,7 +62,7 @@ from app.services.strategy_engine import (
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
-from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
+from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret, load_backtest_cfg
 from app.scoring.first_passage import estimate_stock_first_passage
 # compute_final_stop / compute_target_row take candles, a direction, a price
@@ -637,8 +637,10 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     # confidence / summary_text are decided on them, and the scan and the
     # Analysis page share this cache -- without them a run at 5 trades served
     # its verdict to a later run at 10 for up to _BACKTEST_TTL.
-    return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}|{commission:.6f}"
-            f"|{min_trades}|{min_win_rate!r}")
+    # TRADING-REVIEW-PHASE-C T2: the bar basis version too, right after the bars
+    # hash (a hash of closes alone does not see a basis change in open/high/low).
+    return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{BARS_BASIS_VERSION}"
+            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}")
 
 
 def _get_backtest_cached(key: str):

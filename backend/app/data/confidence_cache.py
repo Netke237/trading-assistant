@@ -13,6 +13,15 @@ _store: dict[str, dict] = {}
 
 _TTL_SECONDS = 7 * 24 * 3600  # weekly
 
+# Basis version of the bar-derived values cached here, appended to every key so
+# a value computed on an older basis is never served (it simply misses and its
+# row expires under the TTL; no migration, no delete). Bump it whenever the bars
+# or the replay that produce a cached confidence change. It last moved to "b2"
+# for TRADING-REVIEW-PHASE-C: T1 (historical_store._read_bars scales open/high/
+# low by adj_factor like close) and T7 (the stock trigger honours
+# trigger.setup_window_bars). stock_scan._backtest_key carries the same token.
+BARS_BASIS_VERSION = "b2"
+
 # L2 SQLite path — sits in backend/data/; overridable in tests via _DB_PATH.
 _DB_PATH: str = str(Path(__file__).parent.parent.parent / "data" / "confidence_cache.db")
 
@@ -39,7 +48,8 @@ def cache_key(
     # scoring_mode is also part of the key: 'stock' and 'options' apply materially
     # different scoring rules, so a value computed under one mode must never be
     # served to a lookup under the other (Critical finding #4, 2026-07-15 audit).
-    return f"{symbol.upper()}|{direction.lower()}|{horizon.lower()}|{mult_key}|{scoring_mode.lower()}"
+    return (f"{symbol.upper()}|{direction.lower()}|{horizon.lower()}|{mult_key}|{scoring_mode.lower()}"
+            f"|{BARS_BASIS_VERSION}")
 
 
 # ── SQLite helpers ─────────────────────────────────────────────────────────────
