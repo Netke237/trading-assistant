@@ -141,3 +141,21 @@ profile hydration/dismissal and moved/restored/legacy stop cases. Initial plural
 Jest filtering accidentally selected full suites; those duplicate incomplete
 runs were stopped, not counted as final full-suite verification. Fresh frontend
 code stage round1 pending against the frontend checkpoint; work unfinished.
+
+Frontend code round1 fresh reviewer `/root/area3_frontend_audit_r1` reviewed
+whole frozen `4af9d089..3d66ae29f7be26eb3e065daaded880aa4486a636` (22 files),
+plan/worklog and backend API interactions. Both required skills applied; zero
+gate findings after scope verification. Independently194 focused tests passed,
+plus116 portfolio/Step7 tests; three obsolete percentage-fixture assertions
+failed as already reported. Typecheck passed. Python3.11 exhaustive31,626
+integer hold ranges0<=min<=max<=250 matched frontend DTE/residual/span formula.
+Frontend stage closes clean at1/3, no second code round needed.
+
+Full frontend first run:191 suites/4609 tests passed, one suite/3 assertions
+failed solely expecting retired target-percentage request keys. Fixture now
+uses recorded/live rr_target_r_multiple, preserving the same provenance test;
+its4 tests passed. No production change follows the clean frozen checkpoint.
+Normal build failed on denied Google Fonts fetches. Separate environment-only
+NEXT_FONT_GOOGLE_MOCKED_RESPONSES build compiled, typechecked and generated30
+routes successfully; mock font is not production-font or exact visual evidence.
+Final corrected full frontend and full backend runs remain in progress.

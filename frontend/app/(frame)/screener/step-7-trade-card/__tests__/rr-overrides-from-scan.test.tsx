@@ -99,9 +99,9 @@ const picked: OptionContract = {
  * basket card -- send the Reward/Risk overrides the SCAN priced with
  * (ScanResult.rr_overrides), not live Step-3 scanOverrides edited after it.
  */
-const RECORDED = { rr_bullish_target_pct: 0.12, rr_bullish_invalidation_pct: 0.04 };
-const LIVE = { rr_bullish_target_pct: 0.5, rr_bearish_target_pct: 0.4, rr_bullish_invalidation_pct: 0.2 };
-const RR_KEYS = ['rr_bullish_target_pct', 'rr_bearish_target_pct', 'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct'];
+const RECORDED = { rr_target_r_multiple: 2.5, rr_bullish_invalidation_pct: 0.04 };
+const LIVE = { rr_target_r_multiple: 3, rr_bullish_invalidation_pct: 0.2 };
+const RR_KEYS = ['rr_target_r_multiple', 'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct'];
 const rrOf = (body: Record<string, unknown>) =>
   Object.fromEntries(RR_KEYS.filter((k) => k in body).map((k) => [k, body[k]]));
 
