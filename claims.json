@@ -7,6 +7,14 @@
       "expires_at": "2026-10-04T19:49:54Z",
       "note": "Specification and parallel coordinator ticket graph on latest main; documentation only",
       "task": "STOCK-DESIGN-GRILLING"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/keen-pascal-i4zd1f",
+      "claimed_at": "2026-10-04T18:12:01Z",
+      "expires_at": "2026-10-04T21:12:01Z",
+      "note": "Phase C proposal+plan for 2026-10-04 trading review (bar basis, WFO measurement, evidence harness)",
+      "task": "TRADING-REVIEW-PHASE-C"
     }
   ]
 }
