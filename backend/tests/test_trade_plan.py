@@ -183,7 +183,10 @@ def test_heston_params_thread_through_to_a_clean_all_heston_ladder():
         "Heston repriced", "Heston repriced", "Heston repriced",
     ]
     prices = [t.estimatedOptionPrice for t in p.targets]
-    assert prices == [4.57, 9.1, 15.48]
+    # AREA3 canonicalizes T1 to round(318.73 * 1.08, 2) = 344.23.
+    # T3 spot is 318.73 + 2*(344.23-318.73) = 369.73,
+    # Heston at the unchanged Annual horizon rounds its premium to 15.49.
+    assert prices == [4.57, 9.1, 15.49]
     # Strictly increasing, not merely non-decreasing: an equality here would
     # mean the floor fired, i.e. the pricer regressed.
     assert prices[0] < prices[1] < prices[2]

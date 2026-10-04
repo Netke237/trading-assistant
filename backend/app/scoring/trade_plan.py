@@ -11,13 +11,12 @@ the premium-stop / invalidation / targets keep describing the old contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 
 from app.models.heston import HestonParams
 from app.scoring.exit_plan import BEARISH_MIN_TARGET_FRACTION
 from app.scoring.entry_quality import assess_entry, EntryAssessment
 from app.scoring.reprice_horizon import display_reprice_years
-from app.scoring.reward_risk import estimate_rr, estimate_targets
+from app.scoring.reward_risk import estimate_rr, estimate_targets, captured_stock_risk
 
 
 @dataclass
@@ -115,6 +114,9 @@ def build_trade_plan(
     if not is_call and stock_price - target_price > max_move:
         target_price = stock_price - max_move
         target_source = "capped"
+    # A displayed target is also the target round-tripped on contract change.
+    # Price both callers at that same cents level.
+    target_price = round(target_price, 2)
     expiry_years = dte / 365.0
 
     # THE ONE CALLER THIS PLUMBING WAS WAITING FOR. estimate_rr and
@@ -186,8 +188,7 @@ def build_trade_plan(
         reprice_years=reprice_years,
         rr_risk_basis=rr.risk_basis,
         target_source=target_source,
-        stock_stop_loss=(round(premium * stop_cost_fraction, 2)
-                         if stop_cost_fraction is not None and math.isfinite(stop_cost_fraction) and stop_cost_fraction > 0 else None),
+        stock_stop_loss=captured_stock_risk(premium, stop_cost_fraction),
         stock_stop_loss_at=(round(invalidation_price, 2)
-                            if stop_cost_fraction is not None and math.isfinite(stop_cost_fraction) and stop_cost_fraction > 0 else None),
+                            if captured_stock_risk(premium, stop_cost_fraction) is not None else None),
     )

@@ -70,3 +70,24 @@ def test_recompute_target_roundtrip_and_legacy():
     assert capped.status_code == 200,capped.text
     assert capped.json()['exit']['target'] == 55
     assert capped.json()['exit']['targetSource'] == 'capped'
+
+
+def test_exact_same_contract_target_roundtrip():
+    from app.scoring.stop_cost import compute_stop_cost
+    cost=compute_stop_cost(stop_price=97.01,stock_price=100,strike=100,dte=45,premium=5,is_call=True)
+    args=dict(direction='Bullish',stock_price=100,strike=100,dte=45,premium=5,entry_bid=4.9,entry_ask=5.1,entry_mid=5,rr_cfg={'premium_stop_pct':.6},final_stop_price=97.006,stop_cost_fraction=cost.fraction)
+    scan=build_trade_plan(target_price=105.988,**args)
+    replay=build_trade_plan(target_price=scan.target_price,**args)
+    assert scan.rr_ratio == replay.rr_ratio
+    assert scan.targets == replay.targets
+
+@pytest.mark.parametrize('premium,stop',[(1.23,99.5),(.19,99.95)])
+def test_captured_dollar_risk_and_visible_option_price_agree(premium,stop):
+    from app.scoring.stop_cost import compute_stop_cost
+    cost=compute_stop_cost(stop_price=stop,stock_price=100,strike=105,dte=45,premium=premium,is_call=True)
+    assert cost is not None
+    plan=build_trade_plan(direction='Bullish',stock_price=100,strike=105,dte=45,premium=premium,entry_bid=premium,entry_ask=premium,entry_mid=premium,rr_cfg={'premium_stop_pct':.6},final_stop_price=stop,target_price=100+2*(100-stop),stop_cost_fraction=cost.fraction)
+    for row in plan.targets:
+        browser_rr=round((row.estimatedOptionPrice-premium)/min(plan.premium_stop,plan.stock_stop_loss),2)
+        assert row.rrContribution == browser_rr
+    assert plan.rr_ratio == plan.targets[0].rrContribution

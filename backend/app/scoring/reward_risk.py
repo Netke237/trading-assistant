@@ -147,9 +147,11 @@ def estimate_rr(
 
     exit_premium = max(exit_premium, 0.01)
 
-    frac = resolved_risk_fraction(premium_stop_pct, risk_fraction)
-    risk = current_premium * frac
-    basis = "stock_stop" if frac < premium_stop_pct else "premium_stop"
+    risk = resolved_risk_dollars(current_premium, premium_stop_pct, risk_fraction)
+    if captured_stock_risk(current_premium, risk_fraction) is not None:
+        exit_premium = round(exit_premium, 2)
+    basis = ("stock_stop" if captured_stock_risk(current_premium, risk_fraction) is not None
+             and risk < round(current_premium * premium_stop_pct, 2) else "premium_stop")
     reward = exit_premium - current_premium
 
     if risk <= 0:
@@ -344,8 +346,10 @@ def estimate_targets(
 
         prev_display_price = opt_price
 
+        if captured_stock_risk(current_premium, risk_fraction) is not None:
+            opt_price = round(opt_price, 2)
         reward = opt_price - current_premium
-        risk_basis = current_premium * resolved_risk_fraction(premium_stop_pct, risk_fraction)
+        risk_basis = resolved_risk_dollars(current_premium, premium_stop_pct, risk_fraction)
         rr = round(reward / risk_basis, 2) if risk_basis > 0 else 0.0
 
         results.append(TargetLevelSchema(
@@ -358,8 +362,21 @@ def estimate_targets(
 
     return results
 
-def resolved_risk_fraction(premium_stop_pct: float, risk_fraction: float | None) -> float:
-    """Use today's computed stock-stop loss when valid and smaller than premium risk."""
+def captured_stock_risk(premium: float, risk_fraction: float | None) -> float | None:
+    """Cents-valued stop loss published to the card; sub-cent zero is unmeasured."""
     if risk_fraction is not None and math.isfinite(risk_fraction) and risk_fraction > 0:
-        return min(premium_stop_pct, risk_fraction)
-    return premium_stop_pct
+        amount = round(premium * risk_fraction, 2)
+        if amount > 0:
+            return amount
+    return None
+
+
+def resolved_risk_dollars(premium: float, premium_stop_pct: float, risk_fraction: float | None) -> float:
+    """New captured plans use the same cents risk as the editable card fields.
+
+    Without captured stock loss, retain the legacy raw premium-stop calculation.
+    """
+    stock_loss = captured_stock_risk(premium, risk_fraction)
+    if stock_loss is not None:
+        return min(round(premium * premium_stop_pct, 2), stock_loss)
+    return premium * premium_stop_pct

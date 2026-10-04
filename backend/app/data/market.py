@@ -710,13 +710,10 @@ def _nearest_expiration_in_window(
     tolerance margin.
 
     `min_dte_floor` is the contract validator's hard-reject floor
-    (dte_window.widened_min_dte: never below hold_max + 1). Expiries under it
-    are dropped BEFORE the centre-nearest pick. Without this the fetch could
-    choose an expiry the validator is certain to reject as dte_too_short, and
-    because only one expiry is fetched, that rejected the whole symbol even
-    when a valid expiry was listed: a Custom 15-200d hold (window 30-400,
-    centre 215, floor 201) picked a 199d monthly; Intraday (window 1-4, floor 3)
-    picked Friday's weekly from Wednesday on.
+    (dte_window.widened_min_dte: at least hold_max + 21 when a hold is supplied).
+    Drop expiries below it before choosing the nearest window centre, so the
+    one fetched expiry can pass the same validator floor. Custom 15-200d has
+    window 221-400 and floor221; Intraday 0-2d has window23-58 and floor23.
     """
     lo, hi = bounds
     centre = (lo + hi) / 2
