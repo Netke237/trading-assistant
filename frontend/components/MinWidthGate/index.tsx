@@ -1,27 +1,35 @@
 'use client';
 
 /*
- * MinWidthGate — spec §6.3 risk #6: desktop-only (≥1280px).
+ * MinWidthGate — default desktop minimum1280px; the audited Options Trade
+ * Card alone supports1200px.
  * Rather than adding responsive breakpoints, block the app under the threshold
  * with a friendly explainer. Uses matchMedia so it responds to window resizes.
  */
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import styles from './MinWidthGate.module.css';
 
 const MIN_WIDTH = 1280;
+const TRADE_CARD_MIN_WIDTH = 1200;
 
 export function MinWidthGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  // Step 7's audited presentation supports1200px. Keep the original desktop
+  // minimum on every other route; children remain mounted behind this overlay.
+  const minWidth = pathname === '/screener/step-7-trade-card'
+    ? TRADE_CARD_MIN_WIDTH : MIN_WIDTH;
   const [tooNarrow, setTooNarrow] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${MIN_WIDTH - 1}px)`);
+    const mq = window.matchMedia(`(max-width: ${minWidth - 1}px)`);
     const sync = () => setTooNarrow(mq.matches);
     sync();
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
-  }, []);
+  }, [minWidth]);
 
   return (
     <>
@@ -32,7 +40,7 @@ export function MinWidthGate({ children }: { children: React.ReactNode }) {
             <Title as="h2" size={20}>Desktop required</Title>
             <Text size={13} tone="secondary">
               Bamendjou is designed for a trading desktop. Please use a window at least
-              1280&nbsp;pixels wide. Current width: {typeof window !== 'undefined' ? window.innerWidth : '—'}&nbsp;px.
+              {minWidth}&nbsp;pixels wide. Current width: {typeof window !== 'undefined' ? window.innerWidth : '—'}&nbsp;px.
             </Text>
           </div>
         </div>

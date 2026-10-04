@@ -266,3 +266,25 @@ themes has no desktop overlay, document/workspace overflow or race table scroll.
 Six additional native125% screenshots and exact metrics/scripts are stored in
 `browser-zoom125.json`. Native125% at this supported CSS width is now verified;
 remote font metrics and shared1200 gate remain the stated limitations.
+
+
+### Resume — latest main, scoped minimum-width correction and reviewer outage
+
+The initial D reviewer `presentation_d_preservation_audit_r1` failed BEFORE
+reviewing due to service usage limit (retry-after14:22UTC). It produced no
+qualifying round or clean verdict; D remains at0 qualifying rounds. No fourth
+round or cap reset occurred. User said continue after the scope question; this
+is treated as authorization for the recommended Step7-only1200 exception.
+Only MinWidthGate/index.tsx and its named focused test are added to owned scope.
+Every other route retains1280; page-scoped frame rule remains1200 on Step7 only.
+Seven tests check exact boundaries, other routes, route-resize listener cleanup
+and the same stateful child DOM through gate transitions; typecheck passed.
+
+At14:49UTC own previous claim had expired; live STOCK-DESIGN-GRILLING is
+documentation-only and disjoint. Reclaimed only integration through17:49UTC.
+Fetched latest origin/main e4d4d80e (audited Stocks Step merge), merged into own
+branch at d49dc5b6 without conflicts. No feature canonical state replaced main;
+new unrelated JSON is retained intact. Main merge commit preceded the resume
+typecheck; subsequent typecheck passed before own source commit. Final full
+checks are rerun because shared shell code and the authorized gate changed.
+No merge into main, deployment or order occurred.
