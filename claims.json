@@ -23,6 +23,14 @@
       "expires_at": "2026-10-04T03:05:19Z",
       "note": "Finish authorized unified Options takeover audit and evidence",
       "task": "OPTIONS-CONTRACT-EXPLANATIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/trade-card-ui-core",
+      "claimed_at": "2026-10-04T00:05:39Z",
+      "expires_at": "2026-10-04T03:05:39Z",
+      "note": "UI-CORE entry-only completion delta after two independent clean code slices",
+      "task": "TRADE-CARD-PRESENTATION-STATE"
     }
   ]
 }
