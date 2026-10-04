@@ -31,3 +31,20 @@ implementation must wait for the plan gate.
 Original TRADE-CARD-PRESENTATION-INTEGRATION remains pending. AREA3 is the
 explicitly reassigned blocker task; finishing it does not certify presentation
 integration or authorize deployment, main merge or orders.
+
+## Final plan review and capped stop
+
+Reviewer `/root/area3_plan_round3` returned one gate finding in exact frozen
+6e905134..24dd15cc scope after tracing actual source. See plan R3-F1 for the
+reproduction and proposed correction. This is not clean; no backend/frontend
+implementation is started and no fourth review is run. Rounds: 4/3/1 findings;
+first two batches recorded fixed by prior session, last finding remains open.
+
+Recovery publication: `3ebb38ed` recorded reassignment/prior audit evidence;
+following documentation commit records final reviewer result. Branch is pushed
+and AREA3 claim released at the capped stop. Canonical JSON has no AREA3 entry
+in fetched main; no existing unrelated state/audit counters were altered.
+Presentation integration remains blocked until AREA3 resolves or an explicit
+shared-file boundary is approved. No tests or typecheck needed for these
+Markdown-only changes; git diff --check passed. No deployment, main merge or
+orders.

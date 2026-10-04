@@ -297,3 +297,32 @@ Non-gate corrections also applied (factual): `scanStore` does not persist `scanO
 * **R2-F1 (medium).** The R1-F1 fix made the ladder and checklist R:R depend on a stock stop the trader can move afterwards (Invalidation edit, Check-structure, Arithmetic Plan). Fix: `exit.stockStopLossAt`; the stock leg is used only while the card's stop equals it; otherwise the ladder uses premium-stop-only risk and the checklist goes CAUTION with no number via `onRrStaleChange` → `tradeCardUiStore.rrStale` (A3, B3, B5).
 * **R2-F2 (medium, persisted data).** The Portfolio drawer's exit-plan re-compute did not send the multiple, so it re-stamped `resolved_tp_price` from a 2.0R row on a position picked at 2.5R. Fix: send the stored rows' first `rrRatio` (B3).
 * **R2-F3 (medium-low).** The $0.01 floor did not fix the inflated R/R. Kenneth chose D6 (cap at 10% of entry by lowering the effective multiple). Fix: a 45%-move cap on the bearish T1 in `build_trade_plan` (the ladder's deepest level T3 then sits ≥ 10%), and a 10% per-row clamp with the `"target_capped"` quality reason in `compute_target_row`. The $0.01 floors from round 1 are replaced (A2).
+
+### Recovered plan round 3 — 2026-10-04 (final allowed round)
+
+Fresh independent reviewer `/root/area3_plan_round3` applied BMad and the canonical
+numeric/persistence gate to exact diff
+`6e90513404318fde7e366c00fb6b3a348c873dd9..24dd15ccaef0c4786b3224f1d10d3f58fa028620`
+and interactions with actual exit-plan/structural-target producers, trade-plan
+construction, portfolio recomputation and TradeCard/UI state.
+
+Result: **NOT CLEAN — one unresolved gate finding; plan stage cap reached.**
+The previous session launched round 3 but published no recoverable verdict;
+recovery evidence is in `area3-worklogs/AREA3-OPTION-PLAN-CONSISTENCY.md`.
+No fourth qualifying round, production implementation or clean-status claim.
+
+- R3-F1: A2 clamps bearish `arithmetic_price` before structural snapping, but
+  `compute_target_row` then replaces the selected price with the structural
+  target. Entry $100, ATR $20, stop $140, multiple 3: arithmetic target clamps
+  to $10; support $5 is within the configured $6 snap tolerance, so the final
+  selected target becomes $5. Structural detection has no 10%-entry floor.
+  The forbidden target can be displayed, repriced and persisted as an
+  Arithmetic take-profit target.
+- Proposed correction, **not implemented or audited**: reject below-floor
+  bearish structural snap candidates, or clamp the final selected price after
+  snapping and retain `target_capped`. Add a regression with support below
+  the floor inside snap tolerance. No production correction is authorized by
+  this record; another review requires explicit user authorization beyond the
+  exhausted plan-stage cap.
+
+Plan remains unaudited-clean false. Backend/frontend code stages have not begun.
