@@ -45,7 +45,7 @@ Kenneth answered on 2026-10-04:
 | T6 | DAY semantics for backtest entry limits | T1 | `backend/app/services/strategy_backtest.py`, `backend/tests/test_backtest_day_limits.py` |
 | T7 | Stock trigger honours `setup_window_bars` | T1 | `backend/app/scoring/stock_scorer.py`, `SCORING_RULES.md`, `backend/tests/test_trigger_setup_window.py` |
 | T8 | **Withdrawn** (plan round 1, F1). The live de-overlap moves to C4; the harness measures it (T11) | — | — |
-| T9 | Options R/R at the full-premium loss basis | — | `backend/app/scoring/reward_risk.py`, `backend/app/scoring/trade_plan.py`, `backend/app/routers/scan.py` (alt R/R call only), `frontend/components/organisms/TradeCard/index.tsx`, `frontend/types/domain.ts`, `frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx`, tests named in the task |
+| T9 | Options R/R at the full-premium loss basis | — | `backend/app/scoring/reward_risk.py`, `backend/app/scoring/trade_plan.py`, `backend/app/routers/scan.py` (alt R/R call only), `frontend/components/organisms/TradeCard/index.tsx`, `frontend/lib/scanStore.ts` (v18 migration only), `frontend/types/domain.ts`, `frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx`, tests named in the task |
 | T10 | Stocks After-scan auto-execute fires on PASS only | — | `frontend/app/(frame)/screener/step-4-stocks/page.tsx`, its test |
 | T11 | Evidence harness: shared loader + bar-basis check + score calibration | T1, T3 | `scripts/evidence/__init__.py`, `scripts/evidence/_bars.py`, `scripts/evidence/bar_basis_check.py`, `scripts/evidence/score_calibration.py`, `backend/tests/test_evidence_harness.py` |
 | T12 | Evidence harness: gate persistence + strategy matrix | T4, T6, T11 | `scripts/evidence/gate_persistence.py`, `scripts/evidence/strategy_matrix.py`, `backend/tests/test_evidence_harness.py` (append) |
@@ -305,6 +305,12 @@ Fixing it needs either a de-overlapped `min_samples` (a threshold, so Kenneth's 
    - (ii) an edited target row;
    - (iii) a card with a captured stock risk after the entry limit is edited;
    - (iv) `rrStale` true.
+   - (v) Plan round 2, R2-F1: a **saved pre-T9 candidate** (`exit.rrRiskBasis: 'premium_stop'`, `rrContribution` 1.25, premium 2.00, estimate 3.50) renders **0.8**, not 1.3, and its caption does not say "full premium" for a value computed on another basis.
+6. Frontend, `frontend/lib/__tests__/` scanStore migration test (extend the existing v13-v17 migration tests):
+   - A v17 persisted state whose `scanResult` (options) holds any candidate with `exit.rrRiskBasis` absent or ≠ `'full_premium'` migrates to `scanResult: null`. The same rule applies to `previousRun`.
+   - A state whose candidates are all `'full_premium'` is kept unchanged.
+   - `stockScanResult` and every other field are untouched.
+7. Frontend, the step-7 rail: a candidate whose `exit.rrRiskBasis !== 'full_premium'` grades the R/R row **CAUTION** with the detail "R/R computed on an older basis: re-run the scan". This is defence in depth for any live card that bypasses the migration.
 5. Frontend, the step-7 context-rail checklist row: with `rrRiskBasis: 'full_premium'`, the detail text says "risking the full premium (no protective stop order)".
 
 **Code.**
@@ -318,6 +324,8 @@ Fixing it needs either a de-overlapped `min_samples` (a threshold, so Kenneth's 
 - Frontend:
   - `types/domain.ts:666` union gains `'full_premium'`.
   - `TradeCard`: `ladderRisk` becomes `overlay.entryLimit` (the full premium at the overlay's own entry). It no longer reads `premiumStop` or `capturedStockRisk` for R/R. `authoritativeRr` passes the backend's `rrContribution` only while the entry limit is unedited. The stock-stop conditions are no longer relevant because the backend no longer uses that basis.
+  - **`authoritativeRr` guard (R2-F1).** Pass the backend's `t.rrContribution` only when `data.exit.rrRiskBasis === 'full_premium'` **and** `overlay.entryLimit === data.entry.limit`. Otherwise the row recomputes `rrContribution(estOptionPrice, overlay.entryLimit, overlay.entryLimit)`. That recomputation is exact, because `estimatedOptionPrice` does not depend on the risk basis.
+  - **scanStore v18 (R2-F1).** Bump `version` 17 → 18 and add an accumulating `if (version < 18)` branch, in the same shape as the v13-v15 branches that delete a saved field that became a wrong number under a new reading. It discards a persisted options `scanResult` and `previousRun` when any candidate's `exit.rrRiskBasis !== 'full_premium'`, so persisted `rrRatio` values from before T9 (header, rail, `AlternativeContractRow`) are never shown under the new basis. The user re-runs the scan. The one-time loss of Δrank against the discarded `previousRun` is accepted. Comment the branch with this reason.
   - The `premiumStop` **field** itself (the editable alert level) is unchanged.
   - Update the comment at `index.tsx:129-131`, the comment at `:3214-3218`, and the caption at `:3202-3204`, which becomes: "R/R risk: full premium (no protective stop order)." Keep the `rrStale` caption only if `rrStale` still changes anything; it does not for R/R, so remove that branch from the caption only.
   - The step-7 rail text gains the third branch.
