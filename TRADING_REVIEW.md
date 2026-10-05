@@ -1,390 +1,291 @@
 # Bamendjou Trading Review
 
-**Date**: 2026-10-02 · **Commit**: `0caf2661` (branch `claude/pipeline-inspector-fixes`, clean tree) · **Mode**: A — full review
-**Method**: k-trading-software-reviewer (three-voice panel + Chair)
+**Date**: 2026-10-04 · **Commit**: `e4d4d80e` (`main`, clean tree) · **Mode**: A — full review
+**Method**: k-trading-software-reviewer (three-voice panel + Chair). Scope confirmed with Kenneth before starting: full review.
 
 ## Overall: **REJECT**
 
-> "The plumbing is careful and the fail-closed work is real. But the tuner is grading the wrong trade, an earnings 'gate' that only shows a badge, and a per-trade loss limit nothing enforces mean I would not put money behind it yet."
+> "The Phase A fixes are real and they hold: the tuner grades the right trade, earnings veto, the option premium cap is the loss limit, and the basket tells the truth. But this run finally had five years of data, and it says three hard things: the price history the backtests read is corrupt, the Swing score does not pick better trades than chance, and the per-symbol backtest gate picks noise. I would not put money behind it yet."
 
 | Area | Grade | Why, in one line |
 |---|---|---|
-| 1. Edge & strategy logic | **CAUTION** | `pullback_ema`'s own target sits a median 0.11R away on SPY; options targets are a flat +8% on every symbol and horizon; the regime gate rests on 0–15 transitions |
-| 2. Statistical evidence | **REJECT** | The WFO tuner runs the **bearish** branch when tuning bullish params, and every out-of-sample fold is skipped on real data (61–62 bars < the 100-bar minimum) |
-| 3. Options & contract selection | **REJECT** | Earnings inside the reject window only lowers the score: 37 of 440 measured PASS setups stay PASS with earnings 3 days out, and nothing downstream blocks them |
-| 4. Risk parameters & sizing | **REJECT** | A 5%-of-account premium cap with no protective order lets one trade lose more than the 3.75% per-trade loss limit, which is warning-only. All % caps multiply a client-typed account value |
-| 5. Execution safety | **CAUTION** | The basket says "N sent to broker" but places no order; "market open / halted" is really "a price exists"; the daily-loss gate is in-memory and auto-trader-only |
+| 1. Edge & strategy logic | **REJECT** | On 5 years × 61 names the Swing score does not separate outcomes: PASS setups +0.140R vs every bar +0.135R vs REJECT +0.113R (CIs overlap). Every bearish strategy loses net |
+| 2. Statistical evidence | **REJECT** | `get_bars` returns split/dividend-adjusted **closes** with **raw** open/high/low: 44% of scan-window bars have a close outside their own range; the backtest gate's verdict flips on 29 of 248 combos. The gate itself has no persistence (rank correlation −0.25…+0.05 between halves) |
+| 3. Options & contract selection | **CAUTION** | Earnings now veto (fixed). Still open: long-hold presets hold through prints, spreads half-built, flat +8% target, R/R computed on a 60% loss basis while sizing assumes 100% |
+| 4. Risk parameters & sizing | **CAUTION** | Option premium cap is now `min(5%, 3.75%)` (fixed). Still open: every % cap multiplies a client-typed account value; the daily-loss gate is in-memory, auto-only, spend not loss |
+| 5. Execution safety | **CAUTION** | Basket honesty fixed. Still open: "market open" = "a price exists"; Stocks "After scan — fire when next scan PASS" also fires on CAUTION; no protective orders |
 
-Overall = worst area = **REJECT**. Grade the behaviour as if live: every broker key is paper today (`routers/broker.py:18`, `broker_router.py` blocks `*_live`). That is said once here and is not counted as mitigation anywhere below.
+Overall = worst area = **REJECT**. Graded as if live: every broker key is paper today (`broker_router.py` refuses `*_live`, `routers/broker.py` `/status` shows them locked). That is said once here and is not counted as mitigation anywhere below.
 
 ---
 
-## Since last run (predecessor: `TRADING_QUALITY_BENCHMARK.md`, 2026-08-19, round 4)
+## Since last run (2026-10-02, commit `0caf2661`, overall REJECT)
 
-The predecessor graded three axes. Its trading-logic findings map to areas 1–2 here and its config findings to areas 3–4. Its code-quality axis (ESLint warnings, `xlsx` advisory, build/typecheck) is **out of scope** for this skill and was not re-graded.
+Phase A of the fix plan (`docs/superpowers/plans/2026-10-03-trading-review-fixes-plan.md`) merged on 2026-10-03 as PR #28 and follow-up PR #32. Every item below was re-checked against the code at `e4d4d80e`, not carried over.
 
-**Fixed (re-verified in this run)**
-- `breakout_base` `atr_tight_max` is 4.0 (`strategy_params.yaml` active blocks). It now fires on real data (1–2 bearish trades per symbol, 2 bullish on SPY).
-- The live Step-6 backtest charges cost. `_backtest_commission()` = fee 0.001 + slippage 0.001 = **0.002 per leg** (`routers/stock_scan.py:203-209`), passed through to `run_strategy_backtest(commission=…)`.
-- `contract_rules.yaml` `min_stock_score: 55` matches the stock `pass` bar.
-- `SCORING_RULES.md` agrees with the YAML on 55/35 (`SCORING_RULES.md:195-197`). The frontend mirrors agree too: `frontend/lib/status.ts:31` `{passAt: 55, cautionAt: 35}`, `frontend/lib/confidenceText.ts:4-11` 50/35.
-- The DTE floor equality (`soft_rank.preferred_dte_min == hard_reject.min_dte`) is still intentional and documented. Closed.
+**Fixed (re-verified)**
+- **#1 WFO tuned the bearish branch for bullish.** `normalize_direction` (`strategy_backtest.py:16-29`) is applied in the engine (`:93`), the store (`strategy_param_store.py:113-114`), the optimizer (`strategy_param_optimizer.py:258`) and the adopt request, where `direction` is now required (`routers/strategy_tuning.py:26-33`). Fixed.
+- **#2 WFO out-of-sample never ran.** Folds now carry a 260-bar warm-up prefix (`walk_forward.py:19, 144-160`) and score only bars inside the fold (`MIN_SCORED_BARS = 40`, `:22`); the first fold is warmed by a 14-month pre-fetch (`strategy_param_optimizer.py:19`). Confirmed by running the tuner on real data (see Quant Q3). Fixed — but see the two new cost findings in Q3.
+- **#3 Earnings was a score, not a gate.** `_earnings_veto` and `_earnings_unknown_caps` cap `finalStatus` (`routers/scan.py:148-178, 1256-1264`); the auto-fire re-looks-up earnings with a source chain and per-source deadlines and refuses on an unknown date for a stock (`auto_trader.py:208-363`); Step 7 ages the scan's distance and blocks send/arm/fire (`frontend/lib/earningsGate.ts`). Fixed on those paths. Residuals below.
+- **#4 Per-trade loss limit vs premium cap.** The option cap is `min(max_single_position_pct, max_loss_per_trade_pct)` = 3.75% (`portfolio_risk.py:181-192`), judged at the fill basis (`premium_cap_basis`, `:50-80`), and refuses a trade that does not fit one contract. The Portfolio save is a hard block when gates are on (`position_writer.py:489-501`). Fixed for long options.
+- **#5 Basket said "sent to broker".** Rows are `source: 'manual'` (`step-7-trade-card/page.tsx:203-204`) and the toast reads "N added to Portfolio" (`:1754`); the dialog says "no broker order is placed" (`SendToBrokerDialog/index.tsx:162`). Fixed (tracked rows still reserve caps; deliberate, D6).
 
-**Still open (re-verified)**
-- **Real-data evidence is thin.** 1 of 40 strategy×symbol×direction combos now reaches `_MIN_TRADES=10`: SPY `pullback_ema` Bullish, n=11. It fails on expectancy (see Quant). The predecessor tested 20 bullish-only combos; this run adds the bearish side.
-- `signal_confidence` is still a single in-sample replay. It is now worse than reported, because the samples overlap and the history window is shorter than configured (Quant Q4).
-- The complexity penalty (0.05/param) is still unmeasured. It is also moot until the WFO runs out-of-sample at all (Quant Q2).
-- `backtesting.py` same-bar SL/TP warning: 1,057 warnings across the quant suite, 42 in the fixture backtest.
-- `mean_reversion_rsi` / `mean_reversion_bb`: still 0 trades on 251 bars (warm-up of 200-SMA plus indicator).
-- Predecessor config table, "`max_daily_loss_pct` is a real circuit breaker": **partly wrong**. It caps premium *deployed* per UTC day by the auto-trader only, from in-memory history (Risk Manager R4).
+**Partly fixed / mechanism only**
+- **#6 `pullback_ema` books tiny targets.** The skip-floor exists (`strategy_engine.py:512-519`) but ships at `min_signal_rr: 0.0` (`strategy_params.yaml`, D7). On 5 years × 61 names the consequence is now measured: median planned rung-1 R/R **0.60**, **74%** of signals below 1:1, pooled net expectancy **−0.075% per trade** over 1,468 bullish trades. Still open in consequence.
+
+**Still open (re-verified at current lines)**
+- #7 Server caps multiply the client's `portfolioValue` (`position_writer.py:497`; `schemas/__init__.py:1114` default 50,000; `routers/auto_trade.py:136` 50,000; YAML 100,000).
+- #8 `_market_is_open` is a price-exists probe (`auto_trader.py:648-670`). Correction to the last report: the probe runs **before** the disarm (`:2586`), so a missing price preserves the arm; a stale price still passes, disarms and sends.
+- #9 Daily-loss gate: premium spend, in-memory history (`auto_trader.py:591-595, 3430-3466`), auto-trader only.
+- #10 Regime row built from stride transitions; `min_obs` counts daily labels (`regime_omm.py:92-114, 194`); options-scan window 441 calendar days (`scan.py:1705`).
+- #11 Confidence replay counts overlapping days; cut-offs ignore payoff (`signal_confidence.py:150-168`).
+- #12 Spreads: no leg liquidity checks, long-put R/R on the card, not routable (`spread_builder.py:31-89`).
+- #13 Options target flat +8% (`trade_plan.py:106-109`, `risk_rules.yaml reward_risk`).
+- #14 Swing DTE floor `hold_max + 1` = 16 (`dte_window.py:43-46`).
+- #15 `summary_text` labels % expectancy as `$` (`strategy_backtest.py:229`).
+- #16 Dead config: `regime.enhanced_states` (no reader), `pullback.max_days_in_pullback`, `pullback.theta_caution_days` (only `config_health.py:127`).
+- Phase B items logged by the fix plan and still open: A1-F6 (long-hold earnings), A1-F4b (no server-side earnings re-check on manual sends), A2-F7 (yfinance window start), A4-F1 (MKT arm fired late).
 
 **New this run** (details in the panel sections)
-1. WFO tunes bullish params on the bearish branch: config vocabulary `bullish` vs code `"Bullish"` (High).
-2. WFO out-of-sample folds can never run on trading-day data (High).
-3. The earnings / event "gate" is not a gate on the options path. The Step-7 checklist uses a different, fixed 7/3-day window (High).
-4. `pullback_ema` targets sit far closer than its stops (High). The design is deliberate; the consequence is measured.
-5. The basket "Auto-send" places no broker order but reports "sent to broker" (High).
-6. Per-trade loss limit vs single-position premium cap contradiction, with no protective order (High).
-7. Server-side % caps multiply a client-supplied `portfolioValue`; the defaults are 50,000 in the schemas vs 100,000 in the YAML and frontend (Medium).
-8. The auto-trader's "market open / halted" check passes on any last or previous close (Medium).
-9. The regime transition row is estimated from 0–15 transitions (Medium).
-10. The confidence gate's cut-offs ignore the 2:1 barrier asymmetry: a 50% hit rate is +0.5R, yet it is demoted (Medium).
-11. Bearish spreads: no liquidity checks on legs, not routable, and the card shows the long put's R/R (Medium).
-12. The Swing DTE floor allows `hold_max + 1` = 16 DTE (Medium).
-13. Dead config: `regime.enhanced_states`, `pullback.max_days_in_pullback`, `pullback.theta_caution_days` (Low).
-14. `strategy_backtest` summary labels a %-per-trade expectancy as `$` (Low).
+1. **Mixed-basis price history** — `_read_bars` adjusts only the close (High, REJECT-grade, area 2).
+2. **The Swing score does not discriminate** on 5 years of data (High, area 1).
+3. **The per-symbol backtest gate has no persistence** (High, area 2).
+4. **Backtest limit orders are good-till-cancelled**; 8–13% of trades are stale fills, live orders are DAY (Medium, area 2).
+5. **WFO selects on gross Sharpe and charges one round trip per fold**, however many trades the fold made; and its eligibility bar (20 OOS trades per symbol) is unreachable for every strategy (Medium, area 2).
+6. **Trigger rule needs four events on the same bar**; `setup_window_bars` is dead config; trigger PASS on 0.5–1.2% of bars (Medium, area 1).
+7. **Every bearish strategy loses net over 5 years**; `breakout_base` and `mean_reversion_rsi` can essentially never reach the backtest gate (Medium, area 1).
+8. **R/R uses a 60%-of-premium loss while sizing uses 100%** (Medium, area 3).
+9. **Stocks "After scan" auto-execute fires on CAUTION** while labelled "PASS", and books a paper row under "Auto-trade mode" (Medium, area 5).
+10. A1-F6 is wider than logged: the **Position** preset (hold 15–45 d) also outlasts its 30-day earnings window (Medium, area 3).
+11. Sector-blind fundamentals thresholds; adapter polish; adjusted-close cliffs in the data (Low).
+
+Checked and **not** a finding: the pullback rule's ATR fallback can in principle PASS a break below the swing low; measured on 144,556 bars it fired on 17 bars and on zero PASS cards. Dropped.
 
 ---
 
 ## The thesis
 
-Bamendjou hunts **trend-pullback continuation** in liquid US large caps (S&P 500 / NDX-100 / Dow universes). It enters when a weighted five-rule score clears 55/100 (trend, pullback, trigger, event, vol; `scoring_rules.yaml` `horizons.*.weights`), and four demote-only gates (confidence replay, regime headwind, fundamentals, pullback timing) can veto it.
+Bamendjou hunts **trend-pullback continuation** in liquid US large caps. A five-rule weighted score (trend, pullback, trigger, event, vol; `scoring_rules.yaml horizons.*.weights`) must reach 55/100, and demote-only gates (confidence replay, regime headwind, fundamentals, direction conviction, earnings veto) can cap it.
 
-It trades three things:
-- **long single-leg options**: calls for bullish, puts for bearish (`scan.py:546`);
-- **defined-risk bearish vertical spreads**: bear put or bear call, picked by IV level (`scan.py:380-464`, `spread_builder.py`), displayed but not routable;
-- **stocks**, long or short, sized by a 1%-risk rule against a strategy-specific stop, through seven named daily strategies (`stock_scan.py:1085-1101`, `strategy_engine.py`).
+It trades:
+- **long single-leg options** — calls bullish, puts bearish — the auto-trader's only instrument;
+- **bearish vertical spreads** (bear put / bear call by IV level), shown but not routable;
+- **stocks**, long or short, through seven named daily strategies with a 1%-risk share size and a per-symbol 5-year backtest gate (`routers/stock_scan.py`, `_HISTORY_YEARS = 5` at `:466`).
 
-What it deliberately leaves out:
-- no premium selling outside the bear-call alternative;
-- no bullish spreads;
-- no short options as a primary structure;
-- no automated exits: every stop and target is an **alert**, not a broker order (`alert_generator.py:47`, and the only order-placing call sites are `routers/broker.py` and `services/auto_trader.py`);
-- event risk does not count on the stock side (weight zeroed, `stock_scorer.py:1150-1157`).
-
-An auto-trader fires one armed option order on scan completion, behind regime and exposure gates.
+It deliberately leaves out: premium selling as a primary structure, bullish spreads, and automated exits — every stop and target is an alert, never a broker order. Only two code paths place orders: `routers/broker.py` (manual) and `auto_trader.execute_option_order` (`auto_trader.py:2460`).
 
 ---
 
 ## Evidence gathered
 
-### Quant regression suite
+### 1. Quant regression suite — all green
 ```
-cd backend && ./.venv/Scripts/python.exe -m pytest -q tests/test_confidence_cache.py tests/test_confidence_gate.py \
-  tests/test_confidence_gate_stocks.py tests/test_data_leakage.py tests/test_regime_no_lookahead.py \
-  tests/test_signal_confidence.py tests/test_strategy_backtest.py tests/test_strategy_backtest_bearish.py tests/test_walk_forward.py
-→ 94 passed, 1057 warnings in 199.50s
+cd backend && ./.venv/Scripts/python.exe -m pytest -q  (17 files)
+  test_confidence_cache test_confidence_gate test_confidence_gate_stocks test_data_leakage
+  test_regime_no_lookahead test_signal_confidence test_strategy_backtest test_strategy_backtest_bearish
+  test_strategy_direction_normalise test_strategy_param_optimizer test_strategy_param_store
+  test_strategy_param_store_direction test_strategy_params test_strategy_params_config_sanity
+  test_walk_forward test_walk_forward_warmup test_wfo_train_warmup
+→ 145 passed, 1079 warnings in 451 s   (Python 3.11.9)
 ```
-The warnings are all `backtesting.py`'s "contingent SL/TP … executed on the next bar". CI (`.github/workflows/ci.yml:17-25`) runs the full `pytest` on Python 3.11, so this suite is in the CI gate.
+The warnings are `backtesting.py`'s same-bar SL/TP notices. CI runs the full backend `pytest` on Python 3.11 (`.github/workflows/ci.yml:17-25`).
 
-**What the suite does not catch:** both WFO defects below pass it. `tests/test_strategy_param_optimizer.py:50-52` uses synthetic calendar-day bars, where `test_months=4` gives "~123 days". On trading-day bars the same window is about 84. Every test passes `direction` capitalised.
+**What the suite does not catch:** the mixed-basis bug is *pinned* by a test — `tests/test_historical_store_guard.py:46-59` stores a bar with high 102.0 and asserts `_read_bars` returns close 110.0, a close above its own high.
 
-### Real-data backtest
-- Fixtures: `backend/tests/fixtures/{AAPL,MSFT,NVDA,SPY}_candles.json`, 251 daily bars each, 2024-04-30 → 2025-04-30.
-- Engine: `run_strategy_backtest`, active params from `strategy_params.yaml`.
-- "net" = `commission=0.002` per leg, which is what the live gate charges.
-- Expectancy is % per trade. Max DD is reported only where pulled. `mean_reversion_vwap` is N/A: intraday-only, and daily bars cannot represent it.
+### 2. Data: five years were available this time
+The last run had only the 251-bar fixtures. This run read the app's own Postgres store **read-only**: 538 symbols, 518 with ≥1,200 daily bars, 2020-10-05 → 2026-10-02. The stored rows were last bulk-refreshed by the nightly ingestion at 2026-10-04 00:28 UTC, 17 hours before this session; nothing was written by the review (all reads were plain `SELECT`s or `get_bars` calls on symbols already current).
 
-| Symbol | Strategy | Dir | n | Win gross→net | Exp % gross→net | Sharpe net | Gate |
-|---|---|---|---|---|---|---|---|
-| AAPL | pullback_ema | Bull | 6 | 67%→67% | +0.48→+0.08 | 0.01 | n<10 |
-| AAPL | pullback_ema | Bear | 1 | 100% | +8.18→+7.80 | 0.63 | n<10 |
-| AAPL | breakout_base | Bull/Bear | 0 / 1 | — / 0% | — / −2.51 | — | n<10 |
-| AAPL | ma_crossover | Bull | 5 | 40% | −0.98→−1.38 | −1.23 | n<10 |
-| AAPL | ma_crossover | Bear | 6 | 17% | −0.90→−1.31 | −0.64 | n<10 |
-| MSFT | pullback_ema | Bull | 1 | 0% | −3.37→−3.76 | −0.46 | n<10 |
-| MSFT | pullback_ema | Bear | 5 | 60% | +0.20→−0.20 | −0.93 | n<10 |
-| MSFT | breakout_base | Bear | 2 | 0% | −1.66→−2.07 | −1.09 | n<10 |
-| MSFT | ma_crossover | Bull | 3 | 0% | −2.72→−3.12 | −1.71 | n<10 |
-| MSFT | ma_crossover | Bear | 4 | 25% | −1.56→−1.96 | −0.63 | n<10 |
-| NVDA | pullback_ema | Bull | 4 | 50% | +0.82→+0.42 | 0.01 | n<10 |
-| NVDA | breakout_base | Bear | 1 | 0% | −7.38→−7.80 | −0.77 | n<10 |
-| NVDA | ma_crossover | Bull | 4 | 50% | +5.39→+4.97 | 0.99 | n<10 |
-| NVDA | ma_crossover | Bear | 4 | 0% | −7.73→−8.14 | −2.68 | n<10 |
-| **SPY** | **pullback_ema** | **Bull** | **11** | **82%→55%** | **−0.12→−0.52** | **−0.92** | **fails expectancy** |
-| SPY | pullback_ema | Bear | 2 | 100% | +3.08→+2.69 | 0.36 | n<10 |
-| SPY | breakout_base | Bull | 2 | 0% | −0.64→−1.04 | −1.13 | n<10 |
-| SPY | breakout_base | Bear | 2 | 50% | +0.24→−0.16 | −0.19 | n<10 |
-| SPY | ma_crossover | Bull | 4 | 25% | +0.39→−0.02 | −0.04 | n<10 |
-| SPY | ma_crossover | Bear | 4 | 25% | +0.36→−0.04 | −0.05 | n<10 |
-| all 4 | mean_reversion_rsi / _bb | both | 0 | — | — | — | 0 trades (warm-up) |
-| NVDA | pullback_ema Bear, breakout_base Bull | — | 0 | — | — | — | — |
+All strategy evidence below uses the app's own WFO basket — `propose_basket(per_sector=5)` + SPY, **61 symbols** — over 2021-10-03 → 2026-10-02 (≈1,255 bars each), on **consistently adjusted** bars (open/high/low/close all × `adj_factor`), net of the live gate's cost `_backtest_commission()` = 0.001 fee + 0.001 slippage = **0.002 per leg** (`stock_scan.py:203-209`), with the `active:` params the live scan uses (`_merge_strategy_params`). Survivorship: the basket is today's S&P 500 members applied to the past.
 
-SPY `pullback_ema` Bullish: gross return −1.59%, max DD −4.96%; net return −5.83%, max DD −7.43%. Six runs logged "Some trades remain open at the end of backtest". The engine excludes those trades from the stats, which biases toward closed (often target-hit) trades.
+### 3. Real-data backtest, 5 years × 61 symbols, net
+| Strategy | Dir | Trades | Pooled win | Net exp %/trade | Gross ≈ net+0.4 | Combos passing gate | Median planned R/R | Share R/R < 1 |
+|---|---|---|---|---|---|---|---|---|
+| pullback_ema | Bull | 1,468 | 59.9% | **−0.075** | +0.325 | 25 / 61 | **0.60** | **74%** |
+| pullback_ema | Bear | 877 | 47.3% | **−1.380** | −0.980 | 5 / 61 | 0.74 | 66% |
+| breakout_base | Bull | 345 | 36.2% | +0.132 | +0.532 | **0 / 61** | 2.93 | 16% |
+| breakout_base | Bear | 397 | 26.4% | **−0.523** | −0.123 | **0 / 61** | 3.62 | 11% |
+| ma_crossover | Bull | 1,117 | 44.9% | **+0.572** | +0.972 | 29 / 61 | 1.29 | 37% |
+| ma_crossover | Bear | 1,098 | 29.2% | **−1.491** | −1.091 | 6 / 61 | 1.63 | 27% |
+| mean_reversion_rsi | Bull | 37 | 21.6% | −0.344 | +0.056 | 0 / 61 | 4.34 | 0% |
+| mean_reversion_rsi | Bear | 18 | 5.6% | −2.264 | −1.864 | 0 / 61 | 4.67 | 0% |
+| mean_reversion_bb | Bull | 1,299 | 44.6% | −0.146 | +0.254 | 21 / 61 | 1.35 | 38% |
+| mean_reversion_bb | Bear | 581 | 34.8% | **−0.988** | −0.588 | 4 / 61 | 1.52 | 34% |
 
-### Planned R/R of every signal the engine emitted on the fixtures
-Every bar where the live signal function returned a signal, measured as |target − entry| / |entry − stop|:
+"Planned R/R" = |rung-1 target − entry| / |entry − stop| for every signal the engine emitted. "Gross" is approximate: `backtesting.py` charges commission as a fraction of each leg, so removing 0.002 × 2 adds ≈0.4 points per trade. `mean_reversion_vwap` is N/A on daily bars (intraday-only).
 
-| Symbol | Strategy · Dir | Signal bars | Median planned R/R | Share below 1:1 |
+Trades per symbol vs the gate's minimum of 10: `breakout_base` median **6** (5–10% of symbols reach 10); `mean_reversion_rsi` median **0** (max 4); `mean_reversion_bb` Bearish median 8.5; the rest reach 10 on most symbols.
+
+### 4. Does the backtest gate pick symbols that keep working? (split-half test)
+Same engine, same params, Bullish, first half (2021-10 → 2024-04) vs second half (2024-04 → 2026-10), each half warmed with 260 prior bars.
+
+| Strategy | H1 gate PASS → H2 net exp | H1 gate FAIL → H2 net exp | Pass again in H2 | Spearman ρ (H1 vs H2 expectancy) |
 |---|---|---|---|---|
-| SPY | pullback_ema · Bull | 43 | **0.11** | **95%** |
-| AAPL | pullback_ema · Bull | 21 | 0.32 | 90% |
-| MSFT | pullback_ema · Bear | 21 | 0.41 | 100% |
-| NVDA | pullback_ema · Bull | 14 | 1.08 | 36% |
-| SPY | ma_crossover · Bull | 19 | 1.94 | 0% |
-| NVDA | ma_crossover · Bear | 24 | 2.49 | 0% |
-| (all others) | | 1–24 | 0.79–5.08 | 0–78% |
+| pullback_ema | 13 syms → **−0.378%** (181 trades) | 48 syms → **+0.080%** (655) | 5 / 13 | −0.04 (n = 59) |
+| ma_crossover | 15 syms → **+0.180%** (155) | 46 syms → **+1.426%** (413) | 2 / 15 | −0.25 (n = 57) |
+| mean_reversion_bb | 13 syms → −0.049% (172) | 48 syms → −0.235% (688) | 4 / 13 | +0.05 (n = 58) |
 
-### Data available vs data required
-| Requirement | Configured | Available | Fits? |
-|---|---|---|---|
-| Fixture history | — | 251 bars (1 year, one regime) | — |
-| Options-scan bar window | `scan.py:1659` 1.75×252 calendar days | ≈306 trading bars | — |
-| Confidence replay, Swing | `history_years: 4` → 1,008+10 bars | ≈306 bars in the options scan | **No**: `history_years` is inert there; ≈236 decision bars |
-| Regime window, Swing / Position | 500 / 750 bars | ≈306 bars | **No**: the window is truncated to the data |
-| WFO train / test | 12 / 3 months, 3 years of data (`strategy_param_optimizer.py:252`) | 12 months ≈ 252 bars ✓; 3 months ≈ **61–62 bars** (measured) | **No**: the test fold is below the 100-bar engine minimum |
-| Signal warm-up in test folds | `trend_ema` up to 200, `trend_sma` 200 | the test slice carries no warm-up prefix (`walk_forward.py:128-133`) | **No** |
+The 95% noise band for ρ at n ≈ 58 is ±1.96/√57 = **±0.26**. All three sit inside it; two point the wrong way.
 
-The production database (Postgres per `.env`) was not opened, so multi-year stored history was **not measured** in this run.
+### 5. Does the Swing score pick better setups? (calibration study)
+For every bar of the 61 symbols (306-bar window, as the options scan uses), `score_stock(..., "Swing")` on consistent bars, then the confidence replay's **own** outcome rule: target 3 ATR vs stop 1.5 ATR within 10 bars (`scoring_rules.yaml confidence_backtest.swing`), stop first if both touch on one bar, else the 10-day close in R. No IV and no earnings inputs — exactly the replay's own design (`signal_confidence.py:221-222`). 144,556 scored bars. "Distinct" = one setup per symbol per 10 bars (de-overlapped).
+
+| Direction | Group | n (distinct) | Mean R (95% CI) | Target hit | Stop hit |
+|---|---|---|---|---|---|
+| Bullish | every bar (base rate) | 72,278 bars | +0.135 (+0.126…+0.144) | 19.6% | 44.5% |
+| Bullish | **PASS** | 4,113 | **+0.140** (+0.103…+0.177) | 20.4% | 44.5% |
+| Bullish | CAUTION | 4,923 | +0.129 (+0.095…+0.163) | 19.6% | 45.0% |
+| Bullish | **REJECT** | 2,911 | **+0.113** (+0.070…+0.157) | 18.6% | 44.2% |
+| Bullish | score 55–69 / 45–54 / 35–44 / 0–34 | 4,134 / 4,020 / 3,091 / 2,911 | +0.138 / +0.122 / +0.108 / +0.113 | | |
+| Bearish | every bar | 72,278 bars | −0.093 (−0.101…−0.085) | 15.9% | 52.5% |
+| Bearish | **PASS** | 3,205 | **−0.081** (−0.120…−0.041) | 15.6% | 51.8% |
+| Bearish | REJECT | 4,092 | −0.125 (−0.160…−0.090) | 15.1% | 54.5% |
+
+Trigger anatomy (Bullish / Bearish): trigger PASS on **0.53% / 1.20%** of bars; a reversal candle on the last bar 7.8% / 8.4%; two momentum signals on the same bar 3.2% / 5.4%. Only **57 of 25,937** Bullish PASS cards (and 110 of 17,915 Bearish) had a passing trigger.
+
+### 6. How much does the mixed-basis bug change what the app decides?
+| Consumer | What changes (app bars vs consistent bars) |
+|---|---|
+| Stored data | **44.2%** of bars in the options scan's 441-day window have close outside [low, high]; **69.6%** over 5 years; 252 of 538 symbols are broken on most of their scan-window bars. Worst: BKNG 96%, KLAC 90%, NFLX 90%, NOW 80% close-below-low (post-split names); median worst gap 1.8% |
+| Stock backtest gate (5 y) | On 248 strategy × symbol × direction combos run both ways: trade count differs on 156, expectancy by > 0.5 pt on 138, **gate verdict flips on 29 (12%)** — e.g. NVDA `ma_crossover` Bull passes on true bars (n = 23, +4.23%) and shows **0 trades** on app bars; ABBV `pullback_ema` Bull fails on true bars (−1.01%) and **passes** on app bars (+4.64%) |
+| Options-scan confidence replay | Of 122 basket replays: **14 move across a gate tier** (35/50), **14 gain or lose a confidence value** (sample < 20 on one side); sample sizes swing (HON Bullish 65 vs 35 samples) |
+| Today's scan score | Small: latest bars carry `adj_factor` ≈ 1, ATR(14) unchanged at the median (p90 ratio 1.001, max 1.25); 6 Bullish and 8 Bearish Swing verdicts flip out of 517 |
+
+### 7. Stale limit fills in the backtest engine
+Synthetic proof: one signal places `buy(limit=105, sl=100, tp=130)` and never re-issues; it fills **35 bars later**. On real data (12 symbols × 5 strategies × 2 directions), the share of trades entered more than one bar after the last signal: `pullback_ema` 8% (37 / 459, max 9 bars), `breakout_base` **13%** (17 / 135, max **107** bars), `mean_reversion_bb` 9% (34 / 371, max 34), `ma_crossover` 1%, `mean_reversion_rsi` 0%.
+
+### 8. The WFO tuner on real data
+`ma_crossover`, 6 symbols, 3 years + warm-up, shipped 12/3-month windows: 8 folds, out-of-sample runs (31 OOS trades), proposal ineligible on `min_trades`. Details in Quant Q3.
 
 ---
 
 ## The Trader
 
-**T1. `pullback_ema` books a coin's-width target against a full stop (High).**
+**T1. The Swing score does not pick better trades than picking at random (High, area 1).**
 
-Its rung-1 target is the prior 20-bar swing extreme (`strategy_engine.py:495-509`). Its stop is `fast EMA − 1.5×ATR` (`:462`). When price is already at the swing high (and in a pullback-in-uptrend it often is), the target sits a few cents above entry.
+Evidence §5. On 4,113 distinct bullish PASS setups across 61 names and five years, the replay's own barrier race averages +0.140R. Every bar in the sample averages +0.135R. REJECT setups average +0.113R. The confidence intervals sit on top of one another, and the score buckets are flat from 0 to 69. The positive number is the market's drift over 2021–2026 in today's S&P members, not the screen's selection. Bearish is the mirror: everything loses, PASS slightly less than REJECT, all inside noise.
 
-Measured on SPY:
-- entry 596.98, TP 597.23 (+0.04%), SL 567.14 (−5.0%);
-- entry 563.09, TP 564.61, SL 539.78: planned R/R = 1.52 / 23.31 = **0.065**.
+This is not a bug in the arithmetic; I worked the rules and they do what they say. It is the absence of the thing the score exists to provide. For long options, which pay spread and theta, a selector that matches the base rate loses money by construction.
 
-That is why the strategy shows an 82% gross win rate with negative expectancy. You need to win about 94% of the time at R/R 0.065 just to break even: 1 / (1 + 0.065).
+The caveats are honest and do not rescue it: the replay runs without IV and earnings (by its own design), and it scores the underlying, not the option. Neither of the omitted rules is a directional edge rule; they are filters.
 
-The builder made this deliberate. `_build_target_ladder`'s docstring (`strategy_engine.py:253-264`) refuses an R-floor and says "a poor reward:risk … is real information; rr_ratio and the backtest are where it belongs." I respect the intent, but the consequence is the problem. The live stock path's only defence is the backtest gate (`stock_scan.py:439`), and when the backtest says "only N trades" the trade is dropped, not repaired. Fix within intent: keep the primary, but skip a signal whose rung-1 R/R is below a configurable floor. That rejects the signal; it does not clamp the target.
+**T2. The trigger rule almost never fires, so it is a constant penalty, not a trigger (Medium, area 1).**
 
-**T2. Earnings inside the holding window does not stop an options trade (High → area 3).**
+In options mode a trigger PASS needs a reversal candle on the **last bar** and two of MACD cross, RSI cross and stochastic cross on **that same bar** (`stock_scorer.py:658-855`). The YAML carries `setup_window_bars: 8 / 10 / 5` per horizon, which reads like an 8-bar setup window; no code reads it — it appears only in `config_health.py:133`. Measured: trigger PASS on 0.53% of bullish bars; 57 of 25,937 bullish PASS cards had a passing trigger. With weight 0.25, the trigger's typical 10–35 points mean a PASS card is almost always trend + pullback + event + vol. Fix within intent: wire `setup_window_bars` (any of the momentum events within the window) or drop the weight.
 
-`_rule_event` (`stock_scorer.py:858-904`) returns `REJECT` with score 5. But it is a weighted component (Swing weight 0.15), not a veto. Only a REJECT pullback caps status (`:1171-1175`).
+**T3. `pullback_ema` still books targets nearer than its stops (High, area 1; deliberate, still open).**
 
-Worked example from the run: AAPL Bearish Swing, 2024-11-07. Trend 70, pullback 96, trigger 20, event 5, vol 90:
-0.30×70 + 0.20×96 + 0.25×20 + 0.15×5 + 0.10×90 = 21 + 19.2 + 5 + 0.75 + 9 = **54.95**, which rounds to **55 → PASS**, with earnings 3 days out.
+Five-year evidence, not fixtures: median planned R/R **0.60**, 74% below 1:1; pooled net −0.075% per trade on 1,468 trades; gross +0.325%. The stop is `fast MA − 1.5×ATR` while entry may sit up to 4% above the MA (`strategy_engine.py:450-463`), and rung 1 is the 20-bar high including today (`:496-508`). The skip-floor is built and disabled (D7). The Chair's ruling from last time stands: deliberate, and the consequence is negative expectancy after cost.
 
-Across all four fixtures, **37 of 440** Swing PASS bars (8.4%) stay PASS with earnings 3 days out. Step 5 paints these REJECT (`step-5-vol-events/page.tsx:247-251`), but nothing downstream reads that verdict:
-- `finalStatus` is the worst of stock, contract and entry (`scan.py:142-143, 1219`);
-- the Step-7 send dialog and `/auto-trade/arm` never look at events;
-- the Step-7 checklist grades earnings on a **fixed** 7/3-day rule (`@contextRail/screener/step-7-trade-card/page.tsx:119-123`), so a Swing trade 10 days from earnings is REJECT on Step 5 (21-day window) and PASS on Step 7.
+**T4. Every bearish strategy loses over five years (Medium, area 1).**
 
-Unknown earnings fail **open**: no date means PASS 90 (`stock_scorer.py:879-883`). For a long call or put held through earnings, that is IV crush inside the trade.
+Net per trade: `pullback_ema` −1.38%, `ma_crossover` −1.49%, `mean_reversion_bb` −0.99%, `breakout_base` −0.52% (§3). Part of that is the 2021–2026 tape (a bull market with a 2022 bear leg). But 877–1,098 trades per strategy is not a small sample, and the calibration study (§5) shows the bearish score adds nothing either. Short stock and long puts are both offered with equal prominence.
 
-**T3. Options target is a flat +8% move for every symbol and every horizon (Medium).**
+**T5. Two of the seven picker strategies cannot reach their own gate (Medium, area 1).**
 
-`trade_plan.py:107-110` reads `reward_risk.bullish_target_pct: 0.08`. An Intraday preset (hold 0–2 days) and an Annual preset (165–200 days) get the same +8% target. A 1%-ATR utility and a 4%-ATR semiconductor get the same +8%. The stop side was moved to structure + 2×ATR in "piece 3" (`trade_plan.py:122-134`), but the target side was not. The card's R/R therefore mixes a volatility-aware stop with a volatility-blind target. Note the R/R risk term is `premium × 0.60` (`reward_risk.py:148`) and ignores the stock stop entirely (`invalidation_price` is "reserved", `:114`). So the headline R/R is neither the chart R/R nor the R/R at the stop.
+`breakout_base` median 6 trades per symbol in 5 years (0 of 122 combos pass); `mean_reversion_rsi` 37 trades across all 61 symbols in 5 years (`rsi_oversold: 30` under `trend_sma: 200`). On the live stock scan they will almost always read "Only N trades — need 10" and drop. The trader sees a menu item that never produces a candidate.
 
-**T4. Bearish spreads are half-built (Medium).**
-- Legs get no liquidity checks at all. `build_bear_put` / `build_bear_call` pick by delta and strike only (`spread_builder.py:27-89`), with no OI, volume or spread filter, while the single-leg path hard-rejects below OI 200 / volume 50 / spread 20%.
-- The primary spread's fields are attached to a card whose `contract`, `contractDetails`, `rrRatio` and `contractScore` still describe the long put (`scan.py:1257-1275, 1155-1219`). The alternative spread row copies `rrRatio=rr.rr_ratio`, the long put's (`:1367`).
-- Leg pricing is natural (buy at ask, sell at bid), which is good, but the send dialog's "EST $" uses the long put's mid (`SendToBrokerDialog/index.tsx:189-191`). Neither the basket nor the direct path can route a spread: "Copy manually — IBKR multi-leg not routed" (`:236`), and the direct path sends `toOptionSymbol(card)`, the single put (`step-7-trade-card/page.tsx:1112, 1175-1185`).
-- No ex-dividend / early-assignment check on the short call.
+**T6. Options target is still a flat +8% (Medium, area 3; open #13).** `trade_plan.py:106-109`. Same +8% on a 2-day Intraday hold and a 200-day Annual hold, on a utility and a semiconductor.
 
-**T5. Swing DTE floor can leave one day of time value at planned exit (Medium).**
+**T7. Earnings — fixed, with two residuals (Medium, area 3).**
+- *Long holds.* The veto covers `reject_days`, not the hold. **Position** (hold 15–45 d, `horizonPresets.ts`) has a 30-day window: a 40-day hold with earnings 35 days out passes and is held through the print. Quarterly (45–60), Semi-annual (90–105, which always contains a print) and Annual are the same. Logged as A1-F6 for the longer presets; it includes Position.
+- *Manual sends server-side.* `POST /api/portfolio` and `/broker/option-order` do not re-check earnings; only Step 7 (client) and the auto-fire do (A1-F4b).
 
-`widened_min_dte` clamps the floor at `hold_max + 1` (`dte_window.py:28-46`). For Swing (hold 5–15 days, multiplier 2.0): lo = 10, floor = max(10 − 10, 15 + 1) = **16 DTE**. The config's own rule says "Never hold an option to expiry — this buffer leaves time value at exit" (`contract_rules.yaml`, `dte_holding_multiplier`). A 16-DTE contract held 15 days exits with 1 DTE. Expiry selection aims at the centre of the window (`market.py:686+`), so this is the edge case, not the norm. Position (lo 30 → floor 46) and longer presets are fine.
+**T8. Bearish spreads are still half-built (Medium, area 3; open #12).** No leg liquidity checks (`spread_builder.py:31-89`), long-put R/R on the card, not routable.
 
-**T6. Regime gate: real wiring, shaky instrument.**
+**T9. Swing DTE floor 16 for a 15-day hold (Medium, area 3; open #14).** `dte_window.py:43-46`.
 
-The gate does gate:
-- the scan demotes or drops (`stock_scorer.py:1011-1021, 1195-1204`);
-- the auto-trader re-measures the traded symbol and refuses a REJECT (`auto_trader.py:1116-1388`).
-
-The refusal needs a **Stable** regime (`require_stable_for_reject: true`), and Stable needs p_stay ≥ 0.75 estimated from a handful of transitions (Quant Q5). A −80 Fragile headwind fires at the `min_mult` floor (`auto_trader.py:1503-1508`, stated in the code).
-
-**T7. Liquidity floors vs exit at size.**
-
-OI 200 / volume 50 / spread ≤ 20% (`contract_rules.yaml`). The 5-contract cap (`sizing.max_contracts_per_trade`) is small relative to OI 200, so exit at size is plausible. Exit at the **assumed price** is not: R/R and targets are priced at mid both ways. On a 20%-wide market, the half-spread on exit alone is 10% of premium, which is not modelled anywhere (see the cross-parameter table).
+**T10. Liquidity floors are tighter than they look (good).** Three soft flags reject a contract (`contract_validator.py:516-517`, `max_soft_fail_count: 3`), so a 20%-wide contract survives only if volume ≥ 200 or OI ≥ 1,000 *and* delta, DTE and IV are in band. The half-spread exit cost is still unmodelled.
 
 ---
 
 ## The Quant
 
-**Q1. The WFO tuner tunes the bearish strategy and labels it bullish (High, REJECT-grade).**
+**Q1. The price history the backtests read mixes two bases (High, REJECT-grade, area 2).**
 
-The chain:
-- `strategy_params.yaml` `direction: bullish` (lowercase) → `store.get_direction()` (`strategy_param_store.py:111-113`) → `run_optimization(direction="bullish")` (`routers/strategy_tuning.py:77`) → `run_strategy_backtest(direction="bullish")`.
-- The engine compares `direction == "Bullish"` (`strategy_backtest.py:20`), as does every signal function. Lowercase falls to the bearish branch.
+`historical_store._read_bars` returns `close = raw_close × adj_factor` but `open`, `high`, `low` raw (`historical_store.py:238-246`). `adj_factor` is Alpaca's adjusted/raw close ratio and includes splits and dividends (`data/alpaca.py:106-118`): NVDA 2020-10-05 has 0.0249 (≈ 1/40 for the 4:1 and 10:1 splits). So on 2024-06-07 `get_bars` hands NVDA out as open 1,197.70 / high 1,216.21 / low 1,180.85 / **close 120.50**.
 
-Measured on SPY `pullback_ema`:
-- `"Bullish"` → 11 trades, 82% win, −0.124% expectancy;
-- `"bullish"` → 2 trades, 100%, +3.084%, **identical to `"Bearish"`**.
+Every consumer of `get_bars` sees this: the options scan (`scan.py:1702-1707`), the stock scan and its 5-year backtest gate (`stock_scan.py:1127`), the confidence replay, the regime routes, composite watches and the WFO tuner. The effect is measured in §6: 44% of scan-window bars are impossible bars; the stock backtest gate's verdict flips on 12% of combos; the confidence gate changes outcome on 23% of basket replays. Today's score is barely touched (the latest bars carry factor ≈ 1), which is why nobody noticed on the screen.
 
-A lowercase signal sample came back with entry 562.14, stop 588.98, target 541.82: a short.
+Fix: scale open/high/low by the same factor in `_read_bars` (one line each), then fix the test that pins the bug (`tests/test_historical_store_guard.py:46-59`) and add an invariant test `low ≤ close ≤ high` over a stored series.
 
-Then "Adopt" posts no direction (`frontend/lib/api.ts:1157-1158`), the router defaults to `"Bullish"` (`routers/strategy_tuning.py:26, 187`), and `adopt()` writes `active.bullish` (`strategy_param_store.py:152`). So every adopted proposal puts **bearish-optimised params into the bullish slot**.
+**Q2. The per-symbol backtest gate selects noise (High, area 2).**
 
-**Q2. Walk-forward out-of-sample never runs on real data (High, REJECT-grade).**
+Split-half test, §4. A symbol that passes the gate in 2021–2024 does no better in 2024–2026 than one that failed — for `pullback_ema` and `ma_crossover` it did worse. Rank correlations −0.04, −0.25, +0.05, all inside the ±0.26 noise band. At 10–25 trades per symbol the gate's three tests (n ≥ 10, win ≥ 45%, expectancy ≥ 0) are decided by luck: at n = 20 and p = 0.5 the 95% interval on the win rate is 0.5 ± 1.96·√(0.25/20) = ±21.9 points. Across 61 symbols, about 40% passing (`pullback_ema` 25/61) is what noise alone delivers around a near-zero pooled edge.
 
-With the shipped `test_months: 3`, a test fold holds 61–62 trading bars (measured on the SPY fixture: folds 2024-10-30→2025-01-30 = 61, 2025-01-30→2025-04-30 = 62). The OOS loop skips any slice under 100 bars (`strategy_param_optimizer.py:122`), and so does the engine (`strategy_backtest.py:89-90`).
+Plain-English: the gate looks like quality control, but it is a coin that has been flipped 20 times per symbol.
 
-So `test_returns` is always empty. Then `consistency([]) = 0.0` (`walk_forward.py:266-267`), `n_trades = 0`, `eligible = False`, and every proposal reads "Edge looks fake — consider dropping" (`strategy_param_optimizer.py:47-50`). The fold winner is still chosen in-sample and can still be adopted.
+**Q3. The WFO tuner: OOS now runs; costs are under-charged and selection is gross (Medium, area 2).**
 
-Even at `test_months ≥ 5`, the test slice has no warm-up prefix (`walk_forward.py:128-133`). A `trend_ema: 200` combo cannot fire inside a 100-bar slice. The non-overlap of folds is correct (`build_folds`, `walk_forward.py:69-86`); the problem is that the test half is empty.
+Run on real data (`_optimize_strategy_sync` with the shipped search grid, costs and eligibility; `ma_crossover`, Bullish, 6 symbols AAPL/JPM/XOM/HD/KO/CAT, 3 years + 14-month warm-up, 12/3-month rolling folds), 777 s:
+- **8 folds; out-of-sample now runs**: 23 of 48 symbol-folds traded, 31 OOS trades (1.35 per traded symbol-fold). Fix #2 holds.
+- Proposal `fast 20, slow 100, lookback 10, atr_target_mult 2.0`; consistency 0.625; OOS Sharpe 0.16, expectancy +0.57%; in-sample return 1.65% vs walk-forward 0.80% (degradation 51%); `eligible: false`; recommendation **"Edge looks fake — consider dropping."**
 
-**Q3. Multiple testing.**
+**The eligibility bar cannot be reached by any strategy (Medium, new).** `oos_metrics.n_trades` is the OOS trade count **per contributing symbol** (`strategy_param_optimizer.py`, `total_n_trades / len(contributing_symbols)`), and `optimization.min_trades: 20` (`strategy_params.yaml`). Eight 3-month folds are 24 months of OOS. From the 5-year trade rates in §3: `pullback_ema` 1,468 / 61 / 5 × 2 = **9.6**, `ma_crossover` 7.3, `mean_reversion_bb` 8.5, `breakout_base` 2.3, `mean_reversion_rsi` 0.2 OOS trades per symbol. None can reach 20, so every proposal is labelled "Edge looks fake" whatever it shows, and the label stops carrying information. Fix: judge eligibility on **pooled** OOS trades across the basket (the quantity that actually has a sample), or scale `min_trades` to the OOS span.
 
-Grid sizes per strategy, from `strategy_params.yaml` `search`:
-- `pullback_ema` 3×3×3×3×4 = **324**;
-- `breakout_base` 3×4×3×4 = **144**;
-- `mean_reversion_bb` 3×3×2×3 = **54**;
-- `ma_crossover` 2×2×2×3 = **24**;
-- `mean_reversion_rsi` 2×3×2×2 = **24**.
+Two cost defects, both in code untouched by Phase A:
+- *Selection on gross.* `train_fold` calls `run_strategy_backtest` with no `commission` (`walk_forward.py:239-240`), so the in-sample winner is chosen on gross Sharpe. A high-turnover combo wins selection on edge that costs remove.
+- *One round trip per fold.* `apply_costs` subtracts `(fee + slippage) × 2` = 0.4% from a fold's **total** return (`walk_forward.py:121-122`; called at `strategy_param_optimizer.py:126, 153`), regardless of how many trades the fold made. The live gate charges 0.2% per leg per trade. Measured in the run above: 1.35 trades per traded symbol-fold, so the true charge is 0.54% against 0.40% applied (a quarter under-charged for `ma_crossover`; more for any higher-turnover combo).
 
-Total **570 combos per fold**, about 8 folds over 3 years at 12/3 months: (36 − 12) / 3 = 8. The only correction is a complexity penalty of at most 0.05 Sharpe per parameter at grid edges (`walk_forward.py:136-176`), applied before selection. There is no deflated Sharpe, and since Q2 there is no working OOS check.
+The run used consistently adjusted bars; the live tuner reads `get_bars`, so it also inherits Q1.
 
-Plain-English deflated Sharpe: the best of 324 noisy backtests looks good by luck alone. A deflated Sharpe subtracts what luck would hand you for that many tries.
+**Q4. Backtest entries are good-till-cancelled limits; live entries are DAY (Medium, area 2).**
 
-The basket is drawn from today's `sp500.csv` (`strategy_basket.py:5`), which is survivorship bias: past losers that left the index are missing.
+`_Strategy.next` issues `buy/sell(limit=entry, sl, tp)` and never cancels it (`strategy_backtest.py:155-162`). `backtesting.py` keeps an unfilled limit queued until filled or replaced (proved in §7: a 35-bar-late fill). On real data 8–13% of `pullback_ema`, `breakout_base` and `mean_reversion_bb` trades are such stale fills, up to 107 bars after the signal, at the old price with the old stop and target. The live stock send is `LMT` with `tif: 'DAY'` (`frontend/lib/stockDirectSend.ts:179`; `routers/broker.py` `StockOrderRequest.tif` defaults to DAY). Fix: cancel open orders at the start of `next()` when flat, or give the order a one-bar life.
 
-**Q4. Confidence replay counts overlapping days as independent samples, on about one year of data (Medium).**
+**Q5. Multiple testing (open).** Grid sizes unchanged — `pullback_ema` 324, `breakout_base` 144, `mean_reversion_bb` 54, `ma_crossover` 24, `mean_reversion_rsi` 24 combos per fold. The only correction is the ≤0.05-Sharpe-per-parameter edge penalty (`walk_forward.py:162-202`). No deflated Sharpe. Given Q2, any per-symbol or per-combo winner should be presumed lucky until it survives a hold-out.
 
-`compute_confidence` (`signal_confidence.py:209-286`) scores every bar where `score_stock(...).status == "PASS"`. A setup that stays PASS for 10 straight days contributes 10 samples whose 10-day forward windows overlap 9/10. `min_samples: 20` can therefore be met by two or three distinct setups.
+**Q6. Confidence replay (open #11).** Still counts every PASS bar, so overlapping 10-day windows inflate n; `min(1, payoff)` caps the reward side (`signal_confidence.py:150-168`). New context from §5: since the replay uses only price-derived rules and those rules do not separate outcomes, the confidence number is mostly a measure of the symbol's recent drift, and it is computed on mixed-basis bars (§6). Status: **uncalibrated**; partly measured here — it does not discriminate.
 
-In the options scan the bars come from a 441-calendar-day window (`scan.py:1659`), about 306 bars. With warm-up 60 and n_days 10, about 236 decision bars remain, so `history_years: 4` (`scoring_rules.yaml` `confidence_backtest.swing`) never binds. One year is one regime.
+**Q7. Regime transitions (open #10).** Unchanged. On the stock path's 5-year bars the Swing window (500 bars, stride 20) gives 24 transitions; on the options path's ≈306 bars, ≈15.
 
-Intervals on the gate's own minimum (p ± 1.96·√(p(1−p)/n)):
-- n = 20, p = 0.5 → ±21.9 points;
-- n = 10 (the backtest gate), p = 0.5 → ±31 points.
+**Q8. Monte Carlo drift assumed (open).** `mu = sign × (trend_score − 50)/50 × 0.40` (`first_passage.py:384, 847`). Uncalibrated.
 
-On the one combo that cleared n = 10 (SPY `pullback_ema` Bullish, n = 11):
-- gross p = 0.82 → ±22.7 → **[59%, 100%]**;
-- net p = 0.545 → ±29.4 → **[25%, 84%]**.
+**Q9. Lookahead — none found.** Signals see `bars[:i+1]`, fills on the next bar, replay outcomes from `bars[i+1:]`, OMM labels trailing; the WFO test slice cannot place an entry before `entry_start` (`strategy_backtest.py:141-142`). The suite's leakage tests pass.
 
-That is noise, and the gate correctly refuses it on expectancy.
-
-**Q5. The regime model's transition row is a handful of observations (Medium).**
-
-`compute_omm` builds the matrix from **stride** samples, one per `lookback` bars (`regime_omm.py:94-114`). Computed:
-- Swing (lookback 20) on ≈306 bars → 16 samples → 15 transitions spread over 3 states;
-- Position (lookback 50) → 7 samples → **6 transitions**.
-
-On the fixtures, the current state's row held 0–5 transitions. MSFT Position published **conviction −50 from 2 transitions** (p_stay 0.5, Fragile). That one number drives the headwind CAUTION, and sizing at the floor via `conviction_mult`.
-
-"Stable" (p_stay ≥ 0.75) on 3–5 observations is a coin flip, and the REJECT arm depends on it. The `min_obs: 100` check counts **daily** labels (`regime_omm.py:208-210`), not the stride transitions the row is built from, so it does not protect the row. Labels are causal (rolling past return), so no lookahead. The HMM (`regime_hmm_daily.py`) is used only for the "alignment" display (`scan.py:658-673`).
-
-**Q6. Confidence cut-offs ignore the payoff asymmetry the replay itself uses (Medium).**
-
-The barriers are a 3.0 ATR target vs a 1.5 ATR stop (`confidence_backtest.swing`), so break-even hit rate = 1.5 / (3.0 + 1.5) = **33.3%**. Confidence ≈ `hit_rate × min(1, payoff)` (`signal_confidence.py:166-172`), and the payoff is usually ≥ 1 because wins are ≥3 ATR excursions and losses ≥1.5. So confidence ≈ hit rate.
-
-`cautionBelow: 50` therefore demotes setups whose replay shows up to 0.5×2 − 0.5×1 = **+0.5R** per trade. `rejectBelow: 35` sits just above break-even. The `min(1, …)` cap also means a strong payoff earns nothing while a weak one is penalised. Status: **uncalibrated**. Nobody has measured whether a 70 hits 70%.
-
-**Q7. Costs.**
-
-Stocks are charged 0.2% per leg, 0.4% round trip (`stock_scan.py:203-209`). Against the measured `pullback_ema` targets of +0.04–0.5%, that cost **is** the expectancy: SPY gross 82% win becomes 55% net. Options are never backtested at all. The confidence replay prices the underlying, not the contract, so no option cost (spread up to 20%, theta) enters any evidence the options path shows.
-
-**Q8. Monte Carlo drift is assumed, not measured.**
-
-`mu = sign × (trend_score − 50) / 50 × 0.40` annualised (`first_passage.py:384, 847`). That is a modelling choice; the code says so itself (`first_passage.py:828-830`). The sigma floor 0.10 and ceiling 1.50 (`risk_rules.yaml first_passage`) can mask bad ATR inputs. Hit probabilities from it are **uncalibrated**.
-
-**Q9. Lookahead.**
-
-None found:
-- `backtesting.py` fills on the next bar;
-- the signal slice is `bars[:i+1]` (`strategy_backtest.py:115-126`);
-- the confidence replay uses `bars[:i+1]` for the signal and `bars[i+1:i+1+n]` only for the outcome (`signal_confidence.py:268-276`);
-- OMM labels are trailing.
-
-The leakage and lookahead tests pass (94/94).
+**Q10. Data anomalies (Low).** Adjusted-close day-over-day jumps outside ×0.6–1.6 in the stored series: GE 2021-08-02 ×7.76 (the 1:8 reverse split, unadjusted), FI 2023-06-07 ×36.7 (ticker reuse), plus AVB 2026-08-21 ×0.36, CTVA 2026-10-01 ×0.16, MRNA 2026-08-19 ×2.77 — not verified against market history; check them. Some real moves also appear (CNC, DXCM, EPAM, FMC). Factors are refreshed by the nightly full ingestion (every row's `fetched_at` = 2026-10-04 00:28 UTC), so a frozen factor is only a risk if that job stops.
 
 ---
 
 ## The Risk Manager
 
-**R1. Per-trade loss limit vs position cap: one trade can blow through the limit with no hard stop (High, REJECT-grade).**
-
-The two settings:
-- `max_single_position_pct: 0.05` caps option **premium** at 5% of the account (`portfolio_risk.py:136-157`);
-- `max_loss_per_trade_pct: 0.0375` is "warning-only, never auto-clamps" (`risk_rules.yaml` comment).
-
-The backend never checks the loss limit (no reader in `portfolio_risk.py` or `position_writer.py`). The frontend checks it only once an exit plan has been computed, and offers "Override & Submit" (`lib/risk.ts:595-615`; `SendToBrokerDialog/index.tsx:138-145, 296-299`).
-
-There is no protective order anywhere (orders are MKT/LMT only, `broker.py:181, 202`). The premium stop is an alert (`alert_generator.py:310-353`). So a long option at the cap can lose 5.0% of the account, which is **1.33×** the per-trade limit, with no hard stop. The design is deliberate, and still REJECT, because this is exactly the "loss limit a single trade can blow through" case.
-
-**R2. Losing-streak arithmetic (non-compounding; see R3 for why that is the honest assumption).**
+**R1. Losing-streak arithmetic (non-compounding; the account value is never updated from P&L, R3).**
 
 | Basis | Loss per trade | −10% after | −20% after |
 |---|---|---|---|
-| Option at 5% cap, premium stop ignored (no broker stop) | 5.00% | **2** losers | **4** losers |
-| Option at 5% cap, 60% premium stop honoured manually | 3.00% | 4 (12%) | 7 (21%) |
-| `max_loss_per_trade_pct` 3.75% | 3.75% | 3 (11.25%) | 6 (22.5%) |
-| Stock, default 1% risk × conviction mult ≤ 1 (`stock_scan.py:1342-1364`) | ≤1.00% | 10 | 20 |
+| Option at the new cap, premium stop ignored (no broker stop) | 3.75% | 3 losers (11.25%) | 6 losers (22.5%) |
+| Option at the cap, 60% premium stop honoured by hand | 2.25% | 5 (11.25%) | 9 (20.25%) |
+| Stock card, 1% risk × conviction ≤ 1 | ≤ 1.00% | 10 | 20 |
 
-Options total exposure is capped at 25% (`max_total_exposure_pct`), i.e. 5 full-size positions. If all five are long beta and the market gaps, the book can lose up to 25% before any human acts. Stocks: total 100%, single 20% (`risk_rules.yaml`). A 20% name gapping 20% through its stop costs 4% of the account against a planned 1%.
+Total option premium is capped at 25%: at 3.75% each that is 6 full-size positions (7 × 3.75 = 26.25% > 25%). Six correlated long-beta options going to zero cost 22.5% before anyone acts. Stocks: 20% single / 100% total notional, no combined cap with options.
 
-**R3. Every % cap multiplies an account value the client types (Medium).**
-- `create_position` passes `portfolio_value=body.portfolioValue` (`position_writer.py:443-451`). The schema default is **50,000** (`schemas/__init__.py:1019`).
-- `ArmRequest.portfolio_value` defaults to **50,000** (`routers/auto_trade.py:127`). The frontend sends `useRiskStore` `limits.portfolioValue` from localStorage (`frontend/lib/portfolioStore.ts:205`, `AutoTradeArm/index.tsx:370`), default **100,000**.
-- It syncs with the YAML only when the Settings page mounts (`settings/page.tsx:1155-1186`). `updateLimit` writes the store before Save (`:1190-1194`), so an unsaved edit already loosens the server cap.
-- The value is never tracked from P&L (`riskStore.ts:54-58`), so after a drawdown every cap still multiplies the pre-drawdown number. Sizes do not shrink as the account does.
-- `risk_rules.yaml portfolio.portfolio_value: 100000` is read only by the stock exit-plan risk budget (`stock_scan.py:2430-2432`) and Settings.
+**R2. Fixed: the option per-trade loss limit is now a hard cap.** `min(5%, 3.75%)` judged at the fill basis, refused when one contract does not fit (`portfolio_risk.py:181-202`). The fire-time check uses the same function (`auto_trader.py:3011-3045`).
 
-**R4. The daily-loss "circuit breaker" is a premium-spend cap, auto-trader-only, in memory (Medium).**
+**R3. Every % cap multiplies an account value the client types (Medium, open #7).** `position_writer.py:497` passes `body.portfolioValue`; defaults 50,000 in `schemas/__init__.py:1114` and `routers/auto_trade.py:136`, 100,000 in the YAML and the frontend store; never updated from P&L.
 
-`_check_daily_loss` sums `premium_at_risk` over **today's in-memory history** (`auto_trader.py:3087-3131`; history is in-memory, `:2993`). A process restart resets it. It never counts realised losses, manual sends, or the basket. 2% of the typed account value per UTC day caps what the auto-trader can deploy. That is conservative for the auto path (it blocks any single 5% trade), but the manual path has no daily limit at all.
+**R4. Daily loss is a spend cap, in memory, auto-only (Medium, open #9).** `auto_trader.py:3430-3466`; a restart resets it; manual sends have no daily limit. `max_daily_recommendations` is still never passed server-side (`check_position_risk` default 0, no caller supplies it).
 
-`max_daily_recommendations: 5` is likewise never passed server-side: `daily_recommendation_count` defaults to 0 and no caller supplies it (`portfolio_risk.py:76, 108`). It is enforced only in the frontend counter, which is overridable.
+**R5. Stocks: no per-trade loss check server-side, shorts with no protective order (Medium).** The stock card sizes at 1% risk, but the share field is editable and the server judges only notional (20% / 100%). A short stock (Bearish `|STOCK`, `premium_stop.is_short_stock_position`) has an alert on a rise, no broker stop; gap risk is unbounded. The 5-year evidence (T4) says bearish strategies lose.
 
-**R5. Sizing is regime-aware, not volatility-aware, for options (Low/Medium).**
-
-The option quantity is whatever the trader types, capped at 5 contracts and 5% premium. The conviction ramp `min_mult + (1 − min_mult)(conv + full) / (2·full)` (`scoring_rules.yaml regime_sizing`) scales the auto-trader's quantity on the noisy Q5 number. A high-vol name gets the same contract count. The stock side **is** vol-aware via stop distance (`stock_scan.py:1085-1101`).
-
-**R6. Missing data, gate by gate.**
-
-| Gate | Input missing | Behaviour | Verdict |
-|---|---|---|---|
-| Event / earnings | no date | PASS 90 (`stock_scorer.py:879-883`); yfinance fallback tried first (`scan.py:603-608`) | **fail-open** |
-| IV (stock vol rule) | no IV | CAUTION 50 (`stock_scorer.py:968-969`) | soft |
-| IV (contract ceiling) | no IV | ceiling skipped (`contract_validator.py:130`); scan back-fills a BS IV (`scan.py:786-804`) | mostly covered |
-| Contract liquidity | no volume / OI / quote | treated as 0 → hard reject (`contract_validator.py:87-110`) | **fail-closed** ✓ |
-| Regime (scan) | no signal | gate skipped (`scan.py:728, 836`); Intraday with no bars is dropped (`:703-707`) | fail-open (daily) |
-| Regime (auto-trader) | bars missing | refuses (`RegimeDataUnavailableError`); unmeasurable → abstains but sizes at the **floor** (`auto_trader.py:1486-1501`) | balanced ✓ |
-| Fundamentals | no EDGAR record | gate skipped (`stock_scorer.py:1207`) | fail-open |
-| Confidence | n < 20 | `confidence=None` → cap PASS (`signal_confidence.py:203`) | fail-open |
-| Config blocks | malformed | money blocks refuse (`money_config.py`; `auto_trader.py:1173-1297`) | **fail-closed** ✓ |
+**R6. Missing-data behaviour** — as last run, with one change: unknown earnings on a single stock is now fail-**closed** (CAUTION cap and auto-fire refusal; ETFs exempt via `data/etfs.py:63`). Still fail-open: fundamentals missing (gate skipped), confidence n < 20 (no cap), regime missing on the daily scan (gate skipped). Contract liquidity and money config blocks remain fail-closed.
 
 ---
 
 ## Execution safety (Risk Manager, continued)
 
-**E1. "Send basket" reports orders sent; none are (High).**
+**E1. Stocks "After scan" auto-execute fires on CAUTION and does not trade (Medium, new).**
+`StockAutoTradeArm` sits under the heading "Auto-trade mode" with the option "After scan — fire when next scan PASS" and the note "Will execute when next scan finds a PASS" (`StockAutoTradeArm/index.tsx:12, 118`). The handler adds **every** armed candidate in the scan result as a `source: 'paper'` Portfolio row (`step-4-stocks/page.tsx:243-262`, `lib/paperTrade.ts:177`). The stock scan returns CAUTION candidates too (`stock_scan.py:1680-1684`), and the loop never checks `status`. So a CAUTION setup is "executed", and "executed" means a tracked row, not an order. Fix: filter `c.stock_status === 'PASS'`, and relabel "Track automatically after the next scan (no order)".
 
-`handleSubmit` (`step-7-trade-card/page.tsx:1279-1375`) calls only `addPosition`. It writes a Portfolio row tagged `source: 'broker'` (`:189`) and never calls `/broker/option-order`. The only order call on the page is the direct path (`:1175`). The toast then says "**{auto} sent to broker**" (`:1683`). The file header calls it "(sent to broker mock)" (`:7`, and `SendToBrokerDialog/index.tsx:7`).
+**E2. "Market open" is still "a price exists" (Medium, open #8).** `auto_trader.py:648-670`.
 
-Consequences:
-- the trader believes they are in, and they are not;
-- the phantom rows count against `max_concurrent_positions`, the duplicate-symbol rule and total exposure (`portfolio_risk.py:115-133`), blocking real trades;
-- every STOP / TP alert fires on a position that does not exist.
+**E3. No protective orders; exits are alerts (Medium, deliberate).** Unchanged. Overnight gaps, halts and regime flips need a human awake.
 
-**E2. The auto-trader's "market closed or halted" guard is a price-exists check (Medium).**
+**E4. Broker endpoints run no risk check of their own (Low → Medium when live).** `/broker/stock-order` and `/broker/option-order` (`routers/broker.py:217-349`); A1-F4b adds earnings to that list.
 
-`_market_is_open` returns True whenever `fetch_price` returns > 0 (`auto_trader.py:418-441`). `fetch_price` falls back to `quote.close`, then yfinance `last_price or previous_close` (`data/market.py:665, 680`). So it passes on weekends, after hours and during a halt. A real session clock exists (`strategy_watch_scheduler._market_open`, re-exported by `market_session.py:39`) and is not used here. Because the fire disarms first (`auto_trader.py:2336-2341`), a DAY order the broker rejects or queues still consumes the arm.
+**E5. A scan-triggered fire does not consult the scan's verdict (Low, deliberate).** `maybe_fire_on_scan` checks arm age ≤ 30 min, then the fire re-checks market, regime, earnings, exposure and daily loss (`auto_trader.py:3053-3132, 2560-2640`). The setup itself is not re-graded; with the 30-minute cap this is acceptable and documented.
 
-**E3. No protective orders; exits are alerts (Medium, deliberate).**
+**E6. Broker adapters (first read this run, Low).** Side/effect mapping is correct (Tradier `buy_to_open` etc., `tradier_paper.py`; IBKR/Alpaca infer open/close). No broker-side client order id on Tradier/Alpaca, so the app's natural-key dedup window (`routers/broker.py` `_claim_or_wait`) is the only duplicate guard. An IBKR option order without a `conid` carries only the underlying symbol with `secType: OPT` (`ibkr_paper.py` `_build_payload`) and will be rejected by the broker. Limit prices are not rounded to the option tick.
 
-Stated in the code: "The auto-trader places no protective order" (`auto_trader.py:3096-3100`). Overnight gaps, regime flips with open positions (`regime_monitor.py` broadcasts a WebSocket warning, `:5`), and premium stops are all notifications (Gmail / Telegram / WebSocket). They need a human awake.
-
-**E4. What is done well (verified).**
-- Idempotent order endpoints with a natural-key claim (`broker.py:58-128`).
-- IBKR "confirmation question" treated as not-placed (`broker.py:139-172`; `auto_trader.py:2201-2210`).
-- Pre-broker vs may-have-landed failure split (`auto_trader.py:2160-2211, 2593-2664`).
-- A may-have-landed order books its full premium against the daily budget (`:2642-2652`).
-- Double-fire prevention via disarm-under-lock plus `expect` identity (`:2304-2341`).
-- Stale-arm expiry with alert (`:2780-2841`).
-- The direct send saves before it orders and deletes the row when the order provably failed (`step-7-trade-card/page.tsx:1124-1225`).
-
-This is careful engineering.
-
-**E5. Server-side risk on the broker endpoints.**
-
-`/broker/stock-order` and `/broker/option-order` run **no** risk check of their own (`broker.py:217-349`). The UI's path runs the portfolio-save check first, but any other client can place an unchecked paper order. Low today (single-user, local), Medium once live keys exist.
+**E7. Done well (re-verified).** Idempotent order endpoints; IBKR confirmation question answered as not-placed; pre-broker vs may-have-landed split with full premium booked; double-fire prevention under lock with `expect` identity; the stock and option direct sends save first, order second, classify the reply and remove a provably-unplaced row (`lib/stockDirectSend.ts`). Careful engineering.
 
 ---
 
@@ -392,22 +293,24 @@ This is careful engineering.
 
 | Check | Values (file:line) | Consistent? | Severity |
 |---|---|---|---|
-| Per-trade loss vs single-position cap | `max_loss_per_trade_pct 0.0375` (warning-only) vs `max_single_position_pct 0.05` premium, no protective order | **No**: one trade can lose 5% > 3.75% | **High** |
-| Per-trade loss vs daily loss | 3.75% per trade vs `auto_trade.max_daily_loss_pct 0.02` | Auto path: the 2% premium cap blocks any trade over 2%. Manual path: no daily gate | Medium |
-| Stock vs option caps | options 5% single / 25% total on premium; stocks 20% / 100% on notional; each judged only against its own kind (`portfolio_risk.py:103-106`) | No combined cap; worst case 25% premium + 100% stock notional at once | Medium |
-| Backtest costs vs allowed liquidity | stocks 0.2% per leg; options: none modelled, yet the filter accepts spreads ≤ 20% (`contract_rules.yaml`) and entry at mid (`entry_quality.py:69`) | **No**: half-spread on exit up to 10% of premium, unpriced | Medium |
-| WFO windows vs data | train 12m (≈252 bars) ✓; test 3m (≈61–62 bars) | **No** | **High** |
-| WFO windows vs code minimums | engine and OOS loop require ≥100 bars (`strategy_backtest.py:89`; `strategy_param_optimizer.py:122`) vs 3-month test | **No**: every OOS fold silently skipped | **High** |
-| Minimum-trade gates | backtest 10 (`strategy_backtest.py:24`), optimizer 20 OOS per symbol (`strategy_params.yaml optimization`), confidence 20 **overlapping** (`scoring_rules.yaml`) | Inconsistent; at n=10 the 95% interval is ±31 pts | Medium |
-| Stop definitions | options card: structural / 2×ATR stock stop (`scan.py:1007-1028`); R/R risk = 60% premium (`reward_risk.py:148`); premium-stop alert = entry×(1−0.60); auto-trader daily gate = 100% premium; Step-7 checklist R/R ≥2.0 | Four stops, and the headline R/R uses one the trader does not see on the chart | Medium |
-| DTE vs holding horizon | `dte_holding_multiplier 2.0`; floor clamp `hold_max+1` (`dte_window.py:43-45`) | Swing can land at 16 DTE for a 15-day hold | Medium |
-| Config vocabulary vs code | `strategy_params.yaml direction: bullish` vs `== "Bullish"` (`strategy_backtest.py:20`) | **No**: the wrong branch runs | **High** |
-| Account value basis | YAML 100,000; schemas default 50,000 (`schemas/__init__.py:1019`, `auto_trade.py:127`); frontend localStorage 100,000 | Three sources; server trusts the client | Medium |
-| Event window vs its mirrors | scan Swing 21/45d (`scoring_rules.yaml`); Step 5 uses the scan's echoed window ✓; Step-7 rail fixed 7/3d (`@contextRail/…/step-7-trade-card/page.tsx:123`) | **No** | Medium |
-| Score thresholds vs mirrors | YAML 55/35, 50/35 = `status.ts:31`, `confidenceText.ts:4-11`, `SCORING_RULES.md:195-197` | Yes | — |
-| Regime window vs data | `regime.swing.window 500`, `position 750` vs ≈306 bars fetched (`scan.py:1659`) | Window never reached | Low/Medium |
-| Confidence `history_years` vs data | Swing 4y vs ≈306 bars in the options scan | Inert there | Low |
-| Dead or unmeasured config | dead: `regime.enhanced_states`, `pullback.max_days_in_pullback`, `pullback.theta_caution_days` (only in `config_health.py:127` key list), `auto_trade.premium_stop_pct` (marked NOT READ), `gap_threshold_pct` (marked intentional). Unmeasured and live: `max_iv_rank`, `iv_rank_*`, `bearish_min_trend`, `stop_premium.pass_max_fraction` (all marked UNMEASURED in YAML) | Marked honestly; the unmeasured ones sit in live gates | Low |
+| Per-trade loss vs single-position cap (options) | `max_loss_per_trade_pct 0.0375` now caps premium via `min(...)` (`portfolio_risk.py:189-192`) | **Yes** (fixed) | — |
+| Per-trade loss vs daily loss | 3.75% per trade vs `auto_trade.max_daily_loss_pct 0.02` premium spend | Auto path blocks any trade > 2%; manual path has no daily gate | Medium |
+| Stop definitions | Sizing: loss = 100% premium (D5). R/R risk = 60% premium (`reward_risk.py:148`). Premium-stop alert at entry × 0.40 (`premium_stop.py`). Card stock stop = structure / 2×ATR. Step-7 checklist wants R/R ≥ 2.0 | **No**: the R/R the checklist grades uses a 60% loss the system itself does not believe; a shown 2.0 is 1.2 on the sizing basis | Medium |
+| Stock vs option caps | options 3.75% / 25% premium; stocks 20% / 100% notional; each counted only against its own kind | No combined cap | Medium |
+| Backtest costs vs allowed liquidity | stocks 0.2%/leg; options never backtested; contract filter accepts ≤ 20% spread at mid | Half-spread on exit unpriced | Medium |
+| Backtest costs vs WFO costs | live gate 0.2%/leg **per trade**; WFO selects gross and charges 0.4% **per fold** | **No** | Medium |
+| Backtest order type vs live | backtest GTC limit (`strategy_backtest.py:160`); live `LMT`, `tif: DAY` | **No** | Medium |
+| WFO windows vs data | 12/3 months + 260-bar warm-up; DB holds ≈ 6 years | **Yes** (fixed) | — |
+| WFO windows vs code minimums | test fold ≈ 62 bars ≥ `MIN_SCORED_BARS` 40; window with warm-up ≥ 100 | **Yes** (fixed) | — |
+| Minimum-trade gates | backtest 10; WFO 20 OOS **per contributing symbol** over 24 months; confidence 20 overlapping | **No**: the WFO bar is unreachable (best strategy ≈ 9.6 OOS trades per symbol); Q2 shows 10–25 is noise anyway | Medium |
+| Config vocabulary vs code | `direction: bullish` normalised (`strategy_backtest.py:16`) | **Yes** (fixed) | — |
+| `setup_window_bars` | 8 / 10 / 5 in YAML; no reader | **Dead** — trigger is same-bar only | Medium |
+| Earnings window vs hold | Swing reject 21 ≥ hold 15 ✓; Position reject 30 < hold 45; Quarterly/Semi/Annual likewise | **No** for four presets | Medium |
+| DTE vs hold | `hold_max + 1` floor → Swing 16 DTE for 15-day hold | Edge case leaves 1 DTE | Medium |
+| Account value basis | YAML 100,000; schema/arm defaults 50,000; client sends its own | Three sources; server trusts the client | Medium |
+| Price basis vs bar invariant | close × `adj_factor`, O/H/L raw (`historical_store.py:238-246`) | **No**: 44% of scan-window bars violate low ≤ close ≤ high | **High** |
+| Score thresholds vs mirrors | 55/35, 50/35 = `status.ts`, `confidenceText.ts`, `SCORING_RULES.md` | Yes | — |
+| Dead or unmeasured config | dead: `enhanced_states`, `max_days_in_pullback`, `theta_caution_days`, `setup_window_bars`, `auto_trade.premium_stop_pct` (marked NOT READ), `gap_threshold_pct` (marked intentional). Unmeasured and live: `max_iv_rank`, `iv_rank_*`, `bearish_min_trend`, `stop_premium.pass_max_fraction`, `min_signal_rr` (0.0, disabled) | Marked honestly except `setup_window_bars` | Low / Medium |
 
 ---
 
@@ -415,14 +318,15 @@ This is careful engineering.
 
 | Scenario | What the code does | Exposure |
 |---|---|---|
-| Clean uptrend | Bullish setups pass. `pullback_ema` puts rung 1 at the prior swing high: median planned R/R 0.11 on SPY. The options target is a flat +8% | Stock side: many small wins, few large losses, negative net expectancy measured on SPY. Options: fine if the move comes |
-| Downtrend | Bearish mirrors: `bearish_min_trend` 30/40 is UNMEASURED (YAML); spreads offered but not routable | Long puts only, in practice |
-| VIX 20 → 40 | No VIX input to the gate. Symbol IV: Swing vol rule CAUTION above 34, REJECT above 55 absolute; contract hard-reject above 70 absolute IV. Regime = symbol's 20-day return label; sizing on the conviction ramp | Long premium bought at elevated IV until 55/70; not handled at the portfolio level |
-| Earnings inside the hold | Options: score penalty only; 8.4% of measured PASS setups survive with earnings in 3 days; unknown date = PASS. Stocks: event weight 0 by design | **Not handled for options**: IV crush plus gap on up to 5% of account per position |
-| Overnight gap through the stop | `regime_monitor._check_overnight_gaps` alerts (`regime_monitor.py:145-197`); no broker stop | Options: up to 100% premium (5% of account). Stocks: unbounded below the stop (20% position) |
-| Trading halt | `_market_is_open` passes on last price; the fire disarms and sends | Order rejected or queued at the broker; arm consumed; alert sent |
-| Regime flip with open positions | WebSocket warning once the sustain clock passes (`regime_flip_sustain_minutes: 0`); no auto-exit | Human-dependent |
-| Broker API down at order time | Auto: `not_submitted` vs `order_failed` rows plus alerts, full premium booked on may-have-landed (`auto_trader.py:2593-2664`). Direct: save first, classify, delete or keep with note | **Handled well** |
+| Clean uptrend | Bullish setups pass about as often as chance (§5); `pullback_ema` rung 1 a median 0.60R away; `ma_crossover` is the one strategy with positive net expectancy (+0.57%/trade) | Options: drift-dependent, no selection edge. Stocks: `pullback_ema` slightly negative net |
+| Downtrend | Bearish mirrors are sound in code; every bearish strategy loses net over 2021–26; spreads not routable | Long puts and short stock with no measured edge |
+| VIX 20 → 40 | No VIX input; symbol IV caps CAUTION > 34, REJECT > 55 (Swing abs), contract hard reject > 70 | Long premium bought at elevated IV up to the caps |
+| Earnings inside the hold | **Swing: vetoed** (fixed); unknown date on a stock caps CAUTION and refuses auto-fire. Position and longer presets: not vetoed beyond 30 days | IV crush on long holds; manual server-side paths unchecked |
+| Overnight gap through the stop | Alert only | Option: up to 100% premium = 3.75% of account. Stock: unbounded below the stop (20% position) |
+| Trading halt | `_market_is_open` passes on a last price; fire disarms and sends | Order rejected or queued; arm consumed |
+| Regime flip with open positions | WebSocket warning; no auto-exit | Human-dependent |
+| Broker API down at order time | Classified not-submitted vs may-have-landed; full premium booked on may-have-landed | **Handled well** |
+| Stock split in the lookback | `get_bars` returns adjusted closes against raw highs/lows | Backtest gate and confidence replay decide on impossible bars (NVDA `ma_crossover`: 23 trades true, 0 shown) |
 
 ---
 
@@ -430,15 +334,15 @@ This is careful engineering.
 
 **Where the voices disagreed, and who is right.**
 
-1. *`pullback_ema`'s tiny targets.* The Trader calls it broken. The builder's docstring calls it honest information that the backtest should judge. The Quant sides with the builder on mechanism: the gate did refuse SPY on expectancy. **The Trader is right on consequence.** When a strategy needs a 94% win rate to break even, every one of its signals is a near-certain cost drag, and the gate only catches it when n ≥ 10. On a 5-year live history most symbols will show "Only N trades" and drop, which hides the defect rather than fixing it. Deliberate, and still a High: fix it within the intent by skipping signals below an R floor, not by clamping targets.
+1. *Is "the score has no edge" a REJECT or a CAUTION?* The Quant says CAUTION: the mechanism works and the REJECT examples in the rubric are bugs, not disappointing results. The Trader says REJECT: an options selector that matches the base rate loses spread and theta on every trade. **The Trader is right.** "Insufficient data" earns CAUTION because the edge is unproven. This is not unproven; 4,113 distinct setups measured it, and the intervals say the score adds nothing over the universe's drift. The REJECT line exists for "real money would be at risk", and it is.
 
-2. *The daily-loss limit.* The predecessor called it a real circuit breaker. The Risk Manager calls it a spend cap. **The Risk Manager is right**: it never sees realised P&L, forgets on restart, and does not cover two of the three send paths. It is still a useful guard on the auto path.
+2. *Phase A credit.* The Risk Manager wanted area 4 kept at REJECT until the account value is server-side. **No.** The REJECT was "a loss limit a single trade can blow through"; that is closed, judged at the fill basis, and refused when one contract does not fit. The client-supplied account value is a real Medium, not the same defect.
 
-3. *Per-trade loss vs position cap.* The YAML marks the loss limit warning-only on purpose. **Deliberate, and still REJECT**: with no protective order, the 5% premium cap is the real per-trade loss limit, and it is above the stated 3.75%.
+3. *Mixed-basis data.* The Trader called it a plumbing bug outside his lens. **It is the most consequential finding of the run for the evidence.** It is invisible on today's screen and decisive in every backtest, gate and replay that looks back. It also explains why five strategies' per-symbol results looked unstable in earlier runs.
 
-4. *Regime gate.* The Trader credits the wiring (it really gates, in both scan and fire). The Quant says the instrument is too noisy to trust. **Both are right.** Grade the wiring PASS and the measurement CAUTION. Lengthen the data window before tightening any threshold.
+4. *The backtest gate.* The builder's design treats a per-symbol backtest as protection. The Quant's split-half test shows it selects noise. **The Quant is right, and the fix is not a tighter threshold.** At 10–25 trades per symbol no threshold separates signal from luck; pool across symbols (the WFO's basket design) and judge on out-of-sample.
 
-**Deliberate choices respected:** event weight zero for stocks; the DTE floor equality; fail-closed money blocks; sizing at the floor when the regime is unmeasurable; IV basis split; UNMEASURED thresholds clearly labelled. None of these is graded as a bug.
+**Deliberate choices respected:** event weight zero for stocks; no protective orders (graded on consequence, not called a bug); D7's disabled floor (the Trader's fix-within-intent stands); ETFs exempt from unknown-earnings; fail-closed money blocks; UNMEASURED thresholds honestly labelled.
 
 ---
 
@@ -446,85 +350,75 @@ This is careful engineering.
 
 | # | Severity | Area | Problem | Fix | Why it costs money |
 |---|---|---|---|---|---|
-| 1 | High | 2 | WFO tunes the bearish branch for bullish (`direction: bullish` vs `"Bullish"`) and Adopt writes it into `active.bullish` | Normalise direction once (`.capitalize()`) at `get_direction()` / `run_optimization`; make Adopt send the proposal's direction; add a test with lowercase input | Adopted params trade the opposite thesis |
-| 2 | High | 2 | OOS folds (61–62 bars) below the 100-bar minimum; no warm-up prefix | Slice test bars with a warm-up prefix of max indicator period, and judge only trades entered inside the test dates; or raise `test_months` and lower the guard. Test on trading-day bars | Every proposal is in-sample only |
-| 3 | High | 3 | Earnings inside the reject window is not a veto; unknown earnings = PASS; Step-7 rail uses a 7/3-day window | Make event REJECT cap `finalStatus` on the options path, block arm and send on it, treat an unknown date as CAUTION, and make the rail read the scan's echoed window | IV crush and gap inside the trade |
-| 4 | High | 4 | 5% premium cap > 3.75% per-trade loss limit, warning-only, no stop order | Size options so `premium × contracts ≤ max_loss_per_trade_pct × account` (long premium can lose 100%), or make the limit a server-side hard check | One loser exceeds the stated limit |
-| 5 | High | 5 | Basket "Auto-send" places no order but says "sent to broker" | Route auto rows through the direct send path (save → order → classify), or relabel as "tracked, not sent" and tag rows `manual` | Phantom positions; real trades blocked by phantom caps |
-| 6 | High | 1 | `pullback_ema` rung-1 R/R median 0.11 on SPY, 95% of signals < 1:1 | Configurable min rung-1 R/R per strategy (skip the signal, don't clamp); re-tune after fix #1/#2 | Wins too small to pay costs |
-| 7 | Medium | 4 | Server caps trust the client's `portfolioValue`; defaults 50k vs 100k; never updated from P&L | Read the account value server-side (YAML, or the broker balance when live); ignore or validate the client value; one default | Caps loosen silently; no shrink after drawdown |
-| 8 | Medium | 5 | `_market_is_open` passes on last close | Use the real session clock plus a halt flag from the quote; check before disarm | Orders after hours / in halts consume the arm |
-| 9 | Medium | 4 | Daily-loss gate: in-memory, auto-only, spend not loss | Persist history; include manual sends; count realised losses | Limit resets on restart; manual path unlimited |
-| 10 | Medium | 2 | Regime row from 0–15 transitions; windows truncated to ≈306 bars | Fetch ≥ window bars for regime; use overlapping counts with an autocorrelation-aware interval, or require a minimum number of transitions per row before publishing | Gate and sizing decided on noise |
-| 11 | Medium | 2 | Confidence replay counts overlapping days; 50/35 cut-offs ignore 2:1 payoff | Count distinct setups (de-overlap by n_days); gate on replayed expectancy in R, not hit rate | Good setups demoted, weak ones pass on luck |
-| 12 | Medium | 3 | Spreads: no liquidity checks on legs, wrong R/R on the card, not routable | Run `validate_contract` hard rules on each leg; compute spread R/R from net debit/credit; hide Send until multi-leg is routed | Illiquid short legs; misleading R/R |
-| 13 | Medium | 1 | Options target flat +8% for every horizon and symbol | ATR or structure-based target matching the stop basis | R/R overstated on low-vol names, understated on high-vol |
-| 14 | Medium | 3 | Swing DTE floor 16 for a 15-day hold | Floor at `ceil(hold_max × multiplier × k)` (k < 1), not `hold_max + 1` | Theta and gamma at exit |
-| 15 | Low | 2 | `summary_text` labels % expectancy as `$` (`strategy_backtest.py:189`) | Fix the label | Misread evidence |
-| 16 | Low | 4 | Dead config keys (`enhanced_states`, `max_days_in_pullback`, `theta_caution_days`) | Remove, or mark NOT READ like the others | Trader may tune a knob that does nothing |
+| 1 | High | 2 | `_read_bars` adjusts close only; O/H/L raw (`historical_store.py:238-246`) | Multiply open/high/low by `adj_factor` too; replace the test that pins the bug; add a `low ≤ close ≤ high` invariant test over stored series; re-run every cached backtest | Gate verdicts flip on 12% of combos; confidence on 23% of replays |
+| 2 | High | 1 | Swing score does not separate outcomes on 5 y × 61 names | Stop trading it as a selector until a rule set beats the base rate out of sample. Use §5's harness (score → barrier R, de-overlapped, with CI) as the acceptance test for any scoring change | Long premium on a no-edge selector pays spread + theta every time |
+| 3 | High | 2 | Per-symbol backtest gate has no persistence | Replace with a pooled, out-of-sample gate (strategy × basket over walk-forward folds); show per-symbol stats as information only | Gate passes noise and blocks equally good names |
+| 4 | High | 1 | `pullback_ema` median R/R 0.60, net −0.075%/trade | After fixes 1, 5 and 6, re-tune and set `min_signal_rr` from out-of-sample results (D7's own plan) | Wins too small to pay costs |
+| 5 | Medium | 2 | WFO picks on gross, charges 0.4% per fold | Pass the live commission into `train_fold` and the OOS run; drop `apply_costs` | Over-traded combos win selection |
+| 5b | Medium | 2 | WFO eligibility needs 20 OOS trades per symbol; best strategy ≈ 9.6 | Judge on pooled basket OOS trades | Every proposal reads "Edge looks fake"; the verdict carries no information |
+| 6 | Medium | 2 | Backtest limits are GTC; live is DAY | Cancel queued orders when flat at each `next()` | 8–13% of trades are stale fills |
+| 7 | Medium | 1 | Trigger needs four same-bar events; `setup_window_bars` dead | Implement the window or drop the weight; re-measure with the §5 harness | A 25% weight that is almost always 10–35 points |
+| 8 | Medium | 5 | Stocks "After scan" fires on CAUTION, label says PASS, books paper rows under "Auto-trade" | Filter `PASS`; relabel as tracking, no order | Trader believes setups were taken |
+| 9 | Medium | 4 | Server caps trust client `portfolioValue` (50k vs 100k defaults) | Server reads account value (YAML, later broker); one default | Caps loosen silently; no shrink after drawdown |
+| 10 | Medium | 3 | R/R uses 60% loss; sizing uses 100% | Compute the headline R/R on the same loss basis sizing uses, or show both | Checklist passes trades at 1.2 R/R |
+| 11 | Medium | 3 | Earnings veto shorter than Position/Quarterly/Semi/Annual holds | `max(reject_days, hold_max)` per preset, or disclose on the card (A1-F6) | IV crush inside long holds |
+| 12 | Medium | 1 | Bearish strategies lose net; `breakout_base` / `mean_reversion_rsi` can't reach the gate | Mark bearish stock strategies experimental; retune or hide the two dead strategies | Menu items with no measured edge or no candidates |
+| 13 | Medium | 5 | `_market_is_open` is a price probe | Session clock + halt flag, before disarm | Orders after hours / in halts |
+| 14 | Medium | 4 | Daily loss in memory, auto-only, spend not loss | Persist; include manual sends; count realised P&L | Limit resets on restart |
+| 15 | Medium | 3 | Spreads half-built; flat +8% target; Swing DTE 16 | Phase B #12, #13, #14 | Misleading R/R; theta at exit |
+| 16 | Medium | 2 | Confidence overlap; regime transitions thin | Phase B #10, #11 | Gates decided on noise |
+| 17 | Low | 2 | Adjusted-close cliffs (GE ×7.76, FI ×36.7, AVB, CTVA, MRNA) | Verify and repair those rows; add a cliff check to ingestion | Fake 600%+ days in any backtest touching them |
+| 18 | Low | 5 | Adapters: no client order id; IBKR option without `conid`; no tick rounding | Send `client_order_id`; require `conid` for IBKR options; round to tick | Duplicate or rejected orders |
+| 19 | Low | 1 | Fundamentals thresholds sector-blind | Sector-relative thresholds or exempt financials/utilities from D/E and current ratio | Systematic bias against two sectors |
+| 20 | Low | 2/4 | `$` label (#15); dead keys (#16) | As Phase B | Misread evidence; dead knobs |
 
 ---
 
 ## Not measured
 
-- **Multi-year real performance.** Only 251-bar fixtures were available locally (the app DB is Postgres via `.env`, not opened). *Measure:* run the same matrix on 5+ years from `historical_store` for a 50-name basket, net of 0.2% per leg.
-- **Option-level P&L of any strategy.** No backtest prices the contract (spread, theta, IV changes). *Measure:* replay recorded chains, or at minimum BS-reprice at entry and exit with the historical IV proxy and a half-spread charge.
-- **Confidence calibration** (does 70 hit 70%?). *Measure:* bucket historical confidence against realised outcomes on distinct setups.
-- **Regime model predictive value.** *Measure:* the forward 20-day return conditional on the published state and conviction, out of sample.
-- **Heston / BS repricing error at targets.** The Heston fit is used only when `method == "heston_grid"` (`scan.py:983`). *Measure:* the predicted vs observed option price at a later date.
-- **Monte Carlo hit probabilities** (drift assumed from score). *Measure:* calibration of the predicted P(hit) against realised outcomes.
-- **Actual WFO output on live data.** The tuner was not run (no DB, and it would also exercise bug #1).
-- **Fill quality at mid** on OI-200 / 20%-spread contracts. *Measure:* paper fills vs mid at order time.
-- **Fundamentals scorer correctness** (EDGAR parsing) — not reviewed.
+- **Option-level P&L of any strategy.** No backtest prices the contract. *Measure:* replay recorded chains, or BS-reprice at entry/exit with a half-spread charge.
+- **Calibration with the live IV and earnings inputs, and for the Position / Intraday horizons.** §5 is Swing, price-only (the replay's own design). *Measure:* the same harness with historical IV and earnings dates.
+- **Edge vs buy-and-hold.** `ma_crossover` Bullish's +0.57% per trade was not compared with simply holding the basket over the same days. *Measure:* exposure-matched buy-and-hold over the same bars.
+- **Survivorship-free results.** Basket = today's S&P members. *Measure:* point-in-time constituents.
+- **The full WFO on all strategies.** Only `ma_crossover` on 6 symbols was run (Q3).
+- **Regime model predictive value; Monte Carlo hit probabilities; Heston repricing error; fill quality at mid on OI-200 / 20%-spread contracts.** As last run.
+- **The data anomalies in Q10** were not checked against an independent price source.
 
 ---
 
 ## Coverage
 
 **Tested by running (this session)**
-- Quant regression suite (9 files, 94 tests).
-- `run_strategy_backtest`: 5 strategies × 2 directions × 4 symbols × gross/net.
-- Per-trade detail for SPY `pullback_ema`.
-- Planned R/R of every signal (`pullback_ema`, `ma_crossover`, `breakout_base`).
-- Lowercase-direction reproduction.
-- WFO fold bar counts on real data.
-- `score_stock` with and without an earnings date (440 PASS bars).
-- `compute_omm` transition counts and fixture outputs.
-- Confidence intervals and losing-streak arithmetic (shown above).
+- Quant regression suite: 17 files, 145 tests (§1).
 - `scripts/state.py`: no drift.
+- Database survey (read-only): 538 symbols; bar-invariant violations across all of them; adjusted-close cliff scan.
+- `score_stock` app-basis vs consistent on all 517 symbols with ≥250 scan-window bars (§6).
+- `run_strategy_backtest`: 5 strategies × 2 directions × 61 symbols × 5 years, consistent basis, net (610 runs) + app basis on 14 symbols plus 36 earlier rows (265 runs) (§3, §6).
+- Split-half gate persistence: 3 strategies × 61 symbols × 2 halves (§4).
+- Calibration study: 144,556 `score_stock` calls with barrier outcomes (§5).
+- Confidence replay app-basis vs consistent, 122 replays (§6).
+- Stale-fill proof (synthetic) and measurement (120 runs) (§7).
+- WFO `_optimize_strategy_sync` on real data, `ma_crossover`, 6 symbols (Q3).
+- Arithmetic: losing streaks, confidence intervals, noise bands (shown inline).
 
 **Read (logic reviewed)**
-- `backend/app/routers/scan.py` (symbol pipeline, spreads, bars window).
-- `routers/broker.py`, `routers/auto_trade.py` (ArmRequest).
-- `routers/stock_scan.py` (gate, sizing, cost, multi-signal; partial).
-- `routers/strategy_tuning.py` (job and adopt).
-- `routers/risk_settings.py` (load/save; partial).
-- `services/auto_trader.py`: fire, sizing, gate, daily loss, market check, scan trigger.
-- `services/portfolio_risk.py`; `services/position_writer.py` (risk and premium-stop sections).
-- `services/regime_omm.py`; `services/strategy_backtest.py`; `services/walk_forward.py`; `services/strategy_param_optimizer.py`; `services/strategy_param_store.py` (direction, adopt).
-- `services/strategy_engine.py` (`pullback_ema_signal`, `_build_target_ladder`).
-- `scoring/stock_scorer.py` (event, vol, regime cap, score_stock); `scoring/signal_confidence.py`; `scoring/contract_validator.py` (hard rejects); `scoring/spread_builder.py`; `scoring/trade_plan.py`; `scoring/reward_risk.py` (`estimate_rr`); `scoring/entry_quality.py`; `scoring/dte_window.py`.
-- `data/market.py` (`fetch_price`, `fetch_candles_async`).
-- All `backend/config/*.yaml` except credentials.
-- Frontend:
-  - `SendToBrokerDialog`;
-  - `step-7-trade-card/page.tsx` (basket, direct send, toast);
-  - `step-5-vol-events/page.tsx` (event gate);
-  - the Step-7 `@contextRail` checklist;
-  - `lib/risk.ts` (`checkTradeRisk`), `lib/riskStore.ts`, `lib/portfolioStore.ts` (account value);
-  - `lib/horizonPresets.ts`, `lib/status.ts`, `lib/confidenceText.ts`;
-  - `settings/page.tsx` (risk sync).
-- `SCORING_RULES.md` thresholds; `.github/workflows/ci.yml`.
+- Backend: `routers/scan.py` (earnings veto, final status, bars window), `routers/stock_scan.py` (cost, param merge, backtest gate, bars window, candidates), `routers/strategy_tuning.py`, `routers/broker.py` (both order routes), `routers/auto_trade.py` (ArmRequest default).
+- `services/strategy_backtest.py`, `walk_forward.py`, `strategy_param_optimizer.py`, `strategy_param_store.py`, `portfolio_risk.py`, `position_writer.py` (risk section), `premium_stop.py`, `historical_store.py` (`get_bars`, `_read_bars`), `strategy_basket.py`, `broker_router.py`, `auto_trader.py` (event veto, earnings lookup, cap basis, market check, fire ordering, daily loss, scan trigger), `fundamentals_gate.py`, `config_health.py` (key lists).
+- Scoring: `stock_scorer.py` (additive trend, pullback, candles, trigger, event window), `contract_validator.py` (hard rejects, all component scores, soft-fail rule), `trade_plan.py`, `reward_risk.py` (risk basis), `exit_plan.py` (`resolve_stock_stop`), `conviction_sizing.py` (header and failure posture), `fundamentals_scorer.py`, `signal_confidence.py` (formula, replay contract), `regime_omm.py` (stride, min_obs), `dte_window.py`, `first_passage.py` (drift lines), `spread_builder.py` (builders).
+- `strategy_engine.py`: `pullback_ema_signal` in full; other strategies through their measured behaviour.
+- Data: `data/alpaca.py` (adjustment), `data/alpaca_paper_execution.py`, `data/tradier_paper.py`, `data/ibkr_paper.py` (order build), `data/etfs.py` (presence).
+- All `backend/config/*.yaml` except credentials (settings.yaml read with secrets filtered).
+- Frontend: `lib/earningsGate.ts`, `lib/horizonPresets.ts`, `lib/premiumStop.ts` (semantics), `lib/stockDirectSend.ts`, `lib/paperTrade.ts` (source tag), `StockSendDialog`, `StockAutoTradeArm`, `step-4-stocks/page.tsx` (auto-execute), `step-7-trade-card/page.tsx` (basket tag, toast, premium-stop notes), `SendToBrokerDialog` (labels), `TradeCard` (premium-stop field).
+- Plans and records: `docs/superpowers/plans/2026-10-03-trading-review-fixes-plan.md` (decisions, Phase B), `docs/superpowers/audits/2026-10-03-trading-review-fixes.md`, `PROJECT_STATE.json` (TRADING-REVIEW entries), `.github/workflows/ci.yml`, `tests/test_historical_store_guard.py`.
 
-**Skimmed (header and purpose only, not graded in depth)**
-- `scoring/first_passage.py` (drift line read), `scoring/conviction_sizing.py` (header and formula), `scoring/structural_stop.py`, `scoring/exit_plan.py`, `scoring/stop_cost.py`, `scoring/reprice_horizon.py`.
-- `services/regime_gate.py`, `services/regime_hmm_daily.py`, `services/regime_monitor.py` (function list), `services/fundamentals_gate.py`, `services/strategy_basket.py`, `services/picked_method.py`, `services/portfolio_alert_monitor.py`, `services/strategy_watch_evaluator.py`, `services/composite_trigger_evaluator.py`, `services/auto_trade_booking.py`, `services/broker_router.py`, `services/alert_generator.py` (stop alerts), `services/config_health.py` (key list).
+**Skimmed (purpose only, not graded in depth)**
+- `scoring/structural_stop.py`, `stop_cost.py`, `reprice_horizon.py`, `entry_quality.py`; `data/tastytrade_paper.py`; `services/regime_gate.py`, `regime_hmm_daily.py`, `regime_monitor.py`, `alert_generator.py` (premium-stop path), `strategy_watch_evaluator.py` (confirmed it places no orders), `composite_trigger_evaluator.py`, `auto_trade_booking.py`.
 
 **Not reviewed in this run (by name, with reason)**
-- **Broker adapters** `data/ibkr_paper.py`, `tradier_paper.py`, `alpaca_paper_execution.py`, `tastytrade_paper.py`, `tastytrade_bridge.py`, `ibkr.py`, `alpaca.py`: order-translation internals. Only their interface and error contract were checked.
-- **Scoring internals not on a finding path:** `scoring/fundamentals_scorer.py` (EDGAR math), `models/heston*`, `services/market_structure.py`, `services/indicator_compute.py`, `services/alert_evaluator.py`; the trend / pullback / trigger rule internals in `stock_scorer.py` (only outputs exercised); `strategy_engine.py` bodies for `breakout_base`, `ma_crossover`, the mean-reversion family, `breakout_setup` and `_fibonacci_pullback` (Pre-Breakout mode), exercised by running only.
-- **Partially or not read:** `routers/contracts.py` (recompute endpoint, shares `build_trade_plan`); `routers/portfolio.py`; `routers/stock_scan.py` beyond the sections cited.
-- **Out of trading-logic scope:** schedulers (`edgar_`, `sp500_`, `tuning_`, `scan_schedule_`, `ingestion_`, `strategy_watch_`, `chart_alert_`, `ibkr_keepalive_`), `services/notifications/*`, `credential_store.py`, `historical_store.py` internals, and the routers for alerts, chart, chart_alerts, chart_drawings, journal, news, sectors, symbols, symbol_notes, watchlist, watched_contracts, ws_alerts, events, health, data_sources, ingestion, historical_data, scan_schedule, notification_settings, candles, config, credentials, tradecards, composite_watch, strategy_watch, regime.
-- **Frontend outside the order and risk path:** Step 1–4 and Step 6 pages, Stocks-mode Steps 4–7 UI, `StockSendDialog`, `StockAutoTradeArm`, `AutoTradeArm` (only the `portfolio_value` line), and the Pre-Breakout UI.
+- `strategy_engine.py` bodies of `breakout_base`, `ma_crossover`, the mean-reversion family, `breakout_setup` and `_fibonacci_pullback`: exercised by running only (5 years × 61 symbols); code not read line by line.
+- `models/heston*`, `services/market_structure.py`, `indicator_compute.py`, `alert_evaluator.py`: not on an order or gate path reviewed here.
+- `routers/contracts.py` (recompute endpoint) and `routers/portfolio.py` beyond the create path: share `build_trade_plan` / `create_position`, already read.
+- Schedulers, notifications, credential store, and the routers for alerts, chart, journal, news, sectors, symbols, watchlists, websockets, health, data sources, ingestion, events, config, candles, tradecards, composite and strategy watches, regime: outside trading logic.
+- Frontend outside the send/risk path: Steps 1–3, Step 4 ranking, Step 5–6 pages, Pre-Breakout UI, Analysis, Chart, Settings.
 
-Next run: re-verify fixes #1–#6 first, then extend coverage to the stock-mode send path (`StockSendDialog`, `StockAutoTradeArm`) and the broker adapters.
+Next run: re-run §3–§6 after fix 1 (the numbers in this report were measured on corrected bars, so they should hold; the app's own cached backtests will change), then extend calibration to Position and Intraday with IV and earnings inputs.
