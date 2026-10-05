@@ -124,3 +124,6 @@ describe('StockPositionCard — direction forwarded to StockAutoTradeArm', () =>
     expect(props?.direction).toBe('Bearish');
   });
 });
+
+// New ephemeral execution records must not leak between independent test scans.
+beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));

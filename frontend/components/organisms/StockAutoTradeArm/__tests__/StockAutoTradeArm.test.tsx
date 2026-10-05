@@ -16,7 +16,7 @@ describe('StockAutoTradeArm', () => {
     jest.clearAllMocks();
   });
 
-  it('arms a watch with the given direction', async () => {
+  it('blocks a new watch arm while strategy validation is unavailable', async () => {
     render(
       <StockAutoTradeArm
         symbol="TSLA"
@@ -31,7 +31,14 @@ describe('StockAutoTradeArm', () => {
     fireEvent.click(screen.getByText(/Watch TSLA — pullback_ema/));
 
     await waitFor(() => {
-      expect(mockAdd).toHaveBeenCalledWith('TSLA', 'pullback_ema', 'Bearish');
+      expect(mockAdd).not.toHaveBeenCalled();
+      expect(screen.getByText(/Unvalidated — research only/)).toBeInTheDocument();
     });
   });
+});
+
+it('shows retained after-scan intent on remount without granting execution', () => {
+  render(<StockAutoTradeArm symbol="AAPL" strategyKey="pullback_ema" direction="Bullish" afterScanArmed onAfterScanToggle={() => {}} />);
+  expect(screen.getByText(/After-scan intent saved for AAPL/)).toBeInTheDocument();
+  expect(api.addStrategyWatch).not.toHaveBeenCalled();
 });

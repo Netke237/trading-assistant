@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { StockSendDialog } from '@/components/organisms/StockSendDialog';
@@ -279,3 +280,10 @@ describe('StockSendDialog — partial basket failure retry', () => {
     expect(screen.getByRole('button', { name: /retry 1 failed order/i })).not.toBeDisabled();
   });
 });
+
+// Downstream save-first/retry parity tests; real unavailable authority is
+// covered by StockPositionCard.session.test.tsx without this mock.
+jest.mock('@/lib/stockExecutionSession', () => ({
+  ...jest.requireActual('@/lib/stockExecutionSession'), stockExecutionBlock: jest.fn(() => null),
+}));
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

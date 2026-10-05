@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import Step7PositionCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
@@ -338,4 +339,30 @@ describe('step-7-position-card — refuses to order a candidate with no method p
     fireEvent.click(limitBtn);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
   });
+});
+
+// Exercise the old Position save/order machinery behind the new boundary;
+// production unavailable validation is verified unmocked in shared boundary
+// suites and explicitly on this page below.
+jest.mock('@/lib/stockExecutionSession', () => ({
+  ...jest.requireActual('@/lib/stockExecutionSession'), stockExecutionBlock: jest.fn(() => null),
+}));
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));
+
+
+it('the old Position request boundary refuses new orders with production unavailable authority', async () => {
+  jest.clearAllMocks();
+  usePortfolioStore.setState({ positions: [] });
+  const actual = jest.requireActual('@/lib/stockExecutionSession');
+  const boundary = (await import('@/lib/stockExecutionSession')).stockExecutionBlock as jest.Mock;
+  boundary.mockReturnValue(actual.stockExecutionBlock());
+  try {
+    useSettingsStore.setState({ ibkrPaper: { baseUrl: 'https://localhost', accountId: 'ACC' } } as never);
+    useScanStore.setState({ stockScanResult: makeScanResult(), stocksCardEdits: { scanId: 'S1', picks: { AAPL: pick() }, invalidation: {}, premiumStop: {}, entryLimit: {}, maxLossOverride: {} } });
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
+    expect(api.postStockOrder).not.toHaveBeenCalled();
+    expect(screen.getByText(actual.STOCK_VALIDATION_UNAVAILABLE)).toBeInTheDocument();
+  } finally { boundary.mockReturnValue(null); }
 });

@@ -1,5 +1,7 @@
 'use client';
 
+import { stockExecutionBlock } from '@/lib/stockExecutionSession';
+
 import { useState, useMemo, useEffect } from 'react';
 import { Text } from '@/components/primitives/Text';
 import { Data } from '@/components/primitives/Data';
@@ -155,6 +157,8 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
           warn[c.symbol] = `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).`;
         }
       } else if (broker !== 'recommendation') {
+        const blocked = stockExecutionBlock();
+        if (blocked) { errs[c.symbol] = blocked; continue; }
         // STOCK-SENDS (P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25): SAVE
         // first, then the order at the quantity the save approved
         // (lib/stockDirectSend.ts). The position carries the tradeCardSnapshot

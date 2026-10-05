@@ -1,5 +1,7 @@
 'use client';
 
+import { stockExecutionBlock } from '@/lib/stockExecutionSession';
+
 import { useState, useEffect, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -121,6 +123,8 @@ export default function Step7PositionCardPage() {
   }
 
   async function submit(orderType: 'LMT' | 'MKT') {
+    const blocked = stockExecutionBlock();
+    if (blocked) { setError(blocked); return; }
     if (!card || execMode === 'recommendation' || hasOrderForCurrent) return;
     // Phase G piece 5, build step 4 (§7.2, S3) — belt-and-braces beside the
     // button's own `disabled`, on the same reading `pickMissing` was derived

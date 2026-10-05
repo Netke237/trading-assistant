@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
-import { runStockScan, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
+import { runStockScanWithContinuation, isStockManualScanCurrent, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
@@ -151,10 +151,10 @@ export default function Step4StocksPage() {
     if (useScanParamsStore.persist.hasHydrated()) sync();
     return useScanParamsStore.persist.onFinishHydration(sync);
   }, []);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const error = useScanStore(s => s.stockScanFeedback.error);
+  const notice = useScanStore(s => s.stockScanFeedback.notice);
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
-  const [afterScanArmedSymbols, setAfterScanArmedSymbols] = useState<Set<string>>(new Set());
+  const afterScanIntent = useScanStore(s => s.stockAfterScanIntent);
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
   const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
@@ -198,96 +198,27 @@ export default function Step4StocksPage() {
       };
 
   function onAfterScanToggle(symbol: string, armed: boolean) {
-    setAfterScanArmedSymbols((prev) => {
-      const next = new Set(prev);
-      if (armed) next.add(symbol); else next.delete(symbol);
-      return next;
-    });
+    useScanStore.getState().setStockAfterScanIntent(symbol, armed);
   }
 
   async function onRun() {
     if (!activeStrategy) return;
-    setError(null);
-    setNotice(null);
-    // The catch is for a throw runStockScan could not convert into a null
-    // return (setScanState itself failing) — without it that throw escapes
-    // this handler as an unhandled rejection and the user is told nothing at
-    // all. It resets scanState as well as showing the reason: the throw
-    // happens with SCANNING already set, which leaves the Run button disabled
-    // for the rest of the session.
-    let res: StockScanResult | null;
+    const pending = runStockScanWithContinuation(activeStrategy, params);
+    const token = useScanStore.getState().stockManualRunToken;
     try {
-      res = await runStockScan(activeStrategy, params);
-    } catch (err) {
-      // Reason FIRST: this catch exists for a throw runStockScan could not
-      // convert into a null return — `setScanState` itself failing — so
-      // resetting the state before showing the message meant the one case it
-      // is written for threw again and the user saw nothing.
-      const reason = stockScanFailureReason(err, false);
-      setError(`Scan failed — ${reason}`);
-      // SCANNING is already set; leaving it there disables the Run button for
-      // the rest of the session. The reason goes to the store too, so a stale
-      // one from an earlier run cannot outlive this FAILED. One try EACH: the
-      // first write throwing must not skip the FAILED reset.
-      try { useScanStore.getState().setStockScanError(reason); } catch { /* store is what failed */ }
-      try { useScanStore.getState().setScanState('FAILED'); } catch { /* ditto */ }
-      return;
+      const outcome = await pending;
+      if (!isStockManualScanCurrent(outcome)) return;
+      // W2 consumes this successful continuation to navigate to Backtest.
+    } catch (error) {
+      if (useScanStore.getState().stockManualRunToken !== token) return;
+      const reason = stockScanFailureReason(error, false);
+      try { useScanStore.getState().setStockScanFeedback(token, { error: `Scan failed — ${reason}`, notice: null }); } catch { /* unavailable storage */ }
+      try { useScanStore.getState().setStockScanError(reason); } catch { /* unavailable storage */ }
+      if (useScanStore.getState().stockManualRunToken !== token) return;
+      try { useScanStore.getState().setScanState('FAILED'); } catch { /* unavailable storage */ }
     }
-    if (!res) {
-      // The backend's own reason when it gave one (a 4xx/5xx detail), rather
-      // than the unconditional "is the backend running?" guess this line used
-      // to show even for a request the running backend had just rejected.
-      setError(`Scan failed — ${useScanStore.getState().stockScanError ?? 'unknown error'}`);
-      return;
-    }
-    // Auto-execute symbols armed for after_scan — add as paper positions locally
-    const failures: string[] = [];
-    const queued: string[] = [];
-    const adjusted: string[] = [];
-    const skipped: string[] = [];
-    for (const c of res.candidates) {
-      if (afterScanArmedSymbols.has(c.symbol)) {
-        // The arm promises "fire when next scan PASS" (StockAutoTradeArm).
-        // Every candidate passed the backtest gate, but stock_status can still
-        // be CAUTION — that one is not fired, and the notice says so.
-        if (c.stock_status !== 'PASS') {
-          skipped.push(`${c.symbol}: ${c.stock_status}`);
-          continue;
-        }
-        // Auto-execute fires with no human in the loop, so there is no overlay to
-        // prefer — send the pristine strategy levels. Note this path also did not
-        // attach a snapshot before; it still does not, deliberately (the scan result
-        // it came from is already persisted in scanStore).
-        //
-        // `?.length ?` not `??` — an empty targets array must fall back too.
-        const addRes = await addPosition(buildPaperStockPosition(
-          c.symbol, c.strategy.entry_price, c.shares, c.direction as Direction, undefined,
-          {
-            stop: c.strategy.stop_price,
-            targets: (c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price])
-              .map((price) => ({ price })),
-          },
-        ));
-        if (addRes.status === 'rejected') failures.push(`${c.symbol}: ${addRes.detail ?? 'not saved'}`);
-        else if (addRes.status === 'pending') queued.push(c.symbol);
-        else if (addRes.adjustedQty != null) adjusted.push(`${c.symbol} (${addRes.adjustedQty} sh)`);
-      }
-    }
-    if (failures.length) {
-      setError(`Some auto-executed positions were not saved — ${failures.join('; ')}`);
-    }
-    const noticeParts: string[] = [];
-    if (queued.length) {
-      noticeParts.push(`Queued — backend unreachable, will sync automatically: ${queued.join(', ')}`);
-    }
-    if (adjusted.length) {
-      noticeParts.push(`Size reduced to fit exposure limits — ${adjusted.join(', ')}`);
-    }
-    if (skipped.length) {
-      noticeParts.push(`Not fired (not PASS): ${skipped.join(', ')}`);
-    }
-    if (noticeParts.length) setNotice(noticeParts.join(' · '));
   }
+
 
   return (
     <div className={styles.main}>
@@ -507,7 +438,7 @@ export default function Step4StocksPage() {
                       // another tab's or device's scan (plan audit P1-F1). StockAutoTradeArm
                       // persists a strategy watch with this key.
                       strategyKey={scannedRequestStrategy ?? c.strategy.strategy}
-                      afterScanArmed={afterScanArmedSymbols.has(c.symbol)}
+                      afterScanArmed={!!afterScanIntent[c.symbol]}
                       onAfterScanToggle={onAfterScanToggle}
                     />
                   )}
