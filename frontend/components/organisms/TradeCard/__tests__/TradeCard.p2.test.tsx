@@ -143,9 +143,12 @@ describe('code round 1 fixes', () => {
   it('C1-1: the ladder R:R keeps the scan-basis risk when the row shows the live-mid global', () => {
     render(<TradeCard data={card()} liveMid={1.0} />);
     fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
-    // (8.00 - 5.20) / 3.12 = 0.9x on one basis; /0.60 would print 4.7x.
-    expect(screen.getByText('0.9x')).toBeInTheDocument();
+    // Re-pinned by TRADING-REVIEW-PHASE-C-RR: the risk leg is the full premium
+    // at the scan-basis entry. (8.00 - 5.20) / 5.20 = 0.5x; the live mid's
+    // 0.60 global stop would print 4.7x, the old 3.12 premium stop 0.9x.
+    expect(screen.getByText('0.5x')).toBeInTheDocument();
     expect(screen.queryByText('4.7x')).not.toBeInTheDocument();
+    expect(screen.queryByText('0.9x')).not.toBeInTheDocument();
   });
 
   it('C1-2: EditableKV commits nothing on a bare blur when its value moved while it was open', () => {

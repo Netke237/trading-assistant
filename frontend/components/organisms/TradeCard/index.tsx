@@ -125,8 +125,10 @@ function rrContribution(
   entryLimit: number,
   riskBasis: number,
 ): number {
-  // Risk basis is the smaller captured stock-stop loss / planned premium stop
-  // while its stock barrier matches; otherwise the planned premium stop.
+  // Risk basis is the FULL premium at the overlay's own entry
+  // (TRADING-REVIEW-PHASE-C-RR, decision D5): no protective stop order is ever
+  // placed, so neither the premium stop (an alert level) nor the captured
+  // stock-stop loss bounds what the trade can lose.
   // Mirrors the backend's reward_risk.py M2 fix: a negative reward's sign/
   // magnitude is preserved, not flattened to 0 — a target priced below entry
   // is a real loss the trader should see, not an indistinguishable "no data".
@@ -1850,7 +1852,10 @@ export function TradeCard({
   const hasCapturedStockRisk = typeof capturedStockRisk === 'number' && Number.isFinite(capturedStockRisk) && capturedStockRisk > 0;
   const rrStale = hasCapturedStockRisk && (typeof capturedStop !== 'number' || !Number.isFinite(capturedStop)
     || typeof currentRrStop !== 'number' || !Number.isFinite(currentRrStop) || Math.abs(currentRrStop - capturedStop) >= 0.005);
-  const ladderRisk = hasCapturedStockRisk && !rrStale ? Math.min(overlay.premiumStop, capturedStockRisk) : overlay.premiumStop;
+  // The full premium at the overlay's own entry (Phase C RR, D5). Neither the
+  // premium stop nor the captured stock-stop loss is an R/R risk leg any more,
+  // so rrStale no longer changes the ladder; it is still reported for the rail.
+  const ladderRisk = overlay.entryLimit;
   useEffect(() => { onRrStaleChange?.(rrStale); }, [onRrStaleChange, rrStale]);
 
   const stockStopMoved = useMemo(() => {
@@ -2584,9 +2589,9 @@ export function TradeCard({
                      anything.
 
                      overlay.premiumStop is UNTOUCHED, for the reasons the
-                     section 6 note gives: it is still rrContribution's risk
-                     denominator and the barrier race's third barrier. Only the
-                     readouts went. */}
+                     section 6 note gives: it is the premium-stop alert level
+                     and the barrier race's third barrier. Only the readouts
+                     went. */}
               </>
             )}
           </div>
@@ -3199,9 +3204,7 @@ export function TradeCard({
         >
           <section className={`${styles.planCard} ${styles.targetsCard}`}>
             <Text size={14} weight={600}>Sell-to-Close Plan</Text>
-            <Text size={10} tone={rrStale ? 'caution' : 'dim'}>{rrStale
-              ? 'Stock stop moved — R/R uses the premium stop until the plan is remeasured.'
-              : hasCapturedStockRisk ? `R/R risk: ${capturedStockRisk < overlay.premiumStop ? 'stock-stop loss' : 'premium stop'} (smaller risk leg).` : 'R/R risk: premium stop (stock-stop loss unavailable).'}</Text>
+            <Text size={10} tone="dim">R/R risk: full premium (no protective stop order).</Text>
             {data.exit.targetSource === 'capped' && <Text size={10} tone="caution">Bearish target capped to keep stock targets above the price floor.</Text>}
             <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
             <div className={styles.targetsTable}>
@@ -3212,13 +3215,17 @@ export function TradeCard({
                   index={i}
                   editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
                   entryLimit={overlay.entryLimit}
-                  // overlay.premiumStop, NOT effectivePremiumStop (code round
-                  // 1, C1-1): this is the R:R risk leg, and its reward leg
-                  // (estimatedOptionPrice - entryLimit) is on the SCAN basis.
-                  // A live-mid risk over a scan-mid reward mis-states the
-                  // ratio by scanMid / liveMid.
+                  // The R:R risk leg: overlay.entryLimit, the full premium
+                  // (Phase C RR, D5). Both legs stay on the SCAN basis -- its
+                  // reward leg is estimatedOptionPrice - entryLimit -- so a
+                  // live mid is never divided into a scan-mid reward.
                   premiumStop={ladderRisk}
-                  authoritativeRr={hasCapturedStockRisk && !rrStale && overlay.entryLimit === data.entry.limit && overlay.premiumStop === data.exit.premiumStop ? t.rrContribution : undefined}
+                  // The backend's ratio only when it was computed on the same
+                  // basis at the same entry. A saved pre-RR candidate
+                  // ('premium_stop' / 'stock_stop' / absent) is recomputed,
+                  // which is exact: estimatedOptionPrice does not depend on
+                  // the risk basis.
+                  authoritativeRr={data.exit.rrRiskBasis === 'full_premium' && overlay.entryLimit === data.entry.limit ? t.rrContribution : undefined}
                   data={data}
                   onStockPriceChange={(v) => {
                     const next = [...overlay.targets];
@@ -3236,12 +3243,13 @@ export function TradeCard({
                ratio reduced to the typed target % over the typed stop % — the
                same number on every contract. The Barrier Race card's
                stock-stop R:R replaces it with one that actually discriminates.
-               overlay.premiumStop itself is UNTOUCHED: it is still the live
-               risk denominator for rrContribution, and it is now also the
-               race's third barrier. (computeEditedRR and isDirty were named
+               overlay.premiumStop itself is UNTOUCHED: it is the premium-stop
+               alert level and the race's third barrier. It is no longer the
+               rrContribution risk denominator — that is the full premium
+               (Phase C RR, D5). (computeEditedRR and isDirty were named
                here too until the Ladder-default copy of the "Projected R/R"
                readout went as well — that readout was their only caller, so
-               both are gone. The field's two remaining reasons stand on their
+               both are gone. The field's remaining reasons stand on their
                own.) */}
         </CollapsibleSection>
 

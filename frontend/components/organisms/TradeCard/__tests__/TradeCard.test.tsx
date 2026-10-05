@@ -122,8 +122,10 @@ describe('TradeCard', () => {
   it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
     // Mirrors the backend's reward_risk.py M2 fix: a target priced below
     // entry (estimatedOptionPrice=1.0 < entry.limit=2.5, reward=-1.5,
-    // rr=-1.5/premiumStop(1.5)=-1.0) is a real loss the trader should see,
+    // rr=-1.5/full premium(2.5)=-0.6) is a real loss the trader should see,
     // not silently omitted the way `rr > 0`-gated rendering used to.
+    // Re-pinned by TRADING-REVIEW-PHASE-C-RR: the risk leg is the full premium
+    // (was -1.5/premiumStop(1.5) = -1.0x).
     const dataWithLosingTarget: TradeCardData = {
       ...mockTradeCard,
       exit: {
@@ -135,7 +137,7 @@ describe('TradeCard', () => {
     };
     render(<TradeCard data={dataWithLosingTarget} />);
     expandLadder();
-    expect(screen.getByText('-1.0x')).toBeInTheDocument();
+    expect(screen.getByText('-0.6x')).toBeInTheDocument();
   });
 
   it('renders symbol and company in header', () => {
@@ -2132,11 +2134,13 @@ describe('TradeCard', () => {
     // cancelled and it printed the same ratio on every contract.
     expect(screen.queryByText('Risk / Reward')).not.toBeInTheDocument();
     expect(screen.queryByText('2.5×')).not.toBeInTheDocument();
-    // The FIELD it divided by is untouched — it is a live risk denominator,
-    // not a display. The Sell-to-Close-Plan's own per-target R:R still uses
-    // premiumStop (1.5): reward=5.0-2.5=2.5, rr=2.5/1.5=1.666...→1.7.
+    // The FIELD it divided by is untouched — it is the premium-stop alert
+    // level, not a display. The Sell-to-Close-Plan's own per-target R:R now
+    // risks the full premium (2.5): reward=5.0-2.5=2.5, rr=2.5/2.5=1.0.
+    // Re-pinned by TRADING-REVIEW-PHASE-C-RR: was 2.5/premiumStop(1.5) = 1.7x.
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
-    expect(screen.getByText('1.7x')).toBeInTheDocument();
+    expect(screen.getByText('1.0x')).toBeInTheDocument();
+    expect(screen.queryByText('1.7x')).not.toBeInTheDocument();
   });
 
   it('renders sell-to-close plan with editable target', () => {
@@ -4099,17 +4103,24 @@ describe('AREA3 captured stock-risk freshness', () => {
   });
 });
 
-it('AREA3 ladder uses authoritative captured ratio, then premium risk when the stop moves', () => {
+// Re-pinned by TRADING-REVIEW-PHASE-C-RR: the captured stock-stop loss is no
+// longer an R/R risk leg, so a moved stock stop no longer swaps the ladder onto
+// the premium stop (was 5.0x -> 1.7x -> 5.0x). The backend ratio is served
+// only when it was computed on the full-premium basis; a captured ratio on the
+// old basis is recomputed on the full premium: (5.0 - 2.5) / 2.5 = 1.0x.
+it('AREA3 ladder serves the full-premium backend ratio whether or not the stock stop moves', () => {
   const card = { ...mockTradeCard, exit: { ...mockTradeCard.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64,
+    rrRiskBasis: 'full_premium' as const,
     targets: [{ ...mockTradeCard.exit.targets[0], rrContribution: 5.0 }] } };
   const { rerender } = render(<TradeCard data={card} />);
   expandLadder();
   expect(screen.getByText('5.0x')).toBeInTheDocument();
   rerender(<TradeCard data={{ ...card, exit: { ...card.exit, invalidation: 179.65 } }} />);
-  expect(screen.getByText('1.7x')).toBeInTheDocument();
-  expect(screen.queryByText('5.0x')).not.toBeInTheDocument();
-  rerender(<TradeCard data={card} />);
   expect(screen.getByText('5.0x')).toBeInTheDocument();
+  expect(screen.queryByText('1.7x')).not.toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, exit: { ...card.exit, rrRiskBasis: 'stock_stop' } }} />);
+  expect(screen.getByText('1.0x')).toBeInTheDocument();
+  expect(screen.queryByText('5.0x')).not.toBeInTheDocument();
 });
 
 
@@ -4134,4 +4145,93 @@ it('presentation can hand market context to the page without mounting a second c
   expect(screen.queryByText(/Market sentiment — insufficient history/)).not.toBeInTheDocument();
   rerender(<TradeCard data={mockTradeCard} />);
   expect(screen.getByText(/Market sentiment — insufficient history/)).toBeInTheDocument();
+});
+
+// ── TRADING-REVIEW-PHASE-C-RR (review M7, D5): full-premium R/R ─────────────
+//
+// No protective option order is ever placed, so the whole premium is at risk:
+// every Sell-to-Close row divides by `overlay.entryLimit`, never by the premium
+// stop (an alert level) or the captured stock-stop loss. Premium 2.00, estimate
+// 3.50: 1.50 / 2.00 = 0.75 → 0.8x (on the old 1.20 premium-stop basis: 1.3x).
+describe('Phase C RR: the ladder risks the full premium', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  const RR_CARD: TradeCardData = {
+    ...mockTradeCard,
+    contractDetails: { ...mockTradeCard.contractDetails!, mid: 2.0 },
+    entry: { ...mockTradeCard.entry, limit: 2.0 },
+    exit: {
+      ...mockTradeCard.exit,
+      premiumStop: 1.2,
+      rrRiskBasis: 'full_premium',
+      targets: [
+        { id: 'tp1', stockPrice: 200.02, targetPrice: 200.02, estimatedOptionPrice: 3.5, contractsToSell: 1, status: 'PENDING', rrContribution: 0.75 },
+      ],
+    },
+  };
+  const CAPTION = 'R/R risk: full premium (no protective stop order).';
+
+  it('(i) an un-edited row with no stock-stop loss divides by the full premium', () => {
+    render(<TradeCard data={RR_CARD} />);
+    expandLadder();
+    expect(screen.getByText('0.8x')).toBeInTheDocument();
+    expect(screen.queryByText('1.3x')).not.toBeInTheDocument();
+    expect(screen.getByText(CAPTION)).toBeInTheDocument();
+  });
+
+  it('serves the backend ratio on an un-edited full-premium row', () => {
+    // 0.74 would be 0.7x; the recomputation would print 0.8x.
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, targets: [{ ...RR_CARD.exit.targets[0], rrContribution: 0.74 }] } };
+    render(<TradeCard data={card} />);
+    expandLadder();
+    expect(screen.getByText('0.7x')).toBeInTheDocument();
+  });
+
+  it('(ii) an edited target row divides by the full premium', async () => {
+    render(<TradeCard data={RR_CARD} />);
+    expandLadder();
+    await act(async () => { fireEvent.click(screen.getByLabelText('Edit target stock price for TP1')); });
+    const input = screen.getByDisplayValue('200.02');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '200.00' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    // Above the 190 strike: delta 0.5 x (200 - 185.2) = 7.40 over entry.
+    // 7.40 / 2.00 = 3.7x (on the 1.20 premium stop: 6.2x).
+    expect(screen.getByText('3.7x')).toBeInTheDocument();
+    expect(screen.queryByText('6.2x')).not.toBeInTheDocument();
+  });
+
+  it('(iii) a captured stock risk does not set the risk leg once the entry limit is edited', () => {
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64 } };
+    render(<TradeCard data={card} initialEntryLimit={2.5} />);
+    expandLadder();
+    // (3.50 - 2.50) / 2.50 = 0.4x (on the 0.50 stock-stop loss: 2.0x).
+    expect(screen.getByText('0.4x')).toBeInTheDocument();
+    expect(screen.queryByText('2.0x')).not.toBeInTheDocument();
+  });
+
+  it('(iv) a moved stock stop (rrStale) changes nothing about the ladder R/R', () => {
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64, invalidation: 179.65 } };
+    const report = jest.fn();
+    render(<TradeCard data={card} onRrStaleChange={report} />);
+    expandLadder();
+    expect(report).toHaveBeenLastCalledWith(true);
+    expect(screen.getByText('0.8x')).toBeInTheDocument();
+    expect(screen.queryByText('1.3x')).not.toBeInTheDocument();
+    expect(screen.queryByText(/R\/R uses the premium stop/)).not.toBeInTheDocument();
+    expect(screen.getByText(CAPTION)).toBeInTheDocument();
+  });
+
+  it('(v) a saved pre-RR candidate is recomputed on the full premium, never shown at its old ratio', () => {
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, rrRiskBasis: 'premium_stop' as const,
+      targets: [{ ...RR_CARD.exit.targets[0], rrContribution: 1.25 }] } };
+    render(<TradeCard data={card} />);
+    expandLadder();
+    // The figure on screen is the full-premium recomputation, so the caption
+    // naming the full premium describes the number it sits above.
+    expect(screen.getByText('0.8x')).toBeInTheDocument();
+    expect(screen.queryByText('1.3x')).not.toBeInTheDocument();
+    expect(screen.getByText(CAPTION)).toBeInTheDocument();
+  });
 });

@@ -10,6 +10,30 @@ const migrate = (useScanStore as unknown as {
   } };
 }).persist.getOptions();
 
+// scanStore v18 (TRADING-REVIEW-PHASE-C-RR) discards an options result unless
+// EVERY candidate's R/R was computed on the full-premium basis, and branches
+// accumulate -- so every fixture below, shaped as it was before v18, would come
+// out as `scanResult: null`. Each candidate is marked full_premium on the way
+// in so these tests keep measuring THIS file's branch, not v18's discard
+// (scanStoreRrBasisMigration.test.ts owns that).
+function markFullPremium(state: unknown): unknown {
+  if (state === null || typeof state !== 'object') return state;
+  const s = { ...(state as Record<string, unknown>) };
+  for (const key of ['scanResult', 'previousRun']) {
+    const run = s[key] as { candidates?: unknown } | null | undefined;
+    if (run && typeof run === 'object' && Array.isArray(run.candidates)) {
+      s[key] = {
+        ...run,
+        candidates: run.candidates.map((c) => (c && typeof c === 'object'
+          ? { ...c, exit: { ...((c as { exit?: object }).exit ?? {}), rrRiskBasis: 'full_premium' } }
+          : c)),
+      };
+    }
+  }
+  return s;
+}
+const migrateKept = (state: unknown, version: number) => migrate.migrate(markFullPremium(state), version);
+
 type MigratedResult = {
   candidates: Array<{
     symbol: string;
@@ -55,7 +79,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
     // branch nine commits AFTER v13 shipped. zustand calls migrate only when
     // the stored version differs from the configured one, so every browser
     // holding a v13 blob skipped it entirely. The tests below cannot see that:
-    // they invoke `migrate.migrate(blob, n)` directly and so bypass the very
+    // they invoke `migrateKept(blob, n)` directly and so bypass the very
     // version comparison that was the bug. They verify what the branch DOES;
     // this pin is what verifies the branch is REACHED. Any new migration step
     // needs a new version, and this assertion is what forces the pairing.
@@ -89,7 +113,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
         }],
       },
     };
-    const out = migrate.migrate(v13Blob, 13) as { scanResult: MigratedResult };
+    const out = migrateKept(v13Blob, 13) as { scanResult: MigratedResult };
     const c = out.scanResult.candidates[0]! as unknown as {
       stockBreakdown: { volDetail: Record<string, unknown> };
       contractBreakdown: { ivDetail: Record<string, unknown> };
@@ -119,7 +143,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
         }],
       },
     };
-    const out = migrate.migrate(roundsOneTwo, 13) as { scanResult: MigratedResult };
+    const out = migrateKept(roundsOneTwo, 13) as { scanResult: MigratedResult };
     const vd = (out.scanResult.candidates[0] as unknown as {
       stockBreakdown: { volDetail: Record<string, unknown> };
     }).stockBreakdown.volDetail;
@@ -141,7 +165,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
         }],
       },
     };
-    const out = migrate.migrate(preSplit, 13) as { scanResult: MigratedResult };
+    const out = migrateKept(preSplit, 13) as { scanResult: MigratedResult };
     const vd = (out.scanResult.candidates[0] as unknown as {
       stockBreakdown: { volDetail: Record<string, unknown> };
     }).stockBreakdown.volDetail;
@@ -167,7 +191,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
         }],
       },
     };
-    const out = migrate.migrate(postSplit, 13) as { scanResult: MigratedResult };
+    const out = migrateKept(postSplit, 13) as { scanResult: MigratedResult };
     const c = out.scanResult.candidates[0]! as unknown as {
       contractBreakdown: { ivDetail: Record<string, unknown> };
       contractDetails: Record<string, unknown>;
@@ -179,7 +203,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
   });
 
   it('drops the unattributable ivRank on the block the trade card renders', () => {
-    const out = migrate.migrate(legacyBlob(), 12) as { scanResult: MigratedResult };
+    const out = migrateKept(legacyBlob(), 12) as { scanResult: MigratedResult };
     const cd = out.scanResult.candidates[0]!.contractDetails!;
     expect(cd.ivRank).toBeNull();
     // The point of dropping it: Step 7 now prints "—" rather than
@@ -194,7 +218,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
   });
 
   it('reaches alternatives too, which carry the same conflated field', () => {
-    const out = migrate.migrate(legacyBlob(), 12) as { scanResult: MigratedResult };
+    const out = migrateKept(legacyBlob(), 12) as { scanResult: MigratedResult };
     const alts = out.scanResult.candidates[0]!.alternatives!;
     expect(alts[0]!.ivRank).toBeNull();
     expect(alts[0]!.reason).toBe('cheaper');
@@ -203,14 +227,14 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
   });
 
   it('repairs previousRun as well — Δscore is computed against it', () => {
-    const out = migrate.migrate(legacyBlob(), 12) as { previousRun: MigratedResult };
+    const out = migrateKept(legacyBlob(), 12) as { previousRun: MigratedResult };
     expect(out.previousRun.candidates[0]!.contractDetails!.ivRank).toBeNull();
   });
 
   it('still applies every earlier branch, so a v1 blob is fully migrated', () => {
     // Branches must accumulate — a store frozen at an old version has to
     // receive all the intermediate field additions in one pass.
-    const out = migrate.migrate({ ...legacyBlob(), context: null }, 1) as
+    const out = migrateKept({ ...legacyBlob(), context: null }, 1) as
       Record<string, unknown> & { scanResult: MigratedResult };
     expect(out.pickedContracts).toEqual({});
     expect(out.screenerMode).toBe('options');
@@ -218,10 +242,10 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
   });
 
   it('handles absent, null and malformed persisted results without throwing', () => {
-    expect(() => migrate.migrate({}, 12)).not.toThrow();
-    expect(() => migrate.migrate({ scanResult: null, previousRun: null }, 12)).not.toThrow();
-    expect(() => migrate.migrate({ scanResult: { candidates: 'nope' } }, 12)).not.toThrow();
-    expect(() => migrate.migrate({ scanResult: { candidates: [null, 7] } }, 12)).not.toThrow();
+    expect(() => migrateKept({}, 12)).not.toThrow();
+    expect(() => migrateKept({ scanResult: null, previousRun: null }, 12)).not.toThrow();
+    expect(() => migrateKept({ scanResult: { candidates: 'nope' } }, 12)).not.toThrow();
+    expect(() => migrateKept({ scanResult: { candidates: [null, 7] } }, 12)).not.toThrow();
   });
 
   it('leaves a post-split blob alone, because the branch is version-gated', () => {
@@ -232,7 +256,7 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
         candidates: [{ symbol: 'AAPL', contractDetails: { ivRank: 62, iv: null, ivPercentile: 58 } }],
       },
     };
-    const out = migrate.migrate(post, 13) as { scanResult: MigratedResult };
+    const out = migrateKept(post, 13) as { scanResult: MigratedResult };
     expect(out.scanResult.candidates[0]!.contractDetails!.ivRank).toBe(62);
     expect(out.scanResult.candidates[0]!.contractDetails!.ivPercentile).toBe(58);
   });
