@@ -1,8 +1,8 @@
 # TRADE-CARD-UI-FOLLOWUP — local tracking document
 
-Date: 2026-10-05. Status: all build tickets complete; phase audit pending. Canonical phase status is in ../PROJECT_STATE.json (repository path docs/superpowers/PROJECT_STATE.json).
+Date: 2026-10-05. All seven build tickets are complete. Independent code audit evidence is in [CODE-AUDIT.md](CODE-AUDIT.md). Canonical phase status is in [PROJECT_STATE.json](../../PROJECT_STATE.json).
 
-Specification: [Reviewed plan](PLAN.md). Review evidence: [Plan audit](PLAN-AUDIT.md).
+Specification: [Reviewed plan](PLAN.md). Review evidence: [Plan audit](PLAN-AUDIT.md), [code audit](CODE-AUDIT.md), [validation and screenshots](evidence/README.md).
 
 The user approved local Markdown ticketing during the completed grilling session. This is an explicit exception to the usual GitHub-only tracker. The k-ticket-coordinator skill was unavailable; repository orchestration rules were used directly. GitHub API read returned Forbidden; no GitHub issues exist for these tickets yet. Documents and code are being committed on codex/trade-card-ui-followup; GitHub Issues publication remains blocked.
 

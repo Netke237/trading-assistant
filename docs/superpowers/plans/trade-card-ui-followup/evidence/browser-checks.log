@@ -1,0 +1,15 @@
+
+Running 3 tests using 1 worker
+
+(node:19361) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 e2e/tests/trade-card-ui-followup.spec.ts:5:7 › trade card scores, evidence, handling and alternatives at 1200px (2.1s)
+  ✓  2 e2e/tests/trade-card-ui-followup.spec.ts:5:7 › trade card scores, evidence, handling and alternatives at 1920px (2.3s)
+  ✓  3 e2e/tests/trade-card-ui-followup.spec.ts:70:5 › Stocks has score disclosure and scans only from Step 4 (3.7s)
+
+  3 passed (9.2s)
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

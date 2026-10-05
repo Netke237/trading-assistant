@@ -1,0 +1,231 @@
+
+> bamendjou-frontend@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.23
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 12.5s
+   Linting and checking validity of types ...
+
+./app/(frame)/analysis/page.tsx
+51:9  Warning: 'router' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./app/(frame)/portfolio/EditDrawer.tsx
+1012:3  Warning: React Hook useEffect contains a call to 'setDraft'. Without a list of dependencies, this can lead to an infinite chain of updates. To fix this, pass [draft, stored] as a second argument to the useEffect Hook.  react-hooks/exhaustive-deps
+
+./app/(frame)/portfolio/page.tsx
+41:39  Warning: '_basis' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(frame)/screener/step-4-ranking/page.tsx
+34:29  Warning: 'TradeCardData' is defined but never used.  @typescript-eslint/no-unused-vars
+209:6  Warning: React Hook useEffect has a missing dependency: 'selected'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/(frame)/screener/step-4-stocks/page.tsx
+541:22  Warning: '_orders' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(frame)/screener/step-5-vol-events/__tests__/gateSummary.test.tsx
+18:82  Warning: 'IvBand' is defined but never used.  @typescript-eslint/no-unused-vars
+20:10  Warning: 'STATUS_LABEL' is defined but never used.  @typescript-eslint/no-unused-vars
+21:10  Warning: 'formatIv' is defined but never used.  @typescript-eslint/no-unused-vars
+21:25  Warning: 'IvBasis' is defined but never used.  @typescript-eslint/no-unused-vars
+22:10  Warning: 'eventVolGateTooltip' is defined but never used.  @typescript-eslint/no-unused-vars
+22:31  Warning: 'gateDrivers' is defined but never used.  @typescript-eslint/no-unused-vars
+23:28  Warning: 'Status' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(frame)/screener/step-5-vol-events/page.tsx
+142:9  Warning: The 'eventWindow' conditional could make the dependencies of useMemo Hook (at line 295) change on every render. To fix this, wrap the initialization of 'eventWindow' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+
+./app/(frame)/screener/step-6-contracts/__tests__/explanations.test.tsx
+2:10  Warning: 'act' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(frame)/screener/step-6-contracts/page.tsx
+259:6  Warning: React Hook useCallback has a missing dependency: 'setContractsBySymbol'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/(frame)/screener/step-7-trade-card/__tests__/rr-overrides-from-scan.test.tsx
+7:10  Warning: 'useSettingsStore' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(frame)/screener/step-7-trade-card/page.tsx
+950:37  Warning: The ref value 'requestedPlanKeysRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'requestedPlanKeysRef.current' to a variable inside the effect, and use that variable in the cleanup function.  react-hooks/exhaustive-deps
+1013:39  Warning: The ref value 'requestedPlanKeysRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'requestedPlanKeysRef.current' to a variable inside the effect, and use that variable in the cleanup function.  react-hooks/exhaustive-deps
+1337:53  Warning: '_riskOverridden' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(frame)/settings/page.tsx
+1580:10  Warning: 'retentionYears' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+2504:11  Warning: Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps').
+2557:6  Warning: React Hook React.useEffect has a missing dependency: 'refreshCount'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/molecules/CollapsibleSection/index.tsx
+58:5  Warning: Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps').
+
+./components/molecules/IndicatorPanel/index.tsx
+11:8  Warning: 'styles' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/molecules/MethodPickSelector/index.tsx
+144:9  Warning: The 'stamp' logical expression could make the dependencies of useCallback Hook (at line 180) change on every render. To fix this, wrap the initialization of 'stamp' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+144:9  Warning: The 'stamp' logical expression could make the dependencies of useCallback Hook (at line 193) change on every render. To fix this, wrap the initialization of 'stamp' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+144:9  Warning: The 'stamp' logical expression could make the dependencies of useCallback Hook (at line 200) change on every render. To fix this, wrap the initialization of 'stamp' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+
+./components/organisms/ChartPane/index.tsx
+142:17  Warning: The ref value 'seriesMap.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'seriesMap.current' to a variable inside the effect, and use that variable in the cleanup function.  react-hooks/exhaustive-deps
+145:6  Warning: React Hook useEffect has a missing dependency: 'getHeight'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/organisms/ChartWorkspace/index.tsx
+178:5  Warning: Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps').
+383:6  Warning: React Hook useEffect has a missing dependency: 'backendInterval'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+428:6  Warning: React Hook useEffect has missing dependencies: 'candles' and 'regimeModel'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+494:5  Warning: Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps').
+612:5  Warning: Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps').
+
+./components/organisms/DrawingOverlays/index.tsx
+76:36  Warning: The ref value 'attachedRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'attachedRef.current' to a variable inside the effect, and use that variable in the cleanup function.  react-hooks/exhaustive-deps
+
+./components/organisms/SendToBrokerDialog/index.tsx
+299:3  Warning: 'hasWarnings' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/organisms/StockPositionCard/__tests__/StockPositionCard.arithmeticPlan.test.tsx
+1:46  Warning: 'within' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/organisms/StockPositionCard/__tests__/StockPositionCard.pending.test.tsx
+23:40  Warning: '_props' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/organisms/StockSendDialog/__tests__/StockSendDialog.test.tsx
+89:34  Warning: 's' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/organisms/TradeCard/index.tsx
+42:132  Warning: 'ExitPlanTargetRow' is defined but never used.  @typescript-eslint/no-unused-vars
+733:6  Warning: React Hook useEffect has a missing dependency: 'data'. Either include it or remove the dependency array. If 'setOverlay' needs the current value of 'data', you can also switch to useReducer instead of useState and read 'data' in the reducer.  react-hooks/exhaustive-deps
+3688:10  Warning: 'TargetRow' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/__tests__/a5AnalysisMirrorsScan.test.tsx
+9:10  Warning: 'useScanParamsStore' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/__tests__/journalStore.test.ts
+45:15  Warning: '_id' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+45:29  Warning: '_u' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+45:45  Warning: '_r' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+45:61  Warning: '_c' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+45:77  Warning: '_up' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./lib/__tests__/scanStoreRrBasisMigration.test.ts
+20:36  Warning: Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any').
+
+./lib/__tests__/scanStoreStopMigration.test.ts
+65:48  Warning: Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any').
+
+./lib/__tests__/settingsStore.test.ts
+2:161  Warning: 'DEFAULT_IBKR_PAPER' is defined but never used.  @typescript-eslint/no-unused-vars
+2:181  Warning: 'DEFAULT_TRADIER_PAPER' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/__tests__/statusTooltips.literal.test.ts
+31:3  Warning: 'gateDrivers' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/__tests__/tradeCardOverride.test.ts
+361:11  Warning: 'pickedContracts' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+362:11  Warning: 'contractsBySymbol' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./lib/__tests__/watchlistStore.test.ts
+2:29  Warning: 'WATCHLIST_STORAGE_KEY' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/analysisStore.ts
+36:23  Warning: '_u' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+36:36  Warning: '_s' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+47:21  Warning: '_u' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./lib/audit.ts
+30:3  Warning: Unused eslint-disable directive (no problems were reported from 'no-console').
+
+./lib/autoTradeStore.ts
+47:3  Warning: '_version' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/chart/overlays.ts
+29:50  Warning: '_interval' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/chartAlertStore.ts
+358:36  Warning: '_cleared' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+482:38  Warning: '_cleared' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./lib/contractExplanation.ts
+5:36  Warning: 'ComponentExplanation' is defined but never used.  @typescript-eslint/no-unused-vars
+5:58  Warning: 'BlockerComparison' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/drawingStore.ts
+32:58  Warning: '_version' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/portfolioStore.ts
+1030:13  Warning: Unused eslint-disable directive (no problems were reported from 'no-console').
+
+./lib/resolveOptionsScanRequest.ts
+108:37  Warning: '_cb' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+108:67  Warning: '_rb' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+109:39  Warning: '_amt' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+109:71  Warning: '_ams' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+110:39  Warning: '_fca' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+110:72  Warning: '_fra' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+115:40  Warning: '_rhc' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+115:74  Warning: '_rhr' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+120:28  Warning: '_mss' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./lib/riskStore.ts
+83:54  Warning: '_version' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/searchProfilesStore.ts
+29:11  Warning: 'get' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/structureStore.ts
+32:3  Warning: '_version' is defined but never used.  @typescript-eslint/no-unused-vars
+38:20  Warning: '_signals' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+   Generating static pages (0/30) ...
+   Generating static pages (7/30) 
+   Generating static pages (14/30) 
+   Generating static pages (22/30) 
+ ✓ Generating static pages (30/30)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                      138 B         103 kB
+├ ○ /_not-found                            744 B         103 kB
+├ ○ /alerts                              9.64 kB         142 kB
+├ ○ /analysis                            10.1 kB         191 kB
+├ ○ /calendar                            3.16 kB         117 kB
+├ ○ /chart                                 245 B         206 kB
+├ ○ /chart/standalone                      201 B         206 kB
+├ ○ /dashboard                           7.93 kB         204 kB
+├ ○ /dev/components                      7.38 kB         122 kB
+├ ○ /journal                             8.36 kB         125 kB
+├ ○ /portfolio                           20.1 kB         214 kB
+├ ○ /screener                              138 B         103 kB
+├ ○ /screener/step-1-regime              8.37 kB         202 kB
+├ ○ /screener/step-2-universe            8.85 kB         119 kB
+├ ○ /screener/step-3-direction           14.9 kB         162 kB
+├ ○ /screener/step-4-prebreakout         13.7 kB         131 kB
+├ ○ /screener/step-4-ranking              8.4 kB         366 kB
+├ ○ /screener/step-4-stocks              20.1 kB         167 kB
+├ ○ /screener/step-5-strategy              138 B         103 kB
+├ ○ /screener/step-5-vol-events          10.6 kB         128 kB
+├ ○ /screener/step-6-backtest            5.89 kB         120 kB
+├ ○ /screener/step-6-contracts           11.9 kB         128 kB
+├ ○ /screener/step-7-position-card       6.57 kB         143 kB
+├ ○ /screener/step-7-trade-card          16.6 kB         278 kB
+├ ○ /settings                            21.7 kB         143 kB
+├ ○ /strategy-watch                      2.78 kB         109 kB
+├ ○ /validation                          4.96 kB         213 kB
+└ ○ /watchlist                           6.48 kB         223 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/1255-d3668eefd1b4a69b.js      46.1 kB
+  ├ chunks/4bd1b696-100b9d70ed4e49c1.js  54.2 kB
+  └ other shared chunks (total)          2.17 kB
+
+
+○  (Static)  prerendered as static content
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
