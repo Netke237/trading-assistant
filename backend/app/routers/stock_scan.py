@@ -62,6 +62,7 @@ from app.services.strategy_engine import (
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
+from app.services.walk_forward import commission_for
 from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
 from app.data.confidence_cache import generation as conf_generation
 from app.data.confidence_cache import invalidated_since as conf_invalidated_since
@@ -206,9 +207,9 @@ def _backtest_commission() -> float:
     """Per-leg cost drag sourced from the same strategy_params.yaml `costs`
     block the WFO tuner (strategy_param_optimizer.py) already uses — keeps
     the Step-6 trader-facing backtest gate cost-aware instead of the
-    commission-free number it showed before (2026-08-18 audit finding)."""
-    costs = get_costs()
-    return costs.get("fee_pct", 0.001) + costs.get("slippage_pct", 0.001)
+    commission-free number it showed before (2026-08-18 audit finding).
+    Same rule as walk_forward.commission_for (Phase C T4)."""
+    return commission_for(get_costs())
 
 
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
