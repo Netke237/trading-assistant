@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/trading-review-hygiene",
       "claimed_at": "2026-10-05T04:53:47Z",
-      "expires_at": "2026-10-05T07:53:47Z",
+      "expires_at": "2026-10-05T09:17:23Z",
       "note": "Phase C hygiene: plan audit + 7 tickets",
       "task": "TRADING-REVIEW-PHASE-C-HYGIENE"
     }
