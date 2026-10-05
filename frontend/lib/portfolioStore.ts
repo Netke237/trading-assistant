@@ -1,8 +1,9 @@
 /*
  * Portfolio store — Zustand with localStorage persistence.
  *
- * Holds open positions. Step 7's "Send to broker" flow calls `addPosition`
- * to push new orders in — tagged as either `broker` or `manual` via `source`.
+ * Holds open positions. Step 7's direct sends (Place Limit / Right Now —
+ * Market) and its tracked-only basket (fix #5 / D6: no broker order) call
+ * `addPosition` — tagged `paper` or `manual` via `source`.
  */
 
 import { create } from 'zustand';
@@ -11,7 +12,8 @@ import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverri
 import { useRiskStore } from '@/lib/riskStore';
 import { stripLegacyIvFields } from '@/lib/ivBasis';
 import { validationMessages } from '@/lib/pydanticError';
-import { premiumStopDropReason, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopDropReason, premiumStopIsSubCent, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 
 type BackendPosition = {
   id: string;
@@ -117,6 +119,9 @@ export type PremiumStopDropNotice = {
   /** Null when the create sent only a fraction (STOP-SEMANTICS S3). */
   symbol: string; contract: string; requestedDollar: number | null; at: number;
   reason: PremiumStopDropReason;
+  /** Set when the dollar could not be applied but the server kept the
+   *  card's own fraction (PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03). */
+  keptPct?: number;
 };
 
 /** STOP-SEMANTICS-2026-10-02 -- did the server drop the per-position stop this
@@ -127,15 +132,32 @@ export type PremiumStopDropNotice = {
  *  `premiumStopPct` in the 201 then means the server could not store it -- a
  *  total loss at the persisted entry, or a stop that would fire below $0.01.
  *  A response carrying the CLIENT fraction (the server's fallback when only
- *  the dollar was unusable) is not a drop. */
+ *  the dollar was unusable) is not a drop to the global, but the dollar was
+ *  still not applied: that returns a notice with `keptPct` set. */
 export function premiumStopDropOf(
   p: Pick<PortfolioPosition, 'premiumStopDollar' | 'premiumStopPct'>,
   savedPremiumStopPct: number | null | undefined,
   savedEntry: number | null | undefined,
-): { requestedDollar: number | null; reason: PremiumStopDropReason } | null {
+): { requestedDollar: number | null; reason: PremiumStopDropReason; keptPct?: number } | null {
   const dollar = (p.premiumStopDollar ?? 0) > 0 ? (p.premiumStopDollar as number) : null;
   const pct = (p.premiumStopPct ?? 0) > 0 && (p.premiumStopPct as number) < 1 ? p.premiumStopPct : null;
-  if ((dollar == null && pct == null) || savedPremiumStopPct != null) return null;
+  if (dollar == null && pct == null) return null;
+  if (savedPremiumStopPct != null) {
+    // PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03 -- the card now sends its
+    // own fraction beside the dollar, so a dollar the server could not apply
+    // no longer leaves a null: it stores that fraction. Same test the writer
+    // makes (total loss or sub-cent at the SAVED entry); the stored fraction is
+    // then not the dollar's, so say which one applies. Card sends are options
+    // only, hence `shortStock = false`, as in premiumStopDropReason.
+    if (dollar == null || savedEntry == null || !Number.isFinite(savedEntry) || savedEntry <= 0) return null;
+    const ratio = premiumStopPctFromDollars(dollar, savedEntry);
+    if (ratio !== undefined && !premiumStopIsSubCent(savedEntry, ratio, false)) return null;
+    return {
+      requestedDollar: dollar,
+      reason: ratio === undefined ? 'total_loss' : 'below_one_cent',
+      keptPct: savedPremiumStopPct,
+    };
+  }
   return { requestedDollar: dollar, reason: premiumStopDropReason(dollar, savedEntry) };
 }
 
@@ -201,7 +223,7 @@ interface PortfolioStoreState {
    *  instead (a TIGHTER stop than requested). Undefined means nothing was
    *  dropped. Without it the basket path could not report the fallback at all
    *  -- see the note in step-7-trade-card's handleSubmit. */
-  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number; premiumStopDropReason?: PremiumStopDropReason }>;
+  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number; premiumStopDropReason?: PremiumStopDropReason; premiumStopKeptPct?: number }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
@@ -456,12 +478,22 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = accountValue(),
+  /** Audit round 1, F1 — the order this save precedes (Step 7's direct send).
+   *  The server judges the D5 premium cap at the price that order can FILL at
+   *  (`portfolio_risk.premium_cap_basis`: max(mid, limit) for LMT, the ask for
+   *  MKT), not at the stored mid. Create-only transport, never a field of the
+   *  position. Omitted means no order follows (judged at the mid). */
+  order?: { orderType: 'LMT' | 'MKT'; limitPrice: number | null },
 ): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }> {
   try {
+    const payload = {
+      ...toBackendPayload(p, portfolioValue),
+      ...(order ? { orderType: order.orderType, orderLimitPrice: order.limitPrice } : {}),
+    };
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toBackendPayload(p, portfolioValue)),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -530,7 +562,7 @@ export function applyPersistedPosition(
    *  The router's own comment says "nothing on screen says why". This is the
    *  hook that lets a call site say it: the response already carries the
    *  resolved `premiumStopPct`, so no extra request is needed. */
-  onPremiumStopDropped?: (requestedDollar: number | null, reason: PremiumStopDropReason) => void,
+  onPremiumStopDropped?: (requestedDollar: number | null, reason: PremiumStopDropReason, keptPct?: number) => void,
 ): { rejected: boolean; detail?: string } {
   if (saved.offline) {
     void addPosition(pos);
@@ -541,7 +573,7 @@ export function applyPersistedPosition(
   }
   if (saved.adjustedQty != null) onAdjusted?.(saved.adjustedQty);
   const dropped = premiumStopDropOf(pos, saved.premiumStopPct, saved.entryPrice);
-  if (dropped) onPremiumStopDropped?.(dropped.requestedDollar, dropped.reason);
+  if (dropped) onPremiumStopDropped?.(dropped.requestedDollar, dropped.reason, dropped.keptPct);
   // Piece 4 — carry the server's derived premium-stop fraction onto the row
   // that goes into local state. `skipPost: true` means nothing else will fetch
   // it until the next 30s syncFromBackend, and until then the frontend alert
@@ -1098,6 +1130,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             ok: true, status: 'ok' as const, adjustedQty,
             premiumStopDropped: drop?.requestedDollar ?? undefined,
             premiumStopDropReason: drop?.reason,
+            premiumStopKeptPct: drop?.keptPct,
           };
         }
         if (outcome.kind === 'rejected' || scaleInRefused) {
@@ -1348,6 +1381,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                       const queue = [...s.premiumStopDropQueue, {
                         symbol: p.symbol, contract: p.contract,
                         requestedDollar: drop.requestedDollar, reason: drop.reason,
+                        keptPct: drop.keptPct,
                         at: Date.now(),
                       }];
                       return { premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };

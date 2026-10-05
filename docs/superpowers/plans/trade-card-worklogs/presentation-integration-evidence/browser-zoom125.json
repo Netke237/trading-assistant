@@ -1,0 +1,72 @@
+{
+  "errors": [],
+  "urls": [
+    "/api/portfolio",
+    "/api/watchlist",
+    "/api/config/health",
+    "/api/stock-scan/last",
+    "/api/scan/last-run",
+    "/api/config/iv-thresholds",
+    "/api/data-sources",
+    "/api/stock-scan/last-run",
+    "/api/quote/option",
+    "/api/quote/stock",
+    "/api/contracts/exit-plan",
+    "/api/contracts/structural-stop",
+    "/api/contracts/first-passage"
+  ],
+  "results": [
+    {
+      "width": 1920,
+      "theme": "dark",
+      "innerWidth": 1536,
+      "outerWidth": 1920,
+      "devicePixelRatio": 1.25,
+      "desktopGateBlocked": false,
+      "client": 1536,
+      "scroll": 1536,
+      "workspaceClient": 1016,
+      "workspaceScroll": 1016,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 638.4000244140625,
+          "parent": 638,
+          "scroll": 638
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 638.4000244140625,
+          "parent": 638,
+          "scroll": 638
+        }
+      ]
+    },
+    {
+      "width": 1920,
+      "theme": "light",
+      "innerWidth": 1536,
+      "outerWidth": 1920,
+      "devicePixelRatio": 1.25,
+      "desktopGateBlocked": false,
+      "client": 1536,
+      "scroll": 1536,
+      "workspaceClient": 1016,
+      "workspaceScroll": 1016,
+      "tables": [
+        {
+          "text": "BARRIER\tLEVEL\tHOW IT IS SET\tARMED\nProfit target\tper row below\tYour T1/T2/T3 % of",
+          "width": 638.4000244140625,
+          "parent": 638,
+          "scroll": 638
+        },
+        {
+          "text": "TARGET / OPTION\tSPLIT\tTARGET FIRST\tSTOCK STOP\tPREMIUM STOP\tNEITHER\tMEDIAN TO TAR",
+          "width": 638.4000244140625,
+          "parent": 638,
+          "scroll": 638
+        }
+      ]
+    }
+  ]
+}

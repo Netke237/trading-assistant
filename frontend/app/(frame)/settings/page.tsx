@@ -1304,7 +1304,7 @@ function RiskForm() {
       </Row>
       <Row
         label="Max loss per trade"
-        hint="Warning-only — checked against the exit-plan pipeline's final stop, repriced to a contract price. Overridable per-position in the Portfolio editor."
+        hint="Caps the premium of one OPTION trade (a long option with no protective order can lose all of it), so the effective option cap is the smaller of this and Max single trade exposure. Also checked against the exit-plan pipeline's final stop, repriced to a contract price; that stop check can be overridden per-position in the Portfolio editor."
         defaultValue="3.75%"
       >
         <input
@@ -2556,9 +2556,9 @@ function StrategyTuningForm() {
     return () => clearInterval(interval);
   }, [polling, jobId]);
 
-  const handleAdopt = async (strategy: string, params: Record<string, number | string>) => {
+  const handleAdopt = async (strategy: string, params: Record<string, number | string>, direction: 'Bullish' | 'Bearish') => {
     try {
-      await adoptStrategyParams(strategy, params);
+      await adoptStrategyParams(strategy, params, direction);
       setAdoptedStrategies(prev => {
         const next = new Set(prev).add(strategy);
         sessionStorage.setItem(SESSION_ADOPTED_KEY, JSON.stringify([...next]));
@@ -2655,7 +2655,7 @@ function StrategyTuningForm() {
               strategy={strategy}
               proposal={prop}
               adopted={adoptedStrategies.has(strategy)}
-              onAdopt={() => handleAdopt(strategy, prop.proposed)}
+              onAdopt={() => handleAdopt(strategy, prop.proposed, prop.direction)}
             />
           ))}
         </div>
@@ -2747,6 +2747,7 @@ function ProposalCard({ strategy, proposal, adopted, onAdopt }: ProposalCardProp
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>OOS trades</div>
           <div style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
             {proposal.oos_metrics.n_trades}
+            {typeof proposal.oos_metrics.n_symbols === 'number' && ` · ${proposal.oos_metrics.n_symbols} symbols`}
           </div>
         </div>
       </div>

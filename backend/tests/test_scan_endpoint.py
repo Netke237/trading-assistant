@@ -225,9 +225,8 @@ def _no_db_leak():
     )
 
 
-def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
-    """Without the override, target = price * 1.08 (risk_rules.yaml default).
-    With rr_bullish_target_pct=0.20, target = price * 1.20 instead."""
+def test_scan_rr_target_r_multiple_override_changes_target_price(client):
+    """A 3R target is resolved off the same stock stop as the default 2R."""
     fetch_quotes_patch, get_bars_patch = _no_db_leak()
     with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
                              company="Apple Inc."), \
@@ -237,7 +236,7 @@ def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
         })
         r_override = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
-            "overrides": {"rr_bullish_target_pct": 0.20},
+            "overrides": {"rr_target_r_multiple": 3},
         })
     default_candidates = r_default.json()["candidates"]
     override_candidates = r_override.json()["candidates"]
@@ -246,7 +245,7 @@ def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
     default_target = default_candidates[0]["exit"]["target"]
     override_target = override_candidates[0]["exit"]["target"]
     assert override_target > default_target
-    assert round(override_target, 2) == round(185.0 * 1.20, 2)
+    assert round(override_target, 2) == round(185 + 3 * abs(185 - override_candidates[0]["exit"]["invalidation"]), 2)
 
 
 # A feed that cannot form a single true range: 30 bars with open == high ==
@@ -380,17 +379,17 @@ def test_scan_rr_negative_target_override_fails_fast_422(client):
                              company="Apple Inc."), _force_passing_stock_score():
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
-            "overrides": {"rr_bullish_target_pct": -1},
+            "overrides": {"rr_target_r_multiple": -1},
         })
     assert r.status_code == 422, r.text
     detail = r.json()["detail"]
-    assert "rr_bullish_target_pct" in detail
-    assert "-1" in detail
+    assert "rr_target_r_multiple" in detail
+    assert "(0, 10]" in detail
 
 
 def test_scan_rr_override_leaves_default_scan_unchanged(client):
     """A scan with no rr_* overrides must still use the risk_rules.yaml default
-    (8% bullish target) -- guards against the merge helper changing the
+    (2R bullish target) -- guards against the merge helper changing the
     no-override path's numbers."""
     fetch_quotes_patch, get_bars_patch = _no_db_leak()
     with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
@@ -401,7 +400,8 @@ def test_scan_rr_override_leaves_default_scan_unchanged(client):
         })
     candidates = r.json()["candidates"]
     assert candidates
-    assert round(candidates[0]["exit"]["target"], 2) == round(185.0 * 1.08, 2)
+    # Default 2R target uses the resolved stop, with this fixture no snap.
+    assert round(candidates[0]["exit"]["target"], 2) == round(185 + 2 * abs(185 - candidates[0]["exit"]["invalidation"]), 2)
 
 
 def test_scan_horizon_preset_reaches_build_trade_plan(client):
@@ -467,12 +467,12 @@ def test_scan_swing_hold_rejects_a_contract_expiring_before_the_hold_ends(client
 
 
 def test_scan_swing_hold_accepts_a_contract_within_the_widened_window(client):
-    """Same Swing hold, but a 20-DTE contract — inside the widened-but-floored
-    window (16-40d after the hold_max_days=15 floor) — must be allowed through
+    """Same Swing hold, but a 36-DTE contract — inside the widened-but-floored
+    window (36-81d after hold15 + buffer21) — must be allowed through
     to scoring and produce a real candidate, not blocked by the DTE gate."""
     ok_chain = [{
-        "strike": 190, "expiry": _dte_expiry(20), "price": 2.50, "spread": 0.20,
-        "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 20,
+        "strike": 190, "expiry": _dte_expiry(36), "price": 2.50, "spread": 0.20,
+        "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 36,
         "right": "C", "volume": 500, "open_interest": 1000,
     }]
     with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=ok_chain,
@@ -631,6 +631,8 @@ def _heston_wiring_fixtures():
         rr_model="Heston repriced",
         target_price_raw=200.0,
         invalidation_price_raw=180.0,
+        rr_risk_basis="premium_stop", target_source="arithmetic",
+        stock_stop_loss=None, stock_stop_loss_at=None,
         reprice_years=(45 - 7) / 365.0,   # Swing on a 45-DTE contract
     )
     return pass_card, contract_score, fake_plan

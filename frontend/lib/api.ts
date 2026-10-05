@@ -448,8 +448,9 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
-    rr_bullish_target_pct?: number;
-    rr_bearish_target_pct?: number;
+    rr_target_r_multiple?: number;
+    target_stock_price?: number;
+    target_source?: TradeCardData['exit']['targetSource'];
     rr_bullish_invalidation_pct?: number;
     rr_bearish_invalidation_pct?: number;
     /** Feed the reprice-horizon fallback behind the Fixed % Ladder. Same field,
@@ -542,6 +543,7 @@ export const api = {
     dte: number;
     premium: number;
     trend_score: number;
+    target_r_multiple?: number;
     /** Same meaning as on `getStructuralStop` — the stop-vs-premium gate is
      *  per-horizon and this is where the line comes from. */
     horizon_preset?: string;
@@ -703,7 +705,9 @@ export const api = {
     regime_headwind_caution_pct?: number;
     regime_headwind_reject_pct?: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
-    entry_premium?: number;
+    /** REQUIRED and > 0 on the backend (audit round 2, R2-F2): it is what the
+     *  D5 cap is judged from at fire, and an arm without it is a 422. */
+    entry_premium: number;
     portfolio_value?: number;
     /** Piece 4 — the per-trade premium stop as a FRACTION of `entry_premium`.
      *  Omitted inherits `auto_trade.premium_stop_pct`. Declared here because
@@ -1112,11 +1116,17 @@ export interface WfoOosMetrics {
   win_rate: number;
   total_return: number;
   max_drawdown: number;
+  /** Pooled OOS trade count across the basket — the figure `min_trades` gates. */
   n_trades: number;
+  /** Phase C T5: pooled trades / contributing symbols. Absent on proposals persisted before Phase C T5. */
+  n_trades_per_symbol?: number;
+  /** Phase C T5: symbols that contributed OOS trades — the figure `min_symbols` gates. Absent on older proposals. */
+  n_symbols?: number;
 }
 
 export interface WfoProposal {
   strategy: string;
+  direction: 'Bullish' | 'Bearish';
   proposed: Record<string, number | string>;
   consistency: number;
   eligible: boolean;
@@ -1154,6 +1164,6 @@ export async function clearTuningJobs(): Promise<{ cleared: number }> {
   return res.json() as Promise<{ cleared: number }>;
 }
 
-export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>): Promise<{ ok: boolean; active: Record<string, number | string> }> {
-  return post('/api/strategy-tuning/adopt', { strategy, params });
+export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>, direction: 'Bullish' | 'Bearish'): Promise<{ ok: boolean; active: Record<string, number | string> }> {
+  return post('/api/strategy-tuning/adopt', { strategy, params, direction });
 }

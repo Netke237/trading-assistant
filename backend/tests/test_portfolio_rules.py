@@ -85,12 +85,13 @@ class TestCheckPositionRisk:
         reason, not a hard block — the trade could always proceed at the
         smaller size, it just never actually could.)
         """
-        # max_single_trade_exposure_pct = 0.05, portfolio_value = 50_000
-        # -> max_allowed_premium = 2_500
-        # entry_premium=10, proposed_contracts=5 -> capital_at_risk = 5_000 (exceeds)
-        # adjusted = int(2_500 / (10*100)) = 2 -> a valid, non-zero smaller size
+        # Option cap = min(max_single_position_pct 0.05, max_loss_per_trade_pct
+        # 0.0375) = 0.0375 (review fix #4, D5); portfolio_value = 50_000
+        # -> max_allowed_premium = 1_875
+        # entry_premium=7, proposed_contracts=5 -> capital_at_risk = 3_500 (exceeds)
+        # adjusted = int(1_875 / (7*100)) = 2 -> a valid, non-zero smaller size
         result = check_position_risk(**_make_request(
-            entry_premium=10.0,
+            entry_premium=7.0,
             proposed_contracts=5,
             portfolio_value=50_000.0,
         ))

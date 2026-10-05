@@ -913,3 +913,26 @@ def test_a2c_merge_key_override_is_not_a_duplicate():
     r = _FileResult()
     _check_duplicates("contract_rules.yaml", "a:\n  - {p: 1, p: 2}\n", r)
     assert [w["path"] for w in r.warnings] == ["a[0].p"]
+
+
+# ── Phase C hygiene T4: setup_window_bars below 1 warns ─────────────────────
+
+SETUP_WINDOW_MSG = "setup_window_bars must be >= 1; read as 1 (last bar only)"
+
+
+@pytest.mark.parametrize("value", [0, -2, 0.5])
+def test_setup_window_below_one_warns_once(cfg_dir, value):
+    rewrite(cfg_dir, "scoring_rules.yaml",
+            lambda doc: doc["horizons"]["swing"]["trigger"].__setitem__("setup_window_bars", value))
+    rep = config_health.report()
+    assert rep["errors"] == []
+    assert rep["warnings"] == [{"file": "scoring_rules.yaml",
+                                "path": "horizons.swing.trigger.setup_window_bars",
+                                "message": SETUP_WINDOW_MSG}]
+    assert rep["checked"] == CHECKED
+
+
+def test_setup_window_shipped_files_do_not_warn():
+    rep = config_health.report()
+    assert not any(w["path"].endswith("setup_window_bars") for w in rep["warnings"])
+    assert rep["warnings"] == []

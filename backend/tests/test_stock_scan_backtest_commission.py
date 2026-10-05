@@ -182,3 +182,25 @@ def _measured_trend():
     card with no trend rule (or an unmeasured one) as "no data"."""
     from app.scoring.stock_scorer import RuleResult
     return RuleResult("trend", "PASS", 90, {})
+
+
+def test_backtest_commission_uses_walk_forward_commission_for():
+    """Phase C hygiene T7: the stock-scan backtest and the WFO tuner charge one
+    per-leg commission rule (walk_forward.commission_for), so they cannot drift."""
+    from app.routers.stock_scan import _backtest_commission
+    from app.services.walk_forward import commission_for
+
+    costs = {"fee_pct": 0.002, "slippage_pct": 0.003}
+    with patch("app.routers.stock_scan.get_costs", return_value=costs):
+        got = _backtest_commission()
+    assert got == commission_for(costs) == 0.005
+
+
+def test_backtest_commission_defaults_when_costs_block_empty():
+    """An empty costs block falls back to fee 0.001 + slippage 0.001 per leg."""
+    from app.routers.stock_scan import _backtest_commission
+    from app.services.walk_forward import commission_for
+
+    with patch("app.routers.stock_scan.get_costs", return_value={}):
+        got = _backtest_commission()
+    assert got == commission_for({}) == 0.002

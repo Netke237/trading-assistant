@@ -1,0 +1,363 @@
+# TRADE-CARD-PRESENTATION-INTEGRATION — work log
+
+## Preflight blocked — 2026-10-04
+
+Branch: `codex/trade-card-presentation-integration`, created from freshly fetched
+`origin/main` at `ba0bed953164f5737e180017977bb4f4d2bfdf53`.
+No integration claim taken, no production edits, no dependency cherry-picks,
+no canonical JSON edits, no integration audits or acceptance checks performed.
+
+Read AGENTS.md, ran state.py (no presence drift) and live claim.py, read the
+parallel handoff, presentation implementation plan and plan audit, and inspected
+prerequisite task worklogs. Prerequisite verification remains incomplete; no
+claim that dependencies have cleared or integration is ready.
+
+### Concrete ownership blocker
+
+Live ledger checks immediately before stopping show
+`AREA3-OPTION-PLAN-CONSISTENCY` owned by `claude/cool-babbage-6i83la`, with about
+2h39m remaining. Fetched branch HEAD:
+`24dd15ccaef0c4786b3224f1d10d3f58fa028620`.
+Its only changes relative to main are the plan at
+`docs/superpowers/plans/2026-10-04-area3-option-plan-consistency.md`.
+Sections A3/B3/B4 explicitly own TradeCard ladder risk/freshness and a new
+onRrStaleChange callback, Step-7 recompute/callback publication, and the
+parallel checklist R:R row. These overlap final integration's TradeCard,
+Step-7 page and checklist composition and the preservation acceptance cases.
+There is no published implementation to incorporate, released claim or
+explicit documented disjoint boundary/transfer. AGENTS.md forbids starting
+another claimed task; the handoff requires stopping dependent shared edits
+and coordinating rather than expanding ownership silently.
+
+Also active: CONTRACT-IV-PILL-LABEL on claude/contract-iv-pill-label;
+no assertion of integration overlap is made for that Step-6 task.
+
+### Discovered prerequisite evidence (not full clearance)
+
+- CONTEXT-CARDS: branch `codex/trade-card-context-cards` at
+  `727f1b3defb95335349f60f100a2a973b02caf7e`; implementation
+  `739afd1fc8c3247475579538c4e4182ffd61315a`. Main contains the component
+  landing and its worklog/code-audit evidence.
+- BARRIER-PRESENTATION: original branch `claude/zen-newton-o3ix8q`,
+  remote tip `e5049f4355e7d22c78a325f8ce77a4657dd05ab0`; implementation
+  `51342019` landed via `076a5a80`. Main contains its worklog/code-audit evidence.
+- UI-CORE: fetched `505551bdf911f27346d4c60b569609625553c4db`;
+  worklog records independent clean reviews for `08d416c2` and `45f83c26`,
+  released ownership, 403 tests/typecheck, and inherited 1200px frame overflow.
+- SCORE-EVIDENCE: fetched `0fb354ecc82316036d285f8eb057be04f9a17b43`;
+  worklog records two independently clean checkpoints for `be05094f` and
+  `fe198ab5` and numerical/persistence parity evidence.
+- QUALIFICATION-PRESENTATION: fetched
+  `030a2a198c8a9a07d023b57069f469fb3cca0546`; worklog records two independently
+  clean checkpoints for `2d8c1c87` and `94692888`, plus prerequisite cherry-picks
+  `08ce063c`/`27418757`. Resume must avoid duplicating those score-evidence patches.
+- OPTIONS-CONTRACT-EXPLANATIONS: canonical main records merged audited
+  implementation at `e1751e15`, with exact correction evidence pointers.
+
+No five-task or external-dependency clearance is asserted: complete audited
+implementation-diff inspection, interface checks, approved preview/mapping
+review and branch state-delta reconciliation still remain before claiming.
+No prerequisite is declared missing or unfinished based on stale main JSON.
+
+### Resume requirements
+
+Re-fetch main and all relevant branches and recheck live claims. Resolve the
+AREA3 overlap through released/landed audited work or explicit documented
+ownership boundaries/transfer before shared edits. Then finish all six
+prerequisite verifications, bring in only missing audited implementation
+commits, claim integration and proceed through audited checkpoints.
+
+Full 520-entry reconciliation, supported widths/themes, legacy/refusal/override/
+contract-switch/race-freshness cases, frontend tests/typecheck/build and Python
+3.11 parity checks have not been run. No deploy, main merge or orders.
+
+## Dependency assembly — 2026-10-04, before integration claim
+
+User supplied original AREA3 logs, explicitly reassigned it and authorized one
+extra plan correction audit. Recovered and completed AREA3 on its own branch:
+source246b4853, closeout454d84c6, backend3/3 clean and frontend2/3 clean;
+claim released. Full frontend192 suites4619 tests/typecheck passed; full Python
+3.11 backend4895 passed/1 skipped/2 inherited Yahoo-network shortlist failures;
+normal Google-font build blocked, separate environment-mocked build passed.
+Exact original plan cap history and reviewer evidence are in its worklog.
+Integration does not re-author those scoring/plan changes as layout work.
+
+Latest main dff659c662f5c7c38f183326238e6cd1ba0664e7 incorporated through AREA3
+merge into this integration branch. Original integration preflight commit and
+AREA3 history preserved. Live claims now empty. No integration claim yet.
+
+Read each prerequisite worklog, audited implementation diff and approved
+presentation plan/audit, design screenshot/preview and520-entry inventory.
+Current interfaces: context components compact?:boolean defaultfalse; barrier
+props unchanged; qualification optional {card,kind}; original panel bars,
+total/status must remain paired with that same effective card. Score snapshots
+are captured read-only and absent/mismatched legacy snapshots remain explicit.
+
+Missing audited code cherry-picked from qualification's existing dependency
+chain, avoiding duplicate score implementations:
+-08ce063c (be05094f patch) ->2ffa9315;
+-27418757 (fe198ab5 patch) ->179523f3;
+-2d8c1c87 ->0a1df7be;
+-94692888 ->ab87be3a;
+-UI core08d416c2 ->fab1a9de and45f83c26 ->93983992.
+All six zero-context stable patch IDs match their audited source commits.
+No conflicts or manual source resolutions. Context739afd1f and barrier51342019
+are main ancestors and their full owned source dirs are byte-identical to
+original implementation commits. Their original and landing audits remain
+clean. External contract explanations e1751e15 are ancestors; read exact
+correction/landing ledger and10,000-card parity evidence. Latest IV display
+correction0a6cffb0 is also retained with its audit evidence.
+
+Copied only three missing task worklogs byte-for-byte from their published
+branches for local reviewer access. No feature-branch canonical state copied;
+current PROJECT_STATE.json parses exactly equal to fetched origin/main.
+UI/score/qualification branch own-entry state deltas will be recorded as
+verified prerequisite evidence within our own integration entry; original
+user instruction permits no edits to their canonical entries. Full-page
+integration source edits and integration claim still await assembly clearance.
+
+### Assembly clearance and integration claim
+
+Fresh independent `/root/presentation_dependency_audit`, assembly round1/3,
+reviewed `454d84c6..93983992` source and documentation throughcbef99eb,
+all task worklogs/clean audit evidence and AREA3/main interactions. Zero gate
+findings after second-pass scope verification. Independently verified all six
+patch IDs, unchanged leaf trees, main/external/AREA3 ancestry, canonical JSON
+identity and empty live claims. Independently75 qualification/override tests,
+186 TradeCard/direct-order tests,60 Python3.11 override/stop-cost tests passed;
+state renderer/diff check passed. Author assembled125 backend tests,16 frontend
+suites459 tests and typecheck passed. Assembly clearance certifies prerequisites
+in checkout; it does not certify final composition or full visual acceptance.
+
+Claimed only TRADE-CARD-PRESENTATION-INTEGRATION at10:00:58UTC after clearance.
+AREA3 and all prerequisite ownership claims are released. No dependency source
+was replaced with preview numerics and no canonical task update yet.
+
+### Checkpoint A — context, identity and captured qualification
+
+Page description moves into native How this page works disclosure, staying
+mounted with exact tracking/order explanation. Existing compact MarketSentiment
+now appears directly beneath it before CandidateNav. TradeCard's optional
+showMarketSentiment defaults true for standalone callers; page explicitly
+false so only one context card mounts. Compact FundamentalHealth follows
+identity once, with original missing/safety/tooltip states. Identity adds
+readable strike/right/expiry alongside original identifier, supplied stock and
+contract score/verdict/confidence, mid/DTE and existing CaR expression.
+Original SymbolHeader/status/direction, edited indicator/tooltip and all
+Contract Details fields remain. No formatter, score or quantity change.
+
+Both original ScoreCardPanel calls receive qualification={card:data,kind},
+where data is the page's effective displayed card. Bars, total, status and
+confidenceScore/text/tooltip are unchanged. No evaluator duplicated.
+Typecheck passed;13 existing focused suites354 tests passed. Two new targeted
+presentation assertions passed, pairing qualification with original bars/results
+and verifying page/standalone market ownership. Initial new test used a guessed
+missing-state string; corrected to actual retained source text, no product fix.
+Checkpoint A awaits independent code audit before further dependent composition.
+
+Checkpoint A reviewed exact `cbef99eba59b0d33dfc9160787a9946989556ddb..71ab258a95f53e44523b2407ab6504b32682040c` by fresh independent `presentation_a_audit_r1`: zero gate findings, second-pass scope verified. Independent151 TradeCard plus9 qualification/panel tests passed and diff check clean. Round1/3 closes A only; no acceptance claim for later composition.
+
+### Checkpoint B — controlled race-row shortcut
+
+BarrierRaceCard gains optional controlled target selection, default absent for
+shared callers. Buttons render inside existing target cells only after original
+refusal/freshness/changed-barrier early returns; no new wide outcome column.
+TradeCard resolves the exact existing barrier_race methodPickOptions row and
+checks its unavailable gate both before supplying the callback and on click.
+It calls original applyMethodPick, preserving current stopBasis (stock default),
+original option price, null stock price and current ISO timestamp. No pricing,
+formatter, stop monitoring, lastRunMethod, evaluator or order changes.
+
+Typecheck and209 tests across BarrierRaceCard, TradeCard and method-pick suites
+passed, including absent actions for all early-return states, controlled row
+identity, premium-basis retention, selector equivalence and contract transition.
+Checkpoint B awaits fresh independent review; no audit-clean claim yet.
+
+Checkpoint B reviewed full `71ab258a95f53e44523b2407ab6504b32682040c..87e45af7d6b779c36623e076723f9175ed8c927c` by fresh independent `presentation_b_audit_r1`: zero gate findings after second pass;229 tests in4 suites, typecheck/diffcheck clean. Round1/3 closes B only.
+
+### Checkpoint C — single selector and execution composition
+
+Original MethodPickSelector renders once through an optional DOM portal into
+the page's existing execution section; undefined retains standalone rendering,
+null waits for its anchor. All TradeCard method state/effects/callbacks remain
+in their original owner. AutoTradeArm stays in the original page-level section,
+under identical effectiveCard/selectedBroker/planReady predicates and with identical
+props. A pending override suppresses AutoTradeArm through original planReady gate;
+this composition does not introduce any additional arm lifecycle transition. Broker/order,
+tracking, arm, toast and feedback implementations remain intact. Native CSS
+flows the same execution panel adjacent on wide screens and below at <=1440;
+method cards use usable-width auto-fit, with original probability spacing.
+Original qualification panels move intact below methods/race. Page-scoped CSS
+adjusts frame minimum without touching other routes/shared Frame source.
+
+Typecheck and266 tests in4 suites passed, including portal decision round-trip,
+exactly one selector, anchor settling/unmount cleanup and retained owner state,
+original TradeCard/directOrder/AutoTradeArm checks. Chromium real frame with mocked
+API has no page errors;1366/1440/1920 both themes no document/workspace overflow;
+race table fits598..1022px inner widths without scrolling. These metrics do NOT
+clear1200 visual acceptance: shared MinWidthGate blocks below1280px, contrary to
+audited plan's assertion that baseline is1200.1200 screenshots show its modal.
+User scope decision requested asynchronously; shared gate has NOT been modified.
+State/inventory acceptance remains pending, not certified by these checks.
+
+Checkpoint C independently reviewed by fresh `presentation_c_audit_r1`, exact
+`87e45af7d6b779c36623e076723f9175ed8c927c..e937b8e1cd9b1eb82af5b0812c90668acb628ac6`, all six files. Zero gate findings, scope and second pass verified. Independent370 tests in8 suites, typecheck/diffcheck passed. Round1/3 closes behavioral stage C.1200 remains blocked pending user scope decision. Screenshot inspection additionally found BrokerPicker's original nowrap flex row squeezed labels in the new narrow panel; subsequent scoped CSS correction is pending its own final review.
+
+### Checkpoint D — visual correction and final preservation evidence
+
+Scoped page CSS makes original BrokerPicker's row wrap within the execution
+panel; configured/disabled labels no longer squeeze into vertical letters.
+No shared broker component or behavior changed. Native wide frame1920 shows
+both method cards side by side;1366/1440 stack methods and flow the same panel
+below. Probability/time columns retain original spacing and minimums. Original
+qualification bars and factor colours, gate badges, bullish/bearish direction
+and active safety/refusal notes stay in the retained token styles.
+
+Recorded `presentation-integration-evidence/information-reconciliation.json`:
+all520 original entries individually mapped to actual source rendering regions,
+state predicates, live destinations and named supporting tests. Inventory
+corrections are explicit: target percentages/ratios/row counts are dynamic,
+missing third legacy rows not fabricated; Retry note is original safety-checked
+Remove; provenance reads captured metadata; right rail stays original provider;
+stock-barrier movement retains explicit stale measured-against statistic.
+A count/path existence check is supporting structure validation, not proof of
+runtime completeness. Named browser cases and source review are distinguished.
+
+TypeScript AST comparison (comments excluded) verifies all141 pre-existing
+TradeCard and129 page nested functions/callbacks equal assembled baseline
+93983992; top-level render functions excluded because presentation changed.
+Only extra TradeCard functions are guarded race selection lookups/callbacks.
+Independent A/B/C reviews separately checked prop/owner interactions.
+
+Final frontend: `npm test -- --runInBand`,194 suites4646 tests passed155.097s
+(`/tmp/integration-final-frontend.log`); `npm run typecheck` passed. Normal
+`npm run build` passed compilation, lint/type validity, all30 static routes and
+final output. Build used warm cache after local-font-mocked dev; a fresh Google
+font download is not certified. Original lint/React act warnings remain; no
+scoring/store/API/order changes were made to quiet them.
+
+Python3.11.16 from prepared `.venv`, backend cwd:
+- `../.venv/bin/python -m pytest -q tests/test_first_passage.py tests/test_first_passage_alert_compatibility.py tests/test_exit_plan.py tests/test_stop_cost_gate.py tests/test_scan_stop_cost.py tests/test_stock_scorer_events.py tests/test_stock_scorer_stock_mode.py`:147 passed9.90s.
+- `../.venv/bin/python -m pytest -q tests/test_contract_explanation.py tests/test_reprice_horizon.py tests/test_reprice_horizon_agreement.py`:102 passed2.36s.
+Relevant final parity total249 passed; not a claim that AREA3's previously
+recorded full-backend network-dependent failures disappeared.
+
+Browser fixture errors0 for named cases: expiry refusal, legacy not-captured,
+custom captured thresholds, hard contract rejection, no-IV fallback, median-null,
+Step6 override pending/ready, spread/alternatives, premium-only race change,
+restoration, stock-barrier change and ready candidate/contract switch.
+Original AutoTradeArm planReady suppression checked on pending override; one
+instance after readiness; same DOM owner across ready-to-ready candidate switch.
+No order/arm/fire/position-save request. Tracking opened/cancelled only.
+24 actual-frame screenshots and width/table metrics stored in evidence folder;
+production-built server repeated width checks with identical metrics/error0.
+
+Remaining acceptance limits: actual shared1280 MinWidthGate blocks1200 and
+needs user-coordinated outside-allowlist scope change.1200 screenshots are
+explicitly blocked, not accepted. Remote font downloading unavailable; local
+mock changes screenshot font metrics, not source/config.100% browser zoom is
+verified; native zoom is not yet certified. Overall readiness remains false.
+Checkpoint D is frozen for fresh independent review; not audit-clean yet.
+
+Further native zoom verification completed before freezing D: isolated Chromium
+profile `chrome.settingsPrivate.setDefaultZoom(1.25)` confirms outerWidth1920,
+innerWidth1536, devicePixelRatio1.25; production-built populated Step7 in both
+themes has no desktop overlay, document/workspace overflow or race table scroll.
+Six additional native125% screenshots and exact metrics/scripts are stored in
+`browser-zoom125.json`. Native125% at this supported CSS width is now verified;
+remote font metrics and shared1200 gate remain the stated limitations.
+
+
+### Resume — latest main, scoped minimum-width correction and reviewer outage
+
+The initial D reviewer `presentation_d_preservation_audit_r1` failed BEFORE
+reviewing due to service usage limit (retry-after14:22UTC). It produced no
+qualifying round or clean verdict; D remains at0 qualifying rounds. No fourth
+round or cap reset occurred. User said continue after the scope question; this
+is treated as authorization for the recommended Step7-only1200 exception.
+Only MinWidthGate/index.tsx and its named focused test are added to owned scope.
+Every other route retains1280; page-scoped frame rule remains1200 on Step7 only.
+Seven tests check exact boundaries, other routes, route-resize listener cleanup
+and the same stateful child DOM through gate transitions; typecheck passed.
+
+At14:49UTC own previous claim had expired; live STOCK-DESIGN-GRILLING is
+documentation-only and disjoint. Reclaimed only integration through17:49UTC.
+Fetched latest origin/main e4d4d80e (audited Stocks Step merge), merged into own
+branch at d49dc5b6 without conflicts. No feature canonical state replaced main;
+new unrelated JSON is retained intact. Main merge commit preceded the resume
+typecheck; subsequent typecheck passed before own source commit. Final full
+checks are rerun because shared shell code and the authorized gate changed.
+No merge into main, deployment or order occurred.
+
+### E clearance and refreshed final preservation evidence
+
+Checkpoint E765bf49152fd118bcca1d3c6f2c9802d7bbe578b independently clean: fresh
+reviewer presentation_minwidth_audit_r1, stage E round1/3, complete three-file
+d49dc5b6..765bf491 diff; first pass and second adversarial re-check zero gate
+findings. Independently7/7 guard tests and typecheck passed. Reviewer traced
+exact route/boundaries, listener cleanup, child DOM/edit retention, root pathname
+provider compatibility and unchanged order/scoring/sizing/persistence. Scope
+verified; this clears E only, not D.
+
+Resumed full frontend:199 suites4664 tests passed (134.932s), typecheck passed,
+normal production build passed30 routes. Build retains previously warmed local
+font mock cache; remote font metrics remain unverified. Existing Python3.11.16
+backend parity147 and evidence102 checks remain applicable: no backend source
+changed in latest-main merge or E. Exact log hashes recorded in checks.json.
+
+Production browser refreshed1200/1366/1440/1920 both themes with explicit
+Desktop-required absence assertion and page/workspace/table overflow assertions;
+all8 cases passed. Native125% physical1920/CSS1536 both themes also passed.
+Thirty refreshed screenshots show actual visible Step7, including1200 identity,
+method and race regions; the historical D1200 blocker is now resolved by E.
+520 entries reconciled against current source hashes/regions;141 TradeCard and
+129 page existing function ASTs still match assembled baseline. Final D audit
+remains pending; no overall clean or completion claim is made yet.
+
+### Final D clearance and canonical closeout
+
+Fresh independent reviewer /root/presentation_d_final_audit_r1: D round1/3
+clean, zero gate findings after second adversarial re-check. Exact frozen HEAD
+31d5bcb096c105b499dc19b87dba909ef68a5012 against assembled baseline
+939839924d436ae01a85704b46c7ce7edf93751d; includes D page CSS
+e937b8e1..c0fcc141b8d00ea687d8f2a9147a90a16cc074d8 and all final evidence,
+composed A/B/C/E interactions and latest-main shared shell. Unrelated Stocks
+implementation excluded. Scope verified:520 ordered original items/groups,54
+valid source regions,25 source-file hashes, suite paths and all141+129 existing
+callback ASTs. Independently239 tests across6 suites, typecheck/state/diffcheck,
+15 production preservation assertions,5 override assertions, all8 width/theme
+cases and native125% both themes passed; all5 test/build/backend log hashes match.
+Reviewer traced original AutoTradeArm predicate/pending suppression, one portal
+selector, race freshness/price units, qualification inputs, disclosures and
+unchanged order/persistence callbacks. No invented spread gate. No gate fixes,
+no outstanding findings or non-gate findings; remote-font limitation remains.
+
+Post-E author browser reruns also passed all five committed case scripts; exact
+logs /tmp/integration-resumed-browser-{cases,override,expired,spread,evidence}.log.
+No order/arm/fire/save requests. Temporary duplicate screenshot names introduced
+in d732562d were removed by31d5bcb0, which replaced the original30 captures.
+
+All five composition stages A/B/C/E/D independently clean at1/3 each; assembly
+separately1/3 clean. Initial failed D service call counts0 qualifying reviews.
+No cap reset/fourth audit. Integration source finished on branch, not merged.
+At15:08UTC took TRADE-CARD-PRESENTATION-STATE lock, fetched main
+e4d4d80ef6ae16ac8fc6eaca3a53e6d1c88846bf; canonical was exactly latest main.
+Only own task entry updated. UI/score/qualification completed branch deltas and
+context/barrier/external/AREA3 evidence recorded inside own dependency record;
+other task entries and all unrelated JSON compare exactly equal to main.
+Final typecheck/state/diffcheck and push/release follow this closeout record.
+No deploy, merge into main or orders.
+
+### Authorized origin/main merge — 2026-10-04
+
+User explicitly requested merge on origin main. Fetched main; it remained
+e4d4d80ef6ae16ac8fc6eaca3a53e6d1c88846bf, already an ancestor of audited
+integration HEAD. Pre-merge typecheck and state renderer passed; clean checkout.
+GitHub API PR calls were denied by environment network policy; Git push works.
+Fast-forwarded origin/main to abb990e0e88c9b3c6c03b245e62a83a17b778db6;
+push confirmed successful. No source edits, conflicts or merge resolutions.
+Under reacquired TRADE-CARD-PRESENTATION-STATE lock, only own canonical entry
+changed to shipped/complete_merged, recording actual merge commit. All unrelated
+JSON still equals freshly fetched main. Existing independent audit scope remains
+unchanged; this closeout modifies documentation/state only. No deploy command
+issued; no orders, arm/fire or position-save requests.

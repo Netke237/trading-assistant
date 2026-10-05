@@ -361,8 +361,8 @@ def test_contract_passes_at_dte_22():
 
 
 @pytest.mark.asyncio
-async def test_recompute_plan_rr_bullish_target_pct_override_changes_target():
-    """Same override key set as the scan endpoint (rr_bullish_target_pct) must
+async def test_recompute_plan_rr_target_r_multiple_override_changes_target():
+    """Same override key set as the scan endpoint (rr_target_r_multiple) must
     also move Step 6's recompute-plan target, or a user who overrides the
     contract after tuning R/R params would silently lose their tuning."""
     app = FastAPI()
@@ -374,11 +374,11 @@ async def test_recompute_plan_rr_bullish_target_pct_override_changes_target():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r_default = await ac.post("/api/contracts/recompute-plan", json=payload_base)
         r_override = await ac.post("/api/contracts/recompute-plan", json={
-            **payload_base, "rr_bullish_target_pct": 0.20,
+            **payload_base, "rr_target_r_multiple": 3,
         })
     assert r_default.status_code == 200
     assert r_override.status_code == 200
     default_target = r_default.json()["exit"]["target"]
     override_target = r_override.json()["exit"]["target"]
     assert override_target > default_target
-    assert round(override_target, 2) == round(185.0 * 1.20, 2)
+    assert round(override_target, 2) == round(185.0 * (1 + 3 * .03), 2)

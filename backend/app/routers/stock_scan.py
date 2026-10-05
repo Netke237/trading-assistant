@@ -9,7 +9,7 @@ import logging
 import math
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path as _Path
@@ -62,7 +62,10 @@ from app.services.strategy_engine import (
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
-from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
+from app.services.walk_forward import commission_for
+from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
+from app.data.confidence_cache import generation as conf_generation
+from app.data.confidence_cache import invalidated_since as conf_invalidated_since
 from app.scoring.signal_confidence import compute_confidence, interpret, load_backtest_cfg
 from app.scoring.first_passage import estimate_stock_first_passage
 # compute_final_stop / compute_target_row take candles, a direction, a price
@@ -204,9 +207,9 @@ def _backtest_commission() -> float:
     """Per-leg cost drag sourced from the same strategy_params.yaml `costs`
     block the WFO tuner (strategy_param_optimizer.py) already uses — keeps
     the Step-6 trader-facing backtest gate cost-aware instead of the
-    commission-free number it showed before (2026-08-18 audit finding)."""
-    costs = get_costs()
-    return costs.get("fee_pct", 0.001) + costs.get("slippage_pct", 0.001)
+    commission-free number it showed before (2026-08-18 audit finding).
+    Same rule as walk_forward.commission_for (Phase C T4)."""
+    return commission_for(get_costs())
 
 
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
@@ -637,8 +640,10 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     # confidence / summary_text are decided on them, and the scan and the
     # Analysis page share this cache -- without them a run at 5 trades served
     # its verdict to a later run at 10 for up to _BACKTEST_TTL.
-    return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}|{commission:.6f}"
-            f"|{min_trades}|{min_win_rate!r}")
+    # TRADING-REVIEW-PHASE-C T2: the bar basis version too, right after the bars
+    # hash (a hash of closes alone does not see a basis change in open/high/low).
+    return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{BARS_BASIS_VERSION}"
+            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}")
 
 
 def _get_backtest_cached(key: str):
@@ -646,6 +651,25 @@ def _get_backtest_cached(key: str):
     if entry and time.time() < entry[1]:
         return entry[0]
     return None
+
+
+def evict_backtest_cache(symbols: Iterable[str]) -> int:
+    """Remove every cached BacktestResult for ``symbols``; returns the count removed.
+
+    _backtest_key hashes only the last 20 bars, so an adjustment refresh that
+    rewrites older bars (historical_store.refresh_adjustments) leaves the key
+    unchanged; without this the pre-refresh result is served for _BACKTEST_TTL
+    (TRADING-REVIEW-PHASE-C-HYGIENE T6). Exact prefix with the ``|`` delimiter,
+    so ``AAPL`` never evicts ``AAPLX``. A backtest in flight across the refresh
+    is kept out by the invalidated_since check at the two stores below.
+    """
+    prefixes = tuple(f"{s.upper()}|" for s in symbols)
+    if not prefixes:
+        return 0
+    keys = [k for k in list(_BACKTEST_CACHE) if k.startswith(prefixes)]
+    for k in keys:
+        _BACKTEST_CACHE.pop(k, None)
+    return len(keys)
 
 
 _INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "IWM", "SPX", "NDX", "VIX",
@@ -689,6 +713,9 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     is_index = _is_index(symbol)
     end = date.today()
     start = end - timedelta(days=_HISTORY_YEARS * 365)
+    # Captured before the read: a refresh evicting this symbol after it makes
+    # set_cached drop the confidence computed from these bars (audit R2-F1).
+    _bars_gen = conf_generation()
     bars = await get_historical_bars(symbol, start, end)
     if not bars or len(bars) < 60:
         return None
@@ -848,7 +875,11 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                                   direction=req.direction, min_trades=req.bt_min_trades,
                                   min_win_rate=req.bt_min_win_rate, params=_bt_params,
                                   commission=_bt_commission))
-            _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+            # A refresh that landed after this request read its bars has already
+            # evicted the symbol: storing now would put the pre-refresh result back
+            # for _BACKTEST_TTL. It is still this request's result (T6, HYG-P1-F2).
+            if not conf_invalidated_since(symbol, _bars_gen):
+                _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if (_drop := _backtest_drop(symbol, bt_result)):
             gate_flags.append(_scan_drop_flag("backtest", _drop))
         # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
@@ -863,7 +894,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                                            horizon=req.horizon, scoring_mode="stock",
                                            atr_mult_target=_atr_target, atr_mult_stop=_atr_stop)
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-            await set_cached(_ck, _cached)
+            await set_cached(_ck, _cached, bars_generation=_bars_gen)
         conf_val = _cached["confidence"]
         conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
         _below_reject = (conf_val is not None and req.confidence_reject_below is not None
@@ -1124,6 +1155,9 @@ async def _process_stock(
             start = end - timedelta(days=_HISTORY_YEARS * 365)
             # DB-first: reads from ohlcv_daily table; fetches delta from Tiingo if stale.
             # Eliminates parallel Tiingo calls for large universes (avoids rate-limit errors).
+            # The generation is captured before the read: a refresh evicting this
+            # symbol after it makes set_cached drop the confidence (audit R2-F1).
+            _bars_gen = conf_generation()
             bars = await get_historical_bars(symbol, start, end)
             if not bars or len(bars) < 60:
                 return {"symbol": symbol, "reason": "insufficient history"}
@@ -1300,7 +1334,10 @@ async def _process_stock(
                         params=_bt_params, commission=_bt_commission,
                     ),
                 )
-                _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+                # Same in-flight guard as _analyze_core's store (T6, HYG-P1-F2): not
+                # stored when a refresh invalidated the symbol after the bars read.
+                if not conf_invalidated_since(symbol, _bars_gen):
+                    _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
             if (_drop := _backtest_drop(symbol, bt_result)):
                 return _drop
 
@@ -1317,7 +1354,7 @@ async def _process_stock(
                     scoring_mode="stock", atr_mult_target=_atr_target, atr_mult_stop=_atr_stop,
                 )
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-                await set_cached(_ck, _cached)
+                await set_cached(_ck, _cached, bars_generation=_bars_gen)
             conf_val = _cached["confidence"]
             conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
 
@@ -2426,9 +2463,13 @@ async def stock_exit_plan(req: StockExitPlanRequest) -> StockExitPlanResponse:
             detail="insufficient price history to compute an exit plan",
         )
 
+    try:
+        server_value = portfolio_risk.account_value()
+    except portfolio_risk.AccountValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     portfolio_cfg = portfolio_risk._load_config().get("portfolio", {})
     risk_budget = round(
-        float(portfolio_cfg.get("portfolio_value", 0.0))
+        server_value
         * float(portfolio_cfg.get("max_loss_per_trade_pct", 0.0)),
         2,
     )

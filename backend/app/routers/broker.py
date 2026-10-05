@@ -5,6 +5,8 @@ import html
 import re
 import threading
 import time
+import uuid
+import logging
 from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -14,6 +16,44 @@ from app.services.broker_router import build_router_from_credentials
 from app.services.audit import log_event, new_rec_id
 
 router = APIRouter(prefix="/broker", tags=["broker"])
+
+
+def _selected_adapter(router_, broker):
+    return router_.resolve(broker)
+
+
+def _dispatch_order(router_, broker, order, hooks, attempt_id):
+    """Validate current configuration in the worker immediately before dispatch."""
+    adapter = _selected_adapter(router_, broker)
+    if order.effect == "OPEN":
+        from app.services.portfolio_risk import account_value, AccountValueError
+        try:
+            account_value()
+        except AccountValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from app.services.daily_risk import DailyRiskError
+        if order.sec_type == "OPT" and order.action != "BUY":
+            raise HTTPException(status_code=422, detail="Daily risk budget refuses naked short option opens")
+        instrument = order.option_symbol if order.sec_type == "OPT" else f"{order.symbol}|STOCK"
+        try:
+            hooks.reserve(attempt_id, instrument=instrument, quantity=order.quantity,
+                          source="manual_option" if order.sec_type == "OPT" else "manual_stock",
+                          multiplier=100 if order.sec_type == "OPT" else 1,
+                          order_type=order.order_type, limit_price=order.limit_price)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Daily risk budget refused opening order: {exc}") from exc
+    try:
+        result = adapter.place_order(order)
+    except Exception:
+        if order.effect == "OPEN":
+            hooks.resolve(attempt_id, definitely_not_submitted=False, outcome="dispatch_error")
+        raise
+    if order.effect == "OPEN":
+        from app.services.auto_trader import _is_rejected_status
+        rejected = _is_rejected_status(result.status) or getattr(result, "awaiting_confirmation", False) is True
+        hooks.resolve(attempt_id, definitely_not_submitted=rejected, outcome=str(result.status))
+    return result
+
 
 BrokerKey = Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
 
@@ -257,7 +297,9 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
             sec_type="STK",
         )
         try:
-            result = await asyncio.to_thread(router_.execute, req.broker, order)
+            from app.services.daily_risk_hooks import capture_daily_risk_hooks
+            hooks = capture_daily_risk_hooks() if req.effect == "OPEN" else None
+            result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order, hooks, uuid.uuid4().hex)
         except ValueError as exc:
             log_event("broker_order_failed", rec_id, {
                 "kind": "stock", "broker": req.broker, "symbol": req.symbol,
@@ -325,7 +367,9 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
             option_symbol=req.option_symbol,
         )
         try:
-            result = await asyncio.to_thread(router_.execute, req.broker, order)
+            from app.services.daily_risk_hooks import capture_daily_risk_hooks
+            hooks = capture_daily_risk_hooks() if req.effect == "OPEN" else None
+            result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order, hooks, uuid.uuid4().hex)
         except ValueError as exc:
             log_event("broker_order_failed", rec_id, {
                 "kind": "option", "broker": req.broker, "symbol": req.symbol,

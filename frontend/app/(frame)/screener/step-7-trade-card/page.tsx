@@ -2,15 +2,19 @@
 
 /*
  * Screener Step 7 — Trade Card.
- * Prev/Next cycles ranked candidates, basket pins multiple. Send basket
- * opens a review dialog where any row can be switched from auto-send
- * (sent to broker mock) to manual (added to portfolio tagged MANUAL).
- * Successful submits surface a bottom-right toast with a Portfolio link.
+ * Prev/Next cycles ranked candidates, basket pins multiple. Track basket
+ * opens a review dialog; submitting it saves every row to the Portfolio tagged
+ * MANUAL. It places NO broker order (review #5, D6) -- a card's own send
+ * buttons do that. A tracked row still reserves its contract and symbol (the
+ * caps and the duplicate refusal count it), so tracking blocks a later send of
+ * the same card until the row is closed. Successful submits surface a
+ * bottom-right toast with a Portfolio link.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
@@ -29,6 +33,7 @@ import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import {
   checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
   checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
@@ -49,6 +54,11 @@ import {
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
+import { earningsGateFor, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
+
+// Fix #3 (review) / audit round 1 F4+F8: the veto, its sentence and the
+// unknown-earnings arm refusal live in lib/earningsGate.ts, shared with the
+// @contextRail checklist so the rail and these buttons cannot disagree.
 
 function nowISOLocal(): string {
   const d = new Date();
@@ -174,6 +184,11 @@ function positionFromOrder(
     // Sent as DOLLARS; the backend derives the fraction against the entry
     // price it persists (which may be a live quote, not this `mid`).
     premiumStopDollar,
+    // ...and as the user's own FRACTION of this `mid` (decision PREMIUM-STOP-
+    // FALLBACK-USER-FRACTION-2026-10-03): the writer stores it only when the
+    // dollar is unusable at the persisted entry (a total loss, or sub-cent),
+    // instead of the global. Same divisor as `entryPrice` above.
+    premiumStopPct: premiumStopPctFromDollars(premiumStopDollar, mid) ?? null,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     // Both quantities travel to the position, kept apart
@@ -186,7 +201,8 @@ function positionFromOrder(
     theta:         cd?.theta,
     vega:          0.20,
     contracts:     order.contracts,
-    source:        order.autoSend ? 'broker' : 'manual',
+    // Fix #5: the basket places no broker order (D6); 'broker' made phantom positions count against real caps.
+    source:        'manual',
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
     tradeCardSnapshot: tradeCardSnapshotOf(c),
@@ -195,15 +211,17 @@ function positionFromOrder(
 }
 
 interface ToastState {
-  auto:    number;
-  manual:  number;
-  queued:  number;   // subset of auto+manual that is pending a backend retry
+  saved:   number;   // confirmed saved by the backend
+  queued:  number;   // saved locally, pending a backend retry
   // Positions whose requested size was auto-reduced by the backend's risk
   // check to fit exposure limits — "SYMBOL: N contracts" per entry.
   adjusted: string[];
 }
 
 export default function Step7Page() {
+  // The controlled method selector is portalled here; AutoTradeArm retains its
+  // original page ownership/predicate even while an override plan is pending.
+  const [decisionTarget, setDecisionTarget] = useState<HTMLDivElement | null>(null);
   const [cards, setCards]         = useState<TradeCardData[]>([]);
   const [active, setActive]       = useState<string>('');
   const [basket, setBasket]       = useState<string[]>([]);
@@ -549,8 +567,8 @@ export default function Step7Page() {
   // quietly inherits the global -- a TIGHTER stop than the one asked for.
   // STOP-SEMANTICS -- the wording (and the reason it names) is shared with the
   // Portfolio banner through `premiumStopDropText`.
-  const droppedStopNote = (requested: number | null, reason: PremiumStopDropReason) =>
-    premiumStopDropText(requested, reason);
+  const droppedStopNote = (requested: number | null, reason: PremiumStopDropReason, keptPct?: number) =>
+    premiumStopDropText(requested, reason, keptPct);
   /* ROUND 10 finding 1 — the quote CARRIES THE CONTRACT IT IS FOR.
    *
    * These used to be bare values, cleared at the top of the fetch effect. The
@@ -572,7 +590,7 @@ export default function Step7Page() {
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
   // the active card AND every overridden basket item share this one cache so a
-  // basket "Send to broker" never falls back to an auto-pick's stale plan just
+  // tracked basket row never falls back to an auto-pick's stale plan just
   // because that symbol isn't the currently-active card. Each entry is tagged
   // with the contract key it was computed for so a plan for contract A is never
   // merged onto contract B while B's recompute is still in flight.
@@ -703,10 +721,16 @@ export default function Step7Page() {
   // auto-pick's (override plan loading or failed). This page does not subscribe
   // to the store, so publishing on every render of an overridden card (whose
   // identity changes each render) re-renders the rail only, never this page.
+  const rrIdentity = effectiveCard ? `${effectiveCard.symbol}|${effectiveCard.contract}` : '';
+  const [rrStaleState, setRrStaleState] = useState<{ key: string; stale: boolean }>({ key: '', stale: false });
+  const onRrStaleChange = useCallback((stale: boolean) => {
+    setRrStaleState((prev) => prev.key === rrIdentity && prev.stale === stale ? prev : { key: rrIdentity, stale });
+  }, [rrIdentity]);
+  const rrStale = rrStaleState.key === rrIdentity && rrStaleState.stale;
   const setRailCard = useTradeCardUiStore((s) => s.setActiveCard);
   useEffect(() => {
-    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady } : null);
-  }, [effectiveCard, planReady, setRailCard]);
+    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady, rrStale } : null);
+  }, [effectiveCard, planReady, rrStale, setRailCard]);
   // Cleared on unmount, so a later visit never shows the previous visit's
   // contract before its first publish.
   useEffect(() => () => setRailCard(null), [setRailCard]);
@@ -775,10 +799,11 @@ export default function Step7Page() {
   );
 
   // Every basket item, override-resolved and (if overridden) merged with its
-  // recomputed plan. `basketPlansPending` gates the whole "Send to broker" flow
-  // so a basket order can never go out carrying an overridden contract whose
-  // Entry/Exit/RR still describe the auto-pick — the exact bug this recompute
-  // machinery exists to prevent, previously reachable only via Send basket.
+  // recomputed plan. `basketPlansPending` gates the whole "Track basket" flow
+  // so a tracked basket row can never be booked carrying an overridden contract
+  // whose Entry/Exit/RR still describe the auto-pick — the exact bug this
+  // recompute machinery exists to prevent. (Fix #5 / D6: the basket books
+  // Portfolio rows only; it places no broker order.)
   // (resolveBasketCards is the same pure logic exercised directly in
   // lib/__tests__/tradeCardOverride.test.ts.)
   const { cards: basketCards, pending: basketPlansPending } = useMemo(
@@ -891,6 +916,7 @@ export default function Step7Page() {
           // endpoint echoes it and builds the plan around it, so an override
           // changes the CONTRACT and nothing about where the stock stop sits.
           final_stop:  pickedCard.exit.finalStop ?? null,
+          ...(pickedCard.exit.targetSource ? { target_stock_price: pickedCard.exit.target, target_source: pickedCard.exit.targetSource } : {}),
           ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
@@ -964,6 +990,7 @@ export default function Step7Page() {
         delta: cd.delta,
         spread: 0,
         final_stop: resolved.exit.finalStop ?? null,
+          ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
         ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
@@ -1049,6 +1076,8 @@ export default function Step7Page() {
       // Piece 4 — MUST match what positionFromOrder produces for the same card,
       // which is now true by construction: both call premiumStopDollarFor.
       premiumStopDollar: premiumStopDollarFor(card),
+      // The user's own fraction of this `mid` -- see positionFromOrder.
+      premiumStopPct: premiumStopPctFromDollars(premiumStopDollarFor(card), mid) ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -1084,6 +1113,10 @@ export default function Step7Page() {
   async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
+    // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
+    // Audit round 1, F4: judged as of TODAY (the scan's distance aged by the
+    // scan's age), the same reading as `earningsVeto` below.
+    if (earningsGateFor(card, scanResult?.timestamp, scanResult?.event_window?.reject_days).veto) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
     // `disabled` protects the button and this protects the ORDER -- anything
     // that reaches this function by another route inherits the refusal.
@@ -1123,7 +1156,12 @@ export default function Step7Page() {
         return;
       }
 
-      const saved = await persistPosition(pos);
+      // Audit round 1, F1: the save carries the order it precedes, so the
+      // server judges the D5 premium cap at what this order can PAY -- the
+      // edited limit when it is above the mid, the ask for a market order --
+      // and not at `pos.entryPrice`, the mid it stores. `limitPrice` is the
+      // very value the order below posts.
+      const saved = await persistPosition(pos, undefined, { orderType, limitPrice });
       // Unconfirmed: offline; a bare gateway 5xx (no JSON detail, so the create
       // may still be running); or a 2xx whose body did not parse (the page
       // cannot know whether the server resized). No order is sent. The create
@@ -1165,7 +1203,7 @@ export default function Step7Page() {
           applyPersistedPosition(
             saved, { ...pos, contracts: orderQty }, addPosition,
             (q) => addSaveNote(`${label}: Portfolio sized it to ${q}; the order was requested for ${q}, status unknown.`),
-            (r, why) => addSaveNote(`${label}: ${droppedStopNote(r, why)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
           );
         } catch (e) {
           setOrderError(`${banner} The local view failed to update: ${String(e)}`);
@@ -1213,7 +1251,7 @@ export default function Step7Page() {
             { ...pos, contracts: orderQty, sourceLabel: `${brokerLabel} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: ${orderId})` },
             addPosition,
             (q) => addSaveNote(`${label}: ${sizeNote(q)}`),
-            (r, why) => addSaveNote(`${label}: ${droppedStopNote(r, why)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
           );
         } catch (e) {
           setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
@@ -1269,13 +1307,32 @@ export default function Step7Page() {
 
   const marketBlocked = directOrderBlock('MKT', selectedBroker);
 
+  // Fix #3 (review, High). The backend sets `earningsVeto` when earnings fall
+  // inside the scan's reject window (and forces finalStatus REJECT).
+  //
+  // Audit round 1, F4 (Kenneth 2026-10-03): that flag is a scan-time snapshot
+  // and the scan result is persisted, so a card reopened days later still
+  // carried the scan day's distance. `earningsGateFor` ages `earningsDays` by
+  // the scan's age in calendar days and re-judges it against the scan's own
+  // window; a distance aged below zero reads as UNKNOWN (D4), not a veto.
+  // F8: `armBlockedReason` also refuses the Arm for a single stock whose date
+  // is unknown -- every fire of it would be refused. The rail reads the same
+  // helper.
+  const earningsGate = earningsGateFor(
+    effectiveCard, scanResult?.timestamp, scanResult?.event_window?.reject_days,
+  );
+  const earningsVeto = earningsGate.veto;
+
   const idx = symbols.indexOf(active);
 
   const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
   const goNext = () => { if (idx >= 0 && idx < symbols.length - 1) setActive(symbols[idx + 1]!); };
 
-  const togglePin = () =>
+  const togglePin = () => {
+    // Fix #3 (review). A vetoed card never enters the basket (un-pinning is fine).
+    if (earningsVeto && !basket.includes(active)) return;
     setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
+  };
   const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
 
   const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
@@ -1296,7 +1353,7 @@ export default function Step7Page() {
     setBasketNotes([]);
     setBasketError(null);
     setOrderError(null);
-    let auto = 0, manual = 0, queued = 0;
+    let saved = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];
 
@@ -1340,7 +1397,7 @@ export default function Step7Page() {
       // placeMarketNow. Same fallback, same silence, one of four create paths
       // away. Symbol-qualified because a basket submits several at once.
       if (res.premiumStopDropReason != null) {
-        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped ?? null, res.premiumStopDropReason)}`;
+        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped ?? null, res.premiumStopDropReason, res.premiumStopKeptPct)}`;
         setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
       }
       if (res.status === 'pending') {
@@ -1352,7 +1409,7 @@ export default function Step7Page() {
       }
       // status === 'ok' — confirmed saved by the backend.
       incrementDaily();
-      if (o.autoSend) auto++; else manual++;
+      saved++;
       if (res.adjustedQty != null) {
         adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
       }
@@ -1369,8 +1426,8 @@ export default function Step7Page() {
     // covers hard rejections. They describe DIFFERENT orders, so both may show for
     // a mixed basket — but a network-only submit shows just the toast (no
     // contradictory red banner) with the queued count reported distinctly.
-    if (auto + manual + queued > 0) {
-      setToast({ auto, manual, queued, adjusted });
+    if (saved + queued > 0) {
+      setToast({ saved, queued, adjusted });
       window.setTimeout(() => setToast(null), 6000);
     }
     if (failures.length) {
@@ -1379,18 +1436,24 @@ export default function Step7Page() {
   };
 
   const basketEmpty = basket.length === 0;
-  const sendLabel = basketEmpty ? 'Send to broker' : `Send basket (${basket.length})`;
+  const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
 
   return (
-    <div className={styles.main}>
+    <div className={`${styles.main} ${paperStyles.presentationPage}`}>
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
+        <details className={paperStyles.pageExplanation}>
+          <summary>How this page works</summary>
         <Text size={13} tone="secondary">
-          Cycle candidates with Prev / Next. Pin multiple to the basket, then Send to broker — uncheck
-          Auto-send for any contract you&apos;d rather place manually.
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
+          places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
+          its card instead of tracking it, or close the tracked row first.
         </Text>
+        </details>
       </div>
+
+      {effectiveCard && <MarketSentiment s={effectiveCard.sentiment} compact />}
 
       <CandidateNav
         symbols={symbols}
@@ -1401,12 +1464,16 @@ export default function Step7Page() {
         onSelect={setActive}
         onTogglePin={togglePin}
         onRemovePin={removePin}
+        pinDisabled={earningsVeto}
+        pinDisabledReason={EARNINGS_VETO_MESSAGE}
       />
 
       {cards.length === 0 && (
         <Text size={13} tone="dim">Run a scan to generate trade cards.</Text>
       )}
 
+      <div className={paperStyles.presentationLayout}>
+        <div className={paperStyles.cardColumn}>
       {effectiveCard && (
         <>
           {effectiveCard._userOverride && (
@@ -1434,6 +1501,9 @@ export default function Step7Page() {
             </div>
           ) : (
             <TradeCard
+              showMarketSentiment={false}
+              decisionTarget={decisionTarget}
+              onRrStaleChange={onRrStaleChange}
               data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}
               onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
@@ -1480,7 +1550,7 @@ export default function Step7Page() {
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
             <Text size={11} tone="caution">
-              Computing the plan for an overridden contract in your basket — Send basket enables once it&apos;s ready.
+              Computing the plan for an overridden contract in your basket — Track basket enables once it&apos;s ready.
             </Text>
           )}
           {basketPlanErrors.map(({ symbol, error }) => (
@@ -1503,9 +1573,13 @@ export default function Step7Page() {
         </>
       )}
 
+        </div>
+
       {/* Paper broker execution */}
       {effectiveCard && (
         <div className={paperStyles.paperSection}>
+          <Text size={14} weight={600}>Decision and execution</Text>
+          <div ref={setDecisionTarget} className={paperStyles.decisionAnchor} />
           <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
           {selectedBroker && (
             <>
@@ -1514,9 +1588,10 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto}
                   title={
-                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
                   }
@@ -1527,10 +1602,11 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || marketBlocked != null}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || marketBlocked != null}
                   title={
                     // The broker refusal wins: filling a field cannot cure it.
                     marketBlocked != null ? marketBlocked
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
@@ -1539,6 +1615,24 @@ export default function Step7Page() {
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
               </div>
+              {/* Fix #3 (review). Said, not merely disabled; independent of the
+                * stop / pick refusals below for the same reason they are
+                * independent of each other. */}
+              {earningsVeto && (
+                <Text size={11} tone="reject">
+                  {EARNINGS_VETO_MESSAGE}
+                </Text>
+              )}
+              {/* Audit round 1, F8. AutoTradeArm prints no sentence of its own
+                * (title only -- see its armBlockedReason NOTE), so the
+                * unknown-earnings refusal is said here, beside the veto's.
+                * Manual sends stay enabled: D4 caps the card at CAUTION, it
+                * does not veto it. */}
+              {!earningsVeto && earningsGate.armBlockedReason && (
+                <Text size={11} tone="caution">
+                  {earningsGate.armBlockedReason}
+                </Text>
+              )}
               {!planReady && (
                 <Text size={11} tone="caution">
                   Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
@@ -1568,8 +1662,13 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
+              {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
+                * Hiding it also hid Disarm for a strategy already armed; the
+                * veto now refuses Arm / Fire now inside the component, and the
+                * sentence is the one printed above. */}
               {planReady && (
                 <AutoTradeArm
+                  armBlockedReason={earningsGate.armBlockedReason}
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path
@@ -1659,6 +1758,8 @@ export default function Step7Page() {
         </div>
       )}
 
+      </div>
+
       {dialogOpen && (
         <SendToBrokerDialog
           cards={basketCards}
@@ -1678,13 +1779,9 @@ export default function Step7Page() {
       {toast && (
         <div className={toastStyles.toast} role="status" aria-live="polite">
           <div>
-            <Text size={13} weight={500}>
-              {toast.auto + toast.manual + toast.queued} order{toast.auto + toast.manual + toast.queued === 1 ? '' : 's'} placed
-            </Text>
-            <Text size={11} tone="secondary">
-              {toast.auto} sent to broker · {toast.manual} added manually
-              {toast.queued > 0 ? ` · ${toast.queued} awaiting backend sync` : ''}
-            </Text>
+            <Text size={13} weight={500}>{toast.saved + toast.queued} added to Portfolio</Text>
+            <Text size={11} tone="caution">No broker order was placed. Tracked rows reserve their contract — to trade one, close the row and send from its card.</Text>
+            {toast.queued > 0 && <Text size={11} tone="secondary">{toast.queued} awaiting backend sync</Text>}
             {toast.adjusted.length > 0 && (
               <Text size={11} tone="caution">
                 Size reduced to fit exposure limits — {toast.adjusted.join(', ')}

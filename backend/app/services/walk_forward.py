@@ -13,6 +13,14 @@ from app.services.strategy_backtest import run_strategy_backtest
 
 logger = logging.getLogger(__name__)
 
+# Largest indicator look-back any strategy uses (trend_sma 200 + BB/RSI period
+# headroom; mean_reversion_bb needs ~225) plus margin. Fix #2: test folds used
+# to start with cold indicators AND were dropped below 100 bars.
+WARMUP_BARS = 260
+# Fewest bars inside [start, end) worth scoring. A 3-month fold is ~62 trading
+# bars; 40 tolerates holidays and a short final fold.
+MIN_SCORED_BARS = 40
+
 
 @dataclass
 class Fold:
@@ -99,19 +107,14 @@ def param_combos(search_space: dict) -> list[dict]:
     return [dict(zip(keys, vals)) for vals in itertools.product(*(search_space[k] for k in keys))]
 
 
-def apply_costs(*, gross_return_pct: float, fee_pct: float, slippage_pct: float) -> float:
-    """Subtract round-trip cost (entry + exit legs) as a percentage drag.
+def commission_for(costs: dict) -> float:
+    """Per-leg commission (fee + slippage, as a decimal) for `run_strategy_backtest`.
 
-    Args:
-        gross_return_pct: Gross return percentage.
-        fee_pct: Fee per leg (as decimal, e.g., 0.001 = 0.1%).
-        slippage_pct: Slippage per leg (as decimal, e.g., 0.001 = 0.1%).
-
-    Returns:
-        Net return percentage after subtracting round-trip costs.
+    TRADING-REVIEW-PHASE-C T4 (review M1): the backtest charges it on every entry
+    and exit leg of every trade, so WFO selects and scores folds net of costs that
+    scale with turnover (it used to subtract one flat round trip per window).
     """
-    drag_pct = (fee_pct + slippage_pct) * 2 * 100.0
-    return gross_return_pct - drag_pct
+    return costs.get("fee_pct", 0.001) + costs.get("slippage_pct", 0.001)
 
 
 def precompute_bar_dates(bars: list[dict]) -> None:
@@ -131,6 +134,24 @@ def _slice_bars(bars: list[dict], start: date, end: date) -> list[dict]:
         b for b in bars
         if start <= (b.get("_date") or date.fromisoformat(str(b["time"])[:10])) < end
     ]
+
+
+def slice_with_warmup(
+    bars: list[dict], start: date, end: date, warmup: int = WARMUP_BARS,
+) -> tuple[list[dict], int]:
+    """Warm-up prefix + [start, end). Bars must be ascending; `_date` is used when
+    precomputed (see `precompute_bar_dates`), else parsed from `time` like `_slice_bars`.
+
+    Returns (window, n_scored), where n_scored counts the bars inside [start, end).
+    The prefix is shorter than `warmup` only when the data starts later.
+    """
+    def _d(b: dict) -> date:
+        return b.get("_date") or date.fromisoformat(str(b["time"])[:10])
+
+    first = next((i for i, b in enumerate(bars) if _d(b) >= start), len(bars))
+    lo = max(0, first - warmup)
+    window = [b for b in bars[lo:] if _d(b) < end]
+    return window, len(window) - (first - lo)
 
 
 def _complexity_penalty(combo: dict, search_space: dict, *, weight: float = 0.05) -> float:
@@ -192,24 +213,29 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
         basket_bars: Dict mapping symbol to list of OHLCV bars.
         fold: Fold object with train/test date ranges.
         search_space: Dict mapping parameter names to lists of values.
-        costs: Dict with 'fee_pct' and 'slippage_pct' keys.
+        costs: Dict with 'fee_pct' and 'slippage_pct' keys, charged per trade leg
+            inside the backtest (see `commission_for`), so the ranking is net.
 
     Returns:
         (winning_params, {symbol: BacktestResult}) for the winning combo. The results map
-        only contains symbols with >= 100 train bars (same guard as the grid search).
+        only contains symbols that pass the grid search's guard (>= MIN_SCORED_BARS bars inside the
+        train window and >= 100 bars including the warm-up prefix).
         Both are ({}, {}) if no combo produced any trades on any symbol.
     """
     best, best_score = None, float("-inf")
     best_results: dict[str, object] = {}
+    commission = commission_for(costs)
     for combo in param_combos(search_space):
         sharpes = []
         combo_results: dict[str, object] = {}
         for sym, bars in basket_bars.items():
-            train_bars = _slice_bars(bars, fold.train_start, fold.train_end)
-            if len(train_bars) < 100:
+            train_bars, n_scored = slice_with_warmup(bars, fold.train_start, fold.train_end)
+            if n_scored < MIN_SCORED_BARS or len(train_bars) < 100:
                 continue
             try:
-                res = run_strategy_backtest(train_bars, strategy=strategy, direction=direction, params=combo)
+                res = run_strategy_backtest(train_bars, strategy=strategy, direction=direction,
+                                            params=combo, commission=commission,
+                                            entry_start=fold.train_start)
             except Exception as exc:
                 logger.debug("Train-fold backtest failed for %s: %s", sym, exc)
                 continue

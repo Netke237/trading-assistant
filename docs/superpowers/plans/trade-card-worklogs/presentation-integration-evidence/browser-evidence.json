@@ -1,0 +1,10 @@
+{
+  "scenario": "evidence",
+  "errors": [],
+  "results": [
+    "actual custom stock thresholds retained",
+    "contract hard rejection visible and diagnostic contributions qualified",
+    "IV fallback warning remains active outside details",
+    "captured bound disclosure reachable"
+  ]
+}

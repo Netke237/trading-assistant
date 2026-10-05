@@ -50,9 +50,14 @@ def _body(**overrides) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_a_direct_call_persists_and_reports_what_it_did(Session):
+async def test_a_direct_call_persists_and_reports_what_it_did(Session, monkeypatch):
     """Called without the router -- the booking path's shape. The default
     fetchers are THIS module's, so patching them here is what keeps it offline."""
+    from copy import deepcopy
+    from app.services import portfolio_risk
+    config = deepcopy(portfolio_risk._load_config())
+    config.setdefault("portfolio", {})["portfolio_value"] = 1_000_000
+    monkeypatch.setattr(portfolio_risk, "_load_config", lambda: config)
     quote = AsyncMock(return_value=None)
     with patch("app.services.position_writer.fetch_contract_quote_async", new=quote):
         async with Session() as db:
@@ -120,6 +125,9 @@ async def test_the_router_passes_its_own_fetchers_so_its_patches_land(Session):
     `app.routers.portfolio`. If the router stopped passing them, those patches
     would miss and the suite would reach the network. Pinned here directly."""
     router_quote = AsyncMock(return_value={"price": 11.11})
+    # Asserted below, not relied on to raise: the writer runs its fetches
+    # inside `except Exception`, so a side_effect here would be swallowed.
+    writer_quote = AsyncMock(return_value=None)
 
     async def _get_db() -> AsyncGenerator[AsyncSession, None]:
         async with Session() as s:
@@ -130,13 +138,13 @@ async def test_the_router_passes_its_own_fetchers_so_its_patches_land(Session):
     test_app.dependency_overrides[get_db] = _get_db
     with (
         patch("app.routers.portfolio.fetch_contract_quote_async", new=router_quote),
-        patch("app.services.position_writer.fetch_contract_quote_async",
-              new=AsyncMock(side_effect=AssertionError("the writer's default was used"))),
+        patch("app.services.position_writer.fetch_contract_quote_async", new=writer_quote),
     ):
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://t") as c:
             r = await c.post("/api/portfolio", json=_body())
 
     assert r.status_code == 201, r.text
+    writer_quote.assert_not_awaited()
     assert router_quote.await_count == 1
     assert r.json()["entryPrice"] == 11.11, "the live quote from the router's fetcher is stored"
 
@@ -219,17 +227,18 @@ async def _create_in_own_session(maker, body):
 
 @pytest.mark.asyncio
 async def test_p1a_13_two_creates_that_breach_the_total_cap_together_judge_in_turn(FileSession):
-    """Seeded 18% of 100k; each create is 4% (1 x 40.00 x 100), so each alone
-    totals 22% (fits 25%) and both together 26%."""
+    """Seeded 18.9% of 100k; each create is 3.5% (1 x 35.00 x 100, inside the
+    3.75% option premium cap, review fix #4 / D5), so each alone totals 22.4%
+    (fits 25%) and both together 25.9%."""
     async with FileSession() as db:
         db.add(PortfolioPositionModel(
             rec_id="REC-SEED", symbol="ZZZ", contract="ZZZ|1|2027-01-15|C",
-            direction="Bullish", entry_price=60.0, qty=3, entry_date="2026-07-17"))
+            direction="Bullish", entry_price=63.0, qty=3, entry_date="2026-07-17"))
         await db.commit()
     a = _body(recId="REC-A", symbol="AAA", contract="AAA|50|2027-01-15|C",
-              entryPrice=40.0, qty=1, portfolioValue=100_000)
+              entryPrice=35.0, qty=1, portfolioValue=100_000)
     b = _body(recId="REC-B", symbol="BBB", contract="BBB|50|2027-01-15|C",
-              entryPrice=40.0, qty=1, portfolioValue=100_000)
+              entryPrice=35.0, qty=1, portfolioValue=100_000)
     with _barrier_commit():
         results = await asyncio.gather(
             _create_in_own_session(FileSession, a), _create_in_own_session(FileSession, b))
@@ -239,11 +248,23 @@ async def test_p1a_13_two_creates_that_breach_the_total_cap_together_judge_in_tu
 
 @pytest.mark.asyncio
 async def test_p1a_13b_a_same_contract_race_answers_409_never_422(FileSession):
-    a = _body(recId="REC-A", entryPrice=40.0, qty=1, portfolioValue=100_000)
-    b = _body(recId="REC-B", entryPrice=40.0, qty=1, portfolioValue=100_000)
+    a = _body(recId="REC-A", entryPrice=35.0, qty=1, portfolioValue=100_000)
+    b = _body(recId="REC-B", entryPrice=35.0, qty=1, portfolioValue=100_000)
     with _barrier_commit():
         results = await asyncio.gather(
             _create_in_own_session(FileSession, a), _create_in_own_session(FileSession, b))
     assert 201 in results, results
     [other] = [r for r in results if r != 201]
     assert other[0] == 409 and "already exists" in other[1], results
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('row,method',[(0,'exit_plan_2r'),(1,'exit_plan_3r')])
+async def test_area3_tp_seed_uses_shown_override_ratios(Session,row,method):
+    targets=[{'rrRatio':2.5,'price':110},{'rrRatio':3.5,'price':115}]
+    body=PortfolioPositionCreate(**_body(pickedMethod='arithmetic',pickedRowStockPrice=targets[row]['price'],exitPlan={'targets':targets}))
+    with patch('app.services.position_writer.fetch_contract_quote_async',new=AsyncMock(return_value=None)):
+        async with Session() as db:
+            outcome=await create_position(body,db)
+    assert outcome.position.active_tp_method == method
+    assert outcome.position.resolved_tp_price == targets[row]['price']

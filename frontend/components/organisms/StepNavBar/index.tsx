@@ -21,10 +21,10 @@ import styles from './StepNavBar.module.css';
 export function StepNavBar() {
   const router   = useRouter();
   const pathname = usePathname();
-  const current  = currentStepFromPath(pathname);
   const regime   = useScanStore((s) => s.combinedRegime);
   const mode     = useScanStore((s) => s.screenerMode);
   const steps    = getSteps(mode);
+  const current  = currentStepFromPath(pathname, steps);
 
   const [showConfirm, setShowConfirm] = useState(false);
 

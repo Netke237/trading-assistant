@@ -81,6 +81,15 @@ _expirations_cache: dict[str, tuple[list[str], str]] = {}
 # yfinance calendar: reset daily (overnight earnings updates).
 _yf_cal_cache: dict[str, tuple[Optional[date], Optional[date]]] = {}
 _yf_cal_cache_date: str = ""
+# Audit round 2, R2-F4: a FAILED yfinance calendar lookup is backed off per
+# symbol for a short TTL -- not cached for the day (round 1, F3: that pinned a
+# stock at CAUTION all day) and not re-asked on every re-scan either (that
+# re-hit a rate-limited feed with no cool-down and could prolong a ban).
+# symbol -> `_yf_fail_clock()` value until which it is not re-asked. Kept apart
+# from `_yf_cal_cache`, which holds REAL answers only (the fire path reads it).
+_YF_CAL_FAIL_TTL_S: float = 10 * 60
+_yf_cal_fail_until: dict[str, float] = {}
+_yf_fail_clock = time.monotonic   # indirection so a test can move time without moving asyncio's
 
 # Yahoo Finance ticker equivalents for index symbols not served by Tradier quotes.
 _YF_SYMBOL_MAP: dict[str, str] = {
@@ -701,13 +710,10 @@ def _nearest_expiration_in_window(
     tolerance margin.
 
     `min_dte_floor` is the contract validator's hard-reject floor
-    (dte_window.widened_min_dte: never below hold_max + 1). Expiries under it
-    are dropped BEFORE the centre-nearest pick. Without this the fetch could
-    choose an expiry the validator is certain to reject as dte_too_short, and
-    because only one expiry is fetched, that rejected the whole symbol even
-    when a valid expiry was listed: a Custom 15-200d hold (window 30-400,
-    centre 215, floor 201) picked a 199d monthly; Intraday (window 1-4, floor 3)
-    picked Friday's weekly from Wednesday on.
+    (dte_window.widened_min_dte: at least hold_max + 21 when a hold is supplied).
+    Drop expiries below it before choosing the nearest window centre, so the
+    one fetched expiry can pass the same validator floor. Custom 15-200d has
+    window 221-400 and floor221; Intraday 0-2d has window23-58 and floor23.
     """
     lo, hi = bounds
     centre = (lo + hi) / 2
@@ -1261,8 +1267,26 @@ def _yf_iv_for_chain(symbol: str, expiry: str, is_call: bool) -> dict[float, flo
         return {}
 
 
-def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
-    """Fetch earnings + dividend dates in ONE yfinance calendar call (avoids two round-trips)."""
+class EarningsLookupError(Exception):
+    """An earnings lookup FAILED (audit round 1, F3) -- the request raised, timed
+    out or answered with something unreadable.
+
+    Distinct from a lookup that ANSWERED "no date on file", which returns None.
+    The two used to be one value (`_calendar_dates_yf` swallowed every error into
+    `(None, None)`), so the fire-time refusal could only ever say "none on file"
+    and the scan day-cached a transient failure as if it were an answer.
+
+    WHERE THE SOURCE ALLOWS: yfinance can itself swallow a failed request and
+    hand back an empty calendar, which is then indistinguishable from a genuine
+    "no calendar" and reads as None. What it raises is reported as a failure.
+    """
+
+
+def _calendar_dates_yf_strict(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Earnings + dividend dates in ONE yfinance calendar call, or raise
+    `EarningsLookupError` when the call fails. `(None, None)` means yfinance
+    answered with no calendar. A date already past reads as None (the next one
+    is not known)."""
     try:
         import yfinance as yf
         from datetime import datetime as _dt
@@ -1287,7 +1311,19 @@ def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
             div = d2 if d2 >= today else None
 
         return earn, div
-    except Exception:
+    except Exception as exc:
+        raise EarningsLookupError(f"yfinance calendar for {symbol} failed: {exc}") from exc
+
+
+def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Fetch earnings + dividend dates in ONE yfinance calendar call (avoids two round-trips).
+
+    Lenient: a failed lookup reads as `(None, None)`, exactly as before audit
+    round 1. Callers that must tell a failure from "no date" use
+    `_calendar_dates_yf_strict`."""
+    try:
+        return _calendar_dates_yf_strict(symbol)
+    except EarningsLookupError:
         return None, None
 
 
@@ -1322,13 +1358,30 @@ async def fetch_calendar_dates_async(symbol: str) -> tuple[Optional[date], Optio
 
     if symbol in _yf_cal_cache:
         return _yf_cal_cache[symbol]
+    if _yf_fail_clock() < _yf_cal_fail_until.get(symbol, float("-inf")):
+        return None, None   # R2-F4: inside the failure backoff -- not re-asked
 
     async with _get_yf_sem():
         # Double-check after acquiring semaphore — another coroutine may have populated it.
         if symbol in _yf_cal_cache:
             return _yf_cal_cache[symbol]
-        result = await asyncio.to_thread(_calendar_dates_yf, symbol)
+        if _yf_fail_clock() < _yf_cal_fail_until.get(symbol, float("-inf")):
+            return None, None
+        try:
+            result = await asyncio.to_thread(_calendar_dates_yf_strict, symbol)
+        except EarningsLookupError:
+            # Audit round 1, F3: a FAILED lookup is not cached for the day.
+            # Since D4 was amended an unknown date caps a stock card at
+            # CAUTION, so day-caching one transient failure pinned the symbol
+            # at CAUTION for the rest of the day, re-scans included. Round 2,
+            # R2-F4: it is backed off for `_YF_CAL_FAIL_TTL_S` instead, so a
+            # re-scan inside that window does not re-hit a rate-limited feed.
+            # Only real answers are day-cached -- a genuine "no date" among
+            # them (the `(None, None)` return above).
+            _yf_cal_fail_until[symbol] = _yf_fail_clock() + _YF_CAL_FAIL_TTL_S
+            return None, None
 
+    _yf_cal_fail_until.pop(symbol, None)
     _yf_cal_cache[symbol] = result
     return result
 
@@ -1573,12 +1626,12 @@ async def fetch_option_chain_async(
                 # and tastytrade return a symbol-level RANK, a different
                 # quantity (where today's IV sits in its own 52-week range).
                 # Until 2026-09-06 this value was written into `ivRank`, so a
-                # name at 45% IV scored as though it sat at the 45th percentile
+                # name at 45% IV scored as though it had IV rank 45
                 # of its own range -- failing iv_rank_pass_max: 34 -- and a name
                 # at 75% was HARD-REJECTED at max_iv_rank: 70 even when 75% is
                 # low for it. See PHASE-A-NULL-IVRANK-2026-09-06.
                 "iv": round(iv * 100, 1) if iv > 0 else None,
-                # A TRUE PERCENTILE, or None. None means "no rank source
+                # An IV RANK, or None. None means "no rank source
                 # answered" -- a distinct state from any number, and what tells
                 # the scorer to judge `iv` against the ABSOLUTE thresholds
                 # instead. Only the IBKR and tastytrade branches below fill it.
@@ -1620,7 +1673,7 @@ async def fetch_option_chain_async(
 
         # Counts contracts with no ABSOLUTE IV, which is what the yfinance
         # backfill below supplies. Reading `ivRank` was only correct while that
-        # field held raw IV; now that it holds a percentile or None, a
+        # field held raw IV; now that it holds a rank or None, a
         # Tradier-only chain would have read 0-of-N and skipped the backfill.
         zero_iv = sum(1 for c in result if not c.get("iv"))
         if zero_iv > len(result) * 0.5 and result:
@@ -1630,7 +1683,7 @@ async def fetch_option_chain_async(
                 if not c.get("iv"):
                     yf_val = yf_iv.get(float(c["strike"]))
                     if yf_val:
-                        # yfinance supplies an ABSOLUTE IV, never a percentile.
+                        # yfinance supplies an ABSOLUTE IV, never a rank.
                         c["iv"] = round(yf_val * 100, 1)
                         c["implied_volatility"] = round(yf_val, 4)
 
@@ -1811,3 +1864,69 @@ def _extract_dividend_date(fund_data: dict | None) -> Optional[date]:
     except ValueError:
         pass
     return None
+
+
+def _first_calendar_result(data) -> dict | None:
+    """The first `results` entry of a Tradier fundamentals/calendars answer."""
+    if data and isinstance(data, list):
+        for entry in data:
+            for r in entry.get("results", []):
+                return r
+    return None
+
+
+# httpx timeouts are PER PHASE (connect, read, write, pool each get their own),
+# not a total, so a bare `timeout=8` let one slow request run 8-16s+ (audit
+# round 2, R2-F3). The hard bound on the fire path is the per-source thread
+# deadline in `auto_trader`; these keep an abandoned thread from lingering far
+# past it. Both sit under `auto_trader._TRADIER_LOOKUP_DEADLINE_S` (5s).
+_TRADIER_CALENDAR_HTTP_TIMEOUT = httpx.Timeout(4.0, connect=2.0)
+
+
+def _fundamentals_calendar_sync(symbol: str) -> dict | None:
+    """Sync twin of `fetch_fundamentals_calendar` for the fire path, which runs
+    on a worker thread. Reuses the scan's same-day answer when there is one
+    (that cache holds only real answers). Raises `EarningsLookupError` on a
+    failed request instead of reading it as "no data"; a real answer is cached
+    the way the async path caches it."""
+    cached = _fundamentals_calendar_cache.get(symbol)
+    if cached is not None and cached[1] == date.today().isoformat():
+        return cached[0]
+    try:
+        resp = httpx.get(
+            f"{_tradier_base()}/beta/markets/fundamentals/calendars",
+            headers=_headers(),
+            params={"symbols": symbol},
+            timeout=_TRADIER_CALENDAR_HTTP_TIMEOUT,
+        )
+        resp.raise_for_status()
+        result = _first_calendar_result(resp.json())
+    except Exception as exc:
+        raise EarningsLookupError(f"fundamentals calendar for {symbol} failed: {exc}") from exc
+    _fundamentals_calendar_cache[symbol] = (result, date.today().isoformat())
+    return result
+
+
+# The fire path's two earnings sources, in the scan's order (`routers/scan.py`,
+# the candidate loop): Tradier fundamentals first, then the yfinance calendar.
+# Each one is called by `auto_trader._lookup_earnings_date` under its OWN
+# deadline (audit round 2, R2-F3); neither is bounded on its own.
+#
+# Each returns the date (today or later) or None when the source ANSWERED with
+# no future date, and raises `EarningsLookupError` when it FAILED. Each reuses
+# the scan's same-day answer when there is one (both caches hold real answers
+# only), which also keeps a fire right after a scan from re-hitting a feed that
+# scan just hammered.
+
+def tradier_next_earnings_date(symbol: str) -> Optional[date]:
+    """Source 1: Tradier fundamentals/calendars (`_fundamentals_calendar_sync`)."""
+    return _extract_earnings_date(_fundamentals_calendar_sync(symbol))
+
+
+def yfinance_next_earnings_date(symbol: str) -> Optional[date]:
+    """Source 2: the yfinance calendar, strict (a failure raises)."""
+    if _yf_cal_cache_date == date.today().isoformat():
+        cached = _yf_cal_cache.get(symbol)
+        if cached is not None:
+            return cached[0]
+    return _calendar_dates_yf_strict(symbol)[0]

@@ -7,16 +7,23 @@ from datetime import date
 from typing import Callable
 
 from app.services.walk_forward import (
-    apply_costs, consensus, consistency, degradation_pct,
-    build_folds, train_fold, _slice_bars,
+    commission_for, consensus, consistency, degradation_pct,
+    build_folds, train_fold, slice_with_warmup, MIN_SCORED_BARS, WARMUP_BARS,
 )
 
 logger = logging.getLogger(__name__)
+
+# Audit round 1, F5 (D2): history fetched BEFORE the 3-year fold window so the
+# FIRST train fold gets the full WARMUP_BARS warm-up too. 260 trading bars is
+# about 377 calendar days; 14 months (~425 days, ~290 bars) leaves margin for
+# holidays and a symbol whose first stored bar is a few days late.
+_WARMUP_FETCH = {"months": 14}
 
 
 def build_proposal(
     *,
     strategy: str,
+    direction: str,
     fold_winners: list[dict],
     fold_test_returns: list[float],
     in_sample_return: float,
@@ -24,27 +31,37 @@ def build_proposal(
     oos_metrics: dict,
     min_trades: int,
     min_consistency: float = 0.5,
+    min_symbols: int = 3,
 ) -> dict:
     """Build a proposal record from optimization results.
 
     Args:
         strategy: Strategy name.
+        direction: Normalised direction ('Bullish' | 'Bearish') the params were tuned for.
         fold_winners: List of winning parameter dicts, one per fold (empty dicts filtered out).
         fold_test_returns: List of test period returns (as percentages).
         in_sample_return: Training (in-sample) return percentage.
         walk_forward_return: Test (out-of-sample) return percentage.
         oos_metrics: Dict with 'sharpe', 'expectancy', 'win_rate', 'total_return',
-                     'max_drawdown', 'n_trades' keys.
-        min_trades: Minimum trade count required for eligibility.
+                     'max_drawdown', 'n_trades' (pooled across the basket) and
+                     'n_symbols' (symbols that contributed OOS trades) keys.
+        min_trades: Minimum pooled OOS trade count required for eligibility.
         min_consistency: Minimum fraction of folds with positive OOS returns (0–1).
+        min_symbols: Minimum number of contributing symbols required for eligibility.
 
     Returns:
-        Dict with keys: strategy, proposed, consistency, eligible, oos_metrics,
+        Dict with keys: strategy, direction, proposed, consistency, eligible, oos_metrics,
         fold_winners, verdict, recommendation.
     """
     proposed = consensus(fold_winners)
     cons = round(consistency(fold_test_returns), 4)
-    eligible = oos_metrics["n_trades"] >= min_trades and cons >= min_consistency
+    # Phase C T5 (review M2, D4): the trade floor is pooled across the basket, so
+    # it also needs evidence from at least `min_symbols` symbols.
+    eligible = (
+        oos_metrics["n_trades"] >= min_trades
+        and oos_metrics.get("n_symbols", 0) >= min_symbols
+        and cons >= min_consistency
+    )
     deg = degradation_pct(in_sample=in_sample_return, walk_forward=walk_forward_return)
 
     if not eligible:
@@ -56,6 +73,7 @@ def build_proposal(
 
     return {
         "strategy": strategy,
+        "direction": direction,
         "proposed": proposed,
         "consistency": cons,
         "eligible": eligible,
@@ -79,6 +97,7 @@ def _optimize_strategy_sync(
     costs: dict,
     min_trades: int,
     min_consistency: float,
+    min_symbols: int = 3,
 ) -> dict | None:
     """Synchronous per-strategy fold loop; run via asyncio.to_thread to avoid blocking.
 
@@ -95,10 +114,21 @@ def _optimize_strategy_sync(
     all_win_rates: list[float] = []
     all_expectancies: list[float] = []
     all_drawdowns: list[float] = []
+    # Per-leg cost charged inside every backtest, IS (train_fold) and OOS alike,
+    # so every window return below is already net (Phase C T4, review M1).
+    commission = commission_for(costs)
 
     for fold in folds:
         winner, winner_results = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
         fold_winners.append(winner)
+
+        # No trained parameters means this fold contributes no proposal evidence.
+        # Evaluating defaults here would contaminate the global OOS metrics even
+        # though valid_triples below excludes this fold's return and parameters.
+        if not winner:
+            in_sample_fold_returns.append(0.0)
+            fold_test_returns.append(0.0)
+            continue
 
         # IS return: reuse the winning combo's backtest results computed inside train_fold's
         # grid search (train_fold already ran this exact backtest to select the winner by
@@ -106,12 +136,7 @@ def _optimize_strategy_sync(
         is_returns: list[float] = []
         for sym, res in winner_results.items():
             if res.n_trades > 0:
-                net = apply_costs(
-                    gross_return_pct=res.total_return_pct,
-                    fee_pct=costs.get("fee_pct", 0.001),
-                    slippage_pct=costs.get("slippage_pct", 0.001),
-                )
-                is_returns.append(net)
+                is_returns.append(res.total_return_pct)
         in_sample_fold_returns.append(
             sum(is_returns) / len(is_returns) if is_returns else 0.0
         )
@@ -119,23 +144,19 @@ def _optimize_strategy_sync(
         # OOS: score the test window with winner params, net of costs
         test_returns: list[float] = []
         for sym, bars in basket_bars.items():
-            test_bars = _slice_bars(bars, fold.test_start, fold.test_end)
-            if len(test_bars) >= 100:  # matches IS guard and backtest engine's internal minimum
+            test_bars, n_scored = slice_with_warmup(bars, fold.test_start, fold.test_end)
+            # Fix #2: judge the fold on bars INSIDE it (>= MIN_SCORED_BARS); the
+            # warm-up prefix only primes indicators and can place no entry.
+            if n_scored >= MIN_SCORED_BARS and len(test_bars) >= 100:
                 try:
                     res = run_strategy_backtest(
-                        test_bars, strategy=strategy, direction=direction, params=winner
+                        test_bars, strategy=strategy, direction=direction, params=winner,
+                        commission=commission, entry_start=fold.test_start,
                     )
-                    # Only include windows where the strategy actually traded.
-                    # Applying cost drag to a zero-trade window injects a false
-                    # negative return (~−0.4%), unfairly suppressing consistency.
+                    # Only include windows where the strategy actually traded: a
+                    # zero-trade window has no evidence and would dilute consistency.
                     if res.n_trades > 0:
-                        gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
-                        net = apply_costs(
-                            gross_return_pct=gross,
-                            fee_pct=costs.get("fee_pct", 0.001),
-                            slippage_pct=costs.get("slippage_pct", 0.001),
-                        )
-                        test_returns.append(net)
+                        test_returns.append(res.total_return_pct)
                         total_n_trades += res.n_trades
                         contributing_symbols.add(sym)
                         all_sharpes.append(getattr(res, "sharpe", 0.0))
@@ -164,8 +185,9 @@ def _optimize_strategy_sync(
         logger.warning("No valid fold winners for %s — all folds empty, skipping", strategy)
         return None
 
-    # apply_costs returns net_return in the same percent units as total_return_pct.
-    # No ×100 here — the values are already percent (e.g., 5.0 = 5%).
+    # Window returns are total_return_pct from backtests run with the per-leg
+    # commission, so they are already net of costs on every trade, in percent
+    # units (e.g., 5.0 = 5%). No ×100 and no further cost deduction here.
     in_sample_return = (
         sum(valid_is_fold_returns) / len(valid_is_fold_returns)
         if valid_is_fold_returns
@@ -184,13 +206,18 @@ def _optimize_strategy_sync(
         "win_rate": round(sum(all_win_rates) / len(all_win_rates), 4) if all_win_rates else 0.0,
         "total_return": walk_forward_return,
         "max_drawdown": round(min(all_drawdowns), 4) if all_drawdowns else 0.0,
-        # Divide by symbols that actually contributed (not total basket) so min_trades
-        # threshold is not diluted by symbols skipped by the 100-bar OOS guard.
-        "n_trades": round(total_n_trades / max(len(contributing_symbols), 1)),
+        # Phase C T5 (review M2): `n_trades` is the pooled OOS trade count across
+        # the basket, the figure `min_trades` gates. The per-symbol average (over
+        # symbols that actually contributed, not the whole basket) is kept for
+        # display, and `n_symbols` feeds the `min_symbols` floor.
+        "n_trades": total_n_trades,
+        "n_trades_per_symbol": round(total_n_trades / max(len(contributing_symbols), 1)),
+        "n_symbols": len(contributing_symbols),
     }
 
     return build_proposal(
         strategy=strategy,
+        direction=direction,
         fold_winners=valid_winners,
         fold_test_returns=valid_fold_test_returns,
         in_sample_return=in_sample_return,
@@ -198,6 +225,7 @@ def _optimize_strategy_sync(
         oos_metrics=oos_metrics,
         min_trades=min_trades,
         min_consistency=min_consistency,
+        min_symbols=min_symbols,
     )
 
 
@@ -211,6 +239,7 @@ async def run_optimization(
     direction: str = "bullish",
     min_trades: int = 20,
     min_consistency: float = 0.5,
+    min_symbols: int = 3,
 ) -> dict:
     """Run walk-forward optimization for all strategies. Returns strategy → proposal dict.
 
@@ -221,17 +250,21 @@ async def run_optimization(
         costs: Dict with 'fee_pct' and 'slippage_pct' keys.
         progress_cb: Callable(done, total) for progress reporting.
         direction: Trading direction ('bullish' or 'bearish').
-        min_trades: Minimum OOS trades for a proposal to be eligible.
+        min_trades: Minimum pooled OOS trades for a proposal to be eligible.
         min_consistency: Minimum fraction of positive OOS folds for eligibility.
+        min_symbols: Minimum symbols contributing OOS trades for eligibility.
 
     Returns:
         Dict mapping strategy name to proposal dict.
         Strategies with no bars or all-empty folds are omitted.
     """
+    from app.services.strategy_backtest import normalize_direction
     from app.services.strategy_param_store import get_search_space
     from app.services.historical_store import get_bars
     from app.services.walk_forward import precompute_bar_dates
     from dateutil.relativedelta import relativedelta
+
+    direction = normalize_direction(direction)
 
     results: dict = {}
     total_work = len(strategies)
@@ -245,12 +278,16 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
+        # The folds cover the 3 years to today, as before. The fetch reaches
+        # `_WARMUP_FETCH` further back: those bars are warm-up only, never
+        # inside a fold (audit round 1, F5).
+        end_date = date.today()
+        window_start = end_date - relativedelta(years=3)
+        fetch_start = window_start - relativedelta(**_WARMUP_FETCH)
         basket_bars: dict[str, list[dict]] = {}
         for sym in basket_symbols:
             try:
-                end_date = date.today()
-                start_date = end_date - relativedelta(years=3)
-                bars = await get_bars(sym, start_date, end_date)
+                bars = await get_bars(sym, fetch_start, end_date)
                 if bars:
                     basket_bars[sym] = bars
             except Exception as exc:
@@ -269,15 +306,55 @@ async def run_optimization(
 
         # Intersection of per-symbol date ranges via pre-computed _date (date objects)
         # so the comparison is type-safe regardless of what format get_bars returns.
-        symbol_starts = [min(b["_date"] for b in bars) for bars in basket_bars.values()]
-        symbol_ends = [max(b["_date"] for b in bars) for bars in basket_bars.values()]
-        if not symbol_starts:
+        #
+        # A symbol's start is its first bar INSIDE the 3-year window, so the
+        # folds' date ranges are exactly what they were before the warm-up
+        # fetch was added (audit round 1, F5); the earlier bars only feed
+        # `slice_with_warmup`'s prefix.
+        #
+        # A symbol with NO bar inside the window (it stopped trading in the
+        # warm-up span the fetch now reaches) is dropped from the basket with a
+        # WARNING naming it, and the rest are used (audit round 2, R2-F5). It
+        # used to skip the whole strategy, silently.
+        for sym in list(basket_bars):
+            if not any(b["_date"] >= window_start for b in basket_bars[sym]):
+                logger.warning(
+                    "WFO %s: dropping %s from the basket -- no bar inside the "
+                    "3-year window (from %s); its bars end %s",
+                    strategy, sym, window_start, max(b["_date"] for b in basket_bars[sym]),
+                )
+                del basket_bars[sym]
+        if not basket_bars:
+            logger.warning(
+                "WFO %s: no basket symbol has a bar inside the 3-year window "
+                "(from %s), skipping", strategy, window_start,
+            )
             done += 1
             progress_cb(done, total_work)
             continue
+        symbol_starts = [
+            min(b["_date"] for b in bars if b["_date"] >= window_start)
+            for bars in basket_bars.values()
+        ]
+        symbol_ends = [max(b["_date"] for b in bars) for bars in basket_bars.values()]
 
         start = max(symbol_starts)  # latest start — intersection
         end = min(symbol_ends)      # earliest end — intersection
+
+        # D2 needs WARMUP_BARS before every fold. A history store holding less
+        # than that before `start` (get_bars does not backfill before its first
+        # stored row) leaves the early folds short, as before this fix -- say so
+        # rather than tune on cold indicators silently.
+        short = [
+            sym for sym, bars in basket_bars.items()
+            if sum(1 for b in bars if b["_date"] < start) < WARMUP_BARS
+        ]
+        if short:
+            logger.warning(
+                "WFO %s: %s hold fewer than %d bars before the first fold (%s); "
+                "the early folds' indicators start partly cold",
+                strategy, ", ".join(sorted(short)), WARMUP_BARS, start,
+            )
 
         folds = build_folds(
             start, end,
@@ -294,7 +371,7 @@ async def run_optimization(
         proposal = await asyncio.to_thread(
             _optimize_strategy_sync,
             strategy, direction, basket_bars, folds, search_space, costs,
-            min_trades, min_consistency,
+            min_trades, min_consistency, min_symbols,
         )
         if proposal is not None:
             results[strategy] = proposal

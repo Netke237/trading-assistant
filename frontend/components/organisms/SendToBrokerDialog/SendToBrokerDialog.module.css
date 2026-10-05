@@ -55,7 +55,7 @@
 .tableHead,
 .row {
   display: grid;
-  grid-template-columns: 72px 1fr 80px 80px 100px 140px;
+  grid-template-columns: 72px 1fr 80px 80px 100px;
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-2) var(--space-4);
@@ -101,24 +101,10 @@
 .qtyInput::-webkit-outer-spin-button,
 .qtyInput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-.autoCell {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-  user-select: none;
-}
-
 /* Spread leg sub-rows — indented, lighter border */
 .legSubRow {
   border-bottom: 1px solid var(--border-subtle);
   opacity: 0.85;
-}
-
-.ibkrNote {
-  grid-column: 5 / 7;
-  text-align: right;
-  font-style: italic;
 }
 
 .footer {

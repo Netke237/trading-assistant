@@ -1,0 +1,8 @@
+{
+  "baseline": "ac39b841",
+  "fixtures": 10000,
+  "seed": 20261003,
+  "comparison": "exact full score card excluding additive explanation",
+  "result": "pass",
+  "python": "3.11.16"
+}

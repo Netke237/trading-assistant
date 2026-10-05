@@ -16,7 +16,7 @@ def opt_int(v) -> int | None:
     -- the common case -- and `int(chain.get("ivRank", 50))` raised TypeError
     on it, because the key is PRESENT and holds None so the 50 default never
     applied (PHASE-A-NULL-IVRANK-2026-09-06). None must survive to the wire:
-    it is what tells the UI it has no percentile to show.
+    it is what tells the UI it has no rank to show.
     """
     return None if v is None else int(round(float(v)))
 
@@ -40,7 +40,7 @@ def _augment(c: dict, stock_price: float = 0.0) -> dict:
           - bid / ask  (derived from price ± spread/2)
           - delta      (from greeks or BS approximation)
           - iv_rank    (the resolved volatility figure for contract_validator --
-                        a percentile when one exists, otherwise the absolute
+                        a rank when one exists, otherwise the absolute
                         level; None when neither does)
           - iv_basis   ("rank" | "absolute" | "none") -- WHICH quantity iv_rank
                         holds, and therefore which threshold set may judge it
@@ -62,16 +62,16 @@ def _augment(c: dict, stock_price: float = 0.0) -> dict:
     # ── Resolve the volatility figure (PHASE-A-NULL-IVRANK-2026-09-06) ───────
     # `ivRank` and `iv` are TWO DIFFERENT QUANTITIES and usually only one is
     # present:
-    #   ivRank -- a TRUE PERCENTILE (where today's IV sits in this name's own
+    #   ivRank -- an IV RANK (where today's IV sits in this name's own
     #             52-week range), supplied only when IBKR or tastytrade
     #             answered.
     #   iv     -- ABSOLUTE implied volatility, 0-100, from Tradier per strike,
     #             the yfinance backfill, or scan.py's Black-Scholes inversion.
-    # Prefer the rank, exactly as routers/scan.py does: a percentile says where
+    # Prefer the rank, exactly as routers/scan.py does: a rank says where
     # this vol sits FOR THIS NAME, which an absolute level cannot. `iv_basis`
     # records which one won so contract_validator judges it against the
     # matching thresholds -- scoring a 45% absolute IV as though it were the
-    # 45th percentile is the defect this split exists to prevent.
+    # IV rank 45 is the defect this split exists to prevent.
     #
     # Note the deliberate asymmetry, matching scan.py's resolution: a rank of
     # 0.0 is MEANINGFUL (bottom of the 52-week range) so it is tested with

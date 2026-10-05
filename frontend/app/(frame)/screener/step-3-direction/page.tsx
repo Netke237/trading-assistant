@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
+import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
@@ -202,10 +203,8 @@ const PARAM_DEFS: ParamDef[] = [
   { key: 'entry_min_premium',          label: 'Min premium',      type: 'number', section: 'options', subGroup: 'Entry Quality', min: 0, max: 5,   step: 0.05, unit: '$',
     hint: 'Minimum option premium per contract in $. ↑ Higher → rejects cheap, illiquid options (fewer) · ↓ Lower → penny options included (more, but harder to exit). Default: $0.10' },
   // ALL — Reward/Risk
-  { key: 'rr_bullish_target_pct',       label: 'Bullish target %',       type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.01, max: 2.0, step: 0.01, unit: '%',
-    hint: 'Profit target as a fraction of entry for bullish trades. ↑ Higher → demands bigger moves (fewer qualify, R/R better) · ↓ Lower → takes smaller wins (more qualify). Default: 8%' },
-  { key: 'rr_bearish_target_pct',       label: 'Bearish target %',       type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.01, max: 2.0, step: 0.01, unit: '%',
-    hint: 'Profit target as a fraction of entry for bearish trades. ↑ Higher → demands bigger downside moves · ↓ Lower → takes smaller drops. Default: 8%' },
+  { key: 'rr_target_r_multiple', label: 'Target (R-multiple)', type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.5, max: 10, step: 0.25, unit: 'R',
+    hint: 'First target distance in multiples of the stock-stop distance, with nearby structure preferred. Default: 2R' },
   { key: 'rr_bullish_invalidation_pct', label: 'Bullish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
     hint: 'Stop-loss distance for bullish trades. ↑ Higher → wider stop (more room, worse R/R) · ↓ Lower → tighter stop (better R/R but more stop-outs). Default: 3%' },
   { key: 'rr_bearish_invalidation_pct', label: 'Bearish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
@@ -727,6 +726,8 @@ export default function Step3Page() {
   const stockSubGroups  = [...new Set(stocksDefs.map((d) => d.subGroup))];
   const optionSubGroups = [...new Set(optionsDefs.map((d) => d.subGroup))];
 
+  const legacyTargetPctDropped = useSearchProfilesStore((s) => s.legacyTargetPctDropped);
+  const dismissLegacyTargetPctNotice = useSearchProfilesStore((s) => s.dismissLegacyTargetPctNotice);
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
@@ -838,6 +839,10 @@ export default function Step3Page() {
 
         {isExpanded && (
           <div className={formStyles.paramsBody}>
+            {legacyTargetPctDropped && <div role="status">
+              <Text size={12} tone="caution">Saved target percentages were removed. Reward/Risk now uses Target (R-multiple); review your saved profiles.</Text>
+              <button type="button" onClick={dismissLegacyTargetPctNotice}>Dismiss</button>
+            </div>}
 
             {/* STOCKS section */}
             <SectionBlock

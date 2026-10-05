@@ -8,7 +8,7 @@ import {
 import type { TradeCardData } from '@/types/domain';
 import { api } from '@/lib/api';
 import { EVENT_SHIPPED, IV_SHIPPED, echoStoredThresholds } from '@/lib/testFixtures/thresholds';
-import { expectPageCopy } from '../testSupport/pageContract';
+import { expectPageCopy, gateOf } from '../testSupport/pageContract';
 
 // DOCC-3: the page fetches both stores on mount; each fetch answers with the
 // record the test set, so it re-sets the test's values rather than clearing them.
@@ -69,7 +69,7 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
   it('uses the window the scan applied: 7/30 makes an event 15 days out CAUTION, not REJECT', () => {
     setup(15, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 7, caution_days: 30 });
     render(<Step5Page />);
-    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('CAUTION');
     expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
     // ...and the header's event-window sentence quotes that same echoed window.
     expectPageCopy();
@@ -78,38 +78,38 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
   it('uses the window the scan applied: 7/30 still REJECTS an event 5 days out', () => {
     setup(5, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 7, caution_days: 30 });
     render(<Step5Page />);
-    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('REJECT');
   });
 
   it('ignores live Step-3 overrides edited after the scan (the result was scored at 30/60)', () => {
     setup(10, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 30, caution_days: 60 },
           { event_reject_days: 7, event_caution_days: 30 });
     render(<Step5Page />);
-    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('REJECT');
   });
 
   it('needs no live Step-3 overrides: the window comes from the result alone', () => {
     setup(15, 'Position (90-105d)', EVENT_SHIPPED, { reject_days: 7, caution_days: 30 }, {});
     render(<Step5Page />);
-    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('CAUTION');
   });
 
   it('Position horizon: an event 8 days out is well inside the 30-day REJECT window, not a PASS', () => {
     setup(8, 'Position (90-105d)');
     render(<Step5Page />);
-    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('REJECT');
   });
 
   it('Position horizon: an event 45 days out is inside the 60-day CAUTION window but outside the 30-day REJECT window', () => {
     setup(45, 'Position (90-105d)');
     render(<Step5Page />);
-    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('CAUTION');
   });
 
   it('Position horizon: an event 78 days out is outside both windows -> PASS', () => {
     setup(78, 'Position (90-105d)');
     render(<Step5Page />);
-    expect(screen.getByText('PASS')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('PASS');
   });
 
   it("Swing horizon: an event 8 days out is well inside the 21-day REJECT window, not a CAUTION", () => {
@@ -120,37 +120,37 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
     // so this can no longer drift out of sync.
     setup(8, 'Swing (5-15d)');
     render(<Step5Page />);
-    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('REJECT');
   });
 
   it('Swing horizon: an event 30 days out is inside the 45-day CAUTION window but outside the 21-day REJECT window', () => {
     setup(30, 'Swing (5-15d)');
     render(<Step5Page />);
-    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('CAUTION');
   });
 
   it('Swing horizon: an event 50 days out is outside both windows -> PASS', () => {
     setup(50, 'Swing (5-15d)');
     render(<Step5Page />);
-    expect(screen.getByText('PASS')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('PASS');
   });
 
   it('Intraday horizon: an event 0 days out is inside the 1-day REJECT window', () => {
     setup(0, 'Intraday (0-2d)');
     render(<Step5Page />);
-    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('REJECT');
   });
 
   it('Intraday horizon: an event 2 days out is inside the 3-day CAUTION window but outside the 1-day REJECT window', () => {
     setup(2, 'Intraday (0-2d)');
     render(<Step5Page />);
-    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('CAUTION');
   });
 
   it('Intraday horizon: an event 5 days out is outside both windows -> PASS', () => {
     setup(5, 'Intraday (0-2d)');
     render(<Step5Page />);
-    expect(screen.getByText('PASS')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('PASS');
   });
 
   // Boundary semantics: backend stock_scorer.py's _rule_event uses strict `<`
@@ -159,13 +159,13 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
   it('Swing horizon: an event exactly 21 days out (== reject_days) is CAUTION, not REJECT', () => {
     setup(21, 'Swing (5-15d)');
     render(<Step5Page />);
-    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('CAUTION');
   });
 
   it('Swing horizon: an event exactly 45 days out (== caution_days) is PASS, not CAUTION', () => {
     setup(45, 'Swing (5-15d)');
     render(<Step5Page />);
-    expect(screen.getByText('PASS')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('PASS');
   });
 
   it('gate reacts to live-fetched thresholds, not just the shipped values', () => {
@@ -177,7 +177,47 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
     setup(7, 'Swing (5-15d)', { Swing: { reject_days: 5, caution_days: 10 } });
     render(<Step5Page />);
     // Under the shipped window (21/45) day 7 would be REJECT; under this seeded window it's CAUTION.
-    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(gateOf('TST')).toBe('CAUTION');
     expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
+  });
+});
+
+/* Audit round 1, F9 — Step 5 grades the NEARER of earnings and dividend, so a
+ * dividend inside the window paints REJECT here while Step 7 (D3: only earnings
+ * veto) lets it send. The row must say a dividend is not a send veto. */
+describe('audit round 1 F9 — a dividend-only REJECT says it is not a send veto', () => {
+  const NOTE = /Dividend — score penalty, not a send veto/;
+
+  function setupRow(over: Partial<TradeCardData>) {
+    setup(5, 'Swing (5-15d)');
+    useScanStore.setState((s: any) => ({
+      scanResult: { ...s.scanResult, candidates: [makeCandidate({ nextEventDays: 5, ...over })] },
+    }));
+  }
+
+  it('dividend 5d out, earnings 90d out: REJECT, with the note', () => {
+    setupRow({ nextEventLabel: 'Dividend', earningsDays: 90 });
+    render(<Step5Page />);
+    expect(gateOf('TST')).toBe('REJECT');
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it('dividend 5d out with no earnings date: still the note (the dividend is what rejected it)', () => {
+    setupRow({ nextEventLabel: 'Dividend', earningsDays: null });
+    render(<Step5Page />);
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it('earnings 5d out: no note — that one IS a veto', () => {
+    setupRow({ nextEventLabel: 'Earnings', earningsDays: 5 });
+    render(<Step5Page />);
+    expect(gateOf('TST')).toBe('REJECT');
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it('dividend 5d out but earnings 10d out (also inside the 21d window): no note', () => {
+    setupRow({ nextEventLabel: 'Dividend', earningsDays: 10 });
+    render(<Step5Page />);
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
   });
 });

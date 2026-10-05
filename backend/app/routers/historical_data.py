@@ -1,5 +1,6 @@
 """POST /api/historical-data/prefetch  — start background OHLCV prefetch.
 GET  /api/historical-data/prefetch/status — return current job state.
+POST /api/historical-data/refresh-adjustments — re-fetch symbols with stale adj factors.
 """
 from __future__ import annotations
 
@@ -7,8 +8,11 @@ from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.historical_store import prefetch_universe, get_prefetch_status
+from app.services.historical_store import (
+    get_prefetch_status, prefetch_universe, refresh_adjustments,
+)
 from app.data.universe_presets import expand_universe
+from app.routers.stock_scan import evict_backtest_cache
 
 router = APIRouter(prefix="/api/historical-data", tags=["historical-data"])
 
@@ -63,3 +67,26 @@ async def start_prefetch(req: PrefetchRequest) -> dict:
 def prefetch_status() -> dict:
     """Return the current state of the background prefetch job."""
     return get_prefetch_status()
+
+
+class RefreshAdjustmentsRequest(BaseModel):
+    symbols: list[str] = Field(
+        default_factory=list,
+        description="Symbols to check; an empty list means every symbol in ohlcv_daily",
+    )
+
+
+@router.post("/refresh-adjustments")
+async def refresh_adjustments_endpoint(req: RefreshAdjustmentsRequest) -> dict:
+    """Find symbols whose stored adj factors span stale fetch batches and re-fetch them.
+
+    Runs inline (an operator call, TRADING-REVIEW-PHASE-C T3). Never deletes rows.
+    Returns ``{checked, stale: [{symbol, reasons, earliest}], refreshed, failed}``.
+    Each refreshed symbol's cached backtests are evicted too: their key hashes only the
+    last 20 bars, so it does not change when older bars are rewritten
+    (TRADING-REVIEW-PHASE-C-HYGIENE T6).
+    """
+    return await refresh_adjustments(
+        [s.strip().upper() for s in req.symbols if s.strip()],
+        on_refreshed=lambda s: evict_backtest_cache([s]),
+    )

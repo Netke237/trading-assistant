@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import copy
+import pytest
 
 from app.scoring.stock_scorer import score_stock
 from app.scoring.contract_validator import validate_contract
@@ -26,6 +28,98 @@ def _make_bars(n: int = 250) -> list[dict]:
 
 
 _BARS = _make_bars()
+
+
+@pytest.mark.parametrize("horizon", ["Intraday", "Swing", "Position"])
+@pytest.mark.parametrize("mode", ["options", "stock"])
+@pytest.mark.parametrize("basis", ["absolute", "rank"])
+def test_stock_evidence_captures_effective_weights_rules_and_vintage(horizon, mode, basis):
+    ov = {"weight_trend": 0.123, "weight_event": 0.321,
+          "event_reject_days": 8, "event_caution_days": 19,
+          "additive_adx_pass": 28.75, "ma_type": "SMA"}
+    card = score_stock("AAPL", "Bullish", horizon, _BARS, iv_rank=40,
+                       iv_basis=basis, overrides=ov, scoring_mode=mode)
+    e = card.explanation
+    assert e["score"] == card.score == round(e["unrounded_score"])
+    assert e["status"] == card.status
+    assert e["iv_basis"] == basis and e["horizon"] == horizon
+    assert e["rounding"] == "python_round_ties_to_even"
+    assert e["components"]["trend"]["config"]["additive"]["adx_pass"] == 28.75
+    assert e["components"]["trend"]["config"]["crossover"]["ma_type"] == "SMA"
+    assert e["components"]["event"]["config"] == {"reject_days": 8, "caution_days": 19}
+    if mode == "stock":
+        assert e["weights"]["event"] == 0
+        assert sum(e["weights"].values()) == pytest.approx(1)
+    else:
+        assert e["weights"]["trend"] == 0.123
+        assert e["weights"]["event"] == 0.321
+    for rule in card.rules[:5]:
+        component = e["components"][rule.name]
+        assert component["raw_score"] == rule.score
+        assert component["status"] == rule.status
+        assert component["detail"] == rule.detail
+        assert component["contribution"] == rule.score * e["weights"][rule.name]
+    assert sum(c["contribution"] for c in e["components"].values()) == e["unrounded_score"]
+    frozen = copy.deepcopy(e)
+    ov["event_reject_days"] = 100
+    card.rules[0].detail["method"] = "mutated"
+    score_stock("AAPL", "Bearish", horizon, _BARS, overrides={"weight_trend": 0.9})
+    assert e == frozen
+
+
+@pytest.mark.parametrize("raw,rounded", [(54.5, 54), (55.5, 56)])
+def test_stock_evidence_preserves_ties_to_even_and_pullback_cap(monkeypatch, raw, rounded):
+    import app.scoring.stock_scorer as scorer
+    monkeypatch.setattr(scorer, "_rule_trend", lambda *a, **kw: scorer.RuleResult("trend", "PASS", int(raw), {}))
+    monkeypatch.setattr(scorer, "_rule_event", lambda *a, **kw: scorer.RuleResult("event", "REJECT", 1, {}))
+    monkeypatch.setattr(scorer, "_rule_pullback", lambda *a, **kw: scorer.RuleResult("pullback", "REJECT", 0, {"reason": "too_deep"}))
+    ov = {f"weight_{name}": 0 for name in ["trend", "pullback", "trigger", "event", "vol"]}
+    ov.update(weight_trend=1, weight_event=0.5)
+    card = score_stock("AAPL", "Bullish", "Swing", _BARS, overrides=ov)
+    e = card.explanation
+    assert card.score == rounded and card.status == "CAUTION"
+    assert e["unrounded_score"] == raw
+    assert e["raw_status"] == ("PASS" if rounded >= 55 else "CAUTION")
+    assert e["caps"][0]["name"] == "pullback_timing"
+    assert e["caps"][0]["detail"]["reason"] == "too_deep"
+
+
+@pytest.mark.parametrize("confidence", [None, 10, 50, 80])
+@pytest.mark.parametrize("direction", ["Bullish", "Bearish"])
+def test_stock_evidence_separates_gates_from_components(confidence, direction):
+    from types import SimpleNamespace
+    gate = {"enabled": True, "rejectBelow": 40, "cautionBelow": 60}
+    regime = {"enabled": True, "headwind_reject_pct": -40,
+              "headwind_caution_pct": -15, "require_stable_for_reject": True}
+    fund_gate = {"enabled": True, "cautionBelow": 45, "rejectBelow": 30,
+                 "cautionAbove": 70, "rejectAbove": 80}
+    fund = SimpleNamespace(score=90, safety_flags=["negative_equity"], detail={"source": "fixture"})
+    card = score_stock("AAPL", direction, "Swing", _BARS, confidence=confidence,
+                       confidence_sample_size=17, confidence_gate=gate,
+                       regime_signal={"conviction_pct": -45, "stability": "Stable"},
+                       regime_gate=regime, fundamentals=fund, fundamentals_gate=fund_gate)
+    e = card.explanation
+    assert set(e["components"]) == {"trend", "pullback", "trigger", "event", "vol"}
+    caps = {c["name"]: c for c in e["caps"]}
+    assert caps["confidence"]["detail"]["confidence"] == confidence
+    assert caps["confidence"]["detail"]["sample_size"] == 17
+    assert caps["confidence"]["status"] == ("PASS" if confidence is None or confidence >= 60 else "REJECT" if confidence < 40 else "CAUTION")
+    assert caps["regime"]["status"] == "REJECT"
+    assert caps["fundamentals"]["detail"]["safety_flags"] == ["negative_equity"]
+    assert e["status"] == "REJECT" == card.status
+    gate["rejectBelow"] = 99
+    fund.safety_flags.clear()
+    assert e["gate_config"]["confidence"]["rejectBelow"] == 40
+    assert caps["fundamentals"]["detail"]["safety_flags"] == ["negative_equity"]
+
+
+def test_stock_evidence_keeps_missing_benchmark_explicit():
+    card = score_stock("AAPL", "Bullish", "Swing", _BARS,
+                       overrides={"trend_method": "relative_strength"})
+    trend = card.explanation["components"]["trend"]
+    assert trend["measured"] is False
+    assert trend["detail"]["reason"] == "no_benchmark_data"
+    assert trend["raw_score"] == 50  # authoritative placeholder, not a measured reading
 
 
 def _expiry_str(days_from_today: int) -> str:

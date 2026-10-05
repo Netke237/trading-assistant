@@ -222,6 +222,7 @@ async def test_disabled_watch_skipped():
 from unittest.mock import patch as _patch
 
 from app.services.strategy_watch_evaluator import evaluate_and_notify, _format_event
+from tests.watch_notify_helpers import configured_channels_no_real_sends, per_channel  # noqa: F401
 
 
 def test_format_event_builds_subject_and_bodies():
@@ -391,8 +392,10 @@ async def test_evaluate_and_notify_dispatches_per_event():
                 new_callable=AsyncMock,
                 return_value=[_Transition(event=ev, watch_id="wch_1", new_state={"phase": "armed"})]), \
          _patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
-         _patch("app.services.strategy_watch_evaluator.notify_enabled_channels",
-                new_callable=AsyncMock, return_value=True) as notify:
+         _patch("app.services.strategy_watch_evaluator.read_notification_config",
+                return_value=({"gmail": {"enabled": True}}, True)), \
+         _patch("app.services.strategy_watch_evaluator.notify_channels",
+                per_channel(notify := AsyncMock(return_value=True))):
         result = await evaluate_and_notify()
     assert result == [ev]
     notify.assert_called_once()

@@ -29,7 +29,11 @@ _PASS_RULES = [
     RuleResult("trend",    "PASS", 80, {}),
     RuleResult("pullback", "PASS", 75, {}),
     RuleResult("trigger",  "PASS", 70, {}),
-    RuleResult("event",    "PASS", 85, {}),
+    # A KNOWN earnings date well outside the window: since D4 was amended
+    # (2026-10-03) an unknown date caps a single stock at CAUTION, and these
+    # tests are about ranking, not earnings.
+    RuleResult("event",    "PASS", 85, {"earnings_days": 90, "reject_days": 21,
+                                         "earnings_unknown": False}),
     RuleResult("vol",      "PASS", 80, {}),
 ]
 
@@ -305,7 +309,7 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
             "hold_min_days": 15, "hold_max_days": 200,
         })
     assert r.status_code == 200
-    assert seen and all(s == ((30, 400), 201, None) for s in seen), seen  # hold window: no dte_limits
+    assert seen and all(s == ((221, 400), 221, None) for s in seen), seen  # hold window: no dte_limits
 
 
 @pytest.mark.parametrize("overrides, limits", [
@@ -353,10 +357,10 @@ def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
         })
     assert r.status_code == 200
     main, legs = seen[0], seen[1:]
-    assert main == (None, (30, 400), 201, None)
+    assert main == (None, (221, 400), 221, None)
     assert r.json()["candidates"], r.json()["rejected"]  # else nothing below is exercised
     assert len(legs) == 2, seen
-    assert all(e == "2027-06-18" and b == (30, 400) and f == 201 and lim is None for e, b, f, lim in legs), seen
+    assert all(e == "2027-06-18" and b == (221, 400) and f == 221 and lim is None for e, b, f, lim in legs), seen
 
 
 def test_bearish_spread_legs_without_hold_days_get_the_same_dte_limits(client):

@@ -20,7 +20,10 @@ from app.routers.portfolio import router as portfolio_router
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
+async def client(monkeypatch) -> AsyncGenerator[AsyncClient, None]:
+    from app.services import portfolio_risk
+    cfg = portfolio_risk._load_config()
+    monkeypatch.setattr(portfolio_risk, '_load_config', lambda: {**cfg, 'portfolio': {**cfg['portfolio'], 'portfolio_value': 10000}})
     engine = create_async_engine("sqlite+aiosqlite:///:memory:",
                                  connect_args={"check_same_thread": False})
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -50,7 +53,8 @@ async def _add(client, contract="AAPL|185|2026-09-18|C", qty=5, entry=1.00, rec=
     # test_portfolio_close_history.py's `_add` helper).
     with patch("app.routers.portfolio.fetch_contract_quote_async",
                new=AsyncMock(return_value=None)):
-        r = await client.post("/api/portfolio", json=body)
+        with patch("app.services.position_writer.account_value", return_value=1_000_000):
+            r = await client.post("/api/portfolio", json=body)
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -189,10 +193,11 @@ async def test_patch_qty_decrease_does_not_require_portfolio_value(client):
 
 
 @pytest.mark.asyncio
-async def test_patch_qty_increase_without_portfolio_value_is_rejected(client):
+async def test_patch_qty_increase_without_portfolio_value_uses_server_account(client):
     await _add(client, rec="REC-QTYUP-NOVAL", qty=1)
     r = await client.patch("/api/portfolio/REC-QTYUP-NOVAL", json={"qty": 2})
-    assert r.status_code == 422, r.text
+    assert r.status_code == 200, r.text
+    assert r.json()["qty"] == 2
 
 
 @pytest.mark.asyncio
@@ -217,7 +222,7 @@ async def test_patch_qty_increase_reruns_risk_gate_and_rejects_when_exposure_too
     await _add(client, rec="REC-QTYUP-REJECT", qty=1, entry=6.00)
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-REJECT",
-        json={"qty": 5, "portfolioValue": 10_000.0},
+        json={"qty": 5, "portfolioValue": 1_000_000.0},
     )
     assert r.status_code == 422, r.text
     assert "single_trade_exposure_too_high" in r.json()["detail"]
@@ -252,11 +257,12 @@ async def test_patch_qty_increase_soft_reduces_and_reports_adjusted_qty(client):
     # does via `resp.adjustedQty` — otherwise the drawer shows the qty the
     # user typed while the database quietly holds a smaller one, and the next
     # sync poll would silently snap the input back with zero explanation.
-    # entry=2.00, requested qty=5 (at risk_rules.yaml's
+    # entry=1.50, requested qty=5 (at risk_rules.yaml's
     # sizing.max_contracts_per_trade ceiling, so it isn't clamped further) ->
-    # capital_at_risk=$1,000 against portfolioValue=$10,000 -> 10% exposure,
-    # over the 5% cap -> max_allowed_premium=$500 / $200-per-contract -> 2.
-    await _add(client, rec="REC-QTYUP-SOFT", qty=1, entry=2.00)
+    # capital_at_risk=$750 against portfolioValue=$10,000 -> 7.5% exposure,
+    # over the 3.75% option cap (min of the 5% single cap and the 3.75% loss
+    # limit, review fix #4 / D5) -> max_allowed_premium=$375 / $150-per-contract -> 2.
+    await _add(client, rec="REC-QTYUP-SOFT", qty=1, entry=1.50)
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-SOFT",
         json={"qty": 5, "portfolioValue": 10_000.0},
@@ -324,7 +330,7 @@ async def test_resized_qty_raise_scales_the_rungs_sent_with_it(client):
     # booked 2) with rungs planned for the 5 asked. Stored verbatim they would
     # sell 5 of 2 held; capped by the overflow (_rescale_rung_shares' rounding)
     # 3/2 becomes 1/1.
-    await _add(client, rec="REC-QTYUP-RUNGS", qty=1, entry=2.00)
+    await _add(client, rec="REC-QTYUP-RUNGS", qty=1, entry=1.50)
     rungs = [{"stockPrice": 200.0, "contractsToSell": 3}, {"stockPrice": 210.0, "contractsToSell": 2}]
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-RUNGS",
@@ -344,7 +350,7 @@ async def test_resized_qty_raise_scales_the_rungs_sent_with_it(client):
 async def test_resized_qty_raise_leaves_stored_rungs_alone(client):
     # Rungs NOT sent with the resized PATCH were planned for the smaller
     # pre-raise qty (here 1 of 1); they still fit the booked 2, so they stay.
-    await _add(client, rec="REC-QTYUP-KEEP", qty=1, entry=2.00,
+    await _add(client, rec="REC-QTYUP-KEEP", qty=1, entry=1.50,
                targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-KEEP",
@@ -366,7 +372,7 @@ async def test_resized_qty_raise_keeps_rungs_that_fit_the_booked_qty(client):
     # Delta review B2: a rung edit typed against the held qty can be merged
     # into the same debounced PATCH as the raise. Rungs that already fit the
     # booked 2 are stored as sent -- not scaled by asked/booked (-> 0/0).
-    await _add(client, rec="REC-QTYUP-FIT", qty=1, entry=2.00)
+    await _add(client, rec="REC-QTYUP-FIT", qty=1, entry=1.50)
     body = await _patch_rungs(client, "REC-QTYUP-FIT", {
         "qty": 5, "portfolioValue": 10_000.0,
         "targets": [{"stockPrice": 200.0, "contractsToSell": 1}, {"stockPrice": 210.0, "contractsToSell": 1}],
@@ -420,8 +426,33 @@ async def test_rejected_qty_raise_still_caps_the_rungs_sent_with_it(client):
 
 @pytest.mark.asyncio
 async def test_resized_raise_with_null_targets_stores_none(client):
-    await _add(client, rec="REC-QTYUP-NULL", qty=1, entry=2.00,
+    await _add(client, rec="REC-QTYUP-NULL", qty=1, entry=1.50,
                targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
     body = await _patch_rungs(client, "REC-QTYUP-NULL", {"qty": 5, "portfolioValue": 10_000.0, "targets": None})
     assert body["adjustedQty"] == 2
     assert body["targets"] == []
+
+@pytest.mark.asyncio
+async def test_invalid_account_refuses_create_but_books_placed_order_unchanged(client, monkeypatch):
+    from app.services import portfolio_risk
+    from app.services.position_writer import create_position
+    from app.schemas import PortfolioPositionCreate
+    from app.database import get_db
+    monkeypatch.setattr(portfolio_risk, '_load_config', lambda: {'portfolio': {'portfolio_value': False}})
+    payload = dict(recId='REC-INVALID', symbol='AAPL', contract='AAPL|STOCK', direction='Bullish', entryPrice=100, qty=20, entryDate='2026-05-01', targets=[], portfolioValue=1e12)
+    response = await client.post('/api/portfolio', json=payload)
+    assert response.status_code == 422
+    get_session = client._transport.app.dependency_overrides[get_db]
+    async for session in get_session():
+        outcome = await create_position(PortfolioPositionCreate(**payload), session, enforce_pre_trade_gates=False)
+        assert outcome.position.qty == 20
+        assert outcome.over_exposure
+
+@pytest.mark.asyncio
+async def test_quantity_decrease_bypasses_invalid_account(client, monkeypatch):
+    from app.services import portfolio_risk
+    await _add(client, rec='REC-INVALID-DECREASE', qty=5)
+    monkeypatch.setattr(portfolio_risk, '_load_config', lambda: {'portfolio': {'portfolio_value': False}})
+    response = await client.patch('/api/portfolio/REC-INVALID-DECREASE', json={'qty': 2})
+    assert response.status_code == 200
+    assert response.json()['qty'] == 2

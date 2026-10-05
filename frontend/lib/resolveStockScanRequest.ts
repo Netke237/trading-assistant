@@ -22,7 +22,7 @@ const STOCKS_SCORER_KEYS = new Set([
   'swing_high_lookback_bars', 'atr_caution_max',
   'macd_fast', 'macd_slow', 'macd_signal', 'rsi_floor',
   'event_reject_days', 'event_caution_days',
-  'rr_bullish_target_pct', 'rr_bearish_target_pct',
+  'rr_target_r_multiple',
   'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct',
 ]);
 

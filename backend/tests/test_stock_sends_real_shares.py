@@ -109,9 +109,11 @@ def test_option_total_counts_only_option_rows():
     assert "total_exposure_limit_reached" in r.reasons
 
 
-def test_option_single_cap_is_unchanged():
-    r = _check(5, 20.0, contract=OPTION, symbol="MSFT")  # $10,000 = 10% > 5%
-    assert r.adjusted_size == int(100_000 * 0.05 / (20.0 * 100))
+def test_option_single_cap_is_the_loss_limit():
+    # $10,000 = 10% > both caps. Review fix #4 (D5): the option cap is
+    # min(5% single, 3.75% loss limit), so the shipped config resizes to 3.75%.
+    r = _check(5, 20.0, contract=OPTION, symbol="MSFT")
+    assert r.adjusted_size == int(100_000 * 0.0375 / (20.0 * 100))
 
 
 def test_shared_checks_still_count_every_row():

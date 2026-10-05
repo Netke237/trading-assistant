@@ -34,9 +34,9 @@ function card(over: Partial<TradeCardData> = {}): TradeCardData {
     contractBreakdown: { dteFit: 80, delta: 65, ivAttractiveness: 55, liquidity: 75, spread: 90 },
     contractDetails: { strike: 150, expiry: '2026-05-15', right: 'C', mid: 2.5, delta: 0.45, theta: -0.09, ivRank: 20, dte: 24 },
     entry: { limit: 2.5, maxFill: 2.63, orderType: 'Limit' },
-    exit: { invalidation: 140, premiumStop: 1.5, timeStopDays: 10, target: 160, targets: [] },
+    exit: { invalidation: 140, premiumStop: 1.5, timeStopDays: 10, target: 160, targets: [], rrRiskBasis: 'full_premium' },
     rrRatio: 3.0, rrModel: 'Heston repriced', finalStatus: 'PASS',
-    nextEventDays: 30,
+    nextEventDays: 30, earningsDays: 30,
     ...over,
   } as TradeCardData;
 }
@@ -141,4 +141,186 @@ it('R2: an active override adds the suffix, and the verdict uses the override', 
 it('R3: mounting fetches the IV thresholds', () => {
   render(<TradeCardContextRail />);
   expect(api.getIvThresholds).toHaveBeenCalledTimes(1);
+});
+
+/* ── Fix #3 (review): the earnings gate reads the SCAN's window ───────────── */
+
+const EARNINGS_LABEL = 'Earnings outside reject window';
+
+/** The earnings row's verdict, as the row publishes it. */
+function earningsStatus(): string | null {
+  return document.querySelector(`[data-gate-label="${EARNINGS_LABEL}"], [data-gate-label="Earnings date"]`)
+    ?.getAttribute('data-status') ?? null;
+}
+
+function scanWith(eventWindow: { reject_days: number; caution_days: number } | undefined) {
+  act(() => {
+    useScanStore.setState({
+      scanResult: { scan_id: 's', candidates: [AUTO], event_window: eventWindow } as any,
+    } as any);
+  });
+}
+
+function publish(over: Partial<TradeCardData>) {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: card(over), rrPending: false } }); });
+}
+
+describe('earnings gate uses the scan-echoed window, not a fixed 7/3 days', () => {
+  it('judges earnings against the scan window (21/45): 10d is REJECT, 30d is CAUTION, 60d is PASS', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+
+    publish({ earningsDays: 10 });
+    const first = render(<TradeCardContextRail />);
+    // Under the old fixed 7/3 window 10d was a PASS.
+    expect(screen.getByText(EARNINGS_LABEL)).toBeInTheDocument();
+    expect(screen.queryByText('Earnings > 7d away')).not.toBeInTheDocument();
+    expect(earningsStatus()).toBe('REJECT');
+    expect(screen.getByText("Earnings in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    first.unmount();
+
+    publish({ earningsDays: 30 });
+    const second = render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('CAUTION');
+    expect(screen.getByText("Earnings in 30d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+    second.unmount();
+
+    publish({ earningsDays: 60 });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('PASS');
+    expect(screen.getByText("Earnings in 60d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+  });
+
+  it('shows CAUTION, naming a re-run, when the scan echoed no window', () => {
+    scanWith(undefined);
+    publish({ earningsDays: 30 });
+    render(<TradeCardContextRail />);
+    // 30d would be PASS under 7/3; with no window in hand it is never PASS.
+    expect(screen.getByText(EARNINGS_LABEL)).toBeInTheDocument();
+    expect(earningsStatus()).toBe('CAUTION');
+    expect(screen.getByText('Earnings in 30d — this scan carried no event window; re-run the scan.')).toBeInTheDocument();
+  });
+
+  it('does not grade a nearer DIVIDEND as an Earnings gate (nextEventDays is the nearer of the two)', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    // Dividend 2d out, no earnings date: nextEventDays = 2 but earningsDays null.
+    publish({ nextEventDays: 2, nextEventLabel: 'Dividend', earningsDays: null });
+    render(<TradeCardContextRail />);
+    expect(screen.queryByText(EARNINGS_LABEL)).not.toBeInTheDocument();
+  });
+
+  it('grades on earningsDays even when a dividend is nearer', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    publish({ nextEventDays: 2, nextEventLabel: 'Dividend', earningsDays: 10 });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('REJECT');
+    expect(screen.getByText("Earnings in 10d — reject <21d, caution <45d (this scan's window).")).toBeInTheDocument();
+  });
+
+  it('shows CAUTION "Earnings date" when a single stock has no known earnings date', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    publish({ earningsDays: null, earningsUnknown: true, isEtf: false });
+    render(<TradeCardContextRail />);
+    expect(screen.getByText('Earnings date')).toBeInTheDocument();
+    expect(earningsStatus()).toBe('CAUTION');
+    // D4 amended 2026-10-03: the backend caps the card at CAUTION and the
+    // auto-trader refuses to fire it -- the rail says the same thing.
+    expect(screen.getByText(
+      'No earnings date on file — the card is capped at CAUTION and auto-trade will not fire a single stock. Check the calendar before sending.',
+    )).toBeInTheDocument();
+    // No days figure, so no window-based gate beside it.
+    expect(screen.queryByText(EARNINGS_LABEL)).not.toBeInTheDocument();
+  });
+
+  it('treats a card without the isEtf flag (pre-deploy scan) as a single stock', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    publish({ earningsDays: null, earningsUnknown: true });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('CAUTION');
+  });
+
+  it('passes the "Earnings date" gate for an ETF, which has no earnings', () => {
+    scanWith({ reject_days: 21, caution_days: 45 });
+    publish({ earningsDays: null, earningsUnknown: true, isEtf: true });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('PASS');
+    expect(screen.getByText('ETF — no earnings date to check.')).toBeInTheDocument();
+  });
+});
+
+/* Audit round 1, F4 — the rail grades the distance AS OF TODAY, through the
+ * same helper (lib/earningsGate.ts) Step 7's buttons read, so the two agree. */
+describe('audit round 1 F4 — the earnings gate is aged by the scan\'s age', () => {
+  function daysAgo(days: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00:00`;
+  }
+  function scanAgo(days: number) {
+    act(() => {
+      useScanStore.setState({
+        scanResult: {
+          scan_id: 's', timestamp: daysAgo(days), candidates: [AUTO],
+          event_window: { reject_days: 21, caution_days: 45 },
+        } as any,
+      } as any);
+    });
+  }
+
+  it('Thursday: a Monday scan at 23d is graded at 20d — REJECT, saying both numbers', () => {
+    scanAgo(3);
+    publish({ earningsDays: 23, earningsVeto: false, isEtf: false });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('REJECT');
+    expect(screen.getByText(
+      "Earnings in 20d (23d at the scan, 3d ago) — reject <21d, caution <45d (this scan's window).",
+    )).toBeInTheDocument();
+  });
+
+  it('Monday: the same card the same day is CAUTION at 23d', () => {
+    scanAgo(0);
+    publish({ earningsDays: 23, earningsVeto: false, isEtf: false });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('CAUTION');
+  });
+
+  it('a print that may have passed since the scan is an unknown date — CAUTION for a stock', () => {
+    scanAgo(5);
+    publish({ earningsDays: 3, earningsVeto: true, isEtf: false });
+    render(<TradeCardContextRail />);
+    expect(screen.getByText('Earnings date')).toBeInTheDocument();
+    expect(earningsStatus()).toBe('CAUTION');
+    expect(screen.getByText(/may already have passed/)).toBeInTheDocument();
+    expect(screen.queryByText(EARNINGS_LABEL)).not.toBeInTheDocument();
+  });
+});
+
+it('withholds numeric R/R when its measured stock stop moved', () => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: PICKED, rrPending: false, rrStale: true } }); });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText(/Stock stop moved since R\/R was measured/)).toBeInTheDocument();
+  expect(screen.queryByText(/Projected reward:risk/)).not.toBeInTheDocument();
+});
+
+
+const rrStatus = () => document.querySelector('[data-gate-label="R:R ≥ 2.0"]')?.getAttribute('data-status') ?? null;
+
+// TRADING-REVIEW-PHASE-C-RR (review M7, D5): no protective stop order is ever
+// placed, so the R/R the rail grades risks the whole premium.
+it('names the full-premium risk without changing its thresholds', () => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: { ...PICKED, rrRatio: 2.4 }, rrPending: false } }); });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText(/risking the full premium \(no protective stop order\)/)).toBeInTheDocument();
+  expect(screen.getByText(/reward:risk is 2\.4×/)).toBeInTheDocument();
+  expect(rrStatus()).toBe('PASS');
+});
+
+// Defence in depth for a live card that bypassed the scanStore v18 migration:
+// a ratio measured on another basis is never graded against the thresholds.
+it.each(['stock_stop', 'premium_stop', undefined] as const)('cautions on an R/R computed on an older basis (%s)', (basis) => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: { ...PICKED, rrRatio: 3.0, exit: { ...PICKED.exit, rrRiskBasis: basis } }, rrPending: false } }); });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText('R/R computed on an older basis: re-run the scan')).toBeInTheDocument();
+  expect(screen.queryByText(/reward:risk is/)).not.toBeInTheDocument();
+  expect(rrStatus()).toBe('CAUTION');
 });

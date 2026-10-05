@@ -163,7 +163,7 @@ export const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
 export interface SpreadsConfig {
   shortLegDelta:      number;   // delta of the short leg (e.g. 0.30 = 30Δ)
   widthPoints:        number;   // spread width in strike points
-  ivRankThreshold:    number;   // sell-premium cut-off when a TRUE PERCENTILE is in hand
+  ivRankThreshold:    number;   // sell-premium cut-off when an IV RANK is in hand
   // Sell-premium cut-off when only an ABSOLUTE IV is in hand — which is most
   // chains, since a real rank needs IBKR or tastytrade to answer. Separate from
   // ivRankThreshold because "50% IV" and "the 50th percentile" are different

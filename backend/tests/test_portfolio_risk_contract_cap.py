@@ -41,15 +41,17 @@ def test_1_an_option_qty_above_the_cap_is_refused_at_its_real_size():
 
 
 def test_2_the_exposure_caps_are_judged_at_the_real_option_qty():
-    """Premium 9.00 on 100k: a 5-lot is 4.5% (fits the 5% single cap), a 6-lot
-    is 5.4% (breaches it). Clamped to 5, the 6-lot would never show the resize."""
-    five = _check(5, premium=9.0)
+    """Premium 7.00 on 100k: a 5-lot is 3.5% (fits the 3.75% option cap), a
+    6-lot is 4.2% (breaches it). Clamped to 5, the 6-lot would never show the
+    resize. The option cap is min(5% single, 3.75% loss limit) since review
+    fix #4 (D5), so the premium moved from 9.00 (4.5%, now over the cap)."""
+    five = _check(5, premium=7.0)
     assert (five.approved, five.reasons, five.adjusted_size) == (True, [], None)
-    six = _check(6, premium=9.0)
+    six = _check(6, premium=7.0)
     assert six.approved is False
     assert "size_reduced_to_fit_exposure_limit" in six.reasons
     assert EXCEEDS_MAX_CONTRACTS in six.reasons
-    assert six.adjusted_size == int(100_000 * 0.05 / (9.0 * 100))
+    assert six.adjusted_size == int(100_000 * 0.0375 / (7.0 * 100))
 
 
 def test_3_stock_shares_are_judged_at_the_real_count():

@@ -100,6 +100,7 @@ def test_fire_blocked_when_exposure_cap_breached(mocker):
     portfolio_value=50_000, max_single=5% → max capital_at_risk = $2,500
     entry_premium=30.0 × 1 contract × 100 multiplier = $3,000 → exceeds cap"""
     from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.portfolio_risk.account_value", return_value=50000)
     svc = AutoTradeService()
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch(
@@ -152,6 +153,7 @@ def test_fire_no_snapshot_skips_check(mocker):
     is tested here, not the circuit breaker.
     """
     from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.portfolio_risk.account_value", return_value=200000)
     svc = AutoTradeService()
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch(
@@ -241,6 +243,7 @@ def test_maybe_fire_on_scan_disarms_stale_order(mocker):
 def test_fire_blocked_records_cap_blocked_history(mocker):
     """Exposure cap breach must be written to history so the event is not lost."""
     from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.portfolio_risk.account_value", return_value=50000)
     svc = AutoTradeService()
     mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch(

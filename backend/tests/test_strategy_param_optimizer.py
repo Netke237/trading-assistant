@@ -34,7 +34,7 @@ def test_optimize_strategy_sync_does_not_rerun_backtest_for_is_return(monkeypatc
 
     call_count = {"n": 0}
 
-    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0):
+    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0, **kwargs):
         call_count["n"] += 1
         return BacktestResult(
             strategy=strategy, direction=direction, n_trades=15, win_rate=0.6,
@@ -47,8 +47,7 @@ def test_optimize_strategy_sync_does_not_rerun_backtest_for_is_return(monkeypatc
 
     bars = _synth_bars(400)
     basket_bars = {"AAPL": bars}
-    # test_months=4 (~123 days) clears the OOS section's >=100-bar minimum so
-    # both the train and OOS backtest calls actually execute.
+    # calendar-day synthetic bars; the warm-up path is covered on trading-day bars in test_walk_forward_warmup.py
     folds = build_folds(date(2020, 1, 1), date(2021, 1, 1), train_months=6, test_months=4)
     assert folds, "fixture must produce at least one fold"
 
@@ -66,3 +65,64 @@ def test_optimize_strategy_sync_does_not_rerun_backtest_for_is_return(monkeypatc
         f"OOS), got {call_count['n']} — IS return must reuse train_fold's result, not "
         f"re-run the backtest"
     )
+
+
+def test_empty_training_winner_cannot_inflate_proposal_evidence(monkeypatch):
+    """Trades from untuned defaults must not qualify a different fold's proposal."""
+    from types import SimpleNamespace
+    import app.services.strategy_backtest as sb
+    import app.services.strategy_param_optimizer as optimizer
+
+    empty = SimpleNamespace(test_start=date(2020, 7, 1), test_end=date(2020, 9, 1))
+    valid = SimpleNamespace(test_start=date(2020, 9, 1), test_end=date(2020, 12, 1))
+    winner = {"ema_period": 20}
+    result = SimpleNamespace(n_trades=1, total_return_pct=3.0, sharpe=0.25,
+                             win_rate=0.5, expectancy=0.1, max_drawdown_pct=-2.0)
+    monkeypatch.setattr(optimizer, "train_fold", lambda *args:
+                        ({}, {}) if args[3] is empty else (winner, {"AAPL": result}))
+    calls = []
+
+    def backtest(bars, **kwargs):
+        calls.append(kwargs["params"])
+        if not kwargs["params"]:
+            return SimpleNamespace(n_trades=100, total_return_pct=10.0, sharpe=10.0,
+                                   win_rate=1.0, expectancy=5.0, max_drawdown_pct=-80.0)
+        return result
+
+    monkeypatch.setattr(sb, "run_strategy_backtest", backtest)
+    proposal = optimizer._optimize_strategy_sync(
+        "pullback_ema", "Bullish", {"AAPL": _synth_bars()}, [empty, valid],
+        search_space={"ema_period": [20]}, costs={"fee_pct": 0, "slippage_pct": 0},
+        min_trades=20, min_consistency=0.5,
+    )
+    # Re-pinned by TRADING-REVIEW-PHASE-C T5: oos_metrics gains n_trades_per_symbol and n_symbols (pooled floor).
+    assert proposal["oos_metrics"] == {
+        "n_trades": 1, "n_trades_per_symbol": 1, "n_symbols": 1,
+        "total_return": 3.0, "sharpe": 0.25,
+        "win_rate": 0.5, "expectancy": 0.1, "max_drawdown": -2.0,
+    }
+    assert proposal["eligible"] is False
+    assert "safe to adopt" not in proposal["recommendation"]
+    assert proposal["fold_winners"] == [winner]
+    assert calls == [winner]
+
+
+def test_all_empty_training_winners_skip_oos(monkeypatch):
+    from types import SimpleNamespace
+    import app.services.strategy_backtest as sb
+    import app.services.strategy_param_optimizer as optimizer
+
+    fold = SimpleNamespace(test_start=date(2020, 7, 1), test_end=date(2020, 10, 1))
+    monkeypatch.setattr(optimizer, "train_fold", lambda *args: ({}, {}))
+
+    def unexpected_backtest(*args, **kwargs):
+        raise AssertionError("An empty training winner must never be evaluated OOS")
+
+    from unittest.mock import Mock
+    backtest = Mock(side_effect=unexpected_backtest)
+    monkeypatch.setattr(sb, "run_strategy_backtest", backtest)
+    assert optimizer._optimize_strategy_sync(
+        "pullback_ema", "Bullish", {"AAPL": _synth_bars()}, [fold],
+        search_space={"ema_period": [20]}, costs={}, min_trades=20, min_consistency=0.5,
+    ) is None
+    backtest.assert_not_called()

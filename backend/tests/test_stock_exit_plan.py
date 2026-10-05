@@ -279,15 +279,15 @@ class TestRecommendedShares:
         )
         assert _post().json()["riskBudget"] == expected
 
-    def test_a_zero_risk_budget_yields_none_not_an_unbounded_size(self):
+    def test_zero_account_refuses_exit_plan(self):
         from app.services import portfolio_risk
         with patch.object(
             portfolio_risk, "_load_config",
             return_value={"portfolio": {"portfolio_value": 0.0, "max_loss_per_trade_pct": 0.0375}},
         ):
-            body = _post().json()
-        assert body["riskBudget"] == 0.0
-        assert body["recommendedShares"] is None
+            response = _post()
+        assert response.status_code == 422
+        assert "Invalid server account value" in response.json()["detail"]
 
     def test_a_missing_portfolio_block_yields_none_rather_than_a_crash(self):
         from app.services import portfolio_risk
@@ -736,3 +736,13 @@ class TestMisc:
         assert _model_caveat_for("mean_reversion_rsi") == _MEAN_REVERSION_CAVEAT
         assert _model_caveat_for(None) is None
         assert _model_caveat_for("") is None
+
+
+def test_missing_account_key_uses_default_for_exit_plan_sizing():
+    from app.services import portfolio_risk
+    with patch.object(portfolio_risk, '_load_config', return_value={'portfolio': {'max_loss_per_trade_pct': 0.0375}}):
+        response = _post()
+    assert response.status_code == 200
+    body = response.json()
+    assert body['riskBudget'] == 3750
+    assert body['recommendedShares'] == math.floor(3750 / body['stop']['riskPerShare'])
