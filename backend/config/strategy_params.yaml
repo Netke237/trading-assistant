@@ -34,6 +34,7 @@ job_retention:
 optimization:
   min_trades: 20
   min_consistency: 0.5
+  min_symbols: 3
 
 basket:
   per_sector: 5

@@ -62,7 +62,8 @@ from app.services.strategy_engine import (
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
-from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
+from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
+from app.data.confidence_cache import generation as conf_generation
 from app.scoring.signal_confidence import compute_confidence, interpret, load_backtest_cfg
 from app.scoring.first_passage import estimate_stock_first_passage
 # compute_final_stop / compute_target_row take candles, a direction, a price
@@ -637,8 +638,10 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     # confidence / summary_text are decided on them, and the scan and the
     # Analysis page share this cache -- without them a run at 5 trades served
     # its verdict to a later run at 10 for up to _BACKTEST_TTL.
-    return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}|{commission:.6f}"
-            f"|{min_trades}|{min_win_rate!r}")
+    # TRADING-REVIEW-PHASE-C T2: the bar basis version too, right after the bars
+    # hash (a hash of closes alone does not see a basis change in open/high/low).
+    return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{BARS_BASIS_VERSION}"
+            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}")
 
 
 def _get_backtest_cached(key: str):
@@ -689,6 +692,9 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     is_index = _is_index(symbol)
     end = date.today()
     start = end - timedelta(days=_HISTORY_YEARS * 365)
+    # Captured before the read: a refresh evicting this symbol after it makes
+    # set_cached drop the confidence computed from these bars (audit R2-F1).
+    _bars_gen = conf_generation()
     bars = await get_historical_bars(symbol, start, end)
     if not bars or len(bars) < 60:
         return None
@@ -863,7 +869,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                                            horizon=req.horizon, scoring_mode="stock",
                                            atr_mult_target=_atr_target, atr_mult_stop=_atr_stop)
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-            await set_cached(_ck, _cached)
+            await set_cached(_ck, _cached, bars_generation=_bars_gen)
         conf_val = _cached["confidence"]
         conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
         _below_reject = (conf_val is not None and req.confidence_reject_below is not None
@@ -1124,6 +1130,9 @@ async def _process_stock(
             start = end - timedelta(days=_HISTORY_YEARS * 365)
             # DB-first: reads from ohlcv_daily table; fetches delta from Tiingo if stale.
             # Eliminates parallel Tiingo calls for large universes (avoids rate-limit errors).
+            # The generation is captured before the read: a refresh evicting this
+            # symbol after it makes set_cached drop the confidence (audit R2-F1).
+            _bars_gen = conf_generation()
             bars = await get_historical_bars(symbol, start, end)
             if not bars or len(bars) < 60:
                 return {"symbol": symbol, "reason": "insufficient history"}
@@ -1317,7 +1326,7 @@ async def _process_stock(
                     scoring_mode="stock", atr_mult_target=_atr_target, atr_mult_stop=_atr_stop,
                 )
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-                await set_cached(_ck, _cached)
+                await set_cached(_ck, _cached, bars_generation=_bars_gen)
             conf_val = _cached["confidence"]
             conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
 

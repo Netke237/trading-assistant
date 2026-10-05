@@ -277,29 +277,46 @@ def test_below_gate_result_preserves_real_trade_stats():
     assert str(below_gate.n_trades) in below_gate.summary_text
 
 
-def test_backtest_result_changes_with_params():
+def test_backtest_result_changes_with_params(monkeypatch):
     """run_strategy_backtest must actually use the params dict passed to it —
-    two materially different param sets on the same bars should not be
-    guaranteed to produce identical trade counts (Critical finding #7, 2026-07-15 audit).
+    the params it is given must reach the signal function (Critical finding #7,
+    2026-07-15 audit).
     This exercises run_strategy_backtest directly; the router-level fix (threading
     live signal_kwargs into this params argument) is verified by code inspection
     of stock_scan.py's two call sites, which have no isolated per-call unit test
-    since they require a full StockAnalysisRequest fixture."""
+    since they require a full StockAnalysisRequest fixture.
+
+    TRADING-REVIEW-PHASE-C T6: this used to compare trade counts of a tight and a
+    loose tolerance on `_synth_bars(500, trend=True)`. On that staircase every
+    pullback_ema fill came from a stale entry limit, so with DAY limits both
+    param sets trade 0 times and the comparison could no longer see whether
+    params were forwarded. A recorder that delegates to the real signal function
+    now checks the forwarding directly: it sees the passed `tolerance` on every
+    call, and would see no `tolerance` at all (the strategy's `exit:` block does
+    not carry one) if params were dropped."""
+    import app.services.strategy_engine as strategy_engine
+
+    real_signal = strategy_engine.pullback_ema_signal
+    seen_tolerances: list = []
+
+    def _recording_signal(bars, **kwargs):
+        seen_tolerances.append(kwargs.get("tolerance"))
+        return real_signal(bars, **kwargs)
+
+    # run_strategy_backtest imports the signal functions at call time, so its
+    # strategy map picks up the patched attribute.
+    monkeypatch.setattr(strategy_engine, "pullback_ema_signal", _recording_signal)
+
     bars = _synth_bars(500, trend=True)
-    # pullback_ema_signal's real kwarg is `tolerance` (strategy_engine.py:250,
-    # default 0.04) — how close price must pull back to the EMA to count as a
-    # setup. A near-zero tolerance should fire far fewer (or differently timed)
-    # entries than a very loose one.
-    # min_signal_rr=0.0 pins the R floor (review fix #6) off, independent of the
-    # YAML value, so the synthetic bars still trade; this test is about params
-    # being forwarded, not the floor.
-    tight = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
-                                   params={"tolerance": 0.005, "min_signal_rr": 0.0})
-    loose = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
-                                   params={"tolerance": 0.15, "min_signal_rr": 0.0})
-    # They must not be silently identical, which is what happens if params is
-    # never forwarded into the signal function.
-    assert tight.n_trades != loose.n_trades or tight.summary_text != loose.summary_text
+    # pullback_ema_signal's real kwarg is `tolerance` (default 0.04) — how close
+    # price must pull back to the EMA to count as a setup.
+    for tolerance in (0.005, 0.15):
+        seen_tolerances.clear()
+        run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                              params={"tolerance": tolerance, "min_signal_rr": 0.0})
+        # The signal function was consulted, and every call got the passed value.
+        assert seen_tolerances, "signal function was never called"
+        assert set(seen_tolerances) == {tolerance}
 
 
 def test_expectancy_uses_real_per_trade_returns_not_aggregate_stats():

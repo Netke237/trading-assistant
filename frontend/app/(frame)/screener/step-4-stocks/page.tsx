@@ -244,8 +244,16 @@ export default function Step4StocksPage() {
     const failures: string[] = [];
     const queued: string[] = [];
     const adjusted: string[] = [];
+    const skipped: string[] = [];
     for (const c of res.candidates) {
       if (afterScanArmedSymbols.has(c.symbol)) {
+        // The arm promises "fire when next scan PASS" (StockAutoTradeArm).
+        // Every candidate passed the backtest gate, but stock_status can still
+        // be CAUTION — that one is not fired, and the notice says so.
+        if (c.stock_status !== 'PASS') {
+          skipped.push(`${c.symbol}: ${c.stock_status}`);
+          continue;
+        }
         // Auto-execute fires with no human in the loop, so there is no overlay to
         // prefer — send the pristine strategy levels. Note this path also did not
         // attach a snapshot before; it still does not, deliberately (the scan result
@@ -274,6 +282,9 @@ export default function Step4StocksPage() {
     }
     if (adjusted.length) {
       noticeParts.push(`Size reduced to fit exposure limits — ${adjusted.join(', ')}`);
+    }
+    if (skipped.length) {
+      noticeParts.push(`Not fired (not PASS): ${skipped.join(', ')}`);
     }
     if (noticeParts.length) setNotice(noticeParts.join(' · '));
   }

@@ -46,7 +46,7 @@ def test_fake_train_parity_guards_exclusion_order_penalty_ties(monkeypatch, case
         wf.precompute_bar_dates(data)
     fold = wf.Fold(date(2020, 3, 1), date(2020, 10, 1), date(2020, 10, 1), date(2021, 1, 1))
     calls = []
-    def fake(data, *, strategy, direction, params, entry_start):
+    def fake(data, *, strategy, direction, params, entry_start, commission):
         marker = data[0]['close']
         assert marker != 99
         assert entry_start == fold.train_start
@@ -77,6 +77,28 @@ def test_fake_train_parity_guards_exclusion_order_penalty_ties(monkeypatch, case
         assert list(actual[1]) == ['FIRST', 'THIRD']
     if case == 'no_trades':
         assert actual == ({}, {})
+
+
+def test_evaluate_job_passes_the_same_commission_as_train_fold(monkeypatch):
+    # TRADING-REVIEW-PHASE-C T4: the harness trains net of per-leg costs, like production.
+    basket = {'FIRST': bars(1), 'SECOND': bars(2)}
+    for data in basket.values():
+        wf.precompute_bar_dates(data)
+    fold = wf.Fold(date(2020, 3, 1), date(2020, 10, 1), date(2020, 10, 1), date(2021, 1, 1))
+    costs = {'fee_pct': .0007, 'slippage_pct': .0005}
+    seen = []
+    def fake(data, *, strategy, direction, params, entry_start, commission):
+        seen.append(commission)
+        return result(1.0)
+    monkeypatch.setattr(wf, 'run_strategy_backtest', fake)
+    expected = wf.train_fold('fake', 'Bullish', basket, fold, {'p': [1, 2]}, costs)
+    production = list(seen)
+    seen.clear()
+    monkeypatch.setattr(harness, '_BASKET', basket)
+    actual = harness.ParallelTrainer(InlinePool())('fake', 'Bullish', basket, fold, {'p': [1, 2]}, costs)
+    assert actual == expected
+    assert seen == production
+    assert seen and all(c == pytest.approx(.0012) for c in seen)
 
 
 def test_checkpoint_exact_roundtrip_and_identity_change(monkeypatch, tmp_path):

@@ -730,6 +730,14 @@ def _detect_candle(bars: list[dict], direction: Direction = "Bullish") -> tuple[
     return False, ""
 
 
+def _event_within(n: int, window: int, event) -> bool:
+    """True if `event(i)` holds for some i in 1..window, where i names the event
+    bar as series[-i] and its prior bar as series[-i - 1]. `n` is the length of the
+    shortest series `event` reads, so the window is bounded by it (series[-n - 1]
+    does not exist). window=1 tests only the last bar."""
+    return any(event(i) for i in range(1, min(window, n - 1) + 1))
+
+
 def _rule_trigger(
     bars: list[dict],
     cfg: dict,
@@ -740,18 +748,30 @@ def _rule_trigger(
     """Returns (RuleResult, volume_bonus)."""
     tc = cfg["trigger"]
     closes = [b["close"] for b in bars]
+    # setup_window_bars (TRADING-REVIEW-PHASE-C T7, review M4): a momentum event
+    # counts if it happened on some bar k within the last W bars AND its state still
+    # holds on the last bar. W=1 is the original last-bar-only behaviour.
+    window = int(tc.get("setup_window_bars", 1))
 
     candle_found, candle_name = _detect_candle(bars, direction)
 
     # ── MACD ──────────────────────────────────────────────────────────────────
     hist = _macd_histogram(closes, tc["macd_fast"], tc["macd_slow"], tc["macd_signal"])
+    rising = tc["macd_histogram_rising"]
     if direction == "Bearish":
-        # Histogram crosses DOWN: was positive, now zero/negative
-        macd_pass = (len(hist) >= 2 and hist[-2] > 0 and hist[-1] <= 0 and
-                     (hist[-1] < hist[-2] if tc["macd_histogram_rising"] else True))
+        # Histogram crosses DOWN at bar k (was positive, now zero/negative), with the
+        # rising/falling confirmation applied at k; still <= 0 on the last bar.
+        def _macd_event(i: int) -> bool:
+            return (hist[-i - 1] > 0 and hist[-i] <= 0 and
+                    (hist[-i] < hist[-i - 1] if rising else True))
+        macd_pass = (len(hist) >= 2 and hist[-1] <= 0 and
+                     _event_within(len(hist), window, _macd_event))
     else:
-        macd_pass = (len(hist) >= 2 and hist[-2] < 0 and hist[-1] >= 0 and
-                     (hist[-1] > hist[-2] if tc["macd_histogram_rising"] else True))
+        def _macd_event(i: int) -> bool:
+            return (hist[-i - 1] < 0 and hist[-i] >= 0 and
+                    (hist[-i] > hist[-i - 1] if rising else True))
+        macd_pass = (len(hist) >= 2 and hist[-1] >= 0 and
+                     _event_within(len(hist), window, _macd_event))
 
     # ── RSI ───────────────────────────────────────────────────────────────────
     rsi_vals = _rsi(closes, tc["rsi_period"])
@@ -761,7 +781,9 @@ def _rule_trigger(
     if direction == "Bearish":
         rsi_ceiling = tc.get("rsi_ceiling", 60)
         if len(rsi_vals) >= 2:
-            rsi_pass = rsi_vals[-2] > rsi_ceiling >= rsi_vals[-1]
+            rsi_pass = (rsi_vals[-1] <= rsi_ceiling and _event_within(
+                len(rsi_vals), window,
+                lambda i: rsi_vals[-i - 1] > rsi_ceiling >= rsi_vals[-i]))
             if not rsi_pass and len(closes) >= div_win and len(rsi_vals) >= div_win:
                 # Bearish divergence: price HH while RSI LH
                 price_high_now  = max(closes[-div_win:])
@@ -773,7 +795,9 @@ def _rule_trigger(
     else:
         rsi_floor = tc["rsi_floor"]
         if len(rsi_vals) >= 2:
-            rsi_pass = rsi_vals[-2] < rsi_floor <= rsi_vals[-1]
+            rsi_pass = (rsi_vals[-1] >= rsi_floor and _event_within(
+                len(rsi_vals), window,
+                lambda i: rsi_vals[-i - 1] < rsi_floor <= rsi_vals[-i]))
             if not rsi_pass and len(closes) >= div_win and len(rsi_vals) >= div_win:
                 # Bullish divergence: price LL while RSI HL
                 price_low_now  = min(closes[-div_win:])
@@ -785,17 +809,23 @@ def _rule_trigger(
 
     # ── Stochastic ────────────────────────────────────────────────────────────
     stoch_k, stoch_d = _stoch(bars, tc["stoch_k"], tc["stoch_d"])
+    # K and D are shorter than bars by different amounts but both end on the last
+    # bar, so they are indexed from the end; the window is bounded by the shorter.
+    stoch_n = min(len(stoch_k), len(stoch_d))
     if direction == "Bearish":
-        # K exits overbought from above: was >= overbought, now K < D
+        # K exits overbought from above at bar k: was >= overbought, now K < D;
+        # K still below D on the last bar.
         overbought = tc.get("stoch_overbought", 70) * (1 - tc.get("stoch_tolerance_pct", 5) / 100)
-        stoch_pass = (len(stoch_k) >= 2 and len(stoch_d) >= 2 and
-                      stoch_k[-2] >= overbought and stoch_k[-1] < stoch_d[-1] and
-                      stoch_k[-2] >= stoch_d[-2])
+        stoch_pass = (stoch_n >= 2 and stoch_k[-1] < stoch_d[-1] and _event_within(
+            stoch_n, window,
+            lambda i: (stoch_k[-i - 1] >= overbought and stoch_k[-i] < stoch_d[-i] and
+                       stoch_k[-i - 1] >= stoch_d[-i - 1])))
     else:
         oversold_threshold = tc["stoch_oversold"] * (1 + tc["stoch_tolerance_pct"] / 100)
-        stoch_pass = (len(stoch_k) >= 2 and len(stoch_d) >= 2 and
-                      stoch_k[-2] <= oversold_threshold and stoch_k[-1] > stoch_d[-1] and
-                      stoch_k[-2] <= stoch_d[-2])
+        stoch_pass = (stoch_n >= 2 and stoch_k[-1] > stoch_d[-1] and _event_within(
+            stoch_n, window,
+            lambda i: (stoch_k[-i - 1] <= oversold_threshold and stoch_k[-i] > stoch_d[-i] and
+                       stoch_k[-i - 1] <= stoch_d[-i - 1])))
 
     momentum_count = sum([macd_pass, rsi_pass, stoch_pass])
     required = tc["momentum_signals_for_pass"]
@@ -811,6 +841,7 @@ def _rule_trigger(
         "stoch_pass": stoch_pass,
         "momentum_count": momentum_count,
         "volume_bonus": vol_bonus,
+        "setup_window_bars": window,
     }
 
     # ── Stock mode: candle = bonus (+15 pts), NOT a gate ─────────────────────
