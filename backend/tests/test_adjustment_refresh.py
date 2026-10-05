@@ -167,7 +167,7 @@ async def test_real_fifteen_percent_move_not_flagged(factory, monkeypatch):
 # ── Refresh ───────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_refresh_fetches_flagged_only_and_upserts(factory, monkeypatch):
+async def test_refresh_fetches_flagged_only_and_upserts(factory, monkeypatch, conf_cache):
     await _seed_batch_step(factory, monkeypatch, "SYM")
     await _store(factory, monkeypatch, "CLEAN",
                  [_bar(d, 50.0) for d in DAYS], _evening(DAYS[9]))
@@ -190,7 +190,7 @@ async def test_refresh_fetches_flagged_only_and_upserts(factory, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_refresh_never_deletes_rows(factory, monkeypatch):
+async def test_refresh_never_deletes_rows(factory, monkeypatch, conf_cache):
     await _seed_batch_step(factory, monkeypatch, "SYM")
     before = await _count(factory, "SYM")
 
@@ -203,7 +203,7 @@ async def test_refresh_never_deletes_rows(factory, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_refresh_adjustments_endpoint(factory, monkeypatch):
+async def test_refresh_adjustments_endpoint(factory, monkeypatch, conf_cache):
     from app.routers.historical_data import router
 
     await _seed_batch_step(factory, monkeypatch, "SYM")
@@ -244,6 +244,7 @@ def conf_cache(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cc, "_DB_PATH", str(tmp_path / "confidence_cache.db"))
     monkeypatch.setattr(cc, "_store", {})
+    monkeypatch.setattr(cc, "_symbol_generation", {}, raising=False)
     cc._init_db()
     return cc
 
@@ -313,3 +314,220 @@ async def test_refresh_failed_symbol_keeps_cached_confidence(factory, monkeypatc
     assert result["failed"] == ["SYM"]
     assert cc.get_cached(sym_key) == {"confidence": 70}
     assert sym_key in _db_keys(cc)
+
+
+# ── In-flight computations across a refresh (audit finding R2-F1) ─────────────
+# A writer reads bars, computes confidence, then stores it. If a refresh evicts the
+# symbol between the read and the store, the store would put the pre-refresh value
+# back for the whole TTL. Each writer captures confidence_cache.generation() before
+# its bars are read and passes it as bars_generation; set_cached drops the value when
+# the symbol was invalidated after that capture.
+
+@pytest.mark.asyncio
+async def test_set_cached_drops_value_computed_before_the_symbols_invalidation(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    g = cc.generation()
+    cc.invalidate_symbol("xyz")
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+
+    assert cc.get_cached(key) is None
+    assert key not in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_set_cached_keeps_other_symbols_value_with_the_same_generation(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("YYY", "Bullish", "Swing", scoring_mode="stock")
+    g = cc.generation()
+    cc.invalidate_symbol("XYZ")
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+
+    assert cc.get_cached(key) == {"confidence": 70}
+    assert key in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_set_cached_keeps_value_whose_generation_follows_the_invalidation(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    cc.invalidate_symbol("XYZ")
+    g = cc.generation()
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+
+    assert cc.get_cached(key) == {"confidence": 70}
+    assert key in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_set_cached_without_generation_stores_as_before(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    cc.invalidate_symbol("XYZ")
+
+    await cc.set_cached(key, {"confidence": 70})
+
+    assert cc.get_cached(key) == {"confidence": 70}
+    assert key in _db_keys(cc)
+
+
+def _keys_for(cc, symbol: str) -> tuple[list[str], list[str]]:
+    """(memory keys, SQLite keys) cached for ``symbol``."""
+    prefix = f"{symbol.upper()}|"
+    return ([k for k in cc._store if k.startswith(prefix)],
+            sorted(k for k in _db_keys(cc) if k.startswith(prefix)))
+
+
+def _conf_stub(calls: list):
+    from types import SimpleNamespace
+
+    def _stub(bars, **kw):
+        calls.append(kw)
+        return SimpleNamespace(confidence=77, sample_size=40)
+    return _stub
+
+
+@pytest.mark.asyncio
+async def test_prefetch_drops_confidence_when_refresh_lands_mid_read(monkeypatch, conf_cache):
+    cc = conf_cache
+    bars = [_bar(d, 100.0) for d in DAYS]
+
+    async def fake_get_bars(symbol, start, end):
+        if symbol == "SYM":
+            cc.invalidate_symbol(symbol)   # a refresh commits while this read is in flight
+        return bars
+
+    calls: list = []
+    monkeypatch.setattr(hs, "get_bars", fake_get_bars)
+    monkeypatch.setattr(hs, "compute_confidence", _conf_stub(calls))
+    monkeypatch.setattr(hs, "_prefetch_state", {})
+
+    await hs._run_prefetch(["SYM", "OTHER"], 1, 0)
+
+    assert len(calls) == 24                       # 12 combos computed per symbol
+    assert _keys_for(cc, "SYM") == ([], [])
+    mem, db = _keys_for(cc, "OTHER")
+    assert len(mem) == len(db) == 12
+
+
+async def _drive_process_stock(monkeypatch, cc, symbol: str, invalidate: bool):
+    from unittest.mock import AsyncMock, MagicMock
+
+    import app.routers.stock_scan as ss
+    from app.schemas.stock_scan import StockScanRequest
+    from tests.test_confidence_gate_stocks import (
+        _make_fake_bars, _make_fake_bt, _make_fake_card, _make_fake_signal,
+    )
+
+    fake_bars = _make_fake_bars()
+
+    async def fake_bars_read(sym, start, end):
+        if invalidate:
+            cc.invalidate_symbol(sym)
+        return fake_bars
+
+    calls: list = []
+    monkeypatch.setattr(ss, "get_historical_bars", fake_bars_read)
+    monkeypatch.setattr(ss, "fetch_company_name_async", AsyncMock(return_value="Co"))
+    monkeypatch.setattr(ss, "fetch_price_async", AsyncMock(return_value=152.0))
+    monkeypatch.setattr(ss, "score_stock", MagicMock(return_value=_make_fake_card()))
+    monkeypatch.setattr(ss, "compute_omm", MagicMock(return_value=None))
+    monkeypatch.setattr(ss, "_get_fundamentals", AsyncMock(return_value=None))
+    monkeypatch.setattr(ss, "_SIGNAL_FNS", {"pullback_ema": lambda *a, **kw: _make_fake_signal()})
+    monkeypatch.setattr(ss, "_get_backtest_cached", lambda key: _make_fake_bt())
+    monkeypatch.setattr(ss, "compute_confidence", _conf_stub(calls))
+    req = StockScanRequest(universe=[symbol], direction="Bullish", horizon="Swing",
+                           strategy="pullback_ema")
+    await ss._process_stock(symbol, req, "scan-r2f1", {}, [])
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_stock_scan_drops_confidence_when_refresh_lands_mid_read(monkeypatch, conf_cache):
+    cc = conf_cache
+    calls = await _drive_process_stock(monkeypatch, cc, "AAPL", invalidate=True)
+    assert len(calls) == 1
+    assert _keys_for(cc, "AAPL") == ([], [])
+
+    calls = await _drive_process_stock(monkeypatch, cc, "MSFT", invalidate=False)
+    assert len(calls) == 1
+    mem, db = _keys_for(cc, "MSFT")
+    assert len(mem) == len(db) == 1
+
+
+async def _drive_analyze_core(monkeypatch, cc, symbol: str, invalidate: bool):
+    import types
+    from unittest.mock import MagicMock
+
+    import app.routers.stock_scan as ss
+    from app.schemas.stock_scan import StockAnalysisRequest
+    from tests.test_a5_analysis_mirrors_scan import _BARS, _offline
+
+    _offline(monkeypatch, conviction=10)
+
+    async def fake_bars_read(sym, start, end):
+        if invalidate and sym == symbol:
+            cc.invalidate_symbol(sym)
+        return _BARS
+
+    sig = MagicMock(entry_price=100.0, stop_price=95.0, target_price=110.0, targets=[110.0],
+                    rr_ratio=2.0, atr=2.0, detail={}, strategy="pullback_ema")
+    calls: list = []
+    monkeypatch.setattr(ss, "get_historical_bars", fake_bars_read)
+    monkeypatch.setitem(ss._SIGNAL_FNS, "pullback_ema", MagicMock(return_value=sig))
+    monkeypatch.setattr(ss, "_get_backtest_cached",
+                        lambda key: types.SimpleNamespace(passes_gate=True, summary_text="ok"))
+    monkeypatch.setattr(ss, "compute_confidence", _conf_stub(calls))
+    await ss._analyze_core(symbol, StockAnalysisRequest(symbol=symbol))
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_stock_analysis_drops_confidence_when_refresh_lands_mid_read(monkeypatch, conf_cache):
+    cc = conf_cache
+    calls = await _drive_analyze_core(monkeypatch, cc, "AAPL", invalidate=True)
+    assert len(calls) == 1
+    assert _keys_for(cc, "AAPL") == ([], [])
+
+    calls = await _drive_analyze_core(monkeypatch, cc, "MSFT", invalidate=False)
+    assert len(calls) == 1
+    mem, db = _keys_for(cc, "MSFT")
+    assert len(mem) == len(db) == 1
+
+
+def test_options_scan_drops_confidence_when_refresh_lands_mid_read(client, conf_cache):
+    """Through POST /api/scan: every symbol's bars are read up front, so a refresh that
+    lands during that read must keep that symbol's confidence out of the cache."""
+    from unittest.mock import patch
+
+    from tests.test_scan_endpoint import (
+        _MOCK_CANDLES, _enter_mock_patches, _force_passing_stock_score, _rr_test_chain,
+    )
+
+    cc = conf_cache
+
+    async def fake_get_bars(symbol, start, end):
+        if symbol == "AAPL":
+            cc.invalidate_symbol(symbol)
+        return list(_MOCK_CANDLES)
+
+    calls: list = []
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Co"), \
+         patch("app.routers.scan.fetch_quotes", return_value={}), \
+         patch("app.services.historical_store.get_bars", fake_get_bars), \
+         patch("app.routers.scan.compute_confidence", _conf_stub(calls)), \
+         _force_passing_stock_score():
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL", "MSFT"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {},
+        })
+
+    assert r.status_code == 200, r.text
+    assert len(calls) == 2                        # both symbols reached the confidence site
+    assert _keys_for(cc, "AAPL") == ([], [])
+    mem, db = _keys_for(cc, "MSFT")
+    assert len(mem) == len(db) == 1

@@ -48,7 +48,8 @@ from app.data.tiingo import fetch_historical_candles
 from app.models.ohlcv_daily import OhlcvDailyModel
 from app.scoring.signal_confidence import compute_confidence
 from app.data.confidence_cache import (
-    cache_key as conf_cache_key, get_cached, invalidate_symbol, set_cached,
+    cache_key as conf_cache_key, generation as conf_generation, get_cached,
+    invalidate_symbol, set_cached,
 )
 
 logger = logging.getLogger(__name__)
@@ -656,6 +657,9 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
             _prefetch_state["current_symbol"] = symbol
             _prefetch_state["elapsed_secs"]   = round(time.monotonic() - start_time, 1)
             try:
+                # Captured before the read: a refresh evicting this symbol after it
+                # makes set_cached drop the confidence computed below (audit R2-F1).
+                _bars_gen = conf_generation()
                 bars = await get_bars(symbol, fetch_start, fetch_end)
                 _prefetch_state["done"] += 1
                 if bars:
@@ -699,7 +703,7 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
                                 await set_cached(_ck, {
                                     "confidence": _res.confidence,
                                     "sample_size": _res.sample_size,
-                                })
+                                }, bars_generation=_bars_gen)
             except Exception as exc:
                 logger.warning("historical_store prefetch: %s failed — %s", symbol, exc)
                 _prefetch_state["failed"] += 1

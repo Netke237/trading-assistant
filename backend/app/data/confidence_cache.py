@@ -11,6 +11,17 @@ from pathlib import Path
 _lock = threading.Lock()
 _store: dict[str, dict] = {}
 
+# Invalidation generations (audit R2-F1). A computation in flight across a refresh
+# (bars read, then historical_store.refresh_adjustments evicts the symbol, then the
+# computation calls set_cached) must not re-store the pre-refresh confidence for the
+# whole TTL. invalidate_symbol stamps the symbol with a new generation; a writer
+# captures generation() before reading its bars and passes it to set_cached, which
+# drops the value when the symbol was invalidated after that capture. In memory on
+# purpose: in-flight computations do not survive a restart, and the eviction already
+# removed the persisted row.
+_generation = 0
+_symbol_generation: dict[str, int] = {}
+
 _TTL_SECONDS = 7 * 24 * 3600  # weekly
 
 # Basis version of the bar-derived values cached here, appended to every key so
@@ -119,10 +130,21 @@ def _write_db(key: str, value: dict, expires_at: float) -> None:
 
 # ── Public API ──────────────────────────────────────────────────────────────
 
-async def set_cached(key: str, value: dict) -> None:
+def generation() -> int:
+    """The current invalidation generation; capture it before reading the bars."""
+    with _lock:
+        return _generation
+
+
+async def set_cached(key: str, value: dict, *, bars_generation: int | None = None) -> None:
     now = time.time()
     expires_at = now + _TTL_SECONDS
     with _lock:
+        # Checked under the same lock as the write, so an invalidation cannot land
+        # between the check and the store. None keeps the unconditional write.
+        if (bars_generation is not None
+                and _symbol_generation.get(key.split("|", 1)[0], 0) > bars_generation):
+            return   # computed from bars read before this symbol's last invalidation
         _store[key] = {**value, "_ts": now}
     # _write_db is intentionally called outside _lock: SQLite has its own
     # write serialisation via file locking. For this cache (deterministic
@@ -169,8 +191,11 @@ def invalidate_symbol(symbol: str) -> int:
     delimiter keeps ``AAPL`` from matching ``AAPLX``. Returns the number removed, or
     the in-memory count if the DB step fails.
     """
+    global _generation
     prefix = f"{symbol.upper()}|"
     with _lock:
+        _generation += 1
+        _symbol_generation[symbol.upper()] = _generation
         keys = [k for k in _store if k.startswith(prefix)]
         for k in keys:
             del _store[k]

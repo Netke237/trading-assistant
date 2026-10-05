@@ -574,6 +574,10 @@ async def _process_symbol(
     direction_min_trend: float | None = None,
     rs_benchmark: list[dict] | None = None,
     rs_misaligned: list[str] | None = None,
+    # confidence_cache.generation() captured by the caller before `bars_map` was
+    # read; set_cached drops a confidence computed from bars read before this
+    # symbol's last invalidation (audit R2-F1). None = unconditional write.
+    bars_generation: int | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -855,7 +859,7 @@ async def _process_symbol(
                 atr_mult_target=atr_mult_target, atr_mult_stop=atr_mult_stop,
             )
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-            await confidence_cache.set_cached(_ck, _cached)
+            await confidence_cache.set_cached(_ck, _cached, bars_generation=bars_generation)
         _conf = _cached["confidence"]
         _conf_n = _cached["sample_size"]
 
@@ -1742,6 +1746,10 @@ async def _execute_scan_core(
     from datetime import date as _date, timedelta as _td
     _bar_end = _date.today()
     _bar_start = _bar_end - _td(days=int(1.75 * 252))  # 441 calendar days ≈ 316 weekdays ≈ ~306 trading days, NOT 252
+    # Captured before any bar is read (this gather, and the per-symbol fallback
+    # fetch later): a refresh evicting a symbol after it makes set_cached drop the
+    # confidence computed from these bars (audit R2-F1).
+    _bars_generation = confidence_cache.generation()
     _bars_results = await asyncio.gather(
         *[_get_bars(sym, _bar_start, _bar_end) for sym in symbols],
         return_exceptions=True,
@@ -1898,6 +1906,7 @@ async def _execute_scan_core(
                 direction_min_trend=_direction_min_trend,
                 rs_benchmark=_rs_bench,
                 rs_misaligned=_rs_misaligned,
+                bars_generation=_bars_generation,
             )
             for symbol in symbols
         ]
