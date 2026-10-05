@@ -11,6 +11,13 @@ from pathlib import Path
 _lock = threading.Lock()
 _store: dict[str, dict] = {}
 
+# Serialises a guarded SQLite write (set_cached with bars_generation) against
+# invalidate_symbol's SQLite DELETE (audit R2-F1): without it the DELETE can run
+# between set_cached's memory write and its INSERT OR REPLACE, and the stale row
+# returns on the next restart's _warm_load. Lock order: _db_lock, then _lock nested
+# inside it, or _lock alone; never _lock then _db_lock, so the two cannot deadlock.
+_db_lock = threading.Lock()
+
 # Invalidation generations (audit R2-F1). A computation in flight across a refresh
 # (bars read, then historical_store.refresh_adjustments evicts the symbol, then the
 # computation calls set_cached) must not re-store the pre-refresh confidence for the
@@ -128,6 +135,19 @@ def _write_db(key: str, value: dict, expires_at: float) -> None:
         pass  # Never block a scan on cache write failure
 
 
+def _write_db_guarded(key: str, value: dict, expires_at: float,
+                      bars_generation: int | None) -> None:
+    """_write_db under _db_lock, dropped if the symbol was invalidated after
+    ``bars_generation`` (re-checked here because invalidate_symbol may have run
+    since set_cached's memory write). None keeps the unconditional write."""
+    with _db_lock:
+        with _lock:
+            if (bars_generation is not None
+                    and _symbol_generation.get(key.split("|", 1)[0], 0) > bars_generation):
+                return
+        _write_db(key, value, expires_at)
+
+
 # ── Public API ──────────────────────────────────────────────────────────────
 
 def generation() -> int:
@@ -146,14 +166,18 @@ async def set_cached(key: str, value: dict, *, bars_generation: int | None = Non
                 and _symbol_generation.get(key.split("|", 1)[0], 0) > bars_generation):
             return   # computed from bars read before this symbol's last invalidation
         _store[key] = {**value, "_ts": now}
-    # _write_db is intentionally called outside _lock: SQLite has its own
-    # write serialisation via file locking. For this cache (deterministic
-    # confidence scores, weekly TTL, low write rate) last-writer-wins is safe.
+    # The SQLite write runs outside _lock (SQLite serialises writers via file
+    # locking; between two writers of the same deterministic value last-writer-
+    # wins is fine) but under _db_lock, with the generation re-checked inside it
+    # (R2-F1). An invalidate_symbol landing after the memory write is then safe
+    # either way: if its generation bump precedes the re-check, the write is
+    # skipped; if it follows, the writer still holds _db_lock, so the
+    # invalidation's DELETE waits and removes the row just written.
     # Offloaded to a thread: this does synchronous disk I/O (open/write/commit/
     # close) and is called from async request handlers running concurrently
     # across up to ~500 symbols per scan — running it inline on the event loop
     # would stall every other concurrent request for the duration of each write.
-    await asyncio.to_thread(_write_db, key, value, expires_at)
+    await asyncio.to_thread(_write_db_guarded, key, value, expires_at, bars_generation)
 
 
 def get_cached(key: str) -> dict | None:
@@ -199,17 +223,22 @@ def invalidate_symbol(symbol: str) -> int:
         keys = [k for k in _store if k.startswith(prefix)]
         for k in keys:
             del _store[k]
+    # _lock is released before _db_lock is taken (lock order: _db_lock then _lock,
+    # never the reverse). The bump above is already visible, so a guarded write that
+    # re-checks after it skips; one already past its re-check holds _db_lock, and this
+    # DELETE waits for its INSERT and then removes it (R2-F1).
     try:
-        conn = sqlite3.connect(_DB_PATH)
-        try:
-            cur = conn.execute(
-                "DELETE FROM confidence_cache WHERE substr(cache_key, 1, ?) = ?",
-                (len(prefix), prefix),
-            )
-            conn.commit()
-            return max(cur.rowcount, len(keys))
-        finally:
-            conn.close()
+        with _db_lock:
+            conn = sqlite3.connect(_DB_PATH)
+            try:
+                cur = conn.execute(
+                    "DELETE FROM confidence_cache WHERE substr(cache_key, 1, ?) = ?",
+                    (len(prefix), prefix),
+                )
+                conn.commit()
+                return max(cur.rowcount, len(keys))
+            finally:
+                conn.close()
     except Exception:
         return len(keys)
 

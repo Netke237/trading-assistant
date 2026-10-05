@@ -374,6 +374,71 @@ async def test_set_cached_without_generation_stores_as_before(conf_cache):
     assert key in _db_keys(cc)
 
 
+@pytest.mark.asyncio
+async def test_set_cached_db_write_does_not_resurrect_row_evicted_mid_write(monkeypatch, conf_cache):
+    """The memory write passed the generation check, then invalidate_symbol lands
+    before the SQLite write. Its DELETE must not run ahead of the writer's INSERT,
+    or the stale row comes back on the next restart's warm load (R2-F1).
+
+    Deterministic interleaving, no sleeps: when the SQLite write for XYZ begins, an
+    invalidation thread is started and the write waits until that thread has either
+    finished (DELETE already run) or is about to take _db_lock (DELETE held back).
+    """
+    import threading
+
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    other = cc.cache_key("YYY", "Bullish", "Swing", scoring_mode="stock")
+    g = cc.generation()
+
+    reached = threading.Event()   # invalidation finished, or is waiting on _db_lock
+    inval: dict = {}
+    real_db_lock = getattr(cc, "_db_lock", threading.Lock())
+
+    class _ObservedLock:
+        def __enter__(self):
+            if threading.current_thread() is inval.get("thread"):
+                reached.set()
+            real_db_lock.acquire()
+            return self
+
+        def __exit__(self, *exc):
+            real_db_lock.release()
+            return False
+
+    monkeypatch.setattr(cc, "_db_lock", _ObservedLock(), raising=False)
+
+    def _invalidate():
+        try:
+            cc.invalidate_symbol("XYZ")
+        finally:
+            reached.set()
+
+    real_write_db = cc._write_db
+
+    def _write_db_with_eviction(k, value, expires_at):
+        if k == key and "thread" not in inval:
+            t = threading.Thread(target=_invalidate)
+            inval["thread"] = t
+            t.start()
+            assert reached.wait(timeout=10), "invalidation thread never progressed"
+        real_write_db(k, value, expires_at)
+
+    monkeypatch.setattr(cc, "_write_db", _write_db_with_eviction)
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+    inval["thread"].join(timeout=10)
+    assert not inval["thread"].is_alive()
+
+    assert key not in _db_keys(cc)
+    assert cc.get_cached(key) is None
+
+    # An unconditional write for another symbol still reaches SQLite.
+    await cc.set_cached(other, {"confidence": 55})
+    assert other in _db_keys(cc)
+    assert cc.get_cached(other) == {"confidence": 55}
+
+
 def _keys_for(cc, symbol: str) -> tuple[list[str], list[str]]:
     """(memory keys, SQLite keys) cached for ``symbol``."""
     prefix = f"{symbol.upper()}|"
