@@ -10,7 +10,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap", "mean_reversion_vwap_daily"]
 
 
 def normalize_direction(direction: str | None) -> Literal["Bullish", "Bearish"]:
@@ -96,6 +96,7 @@ def run_strategy_backtest(
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
         mean_reversion_bb_signal, mean_reversion_vwap_signal,
+        mean_reversion_vwap_daily_signal,
     )
     from app.services.strategy_param_store import get_exit
 
@@ -106,6 +107,7 @@ def run_strategy_backtest(
         "mean_reversion_rsi":    mean_reversion_rsi_signal,
         "mean_reversion_bb":     mean_reversion_bb_signal,
         "mean_reversion_vwap":   mean_reversion_vwap_signal,
+        "mean_reversion_vwap_daily": mean_reversion_vwap_daily_signal,
     }.get(strategy)
 
     if not _signal_fn:

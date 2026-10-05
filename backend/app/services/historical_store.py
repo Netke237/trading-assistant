@@ -503,11 +503,15 @@ async def _fetch_window(symbol: str, start: date, end: date) -> list[dict]:
 async def refresh_adjustments(
     symbols: list[str],
     fetch: Callable[[str, date, date], Awaitable[list[dict]]] | None = None,
+    on_refreshed: Callable[[str], None] | None = None,
 ) -> dict:
     """Re-fetch and upsert the whole stored window of every stale symbol. Never deletes.
 
     An empty ``symbols`` list means every symbol in ``ohlcv_daily``. ``fetch`` exists for
     tests; by default the provider chain get_bars uses (Alpaca → Tiingo → yfinance).
+    ``on_refreshed`` is called once per refreshed symbol, right after its confidence
+    eviction; the endpoint passes the stock-scan backtest-cache eviction (a service
+    must not import a router; TRADING-REVIEW-PHASE-C-HYGIENE T6).
     """
     fetch = fetch if fetch is not None else _fetch_window
     stale: list[dict] = []
@@ -558,6 +562,10 @@ async def refresh_adjustments(
             # The confidence cache key does not depend on the bars: evict the cached
             # values computed on the pre-refresh series (audit finding R1-F1).
             invalidate_symbol(symbol)
+            # After the invalidation, with no await between: a backtest in flight
+            # across this refresh sees the symbol invalidated and does not store.
+            if on_refreshed is not None:
+                on_refreshed(symbol)
             refreshed.append(symbol)
     return {
         "checked":   len(symbols),

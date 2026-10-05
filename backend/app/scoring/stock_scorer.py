@@ -750,8 +750,10 @@ def _rule_trigger(
     closes = [b["close"] for b in bars]
     # setup_window_bars (TRADING-REVIEW-PHASE-C T7, review M4): a momentum event
     # counts if it happened on some bar k within the last W bars AND its state still
-    # holds on the last bar. W=1 is the original last-bar-only behaviour.
-    window = int(tc.get("setup_window_bars", 1))
+    # holds on the last bar. W=1 is the original last-bar-only behaviour. A value
+    # below 1 would test no bar at all, so it reads as 1; config health warns
+    # about it (Phase C hygiene T4).
+    window = max(1, int(tc.get("setup_window_bars", 1)))
 
     candle_found, candle_name = _detect_candle(bars, direction)
 

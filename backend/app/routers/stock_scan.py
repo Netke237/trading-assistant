@@ -9,7 +9,7 @@ import logging
 import math
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from decimal import Decimal
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path as _Path
@@ -62,8 +62,10 @@ from app.services.strategy_engine import (
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
+from app.services.walk_forward import commission_for
 from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
 from app.data.confidence_cache import generation as conf_generation
+from app.data.confidence_cache import invalidated_since as conf_invalidated_since
 from app.scoring.signal_confidence import compute_confidence, interpret, load_backtest_cfg
 from app.scoring.first_passage import estimate_stock_first_passage
 # compute_final_stop / compute_target_row take candles, a direction, a price
@@ -205,9 +207,9 @@ def _backtest_commission() -> float:
     """Per-leg cost drag sourced from the same strategy_params.yaml `costs`
     block the WFO tuner (strategy_param_optimizer.py) already uses — keeps
     the Step-6 trader-facing backtest gate cost-aware instead of the
-    commission-free number it showed before (2026-08-18 audit finding)."""
-    costs = get_costs()
-    return costs.get("fee_pct", 0.001) + costs.get("slippage_pct", 0.001)
+    commission-free number it showed before (2026-08-18 audit finding).
+    Same rule as walk_forward.commission_for (Phase C T4)."""
+    return commission_for(get_costs())
 
 
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
@@ -651,6 +653,25 @@ def _get_backtest_cached(key: str):
     return None
 
 
+def evict_backtest_cache(symbols: Iterable[str]) -> int:
+    """Remove every cached BacktestResult for ``symbols``; returns the count removed.
+
+    _backtest_key hashes only the last 20 bars, so an adjustment refresh that
+    rewrites older bars (historical_store.refresh_adjustments) leaves the key
+    unchanged; without this the pre-refresh result is served for _BACKTEST_TTL
+    (TRADING-REVIEW-PHASE-C-HYGIENE T6). Exact prefix with the ``|`` delimiter,
+    so ``AAPL`` never evicts ``AAPLX``. A backtest in flight across the refresh
+    is kept out by the invalidated_since check at the two stores below.
+    """
+    prefixes = tuple(f"{s.upper()}|" for s in symbols)
+    if not prefixes:
+        return 0
+    keys = [k for k in list(_BACKTEST_CACHE) if k.startswith(prefixes)]
+    for k in keys:
+        _BACKTEST_CACHE.pop(k, None)
+    return len(keys)
+
+
 _INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "IWM", "SPX", "NDX", "VIX",
                   "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC"}
 
@@ -854,7 +875,11 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                                   direction=req.direction, min_trades=req.bt_min_trades,
                                   min_win_rate=req.bt_min_win_rate, params=_bt_params,
                                   commission=_bt_commission))
-            _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+            # A refresh that landed after this request read its bars has already
+            # evicted the symbol: storing now would put the pre-refresh result back
+            # for _BACKTEST_TTL. It is still this request's result (T6, HYG-P1-F2).
+            if not conf_invalidated_since(symbol, _bars_gen):
+                _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if (_drop := _backtest_drop(symbol, bt_result)):
             gate_flags.append(_scan_drop_flag("backtest", _drop))
         # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
@@ -1309,7 +1334,10 @@ async def _process_stock(
                         params=_bt_params, commission=_bt_commission,
                     ),
                 )
-                _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+                # Same in-flight guard as _analyze_core's store (T6, HYG-P1-F2): not
+                # stored when a refresh invalidated the symbol after the bars read.
+                if not conf_invalidated_since(symbol, _bars_gen):
+                    _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
             if (_drop := _backtest_drop(symbol, bt_result)):
                 return _drop
 

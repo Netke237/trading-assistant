@@ -245,6 +245,7 @@ def conf_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_DB_PATH", str(tmp_path / "confidence_cache.db"))
     monkeypatch.setattr(cc, "_store", {})
     monkeypatch.setattr(cc, "_symbol_generation", {}, raising=False)
+    monkeypatch.setattr(cc, "_clear_generation", 0, raising=False)
     cc._init_db()
     return cc
 
@@ -439,6 +440,102 @@ async def test_set_cached_db_write_does_not_resurrect_row_evicted_mid_write(monk
     assert cc.get_cached(other) == {"confidence": 55}
 
 
+# ── clear_cache invalidates in-flight writes (TRADING-REVIEW-PHASE-C-HYGIENE T2) ──
+# clear_cache() is a whole-cache invalidation: a value computed from bars read before
+# the clear must not land in memory or SQLite afterwards, exactly as for one symbol's
+# invalidate_symbol above.
+
+@pytest.mark.asyncio
+async def test_set_cached_drops_value_computed_before_clear_cache(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    g = cc.generation()
+    cc.clear_cache()
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+
+    assert cc.get_cached(key) is None
+    assert key not in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_set_cached_without_generation_stores_after_clear_cache(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    cc.clear_cache()
+
+    await cc.set_cached(key, {"confidence": 70})
+
+    assert cc.get_cached(key) == {"confidence": 70}
+    assert key in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_set_cached_db_write_does_not_resurrect_row_cleared_mid_write(monkeypatch, conf_cache):
+    """The memory write passed the generation check, then clear_cache lands before
+    the SQLite write. Its DELETE must wait for the writer's INSERT (it takes
+    _db_lock), or the stale row comes back on the next restart's warm load.
+
+    Same deterministic interleaving as the R2-F1 test above: when the SQLite write
+    for XYZ begins, a clear_cache thread is started and the write waits until that
+    thread has either finished (DELETE already run) or is about to take _db_lock
+    (DELETE held back).
+    """
+    import threading
+
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    other = cc.cache_key("YYY", "Bullish", "Swing", scoring_mode="stock")
+    g = cc.generation()
+
+    reached = threading.Event()   # clear finished, or is waiting on _db_lock
+    clearer: dict = {}
+    real_db_lock = getattr(cc, "_db_lock", threading.Lock())
+
+    class _ObservedLock:
+        def __enter__(self):
+            if threading.current_thread() is clearer.get("thread"):
+                reached.set()
+            real_db_lock.acquire()
+            return self
+
+        def __exit__(self, *exc):
+            real_db_lock.release()
+            return False
+
+    monkeypatch.setattr(cc, "_db_lock", _ObservedLock(), raising=False)
+
+    def _clear():
+        try:
+            cc.clear_cache()
+        finally:
+            reached.set()
+
+    real_write_db = cc._write_db
+
+    def _write_db_with_clear(k, value, expires_at):
+        if k == key and "thread" not in clearer:
+            t = threading.Thread(target=_clear)
+            clearer["thread"] = t
+            t.start()
+            assert reached.wait(timeout=10), "clear_cache thread never progressed"
+        real_write_db(k, value, expires_at)
+
+    monkeypatch.setattr(cc, "_write_db", _write_db_with_clear)
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+    clearer["thread"].join(timeout=10)
+    assert not clearer["thread"].is_alive()
+
+    assert key not in _db_keys(cc)
+    assert cc.get_cached(key) is None
+
+    # An unconditional write after the clear still reaches SQLite.
+    await cc.set_cached(other, {"confidence": 55})
+    assert other in _db_keys(cc)
+    assert cc.get_cached(other) == {"confidence": 55}
+
+
 def _keys_for(cc, symbol: str) -> tuple[list[str], list[str]]:
     """(memory keys, SQLite keys) cached for ``symbol``."""
     prefix = f"{symbol.upper()}|"
@@ -596,3 +693,209 @@ def test_options_scan_drops_confidence_when_refresh_lands_mid_read(client, conf_
     assert _keys_for(cc, "AAPL") == ([], [])
     mem, db = _keys_for(cc, "MSFT")
     assert len(mem) == len(db) == 1
+
+
+# ── Backtest-cache eviction on refresh (TRADING-REVIEW-PHASE-C-HYGIENE T6) ────
+# stock_scan._backtest_key hashes only the last 20 (time, close) pairs, so a refresh
+# that rewrites older adj_factors leaves the key unchanged and the pre-refresh
+# BacktestResult would be served for _BACKTEST_TTL (24 h). refresh_adjustments evicts
+# the refreshed symbol's entries (through the endpoint's on_refreshed callback), and a
+# backtest in flight across the refresh is used for its own request but not stored.
+
+@pytest.fixture
+def bt_cache(monkeypatch):
+    """An empty, isolated stock_scan._BACKTEST_CACHE."""
+    import app.routers.stock_scan as ss
+
+    cache: dict = {}
+    monkeypatch.setattr(ss, "_BACKTEST_CACHE", cache)
+    return cache
+
+
+def _bt_entry():
+    import time as _time
+
+    return (object(), _time.time() + 3600)
+
+
+def test_evict_backtest_cache_is_an_exact_prefix_match(bt_cache):
+    import app.routers.stock_scan as ss
+
+    bt_cache["AAPL|pullback_ema|bullish|h1|b2|p|0.002000|None|None"] = _bt_entry()
+    bt_cache["AAPLX|pullback_ema|bullish|h1|b2|p|0.002000|None|None"] = _bt_entry()
+
+    assert ss.evict_backtest_cache(["aapl"]) == 1
+
+    assert list(bt_cache) == ["AAPLX|pullback_ema|bullish|h1|b2|p|0.002000|None|None"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_calls_on_refreshed_once_per_refreshed_symbol(factory, monkeypatch, conf_cache):
+    cc = conf_cache
+    await _seed_batch_step(factory, monkeypatch, "SYM")
+    await _seed_batch_step(factory, monkeypatch, "FAIL")
+    await _store(factory, monkeypatch, "CLEAN",
+                 [_bar(d, 50.0) for d in DAYS], _evening(DAYS[9]))
+
+    async def fake(symbol, start, end):
+        if symbol == "FAIL":
+            raise RuntimeError("provider down")
+        return [_bar(d, 100.0, adj=1.0) for d in DAYS]
+
+    g = cc.generation()
+    seen: list[tuple[str, bool]] = []
+
+    def spy(symbol):
+        # Called after invalidate_symbol, so an in-flight writer's generation is stale.
+        seen.append((symbol, cc.invalidated_since(symbol, g)))
+
+    monkeypatch.setattr(hs, "_utcnow", lambda: _evening(DAYS[9]) + timedelta(days=2))
+    result = await hs.refresh_adjustments(["SYM", "FAIL", "CLEAN"], fetch=fake, on_refreshed=spy)
+
+    assert result["refreshed"] == ["SYM"]
+    assert result["failed"] == ["FAIL"]
+    assert seen == [("SYM", True)]
+
+
+@pytest.mark.asyncio
+async def test_refresh_adjustments_endpoint_evicts_refreshed_symbols_backtests(
+        factory, monkeypatch, conf_cache, bt_cache):
+    from app.routers.historical_data import router
+
+    await _seed_batch_step(factory, monkeypatch, "AAPL")
+    aapl = ["AAPL|pullback_ema|bullish|h1|b2|p|0.002000|None|None",
+            "AAPL|breakout_base|bearish|h2|b2|p|0.002000|5|0.5"]
+    others = ["AAPLX|pullback_ema|bullish|h1|b2|p|0.002000|None|None",
+              "MSFT|pullback_ema|bullish|h1|b2|p|0.002000|None|None"]
+    for k in aapl + others:
+        bt_cache[k] = _bt_entry()
+
+    async def fake(symbol, start, end):
+        return [_bar(d, 100.0, adj=1.0) for d in DAYS]
+
+    monkeypatch.setattr(hs, "_fetch_window", fake)
+    monkeypatch.setattr(hs, "_utcnow", lambda: _evening(DAYS[9]) + timedelta(days=2))
+
+    app = FastAPI()
+    app.include_router(router)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/api/historical-data/refresh-adjustments", json={"symbols": ["AAPL", "MSFT"]}
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["refreshed"] == ["AAPL"]
+    assert not [k for k in bt_cache if k.startswith("AAPL|")]
+    assert sorted(bt_cache) == sorted(others)
+
+
+def test_invalidated_since(conf_cache):
+    cc = conf_cache
+    g = cc.generation()
+    cc.invalidate_symbol("AAPL")
+
+    assert cc.invalidated_since("AAPL", g) is True
+    assert cc.invalidated_since("aapl", g) is True
+    assert cc.invalidated_since("MSFT", g) is False
+    assert cc.invalidated_since("AAPL", cc.generation()) is False
+
+    cc.clear_cache()
+
+    assert cc.invalidated_since("AAPL", g) is True
+    assert cc.invalidated_since("MSFT", g) is True
+
+
+# The interleaving (plan round 1, HYG-P1-F2): a request read the bars, then awaits its
+# backtest; a refresh invalidates + evicts the symbol while the backtest runs. The
+# result must not be stored afterwards. _BACKTEST_POOL is a ProcessPoolExecutor and a
+# stub in a child process cannot touch this process's caches, so the pool is replaced
+# by the loop's default thread executor (None) and the stubbed backtest runs the
+# refresh's two steps itself, in this process, before it returns.
+
+def _in_flight_backtest(monkeypatch, cc, refresh_symbol: str | None, n_trades: int):
+    import app.routers.stock_scan as ss
+    from tests.test_confidence_gate_stocks import _make_fake_bt
+
+    calls: list[str] = []
+
+    def fake_backtest(bars, **kw):
+        calls.append(kw["strategy"])
+        if refresh_symbol is not None:
+            cc.invalidate_symbol(refresh_symbol)        # refresh_adjustments, then
+            ss.evict_backtest_cache([refresh_symbol])   # the endpoint's on_refreshed
+        bt = _make_fake_bt()
+        bt.n_trades = n_trades
+        return bt
+
+    monkeypatch.setattr(ss, "_BACKTEST_POOL", None)
+    monkeypatch.setattr(ss, "run_strategy_backtest", fake_backtest)
+    return calls
+
+
+async def _scan_path_with_backtest(monkeypatch, symbol: str):
+    """_process_stock (its _BACKTEST_CACHE store); returns the n_trades it reports."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    import app.routers.stock_scan as ss
+    from app.schemas.stock_scan import StockScanRequest
+    from tests.test_confidence_gate_stocks import (
+        _make_fake_bars, _make_fake_card, _make_fake_signal,
+    )
+
+    fake_bars = _make_fake_bars()
+
+    async def bars_read(sym, start, end):
+        return fake_bars
+
+    monkeypatch.setattr(ss, "get_historical_bars", bars_read)
+    monkeypatch.setattr(ss, "fetch_company_name_async", AsyncMock(return_value="Co"))
+    monkeypatch.setattr(ss, "fetch_price_async", AsyncMock(return_value=152.0))
+    monkeypatch.setattr(ss, "score_stock", MagicMock(return_value=_make_fake_card()))
+    monkeypatch.setattr(ss, "compute_omm", MagicMock(return_value=None))
+    monkeypatch.setattr(ss, "_get_fundamentals", AsyncMock(return_value=None))
+    monkeypatch.setattr(ss, "_SIGNAL_FNS", {"pullback_ema": lambda *a, **kw: _make_fake_signal()})
+    monkeypatch.setattr(ss, "compute_confidence", _conf_stub([]))
+    req = StockScanRequest(universe=[symbol], direction="Bullish", horizon="Swing",
+                           strategy="pullback_ema")
+    out = await ss._process_stock(symbol, req, "scan-t6", {}, [])
+    assert not isinstance(out, dict), out
+    return out.backtest.n_trades
+
+
+async def _analysis_path_with_backtest(monkeypatch, symbol: str):
+    """_analyze_core (its _BACKTEST_CACHE store); returns the n_trades it uses."""
+    from unittest.mock import MagicMock
+
+    import app.routers.stock_scan as ss
+    from app.schemas.stock_scan import StockAnalysisRequest
+    from tests.test_a5_analysis_mirrors_scan import _offline
+
+    _offline(monkeypatch, conviction=10)
+    sig = MagicMock(entry_price=100.0, stop_price=95.0, target_price=110.0, targets=[110.0],
+                    rr_ratio=2.0, atr=2.0, detail={}, strategy="pullback_ema")
+    monkeypatch.setitem(ss._SIGNAL_FNS, "pullback_ema", MagicMock(return_value=sig))
+    monkeypatch.setattr(ss, "compute_confidence", _conf_stub([]))
+    core = await ss._analyze_core(symbol, StockAnalysisRequest(symbol=symbol))
+    return core.bt_result.n_trades
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("drive", [_scan_path_with_backtest, _analysis_path_with_backtest],
+                         ids=["process_stock", "analyze_core"])
+async def test_backtest_in_flight_across_a_refresh_is_used_but_not_stored(
+        drive, monkeypatch, conf_cache, bt_cache):
+    cc = conf_cache
+
+    # The refresh lands while AAPL's backtest is in flight.
+    calls = _in_flight_backtest(monkeypatch, cc, refresh_symbol="AAPL", n_trades=17)
+    assert await drive(monkeypatch, "AAPL") == 17     # this request still uses it
+    assert calls == ["pullback_ema"]
+    assert not [k for k in bt_cache if k.startswith("AAPL|")]
+
+    # Control: no refresh, the computed backtest is cached as before.
+    calls = _in_flight_backtest(monkeypatch, cc, refresh_symbol=None, n_trades=11)
+    assert await drive(monkeypatch, "MSFT") == 11
+    assert calls == ["pullback_ema"]
+    assert len([k for k in bt_cache if k.startswith("MSFT|")]) == 1

@@ -96,6 +96,19 @@ os.environ.setdefault("BAMENDJOU_SCAN_SCHEDULE_PATH", _TEST_SCAN_SCHEDULE_PATH)
 _TEST_STRATEGY_WATCHES_PATH = Path(_TEST_DB_DIR, "test_strategy_watches.yaml").as_posix()
 os.environ.setdefault("BAMENDJOU_STRATEGY_WATCHES_PATH", _TEST_STRATEGY_WATCHES_PATH)
 
+# ── confidence_cache safety pin (MUST run before any app import) ──────────────
+# Same class again (TRADING-REVIEW-PHASE-C-HYGIENE T1): confidence_cache.py sets
+# _DB_PATH at import to the REAL backend/data/confidence_cache.db and runs
+# _warm_load() at import, which deletes that file's expired rows. Tests that call
+# clear_cache()/set_cached() without monkeypatching _DB_PATH wiped every real
+# cached confidence and left a test row behind (MSFT|bullish|swing|default:default
+# |options|b2, confidence 50) that the backend then served after a restart --
+# confirmed in the real file on 2026-10-05. The module reads this variable before
+# _warm_load(). Per-test monkeypatches of _DB_PATH (test_adjustment_refresh.py)
+# still win; setdefault lets an explicit override still win too.
+_TEST_CONFIDENCE_CACHE_PATH = Path(_TEST_DB_DIR, "test_confidence_cache.db").as_posix()
+os.environ.setdefault("BAMENDJOU_CONFIDENCE_CACHE_DB", _TEST_CONFIDENCE_CACHE_PATH)
+
 import asyncio
 from typing import AsyncGenerator
 from unittest.mock import patch, AsyncMock
