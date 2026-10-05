@@ -41,3 +41,5 @@ S2 does not implement C4 model, confidence sampling/calculation or data-exclusio
 ## Coordinator release
 
 Independent plan round 3 returned zero gate findings; see [review record](../plan-audit-round3.md). User-approved Markdown tickets are finalized. Phase claim STOCKS-STEP-MERGE-S2 acquired on codex/stocks-s2-markdown-draft. W1 assigned next; W2/W3 blocked on verified W1; W4 blocked on W2/W3. Application work remains unaudited until integrated code review.
+
+W1 implementer: `/root/s2_w1_implementer` (active). Plan release commit: `0b8c5304`. W1 code is not yet verified/audited. Parallel C4 evidence preflight completed: missing raw report/historical database and Python 3.11; existing harness requires explicit reviewed retained-symbol list for accepted exclusions.
