@@ -41,7 +41,15 @@ _TTL_SECONDS = 7 * 24 * 3600  # weekly
 BARS_BASIS_VERSION = "b2"
 
 # L2 SQLite path — sits in backend/data/; overridable in tests via _DB_PATH.
-_DB_PATH: str = str(Path(__file__).parent.parent.parent / "data" / "confidence_cache.db")
+# BAMENDJOU_CONFIDENCE_CACHE_DB (when set and non-empty) replaces the default.
+# Read once here, before _warm_load() at the bottom of this module, which reads
+# the file and deletes its expired rows. tests/conftest.py pins it to a session
+# temp file so a test run can never touch the real cache (TRADING-REVIEW-PHASE-C-
+# HYGIENE T1). Unset in production, so the default path is unchanged there.
+_DB_PATH: str = (
+    os.environ.get("BAMENDJOU_CONFIDENCE_CACHE_DB")
+    or str(Path(__file__).parent.parent.parent / "data" / "confidence_cache.db")
+)
 
 
 def cache_key(
