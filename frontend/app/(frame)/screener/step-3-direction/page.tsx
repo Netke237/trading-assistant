@@ -974,7 +974,7 @@ export default function Step3Page() {
         </div>
       )}
 
-      <RunScanButton />
+      {screenerMode !== 'stocks' && <RunScanButton />}
     </div>
   );
 }
