@@ -1,4 +1,4 @@
-# NO-LIVE-QUOTE — plan r1 (rewritten 2026-10-05 against measured data; plan audit pending)
+# NO-LIVE-QUOTE — plan r2 (rewritten 2026-10-05 against measured data; plan round 1 fixed, round 2 pending)
 
 - **Phase:** `NO-LIVE-QUOTE` (PROJECT_STATE.json). Status `not_started`: nothing built.
 - **Origin:** split out of `CONTRACT-LIQUIDITY-DTE` on 2026-09-30 (decision `CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30`).
@@ -224,8 +224,10 @@ The strike is still matched, and the right is fixed by the `option_type` it fetc
 - **The live quote** (`get_option_quote`, `contracts.py:360`): `ContractQuoteResponse` gains
   `quoteLive: bool | None = None` and `quoteState: str | None = None`, filled from the row. `None` means
   "row had no state", which only a fixture produces.
-- **The scan's trade card** comes only from non-REJECT rows, so it is always live. `TradeCardData` gains
-  `noLiveQuote: bool = False` so Step 7 can carry a Step 6 pick's flag (3e).
+- **The scan's trade card** comes only from non-REJECT rows, so it was live **when the scan ran**. That says
+  nothing about now: `scanResult` is persisted (`scanStore.ts` `partialize`), so Step 7 can show yesterday's
+  card. `TradeCardData` gains `noLiveQuote: bool = False` to carry a Step 6 pick's flag (3e). Step 7 never
+  treats `false` as proof of a live quote (3e, round 1 F2).
 - **The bearish spread path** (`scan.py:457-460`) is untouched. It is dead today (§2), and 3a adds no `bid`/`ask`
   keys, so it stays dead. A test pins that chain rows carry no `bid`/`ask` keys.
 
@@ -301,13 +303,27 @@ build adds the marker to `pytest.ini`/`pyproject` markers, so an unknown-marker 
   tagged. Off-hours Step 6 thus still shows a labelled recommendation, which is Q3's "label, don't block".
 - **`applyPickedContract`** (`lib/tradeCardOverride.ts:52`) copies `noLiveQuote` onto the card. A scan card
   defaults to false.
-- **Step 7's warning is driven by the live quote** (r0 finding 9). The rule:
-  - when the Step 7 live quote arrives with `quoteLive === false`, show the warning, worded by state: "No
-    live quote (market closed) — the entry premium is the last close's mid, not a live price".
-  - when the live quote failed (`q == null`), fall back to the card's `noLiveQuote`.
-  - when the live quote says live, show no warning, even if the Step 6 pick was tagged.
-  - `TradeCard` shows the warning. `SendToBrokerDialog` shows it **and requires a confirm tick before Send**
-    while it is shown. This is Q-B in §5; the default is the tick.
+- **Step 7: a contract counts as live only when this visit proved it** (r0 finding 9; round 1 F1 and F2).
+  - **Confirmed live** means that Step 7's live quote for **that exact contract** arrived during this visit,
+    with `quoteLive === true`. Nothing else counts:
+    - a failed or timed-out quote (`q == null`) does not;
+    - the scan card's `noLiveQuote: false` does not, because the card may be a persisted scan from yesterday;
+    - basket items other than the active card, which never fetch a live quote (`page.tsx:959-961`), do not.
+  - **Not confirmed live → the warning shows.** It is worded by what is known, for example:
+    - "No live quote (market closed) — the entry premium is the last close's mid, not a live price";
+    - "Live quote unavailable — the entry premium is the scan-time mid".
+  - **Every Step 7 send path requires a confirm tick while any contract it would send is not confirmed live.**
+    The tick lives in the page's state, next to the warning, and covers three paths:
+    1. **"Place Limit @ $X" and "Right Now — Market"** (`page.tsx:1599`, `:1615`). Both buttons stay
+       `disabled` with a `title` naming the reason until the tick is set. `placeDirectOrder` (`:1113`)
+       re-checks the same condition at its top and returns without sending, the same belt-and-braces shape
+       as its `directOrderBlock` check (`:1131`). This is the primary send route: the page's own comment
+       (`:404`) says `SendToBrokerDialog` is only the basket path.
+    2. **`SendToBrokerDialog`** (the basket path). It shows the warning and requires the tick when any basket
+       row is not confirmed live.
+    3. **Arming auto-trade** needs no tick. The fire gate (3d) re-checks the quote at fire time.
+  - Q-B in §5 chooses between tick (the default), warning only, and refuse. Whichever is chosen applies to
+    paths 1 and 2 alike.
 - **Step 7 recompute** (`page.tsx:914`, r0 finding 2):
   - `spread: q?.spread ?? <the pick's spread>`, never `?? 0`;
   - `RecomputePlanRequest` (`contracts.py`) gains `quote_live: bool | None = None`, sent as
@@ -354,7 +370,7 @@ Test files (r0 finding 17: one named file each):
 
 | ID | File | What it pins |
 |---|---|---|
-| T1 | `tests/test_quote_liveness.py` (new) | `classify_quote` truth table: rule order, absent/0/non-numeric stamps, negative age, feed lag, the `max_age_s` boundary |
+| T1 | `tests/test_quote_liveness.py` (new) | `classify_quote` truth table: rule order, absent/0/non-numeric stamps, negative age, feed lag, the `max_age_s` boundary, and a `session_open=False` row with 5-minute-old stamps (16:05) → `session_closed` |
 | T2 | same file | **Replay of the five committed samples.** Fixtures are trimmed copies of the five `rows.csv` files under `tests/fixtures/tradier_chain_raw/`, with only the columns the classifier reads. Each row is classified at its sample's capture time, with the session flag from the capture's ET wall clock. Expected: weekend, overnight, pre-market and after-close give **0 live rows**; in session gives **741 live, 231 one_sided, 0 stale**, at 30 min |
 | T3 | `tests/test_option_chain_expiry_selection.py` | Both builders: every row carries `quoteState`/`quoteLive`/`quoteAgeS`; no row carries `bid`/`ask`; `ask == 0` rows are dropped; `price`/`spread` unchanged for kept rows; session flag and `now` taken once per fetch; sandbox lag applied |
 | T4 | `tests/test_contracts_expiry.py` | `fetch_contract_quote_async` returns `None` when the chain came back for another expiry |
@@ -364,7 +380,7 @@ Test files (r0 finding 17: one named file each):
 | T8 | `tests/test_no_live_quote_fire_gate.py` (new, `real_quote_gate`) | `_option_quote_state` for each outcome (invalid symbol, session closed with no HTTP call, timeout, non-2xx, no row, `ask == 0`, stale, live); `fire()` raises `ArmPreservedError` before the disarm, the strategy stays armed, no history row is written; the re-arm-with-another-contract window refuses |
 | T9 | `tests/test_entry_quality.py` | `assess_entry(..., quote_live=False)` → CAUTION with the reason; `None` unchanged; `recompute_plan` forwards `quote_live` |
 | T10 | `tests/test_scan_schedule_entry.py` | An all-`no_live_quote` options run's notice carries the clause; `noLiveQuoteNames` counted |
-| T11 | Jest: `step-7-trade-card` + `SendToBrokerDialog` + `ScanLog` | The warning follows the live quote over the pick's flag; Send is disabled until the tick; recompute sends the pick's spread when the quote failed; `REASON_CATEGORY.no_live_quote === 'DATA'` |
+| T11 | Jest: `step-7-trade-card` + `SendToBrokerDialog` + `ScanLog` | Confirmed-live rule: `quoteLive: true` → no warning; `quoteLive: false`, `q == null`, a persisted card with `noLiveQuote: false` and no quote, and a non-active basket item → warning. Place Limit and Market buttons disabled until the tick, and `placeDirectOrder` refuses without it even when called directly; `SendToBrokerDialog` Send disabled until the tick; recompute sends the pick's spread when the quote failed; `REASON_CATEGORY.no_live_quote === 'DATA'` |
 
 Mutations. The build runs each one and confirms it fails a test:
 
@@ -372,13 +388,14 @@ Mutations. The build runs each one and confirms it fails a test:
 |---|---|---|
 | M1 | Restore `elif last > 0: spread = 0.0` | T3 |
 | M2 | Rule 3/4 on the older side (`min` of the stamps) | T2 (in session drops below 741 live) |
-| M3 | Delete the session clause | T2 (after-close rows read live) |
+| M3 | Delete the session clause | T1 (the 16:05 case; T2 alone would not catch it, since the after-close sample's quotes are already 45 minutes old) |
 | M4 | Default `quote_mode="label"` | T6 |
 | M5 | Remove the short-circuit | T6 |
 | M6 | Drop the label-mode CAUTION cap | T6, T7 |
 | M7 | Remove the 3d call from `fire()` | T8 |
 | M8 | Probe in the post-disarm region | T8 (strategy no longer armed) |
 | M9 | Restore `spread: q?.spread ?? 0` | T11 |
+| M12 | Treat `q == null` as live, or drop the tick check from `placeDirectOrder` | T11 |
 | M10 | Drop `feed_lag_s` | T3 (sandbox case) |
 | M11 | `fetch_contract_quote_async` without the expiry check | T4 |
 
@@ -391,7 +408,7 @@ gate.
 
 | # | Finding (short) | Disposition in r1 |
 |---|---|---|
-| 0 | After-close vol 1–49 + fabricated 0% spread reaches a broker order once `min_volume` → 0 | **Closed.** The fabricated spread is removed (3a). Any after-close row is `session_closed` → scan rejects (3b) and fire refuses (3d). Step 7 send: warning + confirm tick (3e, Q-B). §1 shows the real after-close shape is stale non-zero quotes, also covered |
+| 0 | After-close vol 1–49 + fabricated 0% spread reaches a broker order once `min_volume` → 0 | **Closed.** The fabricated spread is removed (3a). Any after-close row is `session_closed` → scan rejects (3b) and fire refuses (3d). Step 7 send: warning + confirm tick on the direct buttons, `placeDirectOrder` and the basket dialog (3e, Q-B). §1 shows the real after-close shape is stale non-zero quotes, also covered |
 | 1 | Verification can't run through `/api/contracts` | **Done.** Step 0 measured the raw endpoint (§1); T2 replays it |
 | 2 | Step 7 recompute sends 0% spread | **Fixed** in 3e. With `spread` never `None`, the `float(None)` 500 at `:388` cannot occur |
 | 3 | 3d: armed-and-silent or consumed? | **Stated:** armed-and-silent, pre-disarm `ArmPreservedError` (3d) |
@@ -400,7 +417,7 @@ gate.
 | 6 | Scheduled-scan rule wrong on four points | **Rewritten** (3f): no auto-trade claim; notice clause from structured `noLiveQuoteNames`; no new run status (the delta loss is below gate, §6); the in-session trigger problem is gone (needs *all* names `no_live_quote`) |
 | 7 | `float(None)` crash sites | **Retired:** 3a never produces a `None` spread (rows with no ask are dropped) |
 | 8 | Frontend turns null spread into 0 | **Retired** for the same reason; types stay `number` |
-| 9 | Step 7 warning from a Step 6 snapshot | **Fixed:** driven by the live quote's `quoteLive`, falling back to the pick (3e) |
+| 9 | Step 7 warning from a Step 6 snapshot | **Fixed:** live only when this visit's live quote proved it; everything else warns (3e) |
 | 10 | 4-part test fails open for OCC; "stock strategies" don't exist | **Fixed:** `to_occ` validation → `invalid_symbol` refusal; claim dropped (3d) |
 | 11 | ~15 test files patch `_market_is_open` | **Fixed:** 16 listed; autouse conftest fixture + `real_quote_gate` marker (3d) |
 | 12 | `price` for `bid == 0, ask > 0` unspecified | **Specified: unchanged (`ask/2`).** Such rows are `one_sided`: rejected in the scan as before, tagged in Step 6 ("no bid"). Changing `price` would move held-position marks for no gain |
@@ -422,8 +439,9 @@ premise: volume resets to 0 at 08:00 ET, before any trade.
   so 30 has a thin margin. 60 halves the false-reject risk on quiet strikes, and doubles the early-close
   residual window (13:00–14:00). **Recommendation: 30.**
 - **Q-B — Step 7 direct send.** Q3 named the scan and auto-trade; it did not name Step 7's send, which the
-  merge-hold question listed as a route. Option (a): warning plus a confirm tick before Send. Option (b):
-  warning only. Option (c): refuse. **Recommendation: (a).**
+  merge-hold question listed as a route. Option (a): warning plus a confirm tick before sending. Option (b):
+  warning only. Option (c): refuse. Whichever is chosen applies to all Step 7 send paths: Place Limit, Market and
+  the basket dialog. **Recommendation: (a).**
 - **Q-C — dropping rows with no ask.** Never observed. Dropping them removes the `None`-spread surface
   entirely, at the cost of a held contract with ask 0 showing "quote unavailable" rather than a last-trade mark.
   **Recommendation: drop.**
