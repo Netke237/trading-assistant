@@ -194,10 +194,19 @@ function buildChecklist(
     label: 'R:R ≥ 2.0', status: 'CAUTION',
     detail: 'Stock stop moved since R/R was measured. Recompute the plan before using its ratio.',
   });
+  // TRADING-REVIEW-PHASE-C-RR (review M7, D5): R/R now risks the full premium.
+  // A ratio measured on any other basis (or none recorded) overstates reward
+  // per unit of real risk, so it is never graded against the thresholds.
+  // Defence in depth: the scanStore v18 migration and the backend schema v3
+  // refusal should already have discarded every such card.
+  else if (candidate.exit.rrRiskBasis !== 'full_premium') gates.push({
+    label: 'R:R ≥ 2.0', status: 'CAUTION',
+    detail: 'R/R computed on an older basis: re-run the scan',
+  });
   else gates.push({
     label: 'R:R ≥ 2.0',
     status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',
-    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}×${candidate.exit.rrRiskBasis ? ` to the target, risking the ${candidate.exit.rrRiskBasis === 'stock_stop' ? 'stock stop' : 'premium stop'} (whichever is hit first)` : ''} — pass ≥2.0×, caution 1.5-2.0×.`,
+    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}× to the target, risking the full premium (no protective stop order) — pass ≥2.0×, caution 1.5-2.0×.`,
   });
 
   // Spread score ≥ 70 (higher = tighter spread)

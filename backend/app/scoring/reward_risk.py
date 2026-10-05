@@ -18,7 +18,7 @@ class RrResult:
     rr_ratio: float
     model_used: RrModel
     estimated_exit_premium: float
-    risk_basis: Literal["premium_stop", "stock_stop"] = "premium_stop"
+    risk_basis: Literal["premium_stop", "stock_stop", "full_premium"] = "premium_stop"
 
 
 def _derive_fallback_sigma(
@@ -123,7 +123,19 @@ def estimate_rr(
     premium_stop_pct: float = 0.60,   # fraction of premium at risk (stop-loss basis)
     risk_fraction: float | None = None,
     reprice_years: float | None = None,   # remaining_years_at_barrier(...); None = historical half-life
+    protective_stop_order: bool = False,
 ) -> RrResult:
+    """Reward/risk of buying the contract at current_premium and selling it
+    when the stock reaches target_price.
+
+    protective_stop_order (TRADING-REVIEW-PHASE-C-RR, review M7, decision D5):
+    no protective option order is ever placed -- the premium stop is an alert
+    level (services/premium_stop.py) and sizing already assumes the whole
+    premium can be lost. So by default (False, every caller today) the risk leg
+    is the FULL premium and risk_basis is "full_premium". True restores the
+    premium-stop / captured stock-stop basis (resolved_risk_dollars) unchanged,
+    for the day a real protective order exists.
+    """
     if captured_stock_risk(current_premium, risk_fraction) is not None:
         current_premium = round(current_premium, 2)
     model_used: RrModel
@@ -149,11 +161,16 @@ def estimate_rr(
 
     exit_premium = max(exit_premium, 0.01)
 
-    risk = resolved_risk_dollars(current_premium, premium_stop_pct, risk_fraction)
     if captured_stock_risk(current_premium, risk_fraction) is not None:
         exit_premium = round(exit_premium, 2)
-    basis = ("stock_stop" if captured_stock_risk(current_premium, risk_fraction) is not None
-             and risk < round(current_premium * premium_stop_pct, 2) else "premium_stop")
+    basis: Literal["premium_stop", "stock_stop", "full_premium"]
+    if protective_stop_order:
+        risk = resolved_risk_dollars(current_premium, premium_stop_pct, risk_fraction)
+        basis = ("stock_stop" if captured_stock_risk(current_premium, risk_fraction) is not None
+                 and risk < round(current_premium * premium_stop_pct, 2) else "premium_stop")
+    else:
+        risk = current_premium   # already cents-rounded above when a stock risk is captured
+        basis = "full_premium"
     reward = exit_premium - current_premium
 
     if risk <= 0:
@@ -181,6 +198,7 @@ def estimate_targets(
     premium_stop_pct: float = 0.60,
     risk_fraction: float | None = None,
     reprice_years: float | None = None,   # remaining_years_at_barrier(...); None = historical half-life
+    protective_stop_order: bool = False,
 ) -> list:
     """
     Build 3 target levels: T1=base, T2=base*1.5 move, T3=base*2.0 move.
@@ -189,6 +207,9 @@ def estimate_targets(
     Each level repriced via Heston if available, else delta approximation.
 
     premium_stop_pct: premium risk ceiling; a valid risk_fraction can lower it.
+                      Read only when protective_stop_order is True.
+    protective_stop_order: False (every caller today) divides each level's
+                      reward by the FULL premium -- see estimate_rr.
     """
     from app.schemas import TargetLevel as TargetLevelSchema, PricingMethod
 
@@ -354,7 +375,8 @@ def estimate_targets(
         if captured_stock_risk(current_premium, risk_fraction) is not None:
             opt_price = round(opt_price, 2)
         reward = opt_price - current_premium
-        risk_basis = resolved_risk_dollars(current_premium, premium_stop_pct, risk_fraction)
+        risk_basis = (resolved_risk_dollars(current_premium, premium_stop_pct, risk_fraction)
+                      if protective_stop_order else current_premium)
         rr = round(reward / risk_basis, 2) if risk_basis > 0 else 0.0
 
         results.append(TargetLevelSchema(

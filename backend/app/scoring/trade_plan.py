@@ -141,8 +141,11 @@ def build_trade_plan(
     # `resolve_stock_stop`'s degenerate-feed fallback.
     #
     # premium_stop_pct remains a separate, independent concept (the dollar
-    # premium_stop field below). Risk uses the smaller valid stock-stop fraction
-    # supplied by the caller, without changing that editable premium-stop field.
+    # premium_stop alert level below). R/R risk is the FULL premium
+    # (TRADING-REVIEW-PHASE-C-RR, decision D5): no protective stop order is
+    # placed, so neither the premium stop nor the captured stock-stop fraction
+    # bounds the loss. No `protective_stop_order` is passed, so the default
+    # applies and rr_risk_basis is "full_premium".
     invalidation_price = max(float(final_stop_price), 0.01)
 
     entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid)
