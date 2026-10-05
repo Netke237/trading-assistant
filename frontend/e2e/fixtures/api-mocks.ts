@@ -178,6 +178,9 @@ export const MOCK_SCAN_CANDIDATE = {
   exit: {
     invalidation: 180,
     premiumStop: 1.0,
+    // TRADING-REVIEW-PHASE-C-RR: the backend's current R/R basis. scanStore v18
+    // discards a seeded options result whose candidates are on any other basis.
+    rrRiskBasis: 'full_premium',
     timeStopDays: 30,
     targets: [
       { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },

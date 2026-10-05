@@ -48,6 +48,7 @@ function createCandidate(symbol: string, overrides: Record<string, unknown> = {}
     exit: {
       invalidation: 140,
       premiumStop: 1.0,
+      rrRiskBasis: 'full_premium', // scanStore v18 discards any other basis (Phase C RR)
       timeStopDays: 30,
       targets: [],
     },
