@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import Step7PositionCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -86,6 +86,61 @@ describe('step-7-position-card — broker order submit()', () => {
   });
   afterEach(() => {
     global.fetch = originalFetch;
+  });
+
+  it('places one real stock total above health and preserves it on collapse', async () => {
+    localStorage.removeItem('bamendjou:stock-position-scores-collapsed');
+    render(<Step7PositionCardPage />);
+    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+    const bar = screen.getByRole('progressbar');
+    expect(screen.getByText('AAPL Inc.').compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(bar).toHaveAttribute('aria-valuenow', '80');
+    expect(toggle.compareDocumentPosition(screen.getByText('Fundamental Health — no data')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('Contract Scorecard')).not.toBeInTheDocument();
+    toggle.focus();
+    expect(toggle).toHaveFocus();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(bar).toBeInTheDocument();
+    expect(bar).not.toBeVisible();
+    expect(localStorage.getItem('bamendjou:stock-position-scores-collapsed')).toBe('1');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('progressbar')).toBe(bar);
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+    await waitFor(() => expect(screen.queryByText('Fetching…')).not.toBeInTheDocument());
+    localStorage.removeItem('bamendjou:stock-position-scores-collapsed');
+  });
+
+  it('uses the selected candidate stock total and captured status independently of confidence', async () => {
+    localStorage.removeItem('bamendjou:stock-position-scores-collapsed');
+    const result = makeScanResult();
+    result.candidates[1] = { ...result.candidates[1], stock_score: 42, stock_status: 'PENDING', confidence: null };
+    useScanStore.setState({ stockScanResult: result });
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'MSFT' }));
+    const group = screen.getByRole('button', { name: /Stock & contract scores/ }).closest('section')!;
+    expect(within(group).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
+    expect(within(group).getAllByText('42/100')[0]).toBeInTheDocument();
+    expect(within(group).getByText('PENDING')).toBeInTheDocument();
+    expect(within(group).queryByText(/confidence|trend/i)).not.toBeInTheDocument();
+    // Existing identity badges remain separate from the total-score panel.
+    expect(screen.getAllByText('PENDING')).toHaveLength(2);
+    expect(screen.getByText('—')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Fetching…')).not.toBeInTheDocument());
+  });
+
+  it('restores the persisted collapse without losing the score content', async () => {
+    localStorage.setItem('bamendjou:stock-position-scores-collapsed', '1');
+    render(<Step7PositionCardPage />);
+    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const group = toggle.closest('section')!;
+    expect(within(group).getByRole('progressbar', { hidden: true })).not.toBeVisible();
+    fireEvent.click(toggle);
+    expect(within(group).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '80');
+    await waitFor(() => expect(screen.queryByText('Fetching…')).not.toBeInTheDocument());
+    localStorage.removeItem('bamendjou:stock-position-scores-collapsed');
   });
 
   it('creates a local position with a snapshot after a successful broker order', async () => {

@@ -4,7 +4,7 @@ Phase: TRADE-CARD-UI-FOLLOWUP
 
 Part of: [Tracking document](TRACKING.md)
 
-Status: ready for implementation
+Status: build complete; integrated phase audit pending
 
 Blocked by: None
 
@@ -16,9 +16,9 @@ Place the exit-method selector beside Final Recommendation. Display the selected
 
 ## Acceptance criteria
 
-- [ ] Test each supported selected method with available, missing and stale results, including no explicit selection.
-- [ ] No stale or unrelated targets appear; selection neither computes nor applies values.
-- [ ] Verify stop basis, race freshness, selection invalidation and execution/persistence callbacks remain correct.
+- [x] Test each supported selected method with available, missing and stale results, including no explicit selection.
+- [x] No stale or unrelated targets appear; selection neither computes nor applies values.
+- [x] Verify stop basis, race freshness, selection invalidation and execution/persistence callbacks remain correct.
 
 ## Source locations to inspect
 
@@ -28,4 +28,4 @@ Place the exit-method selector beside Final Recommendation. Display the selected
 
 ## Validation and closeout
 
-Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation has not started.
+Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation complete. Frontend typecheck and full Jest suite passed (203 suites, 4,720 tests). Browser coverage uses installed Chromium and temporary local font mocks; production Google-font metrics are unverified. Detailed validation and phase audit are recorded in PROJECT_STATE.json and the implementation evidence.

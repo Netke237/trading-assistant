@@ -4,7 +4,7 @@ Phase: TRADE-CARD-UI-FOLLOWUP
 
 Part of: [Tracking document](TRACKING.md)
 
-Status: blocked by TC-UI-06
+Status: build complete; TC-UI-06 dependency satisfied; integrated phase audit pending
 
 Blocked by: TC-UI-06
 
@@ -16,9 +16,9 @@ The long gray logs shown in the second screenshot (captured stock/contract evide
 
 ## Acceptance criteria
 
-- [ ] Evidence is hidden initially and keyboard-expandable with correct aria-expanded.
-- [ ] Captured provenance, units, precision and mismatch guards survive expansion.
-- [ ] Collapsing logs does not hide bars or execution controls, lose state or trigger calculations.
+- [x] Evidence is hidden initially and keyboard-expandable with correct aria-expanded.
+- [x] Captured provenance, units, precision and mismatch guards survive expansion.
+- [x] Collapsing logs does not hide bars or execution controls, lose state or trigger calculations.
 
 ## Source locations to inspect
 
@@ -27,4 +27,4 @@ The long gray logs shown in the second screenshot (captured stock/contract evide
 
 ## Validation and closeout
 
-Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation has not started.
+Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation complete. Frontend typecheck and full Jest suite passed (203 suites, 4,720 tests). Browser coverage uses installed Chromium and temporary local font mocks; production Google-font metrics are unverified. Detailed validation and phase audit are recorded in PROJECT_STATE.json and the implementation evidence.

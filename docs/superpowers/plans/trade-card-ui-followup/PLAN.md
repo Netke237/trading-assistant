@@ -1,7 +1,7 @@
 # Trade card UI follow-up — agreed specification
 
 Date: 2026-10-05. Phase ID: TRADE-CARD-UI-FOLLOWUP.
-Scope: document and prepare tickets; application implementation is not started.
+Scope: implement the seven agreed tickets; implementation authorized after documented grilling. Canonical phase state is in docs/superpowers/PROJECT_STATE.json.
 The user completed grilling and confirmed these decisions. Local Markdown tickets are explicitly authorized as a fallback to unavailable GitHub Issues access. GitHub API read returned Forbidden; no remote issues were created. The requested k-ticket-coordinator skill is not installed; this plan follows docs/agents/ticket-orchestration.md without claiming execution of the unavailable skill.
 
 ## Agreed behavior and build units
@@ -16,7 +16,7 @@ The user completed grilling and confirmed these decisions. Local Markdown ticket
 
 ## Verification and execution sequence
 
-Create one local tracking document and seven child tickets after an independent clean plan review. Tickets 1–4 and 7 have no build dependencies. Ticket 6 precedes ticket 5 to settle evidence ownership and placement. Execute related layout changes serially when they share files. Claim the phase before implementation; establish a branch and valid main/origin/main baseline first. Current checkout cannot resolve those baseline refs in the state check, so no integrated-code audit is claimed.
+Create one local tracking document and seven child tickets after an independent clean plan review. Tickets 1–4 and 7 have no build dependencies. Ticket 6 precedes ticket 5 to settle evidence ownership and placement. Execute related layout changes serially when they share files. Claim the phase before implementation; establish a branch and valid main/origin/main baseline first. Implementation baseline was restored by fetching origin/main and fast-forwarding to 4b06656a. Newer full-premium R/R changes are preserved; code audit must review the integrated branch diff.
 
 Frontend verification: typecheck; focused component and route tests for mode gating, selection/results/freshness, loss-budget behavior and score/evidence independence; browser inspection at 1200px on Options Step 7 and existing supported minimums elsewhere, plus a wide screenshot matching the user's layout. Verify keyboard toggles and aria-expanded, no value clipping and no state loss on collapse. Run the full frontend suite for integration. Backend changes are not planned; if needed, revise scope and use Python 3.11 and appropriate checks.
 

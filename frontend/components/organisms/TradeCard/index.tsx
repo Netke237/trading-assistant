@@ -498,6 +498,9 @@ export function TradeCard({
    *  `maxLossOverride` above is. Local state rather than the prop read directly
    *  so a click paints immediately instead of waiting for a store round trip. */
   const [methodPick, setMethodPick] = useState<MethodPick | null>(initialMethodPick);
+  // Display-only memory prevents an invalidated pick from showing another
+  // method's latest results. Reset with the candidate/scan, or a new choice.
+  const [recommendationInvalidated, setRecommendationInvalidated] = useState(false);
   const [structuralStop, setStructuralStop] = useState<StructuralStop | null | undefined>(
     data.exit.structuralStop,
   );
@@ -722,6 +725,7 @@ export function TradeCard({
       // legitimately made on this contract a moment ago -- the same hazard
       // `initialPremiumStop`'s note describes for the typed fields.
       setMethodPick(initialMethodPick);
+      setRecommendationInvalidated(false);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
       prevResetKeyRef.current = resetKey;
@@ -1956,21 +1960,8 @@ export function TradeCard({
   const pickEstimateIsFresh = raceBarriers?.contract === prevContractRef.current;
   const pickRaceIsShowable = pickEstimateIsFresh && !raceBarriersMoved;
 
-  // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
-  // separately-timed method and deliberately does not get its own
-  // lastRunMethod value. It rides the same endpoint call, the same click and
-  // the same computedAt as the Monte Carlo estimate, so "whichever ran most
-  // recently" can never distinguish the two. It is surfaced inside the
-  // monte_carlo branch below instead, replacing the standalone invalidation
-  // probability with the armed stop and the per-target edge.
-  //
-  // Feature 8 (Final Recommendation) — whichever of Arithmetic/Monte Carlo
-  // was most recently explicitly run, determined purely by comparing their
-  // own computedAt timestamps (no cross-method reconciliation/comparison of
-  // the actual VALUES — that's explicitly out of scope). A restored/cached
-  // value still carries a real computedAt from whenever it was genuinely
-  // computed, so this naturally extends to "most recently run, including a
-  // prior session" without needing a separate session-scoped flag.
+  // Before a choice, preserve the latest-run display, including the race
+  // summary accompanying Monte Carlo. Explicit picks use their own results.
   const lastRunMethod = useMemo<'arithmetic' | 'monte_carlo' | null>(() => {
     const exitAt = exitPlan?.computedAt ? Date.parse(exitPlan.computedAt) : null;
     const fpAt = firstPassage?.computedAt ? Date.parse(firstPassage.computedAt) : null;
@@ -2095,6 +2086,7 @@ export function TradeCard({
   // click, like the max-loss override and unlike the exit plan.
   const applyMethodPick = useCallback((next: MethodPick | null) => {
     setMethodPick(next);
+    setRecommendationInvalidated(false);
     onMethodPickChange?.(next);
   }, [onMethodPickChange]);
 
@@ -2175,8 +2167,14 @@ export function TradeCard({
   useEffect(() => {
     // Clearing sets `methodPick` to null, which makes `pickedMethodGone` false
     // on the next render, so this cannot loop.
-    if (pickedMethodGone) applyMethodPickRef.current(null);
+    if (pickedMethodGone) {
+      applyMethodPickRef.current(null);
+      setRecommendationInvalidated(true);
+    }
   }, [pickedMethodGone]);
+
+  const recommendationMethod = methodPick?.method ?? lastRunMethod;
+  const recommendationUnavailable = recommendationInvalidated || pickedMethodGone;
 
   const stockBars = [
     { label: 'Trend',     value: data.stockBreakdown.trend,     detailText: trendDetailText(data.stockBreakdown.trendDetail) },
@@ -2251,6 +2249,35 @@ export function TradeCard({
           </div>
         </div>
       </div>
+      <CollapsibleSection
+        title="Stock & contract scores"
+        storageKey="bamendjou:tradecard-scores-collapsed"
+        keepMounted
+      >
+        <div className={styles.scorePanelsGrid}>
+          {/* 3. Stock Scorecard | Contract — side by side */}
+          <ScoreCardPanel
+            title="Stock Scorecard"
+            qualification={{ card: data, kind: 'stock' }}
+            bars={stockBars}
+            total={data.stockScore}
+            confidence={data.stockConfidence}
+            confidenceScore={data.confidence ?? null}
+            confidenceText={data.confidenceText ?? null}
+            statusTooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
+          />
+
+          <ScoreCardPanel
+            title={`Contract — ${data.contract}`}
+            qualification={{ card: data, kind: 'contract' }}
+            bars={contractBars}
+            total={data.contractScore}
+            confidence={data.contractConfidence}
+            statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+            statusTooltipAlignRight
+          />
+        </div>
+      </CollapsibleSection>
       <FundamentalHealthCard f={data.fundamentals} compact />
 
       <div className={styles.grid}>
@@ -2275,8 +2302,7 @@ export function TradeCard({
             <section className={styles.orderStrip} aria-label="Order Entry">
               <Text size={14} weight={600}>Order Entry</Text>
               <div className={styles.orderStripItem}>
-                <Text size={11} tone="secondary">Order type</Text>
-                <Data size={13} weight={500}>{data.entry.orderType}</Data>
+                <KV label="Order type" value={data.entry.orderType} mono />
               </div>
               <div className={styles.orderStripItem}>
                 <EditableKV
@@ -2399,18 +2425,12 @@ export function TradeCard({
 
           </div>
         </div>
-        {/* 7. Final Recommendation — Feature 8: documentation, not
-             reconciliation. No cross-method comparison logic between
-             Arithmetic/Monte Carlo/Fixed % Ladder — their bases aren't on the
-             same axis. Shows whichever of Arithmetic/Monte Carlo ran most
-             recently (lastRunMethod), falling back to the Ladder's live
-             T1/T2/T3 -- targets only -- when neither has been explicitly run.
-             (It printed "+ R:R" until the Projected R/R readout was removed
-             from that branch; see the note where it stood.) Stands
-             alone — NOT inside the Fixed % Ladder Plan collapsible group. */}
-        <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
+        {/* Selected method's own results, with latest-run fallback before a choice. */}
+        <section aria-label="Final Recommendation" className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
           <div className={styles.scoreCardHeader}>
             <Text size={14} weight={600}>Final Recommendation</Text>
+            {decisionTarget === undefined ? methodSelector
+              : decisionTarget ? createPortal(methodSelector, decisionTarget) : null}
             <LabeledStatusBadge
               label="Final Status"
               status={data.finalStatus}
@@ -2418,21 +2438,15 @@ export function TradeCard({
             />
           </div>
           <div className={styles.scoreCardBody}>
-            {/* Phase G piece 5 (§6.1) — ABOVE the body, so the decision sits
-                 over the numbers it is about. `lastRunMethod` below is
-                 UNTOUCHED and still decides which method's numbers are
-                 DISPLAYED before a pick exists (§6.1, §9.4): the two answer
-                 different questions ("what ran last" vs "what did the trader
-                 choose"), and the fallback is what a trader sees before
-                 picking. */}
-            {decisionTarget === undefined ? methodSelector
-              : decisionTarget ? createPortal(methodSelector, decisionTarget) : null}
-            <Text size={13} weight={500}>Latest calculation</Text>
+            <Text size={13} weight={500}>{methodPick || recommendationUnavailable ? 'Selected method results' : 'Latest calculation'}</Text>
             <Text size={11} tone="secondary">
-              The latest result is displayed below. Choosing a method records your decision;
-              it does not run a calculation or apply its values to the order and exit fields.
+              Choosing a method records your decision; it does not run a calculation or apply
+              its values to the order and exit fields.
             </Text>
-            {lastRunMethod === 'arithmetic' && exitPlan && (
+            {recommendationUnavailable && (
+              <Text size={11} tone="caution">Selected method results unavailable — run its calculation if needed, then choose an exit method again.</Text>
+            )}
+            {!recommendationUnavailable && recommendationMethod === 'arithmetic' && exitPlan && (
               <>
                 <Text size={11} tone="dim">computed via: Arithmetic, {formatHHMM(exitPlan.computedAt)}</Text>
                 <div className={styles.scoreRow}>
@@ -2452,7 +2466,7 @@ export function TradeCard({
                 </Text>
               </>
             )}
-            {lastRunMethod === 'monte_carlo' && firstPassage && (
+            {!recommendationUnavailable && recommendationMethod === 'monte_carlo' && firstPassage && (
               <>
                 <Text size={11} tone="dim">
                   computed via: Monte Carlo{firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}
@@ -2490,49 +2504,17 @@ export function TradeCard({
                     current premium.
                   </Text>
                 )}
-                {/* The Barrier Race rides the SAME call and the same click as
-                     the estimate above, so it is never a separately-timed
-                     "most recent method" — when Monte Carlo is the most recent
-                     one and a race came back with it, the race's numbers are
-                     what belong here.
-
-                     There is deliberately NO else branch. The standalone
-                     invalidation probability that stood in one is REMOVED, not
-                     replaced: it counts paths that touched the stock stop even
-                     when the premium stop had already fired days earlier, and
-                     printed beside independently-measured target probabilities
-                     it invites a comparison that does not hold — the schematic's
-                     "Moved out: the Invalidation row", which had already been
-                     honoured on the Monte Carlo card itself and survived only
-                     here. The stop half of the picture belongs to the Barrier
-                     Race card, which counts every path once. When the race is
-                     not showable this summary prints its target rows and
-                     NOTHING ELSE — no stop of any kind, deliberately, rather
-                     than a stop number that reads like the race's answer and is
-                     not. (An earlier draft of this comment said it "prints its
-                     targets and stops", which reads as two nouns and promises a
-                     stop that is not there.)
-
-                     A MOVE, not a deletion: `firstPassage.invalidation` is
-                     untouched and still feeds BarrierRaceCard, and
-                     `data.exit.invalidation` still hard-blocks every send
-                     ("Invalidation stop required").
-
-                     This retires round 9's mixed-vintage hazard by construction
-                     rather than by gate. That bug was stale race numbers
-                     printing here while SUPPRESSING a fresher invalidation
-                     fallback underneath them; with no fallback to suppress, the
-                     only thing `raceIsShowable` can now do is show or hide the
-                     race's own numbers.
-
-                     STILL SCOPED TO THE RACE NUMBERS. The `firstPassage.targets`
-                     rows above are now gated too, but on `estimateIsFresh`, NOT
-                     on this — the two ask different questions. `raceIsShowable`
-                     additionally requires that neither barrier has MOVED since
-                     the estimate, which is a race-specific concern: the target
-                     rows are priced off the premium alone and a moved stop does
-                     not invalidate them. Gating them on the stricter flag would
-                     blank honest numbers. */}
+              </>
+            )}
+            {/* A selected race shows exclusive race outcomes. Only the initial
+                no-pick latest-MC fallback retains the combined summary. */}
+            {!recommendationUnavailable && firstPassage &&
+              (recommendationMethod === 'barrier_race' ||
+                (methodPick === null && recommendationMethod === 'monte_carlo')) && (
+              <>
+                {recommendationMethod === 'barrier_race' && (
+                  <Text size={11} tone="dim">computed via: Barrier Race{firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}</Text>
+                )}
                 {firstPassage.race && raceIsShowable ? (
                   <>
                     <div className={styles.scoreRow}>
@@ -2548,6 +2530,7 @@ export function TradeCard({
                           {`T${Math.round(o.targetPct * 100)}% edge`}
                         </Text>
                         <Data size={13} tone="primary">
+                          {recommendationMethod === 'barrier_race' && `$${o.targetOptionPrice.toFixed(2)} option (${(o.pTargetFirst * 100).toFixed(0)}% target first) — `}
                           {o.edgePerContract != null ? money(o.edgePerContract) : '—'}
                           {o.rrStockStop != null ? ` at ${o.rrStockStop.toFixed(2)}x` : ''}
                         </Data>
@@ -2561,10 +2544,10 @@ export function TradeCard({
                 ) : null}
               </>
             )}
-            {lastRunMethod === null && (
+            {!recommendationUnavailable && (recommendationMethod === 'ladder' || recommendationMethod === null) && (
               <>
                 <Text size={11} tone="caution">
-                  No method explicitly run — showing Fixed % Ladder Plan (default)
+                  {methodPick?.method === 'ladder' ? 'Selected method: Fixed % Ladder Plan' : 'No method explicitly run — showing Fixed % Ladder Plan (default)'}
                 </Text>
                 {data.exit.targets.map((t, i) => (
                   <div className={styles.scoreRow} key={t.id ?? i}>
@@ -3172,29 +3155,6 @@ export function TradeCard({
           onSelectTarget={racePickOption?.unavailable == null ? selectRaceTarget : undefined}
           selectedTargetPct={selectedRaceTarget}
         />
-
-        {/* 3. Stock Scorecard | Contract — side by side */}
-        <ScoreCardPanel
-          title="Stock Scorecard"
-          qualification={{ card: data, kind: 'stock' }}
-          bars={stockBars}
-          total={data.stockScore}
-          confidence={data.stockConfidence}
-          confidenceScore={data.confidence ?? null}
-          confidenceText={data.confidenceText ?? null}
-          statusTooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
-        />
-
-        <ScoreCardPanel
-          title={`Contract — ${data.contract}`}
-          qualification={{ card: data, kind: 'contract' }}
-          bars={contractBars}
-          total={data.contractScore}
-          confidence={data.contractConfidence}
-          statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
-          statusTooltipAlignRight
-        />
-
 
         <CollapsibleSection
           title="Fixed % Ladder Plan"
@@ -3948,7 +3908,7 @@ function MaxLossOverrideEditor({
       </Text>
       {!editing ? (
         <button type="button" className={styles.btn} onClick={startEdit}>
-          <Text size={12} weight={500}>{override ? 'Edit override' : 'Set override'}</Text>
+          <Text size={12} weight={500}>{override ? 'Edit trade loss budget' : 'Set trade loss budget'}</Text>
         </button>
       ) : (
         <div className={styles.targetPctRow}>

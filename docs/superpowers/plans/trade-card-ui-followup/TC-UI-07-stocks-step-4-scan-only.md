@@ -4,7 +4,7 @@ Phase: TRADE-CARD-UI-FOLLOWUP
 
 Part of: [Tracking document](TRACKING.md)
 
-Status: ready for implementation
+Status: build complete; integrated phase audit pending
 
 Blocked by: None
 
@@ -16,9 +16,9 @@ Hide/remove the RunScanButton on Step 3 only when screenerMode is stocks. Step 3
 
 ## Acceptance criteria
 
-- [ ] Stocks Step 3 has no scan button and navigation does not initiate a scan.
-- [ ] Stocks Step 4 still runs with latest Step 3 parameters and preserves confirmation/error behavior.
-- [ ] Options and Pre-Breakout Step 3 actions remain unchanged.
+- [x] Stocks Step 3 has no scan button and navigation does not initiate a scan.
+- [x] Stocks Step 4 still runs with latest Step 3 parameters and preserves confirmation/error behavior.
+- [x] Options and Pre-Breakout Step 3 actions remain unchanged.
 
 ## Source locations to inspect
 
@@ -28,4 +28,4 @@ Hide/remove the RunScanButton on Step 3 only when screenerMode is stocks. Step 3
 
 ## Validation and closeout
 
-Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation has not started.
+Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation complete. Frontend typecheck and full Jest suite passed (203 suites, 4,720 tests). Browser coverage uses installed Chromium and temporary local font mocks; production Google-font metrics are unverified. Detailed validation and phase audit are recorded in PROJECT_STATE.json and the implementation evidence.

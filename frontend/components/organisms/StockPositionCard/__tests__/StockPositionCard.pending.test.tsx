@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useScanStore } from '@/lib/scanStore';
@@ -25,7 +25,7 @@ jest.mock('@/components/organisms/StockAutoTradeArm', () => ({
   StockAutoTradeArm: (props: unknown) => mockStockAutoTradeArm(props),
 }));
 jest.mock('@/components/molecules/MarketSentiment', () => ({ MarketSentiment: () => null }));
-jest.mock('@/components/molecules/FundamentalHealthCard', () => ({ FundamentalHealthCard: () => null }));
+jest.mock('@/components/molecules/FundamentalHealthCard', () => ({ FundamentalHealthCard: () => <div>Fundamental Health test</div> }));
 
 function makeCard(): PositionCardData {
   return {
@@ -70,6 +70,41 @@ describe('StockPositionCard — Add to Portfolio outcome states', () => {
       fireEvent.click(btn);
     });
   }
+
+  it('places one real stock total above health and preserves it on collapse', async () => {
+    localStorage.removeItem('bamendjou:stock-position-scores-collapsed');
+    render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+    const bar = screen.getByRole('progressbar');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(bar).toHaveAttribute('aria-valuenow', '80');
+    expect(toggle.compareDocumentPosition(screen.getByText('Fundamental Health test')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('Contract Scorecard')).not.toBeInTheDocument();
+    toggle.focus();
+    expect(toggle).toHaveFocus();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(bar).toBeInTheDocument();
+    expect(bar).not.toBeVisible();
+    expect(localStorage.getItem('bamendjou:stock-position-scores-collapsed')).toBe('1');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('progressbar')).toBe(bar);
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+    await act(async () => { await Promise.resolve(); });
+    localStorage.removeItem('bamendjou:stock-position-scores-collapsed');
+  });
+
+  it('updates only the captured stock total and status when card data changes', async () => {
+    localStorage.removeItem('bamendjou:stock-position-scores-collapsed');
+    const { rerender } = render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);
+    rerender(<StockPositionCard card={{ ...makeCard(), stock_score: 42, stock_status: 'PENDING', confidence: null }} strategyKey="pullback_ema" />);
+    const group = screen.getByRole('button', { name: /Stock & contract scores/ }).closest('section')!;
+    expect(within(group).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
+    expect(within(group).getByText('PENDING')).toBeInTheDocument();
+    expect(within(group).queryByText(/confidence|trend/i)).not.toBeInTheDocument();
+    expect(within(group).getAllByRole('progressbar')).toHaveLength(1);
+    await act(async () => { await Promise.resolve(); });
+  });
 
   it('shows a distinct Queued state (not "Added") when the backend is unreachable', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;

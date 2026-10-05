@@ -15,6 +15,9 @@ import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPane
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
+import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
+import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
+import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import styles from './page.module.css';
 
 type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper' | 'tastytrade_paper';
@@ -208,6 +211,22 @@ export default function Step7PositionCardPage() {
             <StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} />
           </div>
         </div>
+
+        <CollapsibleSection
+          title="Stock & contract scores"
+          storageKey="bamendjou:stock-position-scores-collapsed"
+          keepMounted
+        >
+          <ScoreCardPanel
+            title="Stock Scorecard"
+            bars={[{ label: 'Total stock', value: card.stock_score }]}
+            total={card.stock_score}
+            confidence={card.stock_status}
+          />
+          <Text size={11} tone="dim">Only the total stock score is supplied; component scores and a contract score are unavailable in Stocks mode.</Text>
+        </CollapsibleSection>
+
+        <FundamentalHealthCard f={card.fundamentals} />
 
         <div className={styles.grid4}>
           <div>

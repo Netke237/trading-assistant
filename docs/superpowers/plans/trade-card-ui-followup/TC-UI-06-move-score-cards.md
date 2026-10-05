@@ -4,7 +4,7 @@ Phase: TRADE-CARD-UI-FOLLOWUP
 
 Part of: [Tracking document](TRACKING.md)
 
-Status: ready for implementation
+Status: build complete; integrated phase audit pending
 
 Blocked by: None
 
@@ -16,9 +16,9 @@ Locate the actual score-bar cards on each Step 7 route and place them directly b
 
 ## Acceptance criteria
 
-- [ ] On both mode paths, place existing applicable score-bar content below identity and above Fundamental Health.
-- [ ] Group starts expanded, remains keyboard-collapsible, and evidence has an independent collapsed default.
-- [ ] No invented contract score or duplicated calculation/evidence children; totals and qualification remain tied to the same captured data.
+- [x] On both mode paths, place existing applicable score-bar content below identity and above Fundamental Health.
+- [x] Group starts expanded, remains keyboard-collapsible, and evidence has an independent collapsed default.
+- [x] No invented contract score or duplicated calculation/evidence children; totals and qualification remain tied to the same captured data.
 
 ## Source locations to inspect
 
@@ -28,4 +28,4 @@ Locate the actual score-bar cards on each Step 7 route and place them directly b
 
 ## Validation and closeout
 
-Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation has not started.
+Follow [the reviewed plan](PLAN.md) for frontend checks and shared numeric/persistence guards. Record changed files, tests and browser evidence on completion. A closed build ticket does not clear the phase audit gate. Coordinate shared-file edits serially. Implementation complete. Frontend typecheck and full Jest suite passed (203 suites, 4,720 tests). Browser coverage uses installed Chromium and temporary local font mocks; production Google-font metrics are unverified. Detailed validation and phase audit are recorded in PROJECT_STATE.json and the implementation evidence.

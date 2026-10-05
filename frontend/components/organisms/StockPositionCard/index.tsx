@@ -26,6 +26,8 @@ import type { Direction } from '@/types/domain';
 import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
+import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
+import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import styles from './StockPositionCard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -831,6 +833,22 @@ export function StockPositionCard({
   return (
     <div className={styles.wrap}>
 
+        <CollapsibleSection
+          title="Stock & contract scores"
+          storageKey="bamendjou:stock-position-scores-collapsed"
+          keepMounted
+        >
+          <ScoreCardPanel
+            title="Stock Scorecard"
+            bars={[{ label: 'Total stock', value: card.stock_score }]}
+            total={card.stock_score}
+            confidence={card.stock_status}
+          />
+          <Text size={11} tone="dim">Only the total stock score is supplied; component scores and a contract score are unavailable in Stocks mode.</Text>
+        </CollapsibleSection>
+
+        <FundamentalHealthCard f={card.fundamentals} />
+
       {/* Section 1 — Sizing grid, Row 1 */}
       <div className={styles.grid4}>
         <EditableField label="ENTRY"    value={overlay.entry} onChange={(v) => patch({ entry: v })} />
@@ -1259,7 +1277,6 @@ export function StockPositionCard({
 
       <MarketSentiment s={card.sentiment} />
 
-      <FundamentalHealthCard f={card.fundamentals} />
 
       {/* Section 2d — Phase G piece 5 (§6.3): which exit method this trade is
            being taken on. Placed directly above the actions, after all three
