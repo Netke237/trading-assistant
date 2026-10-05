@@ -190,6 +190,16 @@ def generation() -> int:
         return _generation
 
 
+def invalidated_since(symbol: str, bars_generation: int) -> bool:
+    """True when ``symbol`` (or the whole cache) was invalidated after
+    ``bars_generation``: a value computed from bars read at that generation is
+    pre-refresh and must not be stored. The same rule set_cached applies, for
+    callers keeping their own caches (stock_scan's _BACKTEST_CACHE,
+    TRADING-REVIEW-PHASE-C-HYGIENE T6). Takes _lock; never call it while holding it."""
+    with _lock:
+        return _invalidated_after_locked(symbol, bars_generation)
+
+
 async def set_cached(key: str, value: dict, *, bars_generation: int | None = None) -> None:
     now = time.time()
     expires_at = now + _TTL_SECONDS

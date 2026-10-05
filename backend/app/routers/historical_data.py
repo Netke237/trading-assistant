@@ -12,6 +12,7 @@ from app.services.historical_store import (
     get_prefetch_status, prefetch_universe, refresh_adjustments,
 )
 from app.data.universe_presets import expand_universe
+from app.routers.stock_scan import evict_backtest_cache
 
 router = APIRouter(prefix="/api/historical-data", tags=["historical-data"])
 
@@ -81,5 +82,11 @@ async def refresh_adjustments_endpoint(req: RefreshAdjustmentsRequest) -> dict:
 
     Runs inline (an operator call, TRADING-REVIEW-PHASE-C T3). Never deletes rows.
     Returns ``{checked, stale: [{symbol, reasons, earliest}], refreshed, failed}``.
+    Each refreshed symbol's cached backtests are evicted too: their key hashes only the
+    last 20 bars, so it does not change when older bars are rewritten
+    (TRADING-REVIEW-PHASE-C-HYGIENE T6).
     """
-    return await refresh_adjustments([s.strip().upper() for s in req.symbols if s.strip()])
+    return await refresh_adjustments(
+        [s.strip().upper() for s in req.symbols if s.strip()],
+        on_refreshed=lambda s: evict_backtest_cache([s]),
+    )
