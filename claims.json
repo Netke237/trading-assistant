@@ -23,14 +23,6 @@
       "expires_at": "2026-10-05T23:56:13Z",
       "note": "T1 per-horizon tuning machinery: time exit, fire-rate floor, cell grids, adoption bar, multi backtest (ADR 0001)",
       "task": "STOCKS-HORIZON-T1"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/priceless-jennings-995ab7",
-      "claimed_at": "2026-10-05T21:03:05Z",
-      "expires_at": "2026-10-06T00:03:05Z",
-      "note": "Plan rewrite 3a-3g + 19 findings, plan audit rounds",
-      "task": "NO-LIVE-QUOTE"
     }
   ]
 }
