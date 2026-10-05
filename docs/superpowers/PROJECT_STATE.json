@@ -1976,7 +1976,7 @@
     {
       "id": "STOCKS-HORIZON-P0A",
       "name": "Stocks horizon P0A: shared exclusion list (scans + evidence) and confidence on non-overlapping samples, missing confidence = Unvalidated (CAUTION) on both paths",
-      "status": "not_started",
+      "status": "in_progress",
       "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
@@ -1987,7 +1987,8 @@
         "pattern": "\\? '—' : ",
         "note": "DEFECT MARKER: ConfidenceBadge still renders a dash for a missing confidence (plan A6, the last ticket). Gone = the last ticket landed; PRESENCE ONLY, behaviour is pinned by the plan's tests."
       },
-      "note": "ROUND 1 (PLAN ROUND 1, 2026-10-05) CLEAN -- ZERO GATE FINDINGS; plan stage closed (1 of 3 plan rounds). Fresh gate-auditor (bmad-review-adversarial-general), scope: the whole plan at 50de2a34 against the code. Checked: the 29 symbols vs bar_basis.md and the scan/evidence split; all four scan entry points + scheduled runs; options funnel predicates and stocks classify_stock_rejection ordering (Excluded (data): counted in failed_data / failed_history, scanned keeps the sum); evidence scripts' symbol sources and bar_basis_check exemption; A4 greedy skip == score_calibration.distinct, score_stock stateless, every confidence cache path keyed through BARS_BASIS_VERSION; A5 gate callers and gate-off thresholds on both paths; A6 badge consumers. Below the gate, logged not fixed: saved pre-deploy scan results keep old confidence (b2 precedent, no SCAN_RESULT_SCHEMA_VERSION bump); duplicate typed excluded symbol vs scanned count; _analyze_core with no signal never computes confidence; AVB reason date wording; '(N found)' counts decisive fires. Next: tickets via k-ticket-coordinator. || 2026-10-05: plan written on claude/stocks-horizon-tuning (decisions STOCKS-PARAMS-PER-HORIZON-2026-10-05, STOCKS-HORIZON-P0-SCOPE-2026-10-05). Plan audit round 1 next. Claim: STOCKS-HORIZON-P0."
+      "note": "2026-10-05: tickets cut -- tracking #70, A1-A6 #71-#76, coordinator #77. Build loop started. || ROUND 1 (PLAN ROUND 1, 2026-10-05) CLEAN -- ZERO GATE FINDINGS; plan stage closed (1 of 3 plan rounds). Fresh gate-auditor (bmad-review-adversarial-general), scope: the whole plan at 50de2a34 against the code. Checked: the 29 symbols vs bar_basis.md and the scan/evidence split; all four scan entry points + scheduled runs; options funnel predicates and stocks classify_stock_rejection ordering (Excluded (data): counted in failed_data / failed_history, scanned keeps the sum); evidence scripts' symbol sources and bar_basis_check exemption; A4 greedy skip == score_calibration.distinct, score_stock stateless, every confidence cache path keyed through BARS_BASIS_VERSION; A5 gate callers and gate-off thresholds on both paths; A6 badge consumers. Below the gate, logged not fixed: saved pre-deploy scan results keep old confidence (b2 precedent, no SCAN_RESULT_SCHEMA_VERSION bump); duplicate typed excluded symbol vs scanned count; _analyze_core with no signal never computes confidence; AVB reason date wording; '(N found)' counts decisive fires. Next: tickets via k-ticket-coordinator. || 2026-10-05: plan written on claude/stocks-horizon-tuning (decisions STOCKS-PARAMS-PER-HORIZON-2026-10-05, STOCKS-HORIZON-P0-SCOPE-2026-10-05). Plan audit round 1 next. Claim: STOCKS-HORIZON-P0.",
+      "tracking_issue": "70"
     },
     {
       "id": "STOCKS-HORIZON-P0B",
