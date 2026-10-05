@@ -471,6 +471,7 @@ class ConfigHealth:
                       (CHECK_REGIME, _check_regime), (CHECK_CONVICTION, _check_conviction),
                       (CHECK_TOP_LEVEL, _check_top_level),
                       (CHECK_HORIZONS, _check_horizons),
+                      (CHECK_HORIZONS, _check_setup_window),
                       (CHECK_SCORING_KEYS, _check_scoring_other))
         elif file == "risk_rules.yaml":
             checks = ((CHECK_RISK_KEYS, _check_risk_keys),)
@@ -563,6 +564,24 @@ def _check_horizons(doc: dict, r: _FileResult) -> bool:
             r.warnings.append(_warning(path, "unknown horizon, never read", name, _HORIZONS))
         elif isinstance(value, dict):
             _walk_horizon(value, HORIZON_KEYS, path, r)
+    return True
+
+
+def _check_setup_window(doc: dict, r: _FileResult) -> bool:
+    # stock_scorer._rule_trigger reads a window below 1 as 1 (the last bar
+    # only); a raw value below 1 would test no bar at all (Phase C hygiene T4).
+    horizons = doc.get("horizons")
+    if not isinstance(horizons, dict):
+        return False
+    for name in _HORIZONS:
+        horizon = horizons.get(name)
+        trigger = horizon.get("trigger") if isinstance(horizon, dict) else None
+        if not isinstance(trigger, dict):
+            continue
+        value = trigger.get("setup_window_bars")
+        if isinstance(value, (int, float)) and value < 1:
+            r.warnings.append(_warning(f"horizons.{name}.trigger.setup_window_bars",
+                                       "setup_window_bars must be >= 1; read as 1 (last bar only)"))
     return True
 
 

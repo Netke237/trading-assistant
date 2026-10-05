@@ -1200,3 +1200,36 @@ def test_missing_setup_window_bars_defaults_to_one(monkeypatch):
     d = _detail(monkeypatch, "Bullish", None, hist=HIST_UP_4_AGO_HOLDS)
     assert d["macd_pass"] is False
     assert d["setup_window_bars"] == 1
+
+
+# ── Phase C hygiene T4: setup_window_bars below 1 reads as 1 ────────────────────
+
+# Every momentum event crosses on the last bar, so W = 1 passes all three and a
+# window that tests no bar at all (W <= 0 read raw) would pass none.
+HIST_UP_LAST_BAR = [-1.0] * 20 + [0.5]
+RSI_UP_LAST_BAR = [30.0] * 30 + [40.0]
+STOCH_UP_LAST_BAR = ([20.0] * 20 + [40.0], [25.0] * 20 + [30.0])
+
+
+def _trigger_result(monkeypatch, W, horizon, mode):
+    import app.scoring.stock_scorer as ss
+
+    monkeypatch.setattr(ss, "_macd_histogram", lambda *a, **k: list(HIST_UP_LAST_BAR))
+    monkeypatch.setattr(ss, "_rsi", lambda *a, **k: list(RSI_UP_LAST_BAR))
+    monkeypatch.setattr(ss, "_stoch",
+                        lambda *a, **k: (list(STOCH_UP_LAST_BAR[0]), list(STOCH_UP_LAST_BAR[1])))
+    cfg = copy.deepcopy(_horizon_cfg(horizon))
+    cfg["trigger"]["setup_window_bars"] = W
+    bars = _flat_bars()
+    volumes = [b["volume"] for b in bars]
+    result, vol_bonus = _rule_trigger(bars, cfg, volumes, "Bullish", scoring_mode=mode)
+    return result.status, result.score, result.detail, vol_bonus
+
+
+@pytest.mark.parametrize("W", [0, -1, -8])
+@pytest.mark.parametrize("horizon", ["Intraday", "Swing", "Position"])
+@pytest.mark.parametrize("mode", ["stock", "options"])
+def test_setup_window_below_one_scores_as_one(monkeypatch, W, horizon, mode):
+    one = _trigger_result(monkeypatch, 1, horizon, mode)
+    assert (one[2]["macd_pass"], one[2]["rsi_pass"], one[2]["stoch_pass"]) == (True, True, True)
+    assert _trigger_result(monkeypatch, W, horizon, mode) == one

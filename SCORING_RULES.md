@@ -131,7 +131,7 @@ Three bands, driven by `pullback.atr_pass_min`/`atr_pass_max`/`atr_caution_max` 
 ### Setup window
 | Parameter | Value |
 |---|---|
-| All signals must occur within | 8 daily bars of each other |
+| Each momentum event must occur within | the last `setup_window_bars` bars (per horizon — see the Section 8 matrix's "Setup window (bars)" row), and its state must still hold on the last bar |
 | RSI divergence window (`rsi_div_window_bars`) | 15 bars — the only windowed divergence parameter in code; the Stochastic K/D check is a same-bar/prior-bar crossover, not a windowed divergence |
 
 `setup_window_bars`: a momentum event counts if it occurred within the last N bars and its state still holds.
@@ -139,7 +139,7 @@ Three bands, driven by `pullback.atr_pass_min`/`atr_pass_max`/`atr_caution_max` 
 ### Scoring
 | Condition | Status |
 |---|---|
-| Candle + 2 of 3 momentum signals, within 8 bars | PASS |
+| Candle + 2 of 3 momentum signals, within `setup_window_bars` | PASS |
 | Candle + 1 momentum signal | CAUTION |
 | Candle only, no momentum | REJECT |
 | No candle | REJECT |
