@@ -2747,6 +2747,7 @@ function ProposalCard({ strategy, proposal, adopted, onAdopt }: ProposalCardProp
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>OOS trades</div>
           <div style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
             {proposal.oos_metrics.n_trades}
+            {typeof proposal.oos_metrics.n_symbols === 'number' && ` · ${proposal.oos_metrics.n_symbols} symbols`}
           </div>
         </div>
       </div>

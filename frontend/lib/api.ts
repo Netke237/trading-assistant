@@ -1116,7 +1116,12 @@ export interface WfoOosMetrics {
   win_rate: number;
   total_return: number;
   max_drawdown: number;
+  /** Pooled OOS trade count across the basket — the figure `min_trades` gates. */
   n_trades: number;
+  /** Phase C T5: pooled trades / contributing symbols. Absent on proposals persisted before Phase C T5. */
+  n_trades_per_symbol?: number;
+  /** Phase C T5: symbols that contributed OOS trades — the figure `min_symbols` gates. Absent on older proposals. */
+  n_symbols?: number;
 }
 
 export interface WfoProposal {
