@@ -245,6 +245,7 @@ def conf_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_DB_PATH", str(tmp_path / "confidence_cache.db"))
     monkeypatch.setattr(cc, "_store", {})
     monkeypatch.setattr(cc, "_symbol_generation", {}, raising=False)
+    monkeypatch.setattr(cc, "_clear_generation", 0, raising=False)
     cc._init_db()
     return cc
 
@@ -434,6 +435,102 @@ async def test_set_cached_db_write_does_not_resurrect_row_evicted_mid_write(monk
     assert cc.get_cached(key) is None
 
     # An unconditional write for another symbol still reaches SQLite.
+    await cc.set_cached(other, {"confidence": 55})
+    assert other in _db_keys(cc)
+    assert cc.get_cached(other) == {"confidence": 55}
+
+
+# ── clear_cache invalidates in-flight writes (TRADING-REVIEW-PHASE-C-HYGIENE T2) ──
+# clear_cache() is a whole-cache invalidation: a value computed from bars read before
+# the clear must not land in memory or SQLite afterwards, exactly as for one symbol's
+# invalidate_symbol above.
+
+@pytest.mark.asyncio
+async def test_set_cached_drops_value_computed_before_clear_cache(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    g = cc.generation()
+    cc.clear_cache()
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+
+    assert cc.get_cached(key) is None
+    assert key not in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_set_cached_without_generation_stores_after_clear_cache(conf_cache):
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    cc.clear_cache()
+
+    await cc.set_cached(key, {"confidence": 70})
+
+    assert cc.get_cached(key) == {"confidence": 70}
+    assert key in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_set_cached_db_write_does_not_resurrect_row_cleared_mid_write(monkeypatch, conf_cache):
+    """The memory write passed the generation check, then clear_cache lands before
+    the SQLite write. Its DELETE must wait for the writer's INSERT (it takes
+    _db_lock), or the stale row comes back on the next restart's warm load.
+
+    Same deterministic interleaving as the R2-F1 test above: when the SQLite write
+    for XYZ begins, a clear_cache thread is started and the write waits until that
+    thread has either finished (DELETE already run) or is about to take _db_lock
+    (DELETE held back).
+    """
+    import threading
+
+    cc = conf_cache
+    key = cc.cache_key("XYZ", "Bullish", "Swing", scoring_mode="stock")
+    other = cc.cache_key("YYY", "Bullish", "Swing", scoring_mode="stock")
+    g = cc.generation()
+
+    reached = threading.Event()   # clear finished, or is waiting on _db_lock
+    clearer: dict = {}
+    real_db_lock = getattr(cc, "_db_lock", threading.Lock())
+
+    class _ObservedLock:
+        def __enter__(self):
+            if threading.current_thread() is clearer.get("thread"):
+                reached.set()
+            real_db_lock.acquire()
+            return self
+
+        def __exit__(self, *exc):
+            real_db_lock.release()
+            return False
+
+    monkeypatch.setattr(cc, "_db_lock", _ObservedLock(), raising=False)
+
+    def _clear():
+        try:
+            cc.clear_cache()
+        finally:
+            reached.set()
+
+    real_write_db = cc._write_db
+
+    def _write_db_with_clear(k, value, expires_at):
+        if k == key and "thread" not in clearer:
+            t = threading.Thread(target=_clear)
+            clearer["thread"] = t
+            t.start()
+            assert reached.wait(timeout=10), "clear_cache thread never progressed"
+        real_write_db(k, value, expires_at)
+
+    monkeypatch.setattr(cc, "_write_db", _write_db_with_clear)
+
+    await cc.set_cached(key, {"confidence": 70}, bars_generation=g)
+    clearer["thread"].join(timeout=10)
+    assert not clearer["thread"].is_alive()
+
+    assert key not in _db_keys(cc)
+    assert cc.get_cached(key) is None
+
+    # An unconditional write after the clear still reaches SQLite.
     await cc.set_cached(other, {"confidence": 55})
     assert other in _db_keys(cc)
     assert cc.get_cached(other) == {"confidence": 55}
