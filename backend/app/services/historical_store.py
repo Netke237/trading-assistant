@@ -48,7 +48,7 @@ from app.data.tiingo import fetch_historical_candles
 from app.models.ohlcv_daily import OhlcvDailyModel
 from app.scoring.signal_confidence import compute_confidence
 from app.data.confidence_cache import (
-    cache_key as conf_cache_key, get_cached, set_cached,
+    cache_key as conf_cache_key, get_cached, invalidate_symbol, set_cached,
 )
 
 logger = logging.getLogger(__name__)
@@ -554,6 +554,9 @@ async def refresh_adjustments(
                 "historical_store: refreshed adjustment factors for %s (%s..%s, %d bars, %s)",
                 symbol, first, last, len(stored), ",".join(report.reasons),
             )
+            # The confidence cache key does not depend on the bars: evict the cached
+            # values computed on the pre-refresh series (audit finding R1-F1).
+            invalidate_symbol(symbol)
             refreshed.append(symbol)
     return {
         "checked":   len(symbols),

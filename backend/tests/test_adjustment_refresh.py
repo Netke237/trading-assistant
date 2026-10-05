@@ -230,3 +230,86 @@ async def test_refresh_adjustments_endpoint(factory, monkeypatch):
         "refreshed": ["SYM"],
         "failed": [],
     }
+
+
+# ── Confidence-cache eviction on refresh (audit finding R1-F1) ────────────────
+# The confidence cache key does not depend on the bars, so a refresh that rewrites a
+# symbol's adj_factors must evict that symbol's cached confidence, or scans keep serving
+# a value computed on the pre-refresh series.
+
+@pytest.fixture
+def conf_cache(monkeypatch, tmp_path):
+    """Isolate the confidence cache from the real backend/data/confidence_cache.db."""
+    import app.data.confidence_cache as cc
+
+    monkeypatch.setattr(cc, "_DB_PATH", str(tmp_path / "confidence_cache.db"))
+    monkeypatch.setattr(cc, "_store", {})
+    cc._init_db()
+    return cc
+
+
+def _db_keys(cc) -> set[str]:
+    import sqlite3
+
+    conn = sqlite3.connect(cc._DB_PATH)
+    try:
+        return {k for (k,) in conn.execute("SELECT cache_key FROM confidence_cache")}
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_refresh_evicts_refreshed_symbols_cached_confidence(factory, monkeypatch, conf_cache):
+    cc = conf_cache
+    await _seed_batch_step(factory, monkeypatch, "SYM")
+    await _store(factory, monkeypatch, "OTHER",
+                 [_bar(d, 50.0) for d in DAYS], _evening(DAYS[9]))
+    sym_key = cc.cache_key("SYM", "Bullish", "Swing", scoring_mode="stock")
+    other_key = cc.cache_key("OTHER", "Bullish", "Swing", scoring_mode="stock")
+    await cc.set_cached(sym_key, {"confidence": 70})
+    await cc.set_cached(other_key, {"confidence": 60})
+
+    async def fake(symbol, start, end):
+        return [_bar(d, 100.0, adj=1.0) for d in DAYS]
+
+    monkeypatch.setattr(hs, "_utcnow", lambda: _evening(DAYS[9]) + timedelta(days=2))
+    result = await hs.refresh_adjustments(["SYM", "OTHER"], fetch=fake)
+
+    assert result["refreshed"] == ["SYM"]
+    assert cc.get_cached(sym_key) is None
+    assert sym_key not in _db_keys(cc)
+    assert cc.get_cached(other_key) == {"confidence": 60}
+    assert other_key in _db_keys(cc)
+
+
+@pytest.mark.asyncio
+async def test_invalidate_symbol_is_an_exact_prefix_match(conf_cache):
+    cc = conf_cache
+    aapl = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="stock")
+    aaplx = cc.cache_key("AAPLX", "Bullish", "Swing", scoring_mode="stock")
+    await cc.set_cached(aapl, {"confidence": 70})
+    await cc.set_cached(aaplx, {"confidence": 65})
+
+    assert cc.invalidate_symbol("aapl") == 1
+
+    assert cc.get_cached(aapl) is None
+    assert cc.get_cached(aaplx) == {"confidence": 65}
+    assert _db_keys(cc) == {aaplx}
+
+
+@pytest.mark.asyncio
+async def test_refresh_failed_symbol_keeps_cached_confidence(factory, monkeypatch, conf_cache):
+    cc = conf_cache
+    await _seed_batch_step(factory, monkeypatch, "SYM")
+    sym_key = cc.cache_key("SYM", "Bullish", "Swing", scoring_mode="stock")
+    await cc.set_cached(sym_key, {"confidence": 70})
+
+    async def boom(symbol, start, end):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(hs, "_utcnow", lambda: _evening(DAYS[9]) + timedelta(days=2))
+    result = await hs.refresh_adjustments(["SYM"], fetch=boom)
+
+    assert result["failed"] == ["SYM"]
+    assert cc.get_cached(sym_key) == {"confidence": 70}
+    assert sym_key in _db_keys(cc)

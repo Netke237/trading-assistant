@@ -159,5 +159,35 @@ def clear_cache() -> None:
         pass
 
 
+def invalidate_symbol(symbol: str) -> int:
+    """Remove every cached confidence for ``symbol`` from memory and SQLite.
+
+    The key does not depend on the bars, so a bar refresh (historical_store.
+    refresh_adjustments rewriting adj_factors) changes the inputs under an unchanged
+    key; without this the stale value would be served until its TTL. The SQL uses an
+    exact prefix comparison, not LIKE (``_``/``%`` are wildcards there), and the ``|``
+    delimiter keeps ``AAPL`` from matching ``AAPLX``. Returns the number removed, or
+    the in-memory count if the DB step fails.
+    """
+    prefix = f"{symbol.upper()}|"
+    with _lock:
+        keys = [k for k in _store if k.startswith(prefix)]
+        for k in keys:
+            del _store[k]
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        try:
+            cur = conn.execute(
+                "DELETE FROM confidence_cache WHERE substr(cache_key, 1, ?) = ?",
+                (len(prefix), prefix),
+            )
+            conn.commit()
+            return max(cur.rowcount, len(keys))
+        finally:
+            conn.close()
+    except Exception:
+        return len(keys)
+
+
 # Warm-load on module import (once per process).
 _warm_load()

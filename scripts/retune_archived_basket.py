@@ -275,8 +275,8 @@ def run(args):
                 'grids': grids, 'grid_combinations': {s: math.prod(len(v) for v in grid.values()) if grid else 0 for s, grid in grids.items()},
                 'folds': [{k: v.isoformat() for k, v in asdict(f).items()} for f in folds],
                 'costs': costs, 'windows': windows, 'workers': args.workers,
-                'metrics': {'expectancy_sharpe': 'production gross, before configured costs',
-                            'returns_consistency': 'production per-symbol/window return adjustment; not per-trade execution costs'}}
+                'metrics': {'expectancy_sharpe': 'net of the per-leg commission (fee_pct + slippage_pct) charged on the entry and exit of every trade, the same as production train_fold',
+                            'returns_consistency': 'net of the per-leg commission (fee_pct + slippage_pct) charged on the entry and exit of every trade, the same as production train_fold'}}
     write_json(output / 'manifest.json', manifest)
     checkpoints = output / 'checkpoints'
     checkpoints.mkdir(exist_ok=True)
