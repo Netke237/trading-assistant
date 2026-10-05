@@ -52,6 +52,11 @@ P0A (exclusion list, confidence) is a separate target. This plan does not touch 
   frontend `lib/unvalidated.ts::BEARISH_UNVALIDATED_MESSAGE`, same text): `"Bearish setups are Unvalidated: no
   bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research;
   no PASS, no auto-trade, no opening order."`
+- **The hold.** Every frontend place that sends or uses `hold_max_days` takes it from the hold that produced the
+  scan, never from the preset table: `ScanContext.holdMax` (`frontend/lib/scanStore.ts`) passed through
+  `sanitizeHoldDays` (`lib/horizonPresets.ts`), exactly as `resolveOptionsScanRequest.ts` already does for the options
+  scan; a schedule profile uses `profile.holdMax` (`lib/scanScheduleResolve.ts`). `presetByKey(...).holdMax` is wrong
+  for Custom (its row is a fixed 15 while the user's range can be 60-185). Plan round 1, P0B-P1-F2.
 - **Veto window.** `veto_days = max(reject_days, hold_max_days)`. `hold_max_days` comes from the request. When a
   request has none (an older client, or a scheduled scan saved before this change), the backend uses the scoring
   horizon's own preset hold: `DEFAULT_HOLD_MAX = {"Intraday": 2, "Swing": 15, "Position": 45}` in
@@ -59,6 +64,10 @@ P0A (exclusion list, confidence) is a separate target. This plan does not touch 
   `frontend/lib/horizonPresets.ts` as the source it mirrors. New function
   `effective_veto_days(horizon, overrides, hold_max_days) -> int` returns
   `max(effective_event_window(horizon, overrides)[0], hold_max_days if not None else DEFAULT_HOLD_MAX[horizon])`.
+
+**Plan round 1 (2026-10-05):** P0B-P1-F1 (B6 read an earnings date the batch quote never carries), P0B-P1-F2
+(the hold came from the preset table, wrong for Custom) and P0B-P1-F3 (Step 4 / Watchlist read `status`, which B2 left
+uncapped) fixed in this text.
 
 ## Ticket graph
 
@@ -116,7 +125,11 @@ confidence/regime gates.
 
 **Semantics.**
 
-- Options: add `"CAUTION" if direction == "Bearish" else "PASS"` to the `_final_status(...)` arguments, and a field
+- Options: cap **both** verdicts a card carries. `finalStatus`: add `"CAUTION" if direction == "Bearish" else
+  "PASS"` to the `_final_status(...)` arguments. `status` (the stock-only verdict, `status=card.status` near line
+  1219): capped at CAUTION for Bearish, never lowering a REJECT -- Step 4 ranking (`step-4-ranking/cardToRow.ts`, row
+  tint, SymbolHeader, total-score badge) and `/api/watchlist` (`routers/watchlist.py`) read `status`, not
+  `finalStatus` (plan round 1, P0B-P1-F3). Also add a field
   `unvalidatedReason: Optional[str]` on `TradeCardData` (default `None`) set to `BEARISH_UNVALIDATED_MESSAGE` for
   bearish cards. Shortlist ranking already sorts CAUTION after PASS.
 - Stocks: in both functions, after the existing caps, a Bearish request caps `stock_status` at CAUTION (never lowers
@@ -126,7 +139,8 @@ confidence/regime gates.
 - Pre-breakout and fib scans emit setups, not statuses; untouched.
 
 **Test first.** Options scan with a fixture that PASSes Bullish: run it Bearish (patch the scorer to PASS) → card
-`finalStatus == "CAUTION"`, `unvalidatedReason` set; Bullish unchanged. Stocks `/stock-scan` Bearish → candidate
+`finalStatus == "CAUTION"` **and** `status == "CAUTION"`, `unvalidatedReason` set; Bullish unchanged. `/api/watchlist`
+over a stored Bearish card returns CAUTION. Jest: `cardToRow` on a Bearish card (status CAUTION) renders CAUTION. Stocks `/stock-scan` Bearish → candidate
 present at CAUTION with the `unvalidated` flag; `/analyze-stock` Bearish shows the flag.
 
 **Commit:** `feat(scan): cap bearish cards at CAUTION as Unvalidated, options and stocks (STOCKS-HORIZON-P0B)`
@@ -153,14 +167,14 @@ earnings veto uses `_STATUS_EVENT_VETO_BLOCKED`).
 - `ArmRequest` gains `hold_max_days: int = Field(..., ge=0, le=3650)` (**required**, the loud failure `horizon`
   already uses). `ArmedStrategy` gains `hold_max_days: Optional[int] = None` (direct constructors / tests). B5 reads
   it.
-- Frontend `components/organisms/AutoTradeArm/index.tsx` sends `hold_max_days` from the scan context's horizon preset
-  `holdMax` (`lib/horizonPresets.ts`; find how the component already obtains `horizon`). `lib/api.ts` `armAutoTrade`
+- Frontend `components/organisms/AutoTradeArm/index.tsx` sends `hold_max_days` = the scan's hold (shared
+  definitions: `sanitizeHoldDays` over `useScanStore.getState().context`'s hold, where it already reads `horizon`). `lib/api.ts` `armAutoTrade`
   request type gains the field.
 
 **Test first.** Backend: arm Bearish → 422, state unarmed; arm Bullish without `hold_max_days` → 422; with it → armed
 and `ArmedStrategy.hold_max_days` set; fire of a directly constructed Bearish `ArmedStrategy` → refused, status
 `unvalidated_blocked` recorded, adapter never called. Frontend: the arm request body includes `hold_max_days` equal
-to the preset's `holdMax`.
+to the scan context's hold, including a **Custom 60-185** context (→ 185, not 15).
 
 **Commit:** `feat(autotrade): refuse bearish arms and fires; arm carries hold_max_days (STOCKS-HORIZON-P0B)`
 
@@ -188,7 +202,8 @@ the arm is `components/organisms/AutoTradeArm`. Stock sends all go through `lib/
   message: BEARISH_UNVALIDATED_MESSAGE }` **before** the save. The three stock UIs show a not-placed outcome as they
   already do; additionally disable their send buttons for Bearish cards with the message (find each component's
   existing disabled-reason pattern).
-- Displays only: Steps 4/6 tables show the CAUTION status the backend now returns; no extra column.
+- Displays only: Step 4 ranking, the Watchlist and the stocks Steps 4/6 tables show the CAUTION status the backend
+  now returns (B2 caps both `status` and `finalStatus`); no extra column.
 
 **Test first.** Jest: `sendStockSaveFirst` with `action: 'SELL'` returns not-placed and calls neither the save nor
 `postStockOrder`; Step 7 send handler with a Bearish card calls neither `postOptionOrder` nor the portfolio save;
@@ -234,16 +249,28 @@ when the arm has no horizon. `ScanRequest` already carries `hold_min_days` / `ho
 
 ## B6 — Stocks: a new earnings veto over the hold
 
-**Mechanism today.** The stocks path never vetoes on earnings: `_rule_event` in stock mode is display-only (weight
-0), and `routers/stock_scan.py` computes `next_event_days` (nearest of earnings and ex-dividend, from the batch
-quote) for display. `StockScanRequest` (`app/schemas/stock_scan.py`) has no hold days.
+**Mechanism today.** The stocks path never vetoes on earnings and **has no earnings date at all**: the batch quote
+(`data/market.py::fetch_quotes`, used at `stock_scan.py` ~1627 for `_process_stock` and ~727 for `_analyze_core`)
+returns only `last` / `prevclose`, so the `quote.get("earnings_date")` reads that build `next_event_days` (~919,
+~1416) always see None -- that display is dead today -- and `score_stock` on the stocks path gets no `earnings_date`.
+The options scan gets dates from Tradier `fundamentals/calendars` (`market._extract_earnings_date`) with the yfinance
+fallback (`fetch_calendar_dates_async`) (`scan.py` ~641-649); the auto-trade fire path has the same chain as a sync
+call with per-source deadlines and failure backoff, `auto_trader._fetch_earnings_date` → `_lookup_earnings_date`
+(returns the date or None, raises on a failed lookup). `StockScanRequest` (`app/schemas/stock_scan.py`) has no hold
+days. (Plan round 1, P0B-P1-F1.)
 
 **Semantics.**
 
-- `StockScanRequest.hold_max_days: Optional[int] = Field(None, ge=0, le=3650)`. Frontend
-  `lib/resolveStockScanRequest.ts` sends the scan context's preset `holdMax`.
-- In the `/stock-scan` per-symbol function and `_analyze_core`, compute `earnings_days` from the quote's
-  `earnings_date` alone (not the dividend), `>= 0` only, and `veto_days = effective_veto_days(req.horizon,
+- `StockScanRequest.hold_max_days: Optional[int] = Field(None, ge=0, le=3650)`. Frontend: `ResolvedStockScanContext`
+  (`lib/resolveStockScanRequest.ts`) gains a **required** hold field and `buildStockScanRequestBody` sends it; all
+  three callers pass the scan's hold (shared definitions): `lib/stockScan.ts` (~346, `context.holdMax`),
+  `lib/scanScheduleResolve.ts` (~119, `profile.holdMax`), `lib/analysisStore.ts` (~47, `ctx.holdMax`).
+- **Earnings lookup.** In `_process_stock`, only for a symbol that has passed every drop gate (just before the
+  `PositionCardOut` is built, so dropped symbols cost nothing), and in `_analyze_core`, look up the next earnings
+  date with `await asyncio.to_thread(auto_trader._fetch_earnings_date, symbol)` -- the same Tradier-then-yfinance
+  chain, deadlines and backoff the fire path uses. A raised lookup or `None` = unknown. `earnings_days = (date -
+  today).days` when `>= 0`, else unknown. The quote's dead `earnings_date` read is left alone (not this ticket).
+- Compute `veto_days = effective_veto_days(req.horizon,
   req.overrides, req.hold_max_days)` once per scan (the per-symbol function receives it; same fail-toward-vetoing
   fallback as B5). When `earnings_days is not None and earnings_days < veto_days`: cap `stock_status` at CAUTION
   (never lowers a REJECT), add gate flag `{"gate": "earnings", "status": "CAUTION", "detail": "earnings in {n}d is
@@ -254,9 +281,13 @@ quote) for display. `StockScanRequest` (`app/schemas/stock_scan.py`) has no hold
   options auto-fire policy; extending it to stocks was not decided). State this in the code comment.
 - No candidate is dropped; funnel counts unchanged.
 
-**Test first.** `/stock-scan` with a PASS fixture, `hold_max_days=60`, Position, quote earnings 40d → CAUTION,
-`earnings_veto`, flag; earnings 70d → unchanged; ex-dividend 5d and no earnings → no veto; no `hold_max_days` → window
-45. `/analyze-stock` same. Frontend: the stock scan request body includes `hold_max_days`.
+**Test first.** Patch `auto_trader._fetch_earnings_date` (the module-level seam the suite already replaces in
+`tests/conftest.py`), **not** the quote: `/stock-scan` with a PASS fixture, `hold_max_days=60`, Position, earnings 40d
+→ CAUTION, `earnings_veto`, flag; 70d → unchanged; lookup returns None or raises → no veto, no crash; a symbol dropped
+by an earlier gate never triggers the lookup; no `hold_max_days` → window 45. `/analyze-stock` same. One test drives
+the real `_lookup_earnings_date` underneath with its HTTP layer stubbed (follow `tests/test_earnings_lookup_fire.py`).
+Frontend: the stock scan request body includes `hold_max_days` from each of the three callers, including a Custom
+60-185 context (→ 185).
 
 **Commit:** `feat(earnings): stocks veto earnings inside the hold window (STOCKS-HORIZON-P0B)`
 
@@ -271,9 +302,10 @@ age and vetoes when `daysNow < rejectDays` or `card.earningsVeto`. Step 7 and it
 **Semantics.**
 
 - Step 7 and its rail pass `event_window.veto_days ?? max(event_window.reject_days, holdMaxOfScan)`, where
-  `holdMaxOfScan` is the preset `holdMax` of the scan context that produced the result (find where Step 7 reads the
-  scan context; a persisted pre-deploy result has no `veto_days`). If neither is available, keep today's
-  `reject_days`.
+  `holdMaxOfScan` is the scan's hold (shared definitions -- `ScanContext.holdMax` through `sanitizeHoldDays`, never
+  the preset table; a persisted pre-deploy result has no `veto_days`, and `setContext` clears results when the
+  horizon changes, so the context matches the result shown). If neither is available, keep today's `reject_days`.
+  Test a Custom 60-185 context (→ 185).
 - Stocks: a small adapter `stockEarningsGate(card, scanTimestamp, vetoDays)` reusing `earningsGateFor`'s ageing (map
   `earnings_days`/`earnings_veto` onto its input; unknown is never a block on stocks, so pass `earningsUnknown:
   false` and `isEtf: true`-equivalent semantics, or factor the ageing out — implementer's choice, tested). The three
