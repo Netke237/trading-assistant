@@ -117,3 +117,92 @@ def test_no_harness_module_mentions_get_bars():
     assert set(HARNESS_MODULES) <= present
     for path in sorted(EVIDENCE.glob("*.py")):
         assert "get_bars" not in path.read_text(encoding="utf-8"), path.name
+
+
+# ── TRADING-REVIEW-PHASE-C T12: gate persistence and strategy matrix ─────────
+
+class _Res:
+    """Stub BacktestResult: only the fields the pure cores read."""
+
+    def __init__(self, n_trades, expectancy):
+        self.n_trades = n_trades
+        self.expectancy = expectancy
+
+
+def test_spearman_identical_reversed_and_tied_ranks():
+    from evidence.gate_persistence import spearman
+
+    assert spearman([1, 2, 3, 4], [10, 20, 30, 40]) == pytest.approx(1.0)
+    assert spearman([1, 2, 3, 4], [40, 30, 20, 10]) == pytest.approx(-1.0)
+    # Ties take the average rank: x ranks [1, 2.5, 2.5, 4] against y ranks [1, 2, 3, 4]
+    # give 4.5 / sqrt(4.5 * 5). Ordinal tie-breaking would give exactly 1.0.
+    assert spearman([1, 2, 2, 3], [1, 2, 3, 4]) == pytest.approx(4.5 / (4.5 * 5) ** 0.5)
+
+
+def test_persistence_excludes_symbols_below_min_trades_in_either_half():
+    from evidence.gate_persistence import persistence
+
+    results_a = {"A": _Res(10, 1.0), "B": _Res(10, 2.0), "C": _Res(3, 5.0),
+                 "D": _Res(8, 3.0), "F": _Res(9, 4.0)}
+    results_b = {"A": _Res(6, 0.5), "B": _Res(7, 1.5), "C": _Res(9, -1.0),
+                 "D": _Res(4, 2.0), "E": _Res(10, 1.0), "F": _Res(5, 3.0)}
+    out = persistence(results_a, results_b, min_trades=5)
+    # C is short in half A, D in half B, E is missing from half A.
+    assert out.symbols == ["A", "B", "F"]
+    assert out.n == 3
+    assert out.rho == pytest.approx(1.0)
+    assert out.band == pytest.approx(1.96 / (3 - 1) ** 0.5)
+
+
+def test_pool_is_trade_weighted():
+    from app.services.strategy_backtest import _MIN_TRADES
+    from evidence.strategy_matrix import pool
+
+    results = {"A": _Res(10, 1.0), "B": _Res(30, -1.0)}
+    row = pool(results)
+    assert row.n_trades == 40
+    assert row.n_symbols == 2
+    assert row.mean_trade_return_pct == pytest.approx((10 * 1.0 + 30 * -1.0) / 40)
+    assert row.share_min_trades == pytest.approx(1.0)
+
+    results["C"] = _Res(_MIN_TRADES - 1, 5.0)
+    row = pool(results)
+    assert row.n_trades == 40 + _MIN_TRADES - 1
+    assert row.mean_trade_return_pct == pytest.approx(
+        (10 * 1.0 + 30 * -1.0 + (_MIN_TRADES - 1) * 5.0) / (40 + _MIN_TRADES - 1))
+    assert row.share_min_trades == pytest.approx(2 / 3)
+    assert row.ci_low <= row.ci_high
+    assert pool(results) == row       # fixed seed: reproducible CI
+
+
+def test_both_scripts_pass_commission_to_run_strategy_backtest(monkeypatch):
+    from evidence import gate_persistence, strategy_matrix
+
+    calls = []
+
+    def recorder(bars, **kw):
+        calls.append({"n": len(bars), "first": bars[0]["time"], **kw})
+        return _Res(0, 0.0)
+
+    monkeypatch.setattr(gate_persistence, "run_strategy_backtest", recorder)
+    monkeypatch.setattr(strategy_matrix, "run_strategy_backtest", recorder)
+    costs = {"fee_pct": 0.002, "slippage_pct": 0.0005}
+    bars = [_bar(i, 100.0, 101.0, 99.0, 100.0) for i in range(900)]
+
+    gate_persistence.run_halves({"X": bars}, "pullback_ema", "Bullish", costs)
+    assert len(calls) == 2
+    assert all(c["commission"] == pytest.approx(0.0025) for c in calls)
+    first, second = calls
+    assert first["entry_start"] == date.fromisoformat(bars[0]["time"])
+    assert first["n"] == 450
+    # Second half: entries from the midpoint, behind WFO's 260-bar warm-up prefix.
+    assert second["entry_start"] == date.fromisoformat(bars[450]["time"])
+    assert second["first"] == bars[450 - 260]["time"]
+    assert second["n"] == 450 + 260
+
+    calls.clear()
+    strategy_matrix.run_cell({"X": bars}, "pullback_ema", "Bullish", costs)
+    assert len(calls) == 1
+    assert calls[0]["commission"] == pytest.approx(0.0025)
+    assert calls[0]["n"] == 900
+    assert calls[0].get("entry_start") is None
