@@ -11,7 +11,8 @@ Kenneth decided (decision `PHASE-C-DEFERRED-GRILL-2026-10-05`) to build all seve
 backtest map and the evidence scripts, and `setup_window_bars <= 0` read as 1 with a config-health warning.
 
 **No live number changes on purpose, with one exception (T6).** T1-T5 and T7 change no figure the app shows today
-(each says why). T6 removes a 24-hour window in which a backtest computed on pre-refresh bars can be served.
+(each says why). T6 removes a 24-hour window in which a backtest computed on pre-refresh bars can be served — both
+entries cached before the refresh (eviction) and results of backtests in flight across it (generation guard).
 
 **Independence.** Disjoint from `TRADING-REVIEW-PHASE-C-RR`'s files (`reward_risk.py`, `trade_plan.py`, `TradeCard`,
 `scanStore`, `schemas/__init__.py`). Built on its own branch from `main`.
@@ -32,10 +33,15 @@ T1 (cache test isolation) ── T2 (clear_cache lock + generation)      same fi
 T3 (vwap_daily backtest map + evidence)                              disjoint
 T4 (setup_window_bars clamp + config_health + SCORING_RULES.md)      disjoint
 T5 (WfoOosMetrics type + Settings display)                           disjoint (frontend only)
-T6 (refresh_adjustments evicts _BACKTEST_CACHE) ── T7 (commission dedupe)   same file: routers/stock_scan.py → serial
+T2 ── T6 (refresh_adjustments evicts _BACKTEST_CACHE + generation guard) ── T7 (commission dedupe)
+                                                                     T6/T7 same file: routers/stock_scan.py → serial
 ```
 
-Sequential build in the order T1, T2, T3, T4, T5, T6, T7.
+Sequential build in the order T1, T2, T3, T4, T5, T6, T7. T6 also needs T2 (`_clear_generation` and the helper).
+
+**Plan round 1 (2026-10-05):** HYG-P1-F1 (T4 wrote wrong per-horizon numbers into SCORING_RULES.md) and HYG-P1-F2
+(T6 left an in-flight backtest able to re-insert a pre-refresh result) fixed in this text. Also corrected from the
+same audit's checks: T4's function is `_rule_trigger`; `clear_cache` has no production caller (T2).
 
 ---
 
@@ -78,8 +84,9 @@ per-test monkeypatch in `test_adjustment_refresh.py` stays).
 ## T2 — `clear_cache()` takes `_db_lock` and invalidates in-flight writes (item 4)
 
 **Mechanism today.** `clear_cache()` (`confidence_cache.py`) clears `_store` under `_lock` and runs
-`DELETE FROM confidence_cache` **without** `_db_lock` and **without** bumping any generation. Its only caller is
-`routers/credentials.py:34` (a credentials change). A `set_cached(..., bars_generation=g)` already past its memory
+`DELETE FROM confidence_cache` **without** `_db_lock` and **without** bumping any generation. It has **no production
+caller** today (`routers/credentials.py:33-34` calls `tastytrade_session.clear_cache`, a different function); tests
+call it. A `set_cached(..., bars_generation=g)` already past its memory
 write when `clear_cache` runs can re-insert its row into SQLite after the DELETE (it holds `_db_lock`, the DELETE does
 not wait for it), and a value computed before the clear is still accepted into `_store` afterwards because no
 generation moved. `invalidate_symbol` (same file) already does this correctly for one symbol (R2-F1 of Phase C).
@@ -105,8 +112,8 @@ use a tmp `_DB_PATH`):
    `clear_cache()` on another thread while it waits; after both finish, no row for `k` remains in SQLite. Mirror the
    existing R2-F1 interleaving test's structure.
 
-**Why no live number changes:** a credentials change today can leave a pre-change confidence in the cache; after T2 it
-cannot. That only removes a stale value.
+**Why no live number changes:** no production path calls `clear_cache`. T2 makes it safe for any future caller and
+provides the clear generation T6 relies on.
 
 **Commit:** `fix(cache): clear_cache takes _db_lock and invalidates in-flight writes (Phase C hygiene)`
 
@@ -148,7 +155,7 @@ scan number depends on the missing entry**. The evidence harness cannot measure 
 
 ## T4 — `setup_window_bars <= 0` reads as 1 and warns (item 2)
 
-**Mechanism today.** `_score_trigger` (`scoring/stock_scorer.py:754`) reads `window = int(tc.get("setup_window_bars",
+**Mechanism today.** `_rule_trigger` (`scoring/stock_scorer.py:754`) reads `window = int(tc.get("setup_window_bars",
 1))`. A value `<= 0` makes `_event_within(n, window, ...)` find no bar, so MACD, the RSI cross and the stochastic event
 can never pass: the trigger rule silently loses its momentum events. `config_health` only checks that the key is known
 (`HORIZON_KEYS["trigger"]`, `config_health.py:130-134`), not its value. `SCORING_RULES.md:134` says "All signals must
@@ -163,9 +170,10 @@ bar (`:137` already says so) and the window is per horizon (8 / 10 / 5 in `scori
   `"setup_window_bars must be >= 1; read as 1 (last bar only)"`. Add it as one small `_check_setup_window(doc, r)`
   called where `_check_horizons` is called. Warnings, not errors: the reader always has a usable value (DOCC pattern).
 - `SCORING_RULES.md`: line 134 becomes "Each momentum event must occur within | the last `setup_window_bars` bars
-  (Swing 8, Position 10, the third horizon 5 — read the horizon names from `scoring_rules.yaml`), and its state must
-  still hold on the last bar"; line 142 "within 8 bars" becomes "within `setup_window_bars`". Change nothing else in
-  the file.
+  (per horizon — see the Section 8 matrix's "Setup window (bars)" row), and its state must still hold on the last
+  bar"; line 142 "within 8 bars" becomes "within `setup_window_bars`". Do not write per-horizon numbers into these two
+  lines (the shipped values are Intraday 10, Swing 8, Position 5: `scoring_rules.yaml:264,105,375`, already stated at
+  `SCORING_RULES.md:219`). Change nothing else in the file.
 
 **Test first.**
 
@@ -224,6 +232,19 @@ number in front of the user.
 - `routers/stock_scan.py` gains `evict_backtest_cache(symbols: Iterable[str]) -> int`: removes every
   `_BACKTEST_CACHE` key whose prefix is `f"{SYMBOL.upper()}|"` (exact prefix with the `|` delimiter, so `AAPL` never
   evicts `AAPLX`); returns the count.
+- **In-flight guard (plan round 1, HYG-P1-F2).** Eviction alone does not close the window: a scan or Analysis request
+  that read the bars before the refresh and is awaiting `run_strategy_backtest` in `_BACKTEST_POOL` stores its
+  pre-refresh result at `stock_scan.py:857` / `:1312` **after** the eviction, under the same key, for 24 h. Both
+  writers already capture `_bars_gen = conf_generation()` before reading the bars (`stock_scan.py:697`, `:1135`), and
+  `refresh_adjustments` calls `invalidate_symbol(symbol)` (which bumps that symbol's generation) before the callback.
+  So:
+  - `confidence_cache` gains public `invalidated_since(symbol: str, bars_generation: int) -> bool` = the T2 helper's
+    test (`max(_symbol_generation.get(SYMBOL, 0), _clear_generation) > bars_generation`) under `_lock`. T2's
+    `_invalidated_after(key, ...)` calls it with the key's symbol prefix, so the rule lives in one place.
+  - At both `_BACKTEST_CACHE[_bt_key] = ...` stores: skip the store when
+    `invalidated_since(symbol, _bars_gen)`; the computed `bt_result` is still used for this request (it is what this
+    request's bars give, as today).
+  - The eviction stays: it removes entries stored before the refresh started.
 - The service must not import the router. `refresh_adjustments` gains an optional parameter
   `on_refreshed: Callable[[str], None] | None = None`, called once per refreshed symbol right after
   `invalidate_symbol(symbol)`. The endpoint (`routers/historical_data.py:78-85`) passes
@@ -238,8 +259,15 @@ number in front of the user.
    failed or non-stale one (reuse the file's existing stale-symbol fixtures).
 3. Endpoint test: posting to `/api/historical-data/refresh-adjustments` with a stubbed refresh that reports `AAPL`
    refreshed leaves no `AAPL|` key in `_BACKTEST_CACHE`.
+4. `invalidated_since`: `g = generation()`; `invalidate_symbol("AAPL")` → `invalidated_since("AAPL", g)` is True,
+   `invalidated_since("MSFT", g)` is False; after `clear_cache()` both are True for the pre-clear `g`.
+5. Interleaving (HYG-P1-F2): drive one of the two scan paths with `get_historical_bars` and `run_strategy_backtest`
+   stubbed so that `invalidate_symbol(symbol)` + `evict_backtest_cache([symbol])` run while the backtest is in flight
+   (e.g. the stubbed backtest triggers them before returning). After the request finishes, `_BACKTEST_CACHE` has no
+   entry for that symbol, and the request's own result still carries the computed backtest. Repeat for the other
+   path (`:1312` and `:857`), or parametrize.
 
-**Commit:** `fix(backtest): evict cached backtests of symbols whose adjustments were refreshed (Phase C hygiene)`
+**Commit:** `fix(backtest): a refresh evicts cached backtests and drops in-flight pre-refresh results (Phase C hygiene)`
 
 ---
 
