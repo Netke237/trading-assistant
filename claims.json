@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "codex/trade-card-ui-followup",
-      "claimed_at": "2026-10-05T20:12:10Z",
-      "expires_at": "2026-10-05T23:28:27Z",
-      "note": "Implement reviewed trade-card UI tickets with independent audit",
-      "task": "TRADE-CARD-UI-FOLLOWUP"
-    }
-  ]
+  "claims": []
 }
