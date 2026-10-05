@@ -41,9 +41,12 @@ from evidence._bars import (  # noqa: E402
 )
 
 # The strategies run_strategy_backtest can replay on daily bars. mean_reversion_vwap
-# needs 15-minute bars, which ohlcv_daily does not hold.
+# needs 15-minute bars, which ohlcv_daily does not hold; mean_reversion_vwap_daily is
+# its rolling daily-VWAP variant and has no `active:` block, so it runs on the signal
+# function's own defaults over its `exit:` block.
 DAILY_STRATEGIES = (
     "pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb",
+    "mean_reversion_vwap_daily",
 )
 DIRECTIONS = ("Bullish", "Bearish")
 MIN_TRADES_PER_HALF = 5
