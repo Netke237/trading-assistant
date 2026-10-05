@@ -34,7 +34,8 @@ def test_bearish_snap_cannot_bypass_floor(multiple,support,expected,capped):
 
 @pytest.mark.parametrize('fraction,basis',[(None,'premium_stop'),(0,'premium_stop'),(-1,'premium_stop'),(math.nan,'premium_stop'),(.77,'premium_stop'),(.6,'premium_stop'),(.4,'stock_stop')])
 def test_risk_basis_and_ladder_agree(fraction,basis):
-    args=dict(stock_price=100,strike=100,expiry_years=.2,current_premium=5,is_call=True,premium_stop_pct=.6)
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: the premium-stop / stock-stop basis now applies only with a protective stop order.
+    args=dict(stock_price=100,strike=100,expiry_years=.2,current_premium=5,is_call=True,premium_stop_pct=.6,protective_stop_order=True)
     rr=estimate_rr(target_price=106,invalidation_price=97,risk_fraction=fraction,**args)
     targets=estimate_targets(base_target_price=106,risk_fraction=fraction,**args)
     assert rr.risk_basis == basis
@@ -88,7 +89,8 @@ def test_captured_dollar_risk_and_visible_option_price_agree(premium,stop):
     assert cost is not None
     plan=build_trade_plan(direction='Bullish',stock_price=100,strike=105,dte=45,premium=premium,entry_bid=premium,entry_ask=premium,entry_mid=premium,rr_cfg={'premium_stop_pct':.6},final_stop_price=stop,target_price=100+2*(100-stop),stop_cost_fraction=cost.fraction)
     for row in plan.targets:
-        browser_rr=round((row.estimatedOptionPrice-premium)/min(plan.premium_stop,plan.stock_stop_loss),2)
+        # Re-pinned by TRADING-REVIEW-PHASE-C-RR: the browser's risk leg is the full premium, not min(premium stop, stock-stop loss).
+        browser_rr=round((row.estimatedOptionPrice-premium)/premium,2)
         assert row.rrContribution == browser_rr
     assert plan.rr_ratio == plan.targets[0].rrContribution
 
@@ -107,5 +109,6 @@ def test_captured_half_cent_mid_matches_serialized_premium(mid,target):
     assert original.stock_stop_loss == replay.stock_stop_loss
     assert original.entry.limit_price == canonical
     for row in original.targets:
-        ratio=(row.estimatedOptionPrice-canonical)/min(original.premium_stop,original.stock_stop_loss)
+        # Re-pinned by TRADING-REVIEW-PHASE-C-RR: the risk leg is the full (canonical) premium, not min(premium stop, stock-stop loss).
+        ratio=(row.estimatedOptionPrice-canonical)/canonical
         assert row.rrContribution == pytest.approx(ratio,abs=.005000001)

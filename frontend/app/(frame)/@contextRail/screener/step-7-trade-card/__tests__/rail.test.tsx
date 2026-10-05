@@ -34,7 +34,7 @@ function card(over: Partial<TradeCardData> = {}): TradeCardData {
     contractBreakdown: { dteFit: 80, delta: 65, ivAttractiveness: 55, liquidity: 75, spread: 90 },
     contractDetails: { strike: 150, expiry: '2026-05-15', right: 'C', mid: 2.5, delta: 0.45, theta: -0.09, ivRank: 20, dte: 24 },
     entry: { limit: 2.5, maxFill: 2.63, orderType: 'Limit' },
-    exit: { invalidation: 140, premiumStop: 1.5, timeStopDays: 10, target: 160, targets: [] },
+    exit: { invalidation: 140, premiumStop: 1.5, timeStopDays: 10, target: 160, targets: [], rrRiskBasis: 'full_premium' },
     rrRatio: 3.0, rrModel: 'Heston repriced', finalStatus: 'PASS',
     nextEventDays: 30, earningsDays: 30,
     ...over,
@@ -303,8 +303,24 @@ it('withholds numeric R/R when its measured stock stop moved', () => {
 });
 
 
-it.each(['stock_stop', 'premium_stop'] as const)('names captured %s risk without changing its thresholds', (basis) => {
-  act(() => { useTradeCardUiStore.setState({ activeCard: { card: { ...PICKED, exit: { ...PICKED.exit, rrRiskBasis: basis } }, rrPending: false } }); });
+const rrStatus = () => document.querySelector('[data-gate-label="R:R ≥ 2.0"]')?.getAttribute('data-status') ?? null;
+
+// TRADING-REVIEW-PHASE-C-RR (review M7, D5): no protective stop order is ever
+// placed, so the R/R the rail grades risks the whole premium.
+it('names the full-premium risk without changing its thresholds', () => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: { ...PICKED, rrRatio: 2.4 }, rrPending: false } }); });
   render(<TradeCardContextRail />);
-  expect(screen.getByText(new RegExp(`risking the ${basis === 'stock_stop' ? 'stock stop' : 'premium stop'}`))).toBeInTheDocument();
+  expect(screen.getByText(/risking the full premium \(no protective stop order\)/)).toBeInTheDocument();
+  expect(screen.getByText(/reward:risk is 2\.4×/)).toBeInTheDocument();
+  expect(rrStatus()).toBe('PASS');
+});
+
+// Defence in depth for a live card that bypassed the scanStore v18 migration:
+// a ratio measured on another basis is never graded against the thresholds.
+it.each(['stock_stop', 'premium_stop', undefined] as const)('cautions on an R/R computed on an older basis (%s)', (basis) => {
+  act(() => { useTradeCardUiStore.setState({ activeCard: { card: { ...PICKED, rrRatio: 3.0, exit: { ...PICKED.exit, rrRiskBasis: basis } }, rrPending: false } }); });
+  render(<TradeCardContextRail />);
+  expect(screen.getByText('R/R computed on an older basis: re-run the scan')).toBeInTheDocument();
+  expect(screen.queryByText(/reward:risk is/)).not.toBeInTheDocument();
+  expect(rrStatus()).toBe('CAUTION');
 });

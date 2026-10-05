@@ -25,7 +25,8 @@ def test_bs_fallback_call_above_strike():
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
     )
     assert rr.model_used == "BS repriced (IV-derived)"
-    assert rr.rr_ratio == 5.49
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == 3.30   # 8.238855 / 2.50 (was / 1.50 = 5.49)
     assert rr.estimated_exit_premium == 10.74
 
 
@@ -39,7 +40,8 @@ def test_bs_fallback_call_below_strike():
         strike=190, expiry_years=30/365, current_premium=1.00, is_call=True,
     )
     assert rr.model_used == "BS repriced (IV-derived)"
-    assert rr.rr_ratio == 0.24
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == 0.15   # 0.146573 / 1.00 (was / 0.60 = 0.24)
     assert rr.estimated_exit_premium == 1.15
 
 
@@ -55,7 +57,8 @@ def test_bs_fallback_put_below_strike():
         strike=180, expiry_years=30/365, current_premium=2.00, is_call=False,
     )
     assert rr.model_used == "BS repriced (IV-derived)"
-    assert rr.rr_ratio == 6.62
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == 3.97   # 7.943374 / 2.00 (was / 1.20 = 6.62)
     assert rr.estimated_exit_premium == 9.94
 
 
@@ -73,7 +76,8 @@ def test_bs_fallback_put_above_strike():
         stock_price=185, target_price=185, invalidation_price=195,
         strike=180, expiry_years=30/365, current_premium=1.00, is_call=False,
     )
-    assert rr.rr_ratio == -0.91
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == -0.54   # -0.543426 / 1.00 (was / 0.60 = -0.91)
     assert rr.estimated_exit_premium == 0.46
 
 
@@ -130,7 +134,8 @@ def test_zero_price_movement_returns_zero_ratio():
         stock_price=185, target_price=185, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
     )
-    assert rr.rr_ratio == -0.82
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == -0.49   # -1.231442 / 2.50 (was / 1.50 = -0.82)
     assert rr.estimated_exit_premium == 1.27
 
 
@@ -203,8 +208,9 @@ def test_estimate_rr_uses_premium_stop_pct():
         is_call=True,
     )
 
-    result_60 = estimate_rr(**base_kwargs, premium_stop_pct=0.60)
-    result_30 = estimate_rr(**base_kwargs, premium_stop_pct=0.30)
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: premium_stop_pct sets risk only with a protective stop order.
+    result_60 = estimate_rr(**base_kwargs, premium_stop_pct=0.60, protective_stop_order=True)
+    result_30 = estimate_rr(**base_kwargs, premium_stop_pct=0.30, protective_stop_order=True)
 
     # 0.30 stop_pct = half the risk basis → rr_ratio should be double
     assert result_60.rr_ratio > 0
@@ -249,7 +255,8 @@ def test_estimate_exit_premium_rounded_on_zero_reward():
         stock_price=185.0, target_price=185.0, invalidation_price=175.0,
         strike=190.0, expiry_years=30 / 365, current_premium=2.567, is_call=True,
     )
-    assert rr.rr_ratio == -0.82
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == -0.49   # -1.255737 / 2.567 (was / 1.5402 = -0.82)
     assert rr.estimated_exit_premium == 1.31
 
 
@@ -267,7 +274,8 @@ def test_heston_degenerate_price_falls_back_to_delta_approx():
     assert rr.model_used == "BS repriced (IV-derived)"
     # Matches test_bs_fallback_call_above_strike's expected math exactly.
     assert rr.estimated_exit_premium == 10.74
-    assert rr.rr_ratio == 5.49
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == 3.30
 
 
 def test_heston_exception_falls_back_to_delta_approx(monkeypatch):
@@ -631,6 +639,8 @@ def test_estimate_rr_zero_stop_pct_returns_zero():
         current_premium=2.00,
         is_call=True,
         premium_stop_pct=0.0,
+        # Re-pinned by TRADING-REVIEW-PHASE-C-RR: premium_stop_pct sets risk only with a protective stop order.
+        protective_stop_order=True,
     )
     assert result.rr_ratio == 0.0
 
@@ -828,7 +838,8 @@ def test_estimate_rr_put_heston_path_uses_correct_model_label():
     )
     assert rr.model_used == "Heston repriced"
     assert rr.estimated_exit_premium == 9.84
-    assert rr.rr_ratio == 6.53
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == 3.92   # 7.835517 / 2.00 (was / 1.20 = 6.53)
 
 
 def test_estimate_targets_seeds_heston_reference_from_first_successful_level(monkeypatch):
@@ -918,8 +929,9 @@ def test_negative_reward_preserves_sign_deterministic():
             strike=100.0, expiry_years=0.25, current_premium=5.00, is_call=True,
             heston_params=params, premium_stop_pct=0.60,
         )
-    # exit=3.00, reward=-2.00, risk=5.00*0.60=3.00, rr=-0.67
-    assert rr.rr_ratio == -0.67
+    # exit=3.00, reward=-2.00, risk=5.00 (full premium), rr=-0.40
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
+    assert rr.rr_ratio == -0.40
     assert rr.estimated_exit_premium == 3.00
 
 
@@ -931,6 +943,8 @@ def test_risk_zero_still_clamps_to_zero_not_negative():
         stock_price=100.0, target_price=90.0, invalidation_price=110.0,
         strike=100.0, expiry_years=0.25, current_premium=2.00, is_call=True,
         premium_stop_pct=0.0,
+        # Re-pinned by TRADING-REVIEW-PHASE-C-RR: premium_stop_pct sets risk only with a protective stop order.
+        protective_stop_order=True,
     )
     assert rr.rr_ratio == 0.0
 
@@ -949,9 +963,10 @@ def test_estimate_targets_preserves_negative_rr_contribution():
             premium_stop_pct=0.60,
         )
     # opt_price stubbed to 3.00 for every target level via heston_price mock;
-    # reward = 3.00 - 5.00 = -2.00, risk_basis = 5.00*0.60 = 3.00, rr = -0.67
+    # reward = 3.00 - 5.00 = -2.00, risk_basis = 5.00 (full premium), rr = -0.40
+    # Re-pinned by TRADING-REVIEW-PHASE-C-RR: risk is the full premium (no protective stop order), was premium x 0.60.
     for level in results:
-        assert level.rrContribution == -0.67, (
-            f"expected -0.67 (real negative ratio), got {level.rrContribution} — "
+        assert level.rrContribution == -0.40, (
+            f"expected -0.40 (real negative ratio), got {level.rrContribution} — "
             "rrContribution must not clamp negative reward to 0.0"
         )

@@ -41,10 +41,10 @@ describe('scanStore persisted migrate(): legacy pricing methods', () => {
   it('normalizes legacy target pricing codes in persisted scan results', () => {
     const migrated = migrate({
       scanResult: {
-        candidates: [{ exit: { targets: [{ pricingMethod: 'delta-approx' }] } }],
+        candidates: [{ exit: { targets: [{ pricingMethod: 'delta-approx' }], rrRiskBasis: 'full_premium' } }],
       },
       previousRun: {
-        candidates: [{ exit: { targets: [{ pricingMethod: 'heston' }] } }],
+        candidates: [{ exit: { targets: [{ pricingMethod: 'heston' }], rrRiskBasis: 'full_premium' } }],
       },
     }, 11) as {
       scanResult: { candidates: Array<{ exit: { targets: Array<{ pricingMethod: string }> } }> };

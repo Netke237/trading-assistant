@@ -212,6 +212,16 @@ function stripLegacyStopFromScanResult(value: unknown): unknown {
   };
 }
 
+/** scanStore v18 (TRADING-REVIEW-PHASE-C-RR): an options result is kept only
+ *  when EVERY candidate's R/R was computed on the full-premium basis. */
+function discardPreFullPremiumScanResult(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
+  const allFullPremium = value.candidates.every(
+    (candidate) => isRecord(candidate) && isRecord(candidate.exit) && candidate.exit.rrRiskBasis === 'full_premium',
+  );
+  return allFullPremium ? value : null;
+}
+
 function stripLegacyIvDetailsFromScanResult(value: unknown): unknown {
   if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
   return {
@@ -600,7 +610,7 @@ export const useScanStore = create<ScanStoreState>()(
         return quotaSafeLocalStorage();
       }),
       skipHydration: true,
-       version: 17,
+       version: 18,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -741,6 +751,27 @@ export const useScanStore = create<ScanStoreState>()(
           // reads as "use current settings, and say so" -- StoreHydration may
           // then attach the backend's record when its scan_id matches.
           s = { ...s, stockScanRequest: null };
+        }
+        if (version < 18) {
+          // TRADING-REVIEW-PHASE-C-RR (review M7, D5). Options R/R now risks
+          // the FULL premium: no protective stop order is ever placed. Every
+          // `rrRatio` / `rrContribution` stored before that divided reward by
+          // the premium stop (premium x 0.60) or the captured stock-stop loss,
+          // under the same field names -- the v13-v15 shape, a stored value
+          // that became a wrong number under a new reading. The header, the
+          // rail and AlternativeContractRow would print it at least 1/0.6 too
+          // high. Discarded rather than recomputed, as v13-v15 delete rather
+          // than guess: the whole options result goes when any
+          // candidate's `exit.rrRiskBasis` is not 'full_premium'; the user
+          // re-runs the scan. previousRun goes by the same rule, and the
+          // one-time loss of Δrank against it is accepted. The backend refuses
+          // the same blobs (SCAN_RESULT_SCHEMA_VERSION 3), so StoreHydration
+          // cannot refill them from /scan/last. stockScanResult is untouched.
+          s = {
+            ...s,
+            scanResult: discardPreFullPremiumScanResult(s.scanResult),
+            previousRun: discardPreFullPremiumScanResult(s.previousRun),
+          };
         }
         return s;
       },

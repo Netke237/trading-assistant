@@ -160,7 +160,9 @@ describe('T-F3 — persist migration v16 → v17', () => {
   it('persists the request next to its result', () => {
     act(() => useScanStore.getState().setStockScanResult(RESULT('P') as never, { strategy: 'z' } as never));
     const stored = JSON.parse(localStorage.getItem('bamendjou-scan-store') ?? '{}');
-    expect(stored.version).toBe(17);
+    // Re-pinned by TRADING-REVIEW-PHASE-C-RR: scanStore v18 (full-premium R/R)
+    // moved the configured version; this test needs only "at or past v17".
+    expect(stored.version).toBeGreaterThanOrEqual(17);
     expect(stored.state.stockScanRequest).toEqual({ strategy: 'z' });
     localStorage.clear();
   });

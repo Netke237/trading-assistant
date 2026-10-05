@@ -660,7 +660,7 @@ class TradeExit(BaseModel):
     # as a computed stop; the card reads "not computed — re-run the scan".
     stockStopLoss: float | None = None
     stockStopLossAt: float | None = None
-    rrRiskBasis: Literal["premium_stop", "stock_stop"] | None = None
+    rrRiskBasis: Literal["premium_stop", "stock_stop", "full_premium"] | None = None
     targetSource: Literal["structural_snap", "arithmetic", "flat_fallback", "capped"] | None = None
     finalStop: Optional[FinalStopOut] = None
 
@@ -1019,6 +1019,12 @@ class DteWindow(BaseModel):
 #      did not exist. A v1 blob is therefore indistinguishable from a piece-3
 #      scan whose bar feed was too thin to resolve a stop, so the basis is not
 #      recoverable and the blob is refused rather than relabelled.
+#   3  options R/R on the full-premium basis (Phase C T9, TRADING-REVIEW-
+#      PHASE-C-RR). Before it, `rrRatio` / `targets[].rrContribution` divided
+#      reward by the premium stop (premium x 0.60) or the captured stock-stop
+#      loss, and the field names did not change -- so a v2 ratio overstates
+#      reward per unit of real risk by at least 1/0.6 under the new reading.
+#      Refused, and the frontend's scanStore v18 branch discards its own copy.
 #
 # EVERY CONSUMER COMPARES, none tests `is None`. A stored result is trustworthy
 # only when its version is at least this one: `(blob.schema_version or 0) <
@@ -1027,7 +1033,7 @@ class DteWindow(BaseModel):
 # the ONE bump that existed when it was written, so the next one was silently
 # exempt. Written as a comparison, the next bump is honoured everywhere for
 # free.
-SCAN_RESULT_SCHEMA_VERSION = 2
+SCAN_RESULT_SCHEMA_VERSION = 3
 
 
 class ScanRequestContext(BaseModel):
