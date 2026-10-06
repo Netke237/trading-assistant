@@ -28,3 +28,7 @@ Completion housekeeping: feature/audit record pushed48cfafd0; phase claim releas
 ## Coordination review — 2026-10-06
 
 Fresh/root/coordination_review verified commit order, exact auditeddiff hash, independent reviewer/evidence/counters, releasedclaim and state no drift at02d083e9. [Report](../coordination-review.md). Current closure headers supersede historical pending entries. Phase is BUILT/AUDITED ON FEATURE, NOT ON MAIN; shipped_unaudited is the state.py presence-compatible built status with audit_cleantrue, not a merge claim. Code-stage counters unchanged.
+
+## Main merge — 2026-10-06
+
+Kenneth explicitly authorized merge on the integrated-audit basis. Feature merged into main with no code conflict; merge tree exactly matches reviewed feature tree. W1-W4 shipped with audit_cleantrue; C4 remains separate. This entry supersedes historical unmerged statements.
