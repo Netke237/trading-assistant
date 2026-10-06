@@ -174,8 +174,15 @@ Status = Literal["PASS", "CAUTION", "REJECT"]
 
 def status_cap(confidence: int | None, gate: dict) -> Status:
     """The *most permissive* status this confidence allows. Demote-only:
-    callers combine this with the raw status and take the worse of the two."""
-    if not gate.get("enabled", True) or confidence is None:
+    callers combine this with the raw status and take the worse of the two.
+
+    A missing confidence (fewer than min_samples non-overlapping past setups)
+    is Unvalidated and caps at CAUTION whether or not the gate is enabled: it
+    can never PASS (STOCKS-HORIZON-P0A A5). `enabled` and the thresholds
+    govern a measured confidence only."""
+    if confidence is None:
+        return "CAUTION"
+    if not gate.get("enabled", True):
         return "PASS"
     if confidence < gate["rejectBelow"]:
         return "REJECT"
@@ -184,11 +191,13 @@ def status_cap(confidence: int | None, gate: dict) -> Status:
     return "PASS"
 
 
-def interpret(confidence: int | None, *, sample_size: int, symbol: str) -> str:
+def interpret(confidence: int | None, *, sample_size: int, symbol: str,
+              min_samples: int = 20) -> str:
     if confidence is None:
         return (
-            f"Not enough history to judge this setup on {symbol} "
-            f"({sample_size} past occurrences). Confidence not applied."
+            f"Unvalidated — fewer than {min_samples} non-overlapping past setups on "
+            f"{symbol} ({sample_size} found). Capped at CAUTION until there is "
+            f"enough history."
         )
     if confidence >= 70:
         return (

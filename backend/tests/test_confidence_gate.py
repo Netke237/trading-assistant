@@ -15,8 +15,10 @@ def test_status_cap_passes_when_high():
     assert status_cap(80, GATE) == "PASS"
 
 
-def test_status_cap_none_confidence_does_not_demote():
-    assert status_cap(None, GATE) == "PASS"
+def test_status_cap_none_confidence_caps_at_caution():
+    # STOCKS-HORIZON-P0A A5: missing confidence is Unvalidated and never PASSes
+    # (was "PASS": None meant "gate not applied").
+    assert status_cap(None, GATE) == "CAUTION"
 
 
 def test_status_cap_disabled_gate_never_demotes():

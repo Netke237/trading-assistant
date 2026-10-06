@@ -913,17 +913,25 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
             await set_cached(_ck, _cached, bars_generation=_bars_gen)
         conf_val = _cached["confidence"]
-        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+        _min_samples = int(load_backtest_cfg(req.horizon)["min_samples"])
+        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol,
+                             min_samples=_min_samples)
+        _unvalidated = conf_val is None
         _below_reject = (conf_val is not None and req.confidence_reject_below is not None
                          and conf_val < req.confidence_reject_below)
         _below_caution = (conf_val is not None and req.confidence_caution_below is not None
                           and conf_val < req.confidence_caution_below)
         # Mirrors _process_stock's cap: CAUTION at most, never lowers a REJECT.
         # Applied below the reject threshold too (the scan drops the symbol
-        # there), so worse confidence can never read better than milder.
-        if (_below_reject or _below_caution) and card.status == "PASS":
+        # there), so worse confidence can never read better than milder. A
+        # missing confidence is Unvalidated and never PASSes (P0A A5).
+        if (_unvalidated or _below_reject or _below_caution) and card.status == "PASS":
             card = dataclasses.replace(card, status="CAUTION")
-        if _below_reject:
+        if _unvalidated:
+            gate_flags.append({"gate": "confidence", "status": "CAUTION",
+                               "detail": f"Unvalidated: {_cached['sample_size']} non-overlapping "
+                                         f"samples (< {_min_samples})"})
+        elif _below_reject:
             gate_flags.append({"gate": "confidence", "status": "REJECT",
                                "detail": f"{conf_val:.0f}% < {req.confidence_reject_below:.0f}%"})
         elif _below_caution:
@@ -1373,9 +1381,15 @@ async def _process_stock(
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
                 await set_cached(_ck, _cached, bars_generation=_bars_gen)
             conf_val = _cached["confidence"]
-            conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+            conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol,
+                                 min_samples=int(load_backtest_cfg(req.horizon)["min_samples"]))
 
             _SEVERITY = {"PASS": 0, "CAUTION": 1, "REJECT": 2}
+
+            # Missing confidence is Unvalidated: a PASS card becomes CAUTION
+            # (never lowers a REJECT) and the symbol is kept (P0A A5).
+            if conf_val is None and card.status == "PASS":
+                card = dataclasses.replace(card, status="CAUTION")
 
             if conf_val is not None and req.confidence_reject_below is not None:
                 if conf_val < req.confidence_reject_below:

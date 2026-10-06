@@ -1233,7 +1233,7 @@ def score_stock(
 
     # Confidence gate: demote-only. Append a confidence RuleResult and cap status.
     if confidence_gate is not None:
-        from app.scoring.signal_confidence import status_cap, interpret
+        from app.scoring.signal_confidence import status_cap, interpret, load_backtest_cfg
         cap = status_cap(confidence, confidence_gate)
         before = final_status
         final_status = _worse(final_status, cap)
@@ -1245,7 +1245,8 @@ def score_stock(
                 "confidence": confidence,
                 "sample_size": confidence_sample_size,
                 "interpretation": interpret(
-                    confidence, sample_size=confidence_sample_size, symbol=symbol
+                    confidence, sample_size=confidence_sample_size, symbol=symbol,
+                    min_samples=int(load_backtest_cfg(horizon)["min_samples"]),
                 ),
             },
         ))
