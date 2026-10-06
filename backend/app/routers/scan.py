@@ -65,6 +65,7 @@ from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_event_window
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
+from app.data.universe_exclusions import ExclusionListError, filter_symbols
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.contract_validator import contract_caution_threshold, effective_contract_overrides, effective_dte_limits, is_finite_rule_value
 from app.scoring.contract_validator import dte_holding_multiplier
@@ -1652,6 +1653,17 @@ async def _execute_scan_core(
     except PresetUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # STOCKS-HORIZON-P0A A2: drop `scope: scan` symbols from the FINAL list
+    # (presets expanded, typed tickers included) before any per-symbol work.
+    # Each one is reported in `rejected` below and counted in `scanned` and
+    # `failed_data`. A broken list is a named 500: it must not silently scan
+    # everything.
+    try:
+        symbols, _excluded = filter_symbols(symbols, purpose="scan")
+    except ExclusionListError as e:
+        _log.error("SCAN %s aborted: universe exclusion list unusable: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
     # Validate rr_* overrides ONCE upfront, before dispatching any per-symbol
     # work. Without this, a malformed override (e.g. a negative target %)
     # only surfaced inside _process_symbol -- AFTER that symbol's full
@@ -1731,7 +1743,13 @@ async def _execute_scan_core(
         _atr_target = _atr_stop = None
 
     candidates: list[TradeCardData] = []
-    rejected: list[RejectedCandidate] = []
+    rejected: list[RejectedCandidate] = [
+        RejectedCandidate(symbol=_x.symbol, reason=f"Excluded (data): {_x.reason}")
+        for _x in _excluded
+    ]
+    # Excluded symbols were scanned and dropped, so the funnel's `scanned` (and
+    # the direction banner's "of N") count them: scanned == sum of buckets.
+    _scanned = len(symbols) + len(_excluded)
     has_exception = False
 
     # Pre-fetch all prices in one Tradier batch call (removes N individual HTTP requests)
@@ -1991,11 +2009,11 @@ async def _execute_scan_core(
     _direction_banner: str | None = None
     if not candidates and _dir_removed > 0:
         _floor = f" (trend below {_min_trend:g})" if _min_trend is not None else ""
-        _rest = ("" if _dir_removed >= len(symbols)
+        _rest = ("" if _dir_removed >= _scanned
                  else "; the rest were removed by other gates — see the pipeline")
         _direction_banner = (
             f"No {req.direction.lower()} candidates survived. The direction-conviction gate "
-            f"removed {_dir_removed} of {len(symbols)}{_floor}{_rest}."
+            f"removed {_dir_removed} of {_scanned}{_floor}{_rest}."
         )
     elif candidates and all(c.status == "CAUTION" for c in candidates):
         _direction_banner = (
@@ -2064,8 +2082,11 @@ async def _execute_scan_core(
     _data_kw = ("no market data", "price filter", "cap filter")
     # "regime data unavailable:" (P3c item 1) is a data drop, as the stock scan
     # counts it under failed_history (no 15-min regime bars is like no price).
+    # "Excluded (data):" (STOCKS-HORIZON-P0A A2) is a `scope: scan` symbol from
+    # universe_exclusions.yaml, dropped before any per-symbol work.
     def _is_data(r):       return (any(k in r.reason for k in _data_kw)
-                                   or r.reason.startswith("regime data unavailable:"))
+                                   or r.reason.startswith("regime data unavailable:")
+                                   or r.reason.startswith("Excluded (data):"))
     def _is_pre_screen(r): return r.reason.startswith("Pre-screen:")
     def _is_no_chain(r):   return r.reason == "no option chain"
     def _is_score(r):      return r.reason.startswith("Score gate:")
@@ -2075,7 +2096,7 @@ async def _execute_scan_core(
                 _is_score, _is_contracts, _is_direction, _is_shortlist)
 
     _pipeline = OptionsPipeline(
-        scanned=len(symbols),
+        scanned=_scanned,
         failed_data=sum(1 for r in rejected if _is_data(r)),
         failed_pre_screen=sum(1 for r in rejected if _is_pre_screen(r)),
         no_chain=sum(1 for r in rejected if _is_no_chain(r)),

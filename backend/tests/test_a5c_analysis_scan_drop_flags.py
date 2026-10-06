@@ -468,6 +468,9 @@ def test_t7_reason_producer_set_is_unchanged():
         "unknown strategy",
         # Not a gate: a candidate ranked below the shortlist cap (bucket failed_shortlist).
         "Shortlist cap:",
+        # STOCKS-HORIZON-P0A A2: a `scope: scan` symbol from universe_exclusions.yaml
+        # (bucket failed_history).
+        "Excluded (data):",
     }
 
 
