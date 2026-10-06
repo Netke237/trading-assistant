@@ -134,7 +134,11 @@ confidence/regime gates.
   bearish cards. Shortlist ranking already sorts CAUTION after PASS.
 - Stocks: in both functions, after the existing caps, a Bearish request caps `stock_status` at CAUTION (never lowers
   a REJECT) and appends `{"gate": "unvalidated", "status": "CAUTION", "detail": BEARISH_UNVALIDATED_MESSAGE}` to the
-  card's gate flags (find the `GateFlag` list the result carries; `_analyze_core` already builds `gate_flags`).
+  card's gate flags. `_analyze_core` already builds `gate_flags`; `_process_stock` does not yet carry them, so
+  add `PositionCardOut.gate_flags: list[GateFlag] = Field(default_factory=list)` (reuse the existing `GateFlag`
+  type) and the matching optional `PositionCardData.gate_flags` frontend wire field. Initialize the scan card
+  list empty and append the required Unvalidated flag for Bearish. Default-empty/optional makes older saved
+  cards readable; this is the carrier for the flag already required by B2, not a new gate or score change.
 - No candidate is dropped by this cap; funnel counts are unchanged.
 - Pre-breakout and fib scans emit setups, not statuses; untouched.
 
