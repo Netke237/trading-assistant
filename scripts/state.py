@@ -7,8 +7,10 @@ exactly how a previous session came to believe pieces were unbuilt that were,
 and built that were not.
 
 So every phase in PROJECT_STATE.json carries a `verify` probe: a pattern whose
-presence or absence in the real code proves the declared status. This script
-runs all of them and exits non-zero when a claim and the codebase disagree.
+presence or absence in the real code checks the code-existence part of the
+declared status. This script runs all of them and exits non-zero when that
+claim and the codebase disagree. `built` records code that exists but is
+unmerged; `shipped` records merged work. Probes do not establish merge status.
 
 One field pair is checked differently, because no code symbol could ever prove
 it: `audit_rounds` / `audit_clean`. See `audit_bookkeeping_drift`, which reads
@@ -62,7 +64,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "docs" / "superpowers" / "PROJECT_STATE.json"
 
 # Statuses that mean "the code for this exists".
-SHIPPED = {"shipped", "shipped_unaudited"}
+BUILT_STATUSES = {"built", "shipped", "shipped_unaudited"}
 
 # Rounds running on this branch with NOTHING in the state file counting them
 # warn below this number and are drift at or above it. It is audit_rule's HARD
@@ -76,6 +78,7 @@ BOLD, DIM, RED, GREEN, YELLOW, RESET = (
 )
 
 STATUS_STYLE = {
+    "built":              (YELLOW, "BUILT"),
     "shipped":            (GREEN,  "SHIPPED"),
     "shipped_unaudited":  (YELLOW, "SHIPPED*"),
     "not_started":        (DIM,    "not started"),
@@ -85,7 +88,7 @@ STATUS_STYLE = {
 
 
 def probe(v: dict) -> tuple[bool, str]:
-    """Run one verify probe. Returns (code_says_shipped, detail)."""
+    """Run one verify probe. Returns (code_exists, detail), not proof of merge or audit."""
     path = ROOT / v["path"]
     if not path.exists():
         return False, f"{v['path']} does not exist"
@@ -783,23 +786,23 @@ def main() -> int:
         print(f"  {BOLD}{'':<2} {'PHASE':<42} {'STATUS':<13} {'AUDIT':<22}{RESET}")
 
     for ph in state["phases"]:
-        declared_shipped = ph["status"] in SHIPPED
-        code_shipped, detail = probe(ph["verify"])
+        declared_built = ph["status"] in BUILT_STATUSES
+        code_built, detail = probe(ph["verify"])
 
-        # `probe` already returns "does the code say this shipped?" for every
+        # `probe` already returns "does the code for this exist?" for every
         # kind, "absent" and "defect_marker" included. There is nothing left to
         # branch on here.
-        actual_shipped = code_shipped
+        actual_built = code_built
 
-        if declared_shipped != actual_shipped:
+        if declared_built != actual_built:
             drift.append(
                 f"Phase {ph['id']} ({ph['name']}): declared '{ph['status']}' but the code says "
-                f"{'BUILT' if actual_shipped else 'NOT BUILT'} — {detail}"
+                f"{'BUILT' if actual_built else 'NOT BUILT'} — {detail}"
             )
 
         # `is True` (G4): the string "false" is truthy and rendered "clean after N".
         rounds, clean = ph["audit_rounds"], ph["audit_clean"] is True
-        if declared_shipped and not clean:
+        if declared_built and not clean:
             unaudited.append(f"Phase {ph['id']} ({ph['name']}) — {rounds} round(s) run, none clean")
 
         if not quiet:
@@ -808,7 +811,7 @@ def main() -> int:
                 audit = f"{GREEN}clean after {rounds}{RESET}"
             elif rounds:
                 audit = f"{RED}{rounds} run, NOT clean{RESET}"
-            elif declared_shipped:
+            elif declared_built:
                 audit = f"{RED}NEVER AUDITED{RESET}"
             else:
                 audit = f"{DIM}—{RESET}"
@@ -837,8 +840,8 @@ def main() -> int:
         # a claim about the code, wherever in the file the claim is written.
         v = item.get("verify")
         if v:
-            code_shipped, detail = probe(v)
-            if not code_shipped:
+            code_built, detail = probe(v)
+            if not code_built:
                 drift.append(
                     f"Shipped item '{item['name']}': declared shipped but the code "
                     f"says NOT BUILT — {detail}"
@@ -855,7 +858,8 @@ def main() -> int:
         (drift if severity == "drift" else unaudited).append(message)
 
     if not quiet:
-        print(f"\n  {DIM}SHIPPED* = code exists but has never survived an adversarial round.{RESET}")
+        print(f"\n  {DIM}BUILT = code exists, unmerged; audit status is shown separately.{RESET}")
+        print(f"  {DIM}SHIPPED* = legacy code-exists status without a clean adversarial round.{RESET}")
         if shipped_items:
             print(f"\n  {BOLD}{'':<2} {'ALREADY SHIPPED':<42} {'STATUS':<13} {'AUDIT':<22}{RESET}")
             for item in shipped_items:
