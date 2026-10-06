@@ -1,6 +1,6 @@
 'use client';
 
-import { stockExecutionBlock } from '@/lib/stockExecutionSession';
+import { stockExecutionBlock, resolveBasketExecution, patchStockOverlay, useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 
 import { useState, useMemo, useEffect } from 'react';
 import { Text } from '@/components/primitives/Text';
@@ -8,8 +8,8 @@ import { Data } from '@/components/primitives/Data';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
-import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
-import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
+import { pickedFieldsFrom } from '@/lib/cardEdits';
+import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
 import { checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
@@ -36,20 +36,6 @@ interface Props {
   onSubmit: (orders: StockDraftOrder[]) => void;
 }
 
-// Both add-to-portfolio paths below send the PRISTINE strategy levels: this dialog
-// has no per-row level editor, so there is no overlay to prefer. `strategy.targets`
-// is the backend exit ladder; the fallback covers a scan result restored from
-// localStorage that predates that field.
-//
-// `?.length ? … : …`, NOT `?? …`: nullish coalescing does not catch an EMPTY array,
-// and a backend (or a rehydrated scan result) carrying `targets: []` would otherwise
-// persist a position with no take-profit at all.
-const pristineLevels = (c: PositionCardData) => ({
-  stop: c.strategy.stop_price,
-  targets: (c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price])
-    .map((price) => ({ price })),
-});
-
 export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(cards.map((c) => [c.symbol, { shares: c.shares, autoSend: true }])),
@@ -67,15 +53,11 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const addPosition  = usePortfolioStore((s) => s.addPosition);
   const ibkrPaper    = useSettingsStore((s) => s.ibkrPaper);
   const tradierPaper = useSettingsStore((s) => s.tradierPaper);
-  const scanHorizon = useScanStore((s) => s.context?.horizon ?? 'Swing');
-  // Phase G piece 5, build step 4 (§7.2, S4) — the stocks basket. One
-  // unpicked card blocks the whole basket, the same rule §7.1's `.some(...)`
-  // applies to the options basket.
-  const stocksPicks = useScanStore((s) => selectCardEdits(s, 'stocks').picks);
-  const hasMissingMethodPick = useMemo(
-    () => cards.some((c) => !checkMethodPick(stocksPicks[c.symbol] ?? null)),
-    [cards, stocksPicks],
-  );
+  const scan = useScanStore();
+  const ownerships = useStockOrderOwnershipStore(s => s.bySymbol);
+  const effective = (c: PositionCardData) => resolveBasketExecution(scan, c);
+  const alreadyOwned = (c: PositionCardData) => !!ownerships[c.symbol] || !!(effective(c).record?.adding || effective(c).record?.added || effective(c).record?.queued);
+  const hasMissingMethodPick = cards.some(c => !alreadyOwned(c) && !checkMethodPick(effective(c).pick));
 
   const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
   const tradierConfigured = !!tradierPaper.token && !!tradierPaper.accountId;
@@ -91,6 +73,11 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   }, []);
 
   const patch = (sym: string, p: Partial<RowState>) => {
+    const card = cards.find(c => c.symbol === sym);
+    if (card && p.shares != null) {
+      const execution = resolveBasketExecution(useScanStore.getState(), card);
+      if (execution.identity && execution.overlay) useScanStore.getState().patchStockExecution(execution.identity, { overlay: patchStockOverlay(execution.overlay, { shares: Math.max(1, Math.round(p.shares)) }) });
+    }
     setRows((r) => ({ ...r, [sym]: { ...(r[sym] ?? { shares: 1, autoSend: true }), ...p } }));
   };
 
@@ -102,10 +89,11 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
       if (r.autoSend) a++;
       else m++;
-      t += r.shares * c.strategy.entry_price;
+      const execution = effective(c);
+      t += (execution.current ? execution.shares : r.shares) * execution.entry;
     }
     return { autoCount: a, manualCount: m, estTotal: t };
-  }, [cards, rows]);
+  }, [cards, rows, scan]);
 
   async function submit() {
     if (submitting) return;
@@ -135,78 +123,56 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     const q: Record<string, string> = hasSubmittedOnce ? { ...queued } : {};
     const warn: Record<string, string> = hasSubmittedOnce ? { ...warnings } : {};
     for (const c of targets) {
+      const owner = useStockOrderOwnershipStore.getState().bySymbol[c.symbol];
+      if (owner) { warn[c.symbol] = owner.message ?? 'Submission pending or completed; no duplicate will be sent.'; continue; }
+      const execution = resolveBasketExecution(useScanStore.getState(), c);
+      if (execution.record?.adding || execution.record?.added || execution.record?.queued) {
+        warn[c.symbol] = 'Candidate already saved or saving — no duplicate will be submitted.'; continue;
+      }
+      if (!checkMethodPick(execution.pick)) { errs[c.symbol] = execution.explanation ?? MISSING_METHOD_PICK_MESSAGE; continue; }
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
-      // Phase G (piece 5) — resolved once per symbol, reused by whichever of
-      // the three branches below fires. Confirmed gap as of build step 4: the
-      // send gate above blocked an unpicked send but nothing carried a made
-      // pick's VALUE into the created position on any of the three.
-      const pick = stocksPicks[c.symbol] ?? null;
-      if (!r.autoSend) {
-        // Manual → paper portfolio
-        const res = await addPosition({
-          ...buildPaperStockPosition(
-            c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
-            stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
-          ),
-          ...pickedFieldsFrom(pick),
-        });
-        if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
-        else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
-        // STOCK-SENDS (§A4): the row's share count must not be the only number shown.
-        else if (res.adjustedQty != null && res.adjustedQty !== r.shares) {
-          warn[c.symbol] = `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).`;
-        }
-      } else if (broker !== 'recommendation') {
+      const shares = execution.current ? execution.shares : r.shares;
+      if (invalidTargetRungs(execution.entry, c.direction as Direction, execution.targets).length) {
+        errs[c.symbol] = 'Targets are on the wrong side of entry — fix the candidate before saving.'; continue;
+      }
+      const pos = {
+        ...buildPaperStockPosition(c.symbol, execution.entry, shares, c.direction as Direction,
+          stockCardSnapshotOf(c, execution.horizon, execution.overlay ? {
+            entry: execution.entry, stop: execution.stop, targets: execution.targets.map(t => t.price), shares,
+          } : undefined),
+          { stop: execution.stop, targets: execution.targets, structuralStop: execution.structuralStop }),
+        ...pickedFieldsFrom(execution.pick),
+      };
+      if (r.autoSend && broker !== 'recommendation') {
         const blocked = stockExecutionBlock();
         if (blocked) { errs[c.symbol] = blocked; continue; }
-        // STOCK-SENDS (P1-STOCK-CLAMP-REAL-SHARES-DEFERRED-2026-09-25): SAVE
-        // first, then the order at the quantity the save approved
-        // (lib/stockDirectSend.ts). The position carries the tradeCardSnapshot
-        // and real stop/targets, as the manual branch's does.
-        //   refused / not-placed -> `errs` (retryable: nothing tracked, no order);
-        //   unknown -> `warn` (NOT retryable: an order may be live, or a
-        //     save-unconfirmed note owns the row); placed + resized -> `warn`
-        //     so the sent share count is on screen before the dialog closes.
         try {
-          const outcome = await sendStockSaveFirst({
-            pos: {
-              ...buildPaperStockPosition(
-                c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
-                stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
-              ),
-              ...pickedFieldsFrom(pick),
-            },
-            broker,
-            orderType: 'LMT',
-            limitPrice: c.strategy.entry_price,
-            action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
-            addPosition,
-          });
-          if (outcome.kind === 'refused' || outcome.kind === 'not-placed') {
-            errs[c.symbol] = outcome.message;
-          } else if (outcome.kind === 'unknown') {
-            warn[c.symbol] = outcome.message;
-          } else if (outcome.resizedFrom != null) {
-            warn[c.symbol] = `${outcome.message} Portfolio sized it to ${outcome.qty} shares; the order was sent for ${outcome.qty}.`;
+          const outcome = await sendStockSaveFirst({ pos, broker, orderType: 'LMT', limitPrice: execution.entry,
+            action: c.direction === 'Bullish' ? 'BUY' : 'SELL', addPosition });
+          if (outcome.kind === 'refused' || outcome.kind === 'not-placed') errs[c.symbol] = outcome.message;
+          else if (outcome.kind === 'unknown') warn[c.symbol] = outcome.message;
+          else if (outcome.resizedFrom != null) warn[c.symbol] = `${outcome.message} Portfolio sized it to ${outcome.qty} shares; the order was sent for ${outcome.qty}.`;
+        } catch (e) { errs[c.symbol] = `No order was sent — ${String(e)}`; }
+      } else {
+        const ownership = useStockOrderOwnershipStore.getState();
+        if (!ownership.claim(c.symbol, { identity: execution.identity, recId: pos.recId, status: 'in-flight' })) {
+          warn[c.symbol] = 'Submission already pending or completed.'; continue;
+        }
+        try {
+          const res = await addPosition(pos);
+          if (res.status === 'rejected') {
+            errs[c.symbol] = res.detail ?? 'not saved'; ownership.finish(c.symbol, pos.recId, null, errs[c.symbol]);
+          } else {
+            const message = res.status === 'pending' ? 'queued — backend unreachable, will sync'
+              : res.adjustedQty != null && res.adjustedQty !== shares ? `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).` : 'Saved to research portfolio.';
+            ownership.finish(c.symbol, pos.recId, res.status === 'pending' ? 'unknown' : 'placed', message);
+            if (execution.identity) useScanStore.getState().patchStockExecution(execution.identity, { added: res.status !== 'pending', queued: res.status === 'pending' });
+            if (res.status === 'pending') q[c.symbol] = message;
+            else if (res.adjustedQty != null && res.adjustedQty !== shares) warn[c.symbol] = message;
           }
         } catch (e) {
-          // Only pre-save work can throw here: nothing saved, no order sent.
-          errs[c.symbol] = `No order was sent — ${String(e)}`;
-        }
-      } else {
-        // Auto-send but broker = recommendation → fall back to paper
-        const res = await addPosition({
-          ...buildPaperStockPosition(
-            c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
-            stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
-          ),
-          ...pickedFieldsFrom(pick),
-        });
-        if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
-        else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
-        // STOCK-SENDS (§A4): the row's share count must not be the only number shown.
-        else if (res.adjustedQty != null && res.adjustedQty !== r.shares) {
-          warn[c.symbol] = `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).`;
+          const message = `Save status unknown — ${String(e)}`;
+          ownership.finish(c.symbol, pos.recId, 'unknown', message); warn[c.symbol] = message;
         }
       }
     }
@@ -227,7 +193,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     // basket that is now fully placed.
     const orders: StockDraftOrder[] = cards.map((c) => {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
-      return { card: c, shares: Math.max(1, Math.round(r.shares)), autoSend: r.autoSend };
+      return { card: c, shares: effective(c).current ? effective(c).shares : Math.max(1, Math.round(r.shares)), autoSend: r.autoSend };
     });
     onSubmit(orders);
   }
@@ -308,19 +274,22 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         <div className={styles.tableBody}>
           {cards.map((c) => {
             const r        = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
-            const risk     = (c.strategy.entry_price - c.strategy.stop_price) * r.shares;
-            const size     = c.strategy.entry_price * r.shares;
+            const execution = effective(c);
+            const shares = execution.current ? execution.shares : r.shares;
+            const risk = Math.abs(execution.entry - execution.stop) * shares;
+            const size = execution.entry * shares;
             const hasErr   = !!errors[c.symbol];
             const isQueued = !!queued[c.symbol];
             return (
               <div key={c.symbol} className={`${styles.row} ${hasErr ? styles.rowErr : ''} ${isQueued ? styles.rowQueued : ''}`}>
                 <Data size={13} weight={500}>{c.symbol}</Data>
-                <Data size={12}>${c.strategy.entry_price.toFixed(2)}</Data>
+                <Data size={12}>${execution.entry.toFixed(2)}</Data>
                 <input
                   type="number"
                   min={1}
                   step={1}
-                  value={r.shares}
+                  value={shares}
+                  disabled={alreadyOwned(c)}
                   className={styles.sharesInput}
                   onChange={(e) =>
                     patch(c.symbol, { shares: Math.max(1, Number(e.target.value) || 1) })
@@ -333,6 +302,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
                   <input
                     type="checkbox"
                     checked={r.autoSend}
+                    disabled={alreadyOwned(c)}
                     onChange={(e) => patch(c.symbol, { autoSend: e.target.checked })}
                     aria-label={`Auto-send ${c.symbol}`}
                   />
@@ -340,6 +310,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
                     {r.autoSend ? 'Auto' : 'Manual'}
                   </Text>
                 </label>
+                {(execution.explanation || alreadyOwned(c)) && !hasErr && !isQueued && !warnings[c.symbol] && <span className={styles.errCell}><Text size={11} tone="caution">{ownerships[c.symbol]?.message ?? execution.explanation ?? 'Candidate already saved or saving — no duplicate will be sent.'}</Text></span>}
                 {hasErr && (
                   <span className={styles.errCell}>
                     <Text size={11} tone="reject">{errors[c.symbol]}</Text>
@@ -377,7 +348,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0 || submitting || (hasQueued && !hasRetryableErrors) || (hasWarnings && !hasRetryableErrors && !hasQueued) || hasMissingMethodPick}
+              disabled={cards.length === 0 || submitting || cards.every(c => alreadyOwned(c)) || (hasQueued && !hasRetryableErrors) || (hasWarnings && !hasRetryableErrors && !hasQueued) || hasMissingMethodPick}
               title={hasMissingMethodPick ? MISSING_METHOD_PICK_TITLE : undefined}
             >
               <Text size={13}>

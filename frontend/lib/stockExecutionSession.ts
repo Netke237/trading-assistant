@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { PositionCardData, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+import { selectCardEdits, type CardEditsHost } from './cardEdits';
 import type { PickedMethod } from '@/types/domain';
 import type { StockScanRequestBody } from './resolveStockScanRequest';
 
@@ -196,4 +197,35 @@ export function resolveStockCardExecution(state: {
   const identity = stockExecutionIdentity(state, card.symbol);
   const record = identity ? state.stockExecution[identity] : undefined;
   return { identity, overlay: record?.overlay ?? defaultStockOverlay(card), record };
+}
+
+/** Basket provenance is session-only: restored rows retain saved values and
+ * cannot adopt a newer same-symbol pick or execution evidence. */
+export function resolveBasketExecution(state: CardEditsHost & {
+  stockExecutionGeneration: number;
+  stockExecution: Record<string, StockExecutionRecord>;
+  stockBasketSources: Record<string, string | null>;
+  stockScanRequest?: StockScanRequestBody | null;
+  stockScanResult: ({ scan_id?: string; timestamp?: string; candidates?: PositionCardData[] }) | null;
+}, card: PositionCardData) {
+  const identity = stockExecutionIdentity(state, card.symbol);
+  const source = state.stockBasketSources[card.symbol];
+  const current = !!source && source === identity && !!state.stockScanResult?.candidates?.includes(card);
+  const record = current && identity ? state.stockExecution[identity] : undefined;
+  const overlay = current ? record?.overlay ?? defaultStockOverlay(card) : undefined;
+  const pick = current ? selectCardEdits(state, 'stocks').picks[card.symbol] ?? null : null;
+  const targets = overlay ? [
+    { price: overlay.t1, shares: overlay.sharesT1 },
+    { price: overlay.t2, shares: overlay.sharesT2 },
+    { price: overlay.t3, shares: overlay.sharesT3 },
+  ] : (card.strategy.targets?.length ? card.strategy.targets : [card.strategy.target_price]).map(price => ({ price }));
+  return {
+    identity: current ? identity : null, current, record, overlay, pick,
+    entry: overlay?.entry ?? card.strategy.entry_price,
+    stop: overlay?.stop ?? card.strategy.stop_price,
+    shares: overlay?.shares ?? card.shares, targets,
+    structuralStop: record?.structural?.price ?? null,
+    horizon: current ? record?.provenance?.request?.horizon ?? state.stockScanRequest?.horizon ?? 'Swing' : 'Swing',
+    explanation: current ? null : 'Saved basket values — open the current candidate, choose a method and repin before submitting.',
+  };
 }

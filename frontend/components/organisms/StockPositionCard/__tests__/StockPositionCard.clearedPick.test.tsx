@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { StockPositionCard, clearedPickMessage } from '@/components/organisms/StockPositionCard';
@@ -152,3 +153,6 @@ describe('clearedPickMessage', () => {
 
 // New ephemeral execution records must not leak between independent test scans.
 beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));
+
+// Mutation ownership is session-wide; each test begins a fresh session.
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

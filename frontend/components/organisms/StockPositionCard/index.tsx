@@ -667,7 +667,7 @@ export function StockPositionCard({
   }
 
   async function onAddToPortfolio() {
-    if (adding || added || queued) return; // guards against a double-click firing two adds
+    if (adding || added || queued || useStockOrderOwnershipStore.getState().bySymbol[card.symbol]) return; // guards against a double-click firing two adds
     // Phase G piece 5, build step 4 (§7.2, S2) — same gate `submit()` above
     // carries, belt-and-braces beside this button's own `disabled`.
     if (pickMissing) return;
@@ -697,7 +697,7 @@ export function StockPositionCard({
       // fire on. The pristine signal rides along inside the snapshot for the audit
       // trail. stockPositionLevels() drops anything non-positive or on the wrong
       // side of entry, so a half-edited overlay can never send a 0 stop.
-      const res = await addPosition({
+      const position = {
         ...buildPaperStockPosition(
           card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
           stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
@@ -722,7 +722,22 @@ export function StockPositionCard({
         ),
         // Phase G (piece 5) — same confirmed send-path gap as submit() above.
         ...pickedFieldsFrom(methodPick),
-      });
+      };
+      const ownership = useStockOrderOwnershipStore.getState();
+      if (!ownership.claim(card.symbol, { identity: executionIdentity, recId: position.recId, status: 'in-flight' })) return;
+      let res;
+      try { res = await addPosition(position); }
+      catch (error) {
+        const message = `Save status unknown — ${String(error)}`;
+        ownership.finish(card.symbol, position.recId, 'unknown', message);
+        setWarning(message); setQueued(true); return;
+      }
+      ownership.finish(card.symbol, position.recId,
+        res.status === 'rejected' ? null : res.status === 'pending' ? 'unknown' : 'placed',
+        res.status === 'pending' ? 'Queued — will sync automatically.'
+          : res.status === 'rejected' ? res.detail ?? 'Portfolio rejected this position.'
+          : res.adjustedQty != null && res.adjustedQty !== overlay.shares
+            ? `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).` : 'Added to research portfolio.');
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');
         return;
@@ -756,7 +771,7 @@ export function StockPositionCard({
       <Text size={12} tone="caution">{stockExecutionBlock()}</Text>
       <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
 
-      {orderOwnership && <Text size={12} tone="caution">{orderOwnership.message ?? `${card.symbol}: stock send in flight — do not resend.`}</Text>}
+      {orderOwnership && !added && !queued && !warning && <Text size={12} tone="caution">{orderOwnership.message ?? `${card.symbol}: stock send in flight — do not resend.`}</Text>}
       {/* Section 1 — Sizing grid, Row 1 */}
       <div className={styles.grid4}>
         <EditableField label="ENTRY"    value={overlay.entry} onChange={(v) => patch({ entry: v })} />
@@ -1218,7 +1233,7 @@ export function StockPositionCard({
           type="button"
           className={styles.actionBtn}
           onClick={onAddToPortfolio}
-          disabled={added || adding || queued || pickMissing}
+          disabled={added || adding || queued || !!orderOwnership || pickMissing}
           title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
         >
           <Text size={12}>

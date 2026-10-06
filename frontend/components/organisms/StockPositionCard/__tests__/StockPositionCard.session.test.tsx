@@ -127,6 +127,8 @@ it.each(['Bullish', 'Bearish'] as const)('blocks %s limit/market requests despit
 it('blocks basket initial/retry broker requests with production unavailable authority', async () => {
   const { StockSendDialog } = await import('@/components/organisms/StockSendDialog');
   const selected = card();
+  useScanStore.getState().setStockScanResult(scan([selected]));
+  useScanStore.getState().addToStockBasket(selected);
   const first = render(<StockPositionCard card={selected} strategyKey="pullback_ema" />);
   fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); first.unmount();
   const onSubmit = jest.fn();
@@ -165,4 +167,46 @@ it('clears a restored selected Ladder row if its price no longer matches, while 
   fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
   expect(useScanStore.getState().stocksCardEdits.picks.AAPL).toMatchObject({ method: 'ladder', rowStockPrice: null });
   expect(screen.getByRole('button', { name: /add to portfolio/i })).toBeEnabled();
+});
+
+it('blocks a same-symbol research Add on another surface when basket ownership survives replacement scan', () => {
+  const selected = card();
+  useScanStore.getState().setStockScanResult(scan([selected]));
+  const oldIdentity = stockExecutionIdentity(useScanStore.getState(), selected.symbol)!;
+  useStockOrderOwnershipStore.getState().claim(selected.symbol, { identity: oldIdentity, recId: 'basket-save', status: 'in-flight' });
+  useScanStore.getState().setStockScanResult(scan([selected]));
+  render(<StockPositionCard card={selected} strategyKey="pullback_ema" />);
+  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
+  expect(screen.getByRole('button', { name: 'Add to Portfolio' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Add to Portfolio' }));
+  expect(usePortfolioStore.getState().positions).toEqual([]);
+});
+
+it('owns a direct research save through replacement scan and refuses a fresh basket duplicate', async () => {
+  const { StockSendDialog } = await import('@/components/organisms/StockSendDialog');
+  const selected = card();
+  useScanStore.getState().setStockScanResult(scan([selected]));
+  const pending = deferred<{ status: 'pending' }>();
+  const original = usePortfolioStore.getState().addPosition;
+  const add = jest.fn(() => pending.promise);
+  usePortfolioStore.setState({ addPosition: add as never });
+  try {
+    const first = render(<StockPositionCard card={selected} strategyKey="pullback_ema" />);
+    fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Portfolio' }));
+    expect(add).toHaveBeenCalledTimes(1);
+    first.unmount();
+    const replacement = card();
+    act(() => {
+      useScanStore.getState().setStockScanResult(scan([replacement]));
+      useScanStore.getState().setCardEdit('stocks', 'picks', replacement.symbol, { method: 'ladder', rowStockPrice: 160, rowOptionPrice: null, stopBasis: 'stock', pickedAt: 'now' });
+      useScanStore.getState().addToStockBasket(replacement);
+    });
+    render(<StockSendDialog cards={[replacement]} onClose={() => {}} onSubmit={jest.fn()} />);
+    const submit = screen.getByRole('button', { name: /submit 1 order/i });
+    expect(submit).toBeDisabled(); fireEvent.click(submit);
+    await act(async () => pending.resolve({ status: 'pending' }));
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(useStockOrderOwnershipStore.getState().bySymbol.AAPL.status).toBe('unknown');
+  } finally { usePortfolioStore.setState({ addPosition: original }); }
 });

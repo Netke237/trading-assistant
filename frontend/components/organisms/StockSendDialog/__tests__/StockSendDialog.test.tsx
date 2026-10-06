@@ -1,3 +1,5 @@
+import type { ReactElement } from 'react';
+import { stockExecutionIdentity, useStockOrderOwnershipStore as ownershipStore } from '@/lib/stockExecutionSession';
 import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
@@ -116,7 +118,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
       return Promise.resolve({ order_id: `${symbol}-1`, status: 'Submitted' });
     });
 
-    render(<StockSendDialog cards={cards} onClose={jest.fn()} onSubmit={onSubmit} />);
+    renderActive(<StockSendDialog cards={cards} onClose={jest.fn()} onSubmit={onSubmit} />);
 
     fireEvent.click(screen.getByText('IBKR Paper'));
 
@@ -157,7 +159,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
     const cards = [makeCard('AAPL'), makeCard('MSFT')];
     const onSubmit = jest.fn();
 
-    render(<StockSendDialog cards={cards} onClose={jest.fn()} onSubmit={onSubmit} />);
+    renderActive(<StockSendDialog cards={cards} onClose={jest.fn()} onSubmit={onSubmit} />);
 
     fireEvent.click(screen.getByText('IBKR Paper'));
     fireEvent.click(screen.getByLabelText('Auto-send AAPL')); // AAPL -> Manual
@@ -193,7 +195,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
     const addPosition = jest.fn().mockResolvedValue({ status: 'ok' });
     usePortfolioStore.setState({ addPosition } as any);
 
-    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
     fireEvent.click(screen.getByText('IBKR Paper'));
     fireEvent.click(screen.getByText(/Submit 1 order/));
 
@@ -217,7 +219,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
     (api.postStockOrder as jest.Mock).mockImplementation(async () => { log.push('order'); return { order_id: 'ORD-4', status: 'Submitted' }; });
     const onSubmit = jest.fn();
 
-    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={onSubmit} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={onSubmit} />);
     fireEvent.click(screen.getByText('IBKR Paper'));
     await act(async () => { fireEvent.click(screen.getByText(/Submit 1 order/)); });
 
@@ -233,7 +235,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
     // No recognisable status: the broker may have received it -> keep the row.
     (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new Error('network timeout'));
 
-    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
     fireEvent.click(screen.getByText('IBKR Paper'));
     fireEvent.click(screen.getByText(/Submit 1 order/));
     await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1));
@@ -266,7 +268,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
     });
     const onSubmit = jest.fn();
 
-    render(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={onSubmit} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={onSubmit} />);
     fireEvent.click(screen.getByText('IBKR Paper'));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /submit 2 orders/i }));
@@ -287,3 +289,15 @@ jest.mock('@/lib/stockExecutionSession', () => ({
   ...jest.requireActual('@/lib/stockExecutionSession'), stockExecutionBlock: jest.fn(() => null),
 }));
 beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));
+
+// Existing mechanics fixtures represent freshly pinned active candidates.
+function renderActive(element: ReactElement<{ cards: PositionCardData[] }>) {
+  const state = useScanStore.getState();
+  const cards = element.props.cards;
+  useScanStore.setState({ stockScanResult: { ...state.stockScanResult!, candidates: cards },
+    stockBasketSources: Object.fromEntries(cards.map(card => [card.symbol, stockExecutionIdentity(state, card.symbol)])),
+    stockExecution: {},
+  });
+  return render(element);
+}
+beforeEach(() => ownershipStore.setState({ bySymbol: {} }));
