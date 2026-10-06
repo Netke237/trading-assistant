@@ -206,3 +206,103 @@ def test_both_scripts_pass_commission_to_run_strategy_backtest(monkeypatch):
     assert calls[0]["commission"] == pytest.approx(0.0025)
     assert calls[0]["n"] == 900
     assert calls[0].get("entry_start") is None
+
+
+# ── STOCKS-HORIZON-P0A A3: the harness skips the shared exclusion list ──────
+
+import asyncio  # noqa: E402
+
+# CTVA is scope: scan, BIIB scope: evidence in backend/config/universe_exclusions.yaml.
+_STORED = ["AAPL", "BIIB", "CTVA", "MSFT"]
+
+
+async def _fake_stored_symbols(*, session_factory=None):
+    return list(_STORED)
+
+
+def _stub_stored(monkeypatch):
+    from evidence import _bars
+
+    monkeypatch.setattr(_bars, "stored_symbols", _fake_stored_symbols)
+
+
+def test_evidence_symbols_drops_both_scopes_from_stored_and_requested(monkeypatch):
+    from evidence._bars import evidence_symbols
+
+    _stub_stored(monkeypatch)
+    kept, excluded = asyncio.run(evidence_symbols(None))
+    assert kept == ["AAPL", "MSFT"]
+    assert [(e.symbol, e.scope) for e in excluded] == [("BIIB", "evidence"), ("CTVA", "scan")]
+
+    kept, excluded = asyncio.run(evidence_symbols(["ctva", "NVDA"]))
+    assert kept == ["NVDA"]
+    assert [e.symbol for e in excluded] == ["CTVA"]
+
+
+def test_include_excluded_flag_keeps_every_symbol(monkeypatch):
+    from evidence._bars import common_parser, evidence_symbols
+
+    _stub_stored(monkeypatch)
+    assert common_parser("x").parse_args([]).include_excluded is False
+    assert common_parser("x").parse_args(["--include-excluded"]).include_excluded is True
+    kept, excluded = asyncio.run(evidence_symbols(None, include_excluded=True))
+    assert kept == _STORED
+    assert excluded == []
+
+
+def test_report_header_lists_exclusions_or_none():
+    from app.data.universe_exclusions import Exclusion
+    from evidence._bars import report_header
+
+    kw = dict(symbols=["AAPL"], start="2020-01-01", end="2020-12-31", cost_model="n/a")
+    excluded = [Exclusion("BIIB", "evidence", "r1"), Exclusion("CTVA", "scan", "r2")]
+    lines = report_header("T", excluded=excluded, **kw).splitlines()
+    assert "- Excluded (universe_exclusions.yaml): 2 — BIIB (evidence), CTVA (scan)" in lines
+    assert "- Excluded (universe_exclusions.yaml): none" in report_header("T", **kw).splitlines()
+
+
+class _StopAfterLoad(Exception):
+    pass
+
+
+@pytest.mark.parametrize("script", ["score_calibration", "gate_persistence", "strategy_matrix"])
+def test_evidence_scripts_load_only_kept_symbols(monkeypatch, script):
+    import importlib
+
+    module = importlib.import_module(f"evidence.{script}")
+    _stub_stored(monkeypatch)
+    seen = []
+
+    async def fake_load_bars(symbols, start, end, **_):
+        seen.append(list(symbols))
+        raise _StopAfterLoad
+
+    monkeypatch.setattr(module, "load_bars", fake_load_bars)
+    for argv, expected in (([], ["AAPL", "MSFT"]), (["--include-excluded"], _STORED)):
+        seen.clear()
+        args = module.common_parser("x").parse_args(argv)
+        with pytest.raises(_StopAfterLoad):
+            asyncio.run(module._main(args))
+        assert seen == [expected]
+
+
+def test_bar_basis_check_is_not_filtered(monkeypatch):
+    from evidence import bar_basis_check
+
+    seen = {}
+
+    async def fake_load_bars(symbols, start, end, **_):
+        seen["bars"] = list(symbols)
+        return {s: [] for s in symbols}
+
+    async def fake_load_basis_rows(symbols, **_):
+        seen["rows"] = list(symbols)
+        return {s: [] for s in symbols}
+
+    monkeypatch.setattr(bar_basis_check, "stored_symbols", _fake_stored_symbols)
+    monkeypatch.setattr(bar_basis_check, "load_bars", fake_load_bars)
+    monkeypatch.setattr(bar_basis_check, "load_basis_rows", fake_load_basis_rows)
+    args = bar_basis_check.common_parser("x").parse_args([])
+    report = asyncio.run(bar_basis_check._main(args))
+    assert seen == {"bars": _STORED, "rows": _STORED}
+    assert "- Excluded (universe_exclusions.yaml): none" in report.splitlines()
