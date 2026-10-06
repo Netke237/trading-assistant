@@ -263,7 +263,14 @@ def compute_confidence(
     favorable_atrs: list[float] = []
     adverse_atrs: list[float] = []
     last = len(bars) - n_days
+    # Greedy non-overlap (STOCKS-HORIZON-P0A A4), identical to the evidence
+    # harness's score_calibration.distinct(passes, n_days): after a fire at bar i
+    # (any outcome, flat included) the next bar that may fire is i + n_days, and
+    # the bars in between are not scored, so each setup counts once.
+    next_allowed = warmup
     for i in range(warmup, last):
+        if i < next_allowed:
+            continue
         window = bars[: i + 1]
         card = score_stock(
             symbol="_bt", direction=direction, horizon=horizon, bars=window,
@@ -271,6 +278,7 @@ def compute_confidence(
         )
         if card.status != "PASS":
             continue
+        next_allowed = i + n_days
         atr = _atr(window, atr_period)
         forward = bars[i + 1 : i + 1 + n_days]
         outcome = evaluate_fire(window, forward, direction=direction, atr=atr,
