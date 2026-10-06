@@ -1,3 +1,4 @@
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import Step4StocksPage from '../page';

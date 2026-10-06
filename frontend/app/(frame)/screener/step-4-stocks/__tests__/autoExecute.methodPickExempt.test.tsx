@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import Step4StocksPage from '../page';
+import BacktestPage from '../../step-6-backtest/page';
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
@@ -106,7 +108,7 @@ describe('step-4-stocks — S5 after-scan auto-execute is exempt from the method
   });
 
   it('creates the auto-executed position with no picked_method, and the gate never fires', async () => {
-    render(<Step4StocksPage />);
+    render(<><Step4StocksPage /><BacktestPage /></>);
 
     // 1) Select the strategy and run the first scan to surface AAPL.
     fireEvent.click(screen.getByRole('button', { name: /pullback/i }));
@@ -114,7 +116,7 @@ describe('step-4-stocks — S5 after-scan auto-execute is exempt from the method
     await screen.findByText('AAPL');
 
     // 2) Open AAPL's row and arm it for after-scan auto-execute.
-    fireEvent.click(screen.getByText('AAPL'));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand AAPL' }));
     fireEvent.click(await screen.findByRole('button', { name: /arm aapl/i }));
 
     // 3) Re-run — onRun's own auto-execute loop fires against candidates from
@@ -170,14 +172,14 @@ describe('step-4-stocks — after-scan auto-execute fires on PASS only', () => {
   });
 
   async function armBothAndRescan() {
-    render(<Step4StocksPage />);
+    render(<><Step4StocksPage /><BacktestPage /></>);
     fireEvent.click(screen.getByRole('button', { name: /pullback/i }));
     fireEvent.click(screen.getByRole('button', { name: /run stock scan/i }));
     await screen.findByText('AAPL');
 
-    fireEvent.click(screen.getByText('AAPL'));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand AAPL' }));
     fireEvent.click(await screen.findByRole('button', { name: /arm aapl/i }));
-    fireEvent.click(screen.getByText('MSFT'));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand MSFT' }));
     fireEvent.click(await screen.findByRole('button', { name: /arm msft/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /run stock scan/i }));
@@ -201,6 +203,6 @@ describe('step-4-stocks — after-scan auto-execute fires on PASS only', () => {
   it('tells the user the CAUTION candidate was not fired, and why', async () => {
     await armBothAndRescan();
 
-    expect(await screen.findByText(/Not fired.*MSFT: not PASS \(CAUTION\)/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Not fired.*MSFT: not PASS \(CAUTION\)/)).length).toBeGreaterThan(0);
   });
 });

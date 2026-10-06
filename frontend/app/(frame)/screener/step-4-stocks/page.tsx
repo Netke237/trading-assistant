@@ -1,28 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Title, Text, Data } from '@/components/primitives';
+import { useRouter } from 'next/navigation';
+import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
-import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useShallow } from 'zustand/shallow';
-import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
-import { runStockScanWithContinuation, isStockManualScanCurrent, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
-import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { runStockScanWithContinuation, isStockManualScanCurrent, stockScanFailureReason } from '@/lib/stockScan';
 import { Tooltip } from '@/components/atoms/Tooltip';
-import { WatchStar } from '@/components/atoms/WatchStar';
-import { regimeFitTooltip, stockScanGateTooltip, fundamentalScoreTooltip, winRateTooltip } from '@/lib/statusTooltips';
-import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
-import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
-import { splitStockRejected } from '@/lib/stockShortlist';
-import { StockPositionCard } from '@/components/organisms/StockPositionCard';
-import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
+import { regimeFitTooltip } from '@/lib/statusTooltips';
 import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPanel';
-import { buildPaperStockPosition } from '@/lib/paperTrade';
-import type { Direction } from '@/types/domain';
-import type { StockScanResult } from '@/types/stockDomain';
 import { HistoryPrefetchRow } from './HistoryPrefetchRow';
 import styles from './page.module.css';
 
@@ -110,12 +99,8 @@ export default function Step4StocksPage() {
   const STRATEGIES     = bearish ? STRATEGIES_BEARISH : STRATEGIES_BULLISH;
   const activeStrategy    = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
-  // The request of the run whose rows are on screen (A5). With the row's own
-  // strategy as fallback, this is StockPositionCard's strategyKey below.
-  const scannedRequestStrategy = useScanStore((s) => s.stockScanRequest?.strategy ?? null);
   const combinedRegime = useScanStore((s) => s.combinedRegime);
   const result         = useScanStore((s) => s.stockScanResult);
-  const previous       = useScanStore((s) => s.previousStockScanResult);
   const scanState      = useScanStore((s) => s.scanState);
 
   const savedParams = useScanParamsStore(useShallow(panelParamsOf));
@@ -131,12 +116,7 @@ export default function Step4StocksPage() {
   const setVwapLookback             = useScanParamsStore((s) => s.setVwapLookback);
   const setVwapDeviationPct         = useScanParamsStore((s) => s.setVwapDeviationPct);
 
-  const stockBasket  = useScanStore((s) => s.stockBasket);
   const stockScanAt  = useScanStore((s) => s.stockScanAt);
-  const addPosition = usePortfolioStore((s) => s.addPosition);
-  const portfolioPositions = usePortfolioStore((s) => s.positions);
-  const portfolioSymbols = new Set(portfolioPositions.map((p) => p.symbol));
-
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -153,21 +133,7 @@ export default function Step4StocksPage() {
   }, []);
   const error = useScanStore(s => s.stockScanFeedback.error);
   const notice = useScanStore(s => s.stockScanFeedback.notice);
-  const [openSymbol, setOpenSymbol] = useState<string | null>(null);
-  const afterScanIntent = useScanStore(s => s.stockAfterScanIntent);
-  const [showSendDialog, setShowSendDialog] = useState(false);
-  const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
-  const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
-
-  // The table used to re-filter on `passes_gate || win_rate >= 0.40`. That was
-  // dead: stock_scan.py returns a "backtest gate:" rejection for every symbol
-  // failing passes_gate, so no candidate reaching here can fail it and the
-  // predicate was always true. Dropped rather than kept for reassurance — the
-  // funnel's count and this table are the same list.
-  const shownCandidates = result?.candidates ?? [];
-  // Names ranked below the shortlist cap passed every gate; they ride in
-  // `rejected` so they are visible, but are listed apart from real rejections.
-  const { rejected: gateRejected, overCap } = splitStockRejected(result?.rejected);
+  const router = useRouter();
 
   const scanning = scanState === 'SCANNING';
 
@@ -197,18 +163,14 @@ export default function Step4StocksPage() {
         breakout_base:         `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
       };
 
-  function onAfterScanToggle(symbol: string, armed: boolean) {
-    useScanStore.getState().setStockAfterScanIntent(symbol, armed);
-  }
-
   async function onRun() {
     if (!activeStrategy) return;
     const pending = runStockScanWithContinuation(activeStrategy, params);
     const token = useScanStore.getState().stockManualRunToken;
     try {
       const outcome = await pending;
-      if (!isStockManualScanCurrent(outcome)) return;
-      // W2 consumes this successful continuation to navigate to Backtest.
+      if (outcome.kind !== 'success' || !isStockManualScanCurrent(outcome)) return;
+      router.push('/screener/step-6-backtest');
     } catch (error) {
       if (useScanStore.getState().stockManualRunToken !== token) return;
       const reason = stockScanFailureReason(error, false);
@@ -226,7 +188,7 @@ export default function Step4StocksPage() {
         <Text size={11} tone="dim" weight={500}>STEP 4 OF 6</Text>
         <Title as="h1" size={24}>Strategy</Title>
         <Text size={13} tone="secondary">
-          Pick a strategy, run the scan, and act on the results — all on this page.
+          Pick a strategy and run a scan. Review the results on Backtest.
         </Text>
         <Text size={12} tone="secondary">
           Scanning full {context?.universe ?? 'SP500'} universe for stock setups
@@ -303,15 +265,7 @@ export default function Step4StocksPage() {
         {stockScanAt && mounted && (
           <Text size={11} tone="dim">Last stock scan: {_labelWithDate(stockScanAt)}</Text>
         )}
-        {stockBasket.length > 0 && (
-          <button
-            type="button"
-            className={styles.sendBtn}
-            onClick={() => setShowSendDialog(true)}
-          >
-            Send basket ({stockBasket.length})
-          </button>
-        )}
+
       </div>
 
       <HistoryPrefetchRow />
@@ -323,158 +277,11 @@ export default function Step4StocksPage() {
         * is unknown. */}
       <DirectSendNotesPanel />
 
-      {result?.pipeline && (
-        <details className={styles.logPanel}>
-          <summary><Text size={12} tone="secondary">Pipeline log</Text></summary>
-          <ScanFunnel mode="stock" pipeline={result.pipeline} />
-        </details>
-      )}
-
-      {result?.direction_banner && (
-        <div className={styles.directionBanner}>
-          <Text size={12} tone="caution">{result.direction_banner}</Text>
-        </div>
-      )}
-
       {result && (
-        <div className={styles.results}>
-          <div className={styles.tableHeader}>
-            <span aria-hidden />
-            <Text size={11} tone="dim">SYMBOL</Text>
-            <Text size={11} tone="dim">SCORE</Text>
-            <Text size={11} tone="dim">Δ</Text>
-            <Text size={11} tone="dim">WIN %</Text>
-            <Text size={11} tone="dim">TRADES</Text>
-            <Text size={11} tone="dim">RETURN</Text>
-            <Text size={11} tone="dim">MAX DD</Text>
-            <button
-              type="button"
-              className={styles.sortableHeader}
-              onClick={() => setHealthSort((s) => s === null ? 'desc' : s === 'desc' ? 'asc' : null)}
-              title="Sort by fundamental health score"
-            >
-              <Text size={11} tone="dim">HEALTH</Text>
-              <Text size={10} tone="dim">{healthSort === 'desc' ? '↓' : healthSort === 'asc' ? '↑' : '↕'}</Text>
-            </button>
-            <Text size={11} tone="dim">GATE</Text>
-          </div>
-
-          <div className={styles.tableBody}>
-            {[...shownCandidates].sort((a, b) => {
-              if (healthSort === null) return 0;
-              const aScore = a.fundamentals?.score ?? -1;
-              const bScore = b.fundamentals?.score ?? -1;
-              return healthSort === 'desc' ? bScore - aScore : aScore - bScore;
-            }).map((c) => {
-              const d = deltas.get(c.symbol);
-              const bt = c.backtest;
-              const open = openSymbol === c.symbol;
-              // Always PASS: a symbol failing the gate is rejected before it
-              // becomes a candidate, so the CAUTION branch was unreachable.
-              const gateStatus = 'PASS';
-              return (
-                <div key={c.symbol}>
-                  <button
-                    type="button"
-                    className={`${styles.row} ${open ? styles.rowOpen : ''}`}
-                    onClick={() => setOpenSymbol(open ? null : c.symbol)}
-                  >
-                    <span onClick={(e) => e.stopPropagation()}>
-                      <WatchStar symbol={c.symbol} size="sm" />
-                    </span>
-                    <span className={styles.symbolCell}>
-                      <Data size={12} weight={500}>{c.symbol}</Data>
-                      {portfolioSymbols.has(c.symbol) && (
-                        <span className={styles.inPortfolioDot} title="Already in portfolio" />
-                      )}
-                    </span>
-                    <Data size={12}>{c.stock_score}</Data>
-                    <Data size={11} tone={!d ? 'dim' : d.scoreDelta > 0 ? 'pass' : d.scoreDelta < 0 ? 'reject' : 'secondary'}>
-                      {!d ? '—' : `${d.scoreDelta > 0 ? '+' : ''}${d.scoreDelta}${d.rankDelta !== 0 ? ` (${d.rankDelta > 0 ? '↑' : '↓'}${Math.abs(d.rankDelta)})` : ''}`}
-                    </Data>
-                    <Data
-                      size={12}
-                      tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.40 ? 'caution' : 'reject'}
-                      title={winRateTooltip(bt.win_rate, 0.5, 0.40)}
-                    >
-                      {(bt.win_rate * 100).toFixed(0)}%
-                    </Data>
-                    <Data size={12}>{bt.n_trades}</Data>
-                    <Data size={12} tone={bt.total_return_pct >= 0 ? 'pass' : 'reject'}>{bt.total_return_pct.toFixed(1)}%</Data>
-                    <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
-                    {c.fundamentals ? (
-                      <Tooltip text={fundamentalScoreTooltip('overall', c.fundamentals.score)}>
-                        <Data size={12} tone={toneForScore(c.fundamentals.score, FUNDAMENTAL_BAND)}>
-                          {c.fundamentals.score}
-                        </Data>
-                      </Tooltip>
-                    ) : (
-                      <Data size={12} tone="dim">—</Data>
-                    )}
-                    <StatusBadge
-                      status={gateStatus}
-                      tooltip={stockScanGateTooltip({
-                        passes: bt.passes_gate,
-                        winRate: bt.win_rate,
-                        nTrades: bt.n_trades,
-                        expectancy: bt.expectancy,
-                        minWinRate: params.btMinWinRate,
-                        minTrades: params.btMinTrades,
-                      })}
-                    />
-                  </button>
-                  {open && (
-                    <StockPositionCard
-                      // See stockPositionCardKey's doc comment: an adversarial audit
-                      // round caught a stale entry/stop/target overlay from a
-                      // PREVIOUS scan silently surviving a same-symbol Run Scan and
-                      // reaching order placement / Add to Portfolio, because
-                      // `openSymbol` isn't reset by onRun() and StockPositionCard's
-                      // own overlay-reset effect only fires on a symbol change.
-                      key={stockPositionCardKey(c)}
-                      card={c}
-                      // The strategy this row was scanned with: NOT the current selection, which
-                      // can change after the scan, and NOT lastStockScanStrategy, which can name
-                      // another tab's or device's scan (plan audit P1-F1). StockAutoTradeArm
-                      // persists a strategy watch with this key.
-                      strategyKey={scannedRequestStrategy ?? c.strategy.strategy}
-                      afterScanArmed={!!afterScanIntent[c.symbol]}
-                      onAfterScanToggle={onAfterScanToggle}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {overCap.length > 0 && (
-            <details className={styles.rejectedSection}>
-              <summary><Text size={12} tone="caution">{overCap.length} over cap</Text></summary>
-              {overCap.map((r) => (
-                <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
-              ))}
-            </details>
-          )}
-          {gateRejected.length > 0 && (
-            <details className={styles.rejectedSection}>
-              <summary><Text size={12} tone="dim">{gateRejected.length} rejected</Text></summary>
-              {gateRejected.map((r) => (
-                <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
-              ))}
-            </details>
-          )}
-        </div>
-      )}
-      {showSendDialog && (
-        <StockSendDialog
-          cards={stockBasket}
-          onClose={() => setShowSendDialog(false)}
-          onSubmit={(_orders: StockDraftOrder[]) => {
-            setShowSendDialog(false);
-          }}
-        />
+        <button type="button" className={styles.sendBtn} onClick={() => router.push('/screener/step-6-backtest')}>
+          View Backtest results
+        </button>
       )}
     </div>
   );
 }
-

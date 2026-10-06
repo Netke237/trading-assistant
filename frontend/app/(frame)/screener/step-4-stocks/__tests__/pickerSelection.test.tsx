@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import Step4StocksPage from '../page';
+import BacktestPage from '../../step-6-backtest/page';
 import { useScanStore } from '@/lib/scanStore';
 
 const mockCardProps = jest.fn();
@@ -59,7 +60,7 @@ beforeEach(() => {
 
 it('clicking a card writes activeStrategy without running a scan', () => {
   const { runStockScan } = jest.requireMock('@/lib/stockScan');
-  render(<Step4StocksPage />);
+  render(<><Step4StocksPage /><BacktestPage /></>);
   fireEvent.click(card(/^Breakout from tight base$/));
   expect(useScanStore.getState().activeStrategy).toBe('breakout_base');
   expect(runStockScan).not.toHaveBeenCalled();
@@ -78,9 +79,9 @@ it('the position card gets the strategy the rows were scanned with, not the curr
     stockScanResult: { scan_id: 'S', timestamp: 't', candidates: [CANDIDATE], rejected: [] },
     stockScanRequest: { strategy: 'pullback_ema' },
   } as never);
-  render(<Step4StocksPage />);
+  render(<><Step4StocksPage /><BacktestPage /></>);
   fireEvent.click(card(/^Breakout from tight base$/));       // change selection after the scan
-  fireEvent.click(screen.getByText('AAPL').closest('button')!); // open the row
+  fireEvent.click(screen.getByRole('button', { name: 'Expand AAPL' })); // open the row
   expect(mockCardProps).toHaveBeenLastCalledWith(expect.objectContaining({ strategyKey: 'pullback_ema' }));
 });
 
@@ -90,7 +91,7 @@ it("with no request on record, uses the row's own strategy, never a mismatching 
     stockScanResult: { scan_id: 'S', timestamp: 't', candidates: [CANDIDATE], rejected: [] },
     stockScanRequest: null, lastStockScanStrategy: 'ma_crossover',
   } as never);
-  render(<Step4StocksPage />);
-  fireEvent.click(screen.getByText('AAPL').closest('button')!);
+  render(<BacktestPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'Expand AAPL' }));
   expect(mockCardProps).toHaveBeenLastCalledWith(expect.objectContaining({ strategyKey: 'pullback_ema' }));
 });
