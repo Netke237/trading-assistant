@@ -616,6 +616,7 @@ export interface TradeCardData {
   price:         number;
   direction:     Direction;
   status:        Status;
+  unvalidatedReason?: string | null;
   stockScore:    number;
   stockConfidence: Status;
   stockBreakdown:  ScoreBreakdown;

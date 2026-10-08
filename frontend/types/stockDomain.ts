@@ -22,6 +22,7 @@ export interface PositionCardData {
   symbol: string; company: string; price: number; direction: string;
   strategy: StrategySignalData; backtest: BacktestData;
   stock_score: number; stock_status: Status;
+  gate_flags?: Array<{ gate: string; status: 'PASS' | 'CAUTION' | 'REJECT'; detail: string }>;
   shares: number; dollar_risk: number; dollar_size: number;
   confidence: number | null; confidence_text: string | null;
   sector_rs_pct?: number | null;

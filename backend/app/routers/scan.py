@@ -84,6 +84,7 @@ from types import SimpleNamespace
 from app.routers.stock_scan import (
     _regime_data_drop, _direction_conviction_drop, _rs_benchmark_candles, _aligned_benchmark,
 )
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.audit import new_rec_id, log_event
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
@@ -1217,7 +1218,7 @@ async def _process_symbol(
         company=company,
         price=price,
         direction=direction,
-        status=card.status,
+        status=_final_status(card.status, "CAUTION" if direction == "Bearish" else "PASS"),
         stockScore=card.score,
         stockConfidence=card.status,
         stockExplanation=card.explanation,
@@ -1287,7 +1288,9 @@ async def _process_symbol(
             "REJECT" if _earnings_veto(card) else "PASS",
             # D4 amended 2026-10-03: unknown earnings caps a single stock.
             "CAUTION" if _earnings_unknown_caps(card, symbol) else "PASS",
+            "CAUTION" if direction == "Bearish" else "PASS",
         ),
+        unvalidatedReason=BEARISH_UNVALIDATED_MESSAGE if direction == "Bearish" else None,
         earningsVeto=_earnings_veto(card),
         earningsUnknown=bool(rule_detail.get("event", {}).get("earnings_unknown", False)),
         isEtf=is_etf(symbol),

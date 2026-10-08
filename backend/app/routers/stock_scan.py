@@ -27,6 +27,7 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 
 from app.services.audit import new_rec_id
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.scoring.conviction_sizing import (
     SizingConfigError,
     conviction_mult,
@@ -938,6 +939,12 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             gate_flags.append({"gate": "confidence", "status": "CAUTION",
                                "detail": f"{conf_val:.0f}% < {req.confidence_caution_below:.0f}%"})
 
+    if req.direction == "Bearish":
+        if card.status == "PASS":
+            card = dataclasses.replace(card, status="CAUTION")
+        gate_flags.append({"gate": "unvalidated", "status": "CAUTION",
+                           "detail": BEARISH_UNVALIDATED_MESSAGE})
+
     # Event proximity
     next_event_days = next_event_label = None
     if quote:
@@ -1405,6 +1412,13 @@ async def _process_stock(
                     if _SEVERITY.get(card.status, 0) < _SEVERITY["CAUTION"]:
                         card = dataclasses.replace(card, status="CAUTION")
 
+            gate_flags = []
+            if req.direction == "Bearish":
+                if card.status == "PASS":
+                    card = dataclasses.replace(card, status="CAUTION")
+                gate_flags.append(GateFlag(gate="unvalidated", status="CAUTION",
+                                           detail=BEARISH_UNVALIDATED_MESSAGE))
+
             sizing_cfg = full_cfg.get("regime_sizing", {"enabled": False})
             _sizing = resolve_sizing(sizing_cfg)
             if _sizing is None:
@@ -1472,7 +1486,7 @@ async def _process_stock(
                     confidence=bt_result.confidence, passes_gate=bt_result.passes_gate,
                     summary_text=bt_result.summary_text,
                 ),
-                stock_score=card.score, stock_status=card.status,
+                stock_score=card.score, stock_status=card.status, gate_flags=gate_flags,
                 shares=shares, dollar_risk=dollar_risk,
                 dollar_size=round(shares * signal.entry_price, 2),
                 sizing_basis=sizing_basis,

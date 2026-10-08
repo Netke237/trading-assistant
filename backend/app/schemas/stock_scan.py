@@ -147,6 +147,7 @@ class PositionCardOut(BaseModel):
     backtest:     BacktestOut
     stock_score:  int
     stock_status: str
+    gate_flags: list["GateFlag"] = Field(default_factory=list)
     shares:       int
     dollar_risk:  float
     dollar_size:  float

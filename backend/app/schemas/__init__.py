@@ -741,6 +741,7 @@ class TradeCardData(BaseModel):
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status
+    unvalidatedReason: Optional[str] = None
     # Fix #3: earnings inside the reject window -> finalStatus REJECT and no send.
     earningsVeto: bool = False
     # Unknown earnings (none on file, or only a past date). D4 amended
