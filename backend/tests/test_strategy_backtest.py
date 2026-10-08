@@ -246,8 +246,12 @@ async def test_process_stock_uses_process_pool_for_backtest():
             [100.0] * 100,
         )
 
-    mock_executor.assert_called_once()
-    executor_arg = mock_executor.call_args[0][0]
+    # The surviving symbol's earnings lookup (STOCKS-HORIZON-P0B B6) also goes
+    # through run_in_executor, via asyncio.to_thread on the DEFAULT executor;
+    # the backtest must still be the one call on _BACKTEST_POOL.
+    pool_calls = [c for c in mock_executor.call_args_list if c[0][0] is not None]
+    assert len(pool_calls) == 1, mock_executor.call_args_list
+    executor_arg = pool_calls[0][0][0]
     assert executor_arg is _BACKTEST_POOL, (
         f"Expected _BACKTEST_POOL, got {executor_arg!r}"
     )

@@ -58,6 +58,11 @@ class StockScanRequest(BaseModel):
     # (stock_scan's last_request_json) could carry one; restore_stock_from_db
     # drops such a request instead of failing startup (r3 finding 2).
     risk_fixed_usd:     Optional[float] = Field(None, gt=0, allow_inf_nan=False)
+    # The hold that produced the scan (STOCKS-HORIZON-P0B B6): the earnings veto
+    # window is max(reject_days, hold_max_days). None (an older client, or a
+    # schedule saved before the field) uses the scoring horizon's preset hold,
+    # `stock_scorer.DEFAULT_HOLD_MAX`.
+    hold_max_days:      Optional[int] = Field(None, ge=0, le=3650)
     bt_min_trades:      int   = 5
     bt_min_win_rate:    float = 0.45
     shortlist_max_candidates: int = Field(10, gt=0)
@@ -161,6 +166,10 @@ class PositionCardOut(BaseModel):
     sector_rs_pct: float | None = None   # stock ROC minus SPY ROC; positive = outperforming
     next_event_days: int | None = None    # days to nearest earnings or dividend (>=0)
     next_event_label: str | None = None   # "earnings" | "dividend"
+    # Next earnings date in days (None = unknown), and whether it falls inside
+    # the scan's veto window (STOCKS-HORIZON-P0B B6).
+    earnings_days: Optional[int] = None
+    earnings_veto: bool = False
     sentiment: Optional[SentimentData] = None
     fundamentals: Optional[FundamentalsOut] = None
 
@@ -252,6 +261,8 @@ class StockAnalysisOut(BaseModel):
     fundamentals: Optional[FundamentalsOut] = None
     next_event_days: Optional[int] = None
     next_event_label: Optional[str] = None
+    earnings_days: Optional[int] = None
+    earnings_veto: bool = False
     # Analysis-specific additions
     rules: list[RuleContribution] = Field(default_factory=list)
     gate_flags: list[GateFlag] = Field(default_factory=list)
@@ -296,3 +307,6 @@ class StockScanResult(BaseModel):
     original_count:       int = 0
     shortlist_truncated:  bool = False
     direction_banner:     Optional[str] = None
+    # The earnings veto window this scan applied, max(reject_days, hold);
+    # None on a result persisted before it existed.
+    veto_days:            Optional[int] = None
