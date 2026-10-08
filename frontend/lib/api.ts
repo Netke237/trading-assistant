@@ -353,6 +353,10 @@ export interface StockAnalysis {
   fundamentals: AnalysisFundamentals | null;
   next_event_days: number | null;
   next_event_label: string | null;
+  /** STOCKS-HORIZON-P0B B6: as on PositionCardData. Optional for a backend
+   *  from before B6. */
+  earnings_days?: number | null;
+  earnings_veto?: boolean;
   rules: RuleContribution[];
   gate_flags: GateFlag[];
   ema_trend: EmaTrend | null;

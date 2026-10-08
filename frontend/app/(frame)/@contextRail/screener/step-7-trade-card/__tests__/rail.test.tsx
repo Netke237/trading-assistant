@@ -333,6 +333,40 @@ it('B4 shows a REJECT Direction gate for the active Bearish card', () => {
   expect(document.querySelector('[data-gate-label="Direction"]')).toHaveAttribute('data-status', 'REJECT');
   expect(screen.getByText(BEARISH_REASON)).toBeInTheDocument();
 });
+/* STOCKS-HORIZON-P0B B7 — the rail judges the same veto window as Step 7's
+ * buttons: event_window.veto_days, else max(reject_days, the scan's hold). */
+describe('P0B B7 — the earnings row uses the veto window over the hold', () => {
+  function scanWithWindow(eventWindow: object, context: object) {
+    act(() => {
+      useScanStore.setState({
+        scanResult: { scan_id: 's', candidates: [AUTO], event_window: eventWindow } as any,
+        context: { universe: 'SP500', direction: 'Bullish', horizon: 'Position (60–185d)', ...context } as any,
+      } as any);
+    });
+  }
+
+  it('earnings 40d is REJECT against veto_days 60 although reject_days is 30', () => {
+    scanWithWindow({ reject_days: 30, caution_days: 60, veto_days: 60 }, { horizonPreset: 'Quarterly', holdMin: 45, holdMax: 60 });
+    publish({ earningsDays: 40 });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('REJECT');
+    expect(screen.getByText(/Earnings in 40d — veto <60d/)).toBeInTheDocument();
+  });
+
+  it('without veto_days it falls back to max(reject_days, the scan hold): Custom 60-185 -> 185', () => {
+    scanWithWindow({ reject_days: 30, caution_days: 60 }, { horizonPreset: 'Custom', holdMin: 60, holdMax: 185 });
+    publish({ earningsDays: 120 });
+    const first = render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('REJECT');
+    expect(screen.getByText(/Earnings in 120d — veto <185d/)).toBeInTheDocument();
+    first.unmount();
+
+    publish({ earningsDays: 190 });
+    render(<TradeCardContextRail />);
+    expect(earningsStatus()).toBe('PASS');
+  });
+});
+
 it('B4 leaves Bullish cards without a Direction refusal', () => {
   useTradeCardUiStore.setState({ activeCard: { card: card(), rrPending: false } });
   render(<TradeCardContextRail />);

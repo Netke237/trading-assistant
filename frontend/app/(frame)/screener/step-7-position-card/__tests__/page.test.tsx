@@ -226,3 +226,30 @@ it('B4 inherits the Bearish refusal through the shared stock card and basket', a
   expect(saveCalls()).toHaveLength(0);
   expect(api.postStockOrder).not.toHaveBeenCalled();
 });
+
+/* STOCKS-HORIZON-P0B B7 — the Step-7 position card inherits the earnings veto
+ * through the shared StockPositionCard and StockSendDialog. */
+const EARNINGS_VETO_REASON = 'Earnings inside the reject window — no send';
+
+it('B7 inherits the earnings veto through the shared stock card and basket', async () => {
+  const selected = { ...card('AAPL'), earnings_days: 40, earnings_veto: true } as PositionCardData;
+  useScanStore.getState().setStockScanResult({ ...scan([selected]), veto_days: 60 } as StockScanResult);
+  useScanStore.getState().addToStockBasket(selected);
+  render(<Step7PositionCardPage />);
+  selectLadderAndBroker();
+  expect(screen.getByRole('button', { name: /limit @/i })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /limit @/i })).toHaveAttribute('title', EARNINGS_VETO_REASON);
+  expect(screen.getByRole('button', { name: 'Market Order' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Market Order' })).toHaveAttribute('title', EARNINGS_VETO_REASON);
+  fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send basket (1)' }));
+  const dialog = screen.getByRole('dialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'IBKR Paper' }));
+  const send = within(dialog).getByRole('button', { name: /submit 1 order/i });
+  expect(send).toBeDisabled();
+  expect(send).toHaveAttribute('title', EARNINGS_VETO_REASON);
+  fireEvent.click(send);
+  await act(async () => {});
+  expect(saveCalls()).toHaveLength(0);
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+});

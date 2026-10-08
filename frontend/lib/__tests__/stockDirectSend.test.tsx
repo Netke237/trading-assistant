@@ -55,7 +55,7 @@ afterEach(() => { global.fetch = originalFetch; });
 const pos = (shares = 300) => buildPaperStockPosition('AAPL', 200, shares, 'Bullish', undefined, { stop: 190, targets: [{ price: 220 }] });
 const send = (p = pos(), broker = 'ibkr_paper', orderType: 'LMT' | 'MKT' = 'LMT') => sendStockSaveFirst({
   pos: p, broker, orderType, limitPrice: orderType === 'LMT' ? 200 : null, action: 'BUY',
-  addPosition: usePortfolioStore.getState().addPosition,
+  addPosition: usePortfolioStore.getState().addPosition, earningsVeto: false,
 });
 const notes = () => useDirectSendNotesStore.getState().notes;
 const positions = () => usePortfolioStore.getState().positions;
@@ -227,7 +227,7 @@ it('B4 refuses a SELL opening before validation, save or ownership claim', async
   const claim = jest.spyOn(useStockOrderOwnershipStore.getState(), 'claim');
   const out = await sendStockSaveFirst({
     pos: pos(), broker: 'ibkr_paper', orderType: 'LMT', limitPrice: 200, action: 'SELL',
-    addPosition: usePortfolioStore.getState().addPosition,
+    addPosition: usePortfolioStore.getState().addPosition, earningsVeto: false,
   });
   expect(out).toEqual({ kind: 'not-placed', message: BEARISH_REASON });
   expect(log).toEqual([]);
@@ -243,4 +243,21 @@ it('B4 uses the exact backend Unvalidated reason', () => {
 });
 it.each(['Bearish', 'Bullish', 'bearish', '', null, undefined])('B4 tests only exact Bearish direction: %s', direction => {
   expect(isBearishUnvalidated(direction)).toBe(direction === 'Bearish');
+});
+
+/* STOCKS-HORIZON-P0B B7 — the earnings veto refuses the ORDER even if a button
+ * is bypassed: nothing is saved, nothing claimed, no broker request. */
+it('B7 refuses an earnings-vetoed send before validation, save or ownership claim', async () => {
+  const claim = jest.spyOn(useStockOrderOwnershipStore.getState(), 'claim');
+  const out = await sendStockSaveFirst({
+    pos: pos(), broker: 'ibkr_paper', orderType: 'LMT', limitPrice: 200, action: 'BUY',
+    addPosition: usePortfolioStore.getState().addPosition, earningsVeto: true,
+  });
+  expect(out).toEqual({ kind: 'refused', message: 'Earnings inside the reject window — no send' });
+  expect(log).toEqual([]);
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  expect(claim).not.toHaveBeenCalled();
+  expect(notes()).toEqual([]);
+  expect(positions()).toEqual([]);
+  claim.mockRestore();
 });

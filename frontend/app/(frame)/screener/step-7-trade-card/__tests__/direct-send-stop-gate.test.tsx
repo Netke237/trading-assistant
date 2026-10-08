@@ -563,6 +563,61 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     const arm = await screen.findByRole('button', { name: /^Arm —/ });
     expect(arm.getAttribute('title') ?? '').not.toMatch(UNKNOWN_ARM);
   });
+
+  /* STOCKS-HORIZON-P0B B7 — the veto window covers the hold. Step 7 judges
+   * against `event_window.veto_days`; a result persisted before B5 has none,
+   * so it falls back to max(reject_days, the scan's hold) from ScanContext. */
+  function mountWithWindow(
+    eventWindow: { reject_days: number; caution_days: number; veto_days?: number | null },
+    context: { horizonPreset: string; holdMin: number; holdMax: number } | null,
+    extra: Partial<TradeCardData>,
+  ) {
+    const view = mount(140, { extra });
+    act(() => {
+      useScanStore.setState((s: any) => ({
+        scanResult: { ...s.scanResult, timestamp: daysAgo(0), event_window: eventWindow },
+        context: context ? { universe: 'SP500', direction: 'Bullish', horizon: 'Position (60–185d)', ...context } : null,
+      }) as any);
+    });
+    return view;
+  }
+
+  async function expectVetoed() {
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    expect(limitBtn).toBeDisabled();
+    expect(limitBtn).toHaveAttribute('title', VETO_REASON);
+    expect(screen.getByRole('button', { name: /right now — market/i })).toBeDisabled();
+    expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
+    fireEvent.click(limitBtn);
+    await act(async () => {});
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(usePortfolioStore.getState().positions).toEqual([]);
+  }
+
+  it('B7: passes event_window.veto_days -- earnings 40d against reject 30 / veto 60 is refused', async () => {
+    mountWithWindow({ reject_days: 30, caution_days: 60, veto_days: 60 }, null,
+      { earningsDays: 40, earningsVeto: false, isEtf: false });
+    await expectVetoed();
+  });
+
+  it('B7: without veto_days it falls back to max(reject_days, the scan hold) -- Custom 60-185 -> 185', async () => {
+    mountWithWindow({ reject_days: 30, caution_days: 60 },
+      { horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+      { earningsDays: 120, earningsVeto: false, isEtf: false });
+    await expectVetoed();
+  });
+
+  it('B7 control: earnings beyond the Custom 60-185 hold still sends', async () => {
+    mountWithWindow({ reject_days: 30, caution_days: 60 },
+      { horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+      { earningsDays: 190, earningsVeto: false, isEtf: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit/i })).toBeEnabled());
+  });
 });
 
 const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';

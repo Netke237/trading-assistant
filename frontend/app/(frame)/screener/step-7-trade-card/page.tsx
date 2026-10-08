@@ -55,7 +55,7 @@ import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
 import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
-import { earningsGateFor, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
+import { earningsGateFor, scanVetoDays, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 
 // Fix #3 (review) / audit round 1 F4+F8: the veto, its sentence and the
 // unknown-earnings arm refusal live in lib/earningsGate.ts, shared with the
@@ -604,6 +604,10 @@ export default function Step7Page() {
   const requestedPlanKeysRef = useRef<Record<string, string>>({});
 
   const scanResult          = useScanStore((s) => s.scanResult);
+  // STOCKS-HORIZON-P0B B7: the scan's hold, for the veto-window fallback on a
+  // result persisted before `event_window.veto_days` existed.
+  const scanContext         = useScanStore((s) => s.context);
+  const earningsVetoDays    = scanVetoDays(scanResult?.event_window, scanContext);
   const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
   const pickedContracts     = useScanStore((s) => s.pickedContracts);
   const contractsBySymbol   = useScanStore((s) => s.contractsBySymbol);
@@ -1116,8 +1120,9 @@ export default function Step7Page() {
     if (!card || !selectedBroker || isBearishUnvalidated(card.direction)) return;
     // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
     // Audit round 1, F4: judged as of TODAY (the scan's distance aged by the
-    // scan's age), the same reading as `earningsVeto` below.
-    if (earningsGateFor(card, scanResult?.timestamp, scanResult?.event_window?.reject_days).veto) return;
+    // scan's age), the same reading as `earningsVeto` below. P0B B7: against
+    // the scan's veto window, max(reject_days, hold).
+    if (earningsGateFor(card, scanResult?.timestamp, earningsVetoDays).veto) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
     // `disabled` protects the button and this protects the ORDER -- anything
     // that reaches this function by another route inherits the refusal.
@@ -1319,8 +1324,10 @@ export default function Step7Page() {
   // F8: `armBlockedReason` also refuses the Arm for a single stock whose date
   // is unknown -- every fire of it would be refused. The rail reads the same
   // helper.
+  // STOCKS-HORIZON-P0B B7: the window is the scan's veto window,
+  // `event_window.veto_days ?? max(reject_days, the scan's hold)`.
   const earningsGate = earningsGateFor(
-    effectiveCard, scanResult?.timestamp, scanResult?.event_window?.reject_days,
+    effectiveCard, scanResult?.timestamp, earningsVetoDays,
   );
   const earningsVeto = earningsGate.veto;
   const bearishUnvalidated = isBearishUnvalidated(effectiveCard?.direction);

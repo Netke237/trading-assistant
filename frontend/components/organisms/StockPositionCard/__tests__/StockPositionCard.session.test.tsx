@@ -229,3 +229,38 @@ it('B4 disables Bearish stock limit and market sends with the direction reason',
   expect(usePortfolioStore.getState().positions).toEqual([]);
   await act(async () => {});
 });
+
+/* STOCKS-HORIZON-P0B B7 — a card the stock scan vetoed on earnings (inside
+ * max(reject_days, hold)) cannot be sent; unknown earnings never blocks. */
+const EARNINGS_VETO_REASON = 'Earnings inside the reject window — no send';
+const vetoed = (over: Record<string, unknown> = {}) =>
+  ({ ...card(), earnings_days: 40, earnings_veto: true, ...over }) as PositionCardData;
+
+it('B7 disables limit and market sends on an earnings-vetoed card, with the veto reason', async () => {
+  const selected = vetoed();
+  useScanStore.getState().setStockScanResult({ ...scan([selected]), veto_days: 60 } as StockScanResult);
+  render(<StockPositionCard card={selected} strategyKey="pullback_ema" />);
+  fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+  for (const name of [/limit @/i, /market order/i]) {
+    const button = screen.getByRole('button', { name });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', EARNINGS_VETO_REASON);
+    fireEvent.click(button);
+  }
+  expect(screen.getAllByText(EARNINGS_VETO_REASON).length).toBeGreaterThan(0);
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  expect(usePortfolioStore.getState().positions).toEqual([]);
+  await act(async () => {});
+});
+
+it('B7 control: unknown earnings never blocks a stock send', async () => {
+  const selected = vetoed({ earnings_days: null, earnings_veto: false });
+  useScanStore.getState().setStockScanResult({ ...scan([selected]), veto_days: 60 } as StockScanResult);
+  render(<StockPositionCard card={selected} strategyKey="pullback_ema" />);
+  fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+  for (const name of [/limit @/i, /market order/i]) {
+    expect(screen.getByRole('button', { name })).not.toHaveAttribute('title', EARNINGS_VETO_REASON);
+  }
+  expect(screen.queryByText(EARNINGS_VETO_REASON)).not.toBeInTheDocument();
+  await act(async () => {});
+});

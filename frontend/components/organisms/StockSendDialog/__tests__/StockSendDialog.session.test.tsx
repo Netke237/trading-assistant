@@ -106,3 +106,31 @@ it('B4 disables a Bearish broker basket before saving, while leaving research sa
   fireEvent.click(screen.getByLabelText('Auto-send AAPL'));
   expect(button).toBeEnabled();
 });
+
+/* STOCKS-HORIZON-P0B B7 — an earnings-vetoed card cannot be sent through the
+ * basket; a research save (auto-send off) stays available. */
+const EARNINGS_VETO_REASON = 'Earnings inside the reject window — no send';
+
+it('B7 disables an earnings-vetoed broker basket before saving, while leaving research saves available', async () => {
+  const vetoed = { ...card, direction: 'Bullish', earnings_days: 40, earnings_veto: true,
+    strategy: { ...card.strategy, stop_price: 145, target_price: 160, targets: [160, 165, 170] } } as PositionCardData;
+  useScanStore.setState({ stockExecutionGeneration: 0, stockExecution: {}, stockBasket: [], stockBasketSources: {} });
+  useScanStore.getState().setStockScanResult({ scan_id: 'scan-veto', candidates: [vetoed], rejected: [], timestamp: 'now', veto_days: 60 } as StockScanResult);
+  useScanStore.getState().setCardEdit('stocks', 'picks', vetoed.symbol, pick);
+  useScanStore.getState().addToStockBasket(vetoed);
+  useSettingsStore.setState({ ibkrPaper: { accountId: 'ACC', baseUrl: 'localhost' } });
+  const add = jest.fn().mockResolvedValue({ status: 'ok' });
+  usePortfolioStore.setState({ addPosition: add });
+  render(<StockSendDialog cards={[vetoed]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'IBKR Paper' }));
+  const button = screen.getByRole('button', { name: /submit 1 order/i });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('title', EARNINGS_VETO_REASON);
+  expect(screen.getByText(EARNINGS_VETO_REASON)).toBeInTheDocument();
+  fireEvent.click(button);
+  await act(async () => {});
+  expect(add).not.toHaveBeenCalled();
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText('Auto-send AAPL'));
+  expect(button).toBeEnabled();
+});

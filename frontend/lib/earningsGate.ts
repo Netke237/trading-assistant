@@ -17,6 +17,8 @@
  *  - aged distance < 0: the print may already have passed, so the NEXT date is
  *    unknown -- `unknown` (D4: a single stock is CAUTION and cannot be armed).
  *  - aged distance < reject_days: `veto` (no send, no pin, no arm, no fire).
+ *    Since STOCKS-HORIZON-P0B B7 the window callers pass is the scan's veto
+ *    window, max(reject_days, hold) -- see `scanVetoDays` below.
  *  - a card the backend already vetoed stays vetoed unless its aged distance
  *    went negative (then it is unknown, above): ageing only shortens the
  *    distance, so it can never clear a veto on its own.
@@ -26,6 +28,8 @@
  * earnings against today; only the auto-trade fire does (`_apply_event_veto`).
  */
 import type { TradeCardData } from '@/types/domain';
+import type { PositionCardData } from '@/types/stockDomain';
+import { sanitizeHoldDays } from '@/lib/horizonPresets';
 
 /** The sentence every vetoed control on Step 7 carries. */
 export const EARNINGS_VETO_MESSAGE = 'Earnings inside the reject window — no send';
@@ -86,4 +90,55 @@ export function earningsGateFor(
     : unknown && card?.isEtf !== true ? EARNINGS_UNKNOWN_ARM_MESSAGE
     : null;
   return { daysNow, daysAtScan, ageDays, veto, unknown, passedSinceScan, armBlockedReason };
+}
+
+/**
+ * STOCKS-HORIZON-P0B B7 — the window Step 7 and its `@contextRail` judge
+ * earnings against: the scan's veto window `max(reject_days, hold_max_days)`.
+ *
+ *  - `event_window.veto_days` when the scan echoed it (B5);
+ *  - else, on a result persisted before B5, `max(reject_days, the scan's
+ *    hold)`, the hold being `ScanContext.holdMax` through `sanitizeHoldDays`
+ *    exactly as the scan request sent it -- never the preset table, whose
+ *    Custom row is a fixed 15 while the user's range can be 60-185.
+ *    `setContext` clears the result when the horizon changes, so the context
+ *    in hand is the one that produced the result shown;
+ *  - else (no hold either) today's `reject_days`;
+ *  - undefined when the scan echoed no window at all.
+ */
+export function scanVetoDays(
+  eventWindow: { reject_days: number; caution_days?: number; veto_days?: number | null } | null | undefined,
+  context: { holdMin?: number | null; holdMax?: number | null } | null | undefined,
+): number | undefined {
+  if (eventWindow == null) return undefined;
+  if (eventWindow.veto_days != null) return eventWindow.veto_days;
+  const holdMax = context?.holdMax;
+  if (holdMax == null || !Number.isFinite(holdMax)) return eventWindow.reject_days;
+  const hold = sanitizeHoldDays(context?.holdMin ?? 0, holdMax).hold_max_days;
+  return Math.max(eventWindow.reject_days, hold);
+}
+
+/**
+ * STOCKS-HORIZON-P0B B7 — the stocks adapter over `earningsGateFor`'s ageing.
+ * A stock card carries `earnings_days` / `earnings_veto` (B6) and the stock
+ * scan echoes `veto_days`. Unknown earnings is NEVER a block on stocks (B6:
+ * the options unknown-date rule was not extended to stocks), so the card is
+ * mapped with `earningsUnknown: false` and `isEtf: true`: only `veto` is read
+ * by the stocks send UIs, and an unknown or passed date never sets it.
+ */
+export function stockEarningsGate(
+  card: Pick<PositionCardData, 'earnings_days' | 'earnings_veto'> | null | undefined,
+  scanTimestamp: string | null | undefined,
+  vetoDays: number | null | undefined,
+  now: Date = new Date(),
+): EarningsGate {
+  return earningsGateFor(
+    card ? {
+      earningsDays: card.earnings_days ?? null,
+      earningsVeto: card.earnings_veto === true,
+      earningsUnknown: false,
+      isEtf: true,
+    } : null,
+    scanTimestamp, vetoDays, now,
+  );
 }
