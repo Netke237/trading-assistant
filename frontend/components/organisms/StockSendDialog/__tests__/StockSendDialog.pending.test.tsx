@@ -1,3 +1,5 @@
+import type { ReactElement } from 'react';
+import { stockExecutionIdentity, useStockOrderOwnershipStore as ownershipStore } from '@/lib/stockExecutionSession';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { StockSendDialog } from '@/components/organisms/StockSendDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -60,7 +62,7 @@ describe('StockSendDialog — pending (backend-unreachable) submit', () => {
     const onSubmit = jest.fn();
     const onClose = jest.fn();
 
-    render(<StockSendDialog cards={[makeCard()]} onClose={onClose} onSubmit={onSubmit} />);
+    renderActive(<StockSendDialog cards={[makeCard()]} onClose={onClose} onSubmit={onSubmit} />);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /submit 1 order/i }));
@@ -83,7 +85,7 @@ describe('StockSendDialog — pending (backend-unreachable) submit', () => {
     const onSubmit = jest.fn();
     const onClose = jest.fn();
 
-    render(<StockSendDialog cards={[makeCard()]} onClose={onClose} onSubmit={onSubmit} />);
+    renderActive(<StockSendDialog cards={[makeCard()]} onClose={onClose} onSubmit={onSubmit} />);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /submit 1 order/i }));
@@ -95,3 +97,15 @@ describe('StockSendDialog — pending (backend-unreachable) submit', () => {
     expect(screen.queryByText(/will sync/i)).not.toBeInTheDocument();
   });
 });
+
+// Existing mechanics fixtures represent freshly pinned active candidates.
+function renderActive(element: ReactElement<{ cards: PositionCardData[] }>) {
+  const state = useScanStore.getState();
+  const cards = element.props.cards;
+  useScanStore.setState({ stockScanResult: { ...state.stockScanResult!, candidates: cards },
+    stockBasketSources: Object.fromEntries(cards.map(card => [card.symbol, stockExecutionIdentity(state, card.symbol)])),
+    stockExecution: {},
+  });
+  return render(element);
+}
+beforeEach(() => ownershipStore.setState({ bySymbol: {} }));

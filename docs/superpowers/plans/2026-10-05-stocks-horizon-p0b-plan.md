@@ -190,7 +190,10 @@ to the scan context's hold, including a **Custom 60-185** context (→ 185, not 
 send handler near line 1116 that already returns early on an earnings veto, and `api.postOptionOrder` near line 1215);
 the arm is `components/organisms/AutoTradeArm`. Stock sends all go through `lib/stockDirectSend.ts::sendStockSaveFirst`
 (save the Portfolio row first, then `api.postStockOrder` with `effect: 'OPEN'`), called from `StockPositionCard`,
-`StockSendDialog` and the Step-7 position-card page.
+`StockSendDialog` and the Step-7 position-card page. After audited STOCKS-STEP-MERGE-S2
+landed on main, the stock Step-7 page delegates its sends to these shared components; put the guard in those
+authoritative components and test the page through them, without recreating a separate submit path. Preserve the
+existing unavailable-C4-validation refusal and in-flight ownership/recovery gates. This changes wiring only, not B4 semantics.
 
 **Semantics.**
 

@@ -1,3 +1,5 @@
+import type { ReactElement } from 'react';
+import { stockExecutionIdentity, useStockOrderOwnershipStore as ownershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { StockSendDialog } from '@/components/organisms/StockSendDialog';
@@ -60,7 +62,7 @@ describe('StockSendDialog — the method-pick gate', () => {
       },
     });
 
-    render(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
 
     expect(screen.getByText(/Method pick required/)).toBeInTheDocument();
     const submitBtn = screen.getByRole('button', { name: /submit 2 orders/i });
@@ -82,7 +84,7 @@ describe('StockSendDialog — the method-pick gate', () => {
       },
     });
 
-    render(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL'), makeCard('MSFT')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
 
     expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
   });
@@ -104,7 +106,7 @@ describe('StockSendDialog — the method-pick gate', () => {
       },
     });
 
-    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /submit 1 order/i }));
     });
@@ -128,8 +130,20 @@ describe('StockSendDialog — the method-pick gate', () => {
       },
     });
 
-    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    renderActive(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
 
     expect(screen.getByText(/Method pick required/)).toBeInTheDocument();
   });
 });
+
+// Existing mechanics fixtures represent freshly pinned active candidates.
+function renderActive(element: ReactElement<{ cards: PositionCardData[] }>) {
+  const state = useScanStore.getState();
+  const cards = element.props.cards;
+  useScanStore.setState({ stockScanResult: { ...state.stockScanResult!, candidates: cards },
+    stockBasketSources: Object.fromEntries(cards.map(card => [card.symbol, stockExecutionIdentity(state, card.symbol)])),
+    stockExecution: {},
+  });
+  return render(element);
+}
+beforeEach(() => ownershipStore.setState({ bySymbol: {} }));
