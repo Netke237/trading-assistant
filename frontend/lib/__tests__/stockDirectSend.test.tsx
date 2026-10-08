@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { sendStockSaveFirst, removeNoteRow, stockSendLabel } from '@/lib/stockDirectSend';
@@ -180,4 +181,39 @@ describe('DirectSendNotesPanel', () => {
     expect(notes()).toHaveLength(1);
     confirmSpy.mockRestore();
   });
+});
+
+// Exercise the existing save-first/recovery machinery behind the boundary.
+// Production has no positive validation authority; separate S2 tests verify
+// the real fail-closed boundary with this module unmocked.
+jest.mock('@/lib/stockExecutionSession', () => ({
+  ...jest.requireActual('@/lib/stockExecutionSession'), stockExecutionBlock: jest.fn(() => null),
+}));
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));
+
+it('blocks a second send while the first save/order is in flight across a new scan and keeps its outcome ownership', async () => {
+  let resolveSave!: (reply: Reply) => void;
+  saveReply = body => new Promise(resolve => { resolveSave = resolve; });
+  const first = send();
+  await Promise.resolve();
+  const second = await send();
+  expect(second.kind).toBe('refused');
+  expect(log).toEqual(['save']);
+  resolveSave({ ok: true, status: 201, json: async () => ({ entryPrice: 200 }) });
+  expect((await first).kind).toBe('placed');
+  expect(useStockOrderOwnershipStore.getState().bySymbol.AAPL.status).toBe('placed');
+  expect((await send()).kind).toBe('refused');
+  expect(log).toEqual(['save', 'order']);
+});
+
+it('rechecks validation availability after an async save and sends no broker request if it was revoked', async () => {
+  const availability = (await import('@/lib/stockExecutionSession')).stockExecutionBlock as jest.Mock;
+  availability.mockReturnValueOnce(null).mockReturnValueOnce('Validation unavailable after save');
+  const outcome = await send();
+  expect(outcome.kind).toBe('not-placed');
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  expect(api.deletePortfolioPosition).toHaveBeenCalledTimes(1);
+  expect(log).toEqual(['save']);
+  expect(useStockOrderOwnershipStore.getState().bySymbol.AAPL).toBeUndefined();
+  availability.mockReturnValue(null);
 });

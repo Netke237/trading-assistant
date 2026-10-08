@@ -1,3 +1,5 @@
+import { stockExecutionBlock, stockExecutionIdentity, useStockOrderOwnershipStore } from './stockExecutionSession';
+import { useScanStore } from './scanStore';
 /*
  * STOCK-SENDS (phase STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES, Part A) — the ONE
  * way a Stocks-mode path sends a broker order: SAVE the position first, then send
@@ -92,7 +94,7 @@ export async function removeNoteRow(note: DirectSendNote, confirm: (text: string
   }
 }
 
-export async function sendStockSaveFirst(args: {
+type StockSendArgs = {
   /** Built by `buildPaperStockPosition`: contract `SYM|STOCK`, `recId` set,
    *  `contracts` = the shares asked for. */
   pos: PortfolioPosition;
@@ -101,7 +103,31 @@ export async function sendStockSaveFirst(args: {
   limitPrice: number | null;
   action: 'BUY' | 'SELL';
   addPosition: AddPosition;
-}): Promise<StockSendOutcome> {
+};
+
+export async function sendStockSaveFirst(args: StockSendArgs): Promise<StockSendOutcome> {
+  const validationBlock = stockExecutionBlock();
+  if (validationBlock) return { kind: 'refused', message: validationBlock };
+  const ownership = useStockOrderOwnershipStore.getState();
+  const identity = stockExecutionIdentity(useScanStore.getState(), args.pos.symbol);
+  if (!ownership.claim(args.pos.symbol, {
+    identity,
+    recId: args.pos.recId, status: 'in-flight',
+  })) return { kind: 'refused', message: `${args.pos.symbol}: a previous stock send is in flight, placed or unresolved. Reconcile that order before sending again.` };
+  try {
+    const outcome = await performStockSaveFirst(args, identity);
+    const hasNote = useDirectSendNotesStore.getState().notes.some(n => n.recId === args.pos.recId);
+    ownership.finish(args.pos.symbol, args.pos.recId,
+      outcome.kind === 'placed' ? 'placed' : outcome.kind === 'unknown' || hasNote ? 'unknown' : null,
+      outcome.message);
+    return outcome;
+  } catch (error) {
+    ownership.finish(args.pos.symbol, args.pos.recId, null, String(error));
+    throw error;
+  }
+}
+
+async function performStockSaveFirst(args: StockSendArgs, identity: string | null): Promise<StockSendOutcome> {
   const { pos, broker, orderType, limitPrice, action, addPosition } = args;
   // Always set by buildPaperStockPosition; the type is optional.
   const asked = pos.contracts ?? 1;
@@ -168,6 +194,16 @@ export async function sendStockSaveFirst(args: {
   try {
     let outcome: DirectOutcome;
     try {
+      // Recheck after asynchronous save; permission may have changed while
+      // saving. No new broker request follows an unavailable authority.
+      const validationBlock = stockExecutionBlock()
+        ?? (identity !== null && stockExecutionIdentity(useScanStore.getState(), pos.symbol) !== identity
+          ? 'The scan changed while saving. No broker order was sent; review the current candidate.' : null);
+      if (validationBlock) {
+        try { await removeTrackedRow(recId, true); }
+        catch { addNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null }); }
+        return { kind: 'not-placed', message: validationBlock };
+      }
       const res = await api.postStockOrder({
         broker,
         symbol: pos.symbol,
