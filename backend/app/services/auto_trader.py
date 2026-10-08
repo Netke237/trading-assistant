@@ -139,7 +139,7 @@ class UnvalidatedDirectionError(RuntimeError):
 
 
 class EventVetoError(RuntimeError):
-    """Fix #3: an earnings date inside the trade's horizon reject window -- or,
+    """An earnings date inside max(YAML reject, hold) -- or,
     for a SINGLE STOCK, an earnings date nobody knows (D4 amended 2026-10-03).
 
     The scan marks the first card REJECT; this refuses a fire for the same reason,
@@ -152,8 +152,8 @@ class EventVetoError(RuntimeError):
     ETFs (`app.data.etfs.is_etf`) have no earnings and are exempt; a symbol not
     in that curated set counts as a stock, which is the safe direction.
 
-    THE WINDOW IS THE HORIZON'S YAML ONE (scoring_rules.yaml
-    `horizons.<horizon>.event.reject_days`), NOT necessarily the scan's. A
+    THE WINDOW IS max(the horizon's YAML reject days, the arm's hold days),
+    with the horizon's own hold preset when the arm has no hold. A
     Step-3 `event_reject_days` override is not carried on the arm, so a scan run
     with a LOWERED override can still be refused here. That is deliberate: it
     errs toward refusing, and carrying the override is a follow-up.
@@ -299,12 +299,11 @@ def _fetch_earnings_date(symbol: str):
 
 
 def _apply_event_veto(strategy) -> None:
-    """Raise `EventVetoError` when earnings fall inside the horizon's reject
-    window, or when a single stock's earnings date is unknown.
+    """Raise `EventVetoError` inside max(YAML reject, hold), or on an unknown stock date.
 
     Same comparison as the scan's (`routers/scan.py::_earnings_veto`): `0 <=
-    days < reject_days`. The window, though, is the horizon's YAML reject window
-    (`effective_event_window(horizon, None)`), NOT the scan's effective one: a
+    days < veto_days`. The gate covers the arm's hold (or its horizon's preset)
+    and the horizon's YAML reject window. Unlike the scan, a
     Step-3 `event_reject_days` override is not carried on the arm, so a lowered
     override can still be refused here. Deliberate -- it errs toward refusing --
     and a follow-up will carry the override.
@@ -320,13 +319,13 @@ def _apply_event_veto(strategy) -> None:
 
     A trade with no horizon cannot say which window applies, and the regime gate
     abstains there. This one must not abstain: for a KNOWN future date it uses
-    the WIDEST reject window across every configured horizon (the `Horizon`
+    the WIDEST max(reject, hold) across every configured horizon (the `Horizon`
     literal is the source of truth, not a copied list), so a missing horizon can
     only make the veto stricter, never looser. Production cannot
     reach that branch (`ArmRequest.horizon` is required); direct constructors can.
     """
     from typing import get_args
-    from app.scoring.stock_scorer import Horizon, effective_event_window
+    from app.scoring.stock_scorer import DEFAULT_HOLD_MAX, Horizon, effective_event_window
     from app.data.etfs import is_etf
 
     def _unknown(why: str) -> None:
@@ -351,20 +350,25 @@ def _apply_event_veto(strategy) -> None:
     if days < 0:
         _unknown(f"last date on file {earnings} is past")
         return
+    def _window(horizon):
+        reject, _ = effective_event_window(horizon, None)
+        hold = (strategy.hold_max_days if strategy.hold_max_days is not None
+                else DEFAULT_HOLD_MAX[horizon])
+        return max(reject, hold), reject, hold
+
     if strategy.horizon is not None:
-        reject_days, _ = effective_event_window(strategy.horizon, None)
-        label = f"{strategy.horizon} YAML reject window"
+        veto_days, reject_days, hold_days = _window(strategy.horizon)
     else:
-        reject_days = max(effective_event_window(h, None)[0] for h in get_args(Horizon))
-        label = "widest YAML reject window"
+        veto_days, reject_days, hold_days = max(_window(h) for h in get_args(Horizon))
         logger.warning(
             "Event veto: the armed strategy for %s carries no horizon; "
-            "using the widest configured reject window (%dd)",
-            strategy.symbol, reject_days,
+            "using the widest configured hold window (%dd)",
+            strategy.symbol, veto_days,
         )
-    if days < reject_days:
+    if days < veto_days:
         raise EventVetoError(
-            f"earnings in {days}d is inside the {label} (<{reject_days}d)"
+            f"earnings in {days}d is inside the hold window "
+            f"(<{veto_days}d: max(reject {reject_days}d, hold {hold_days}d))"
         )
 
 
@@ -2074,7 +2078,7 @@ def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     PER SYMBOL AND DISCRETE, for the headwind alert's reasons: one refusal per
     symbol, an event rather than a standing condition. Its own wording and type:
     nothing is misconfigured and the market did not move -- an earnings print is
-    inside the horizon's reject window, and the remedy is a decision (re-arm
+    inside the hold window, and the remedy is a decision (re-arm
     after the print, or not at all). When `exc.unknown` (D4 amended 2026-10-03:
     a single stock with no known earnings date) the wording says so instead of
     claiming a print is inside the window -- the remedy is to check the calendar.
@@ -2090,7 +2094,7 @@ def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     else:
         reason = (
             f"Auto-trade REFUSED to fire {symbol}: earnings fall inside this "
-            f"trade's horizon reject window (the horizon's configured window; "
+            f"trade's hold window (max of the horizon's configured reject days and hold days; "
             f"a lowered Step-3 override is not carried on the arm). Nothing was sent and the auto-trader is "
             f"disarmed — re-arm after the announcement if you still want the "
             f"trade. {exc}"
@@ -2198,7 +2202,7 @@ _STATUS_STALE_BLOCKED = "stale_blocked"
 _STATUS_RISK_CHECK_FAILED = "risk_check_failed"
 # P3b: the bars to measure the regime could not be had (RegimeDataUnavailableError).
 _STATUS_REGIME_DATA_BLOCKED = "regime_data_blocked"
-# Fix #3 part 2: earnings inside the horizon's reject window (EventVetoError).
+# Earnings inside max(YAML reject, hold) (EventVetoError).
 _STATUS_EVENT_VETO_BLOCKED = "event_veto_blocked"
 _STATUS_UNVALIDATED_BLOCKED = "unvalidated_blocked"
 

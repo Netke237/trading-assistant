@@ -11,6 +11,7 @@ that card at CAUTION. ETFs (app.data.etfs.is_etf) have no earnings and still
 fire. A symbol missing from the curated ETF set is treated as a stock (the safe
 direction).
 """
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -23,6 +24,7 @@ class _S:
     symbol = "AAPL"
     horizon = "Swing"
     direction = "Bullish"
+    hold_max_days = None
 
 
 def test_veto_inside_window(monkeypatch):
@@ -321,3 +323,45 @@ def test_unknown_earnings_alert_says_unknown_not_inside_the_window(mocker, monke
     body = alert.call_args.args[2]
     assert "unknown" in body
     assert "fall inside" not in body
+
+
+@pytest.mark.parametrize("horizon, hold, days, veto, reject, effective_hold", [
+    ("Position", 105, 90, 105, 30, 105),
+    ("Position", None, 40, 45, 30, 45),
+    (None, None, 40, 45, 30, 45),
+    (None, 105, 90, 105, 30, 105),
+])
+def test_p0b_auto_veto_covers_hold(monkeypatch, horizon, hold, days, veto, reject, effective_hold):
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: date.today() + timedelta(days=days))
+    strategy = replace(_armed(), horizon=horizon, hold_max_days=hold)
+    with pytest.raises(at.EventVetoError) as info:
+        at._apply_event_veto(strategy)
+    assert str(info.value) == (f"earnings in {days}d is inside the hold window "
+                               f"(<{veto}d: max(reject {reject}d, hold {effective_hold}d))")
+    assert info.value.unknown is False
+
+
+@pytest.mark.parametrize("hold, days, blocked", [(60, 59, True), (60, 60, False),
+                                                 (0, 29, True), (0, 30, False)])
+def test_p0b_auto_hold_boundary_and_zero(monkeypatch, hold, days, blocked):
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda s: date.today() + timedelta(days=days))
+    strategy = replace(_armed(), horizon="Position", hold_max_days=hold)
+    if blocked:
+        with pytest.raises(at.EventVetoError):
+            at._apply_event_veto(strategy)
+    else:
+        at._apply_event_veto(strategy)
+
+
+def test_p0b_fire_long_hold_refuses_before_broker(mocker, monkeypatch):
+    svc, sent = _fire_with(mocker, monkeypatch, "AAPL", date.today() + timedelta(days=90))
+    strategy = replace(_armed(), horizon="Position", hold_max_days=105)
+    svc.arm(strategy)
+    with pytest.raises(at.EventVetoError):
+        svc.fire(attempt_id="p0b-long-hold")
+    assert sent == []
+    row = svc.get_state().history[-1]
+    assert row["status"] == "event_veto_blocked"
+    assert row["premium_at_risk"] == 0.0
+    assert row["order_id"] is None
+    assert svc.get_state().armed is False

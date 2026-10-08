@@ -1000,6 +1000,8 @@ class EventWindow(BaseModel):
     (scoring_rules.yaml horizon default, replaced by any request override)."""
     reject_days:  int
     caution_days: int
+    # Separate earnings gate; absent on results saved before hold-aware vetoes.
+    veto_days: Optional[int] = None
 
 
 class DteWindow(BaseModel):
