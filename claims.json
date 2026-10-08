@@ -7,14 +7,6 @@
       "expires_at": "2026-10-08T22:37:59Z",
       "note": "Resume P0B B2 closeout and continue B3-B7 after usage interruption",
       "task": "STOCKS-HORIZON-P0B"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/stocks-horizon-tuning",
-      "claimed_at": "2026-10-08T20:26:18Z",
-      "expires_at": "2026-10-08T23:26:18Z",
-      "note": "Reconcile PR88 with audited stocks workflow on main; preserve P0A audit counts",
-      "task": "STOCKS-HORIZON-P0A"
     }
   ]
 }
