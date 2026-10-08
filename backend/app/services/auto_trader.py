@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Literal, Optional, get_args
 from app.services.config_health import config_health
 from app.schemas import Direction, Horizon
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 
 if TYPE_CHECKING:
     # For `FiredOrder`'s annotation only: `execute_option_order` imports the
@@ -131,6 +132,10 @@ class RegimeHeadwindError(RuntimeError):
     suppress a genuine config refusal. Its own type, its own history status, its
     own message.
     """
+
+
+class UnvalidatedDirectionError(RuntimeError):
+    """Bearish auto-fire is refused while its direction remains Unvalidated."""
 
 
 class EventVetoError(RuntimeError):
@@ -525,6 +530,8 @@ class ArmedStrategy:
     # construction sites; the cost of defaulting it would be a silent wrong
     # measurement, which is why it is None and not "Swing".
     horizon:                 Optional[Horizon] = None
+    # None preserves arms created before this field and direct constructors.
+    hold_max_days:           Optional[int] = None
     # The Step-3 Regime Gate thresholds AS THE SCAN RESOLVED THEM, snapshotted.
     # None means "the scan used the scoring_rules.yaml value", which is what an
     # untouched Step-3 control means. Frozen at arm for the reason `quantity`,
@@ -2048,6 +2055,19 @@ def _alert_regime_data_refusal(symbol: str, exc: Exception) -> None:
     )
 
 
+def _alert_unvalidated_refusal(symbol: str, exc: Exception) -> None:
+    """Page a consumed bearish refusal, per symbol and as a discrete event."""
+    _alert_refusal(
+        symbol,
+        "unvalidated-direction refusal",
+        (f"Auto-trade REFUSED to fire {symbol}: {exc} "
+         "Nothing was sent and the auto-trader is disarmed."),
+        _per_symbol_rec_id("auto-trade-unvalidated", symbol),
+        "AUTO_TRADE_UNVALIDATED",
+        discrete=True,
+    )
+
+
 def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     """Alert an earnings-veto refusal (fix #3 part 2, EventVetoError).
 
@@ -2180,6 +2200,7 @@ _STATUS_RISK_CHECK_FAILED = "risk_check_failed"
 _STATUS_REGIME_DATA_BLOCKED = "regime_data_blocked"
 # Fix #3 part 2: earnings inside the horizon's reject window (EventVetoError).
 _STATUS_EVENT_VETO_BLOCKED = "event_veto_blocked"
+_STATUS_UNVALIDATED_BLOCKED = "unvalidated_blocked"
 
 
 def _clear_config_refusal_holds() -> None:
@@ -2582,6 +2603,17 @@ class AutoTradeService:
                     "— armed state preserved for the next trigger"
                 )
             _symbol = self._state.strategy.symbol
+            # An unsupported arm is consumed even outside market hours. Take it
+            # under the same lock as the identity check; record outside the lock.
+            unvalidated = self._state.strategy.direction == "Bearish"
+            if unvalidated:
+                strategy = self._state.strategy
+                self._state.armed = False
+                self._state.strategy = None
+                self._consumed_attempts.append(attempt_id)
+
+        if unvalidated:
+            self._refuse_unvalidated(attempt_id, strategy)
 
         # Halt check outside lock — network call must not hold the lock.
         # Armed state is preserved: we haven't disarmed yet.
@@ -2611,6 +2643,11 @@ class AutoTradeService:
             # OWNERSHIP TAKEN — recorded inside the disarm's own lock
             # acquisition so the two cannot come apart. See the deque.
             self._consumed_attempts.append(attempt_id)
+
+        # Defensive for an arm created before deploy or by a direct constructor.
+        # Refuse before sizing/regime can fetch data or any broker is reached.
+        if strategy.direction == "Bearish":
+            self._refuse_unvalidated(attempt_id, strategy)
 
         # Vol-scaled sizing + the headwind gate, both on ONE measurement of
         # this symbol's own regime (SIZING-4), which therefore DOES make a
@@ -3217,6 +3254,8 @@ class AutoTradeService:
             _alert_regime_data_refusal(strategy.symbol, exc)
         except EventVetoError as exc:
             _alert_event_veto_refusal(strategy.symbol, exc)
+        except UnvalidatedDirectionError as exc:
+            _alert_unvalidated_refusal(strategy.symbol, exc)
         except RegimeGateConfigError as exc:
             _alert_regime_gate_config_refusal(strategy.symbol, exc)
         except SizingConfigError as exc:
@@ -3292,13 +3331,20 @@ class AutoTradeService:
             # state read that computed it.
             self._alert_for_consumed_attempt(attempt_id, strategy.symbol, exc)
 
+    def _refuse_unvalidated(self, attempt_id: str, strategy: "ArmedStrategy") -> None:
+        self._record_refusal(attempt_id, strategy, _STATUS_UNVALIDATED_BLOCKED,
+                             BEARISH_UNVALIDATED_MESSAGE)
+        logger.error("AutoTrader fire REFUSED for %s %s — %s",
+                     strategy.symbol, strategy.direction, BEARISH_UNVALIDATED_MESSAGE)
+        raise UnvalidatedDirectionError(BEARISH_UNVALIDATED_MESSAGE)
+
     def _record_refusal(self, attempt_id: str, strategy: "ArmedStrategy",
                         status: str, error: str) -> None:
         """Append the refusal row `fire()` writes when it declines to send.
 
         The 9-key shape every refusal row has: no order id, zero premium at
         risk, stamped with `attempt_id` so `maybe_fire_on_scan` can correlate it.
-        Used by the earnings-veto blocks only; the older refusal blocks in
+        Used by the earnings-veto and Unvalidated blocks; older refusal blocks in
         `fire()` keep their own inline copies deliberately (audited code).
         """
         with self._lock:
@@ -3402,6 +3448,8 @@ class AutoTradeService:
             _alert_regime_data_refusal(symbol, exc)
         elif status == _STATUS_EVENT_VETO_BLOCKED:
             _alert_event_veto_refusal(symbol, exc)
+        elif status == _STATUS_UNVALIDATED_BLOCKED:
+            _alert_unvalidated_refusal(symbol, exc)
         elif status == "not_submitted":
             # ABOVE `order_failed` for readability only — the two statuses
             # are disjoint, so this is reading order, not precedence.

@@ -1009,3 +1009,36 @@ describe('AutoTradeArm — armBlockedReason (earnings-vetoed card)', () => {
     await waitFor(() => expect(api.fireAutoTrade).toHaveBeenCalledTimes(1));
   });
 });
+
+
+describe('AutoTradeArm — P0B B3: the actual scan hold travels on the arm', () => {
+  let previousContext: ReturnType<typeof useScanStore.getState>['context'];
+
+  beforeEach(() => {
+    previousContext = useScanStore.getState().context;
+    act(() => {
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, armedSymbol: null, lastOrderId: null });
+      usePortfolioStore.setState({ positions: [] });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+  });
+
+  afterEach(() => { act(() => { useScanStore.setState({ context: previousContext }); }); });
+
+  it.each([
+    ['Position (60–185d)', 'Custom', 60, 185, 185],
+    ['Swing (5–15d)', 'Swing', 5, 15, 15],
+    ['Position (60–185d)', 'Custom', 60.4, 184.6, 185],
+    ['Position (60–185d)', 'Custom', 185, 60, 185],
+  ] as const)('posts the sanitized context hold for %s / %s (%s–%s)', async (horizon, horizonPreset, holdMin, holdMax, expected) => {
+    act(() => {
+      useScanStore.setState({ context: { universe: 'SP500', direction: 'Bullish', horizon,
+        horizonPreset, holdMin, holdMax } });
+    });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledTimes(1));
+    expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].hold_max_days).toBe(expected);
+  });
+});

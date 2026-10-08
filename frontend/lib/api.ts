@@ -694,6 +694,8 @@ export const api = {
      *  the scan context rather than hand-writing a literal; never default it
      *  here, which would typecheck while measuring the wrong window. */
     horizon: ScoringHorizon;
+    /** Actual sanitized scan hold, including Custom ranges. Required at arm. */
+    hold_max_days: number;
     /** The Regime Gate thresholds this card's scan RESOLVED, read off the
      *  card's own `regimeGate` snapshot so neither a Step-3 edit, a reset nor
      *  a reload can change the rule the trade is judged by — the same freeze

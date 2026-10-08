@@ -8,7 +8,7 @@ import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
-import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
+import { sanitizeHoldDays, scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import { regimeGateFromCard, MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
 import { api } from '@/lib/api';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -346,6 +346,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     setDupWarning(null);
     setWorking(true); setError(null); setFireNote(null);
     try {
+      const context = useScanStore.getState().context;
+      const { hold_max_days } = sanitizeHoldDays(context?.holdMin ?? 0, context?.holdMax ?? 0);
       await api.armAutoTrade({
         broker,
         symbol:          card.symbol,
@@ -376,7 +378,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // label helper is the one place that mapping is defined. A null context
         // (nothing scanned this session) falls back to the helper's own default
         // rather than to a literal written here.
-        horizon:         scoringHorizonFromLabel(useScanStore.getState().context?.horizon),
+        horizon:         scoringHorizonFromLabel(context?.horizon),
+        hold_max_days,
         // The thresholds THIS CARD'S SCAN RESOLVED, off the card itself --
         // NOT the live Step-3 store. Arm-door round 1, F1: `scanOverrides` is
         // not persisted and survives a threshold edit or "Reset to defaults"

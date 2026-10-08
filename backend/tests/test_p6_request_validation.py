@@ -220,7 +220,7 @@ def _arm_body(**extra) -> dict:
     base = {
         "broker": "tastytrade_paper", "symbol": "AAPL",
         "option_symbol": "AAPL260620C00185000",
-        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "quantity": 1,
+        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 1,
         "order_type": "LMT", "limit_price": 2.50, "entry_premium": 2.50,
     }
     base.update(extra)

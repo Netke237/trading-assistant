@@ -9,7 +9,7 @@ async def test_arm_accepts_tastytrade_paper_broker_key():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/auto-trade/arm", json={
             "broker": "tastytrade_paper", "symbol": "AAPL", "option_symbol": "AAPL240119C00150000",
-            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "quantity": 1, "order_type": "MKT",
+            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 1, "order_type": "MKT",
             "entry_premium": 3.50,
         })
     assert resp.status_code != 422, (
@@ -31,7 +31,7 @@ async def test_arm_rejects_zero_quantity():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/auto-trade/arm", json={
             "broker": "tastytrade_paper", "symbol": "AAPL", "option_symbol": "AAPL240119C00150000",
-            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "quantity": 0, "order_type": "MKT",
+            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 0, "order_type": "MKT",
             "entry_premium": 3.50,
         })
     assert resp.status_code == 422
@@ -43,7 +43,7 @@ async def test_arm_rejects_negative_quantity():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/auto-trade/arm", json={
             "broker": "tastytrade_paper", "symbol": "AAPL", "option_symbol": "AAPL240119C00150000",
-            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "quantity": -1, "order_type": "MKT",
+            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": -1, "order_type": "MKT",
             "entry_premium": 3.50,
         })
     assert resp.status_code == 422
@@ -56,7 +56,7 @@ async def test_arm_disarm_clears_armed_state():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/auto-trade/arm", json={
                 "broker": "tastytrade_paper", "symbol": "MSFT", "option_symbol": "MSFT240119C00400000",
-                "action": "BUY", "direction": "Bullish", "horizon": "Swing", "quantity": 1, "order_type": "MKT",
+                "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 1, "order_type": "MKT",
                 "entry_premium": 2.00,
             })
             assert resp.status_code == 200
@@ -97,7 +97,7 @@ async def test_arm_refuses_a_body_with_no_direction():
         resp = await client.post("/auto-trade/arm", json={
             "broker": "tastytrade_paper", "symbol": "AAPL",
             "option_symbol": "AAPL240119C00150000",
-            "action": "BUY", "quantity": 1, "order_type": "MKT",
+            "action": "BUY", "horizon": "Swing", "hold_max_days": 15, "quantity": 1, "order_type": "MKT",
             "entry_premium": 3.50,
         })
     assert resp.status_code == 422, resp.text
@@ -106,24 +106,9 @@ async def test_arm_refuses_a_body_with_no_direction():
 
 @pytest.mark.asyncio
 async def test_arm_carries_direction_through_to_the_armed_strategy_and_status():
-    """THE SEAM. ROUND 1 finding 2.
+    """The supported direction reaches both the strategy and status response.
 
-    Three things were already pinned: the browser sends `direction`
-    (AutoTradeArm.test.tsx), `_apply_vol_sizing` consumes it
-    (test_auto_trader.py), and a body omitting it 422s (above). The join
-    between them was not — no test asserted that a POST carrying
-    `direction: "Bearish"` produces an ArmedStrategy that actually HOLDS
-    "Bearish". Every piece could pass while the router dropped the value on the
-    floor, and sizing would silently read the dataclass default... except there
-    is no default, so it would raise — which is precisely the kind of thing a
-    test should establish rather than a reader infer.
-
-    Phase G wrote exactly this test for its five picked_* fields
-    (test_phase_g_arm_pick.py, "The carry: ArmRequest -> ArmedStrategy") and
-    premium_stop_pct has one too. This follows those precedents.
-
-    "Bearish" is the discriminating value: it is the direction the old
-    `action`-inference could never produce, since `action` is always BUY.
+    Bearish is refused by P0B; its refusal is pinned in test_auto_trade_unvalidated.
     """
     from app.services.auto_trader import auto_trader
 
@@ -132,10 +117,8 @@ async def test_arm_carries_direction_through_to_the_armed_strategy_and_status():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/auto-trade/arm", json={
                 "broker": "tastytrade_paper", "symbol": "NVDA",
-                # A bearish trade is a long PUT — action stays BUY. That is the
-                # whole reason `action` could never encode direction.
-                "option_symbol": "NVDA240119P00400000",
-                "action": "BUY", "direction": "Bearish", "horizon": "Swing", "quantity": 1,
+                "option_symbol": "NVDA240119C00400000",
+                "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 1,
                 "order_type": "MKT", "entry_premium": 2.00,
             })
             assert resp.status_code == 200, resp.text
@@ -145,7 +128,7 @@ async def test_arm_carries_direction_through_to_the_armed_strategy_and_status():
             # `_state` — the same way test_phase_g_arm_pick.py reads it.
             armed = auto_trader.get_state().strategy
             assert armed is not None
-            assert armed.direction == "Bearish"
+            assert armed.direction == "Bullish"
             # ...and that `action` did NOT become the source of truth again.
             assert armed.action == "BUY"
 
@@ -154,7 +137,7 @@ async def test_arm_carries_direction_through_to_the_armed_strategy_and_status():
             # entire suite would stay green.
             body = (await client.get("/auto-trade/status")).json()
             assert body["armed"] is True
-            assert body["direction"] == "Bearish"
+            assert body["direction"] == "Bullish"
 
             await client.delete("/auto-trade/arm")
             # Cleared with the strategy, not left stale on a disarmed trader.
@@ -183,7 +166,7 @@ async def test_arm_refuses_sell_because_it_would_be_a_naked_short():
         resp = await client.post("/auto-trade/arm", json={
             "broker": "tastytrade_paper", "symbol": "AAPL",
             "option_symbol": "AAPL240119C00150000",
-            "action": "SELL", "direction": "Bullish", "horizon": "Swing", "quantity": 1,
+            "action": "SELL", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 1,
             "order_type": "MKT", "entry_premium": 3.50,
         })
     assert resp.status_code == 422, resp.text
@@ -211,7 +194,7 @@ async def test_arm_rejects_a_body_with_no_horizon():
         resp = await client.post("/auto-trade/arm", json={
             "broker": "tastytrade_paper", "symbol": "AAPL",
             "option_symbol": "AAPL240119C00150000",
-            "action": "BUY", "direction": "Bullish", "quantity": 1,
+            "action": "BUY", "direction": "Bullish", "hold_max_days": 15, "quantity": 1,
             "order_type": "MKT", "entry_premium": 3.50,
         })
     assert resp.status_code == 422
@@ -234,7 +217,7 @@ async def test_arm_rejects_a_horizon_outside_the_three_scoring_horizons():
         resp = await client.post("/auto-trade/arm", json={
             "broker": "tastytrade_paper", "symbol": "AAPL",
             "option_symbol": "AAPL240119C00150000",
-            "action": "BUY", "direction": "Bullish", "horizon": "Quarterly",
+            "action": "BUY", "direction": "Bullish", "horizon": "Quarterly", "hold_max_days": 105,
             "quantity": 1, "order_type": "MKT", "entry_premium": 3.50,
         })
     assert resp.status_code == 422
@@ -255,8 +238,8 @@ async def test_arm_carries_the_horizon_and_the_gate_snapshot_onto_the_strategy()
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/auto-trade/arm", json={
                 "broker": "tastytrade_paper", "symbol": "NVDA",
-                "option_symbol": "NVDA240119P00400000",
-                "action": "BUY", "direction": "Bearish", "horizon": "Position",
+                "option_symbol": "NVDA240119C00400000",
+                "action": "BUY", "direction": "Bullish", "horizon": "Position", "hold_max_days": 45,
                 "quantity": 1, "order_type": "MKT", "entry_premium": 2.00,
                 "regime_headwind_caution_pct": -25,
                 "regime_headwind_reject_pct": -80,
@@ -286,8 +269,8 @@ async def test_arm_without_gate_thresholds_leaves_them_none():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/auto-trade/arm", json={
                 "broker": "tastytrade_paper", "symbol": "NVDA",
-                "option_symbol": "NVDA240119P00400000",
-                "action": "BUY", "direction": "Bearish", "horizon": "Swing",
+                "option_symbol": "NVDA240119C00400000",
+                "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15,
                 "quantity": 1, "order_type": "MKT", "entry_premium": 2.00,
             })
             assert resp.status_code == 200, resp.text

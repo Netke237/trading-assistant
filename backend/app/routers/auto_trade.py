@@ -15,6 +15,7 @@ from app.database import get_db
 from app.schemas import Direction, PickedAt, PickedMethod, PickedStopBasis, Horizon
 from app.services.auto_trader import auto_trader, ArmedStrategy, RegimeGateConfigError
 from app.services.auto_trade_booking import book_fired_order
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.scoring.conviction_sizing import SizingConfigError
 
 # The detail prefix of POST /fire's sizing-config 500. Coupled on purpose to
@@ -200,6 +201,8 @@ class ArmRequest(BaseModel):
     # older client bundle, turns every Arm click into a 422. Both sides ship
     # together. Failing loudly at arm beats measuring the wrong window at fire.
     horizon:         Horizon
+    # Required actual scan hold; stale clients fail at arm rather than guessing.
+    hold_max_days:   int = Field(..., ge=0, le=3650)
     # The Step-3 Regime Gate thresholds this card's scan was run with. Omitted
     # or null means "the scan used the scoring_rules.yaml value", which is what
     # an untouched Step-3 control means -- so an omission is a real state here
@@ -247,6 +250,8 @@ class ArmRequest(BaseModel):
 @router.post("/arm")
 async def arm(req: ArmRequest) -> dict:
     """Arm the auto-trader with the given option order. Fires on next trigger."""
+    if req.direction == "Bearish":
+        raise HTTPException(status_code=422, detail=BEARISH_UNVALIDATED_MESSAGE)
     auto_trader.arm(ArmedStrategy(**req.model_dump()))
     return {"armed": True, "symbol": req.symbol, "option_symbol": req.option_symbol}
 

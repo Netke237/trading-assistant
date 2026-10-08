@@ -367,7 +367,7 @@ def test_arm_request_carries_the_pct_into_the_strategy():
     req = ArmRequest(
         broker="tradier_paper", symbol="AAPL",
         option_symbol="AAPL260516C00190000", action="BUY", direction="Bullish",
-        horizon="Swing", quantity=1, entry_premium=2.50,
+        horizon="Swing", hold_max_days=15, quantity=1, entry_premium=2.50,
         premium_stop_pct=0.30,
     )
     assert ArmedStrategy(**req.model_dump()).premium_stop_pct == 0.30
@@ -387,7 +387,7 @@ def test_arm_request_rejects_meaningless_percentages(bad):
         ArmRequest(
             broker="tradier_paper", symbol="AAPL",
             option_symbol="AAPL260516C00190000", action="BUY", direction="Bullish", quantity=1,
-            horizon="Swing", entry_premium=2.50,
+            horizon="Swing", hold_max_days=15, entry_premium=2.50,
             premium_stop_pct=bad,
         )
     assert [e["loc"] for e in exc.value.errors()] == [("premium_stop_pct",)]
@@ -849,7 +849,7 @@ def test_order_schemas_reject_a_non_positive_limit_price(bad):
     for model, extra in (
         (StockOrderRequest, {}),
         (OptionOrderRequest, {"option_symbol": "AAPL|190|2026-05-16|C"}),
-        (ArmRequest, {"option_symbol": "AAPL|190|2026-05-16|C"}),
+        (ArmRequest, {"option_symbol": "AAPL|190|2026-05-16|C", "hold_max_days": 15}),
     ):
         base = {
             "broker": "tradier_paper", "symbol": "AAPL", "action": "BUY",
