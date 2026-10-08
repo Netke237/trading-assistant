@@ -1,9 +1,12 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import Step4StocksPage from '../page';
+import BacktestPage from '../../step-6-backtest/page';
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { runStockScan } from '@/lib/stockScan';
+import { api } from '@/lib/api';
+import * as execution from '@/lib/stockExecutionSession';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 /*
@@ -18,10 +21,7 @@ import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
  *   - it carries no method pick and the gate never fires for it.
  */
 
-jest.mock('@/lib/stockScan', () => ({
-  ...jest.requireActual('@/lib/stockScan'),
-  runStockScan: jest.fn(),
-}));
+jest.mock('@/lib/api', () => ({ api: { postStockScan: jest.fn(), getLastStockScanStatus: jest.fn().mockResolvedValue({ status: 'idle' }) } }));
 jest.mock('@/components/organisms/StockPositionCard', () => ({
   // A minimal stand-in exposing exactly the one control this test drives —
   // the after-scan arm toggle — rather than the full card.
@@ -83,6 +83,8 @@ const originalFetch = global.fetch;
 describe('step-4-stocks — S5 after-scan auto-execute is exempt from the method-pick gate', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(execution, 'stockExecutionBlock').mockReturnValue(null);
+    useScanStore.setState({ stockAfterScanIntent: {} });
     act(() => {
       useScanStore.setState({
         context: { direction: 'Bullish', universe: 'SP500' } as any,
@@ -98,18 +100,15 @@ describe('step-4-stocks — S5 after-scan auto-execute is exempt from the method
       usePortfolioStore.setState({ positions: [], lastSyncError: null });
     });
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
-    (runStockScan as jest.Mock).mockImplementation(async () => {
-      const result = makeScanResult();
-      useScanStore.getState().setStockScanResult(result);
-      return result;
-    });
+    (api.postStockScan as jest.Mock).mockResolvedValue(makeScanResult());
   });
   afterEach(() => {
     global.fetch = originalFetch;
+    jest.restoreAllMocks();
   });
 
   it('creates the auto-executed position with no picked_method, and the gate never fires', async () => {
-    render(<Step4StocksPage />);
+    render(<><Step4StocksPage /><BacktestPage /></>);
 
     // 1) Select the strategy and run the first scan to surface AAPL.
     fireEvent.click(screen.getByRole('button', { name: /pullback/i }));
@@ -117,7 +116,7 @@ describe('step-4-stocks — S5 after-scan auto-execute is exempt from the method
     await screen.findByText('AAPL');
 
     // 2) Open AAPL's row and arm it for after-scan auto-execute.
-    fireEvent.click(screen.getByText('AAPL'));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand AAPL' }));
     fireEvent.click(await screen.findByRole('button', { name: /arm aapl/i }));
 
     // 3) Re-run — onRun's own auto-execute loop fires against candidates from
@@ -147,6 +146,8 @@ describe('step-4-stocks — after-scan auto-execute fires on PASS only', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(execution, 'stockExecutionBlock').mockReturnValue(null);
+    useScanStore.setState({ stockAfterScanIntent: {} });
     act(() => {
       useScanStore.setState({
         context: { direction: 'Bullish', universe: 'SP500' } as any,
@@ -162,26 +163,23 @@ describe('step-4-stocks — after-scan auto-execute fires on PASS only', () => {
       usePortfolioStore.setState({ positions: [], lastSyncError: null });
     });
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
-    (runStockScan as jest.Mock).mockImplementation(async () => {
-      const result = makeScanResult([makeCandidate('AAPL', 'PASS'), makeCandidate('MSFT', 'CAUTION')]);
-      useScanStore.getState().setStockScanResult(result);
-      return result;
-    });
+    (api.postStockScan as jest.Mock).mockResolvedValue(makeScanResult([makeCandidate('AAPL', 'PASS'), makeCandidate('MSFT', 'CAUTION')]));
   });
   afterEach(() => {
     global.fetch = originalFetch;
+    jest.restoreAllMocks();
     act(() => { usePortfolioStore.setState({ addPosition: realAddPosition }); });
   });
 
   async function armBothAndRescan() {
-    render(<Step4StocksPage />);
+    render(<><Step4StocksPage /><BacktestPage /></>);
     fireEvent.click(screen.getByRole('button', { name: /pullback/i }));
     fireEvent.click(screen.getByRole('button', { name: /run stock scan/i }));
     await screen.findByText('AAPL');
 
-    fireEvent.click(screen.getByText('AAPL'));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand AAPL' }));
     fireEvent.click(await screen.findByRole('button', { name: /arm aapl/i }));
-    fireEvent.click(screen.getByText('MSFT'));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand MSFT' }));
     fireEvent.click(await screen.findByRole('button', { name: /arm msft/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /run stock scan/i }));
@@ -205,6 +203,6 @@ describe('step-4-stocks — after-scan auto-execute fires on PASS only', () => {
   it('tells the user the CAUTION candidate was not fired, and why', async () => {
     await armBothAndRescan();
 
-    expect(await screen.findByText(/Not fired \(not PASS\): MSFT: CAUTION/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Not fired.*MSFT: not PASS \(CAUTION\)/)).length).toBeGreaterThan(0);
   });
 });

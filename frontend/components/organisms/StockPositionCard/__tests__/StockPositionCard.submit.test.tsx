@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -179,3 +180,14 @@ describe('StockPositionCard — broker order submit()', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /limit @/i })).toBeEnabled());
   });
 });
+
+// New ephemeral execution records must not leak between independent test scans.
+beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));
+
+// Exercise the existing save-first/recovery machinery behind the boundary.
+// Production has no positive validation authority; separate S2 tests verify
+// the real fail-closed boundary with this module unmocked.
+jest.mock('@/lib/stockExecutionSession', () => ({
+  ...jest.requireActual('@/lib/stockExecutionSession'), stockExecutionBlock: jest.fn(() => null),
+}));
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

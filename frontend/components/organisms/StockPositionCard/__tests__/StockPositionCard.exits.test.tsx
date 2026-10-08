@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -137,6 +138,7 @@ function estimateFixture(modelCaveat: string | null = null) {
 }
 
 async function clickButton(name: RegExp) {
+  if (name.test('Add to Portfolio')) fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name }));
   });
@@ -527,3 +529,9 @@ describe('StockPositionCard — Add to Portfolio rejects a fat-fingered target',
     expect(screen.queryByText(/wrong side of entry/i)).toBeNull();
   });
 });
+
+// New ephemeral execution records must not leak between independent test scans.
+beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));
+
+// Mutation ownership is session-wide; each test begins a fresh session.
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

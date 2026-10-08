@@ -20,7 +20,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
-import { runStockScan, stockScanFailureReason } from '@/lib/stockScan';
+import { runStockScanWithContinuation, isStockManualScanCurrent, stockScanFailureReason } from '@/lib/stockScan';
 import { presetByKey, resolveParamsHorizon } from '@/lib/horizonPresets';
 import { buildOptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import styles from './index.module.css';
@@ -108,38 +108,24 @@ export function RunScanButton() {
       // Two-argument then(), not .then().catch(): a chained catch would also
       // catch a throw from toastFailure inside the handler above and answer it
       // by calling toastFailure again with the toast layer's own error.
-      void runStockScan(activeStrategy).then(
-        (res) => {
-          if (res) return;
-          // Guarded for the same reason the rejection branch below is, and
-          // more urgently: runStockScan catches its own store writes now, so
-          // under blocked storage it RETURNS NULL rather than rejecting —
-          // this is the branch that actually runs, and an unguarded throw out
-          // of a persist()ed addToast escapes a void-discarded chain as an
-          // unhandled rejection with nothing shown.
-          try {
-            toastFailure(useScanStore.getState().stockScanError ?? 'unknown error');
-          } catch { /* storage is down; nothing left to show with */ }
-        },
-        (err: unknown) => {
-          // Reason FIRST. This handler exists for a throw runStockScan could
-          // not convert into a null return — a persisted-store write failing —
-          // so doing the state reset first meant the one case it is written
-          // for threw again and the user was told nothing at all.
-          //
-          // Guarded even so: alertStore is persist()ed too, so whatever made
-          // the scan's store write throw can make addToast throw, and an
-          // unguarded throw here escapes a void-discarded promise chain as an
-          // unhandled rejection.
-          const reason = stockScanFailureReason(err, false);
-          try { toastFailure(reason); } catch { /* storage is down; nothing left to show with */ }
-          // One try EACH: the first write throwing must not skip FAILED, which
-          // is what re-enables the Run button. A stale reason from an earlier
-          // run must not outlive this one either, hence both.
-          try { useScanStore.getState().setStockScanError(reason); } catch { /* as above */ }
-          try { useScanStore.getState().setScanState('FAILED'); } catch { /* as above */ }
-        },
-      );
+      const pending = runStockScanWithContinuation(activeStrategy);
+      const token = useScanStore.getState().stockManualRunToken;
+      void pending.then(outcome => {
+        if (!isStockManualScanCurrent(outcome)) return;
+        if (outcome.kind === 'failure') {
+          try { toastFailure(outcome.reason); } catch { /* unavailable storage */ }
+        }
+        if (outcome.kind === 'success' && isStockManualScanCurrent(outcome)) {
+          router.push('/screener/step-6-backtest');
+        }
+      }, error => {
+        if (useScanStore.getState().stockManualRunToken !== token) return;
+        const reason = stockScanFailureReason(error, false);
+        try { toastFailure(reason); } catch { /* unavailable storage */ }
+        try { useScanStore.getState().setStockScanError(reason); } catch { /* unavailable storage */ }
+        if (useScanStore.getState().stockManualRunToken !== token) return;
+        try { useScanStore.getState().setScanState('FAILED'); } catch { /* unavailable storage */ }
+      });
       return;
     }
 
