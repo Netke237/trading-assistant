@@ -324,3 +324,17 @@ it.each(['stock_stop', 'premium_stop', undefined] as const)('cautions on an R/R 
   expect(screen.queryByText(/reward:risk is/)).not.toBeInTheDocument();
   expect(rrStatus()).toBe('CAUTION');
 });
+
+const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';
+
+it('B4 shows a REJECT Direction gate for the active Bearish card', () => {
+  useTradeCardUiStore.setState({ activeCard: { card: card({ direction: 'Bearish' }), rrPending: false } });
+  render(<TradeCardContextRail />);
+  expect(document.querySelector('[data-gate-label="Direction"]')).toHaveAttribute('data-status', 'REJECT');
+  expect(screen.getByText(BEARISH_REASON)).toBeInTheDocument();
+});
+it('B4 leaves Bullish cards without a Direction refusal', () => {
+  useTradeCardUiStore.setState({ activeCard: { card: card(), rrPending: false } });
+  render(<TradeCardContextRail />);
+  expect(document.querySelector('[data-gate-label="Direction"]')).toBeNull();
+});

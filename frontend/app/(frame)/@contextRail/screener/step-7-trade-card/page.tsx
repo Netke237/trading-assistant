@@ -22,6 +22,7 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import { statusForScore } from '@/lib/status';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { earningsGateFor } from '@/lib/earningsGate';
 import {
   useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
@@ -56,6 +57,9 @@ function buildChecklist(
   rrStale: boolean = false,
 ): Gate[] {
   const gates: Gate[] = [];
+  if (isBearishUnvalidated(candidate.direction)) {
+    gates.push({ label: 'Direction', status: 'REJECT', detail: BEARISH_UNVALIDATED_MESSAGE });
+  }
 
   // Regime — PENDING/NO_DATA means scan not run yet, show CAUTION not REJECT
   if (regime !== 'PENDING' && regime !== 'NO_DATA') {

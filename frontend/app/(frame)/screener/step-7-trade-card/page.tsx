@@ -54,6 +54,7 @@ import {
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { earningsGateFor, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 
 // Fix #3 (review) / audit round 1 F4+F8: the veto, its sentence and the
@@ -1112,7 +1113,7 @@ export default function Step7Page() {
    * another candidate's screen. */
   async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
-    if (!card || !selectedBroker) return;
+    if (!card || !selectedBroker || isBearishUnvalidated(card.direction)) return;
     // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
     // Audit round 1, F4: judged as of TODAY (the scan's distance aged by the
     // scan's age), the same reading as `earningsVeto` below.
@@ -1322,6 +1323,7 @@ export default function Step7Page() {
     effectiveCard, scanResult?.timestamp, scanResult?.event_window?.reject_days,
   );
   const earningsVeto = earningsGate.veto;
+  const bearishUnvalidated = isBearishUnvalidated(effectiveCard?.direction);
 
   const idx = symbols.indexOf(active);
 
@@ -1588,9 +1590,10 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated}
                   title={
-                    earningsVeto ? EARNINGS_VETO_MESSAGE
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
@@ -1602,10 +1605,11 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || marketBlocked != null}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated || marketBlocked != null}
                   title={
-                    // The broker refusal wins: filling a field cannot cure it.
-                    marketBlocked != null ? marketBlocked
+                    // Direction and broker refusals cannot be cured by filling a field.
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : marketBlocked != null ? marketBlocked
                     : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
@@ -1618,6 +1622,9 @@ export default function Step7Page() {
               {/* Fix #3 (review). Said, not merely disabled; independent of the
                 * stop / pick refusals below for the same reason they are
                 * independent of each other. */}
+              {bearishUnvalidated && (
+                <Text size={11} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>
+              )}
               {earningsVeto && (
                 <Text size={11} tone="reject">
                   {EARNINGS_VETO_MESSAGE}
@@ -1668,7 +1675,7 @@ export default function Step7Page() {
                 * sentence is the one printed above. */}
               {planReady && (
                 <AutoTradeArm
-                  armBlockedReason={earningsGate.armBlockedReason}
+                  armBlockedReason={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsGate.armBlockedReason}
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path

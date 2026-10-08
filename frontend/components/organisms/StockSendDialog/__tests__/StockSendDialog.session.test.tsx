@@ -83,6 +83,26 @@ it.each(['Bullish', 'Bearish'])('keeps %s broker sends unavailable while researc
   mount(); fireEvent.click(screen.getByText('IBKR Paper'));
   await act(async () => fireEvent.click(screen.getByRole('button', { name: /submit 1 order/i })));
   expect(api.postStockOrder).not.toHaveBeenCalled(); expect(add).not.toHaveBeenCalled();
-  expect(screen.getByText(/Unvalidated/)).toBeInTheDocument();
+  expect(screen.getByText(direction === 'Bearish' ? BEARISH_REASON : /Unvalidated/)).toBeInTheDocument();
   card.direction = 'Bearish'; card.strategy.targets = [140, 135, 130];
+});
+
+const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';
+
+it('B4 disables a Bearish broker basket before saving, while leaving research saves available', async () => {
+  useSettingsStore.setState({ ibkrPaper: { accountId: 'ACC', baseUrl: 'localhost' } });
+  const add = jest.fn().mockResolvedValue({ status: 'ok' });
+  usePortfolioStore.setState({ addPosition: add });
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'IBKR Paper' }));
+  const button = screen.getByRole('button', { name: /submit 1 order/i });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('title', BEARISH_REASON);
+  expect(screen.getByText(BEARISH_REASON)).toBeInTheDocument();
+  fireEvent.click(button);
+  await act(async () => {});
+  expect(add).not.toHaveBeenCalled();
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText('Auto-send AAPL'));
+  expect(button).toBeEnabled();
 });

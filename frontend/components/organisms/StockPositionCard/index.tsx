@@ -12,6 +12,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { api } from '@/lib/api';
 import { useStockExecutionField, useStockExecutionIdentity } from '@/lib/useStockExecutionField';
 import { defaultStockOverlay as defaultOverlay, patchStockOverlay, stockExecutionBlock, useStockOrderOwnershipStore, type StockEditOverlay } from '@/lib/stockExecutionSession';
@@ -477,6 +478,7 @@ export function StockPositionCard({
 
   async function submit(orderType: 'LMT' | 'MKT') {
     if (execMode === 'recommendation' || orderId != null || placingType != null || orderOwnership) return;
+    if (isBearishUnvalidated(card.direction)) { setErr(BEARISH_UNVALIDATED_MESSAGE); return; }
     const validationBlock = stockExecutionBlock();
     if (validationBlock) { setErr(validationBlock); return; }
     // Phase G piece 5, build step 4 (§7.2, S1) — belt-and-braces beside the
@@ -765,10 +767,11 @@ export function StockPositionCard({
   const rrT3 = rrAt(overlay.t3);
 
   const winTone = card.backtest.win_rate >= 0.5 ? 'pass' : 'caution';
+  const bearishUnvalidated = isBearishUnvalidated(card.direction);
 
   return (
     <div className={styles.wrap} key={executionIdentity ?? card.symbol}>
-      <Text size={12} tone="caution">{stockExecutionBlock()}</Text>
+      <Text size={12} tone="caution">{bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : stockExecutionBlock()}</Text>
       <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
 
       {orderOwnership && !added && !queued && !warning && <Text size={12} tone="caution">{orderOwnership.message ?? `${card.symbol}: stock send in flight — do not resend.`}</Text>}
@@ -1276,8 +1279,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('LMT')}
-            disabled={placingType !== null || orderId !== null || pickMissing}
-            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
+            disabled={placingType !== null || orderId !== null || pickMissing || bearishUnvalidated}
+            title={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}</Text>
           </button>
@@ -1285,8 +1288,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('MKT')}
-            disabled={placingType !== null || orderId !== null || pickMissing}
-            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
+            disabled={placingType !== null || orderId !== null || pickMissing || bearishUnvalidated}
+            title={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'MKT' ? 'Placing…' : 'Market Order'}</Text>
           </button>

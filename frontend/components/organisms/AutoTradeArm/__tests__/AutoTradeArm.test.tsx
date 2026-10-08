@@ -353,18 +353,8 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
   });
 });
 
-describe("the armed payload carries the CARD's direction", () => {
-  /* THE ONE THING THIS WHOLE PIECE EXISTS TO GUARANTEE, and until now nothing
-   * pinned it. The backend sizes off `direction`; if the browser never sends it,
-   * or sends a constant, the fix is inert — and a missing field would be caught
-   * only by `tsc`, and only until someone writes `card.direction ?? 'Bullish'`,
-   * which typechecks and silently restores the exact defect: every bearish trade
-   * sized off the bullish frame.
-   *
-   * Both directions are asserted on purpose. A single Bullish case would pass
-   * against a hardcoded 'Bullish' literal, which is the failure mode worth
-   * catching — the old code hardcoded `action: 'BUY'` and that is what made
-   * `action` useless as a direction signal in the first place. */
+describe("the armed payload carries the Bullish CARD's direction", () => {
+  // Bearish arms are refused by B4; the allowed arm still carries its card's direction.
 
   beforeEach(() => {
     // Same setup the sibling describes use: the Arm button only renders in
@@ -377,7 +367,7 @@ describe("the armed payload carries the CARD's direction", () => {
     (api.armAutoTrade as jest.Mock).mockClear();
   });
 
-  it.each([['Bullish'], ['Bearish']] as const)(
+  it.each([['Bullish']] as const)(
     'sends direction=%s when that is what the card says',
     async (direction) => {
       render(
@@ -1041,4 +1031,21 @@ describe('AutoTradeArm — P0B B3: the actual scan hold travels on the arm', () 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledTimes(1));
     expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].hold_max_days).toBe(expected);
   });
+});
+
+const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';
+
+it('B4 refuses Bearish arm with its own reason before other arm refusals', async () => {
+  jest.clearAllMocks();
+  (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+  useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+  render(<AutoTradeArm {...BOOKING} card={{ ...mockCard, direction: 'Bearish' }} broker="ibkr_paper"
+    methodPick={pick()} armBlockedReason="Another gate" />);
+  const button = screen.getByRole('button', { name: /^Arm —/ });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('title', BEARISH_REASON);
+  expect(screen.getByText(BEARISH_REASON)).toBeInTheDocument();
+  fireEvent.click(button);
+  await act(async () => {});
+  expect(api.armAutoTrade).not.toHaveBeenCalled();
 });

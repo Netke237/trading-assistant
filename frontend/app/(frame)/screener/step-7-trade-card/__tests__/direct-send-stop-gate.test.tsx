@@ -187,6 +187,27 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     global.fetch = originalFetch;
   });
 
+
+  it('B4 refuses Bearish direct sends and arm before saving anything', async () => {
+    mount(140, { extra: { direction: 'Bearish', isEtf: true, regimeGate: { headwindCautionPct: -15, headwindRejectPct: -40 } } });
+    await selectBroker();
+    for (const name of [/place limit/i, /right now — market/i]) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('title', BEARISH_REASON);
+      fireEvent.click(button);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Armed — fire on next qualifying condition' }));
+    expect(screen.getByRole('button', { name: /^Arm —/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Arm —/ })).toHaveAttribute('title', BEARISH_REASON);
+    expect(screen.getAllByText(BEARISH_REASON).length).toBeGreaterThan(0);
+    await act(async () => {});
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+    expect((global.fetch as jest.Mock).mock.calls.filter(([url, init]) => String(url).endsWith('/api/portfolio') && init?.method === 'POST')).toHaveLength(0);
+    expect(usePortfolioStore.getState().positions).toEqual([]);
+  });
+
   it('disables Place Limit and Right Now — Market, and places NO order, when the stop is null', async () => {
     mount(null);
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
@@ -543,3 +564,5 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     expect(arm.getAttribute('title') ?? '').not.toMatch(UNKNOWN_ARM);
   });
 });
+
+const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';
