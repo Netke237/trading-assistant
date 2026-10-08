@@ -7,6 +7,14 @@
       "expires_at": "2026-10-09T00:21:03Z",
       "note": "Resume P0B B2 closeout and continue B3-B7 after usage interruption",
       "task": "STOCKS-HORIZON-P0B"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/stocks-horizon-t1",
+      "claimed_at": "2026-10-08T21:30:40Z",
+      "expires_at": "2026-10-09T00:30:40Z",
+      "note": "Plan + audit + tickets for T1 horizon tuning machinery; build waits for P0B merge",
+      "task": "STOCKS-HORIZON-T1"
     }
   ]
 }
