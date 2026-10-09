@@ -9,6 +9,7 @@ OCC construction:
 from __future__ import annotations
 
 import re
+from typing import Literal, cast
 
 # Matches OCC symbols: 1-6 uppercase letters + 6 digits + C/P + 8 digits
 _OCC_RE = re.compile(r'^[A-Z]{1,6}\d{6}[CP]\d{8}$')
@@ -56,3 +57,13 @@ def to_occ(option_symbol: str) -> str:
     if is_occ(option_symbol):
         return option_symbol
     return pipe_to_occ(option_symbol)
+
+
+def option_right(option_symbol: str) -> Literal["C", "P"]:
+    """Read the right from a complete OCC or pipe symbol; unknown formats raise."""
+    if _OCC_RE.fullmatch(option_symbol):
+        return cast(Literal["C", "P"], option_symbol[-9])
+    match = _PIPE_RE.fullmatch(option_symbol)
+    if match:
+        return cast(Literal["C", "P"], match.group(6))
+    raise ValueError("Cannot determine option right: expected an OCC or pipe option symbol")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 from datetime import date
 
 import httpx
@@ -20,6 +21,8 @@ def fetch_historical_candles(
     symbol: str,
     start: date,
     end: date,
+    *,
+    strict_adjustments: bool = False,
 ) -> list[dict]:
     """Return daily OHLCV bars for `symbol` between `start` and `end` (inclusive).
 
@@ -30,6 +33,8 @@ def fetch_historical_candles(
     the fully-adjusted close price.
 
     Returns [] on any error (network, auth, symbol not found).
+    Strict mode also rejects the whole reply if any row lacks finite positive
+    raw and adjusted closes; missing adjusted prices are never synthesized.
     """
     try:
         resp = httpx.get(
@@ -46,8 +51,18 @@ def fetch_historical_candles(
         rows = []
         for bar in resp.json():
             raw_close = float(bar.get("close", 0) or 0)
-            adj_close = float(bar.get("adjClose", raw_close) or raw_close)
+            if strict_adjustments:
+                adj_close = float(bar.get("adjClose"))
+                if not (
+                    math.isfinite(raw_close) and raw_close > 0
+                    and math.isfinite(adj_close) and adj_close > 0
+                ):
+                    return []
+            else:
+                adj_close = float(bar.get("adjClose", raw_close) or raw_close)
             adj_factor = round(adj_close / raw_close, 8) if raw_close != 0 else 1.0
+            if strict_adjustments and (not math.isfinite(adj_factor) or adj_factor <= 0):
+                return []
             rows.append({
                 "time":         bar["date"][:10],
                 "open":         round(float(bar.get("open", 0) or 0),   4),

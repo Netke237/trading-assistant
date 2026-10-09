@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -124,3 +125,9 @@ describe('StockPositionCard — direction forwarded to StockAutoTradeArm', () =>
     expect(props?.direction).toBe('Bearish');
   });
 });
+
+// New ephemeral execution records must not leak between independent test scans.
+beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));
+
+// Mutation ownership is session-wide; each test begins a fresh session.
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

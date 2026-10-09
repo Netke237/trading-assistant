@@ -127,6 +127,9 @@ export function resolveProfileToScanRequest(
     confidenceGate: profile.scanSettings.confidenceGate,
     accountSize: risk.portfolioValue,
     riskPct: risk.maxLossPerTradePct,
+    // The profile's own hold, Custom included, as the options branch (B6).
+    holdMinDays: profile.holdMin,
+    holdMaxDays: profile.holdMax,
   });
 }
 

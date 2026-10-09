@@ -55,6 +55,9 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     confidenceGate: useSettingsStore.getState().confidenceGate,
     accountSize: sizing.accountSize,
     riskPct: sizing.riskPct,
+    // The scan context's hold, as runStockScan sends it (B6).
+    holdMinDays: ctx?.holdMin,
+    holdMaxDays: ctx?.holdMax,
   });
   return { req: { ...rest, symbol, horizon: _horizonEnum(ctx?.horizon) }, basis: 'current-settings' };
 }

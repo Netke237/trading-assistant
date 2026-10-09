@@ -22,7 +22,8 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import { statusForScore } from '@/lib/status';
-import { earningsGateFor } from '@/lib/earningsGate';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { earningsGateFor, scanVetoDays } from '@/lib/earningsGate';
 import {
   useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
   type HorizonIvThresholds,
@@ -54,8 +55,14 @@ function buildChecklist(
   /** Audit round 1, F4 — the scan's timestamp, to age `earningsDays` by. */
   scanTimestamp: string | undefined = undefined,
   rrStale: boolean = false,
+  /** STOCKS-HORIZON-P0B B7 — the scan's veto window, max(reject_days, hold)
+   *  (`scanVetoDays`), the same one Step 7's buttons read. */
+  vetoDays: number | undefined = eventWindow?.reject_days,
 ): Gate[] {
   const gates: Gate[] = [];
+  if (isBearishUnvalidated(candidate.direction)) {
+    gates.push({ label: 'Direction', status: 'REJECT', detail: BEARISH_UNVALIDATED_MESSAGE });
+  }
 
   // Regime — PENDING/NO_DATA means scan not run yet, show CAUTION not REJECT
   if (regime !== 'PENDING' && regime !== 'NO_DATA') {
@@ -133,7 +140,7 @@ function buildChecklist(
   // helper Step 7's buttons read -- so a persisted scan reopened days later is
   // judged on today's distance, and a print that may have passed since the
   // scan is an unknown date.
-  const eg = earningsGateFor(candidate, scanTimestamp, eventWindow?.reject_days);
+  const eg = earningsGateFor(candidate, scanTimestamp, vetoDays);
   if (eg.passedSinceScan && !candidate.isEtf) {
     gates.push({
       label: 'Earnings date',
@@ -160,11 +167,15 @@ function buildChecklist(
   const days = eg.daysNow;
   if (days != null) {
     const aged = eg.ageDays > 0 ? ` (${eg.daysAtScan}d at the scan, ${eg.ageDays}d ago)` : '';
+    // P0B B7: REJECT inside the veto window (never narrower than reject_days).
+    const veto = Math.max(eventWindow?.reject_days ?? 0, vetoDays ?? 0);
     gates.push(eventWindow
       ? {
           label: 'Earnings outside reject window',
-          status: days < eventWindow.reject_days ? 'REJECT' : days < eventWindow.caution_days ? 'CAUTION' : 'PASS',
-          detail: `Earnings in ${days}d${aged} — reject <${eventWindow.reject_days}d, caution <${eventWindow.caution_days}d (this scan's window).`,
+          status: days < veto ? 'REJECT' : days < eventWindow.caution_days ? 'CAUTION' : 'PASS',
+          detail: veto > eventWindow.reject_days
+            ? `Earnings in ${days}d${aged} — veto <${veto}d (reject ${eventWindow.reject_days}d widened to the scan's hold), caution <${eventWindow.caution_days}d (this scan's window).`
+            : `Earnings in ${days}d${aged} — reject <${eventWindow.reject_days}d, caution <${eventWindow.caution_days}d (this scan's window).`,
         }
       : {
           label: 'Earnings outside reject window',
@@ -228,6 +239,8 @@ export default function TradeCardContextRail() {
   const eventWindow         = useScanStore((s) => s.scanResult?.event_window);
   // Audit round 1, F4: the earnings distance is aged by the scan's age.
   const scanTimestamp       = useScanStore((s) => s.scanResult?.timestamp);
+  // P0B B7: the scan's hold, for the veto-window fallback (scanVetoDays).
+  const scanContext         = useScanStore((s) => s.context);
   // Two selectors (Zustand v5: never one returning a fresh object).
   const ivFetched           = useIvThresholdsStore((s) => s.thresholds);
   const ivOverrides         = useIvThresholdsStore((s) => s.overrides);
@@ -267,6 +280,7 @@ export default function TradeCardContextRail() {
     eventWindow,
     scanTimestamp,
     published?.rrStale ?? false,
+    scanVetoDays(eventWindow, scanContext),
   ) : [];
 
   return (

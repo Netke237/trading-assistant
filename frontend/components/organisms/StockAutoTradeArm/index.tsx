@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Text } from '@/components/primitives';
+import { stockExecutionBlock } from '@/lib/stockExecutionSession';
 import { api } from '@/lib/api';
 import styles from './StockAutoTradeArm.module.css';
 
@@ -28,12 +29,18 @@ export function StockAutoTradeArm({
   afterScanArmed,
   onAfterScanToggle,
 }: StockAutoTradeArmProps) {
-  const [mode, setMode]       = useState<StockArmMode>('manual');
+  const [mode, setMode]       = useState<StockArmMode>(afterScanArmed ? 'after_scan' : 'manual');
   const [watchId, setWatchId] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
+  useEffect(() => {
+    setMode(afterScanArmed ? 'after_scan' : 'manual');
+  }, [symbol, afterScanArmed]);
+
   async function handleArm() {
+    const blocked = stockExecutionBlock();
+    if (blocked) { setError(blocked); return; }
     setWorking(true);
     setError(null);
     try {
@@ -114,8 +121,8 @@ export function StockAutoTradeArm({
       {mode === 'after_scan' && (
         <Text size={11} tone="secondary">
           {afterScanArmed
-            ? `Armed — will execute when next scan finds a PASS for ${symbol}.`
-            : `Will execute when next scan finds a PASS for ${symbol}.`}
+            ? `After-scan intent saved for ${symbol}. ${stockExecutionBlock()}`
+            : stockExecutionBlock()}
         </Text>
       )}
 

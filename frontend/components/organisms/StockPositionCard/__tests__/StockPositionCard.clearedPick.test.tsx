@@ -1,7 +1,9 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { StockPositionCard, clearedPickMessage } from '@/components/organisms/StockPositionCard';
 import { useScanStore } from '@/lib/scanStore';
+import { stockExecutionIdentity } from '@/lib/stockExecutionSession';
 import { selectCardEdits } from '@/lib/cardEdits';
 import { MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { api } from '@/lib/api';
@@ -86,11 +88,14 @@ async function pickArithmeticThenRemount() {
   await waitFor(() => expect(radio('Arithmetic')).toBeEnabled());
   fireEvent.click(radio('Arithmetic'));
   expect(stocksPicks().AAPL).toEqual(expect.objectContaining({ method: 'arithmetic' }));
-  first.unmount();                                   // the Step-4 row collapses
+  first.unmount();
+  // Simulate unavailable evidence (e.g. reload). Ordinary S2 remounts keep
+  // completed evidence and are covered by the shared-session tests.
+  useScanStore.setState({ stockExecution: {} });
   render(<StockPositionCard card={makeCard()} strategyKey="pullback_ema" />);   // ...and reopens
 }
 
-describe('StockPositionCard — a pick lost to a remount says so (P6, G4-1)', () => {
+describe('StockPositionCard — a pick whose evidence is missing says so', () => {
   it('names the cleared method instead of the generic refusal, and still refuses', async () => {
     await pickArithmeticThenRemount();
     await waitFor(() => expect(screen.getByText(ARITH_CLEARED)).toBeInTheDocument());
@@ -127,6 +132,7 @@ describe('StockPositionCard — a pick lost to a remount says so (P6, G4-1)', ()
     // Away and back: the symbol reset drops AAPL's plan, so on return its pick
     // is cleared in this instance and the note appears.
     rerender(<StockPositionCard card={makeCard('MSFT')} strategyKey="pullback_ema" />);
+    useScanStore.setState({ stockExecution: {} });
     rerender(<StockPositionCard card={makeCard('AAPL')} strategyKey="pullback_ema" />);
     await waitFor(() => expect(screen.getByText(ARITH_CLEARED)).toBeInTheDocument());
     // On to a symbol that was never picked: the generic line, not AAPL's note.
@@ -144,3 +150,9 @@ describe('clearedPickMessage', () => {
     expect(clearedPickMessage(null)).toBeNull();
   });
 });
+
+// New ephemeral execution records must not leak between independent test scans.
+beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));
+
+// Mutation ownership is session-wide; each test begins a fresh session.
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

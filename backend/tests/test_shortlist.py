@@ -395,7 +395,7 @@ def test_scan_result_carries_the_overridden_event_window(client):
             "overrides": {"event_reject_days": 7, "event_caution_days": 30},
         })
     assert r.status_code == 200
-    assert r.json()["event_window"] == {"reject_days": 7, "caution_days": 30}
+    assert r.json()["event_window"] == {"reject_days": 7, "caution_days": 30, "veto_days": 45}
 
 
 def test_scan_result_carries_the_yaml_event_window_without_overrides(client):
@@ -406,7 +406,7 @@ def test_scan_result_carries_the_yaml_event_window_without_overrides(client):
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Position",
         })
     assert r.status_code == 200
-    assert r.json()["event_window"] == {"reject_days": ec["reject_days"], "caution_days": ec["caution_days"]}
+    assert r.json()["event_window"] == {"reject_days": ec["reject_days"], "caution_days": ec["caution_days"], "veto_days": 45}
 
 
 def test_a_partial_event_override_falls_back_to_yaml_for_the_other_bound():

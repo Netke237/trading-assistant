@@ -353,6 +353,10 @@ export interface StockAnalysis {
   fundamentals: AnalysisFundamentals | null;
   next_event_days: number | null;
   next_event_label: string | null;
+  /** STOCKS-HORIZON-P0B B6: as on PositionCardData. Optional for a backend
+   *  from before B6. */
+  earnings_days?: number | null;
+  earnings_veto?: boolean;
   rules: RuleContribution[];
   gate_flags: GateFlag[];
   ema_trend: EmaTrend | null;
@@ -694,6 +698,8 @@ export const api = {
      *  the scan context rather than hand-writing a literal; never default it
      *  here, which would typecheck while measuring the wrong window. */
     horizon: ScoringHorizon;
+    /** Actual sanitized scan hold, including Custom ranges. Required at arm. */
+    hold_max_days: number;
     /** The Regime Gate thresholds this card's scan RESOLVED, read off the
      *  card's own `regimeGate` snapshot so neither a Step-3 edit, a reset nor
      *  a reload can change the rule the trade is judged by — the same freeze

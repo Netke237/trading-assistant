@@ -31,7 +31,7 @@ it('adds visible interpretation and per-symbol text without changing the origina
 });
 it('preserves null-confidence no-history tooltip and visible explanation', () => {
   render(<ScoreCardPanel {...props} confidenceScore={null} confidenceText="No backtest history for TEST" qualification={{ card, kind: 'stock' }} />);
-  expect(screen.getByText('—')).toBeInTheDocument();
+  expect(screen.getByText('Unvalidated')).toBeInTheDocument();
   expect(screen.getAllByText('No backtest history for TEST').length).toBeGreaterThan(0);
 });
 it('does not fabricate absent confidence or relabel contract verdict as historical confidence', () => {

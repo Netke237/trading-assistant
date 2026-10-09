@@ -1,3 +1,5 @@
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { sendStockSaveFirst, removeNoteRow, stockSendLabel } from '@/lib/stockDirectSend';
@@ -53,7 +55,7 @@ afterEach(() => { global.fetch = originalFetch; });
 const pos = (shares = 300) => buildPaperStockPosition('AAPL', 200, shares, 'Bullish', undefined, { stop: 190, targets: [{ price: 220 }] });
 const send = (p = pos(), broker = 'ibkr_paper', orderType: 'LMT' | 'MKT' = 'LMT') => sendStockSaveFirst({
   pos: p, broker, orderType, limitPrice: orderType === 'LMT' ? 200 : null, action: 'BUY',
-  addPosition: usePortfolioStore.getState().addPosition,
+  addPosition: usePortfolioStore.getState().addPosition, earningsVeto: false,
 });
 const notes = () => useDirectSendNotesStore.getState().notes;
 const positions = () => usePortfolioStore.getState().positions;
@@ -180,4 +182,82 @@ describe('DirectSendNotesPanel', () => {
     expect(notes()).toHaveLength(1);
     confirmSpy.mockRestore();
   });
+});
+
+// Exercise the existing save-first/recovery machinery behind the boundary.
+// Production has no positive validation authority; separate S2 tests verify
+// the real fail-closed boundary with this module unmocked.
+jest.mock('@/lib/stockExecutionSession', () => ({
+  ...jest.requireActual('@/lib/stockExecutionSession'), stockExecutionBlock: jest.fn(() => null),
+}));
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));
+
+it('blocks a second send while the first save/order is in flight across a new scan and keeps its outcome ownership', async () => {
+  let resolveSave!: (reply: Reply) => void;
+  saveReply = body => new Promise(resolve => { resolveSave = resolve; });
+  const first = send();
+  await Promise.resolve();
+  const second = await send();
+  expect(second.kind).toBe('refused');
+  expect(log).toEqual(['save']);
+  resolveSave({ ok: true, status: 201, json: async () => ({ entryPrice: 200 }) });
+  expect((await first).kind).toBe('placed');
+  expect(useStockOrderOwnershipStore.getState().bySymbol.AAPL.status).toBe('placed');
+  expect((await send()).kind).toBe('refused');
+  expect(log).toEqual(['save', 'order']);
+});
+
+it('rechecks validation availability after an async save and sends no broker request if it was revoked', async () => {
+  const availability = (await import('@/lib/stockExecutionSession')).stockExecutionBlock as jest.Mock;
+  availability.mockReturnValueOnce(null).mockReturnValueOnce('Validation unavailable after save');
+  const outcome = await send();
+  expect(outcome.kind).toBe('not-placed');
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  expect(api.deletePortfolioPosition).toHaveBeenCalledTimes(1);
+  expect(log).toEqual(['save']);
+  expect(useStockOrderOwnershipStore.getState().bySymbol.AAPL).toBeUndefined();
+  availability.mockReturnValue(null);
+});
+
+const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';
+
+it('B4 refuses a SELL opening before validation, save or ownership claim', async () => {
+  const availability = (await import('@/lib/stockExecutionSession')).stockExecutionBlock as jest.Mock;
+  availability.mockReturnValue('Validation unavailable');
+  const claim = jest.spyOn(useStockOrderOwnershipStore.getState(), 'claim');
+  const out = await sendStockSaveFirst({
+    pos: pos(), broker: 'ibkr_paper', orderType: 'LMT', limitPrice: 200, action: 'SELL',
+    addPosition: usePortfolioStore.getState().addPosition, earningsVeto: false,
+  });
+  expect(out).toEqual({ kind: 'not-placed', message: BEARISH_REASON });
+  expect(log).toEqual([]);
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  expect(claim).not.toHaveBeenCalled();
+  expect(notes()).toEqual([]);
+  claim.mockRestore();
+  availability.mockReturnValue(null);
+});
+
+it('B4 uses the exact backend Unvalidated reason', () => {
+  expect(BEARISH_UNVALIDATED_MESSAGE).toBe(BEARISH_REASON);
+});
+it.each(['Bearish', 'Bullish', 'bearish', '', null, undefined])('B4 tests only exact Bearish direction: %s', direction => {
+  expect(isBearishUnvalidated(direction)).toBe(direction === 'Bearish');
+});
+
+/* STOCKS-HORIZON-P0B B7 — the earnings veto refuses the ORDER even if a button
+ * is bypassed: nothing is saved, nothing claimed, no broker request. */
+it('B7 refuses an earnings-vetoed send before validation, save or ownership claim', async () => {
+  const claim = jest.spyOn(useStockOrderOwnershipStore.getState(), 'claim');
+  const out = await sendStockSaveFirst({
+    pos: pos(), broker: 'ibkr_paper', orderType: 'LMT', limitPrice: 200, action: 'BUY',
+    addPosition: usePortfolioStore.getState().addPosition, earningsVeto: true,
+  });
+  expect(out).toEqual({ kind: 'refused', message: 'Earnings inside the reject window — no send' });
+  expect(log).toEqual([]);
+  expect(api.postStockOrder).not.toHaveBeenCalled();
+  expect(claim).not.toHaveBeenCalled();
+  expect(notes()).toEqual([]);
+  expect(positions()).toEqual([]);
+  claim.mockRestore();
 });

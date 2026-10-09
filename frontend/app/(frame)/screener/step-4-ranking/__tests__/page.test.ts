@@ -161,3 +161,12 @@ describe('cardToRow', () => {
     expect(row.confidence).toBeNull();
   });
 });
+
+it('retains the bearish Unvalidated CAUTION verdict for ranking', () => {
+  const card = { ...mockCurrentRun.candidates[0], direction: 'Bearish' as const,
+    status: 'CAUTION' as const, finalStatus: 'CAUTION' as const };
+  const row = cardToRow(card, 1);
+  expect(row.direction).toBe('Bearish');
+  expect(row.status).toBe('CAUTION');
+  expect(row.score).toBe(card.stockScore);
+});

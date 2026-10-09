@@ -197,3 +197,49 @@ async def test_fib_pullback_rejects_lookback_below_minimum():
             "params_override": {"fib_swing_lookback": 5},
         })
     assert resp.status_code == 422
+
+
+# ── Universe exclusion list (STOCKS-HORIZON-P0A A2) ──────────────────────────
+#
+# Fib pullback returns a bare list of setups and has no `rejected` list, so a
+# `scope: scan` symbol is skipped and named in one INFO log line. The shipped
+# config/universe_exclusions.yaml lists CTVA with scope scan.
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_skips_a_typed_excluded_symbol(caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="app.routers.stock_scan")
+    with patch("app.routers.stock_scan.get_historical_bars", new_callable=AsyncMock) as mock_bars:
+        mock_bars.return_value = []
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/scan/fib-pullback", json={
+                "symbols": ["AAPL", "ctva"],
+                "direction": "Bullish",
+            })
+    assert resp.status_code == 200, resp.text
+    assert [c.args[0] for c in mock_bars.call_args_list] == ["AAPL"], "CTVA was processed"
+    skipped = [r for r in caplog.records
+               if r.levelno == logging.INFO and "CTVA" in r.getMessage()]
+    assert len(skipped) == 1, [r.getMessage() for r in caplog.records]
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_broken_exclusion_list_returns_500_before_any_symbol_work():
+    from app.data.universe_exclusions import ExclusionListError
+
+    msg = "universe_exclusions.yaml: 'version' must be 1, got 2"
+    with patch(
+        "app.data.universe_exclusions.load_exclusions",
+        side_effect=ExclusionListError(msg),
+    ), patch("app.routers.stock_scan.get_historical_bars", new_callable=AsyncMock) as mock_bars:
+        mock_bars.return_value = []
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/scan/fib-pullback", json={
+                "symbols": ["AAPL"],
+                "direction": "Bullish",
+            })
+    assert resp.status_code == 500, resp.text
+    assert resp.json()["detail"] == msg
+    mock_bars.assert_not_called()

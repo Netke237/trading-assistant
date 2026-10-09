@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
@@ -186,3 +187,9 @@ describe('StockPositionCard — the method pick (§6.3)', () => {
     expect(stocksPicks().MSFT).toEqual(expect.objectContaining({ method: 'arithmetic' }));
   });
 });
+
+// New ephemeral execution records must not leak between independent test scans.
+beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));
+
+// Mutation ownership is session-wide; each test begins a fresh session.
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

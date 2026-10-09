@@ -106,6 +106,16 @@ def effective_event_window(horizon: Horizon, overrides: dict | None) -> tuple[in
     return reject, caution
 
 
+# Mirrors the scoring horizons' own hold presets in frontend/lib/horizonPresets.ts.
+DEFAULT_HOLD_MAX: dict[Horizon, int] = {"Intraday": 2, "Swing": 15, "Position": 45}
+
+
+def effective_veto_days(horizon: Horizon, overrides: dict | None, hold_max_days: int | None) -> int:
+    """Earnings gate over the hold; the event rule's grading stays unchanged."""
+    hold = hold_max_days if hold_max_days is not None else DEFAULT_HOLD_MAX[horizon]
+    return max(effective_event_window(horizon, overrides)[0], hold)
+
+
 def _thresholds() -> dict:
     return _load_config()["stock_score_thresholds"]
 
@@ -1233,7 +1243,7 @@ def score_stock(
 
     # Confidence gate: demote-only. Append a confidence RuleResult and cap status.
     if confidence_gate is not None:
-        from app.scoring.signal_confidence import status_cap, interpret
+        from app.scoring.signal_confidence import status_cap, interpret, load_backtest_cfg
         cap = status_cap(confidence, confidence_gate)
         before = final_status
         final_status = _worse(final_status, cap)
@@ -1245,7 +1255,8 @@ def score_stock(
                 "confidence": confidence,
                 "sample_size": confidence_sample_size,
                 "interpretation": interpret(
-                    confidence, sample_size=confidence_sample_size, symbol=symbol
+                    confidence, sample_size=confidence_sample_size, symbol=symbol,
+                    min_samples=int(load_backtest_cfg(horizon)["min_samples"]),
                 ),
             },
         ))

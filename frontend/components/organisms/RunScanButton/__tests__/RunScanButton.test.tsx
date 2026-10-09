@@ -23,10 +23,19 @@ jest.mock('@/lib/stockScan', () => ({
   // requireActual, so the real stockScanFailureReason() runs in the .catch()
   // path under test rather than arriving as undefined.
   ...jest.requireActual('@/lib/stockScan'),
+  runStockScanWithContinuation: jest.fn(async (...args: unknown[]) => {
+    const scan = await jest.requireMock('@/lib/stockScan').runStockScan(...args);
+    const store = jest.requireActual('@/lib/scanStore').useScanStore.getState();
+    const reason = store.stockScanError ?? 'unknown error';
+    store.setStockScanFeedback(store.stockManualRunToken, { error: scan ? null : `Scan failed — ${reason}`, notice: null });
+    return scan ? { kind: 'success', token: store.stockManualRunToken, result: scan } : { kind: 'failure', token: store.stockManualRunToken, reason };
+  }),
+  isStockManualScanCurrent: (outcome: { kind: string; token: number }) => outcome.kind !== 'obsolete' && outcome.token === jest.requireActual('@/lib/scanStore').useScanStore.getState().stockManualRunToken,
   runStockScan: jest.fn(),
 }));
 
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 const mockPostScanBody = api.postScanBody as jest.MockedFunction<typeof api.postScanBody>;
 
@@ -445,4 +454,27 @@ describe('RunScanButton — confidence ATR override both-or-neither', () => {
     expect(body.confidence_atr_mult_target).toBe(2.5);
     expect(body.confidence_atr_mult_stop).toBe(0.5);
   });
+});
+
+
+it('routes a current successful empty stock scan to Backtest exactly once', async () => {
+  jest.clearAllMocks();
+  useScanStore.setState({ scanState: 'IDLE', screenerMode: 'stocks', activeStrategy: 'pullback_ema' });
+  (runStockScan as jest.Mock).mockResolvedValue({ scan_id: 'empty', timestamp: 't', candidates: [], rejected: [] });
+  render(<RunScanButton />);
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i })));
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  expect(mockPush).toHaveBeenCalledWith('/screener/step-6-backtest');
+});
+it('does not route or toast an obsolete stock continuation', async () => {
+  jest.clearAllMocks();
+  useScanStore.setState({ scanState: 'IDLE', screenerMode: 'stocks', activeStrategy: 'pullback_ema' });
+  const runner = await import('@/lib/stockScan');
+  (runner.runStockScanWithContinuation as jest.Mock).mockResolvedValueOnce({ kind: 'obsolete', token: useScanStore.getState().stockManualRunToken - 1 });
+  const toast = jest.spyOn(useAlertStore.getState(), 'addToast');
+  try {
+    render(<RunScanButton />);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i })));
+    expect(mockPush).not.toHaveBeenCalled(); expect(toast).not.toHaveBeenCalled();
+  } finally { toast.mockRestore(); }
 });

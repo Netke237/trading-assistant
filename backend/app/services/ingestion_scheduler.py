@@ -31,7 +31,8 @@ async def _run_nightly() -> None:
     except Exception:
         universe = ["SPY"]
     from app.services.ingestion_job import start_ingestion_task
-    start_ingestion_task(universe, years=6)
+    from app.services.history_retention import history_years
+    start_ingestion_task(universe, years=history_years())
     # Piggyback the audit.log rotation/pruning and the scheduled-scan-run
     # retention sweep onto this same nightly tick — neither needs its own
     # cron slot (Part 0/Part 3's resolved decision: a few hundred audit

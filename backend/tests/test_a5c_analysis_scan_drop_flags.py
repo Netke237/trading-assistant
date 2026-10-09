@@ -162,7 +162,9 @@ async def test_t1_conviction_floor_drop_mirrors_the_scan(monkeypatch):
     # Literal pin, hand-written (not built from the helper).
     assert _flags(core, "direction_conviction")[0]["detail"] == \
         "the scan would drop this: direction_conviction: trend 20 < 40 for Bearish Position"
-    assert core.card.status == "PASS"
+    # The direction-conviction flag does not cap the card; the independent
+    # P0B bearish Unvalidated gate now caps this otherwise-PASS verdict.
+    assert core.card.status == "CAUTION"
 
 
 @pytest.mark.asyncio
@@ -384,6 +386,9 @@ async def test_t4_multi_no_valid_combined_levels(monkeypatch):
 @pytest.mark.asyncio
 async def test_t5_backtest_gate_is_a_drop(monkeypatch):
     _offline(monkeypatch, bt_passes=False)
+    # A measured confidence: this test pins that the drop flag leaves the card
+    # PASS, and a missing one now caps it at CAUTION (STOCKS-HORIZON-P0A A5).
+    monkeypatch.setattr(ss, "get_cached", lambda key: {"confidence": 70, "sample_size": 30})
     _signal_stub(monkeypatch, "pullback_ema", _firing_signal("pullback_ema"))
     scan = await _scan()
     assert scan["reason"] == "backtest gate: 38% win over 12 trades"
@@ -468,6 +473,9 @@ def test_t7_reason_producer_set_is_unchanged():
         "unknown strategy",
         # Not a gate: a candidate ranked below the shortlist cap (bucket failed_shortlist).
         "Shortlist cap:",
+        # STOCKS-HORIZON-P0A A2: a `scope: scan` symbol from universe_exclusions.yaml
+        # (bucket failed_history).
+        "Excluded (data):",
     }
 
 
