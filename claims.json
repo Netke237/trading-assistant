@@ -18,27 +18,9 @@
     },
     {
       "agent": "claude",
-      "branch": "codex/no-live-quote-resumed",
-      "claimed_at": "2026-10-09T14:34:58Z",
-      "expires_at": "2026-10-09T17:34:58Z",
-      "note": "User reassigned to resumed chat: recover NLQ-1 clean commit b6f2259e and finish remaining tickets",
-      "previous": [
-        {
-          "branch": "claude/priceless-jennings-995ab7",
-          "claimed_at": "2026-10-09T12:54:32Z"
-        },
-        {
-          "branch": "codex/no-live-quote-continuation",
-          "claimed_at": "2026-10-09T14:28:56Z"
-        }
-      ],
-      "task": "NO-LIVE-QUOTE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/hopeful-rubin-64bowt",
       "claimed_at": "2026-10-09T16:34:03Z",
-      "expires_at": "2026-10-09T19:34:03Z",
+      "expires_at": "2026-10-09T21:32:11Z",
       "note": "Publish fire-hygiene tickets, implement H1-H3, integrated code audit",
       "task": "AUTOTRADE-FIRE-HYGIENE"
     }
