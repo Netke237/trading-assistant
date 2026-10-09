@@ -69,23 +69,43 @@ Step 6 renders the backtest columns in `frontend/app/(frame)/screener/step-6-bac
 **Change:**
 
 - Backend: `BacktestOut` gains `n_time_exits: Optional[int] = None` and `hold_max_days: Optional[int] =
-  None` (the hold the backtest ran with; `None` = no hold). Both `BacktestOut(...)` constructions fill
-  them from the `BacktestResult` and the hold actually passed to that backtest (`_bt_hold`). A row saved
-  before this change deserializes with both `None`.
-- Frontend: the backtest types gain the two optional fields. Step 6 shows, per candidate, the time
-  exits next to the trade count, e.g. `3 of 18 on time (hold 15d)`, with a tooltip saying "trades
-  closed at the next open after being held the horizon's hold, neither stop nor target reached". When
-  `hold_max_days` is null show "no hold"; when `n_time_exits` is null (an old saved row) show "—", never
-  `0`. No other column moves. CSS Modules + primitives only (CLAUDE.md conventions).
+  None`. Both `BacktestOut(...)` constructions fill them from the `BacktestResult` and the hold actually
+  passed to that backtest: `_bt_hold = hold_for_backtest(req.horizon, _bt_strategy, req.hold_max_days)`
+  (`stock_scan.py` ~L1006 and ~L1497; the same value is in the cache key, so a cached result always
+  carries its own hold). The ~L1250 construction is in the analysis endpoint (the caller of
+  `_analyze_core`), built from `core.bt_result`; `_AnalyzeCore` has no hold field, so add one
+  (`bt_hold`) set from `_bt_hold` inside `_analyze_core` rather than recomputing it. A row saved before
+  this change deserializes with both `None` (no `extra="forbid"` on these models).
+- **What `None` means (plan round 1, PF-1):** `n_time_exits is None` means **unknown** — a result saved
+  before this change (backend `stock-current` row, scan-schedule rows, or the frontend's persisted
+  `scanStore.stockScanResult` in localStorage, where the fields are **absent/undefined**, not null). Only
+  a NEW result can say "no hold": `n_time_exits` is an int (0 or more) and `hold_max_days` is None
+  (Intraday horizon or an intraday strategy). So every new result always carries `n_time_exits` as an
+  int, even when no hold was used.
+- Frontend: the backtest types gain the two optional fields (`n_time_exits?: number | null`,
+  `hold_max_days?: number | null`). Step 6 shows, per candidate, the time exits next to the trade count:
+  - `n_time_exits == null` (loose: null or undefined) → `—` for the whole time-exit text, **no hold
+    label** (unknown, old row), never `0`;
+  - `n_time_exits != null && hold_max_days == null` → `no hold`;
+  - otherwise → `3 of 18 on time (hold 15d)`, tooltip "trades closed at the next open after being held
+    the horizon's hold, neither stop nor target reached".
+  No other column moves. CSS Modules + primitives only (CLAUDE.md conventions).
+- Existing test fakes: `test_stock_scan_backtest_commission.py`'s `_fake_bt_result()` is a `MagicMock`;
+  once `BacktestOut` reads `n_time_exits` from it, validation fails and `_process_stock` swallows the
+  error. Set real ints on that fake (and any other fake `BacktestResult` the suite feeds into
+  `BacktestOut`), so those tests still exercise the success path.
 - Nothing else: no change to the backtest, the gate, the cache key or any verdict.
 
 **Test first:**
 
-- Backend: both `_analyze_core` and `_process_stock` return `backtest.n_time_exits` equal to the
-  `BacktestResult`'s and `hold_max_days` equal to the hold passed; a persisted `BacktestOut` JSON without
-  the fields validates with both `None`.
-- Frontend: Step 6 renders "3 of 18 on time (hold 15d)" for a fixture with 18 trades / 3 time exits /
-  hold 15, "no hold" for a null hold, "—" for a null count.
+- Backend: the scan (`_process_stock`) and the analysis endpoint return `backtest.n_time_exits` equal to
+  the `BacktestResult`'s and `hold_max_days` equal to the hold passed (a Swing request → 15; an
+  Intraday/intraday-strategy request → `None` with `n_time_exits` an int); an old `stock-current`
+  `StockScanResult` JSON without the fields reloads with both `None`.
+- Frontend: Step 6 renders "3 of 18 on time (hold 15d)" for 18 trades / 3 time exits / hold 15;
+  "no hold" for `n_time_exits: 0, hold_max_days: null`; "—" and no hold label for
+  `n_time_exits: null, hold_max_days: null`; and "—" and no hold label for a fixture with **both fields
+  absent** (an old localStorage row).
 
 ## Tickets
 

@@ -2035,7 +2035,7 @@
       "id": "STOCKS-T1-FOLLOWUPS",
       "name": "T1 follow-ups: #129 test isolation (green main CI) and time exits shown on Step 6",
       "status": "not_started",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "STOCKS-HORIZON-T1"
@@ -2047,7 +2047,7 @@
         "pattern": "n_time_exits",
         "note": "F2 adds n_time_exits to BacktestOut. PRESENCE ONLY; behaviour is pinned by the plan's tests."
       },
-      "note": "2026-10-10 opened at Kenneth's request after T1 shipped (PR #138): fix #129 (red main CI) and show time exits on Step 6. Plan written; plan round 1 running."
+      "note": "2026-10-10 ROUND 1 (plan round 1 of 3): fresh independent gate-auditor (bmad-review-adversarial-general), scope = the plan file at be0c2600 checked against main a2b6935c. 1 GATE FINDING: PF-1 - the plan rendered hold_max_days None as 'no hold', so a result saved before F2 (stock-current row, scan-schedule rows, localStorage scanStore where the fields are absent/undefined) whose backtest used a hold would show 'no hold'. Fixed in the plan: n_time_exits null/undefined = unknown -> '—' and no hold label; 'no hold' only for a new result (int count, null hold); tests for absent fields and old stock-current JSON; analysis path gets bt_hold on _AnalyzeCore; MagicMock backtest fakes get real ints. || 2026-10-10 opened at Kenneth's request after T1 shipped (PR #138): fix #129 (red main CI) and show time exits on Step 6. Plan written; plan round 1 running."
     },
     {
       "id": "STATE-BUILT-UNMERGED",
