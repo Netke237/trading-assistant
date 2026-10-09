@@ -7,14 +7,6 @@
       "expires_at": "2026-10-09T12:54:35Z",
       "note": "T1 plan audit round 3 + tickets (taken over from main-PC session, Kenneth reassigned)",
       "task": "STOCKS-HORIZON-T1"
-    },
-    {
-      "agent": "claude",
-      "branch": "main",
-      "claimed_at": "2026-10-09T10:47:40Z",
-      "expires_at": "2026-10-09T13:47:40Z",
-      "note": "Lane C #111: at-cap decision + finish (claude/state-per-stage-cap)",
-      "task": "STATE-PER-STAGE-CAP"
     }
   ]
 }
