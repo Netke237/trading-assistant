@@ -76,3 +76,32 @@ socket volume removed. Frontend typecheck and diff whitespace check clean.
 
 Outstanding: fresh fixes-only code round 3, the final allowed code-stage round.
 Code audit_clean remains false.
+
+
+## Code round 3 (continuous phase round 5) - CLEAN
+
+Reviewer: fresh independent `history_code_audit_r3`, applying both mandated
+skills and the numeric/persistence gate; zero gate findings after scope recheck.
+Exact fixes-only range:
+`1602051805f4c1f134889f515091bc3e43e575a5..eca4a41eb022fe77e34c2256c8a35c3894279469`.
+Raw complete diff SHA-256:
+`fdbde7f21a5447b9c6f9d5d0c9ec172d0129fe1b6397e4e557b0e77cbd331c2a`.
+
+Reviewed executable/test changes in historical_store.py and
+test_history_large_writes.py, plus four changed handoff/state/audit records.
+Verified failed store/commit rollback before retries, no abandoned chunks in
+fallback commits/final reads, successful and empty fallbacks, settled filtering,
+healing's scalar date state after rollback, existing-row preservation, cache
+notification after successful commit only, and unchanged coherent refresh
+transaction ownership. _store_bars still owns no commits.
+
+Independent verification: test_history_large_writes.py, test_historical_store.py,
+and test_historical_store_settle.py: 26 passed, 6 PostgreSQL cases skipped because
+no disposable PostgreSQL URL was supplied. Python 3.11.17, read-only source mount,
+network disabled, mocked providers. PostgreSQL was verified by the implementing
+agent's 12 SQLite/PostgreSQL semantic cases above, not by this reviewer.
+
+Final code-stage tally: three completed independent rounds; one gate defect in
+R1, one in R2, both fixed; R3 zero. No outstanding gate findings. Plan-stage tally:
+two rounds, clean. Overall audit_rounds=5, audit_clean=true. PR #130 ready for
+review; merge requires user approval. D3 #114 operational execution is unrun.

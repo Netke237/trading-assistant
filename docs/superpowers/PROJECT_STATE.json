@@ -2068,8 +2068,8 @@
       "id": "STOCKS-HORIZON-HISTORY",
       "name": "Stocks horizon HISTORY: daily history back to about 2010 for today's S&P 500 + NDX 100, kept by the nightly job, seam on the current adjustment basis",
       "status": "built",
-      "audit_rounds": 4,
-      "audit_clean": false,
+      "audit_rounds": 5,
+      "audit_clean": true,
       "depends_on": [],
       "plan": "docs/superpowers/plans/2026-10-09-stocks-horizon-history-plan.md",
       "verify": {
@@ -2078,15 +2078,15 @@
         "pattern": "class OhlcvHistoryStateModel",
         "note": "Presence only: HISTORY persists seam/floor state atomically with bars; synthetic integration tests verify behavior."
       },
-      "note": "D1 #112 plan clean after two independent rounds. D2 built in draft PR #130. Code R1 bind-limit fix verified. Fresh replacement history_code_audit_r2_resumed completed interrupted fixes-only R2 over 058295df..c188487b; one gate defect: failed later chunks could leak into legacy-reader fallback commits. Per-provider rollback fix and SQLite/PostgreSQL regression added; verification and final code R3 pending. Audit_clean=false; not ready to merge. Broad suite 6436 passed/2 skipped/3 baseline failures reproduced unchanged on main (#129). D3 #114 stays mini PC only after merge. Separate T1 cap unchanged.",
+      "note": "D1 #112 plan clean after 2 independent rounds. D2 build/audit/PR preparation complete in PR #130, unmerged. Code R1 asyncpg bind-limit defect fixed with bounded atomic upserts; R2 fallback-commit contamination fixed with rollback before retry. Fresh R3 history_code_audit_r3 reviewed 16020518..eca4a41e and interactions: zero gate findings, 26 independent tests passed/6 PG skipped. Parent verification 12 SQLite/PostgreSQL cases and 192 focused regressions passed; typecheck clean. Prior broad suite 6436 passed/2 skipped/3 failures reproduced unchanged on main (#129). Five total rounds, three code rounds, audit_clean=true; no outstanding gate findings. Merge awaits user approval. D3 #114 remains mini PC only after merge. Separate T1 capped record unchanged.",
       "tracking_issue": 123,
       "plan_stage": {
         "rounds": 2,
         "audit_clean": true
       },
       "code_stage": {
-        "rounds": 2,
-        "audit_clean": false
+        "rounds": 3,
+        "audit_clean": true
       },
       "audit_record": "docs/superpowers/audits/2026-10-09-stocks-horizon-history-code.md"
     }

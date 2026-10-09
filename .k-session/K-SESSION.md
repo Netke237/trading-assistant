@@ -4,12 +4,11 @@
 D1 plan audit and D2 synthetic/mocked build, code audit and PR; D3 live execution is reserved for the mini PC.
 
 ## Status
-D1 plan stage clean after two independent rounds. D2 draft PR #130 is open.
-Fresh replacement completed interrupted code round 2: one fallback-transaction
-leak found. Per-provider rollback fix and real SQLite/PostgreSQL constraint
-failure regressions passed: 12 SQLite/PostgreSQL tests and 192 focused regressions.
-Frontend typecheck clean; disposable database resources removed. Final allowed code round 3
-next. Code audit remains unclean and merge approval is outstanding.
+D1 plan clean after two independent rounds. D2 build and code audit complete;
+code rounds 1 and 2 found one defect each, both fixed; fresh round 3 returned
+zero gate findings. PR #130 ready for review; unmerged and awaiting approval.
+12 SQLite/PostgreSQL semantic tests and 192 focused regressions passed; final
+reviewer independently passed 26 tests (6 PostgreSQL cases skipped). D3 unrun.
 
 ## Done
 - Read project state and coordinator/audit instructions; no initial state drift.
@@ -17,12 +16,10 @@ next. Code audit remains unclean and merge approval is outstanding.
 - Preserved inherited draft from origin/claude/stocks-horizon-t1 and wrote complete redesigned plan with six work packages.
 
 ## Next steps
-- [x] Plan round 2 clean over the two fixes and interactions (fb19f2f3).
-- [x] Published tracking #123 and build tickets #124 to #128.
-- [x] Implement and verify #124 retention, #125 backfill, #126 refresh/evidence and #127 verification; ticket closure awaits final audit.
-- [ ] Finish rollback regressions and fresh fixes-only code round 3; cap three code rounds.
-- [x] Publish draft PR #130.
-- [ ] Finalize audit record/PR and release handoff at the merge approval gate.
+- [x] Implement/verify #124 to #127 and independent code audit #128.
+- [x] Publish PR #130 with exact audit records and test limitations.
+- [ ] Merge only after user approval; keep D2 parent/tracking open until merged.
+- [ ] Run D3 #114 only on the mini PC after merge, following the runbook.
 
 ## Blockers / open questions
 - D3 operational work requires mini PC and D2 merge; intentionally remains pending.
@@ -49,3 +46,5 @@ next. Code audit remains unclean and merge approval is outstanding.
 - Code round 1 reviewed base aaa7102c to 058295df; one confirmed asyncpg parameter-limit finding. Fix preserves one transaction across bounded upsert statements; audit record stored in docs/superpowers/audits/2026-10-09-stocks-horizon-history-code.md.
 
 - Resumed existing worktree and renewed its claim after handoff confirmation. Interrupted code round 2 produced no report; completing its exact 058295df..c188487b fix scope with a fresh independent replacement, preserving the stage cap.
+
+- Final R3 exact 16020518..eca4a41e: fresh history_code_audit_r3, zero gate findings. Three completed code rounds, two plan rounds; no fourth code round.
