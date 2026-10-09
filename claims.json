@@ -15,6 +15,14 @@
       "expires_at": "2026-10-09T13:48:35Z",
       "note": "Lane C #111: at-cap decision + finish",
       "task": "STATE-PER-STAGE-CAP"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/stocks-horizon-history",
+      "claimed_at": "2026-10-09T10:51:18Z",
+      "expires_at": "2026-10-09T13:51:18Z",
+      "note": "Finalize authorized PR 130 merge and state",
+      "task": "STOCKS-HORIZON-HISTORY"
     }
   ]
 }
