@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import type { DataSourceInfo } from '@/lib/api';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useScanStore } from '@/lib/scanStore';
+import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
@@ -48,12 +49,9 @@ export function RailQuickLook({ showPortfolio = true }: { showPortfolio?: boolea
     [watchlist],
   );
 
-  const deployed = portfolio.reduce(
-    (s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1),
-    0,
-  );
-  const openPnL = portfolio.reduce((s, p) => s + p.pnlDollar, 0);
-  const winners = portfolio.filter((p) => p.pnlDollar > 0).length;
+  // Positions without a quote are left out of the totals (NO-LIVE-QUOTE NLQ-1).
+  const { deployed, openPnL, winners, quoted, unquoted } = openTotals(portfolio);
+  const note = unquotedNote(unquoted);
 
   return (
     <>
@@ -87,8 +85,9 @@ export function RailQuickLook({ showPortfolio = true }: { showPortfolio?: boolea
             </Row>
             <Row>
               <Text size={12} tone="secondary">Winners</Text>
-              <Data size={12} tone="pass">{winners} / {portfolio.length}</Data>
+              <Data size={12} tone="pass">{winners} / {quoted}</Data>
             </Row>
+            {note && <Text size={11} tone="caution">{note}</Text>}
           </div>
         </RailSection>
       )}

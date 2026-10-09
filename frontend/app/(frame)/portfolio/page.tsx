@@ -30,6 +30,7 @@ import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
 import { isPartialSave, rejectionMessage } from '@/lib/portfolioRejection';
 import { premiumStopDropText } from '@/lib/premiumStop';
+import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
 
 const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
@@ -108,8 +109,10 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     // Sync open positions FIRST — GET /api/portfolio writes today's equity
-    // snapshot (including open P&L). Only then read performance, otherwise the
-    // curve races ahead of the write and shows a stale value.
+    // snapshot (including open P&L) when every position got a quote; when any
+    // did not, it skips the write and today's point stays as last written
+    // (NO-LIVE-QUOTE NLQ-1). Only then read performance, otherwise the curve
+    // races ahead of a write and shows a stale value.
     (async () => {
       await syncFromBackend();
       fetchPerformance();
@@ -145,13 +148,7 @@ export default function PortfolioPage() {
 
   // A row with no quote carries 0 defaults, not a price: the totals leave it
   // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
-  const quoted   = positions.filter((p) => !p.quoteUnavailable);
-  const unquoted = positions.length - quoted.length;
-  const deployed = quoted.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
-  const openPnL  = quoted.reduce((s, p) => s + p.pnlDollar, 0);
-  const openPnLPct = deployed > 0 ? (openPnL / deployed) * 100 : 0;
-  const winners = quoted.filter((p) => p.pnlDollar > 0).length;
-  const losers  = quoted.filter((p) => p.pnlDollar < 0).length;
+  const { deployed, openPnL, openPnLPct, winners, losers, unquoted } = openTotals(positions);
 
   const now = new Date();
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -448,9 +445,7 @@ export default function PortfolioPage() {
             </div>
             {unquoted > 0 && (
               <div className={styles.footerGroup}>
-                <Text size={11} tone="caution">
-                  {`Excludes ${unquoted} position${unquoted === 1 ? '' : 's'} without a quote`}
-                </Text>
+                <Text size={11} tone="caution">{unquotedNote(unquoted)}</Text>
               </div>
             )}
           </div>
