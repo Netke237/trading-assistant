@@ -59,7 +59,7 @@ async def _fetch_fallback(symbol, start, end, accept=None):
     for provider in ("tiingo", "yfinance"):
         try:
             if provider == "tiingo":
-                bars = await asyncio.to_thread(fetch_historical_candles, symbol, start,
+                bars = await fetch_historical_candles(symbol, start,
                                               end + timedelta(days=1), strict_adjustments=True)
             else:
                 bars = await asyncio.to_thread(hs._yfinance_fetch, symbol, start,

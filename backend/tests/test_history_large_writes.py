@@ -235,7 +235,7 @@ async def test_get_bars_rolls_back_rejected_provider_chunks_before_fallback(
     fallback = _bars(factor=0.2)[500:600] if fallback_available else []
     monkeypatch.setattr(alpaca, "get_alpaca_client", AsyncMock(return_value=object()))
     monkeypatch.setattr(alpaca, "fetch_daily_bars_single", AsyncMock(return_value=rejected))
-    monkeypatch.setattr(hs, "fetch_historical_candles", lambda *args: fallback)
+    monkeypatch.setattr(hs, "fetch_historical_candles", AsyncMock(return_value=fallback))
     monkeypatch.setattr(hs, "_yfinance_fetch", lambda *args: [])
 
     bars = await hs.get_bars("TEST", START, DATES[599])
