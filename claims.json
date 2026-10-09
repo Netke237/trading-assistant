@@ -15,6 +15,14 @@
       "expires_at": "2026-10-09T09:52:29Z",
       "note": "state.py hard cap counts per stage: plan_stage field on phase records",
       "task": "STATE-PER-STAGE-CAP"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/stocks-horizon-history",
+      "claimed_at": "2026-10-09T07:32:43Z",
+      "expires_at": "2026-10-09T10:32:43Z",
+      "note": "D1 HISTORY plan audit then D2 synthetic/mocked build and code audit",
+      "task": "STOCKS-HORIZON-HISTORY"
     }
   ]
 }
