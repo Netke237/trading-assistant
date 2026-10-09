@@ -27,23 +27,21 @@ async def test_run_ingestion_returns_result():
     }
     with patch("app.services.ingestion_job.fetch_daily_bars_batch", new_callable=AsyncMock) as mock_batch, \
          patch("app.services.ingestion_job.get_alpaca_client", new_callable=AsyncMock) as mock_client, \
-         patch("app.services.ingestion_job.AsyncSessionLocal") as mock_session_cls, \
+         patch("app.services.ingestion_job.update_history", new_callable=AsyncMock) as mock_update, \
          patch("app.services.ingestion_job._prune_old_rows", new_callable=AsyncMock, return_value=0):
 
         mock_batch.return_value = fake_bars
         mock_client.return_value = MagicMock()
 
-        # Mock the DB session as an async context manager
-        mock_session = AsyncMock()
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
-        mock_session_cls.return_value = mock_session
+        from app.services.history_backfill import HistoryUpdateResult
+        mock_update.return_value = HistoryUpdateResult(1, False, False)
 
         result = await run_ingestion(symbols, years=1)
 
     assert isinstance(result, IngestionResult)
     assert result.total == 2
     assert result.failed == 0
+    assert mock_update.await_count == 2
 
 
 def test_should_ingest_when_stale():

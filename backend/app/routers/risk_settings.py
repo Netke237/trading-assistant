@@ -231,12 +231,14 @@ class SchedulingConfig(BaseModel):
     strategy-watch EOD trigger) — those stay pinned to America/New_York
     regardless of this setting; see app/services/scheduling_tz.py."""
     timezone: str = Field(default="Europe/Berlin", description="IANA timezone name, e.g. 'Europe/Berlin'")
+    history_years: int | None = Field(default=None, ge=1, le=20)
 
 
 @router.get('/scheduling', response_model=SchedulingConfig)
 def get_scheduling() -> SchedulingConfig:
     from app.services.scheduling_tz import operator_timezone_name
-    return SchedulingConfig(timezone=operator_timezone_name())
+    from app.services.history_retention import history_years
+    return SchedulingConfig(timezone=operator_timezone_name(), history_years=history_years())
 
 
 @router.put('/scheduling', response_model=SchedulingConfig)
@@ -249,5 +251,8 @@ def put_scheduling(cfg: SchedulingConfig) -> SchedulingConfig:
         raise HTTPException(status_code=422, detail=f"unknown timezone {cfg.timezone!r}")
     data = _load_settings()
     data.setdefault('scheduling', {})['timezone'] = cfg.timezone
+    if cfg.history_years is not None:
+        data['scheduling']['history_years'] = cfg.history_years
     _save_settings(data)
-    return cfg
+    from app.services.history_retention import history_years
+    return SchedulingConfig(timezone=cfg.timezone, history_years=history_years(data))

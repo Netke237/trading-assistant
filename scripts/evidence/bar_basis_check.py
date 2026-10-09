@@ -21,7 +21,7 @@ for _p in (REPO / "backend", REPO / "scripts"):
         sys.path.insert(0, str(_p))
 
 from evidence._bars import (  # noqa: E402
-    common_parser, emit, load_basis_rows, load_bars, loaded_range, report_header,
+    common_parser, emit, load_basis_rows, load_bars, load_history_states, loaded_range, report_header,
     stored_symbols,
 )
 
@@ -80,6 +80,7 @@ def build_report(
     bars_by_symbol: dict[str, list[dict]],
     rows_by_symbol: dict[str, list[tuple]],
     header: str,
+    states_by_symbol: dict[str, dict] | None = None,
 ) -> str:
     from app.services.historical_store import stale_reasons
 
@@ -94,7 +95,7 @@ def build_report(
         rows = rows_by_symbol.get(symbol, [])
         v = basis_violations(bars)
         jumps = big_jumps(bars, JUMP_THRESHOLD)
-        report = stale_reasons(rows)
+        report = stale_reasons(rows, (states_by_symbol or {}).get(symbol))
         tot_n += v["n"]
         tot_any += v["any_outside"]
         flagged += report is not None
@@ -129,12 +130,13 @@ async def _main(args) -> str:
     symbols = args.symbols or await stored_symbols()
     bars = await load_bars(symbols, args.start, args.end)
     rows = await load_basis_rows(symbols)
+    states = await load_history_states(symbols)
     header = report_header(
         "Bar-basis check", symbols=symbols, start=args.start, end=args.end,
         cost_model="n/a (no trades simulated)", loaded=loaded_range(bars),
         extra={"Stale-reason rows": "full stored row set per symbol (not date-bounded)"},
     )
-    return build_report(bars, rows, header)
+    return build_report(bars, rows, header, states_by_symbol=states)
 
 
 def main(argv: list[str] | None = None) -> None:
