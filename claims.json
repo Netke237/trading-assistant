@@ -33,14 +33,6 @@
         }
       ],
       "task": "NO-LIVE-QUOTE"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/ticketing-fire-horizon-20261009",
-      "claimed_at": "2026-10-09T15:57:58Z",
-      "expires_at": "2026-10-09T18:57:58Z",
-      "note": "Prepare and audit ticketing plan; no application implementation",
-      "task": "AUTOTRADE-FIRE-HYGIENE"
     }
   ]
 }
