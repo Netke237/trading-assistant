@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/state-per-stage-cap",
       "claimed_at": "2026-10-09T05:39:31Z",
-      "expires_at": "2026-10-09T09:36:11Z",
+      "expires_at": "2026-10-09T09:52:29Z",
       "note": "state.py hard cap counts per stage: plan_stage field on phase records",
       "task": "STATE-PER-STAGE-CAP"
     }
