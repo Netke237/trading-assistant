@@ -10,12 +10,23 @@ walk-forward windows scale with the hold), and Kenneth's answers in chat (record
 `PROJECT_STATE.json` before H1 starts):
 
 - **T1-BASKET-SECTOR-SAMPLE-2026-10-08.** The grid search runs on a sector sample (10 symbols per sector stratum).
-  Fire rates are scaled per sector to the universe. Before the report, each cell's final parameters are checked
-  again on the **full** universe (S&P 500 ∪ NDX 100 minus the exclusion list).
+  Fire rates are scaled per sector to the universe. Before the report, each cell's fold winners and final parameters
+  are checked again on the **full** universe (S&P 500 ∪ NDX 100 minus the scan-scope exclusions): fire rate,
+  walk-forward OOS and held-out year. The adoption bar uses the full-universe numbers (H10).
+- **T1-SECTORS-FILL-FIRST-2026-10-09.** 309 of 518 rows in `backend/app/data/sp500.csv` have sector `Unknown`, so
+  sector strata are meaningless today. H0a fills the missing sectors from the public GICS lists before H8.
+- **T1-HISTORY-BACKFILL-2026-10-09.** Stored history starts 2020-10-06, which leaves Annual 1–2 folds once every
+  signal gets its full 400-bar window. H0b loads daily history back to about 2010 and stops the nightly job pruning it.
+  Every tuned signal then starts with the full live window (exact live parity), and every horizon gets enough folds.
+  This **supersedes T1-ANNUAL-TWO-FOLDS-2026-10-09** (Annual 24/12 kept; "thin" stays as a rule, no longer expected
+  to trigger). The survivorship label stays: the backfill covers today's constituents only.
+- **T1-MINI-PC-2026-10-09.** Every step that reads or writes stored bars (H0b's backfill, the bar-basis re-check,
+  `tune_horizons.py`) runs on Kenneth's **mini PC**, which holds the latest price history. Planning and code can be
+  done on either machine.
 - **T1-LIVE-COST-UNCHANGED-2026-10-08.** The tuner charges 0.05% per leg and reports 0.2% per leg as a stress test.
   The live Step-6 per-symbol backtest gate keeps 0.2% (`costs:` untouched). T2 replaces that gate.
-- **T1-ANNUAL-TWO-FOLDS-2026-10-09.** Annual keeps train 24 / test 12. With warm-up and the held-out year it gets
-  about 2 folds (not the ~3 the T1-DESIGN decision estimated); its results are labelled **thin**.
+- **T1-ANNUAL-TWO-FOLDS-2026-10-09** (superseded by T1-HISTORY-BACKFILL-2026-10-09, kept for the record): Annual
+  keeps train 24 / test 12 and is labelled **thin** when it has fewer than `min_folds_not_thin` folds.
 - **T1-CUSTOM-NEAREST-HOLD-2026-10-09.** A Custom hold uses the parameters of the tuned horizon whose hold max is
   nearest to the Custom hold max; the card names it ("Custom: using Annual settings").
 - **T1-PROFILES-NO-FALLBACK-2026-10-09.** The frontend has no hardcoded copy of the profiles and no fallback: a
@@ -27,7 +38,11 @@ walk-forward windows scale with the hold), and Kenneth's answers in chat (record
 the base branch.** H2 reads P0B's `StockScanRequest.hold_max_days` and `DEFAULT_HOLD_MAX`; H6 edits the stock sends
 P0B B7 changed. If P0B's merged names differ, the coordinator updates this plan before H2 starts.
 
-**Not in T1** (other tasks): running the tuner on Kenneth's data (`STOCKS-HORIZON-TUNING-RUN`); the Adopt action,
+**Plan audit status.** Round 1 (2026-10-08: 4 critical, 13 major, 10 minor) and round 2 (2026-10-09: 23 findings,
+8 gate-level) are fixed in this text; none were deferred. Next: round 3 with a fresh reviewer, then `/to-tickets`,
+then the build waits for P0B's merge. Work can continue on the mini PC from branch `claude/stocks-horizon-t1`.
+
+**Not in T1** (other tasks): running the tuner on the mini PC's data (`STOCKS-HORIZON-TUNING-RUN`); the Adopt action,
 Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer re-tune and its 120-bar window
 (`T3`); Pre-Breakout (`T4`); Intraday and `mean_reversion_vwap` (no daily bars, ADR decision 1).
 
@@ -39,7 +54,14 @@ Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer 
   (225), and `pullback_ema` with `trend_ema >= 111` **never fire live** while Step 6 shows trades. After H1 they fire.
   Also, because `_ema` is seeded from the window's first values and `_rsi` smooths from the window start, **every
   live `pullback_ema` signal and every RSI reading moves** (entries, stops and tolerance hits), for every symbol.
-  The scorer's `bars[-120:]` is not changed.
+  The backtest window also grows from 350 to 400 bars, so Step-6 results and `passes_gate` for `pullback_ema` and the
+  RSI strategies move in H1 too, as do the legacy Settings tuner's results. Composite watches on the **intraday**
+  path (`mean_reversion_vwap` on 15-min bars) keep their 120-bar window, so their anchored VWAP is unchanged. The
+  scorer's `bars[-120:]` is not changed.
+- **H0a:** sectors are filled for about 300 S&P names that read `Unknown` today, so the sector heatmap, sector RS and
+  anything else reading `sector_for_symbol` see more names.
+- **H0b:** the nightly ingestion keeps about 17 years of daily bars instead of pruning to 6, and the first run
+  after H0b downloads the missing years (one-off, on the mini PC).
 - **H2: time exit.** Every daily-bar backtest closes a trade still open `hold_max_days` calendar days after entry, at
   the next bar's open. Step-6 win rates and expectancies move, **and so do `passes_gate` and the scan's
   backtest-gate keep/drop verdicts** — the candidate list changes. Intraday horizon and intraday strategies get no
@@ -50,8 +72,9 @@ Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer 
   the user overrode a field. Until T2 adopts tuned values every profile **is** today's direction baseline, so values
   change only where the request used to carry a frontend/schema default instead of the YAML value (e.g. pullback
   tolerance 8% → the YAML's 4%; breakout volume 1.1 (frontend) / 1.5 (schema) → YAML 1.5). That difference is a
-  defect today: the adopted YAML value never reached a live scan. Saved search profiles and scheduled scans lose
-  their frozen strategy values (migration, H5).
+  defect today: the adopted YAML value never reached a live scan. Saved search profiles (localStorage, H5) and
+  saved scan schedules / the continuous-scan request (server-side `resolved_request`, H4) lose their frozen strategy
+  values and follow the profile.
 - **H6/H7:** a stock position or a strategy watch with a hold raises `TIME_STOP` once held `hold_max_days`. No
   automatic close (ADR decision 2).
 
@@ -59,8 +82,9 @@ Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer 
 
 - **Runtime.** Backend Python **3.11** (Windows `.\.venv\Scripts\python.exe -m pytest`). Frontend
   `cd frontend && npm run typecheck && npm run test`. The worktree has no `.venv`; the coordinator creates one from
-  `backend/requirements.txt` before H1. `backtesting` must be the pinned **0.6.6** (Kenneth's main checkout has
-  0.6.5 installed); H8's parity test asserts `backtesting.__version__ == "0.6.6"`.
+  `backend/requirements.txt` before H0a. `backtesting` must be the pinned **0.6.6** (Kenneth's main-PC checkout has
+  0.6.5 installed); H8's parity test asserts `backtesting.__version__ == "0.6.6"`, and the Verification section
+  upgrades the venv that serves the live app on the mini PC to the pin.
 - **TDD.** Write the failing test first, run it, see it fail for the predicted reason, then write the code.
 - **Numeric golden pins.** H1, H2, H3 and H4 move signal, backtest and scan pins on purpose. The implementer lists
   every moved pin with its cause (window, time exit, multi rule, profile value). Any other moved pin is a defect:
@@ -76,6 +100,8 @@ Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer 
 
 - **Tuned horizons.** `Swing`, `Position`, `Quarterly`, `SemiAnnual`, `Annual` — the frontend `HorizonKey` spelling
   (`frontend/lib/horizonPresets.ts`). Backend `TUNED_HORIZONS` in new `app/services/horizon_profiles.py`, same order.
+  **Owner:** H2 creates `horizon_profiles.py` (`TUNED_HORIZONS`, `HOLD_MAX_DAYS`, `tuned_params_horizon`,
+  `hold_for_backtest`) and the cross-file hold test; H5 creates the frontend `tunedParamsHorizon`.
 - **Hold max per tuned horizon** (calendar days): Swing 15, Position 45, Quarterly 60, SemiAnnual 105, Annual 200.
   Backend `HOLD_MAX_DAYS` in `horizon_profiles.py`, with a comment naming `horizonPresets.ts`; a test reads both
   files and fails if they differ.
@@ -87,13 +113,15 @@ Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer 
   a request carries a hold but no `params_horizon`. Examples pinned in both test suites: Custom 60–185 → Annual;
   Custom 5–30 → Swing (|30−15|=15 = |30−45|=15, tie → Swing); Custom 0–3 → `null`.
 - **Signal window.** `SIGNAL_WINDOW_BARS = 400` in `app/services/strategy_engine.py`. Every caller of a strategy
-  signal function passes at most the last 400 bars ending at the evaluated bar: live scan (single + multi),
-  Analysis, strategy watch (entry and reversal), composite watch, the backtest's per-bar slice, the tuner.
+  **daily-bar** strategy signal function passes at most the last 400 bars ending at the evaluated bar: live scan
+  (single + multi), Analysis, strategy watch (entry and reversal), composite watch (daily keys only), the backtest's
+  per-bar slice, the tuner. Intraday paths keep their windows (scan `intraday_bars[-300:]`, composite intraday 120).
+  Pre-Breakout's `breakout_setup_signal` and `fibonacci_pullback_signal` are T4 and untouched.
 - **Bars needed.** `bars_needed(strategy, params) -> int` in `strategy_engine.py`: the smallest bar count at which
-  **every** length guard of the signal function can pass, read from the code (e.g. `ma_crossover` is `slow +
-  max(5, lookback + 1)`-shaped because of both `len(bars) < slow + 5` and `len(slow_ma) < lookback + 1` — the
-  implementer derives each exactly). `mean_reversion_multi` = max over its variants with their merged params.
-  Tested both ways (H1).
+  **every** length guard of the signal function can pass, read from the code (e.g. `ma_crossover` = `slow +
+  max(5, lookback)`, from `len(bars) < slow + 5` and `len(slow_ma) < lookback + 1` — the implementer derives each
+  exactly and the both-ways test is the judge). `mean_reversion_multi` = max over its variants with their merged
+  params. Tested both ways (H1).
 - **Time exit.** Trade filled on bar `e` (date `d_e`). At the close of bar `t`, if `(d_t − d_e).days >=
   hold_max_days`, the trade is closed with a market order. `backtesting.py` inserts a close order at the front of the
   queue (`Trade.close()`), so it fills at bar `t+1`'s **open before** stop and target are checked: stop and target
@@ -108,49 +136,121 @@ Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer 
   **Net expectancy** = the mean net trade return over pooled trades (trade-weighted).
 - **Multi params shape.** One nested object, used by the live loop, the backtest, the profile and the tuner:
   `{"variants": [...], "min_confirmations": n, "variant_params": {"<variant>": {...}}}`. Its effective form is built
-  by `merge_multi_params(base, override)` (H3): `variant_params[v]` = `get_exit(v)` ∪ the variant's baseline
-  `get_active(v, direction)` ∪ the multi profile's `variant_params[v]` ∪ request overrides. Grid keys address it with
+  by `merge_multi_params(base, override)` (H3): `variant_params[v]` = `get_exit(v)` ∪ the variant's **direction
+  baseline** `get_active(v, direction)` ∪ the multi profile's `variant_params[v]` ∪ request overrides. The variant
+  base is **always** the direction baseline, never the standalone strategy's tuned horizon profile (a T2 adopt of a
+  `mean_reversion_rsi` Quarterly profile must not change multi); a test pins this. Grid keys address it with
   dots: `min_confirmations`, `mean_reversion_rsi.rsi_oversold`, `mean_reversion_bb.bb_std`,
   `mean_reversion_vwap_daily.vwap_lookback`, ….
 
 ## Ticket graph
 
 ```
+H0a (sector fill)  ──────────────────────────────────────────────────────────────┐
+H0b (history backfill + retention) ─────────────────────────────────────────────┤ (H8 basket, H9 calendar)
 H1 (signal window) ── H2 (time exit) ── H3 (multi backtest + shape) ── H4 (profiles, Optional request fields)
 H4 ── H5 (frontend profiles + migrations)
 H4 ── H6 (position TIME_STOP) ── H7 (watch horizon + TIME_STOP)
 H4 ── H8 (signal/gate cache, simulator, gate mask) ── H9 (walk-forward per cell) ── H10 (report, CLI, re-check)
 ```
 
-Sequential build: H1 … H10. H1–H4 and H8 edit `strategy_backtest.py` / `strategy_engine.py` / `stock_scan.py`;
-serial order avoids conflicts.
+Sequential build: H0a, H0b, H1 … H10. H0a and H0b touch no file the others touch and do not depend on P0B; the
+coordinator may build them first. H1–H4 and H8 edit `strategy_backtest.py` / `strategy_engine.py` /
+`stock_scan.py`; serial order avoids conflicts.
+
+---
+
+## H0a — Fill the missing sectors
+
+**Mechanism today.** `backend/app/data/sp500.csv` (`symbol,sector,liquidity`) has 309 of 518 rows at `Unknown`.
+`sector_map.sector_for_symbol` reads only that file. `scripts/update_sp500_liquidity.py` tries yfinance `.info` for
+`Unknown` rows and writes `Unknown` on any failure. `sp500_update_service` (daily `sp500_scheduler`) rewrites the file.
+NDX-only names have no sector anywhere.
+
+**Semantics.**
+
+- New committed file `backend/app/data/sector_overrides.csv` (`symbol,sector,source,as_of`), canonical sector names
+  (`sector_names.NORMALIZE`). New script `backend/scripts/fill_sectors.py` builds it from the public GICS tables of
+  the Wikipedia pages "List of S&P 500 companies" and "Nasdaq-100" (`pandas.read_html`; GICS sector column), for every
+  S&P 500 ∪ NDX 100 symbol, mapping each GICS name through `NORMALIZE`. A name that maps to nothing canonical is an
+  error naming it (no silent `Unknown`). Ticker spellings (`BRK.B` vs `BRK-B`) are normalised the way
+  `update_sp500_liquidity._yf_key` / the CSV already do; unmatched symbols are listed in the script output.
+- `sector_for_symbol`: the `sp500.csv` sector when it is not `Unknown`, else `sector_overrides.csv`, else
+  `(None, None)`. The daily updater keeps writing `sp500.csv` as today; nothing it writes can erase an override.
+- The coordinator runs the script once (needs internet; either PC — no bar data involved), reviews the diff, commits
+  the CSV. Re-running later is a manual refresh.
+
+**Test first.** `sector_for_symbol` prefers a known `sp500.csv` sector, falls back to the override, returns `None`
+for neither. The script's parser on a saved HTML fixture (a few rows incl. a `BRK.B`-style ticker and an unknown
+GICS name → error). After the real run: a test asserts `Unknown` covers 0 of the current S&P 500 ∪ NDX 100 symbols
+(minus any the script listed as unmatched, which the ticket report names).
+
+**Commit:** `feat(data): fill missing sectors from the public GICS lists (STOCKS-HORIZON-T1)`
+
+---
+
+## H0b — Daily history back to about 2010, kept by the nightly job
+
+**Mechanism today.** `ingestion_job.run_ingestion(symbols, years=6)` fetches `years × 365` days (Alpaca batch first,
+then `historical_store.get_bars` for symbols Alpaca returned nothing for) and then `_prune_old_rows(years)` deletes
+older rows. The nightly scheduler calls it with `years=6`; `/api/ingestion` caps `years` at 10. A symbol Alpaca
+returns *some* bars for is never back-filled further (Alpaca's free history starts about 2016).
+
+**Semantics.**
+
+- One setting `history_years` (default **17**) in the scheduling settings that
+  `ingestion_scheduler._run_nightly_maintenance` already reads (`scheduling_tz._load_settings`). The nightly run and
+  the prune both use it. `/api/ingestion` `years` bound raised to 20. Nothing prunes below `history_years`.
+- **Gap backfill.** After the Alpaca step, for each symbol whose earliest stored bar is later than `fetch_start + 7
+  days`, fetch `[fetch_start, earliest)` from the non-Alpaca chain (Tiingo → yfinance, as `_fetch_chain` orders
+  them). **Seam check:** the fetch overlaps the stored series by 5 trading days; if any overlapping close differs by
+  more than 0.5% (different adjustment basis), the back segment is **not stored**, and the symbol is listed in the
+  run state as `seam_mismatch` with the ratio. A symbol whose provider returns nothing earlier (listed later) is
+  recorded in `backend/data/history_floor.json` (`symbol → first available date`, gitignored) so the nightly run does
+  not refetch it.
+- Ingestion state reports `backfilled`, `seam_mismatch`, `floor_reached` counts and names.
+- After the first full run (mini PC), the coordinator re-runs the Phase C bar-basis check
+  (`scripts/evidence`, `bar_basis`) over the whole span and brings the newly flagged symbols to Kenneth for the
+  exclusion list (P0A process). Seam-mismatch symbols go to him too.
+
+**Test first.** Prune keeps 17 years (row at 16.9 years kept, 17.1 years pruned) with `history_years: 17`. A symbol
+whose stored series starts 2016 gets `[2009, 2016)` fetched from the non-Alpaca chain and stored. Seam mismatch (1%
+off) → nothing stored, listed. Provider returns nothing earlier → floor recorded, second run makes no fetch.
+
+**Commit:** `feat(ingestion): keep ~17 years of daily bars; back-fill and seam-check older history (STOCKS-HORIZON-T1)`
 
 ---
 
 ## H1 — One signal window everywhere a signal is computed
 
-**Mechanism today.** `routers/stock_scan.py::_process_stock` calls the signal function on `bars[-120:]`;
-`_multi_signal` and `_analyze_core` likewise. `strategy_backtest.run_strategy_backtest` slices the last 350 bars per
-bar. `strategy_watch_evaluator._eval_strategy_watch` passes the full `get_bars` result (entry and reversal paths).
-`composite_trigger_evaluator.py` (~L472) slices `bars[max(0, i - 119): i + 1]`. Length guards return `None` on short
-windows.
+**Mechanism today.** `routers/stock_scan.py::_process_stock` calls the signal function on `bars[-120:]` (via
+`signal_fn(`, ~L1339); `_multi_signal` (`fn(`, ~L419) and `_analyze_core` (~L866) likewise.
+`strategy_backtest.run_strategy_backtest` slices `max(0, n - 350)` per bar. `strategy_watch_evaluator` passes the full
+`get_bars` result at entry (`fn(`, ~L390) and reversal (~L485). `composite_trigger_evaluator.py` (~L476) slices
+`bars[max(0, i - 119): i + 1]` for every key, daily and intraday. Length guards return `None` on short windows.
 
 **Semantics.**
 
 - Add `SIGNAL_WINDOW_BARS` and `bars_needed` (shared definitions).
-- Replace every slice above with `[-SIGNAL_WINDOW_BARS:]` (composite: `bars[max(0, i - SIGNAL_WINDOW_BARS + 1): i +
-  1]`); the scan's intraday branch keeps `intraday_bars[-300:]`; the backtest's `start = max(0, n - 350)` becomes
-  `n - SIGNAL_WINDOW_BARS` (update its comment). Check that the watch's and the composite evaluator's `get_bars`
-  ranges reach 400 trading bars; widen them if not. `_MIN_STRATEGY_BARS` in the composite evaluator is left as is.
-- Grep for any other caller of a `*_signal` function (`grep -rn "_signal(" backend/app`) and apply the same rule;
-  list them in the ticket report.
+- Change exactly these call sites: `_process_stock` daily branch (`bars[-120:]` → `bars[-SIGNAL_WINDOW_BARS:]`; the
+  intraday branch keeps `intraday_bars[-300:]`), `_multi_signal`, `_analyze_core`'s signal call, the backtest
+  (`start = max(0, n - SIGNAL_WINDOW_BARS)` — keep the `max(0, …)`; update its comment), the watch evaluator's entry
+  and reversal calls (`fn(bars[-SIGNAL_WINDOW_BARS:], …)`), and the composite evaluator's slice for **daily** keys
+  only (`bars[max(0, i - SIGNAL_WINDOW_BARS + 1): i + 1]`; the intraday `mean_reversion_vwap` path keeps
+  `i - 119`). Check that the watch's and the composite evaluator's `get_bars` ranges reach 400 trading bars; widen
+  them if not. `_MIN_STRATEGY_BARS` is left as is. Pre-Breakout callers (`breakout_setup_signal`,
+  `fibonacci_pullback_signal`) are not touched (T4). The implementer greps for further callers of the six daily
+  signal functions (direct and through `_SIGNAL_FNS`) and lists any extra one in the ticket report before changing it.
 
 **Test first.** (1) A synthetic 600-bar series built so `mean_reversion_rsi` at defaults fires on the last bar:
-`_process_stock` (mocked bars/quotes as existing scan tests do) returns a card. Today: the no-setup rejection.
-(2) Same for `mean_reversion_bb`. (3) The composite evaluator matches a `mean_reversion_rsi` setup on that series.
-(4) `bars_needed` both ways, per strategy, on synthetic series built to fire: with exactly `bars_needed` bars the
-signal is not `None`; with `bars_needed − 1` it is `None`. (5) Every combination in the current `search:` blocks has
-`bars_needed <= 400` (H4 extends this to its grids). (6) Watch entry and reversal calls receive ≤ 400 bars.
+`_process_stock` (mocked bars/quotes, backtest mocked to pass, as existing scan tests do) returns a card — or, with
+the real backtest, a rejection that is **not** the no-setup reason. Today: the no-setup rejection. (2) Same for
+`mean_reversion_bb`. (3) The composite evaluator matches a daily `mean_reversion_rsi` setup on that series; an
+intraday `mean_reversion_vwap` composite result is unchanged (pin before/after). (4) Backtest on a 150-bar series
+gives the same trades as before for bars < 350 (no negative index).
+(5) `bars_needed` both ways, per strategy, on synthetic series built to fire: with exactly `bars_needed` bars the
+signal is not `None`; with `bars_needed − 1` it is `None`. (6) Every combination in the current `search:` blocks has
+`bars_needed <= 400` (H4 extends this to its grids). (7) Watch entry and reversal calls receive ≤ 400 bars.
 
 **Commit:** `fix(stocks): one 400-bar signal window for scan, Analysis, watches and backtest (STOCKS-HORIZON-T1)`
 
@@ -174,6 +274,8 @@ signal is not `None`; with `bars_needed − 1` it is `None`. (5) Every combinati
   it (record the trade in a set when calling `close()`); else by side and inequality — Bullish: exit price `<= sl` →
   stop, `>= tp` → target; Bearish mirrored (works for gap fills at the open).
 - `BacktestResult` gains `n_time_exits: int = 0` (last field, defaulted).
+- Create `app/services/horizon_profiles.py` (`TUNED_HORIZONS`, `HOLD_MAX_DAYS`, `tuned_params_horizon`,
+  `hold_for_backtest`) and its cross-file test against `horizonPresets.ts` (shared definitions).
 - Stock scan: `_process_stock` and `_analyze_core` pass `hold_for_backtest(req.horizon, bt_strategy,
   req.hold_max_days)`. `_backtest_key` includes it.
 - The legacy Settings → Strategy Tuning WFO (`strategy_param_optimizer.py`) is unchanged (no hold); H10's report
@@ -244,7 +346,18 @@ request values, and **every strategy field of `StockScanRequest` has a non-`None
   `mean_reversion_variants`, `mean_reversion_min_confirmations`, `vwap_lookback`, `vwap_deviation_pct`.
   `pullback_require_reversal` stays as is (UI toggle, not tuned). Before changing, grep every request builder and
   backend reader of these fields (Pre-Breakout ad-hoc scans, schedule resolver, `_SIGNAL_KWARGS`, Analysis,
-  auto-trade) and make each read `None`-safe; list them in the ticket report.
+  auto-trade) and make each read `None`-safe; list them in the ticket report. Two known readers break on `None`
+  and move: the model validator `check_min_confirmations` (`schemas/stock_scan.py`) and the
+  `"mean_reversion_vwap" in req.mean_reversion_variants` check (`_reject_unsupported_multi_variants`,
+  `stock_scan.py` ~L462). Both become checks on the **merged** multi shape after `merge_multi_params`: 422 when
+  `min_confirmations > len(variants)` or when `mean_reversion_vwap` is in the effective variants (so a request with 2
+  variants against a profile `min_confirmations: 3` is refused, not silently dead).
+- **Saved server-side requests.** Scan schedules store a full `resolved_request` (`schemas/scan_schedule.py`,
+  fired as-is by `scan_schedule_scheduler.py`), and the continuous scan persists its `last_request`. A one-off
+  migration on load (versioned, idempotent, with a backup like `adopt()`'s) strips the strategy fields above from
+  every stocks request in both, and sets `params_horizon` from the request's `hold_max_days` via
+  `tuned_params_horizon` when the scoring horizon is not Intraday. Without it, old schedules would keep sending the
+  frozen defaults (0.08, 1.1, …) and override the profile forever.
 - **YAML shape** (ADR decision 3, `active.<direction>.<horizon>`): inside `active.<direction>`, a key in
   `TUNED_HORIZONS` holds that horizon's profile dict; every other key is the **direction baseline** (unchanged
   values). T1 writes no profile.
@@ -320,7 +433,10 @@ counts per cell equal this table's n (test reads the YAML), every combination `b
 contain `rsi_overbought` and no `rsi_oversold`. (5) Endpoint shape. (6) Scan: a request **without** strategy fields
 uses the YAML baseline (`pullback_tolerance_pct` 0.04, not 0.08); with a tuned `Quarterly` profile in a temp YAML and
 `params_horizon="Quarterly"` uses the profile; an explicit request value still wins; `hold_max_days=185` without
-`params_horizon` → Annual. (7) Watch reversal uses the profile.
+`params_horizon` → Annual. (7) Watch reversal uses the profile. (8) Multi: a request with 2 variants and a profile
+`min_confirmations: 3` → 422; `mean_reversion_vwap` in the effective variants → 422; a request without multi fields
+validates. (9) Migration: a stored schedule request carrying `pullback_tolerance_pct: 0.08` and `hold_max_days: 60`
+loses the field and gains `params_horizon: "Quarterly"`; running the migration twice changes nothing.
 
 **Commit:** `feat(stocks): per-horizon parameter profiles; request fields default to the profile (STOCKS-HORIZON-T1)`
 
@@ -338,9 +454,12 @@ field. `searchProfileSnapshot.ts` saves a full `strategyParams` snapshot and `lo
 
 - **Override fields** (each becomes `T | null`, `null` = follow the profile): `pullbackTolerancePct`,
   `pullbackEmaPeriod`, `pullbackTrendEma`, `pullbackMaType`, `maCrossoverFast`, `maCrossoverSlow`,
-  `maCrossoverLookback`, `breakoutVolumeMult`, `rsiPeriod`, `rsiOversold`, `rsiTrendSma`, `requireChoppyRegime`,
+  `maCrossoverLookback`, `breakoutVolumeMult`, `rsiPeriod`, `rsiOversold`, **`rsiOverbought` (new; sent as
+  `rsi_overbought`, the one RSI threshold the bearish rule reads)**, `rsiTrendSma`, `requireChoppyRegime`,
   `meanReversionVariants`, `meanReversionMinConfirm`, `vwapLookback`, `vwapDeviationPct`. Unchanged:
-  `btMinTrades`, `btMinWinRate`, `eventFilter`, `stockShortlistMax`.
+  `btMinTrades`, `btMinWinRate`, `eventFilter`, `stockShortlistMax`. `rsiOversold` / `rsiOverbought` /
+  `rsiPeriod` / `rsiTrendSma` overrides apply to the standalone RSI strategy **and** to multi's RSI variant, as
+  today's request already does (`_SIGNAL_KWARGS`); the panel says so under the RSI section.
 - `scanParamsStore`: bump `version`; `migrate()` sets every override field to `null`. `searchProfilesStore`
   (`'bamendjou:search-profiles'`): bump `version`; `migrate()` sets each saved profile's override fields to `null`
   (other saved fields kept). Snapshot save stores only non-`null` overrides; `loadParams` restores them as overrides.
@@ -350,8 +469,12 @@ field. `searchProfileSnapshot.ts` saves a full `strategyParams` snapshot and `lo
   fallback (T1-PROFILES-NO-FALLBACK-2026-10-09).
 - Panel: per field, the override if set, else the profile value for (direction, `tunedParamsHorizon`); a `tuned` /
   `baseline` tag per strategy section; per-field "reset to profile"; for Custom, "Custom: using <horizon> settings".
-  Fetch failed → "Profile unavailable — the scan uses the backend's values", overrides only. Settings page fields
-  that edit the same store follow the same null-override model.
+  Fetch failed → "Profile unavailable — the scan uses the backend's values", overrides only.
+- **Settings page** (`app/(frame)/settings/page.tsx` ~L2350+) edits the same store with no horizon or direction in
+  view, so an edit there masks every profile. Its fields show an empty input with the placeholder "follows horizon
+  profile" when `null`, a "clear" button when set, and one line of help: "A value here overrides the tuned setting
+  for every horizon and direction."
+- Create `tunedParamsHorizon` in `horizonPresets.ts` (shared definitions) with the pinned examples.
 - `ResolvedStockScanContext` gains `paramsHorizon`; all its builders (`stockScan.ts`, `scanScheduleResolve.ts`,
   `analysisStore.ts`, and any other found by grep) set it from `tunedParamsHorizon` over the context's preset and
   hold. `buildStockScanRequestBody` sends `params_horizon` and only non-`null` overrides.
@@ -405,6 +528,10 @@ target / reversal. No hold.
 
 - `AddWatch` and `BulkAdd` gain `params_horizon: Optional[TunedHorizon] = None`; the watch stores it plus
   `hold_max_days` (`HOLD_MAX_DAYS[params_horizon]` or `None`). Existing watches: absent → `None`.
+  `strategy_watch_store.add_watch` and `add_watches_bulk` gain the `params_horizon` keyword (default `None`) and
+  write both fields.
+- Composite watches get no `TIME_STOP`: they have no entry/armed position to age. Intended; stated in the ticket
+  report.
 - Evaluator, `armed` phase, before stop/target: if `hold_max_days` is set and `(today_utc − date_utc(last_event_at)).
   days >= hold_max_days` with `last_event` in {`entry`, `reversal`} → event type **`time_stop`** (ADR decision 2's
   `TIME_STOP`), reason `"{symbol}: {label} time stop — held {n}d (hold {hold}d)"`, state → idle. Both dates are UTC
@@ -437,18 +564,24 @@ trades per horizon and cost. A parity test ties the simulator to `run_strategy_b
   volume` of every bar), and `SIGNAL_CACHE_VERSION` (a constant bumped whenever a signal function changes; a test
   pins a hash of `strategy_engine.py`'s source and fails with "bump SIGNAL_CACHE_VERSION" when it changes). **Gate
   key** = symbol, direction, scoring horizon, OHLCV hash, `BARS_BASIS_VERSION`, sha256 of `scoring_rules.yaml`, the
-  benchmark series hash (if any), price bounds, and a source hash of `stock_scorer.py`.
+  benchmark series hash (if any), price bounds, and source hashes of `stock_scorer.py`, of
+  `routers/stock_scan.py::_direction_conviction_drop` and of `services/config_loader.py`
+  (`load_direction_conviction_min_trend`, which resolves the floor).
 - `simulate.py`: `simulate_trades(bars, signals, *, direction, commission, hold_max_days, entry_start, entry_end,
   allowed: list[bool] | None) -> list[TradeRecord]` with `run_strategy_backtest`'s rules (DAY limit entry valid for
   one bar, `_entry_side`, one position at a time, H2's `next()` order and time exit, commission per leg, no entry
-  where `allowed[t]` is False). The implementer copies the fill rules from `backtesting.py` 0.6.6
+  where `allowed[t]` is False, **an empty result for fewer than 100 bars** (as `run_strategy_backtest`), and **trades
+  still open at the end of the series are dropped** (`finalize_trades=False`); the simulator returns those dropped
+  trades' count so callers can report it). The implementer copies the fill rules from `backtesting.py` 0.6.6
   (`_Broker._process_orders`: limit fill price, gaps, same-bar SL/TP order, close-order priority). The parity test
   is the judge.
-- **Parity test (gate for this ticket).** Seeded synthetic series (1,500 bars, trending, choppy, gappy with
-  holidays) plus the four 251-bar fixtures; every tuned strategy × both directions × `hold_max_days` {None, 15, 200} ×
-  commission {0, 0.0005, 0.002} × `entry_start`/`entry_end` {unset, mid-series}; one grid combination per strategy
-  plus the baseline: `simulate_trades` equals `run_strategy_backtest_trades` (dates equal, prices/returns within
-  1e-9, same exit reasons). Asserts `backtesting.__version__ == "0.6.6"`.
+- **Parity test (gate for this ticket).** Two layers so it stays runnable. **Fast (default suite, budget ≤ 3 min):**
+  a pairwise-covering matrix over strategy × direction × `hold_max_days` {None, 15, 200} × commission {0, 0.0005,
+  0.002} × `entry_start`/`entry_end` {unset, mid-series} × series {trending, choppy, gappy-with-holidays, one
+  fixture}, plus two edge series: one ending with a trade open, one of 99 bars. **Full (`@pytest.mark.slow`, run by
+  the coordinator before closing H8):** the full product, 1,500-bar series. Both: `simulate_trades` equals
+  `run_strategy_backtest_trades` (dates equal, prices/returns within 1e-9, same exit reasons, same dropped-open
+  count). Asserts `backtesting.__version__ == "0.6.6"`.
 - `gates.py`: `gate_mask(bars, direction, scoring_horizon, *, min_price, max_price, benchmark) -> list[bool]`: per
   bar `t`, the replayable live gates on bars up to `t`, in the scan's order: close of `t` within `[min_price,
   max_price]` (`None` = no bound); `score_stock(bars[t-119..t], direction, scoring_horizon, scoring_mode="stock",
@@ -459,11 +592,14 @@ trades per horizon and cost. A parity test ties the simulator to `run_strategy_b
   fundamentals, IV, earnings dates, confidence replay, `min_stock_score`, the per-symbol backtest gate. Also named:
   the live scan passes the live quote as `current_price` to `pullback_ema` (`stock_scan.py` ~L1338); the tuner uses
   the close.
-- `basket.py`: **strata** = the `sector` column of `backend/app/data/sp500.csv`; NDX 100 names not in it form one
-  stratum `"NDX-only"`. Sample = `build_basket(rows, per_sector=tuning.basket.per_sector)` (existing
-  `strategy_basket.py`, top-N by liquidity per stratum) over the union minus `universe_exclusions.yaml` (both scopes —
-  the evidence scope means "skipped by tuning"). Universe = the same union minus exclusions. The report labels the
-  sample "liquidity-selected, equal count per stratum".
+- `basket.py`: **strata** = `sector_for_symbol` after H0a (the 11 GICS sectors; a symbol still without a sector is
+  listed and left out of the sample). **Liquidity** for ranking = mean daily dollar volume (close × volume) from
+  stored bars over the walk-forward span before `heldout_start`, the same measure for every symbol (S&P and NDX-only
+  alike; the CSV `liquidity` column is not used). Sample = `build_basket(rows, per_sector=tuning.basket.per_sector)`
+  (existing `strategy_basket.py`, top-N per stratum) over S&P 500 ∪ NDX 100 minus `universe_exclusions.yaml` **both
+  scopes** (the evidence scope means "skipped by tuning"). **Fire-rate universe** = the same union minus the
+  **scan-scope** exclusions only (live scans still scan evidence-scope names). The report labels the sample
+  "liquidity-selected (dollar volume), equal count per sector".
 - **Fire rate (sample-scaled), per sector:** `rate = Σ_s (fires_s ÷ scan_days) × (N_universe_s ÷ N_sample_s)`, where
   `fires_s` = gate-passing signal bars in stratum `s` over the window and `scan_days` = trading days in it. A week is
   5 scan days.
@@ -475,7 +611,7 @@ trades per horizon and cost. A parity test ties the simulator to `run_strategy_b
     stress_cost_per_leg: 0.002
     held_out_months: 12
     exit_buffer_days: 14          # calendar days added to the hold when cutting entries (H9)
-    windows:                      # STOCKS-HORIZON-T1-DESIGN-2026-10-05: test >= 2 x holdMax, train = 2 x test
+    windows:                      # STOCKS-HORIZON-T1-DESIGN-2026-10-05 values (train is 2-4 x test)
       Swing:      {train_months: 12, test_months: 3}
       Position:   {train_months: 12, test_months: 3}
       Quarterly:  {train_months: 12, test_months: 4}
@@ -493,6 +629,8 @@ trades per horizon and cost. A parity test ties the simulator to `run_strategy_b
     basket: {per_sector: 10}
     gates: {min_price: null, max_price: null}
   ```
+- **Ordering note.** H8 uses H0a's sectors and reads whatever history is stored; the real run needs H0b's backfill
+  done on the mini PC. Tests use synthetic data and need neither.
 - **Runtime probe.** `backend/scripts/tune_horizons.py --probe` (the CLI's other flags land in H10) times the signal
   function per strategy on 3 symbols and prints ms per call and the projected total for the configured basket and
   grids at `--workers N`. The implementer runs it on the fixtures and records the numbers in the ticket report.
@@ -513,16 +651,22 @@ gate mask. Sector scaling formula on a hand-counted case. Config loader refuses 
 - **Calendar.** The trading calendar = the sorted union of bar dates over the sample. `data_end` = the latest date
   on which ≥ 90% of sample symbols have a bar. **Held-out year** = `[heldout_start, data_end]`, `heldout_start` =
   `data_end − held_out_months`.
-- **Warm-up.** `warm_start` = the calendar date at index `max(bars_needed over the cell's grid)` (so every
-  combination of the cell can fire from the first fold on). Symbols that start later simply have fewer signals.
+- **Warm-up.** `warm_start` = the calendar date at index `SIGNAL_WINDOW_BARS` (the same for every cell and horizon),
+  so every tuned signal is computed on a full 400-bar window, exactly as live after H1 (`_ema` / `_rsi` depend on the
+  window start). Per symbol, no entry is allowed before that symbol's own 400th bar (`allowed[t]` is False there);
+  symbols listed later simply start later. With H0b's history (~2009–2010 start) this costs about 1.6 years and leaves
+  every horizon several folds.
 - **Folds.** `build_folds(warm_start, heldout_start, train_months, test_months)` — the existing rule: a fold exists
   only if its whole test window ends `<= heldout_start`. **Entry cut-offs** (calendar days, `buffer =
   exit_buffer_days`): train entries in `[train_start, train_end − hold − buffer)`; test entries in `[test_start,
   min(test_end, heldout_start − hold − buffer))`; held-out entries in `[heldout_start, data_end − hold − buffer)`.
   Worst case from a signal on day `s`: fill ≤ s+4 (holiday weekend), time-exit trigger ≤ fill + hold + 3, exit open
-  ≤ +4, so exit ≤ s + hold + 11 < s + hold + 14. Folds with an empty entry window are dropped. Fewer than
-  `min_folds_not_thin` folds → **thin**. Expected (pinned in the test for data 2020-10-06 .. 2026-10-02): Annual 2
-  folds (T1-ANNUAL-TWO-FOLDS-2026-10-09); the test pins every horizon's actual fold dates.
+  ≤ +4, so exit ≤ s + hold + 11 < s + hold + 14 on an exchange calendar. A symbol with missing bars (halt, ingestion
+  hole) can still push an exit further, so as a hard guard any trade whose `exit_date` reaches its window's
+  restriction (`train_end` for train, `heldout_start` for test, after `data_end` for held-out) is **dropped and
+  counted**, never kept. Folds with an empty entry window are dropped. Fewer than `min_folds_not_thin` folds →
+  **thin**. Fold dates are pinned in the test on a synthetic exchange calendar 2009-10-01 .. 2026-10-02 (the
+  expected H0b span), per horizon; the report prints each cell's real fold dates from the mini PC's data.
 - **Selection (per fold).** For each grid combination (invalid ones skipped and counted): simulate the train entries
   at `cost_per_leg` with the gate mask. Eligible if pooled train trades ≥ `min_train_trades` **and** the
   sector-scaled train fire rate ≥ the horizon floor. Winner = highest pooled train net expectancy; tie → more
@@ -536,15 +680,16 @@ gate mask. Sector scaling formula on a hand-counted case. Config loader refuses 
   `12 months − 214 days`).
 - `CellResult`: cell, final params, fold dates and winners, per-fold OOS stats, pooled OOS `TradeRecord`s with
   symbol (both costs), held-out stats, scaled fire rate, counts (tried / invalid / ineligible / no-winner folds),
-  `thin`, effective entry spans.
+  `thin`, effective entry spans, boundary-dropped and end-dropped trade counts.
 - Parallelism: signal series and gate masks are computed in a `ProcessPoolExecutor` (`--workers`), one work unit per
   (symbol, strategy, direction); simulation runs in-process.
 
 **Test first.** Planted edge on a small synthetic universe: the planted combination wins every fold and is final.
-Fold dates per horizon pinned for 2020-10-06 .. 2026-10-02 (Annual = 2). On a calendar with holidays, every OOS and
-train trade's exit date is before the next window's restriction and before `heldout_start`; no held-out trade is
-open at `data_end`. A combination below the floor never wins. Long-lookback combinations are eligible from fold 0
-(warm-up).
+Fold dates per horizon pinned on the synthetic 2009-10-01 .. 2026-10-02 calendar. On a calendar with holidays, every
+OOS and train trade's exit date is before its window's restriction and before `heldout_start`; no held-out trade is
+open at `data_end`; a symbol with a 10-day bar hole produces a crossing trade that is dropped and counted. A
+combination below the floor never wins. A 355-bar-lookback combination is eligible from fold 0 (warm-up), and no
+entry happens before a symbol's 400th bar.
 
 **Commit:** `feat(tuning): per-cell walk-forward with hold-scaled windows and a held-out year (STOCKS-HORIZON-T1)`
 
@@ -558,11 +703,14 @@ open at `data_end`. A combination below the floor never wins. Long-lookback comb
   `--workers` (default `os.cpu_count() - 1`), `--probe`, `--resume` (skips cells whose result exists for the same
   config + data hash), `--out` (summaries; default `docs/superpowers/measurements/<today>-horizon-tuning/`), `--data`
   (trade lists and per-cell JSON; default `backend/data/tuning_runs/<today>/`, gitignored). Prints the projected
-  runtime before starting. Runs on Kenneth's machine (bars only in his Postgres).
-- **Full-universe re-check** (T1-BASKET-SECTOR-SAMPLE-2026-10-08): each cell's final parameters get signal series
-  and gate masks on the whole universe; the report shows the measured fire rate over the walk-forward span and over
-  the held-out year beside the scaled one. The floor verdict uses the measured walk-forward rate.
-- **Adoption bar** per cell (ADR decision 5) at `cost_per_leg`:
+  runtime before starting. Runs on the mini PC (T1-MINI-PC-2026-10-09: the latest bars are only in its Postgres).
+- **Full-universe re-check** (T1-BASKET-SECTOR-SAMPLE-2026-10-08). Selection stays on the sample; evaluation is
+  repeated on the whole fire-rate universe: each fold's **winner** trades that fold's test entries on every universe
+  symbol (still out-of-sample — winners were chosen on sample train windows), and the **final** parameters trade the
+  held-out year on every universe symbol, both costs. The universe also gives the measured fire rate over the
+  walk-forward span and the held-out year. Cost is small: per cell, one signal series per distinct fold winner per
+  universe symbol. The report shows sample and universe numbers side by side.
+- **Adoption bar** per cell (ADR decision 5) at `cost_per_leg`, on the **full-universe** OOS and held-out numbers:
   1. OOS net expectancy CI lower bound > 0, **cluster bootstrap over symbols**: group pooled OOS trades by symbol;
      each resample draws `S` symbols with replacement (`S` = symbols with ≥ 1 OOS trade), concatenates all their
      trades, takes the trade-weighted mean; 2000 resamples, `numpy.random.default_rng(7)`; the lower bound is the
@@ -573,8 +721,10 @@ open at `data_end`. A combination below the floor never wins. Long-lookback comb
   5. Measured full-universe fire rate ≥ the horizon floor.
   `passes_bar` only if all five hold; failed criteria are named. Bearish cells are computed and shown, marked
   **blocked (P0B)** whatever the verdict. Nothing is written to `active:` (T2).
-- **Chance count.** `cells passed` and `expected by chance ≈ n_cells_evaluated × 0.025 × 0.5` (one-sided CI miss ×
-  an independent held-out coin flip under no edge), formula written out and labelled an approximation.
+- **Chance count.** Over the **bullish** cells only (bearish cells are blocked and cannot be adopted; they are
+  reported in their own table): `bullish cells passed` and `expected by chance ≈ n_bullish_cells_evaluated × 0.025 ×
+  0.5` (one-sided CI miss × an independent held-out coin flip under no edge), formula written out and labelled an
+  approximation.
 - **Report files.** `--out`: `tuning_report.md` (one row per cell: final params; OOS trades / symbols / net
   expectancy / CI at 0.05% and at 0.2%; held-out at both costs and its entry span; fire rate scaled, full
   walk-forward, full held-out; folds; thin; verdict; failed criteria) and `tuning_summary.json` (same, no trade
@@ -594,10 +744,13 @@ all files with every documented column.
 ## Verification (coordinator, after H10)
 
 - Backend full suite on Python 3.11; frontend typecheck + Jest.
-- `tune_horizons.py --probe` on Kenneth's machine; the projected runtime goes to him before the real run
-  (`STOCKS-HORIZON-TUNING-RUN`). Over 24 h at his core count → raise it (smaller `per_sector`, fewer cells per night
-  with `--resume`).
-- Live checks on Kenneth's machine: a live `mean_reversion_rsi` scan returns setups (H1); a Swing stock scan's
+- On the mini PC, in order: upgrade the live app's venv to `backtesting==0.6.6` (`pip install -r
+  backend/requirements.txt`); run H0b's first full ingestion and confirm `backfilled` / `seam_mismatch` /
+  `floor_reached`; re-run the bar-basis check over the whole span and bring flagged and seam-mismatch symbols to
+  Kenneth for the exclusion list; then `tune_horizons.py --probe`. The projected runtime goes to Kenneth before the
+  real run (`STOCKS-HORIZON-TUNING-RUN`). Over 24 h at its core count → raise it (smaller `per_sector`, fewer cells
+  per night with `--resume`).
+- Live checks on the mini PC: a live `mean_reversion_rsi` scan returns setups (H1); a Swing stock scan's
   Step 6 shows time exits (H2); the Step-4 panel shows `baseline` profiles and a Custom 60–185 scan says "using Annual
   settings" (H5); a stock position entered with hold 15 raises `TIME_STOP` on day 15 (H6).
 
