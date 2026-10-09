@@ -33,14 +33,14 @@ walk-forward windows scale with the hold), and Kenneth's answers in chat (record
   failed fetch shows "profile unavailable" and the backend applies the profile itself. This supersedes ADR 0001
   decision 3's "with a fallback" and follows `DOCC-3-THRESHOLD-STORES-REFUSE-2026-09-29`.
 
-**Hard dependency.** T1 depends on `STOCKS-HORIZON-P0`. P0B is built and its code round came back clean
-(2026-10-09, `codex/stocks-horizon-p0b` @ `cb16238e`) but is not merged. **No ticket is built until P0B is merged to
-the base branch.** H2 reads P0B's `StockScanRequest.hold_max_days` and `DEFAULT_HOLD_MAX`; H6 edits the stock sends
-P0B B7 changed. If P0B's merged names differ, the coordinator updates this plan before H2 starts.
+**Hard dependency.** T1 depends on `STOCKS-HORIZON-P0`. P0A and P0B are merged to `main` (P0B via PR #91 at
+`aaa7102c`, 2026-10-09), and `main` is merged into this branch. H2 reads P0B's `StockScanRequest.hold_max_days`
+(`app/schemas/stock_scan.py`) and `DEFAULT_HOLD_MAX` (`app/scoring/stock_scorer.py`; keys `Intraday`, `Swing`,
+`Position` only); H6 edits the stock sends P0B B7 changed. Both names exist on `main` as written here.
 
 **Plan audit status.** Round 1 (2026-10-08: 4 critical, 13 major, 10 minor) and round 2 (2026-10-09: 23 findings,
-8 gate-level) are fixed in this text; none were deferred. Next: round 3 with a fresh reviewer, then `/to-tickets`,
-then the build waits for P0B's merge. Work can continue on the mini PC from branch `claude/stocks-horizon-t1`.
+8 gate-level) are fixed in this text; none were deferred. Next: round 3 (the last of the plan stage's three) with a
+fresh reviewer, scoped to round 2's fixes, then tickets.
 
 **Not in T1** (other tasks): running the tuner on the mini PC's data (`STOCKS-HORIZON-TUNING-RUN`); the Adopt action,
 Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer re-tune and its 120-bar window
@@ -760,5 +760,6 @@ all files with every documented column.
 - Switching the live Step-6 gate to 0.05% per leg (T1-LIVE-COST-UNCHANGED-2026-10-08; T2).
 - The legacy Settings → Strategy Tuning WFO (no time exit, 3-year window, Sharpe ranking): left as is.
 - `TIME_STOP_APPROACHING` for stocks.
-- Longer history and delisted names (logged by STOCKS-PARAMS-PER-HORIZON-2026-10-05, not scheduled).
+- Delisted names (logged by STOCKS-PARAMS-PER-HORIZON-2026-10-05, not scheduled). Longer history for today's
+  constituents is now in scope as H0b.
 - The scorer's 120-bar window (T3). The live `current_price` vs close difference for `pullback_ema` (reported).
