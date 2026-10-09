@@ -656,8 +656,13 @@ async def _get_bars_locked(symbol: str, start: date, end: date) -> list[dict]:
                     return False
                 # Nothing past the caller's `end` (the heal-only `+1` day is request slack).
                 in_range = [b for b in new_bars if _bar_date(b) <= end]
-                stored_dates = await _store_bars(symbol, in_range, db)
-                await db.commit()
+                try:
+                    stored_dates = await _store_bars(symbol, in_range, db)
+                    await db.commit()
+                except Exception:
+                    # Discard earlier chunks before the provider chain retries this session.
+                    await db.rollback()
+                    raise
                 if stored_dates:
                     from app.services.bars_changed import notify_bars_changed
                     notify_bars_changed(symbol)

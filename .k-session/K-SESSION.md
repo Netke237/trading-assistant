@@ -4,7 +4,12 @@
 D1 plan audit and D2 synthetic/mocked build, code audit and PR; D3 live execution is reserved for the mini PC.
 
 ## Status
-D1 plan stage clean after two independent rounds; D2 code audit round 1 found one PostgreSQL bind-limit defect. Bounded statements fixed; 8 SQLite/PostgreSQL semantic tests and 228 focused/legacy tests passed. Draft PR #130 is open. Original fixes-only round 2 was interrupted by the usage limit before a report; fresh replacement history_code_audit_r2_resumed is completing the same scope. Code audit remains unclean.
+D1 plan stage clean after two independent rounds. D2 draft PR #130 is open.
+Fresh replacement completed interrupted code round 2: one fallback-transaction
+leak found. Per-provider rollback fix and real SQLite/PostgreSQL constraint
+failure regressions passed: 12 SQLite/PostgreSQL tests and 192 focused regressions.
+Frontend typecheck clean; disposable database resources removed. Final allowed code round 3
+next. Code audit remains unclean and merge approval is outstanding.
 
 ## Done
 - Read project state and coordinator/audit instructions; no initial state drift.
@@ -15,7 +20,7 @@ D1 plan stage clean after two independent rounds; D2 code audit round 1 found on
 - [x] Plan round 2 clean over the two fixes and interactions (fb19f2f3).
 - [x] Published tracking #123 and build tickets #124 to #128.
 - [x] Implement and verify #124 retention, #125 backfill, #126 refresh/evidence and #127 verification; ticket closure awaits final audit.
-- [ ] Run synthetic/mocked tests, fresh independent code audit, cap three code rounds.
+- [ ] Finish rollback regressions and fresh fixes-only code round 3; cap three code rounds.
 - [x] Publish draft PR #130.
 - [ ] Finalize audit record/PR and release handoff at the merge approval gate.
 

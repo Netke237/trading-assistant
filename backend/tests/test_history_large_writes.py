@@ -216,3 +216,45 @@ async def test_error_after_first_upsert_chunk_preserves_all_rows_metadata_and_ca
     for symbol in keys:
         assert stock_scan._get_backtest_cached(keys[symbol][0]) == f"{symbol} stale backtest"
         assert cc.get_cached(keys[symbol][1]) == {"confidence": 70}
+
+
+@pytest.mark.parametrize("fallback_available", [False, True])
+@pytest.mark.asyncio
+async def test_get_bars_rolls_back_rejected_provider_chunks_before_fallback(
+    database, monkeypatch, fallback_available
+):
+    engine, factory = database
+    keys = await _warm_caches()
+    confidence_rows = _confidence_rows()
+    generation = cc.generation()
+    backtests = dict(stock_scan._BACKTEST_CACHE)
+    rejected = _bars(factor=0.1, source="alpaca")[:600]
+    # A real NOT NULL violation in chunk two leaves chunk one pending on SQLite
+    # and aborts the transaction on PostgreSQL. Neither can enter the next attempt.
+    rejected[500]["volume"] = None
+    fallback = _bars(factor=0.2)[500:600] if fallback_available else []
+    monkeypatch.setattr(alpaca, "get_alpaca_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(alpaca, "fetch_daily_bars_single", AsyncMock(return_value=rejected))
+    monkeypatch.setattr(hs, "fetch_historical_candles", lambda *args: fallback)
+    monkeypatch.setattr(hs, "_yfinance_fetch", lambda *args: [])
+
+    bars = await hs.get_bars("TEST", START, DATES[599])
+    snapshot, state = await _snapshot(factory)
+    assert state is None
+    async with factory() as db:
+        persisted = await hs._read_bars("TEST", START, DATES[599], db)
+    assert persisted == bars
+    if fallback_available:
+        assert len(bars) == 100
+        assert [b["time"] for b in bars] == [d.isoformat() for d in DATES[500:600]]
+        assert {b["close"] for b in bars} == {20.0}
+        assert {row[7] for row in snapshot} == {"tiingo"}
+        assert stock_scan._get_backtest_cached(keys["TEST"][0]) is None
+        assert cc.get_cached(keys["TEST"][1]) is None
+    else:
+        assert bars == [] and snapshot == []
+        assert stock_scan._BACKTEST_CACHE == backtests
+        assert cc.generation() == generation and _confidence_rows() == confidence_rows
+        assert cc.get_cached(keys["TEST"][1]) == {"confidence": 70}
+    assert stock_scan._get_backtest_cached(keys["OTHER"][0]) == "OTHER stale backtest"
+    assert cc.get_cached(keys["OTHER"][1]) == {"confidence": 70}

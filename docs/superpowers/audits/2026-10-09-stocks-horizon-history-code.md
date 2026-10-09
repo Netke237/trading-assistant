@@ -42,3 +42,37 @@ container/socket volume removed. Further focused and legacy-store regressions:
   yfinance data; commission fixture passes a MagicMock to dataclasses.replace.
   These baseline test limitations are tracked in #129 and are not fixed in the HISTORY branch.
 - Temporary Alembic upgrade/downgrade preserved seeded daily bars. Frontend typecheck clean.
+
+
+## Code round 2 (continuous phase round 4)
+
+Reviewer: fresh independent `history_code_audit_r2_resumed`, applying both required
+skills and the numeric/persistence gate. The original `history_code_audit_r2`
+was interrupted by the usage limit before a report. This replacement completes
+that same unfinished round; no cap reset or extra completed round.
+
+Fixes-only scope: `058295dfa2338dfd4f9724e68245fc3b7c6927ee..c188487bc8a9d3f2d880f47d4dcc964da6f6a4d5`.
+Raw complete diff SHA-256: `d2367b42bec0d7bcb8a91484f3ee7517a05a203cbc45a855cdc1bc1be3e3ff64`.
+Reviewed the 500-row write fix, all 218 added test lines, associated records,
+and interactions with coherent writes, both refresh paths, legacy get_bars,
+provider retries, floor/seam metadata and cache notification.
+
+One gate finding: the legacy get_bars callback did not roll back after a later
+chunk failed. SQLite permitted a shorter fallback reply to commit the rejected
+provider's earlier chunks. Independent synthetic reproduction persisted/returned
+600 rows: first 500 Alpaca adjusted close 10, final 100 Tiingo adjusted close 20.
+The reviewer ran the added long-write tests: 4 passed, 4 PostgreSQL cases skipped
+(no disposable PostgreSQL URL supplied); Python 3.11.17, network disabled.
+
+Fix: roll back the provider attempt on any _store_bars/commit exception before
+rethrowing to the provider chain. Added real later-chunk NOT NULL failures with
+and without a usable fallback; verify returned/persisted prices, no abandoned
+rows and appropriate cache preservation/eviction on both database dialects.
+
+Fix verification: 12 long-write/fallback semantics passed on SQLite and disposable
+PostgreSQL 15.19, plus 192 focused HISTORY/legacy-reader regressions on Python
+3.11.17. Network disabled; mocked providers. Disposable PostgreSQL container and
+socket volume removed. Frontend typecheck and diff whitespace check clean.
+
+Outstanding: fresh fixes-only code round 3, the final allowed code-stage round.
+Code audit_clean remains false.
