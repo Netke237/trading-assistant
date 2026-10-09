@@ -37,6 +37,9 @@ walk-forward windows scale with the hold), and Kenneth's answers in chat (record
   `STOCKS-HORIZON-HISTORY` (plan `docs/superpowers/plans/2026-10-09-stocks-horizon-history-plan.md`, its own plan
   rounds), carrying round 3 finding 1 (adjustment basis at the seam); round 3 finding 2 (evidence-scope symbols in
   the adoption numbers) is fixed in this plan by his decision, without a further plan round. The code audit covers it.
+- **T1-H0A-SOURCES-2026-10-09.** H0a parses Wikipedia's S&P 500 table with BeautifulSoup (no new dependency),
+  takes NDX-only sectors from yfinance, defines the NDX list as the app's `universe_presets.NDX100`, and leaves the
+  sector heatmap and `SECTOR:` presets unchanged (logged). Decided after the H0a implementer reported the plan defect.
 - **T1-CUSTOM-NEAREST-HOLD-2026-10-09.** A Custom hold uses the parameters of the tuned horizon whose hold max is
   nearest to the Custom hold max; the card names it ("Custom: using Annual settings").
 - **T1-PROFILES-NO-FALLBACK-2026-10-09.** The frontend has no hardcoded copy of the profiles and no fallback: a
@@ -69,8 +72,11 @@ Unvalidated labels from tuned verdicts, the pooled per-cell gate (`T2`); scorer 
   RSI strategies move in H1 too, as do the legacy Settings tuner's results. Composite watches on the **intraday**
   path (`mean_reversion_vwap` on 15-min bars) keep their 120-bar window, so their anchored VWAP is unchanged. The
   scorer's `bars[-120:]` is not changed.
-- **H0a:** sectors are filled for about 300 S&P names that read `Unknown` today, so the sector heatmap, sector RS and
-  anything else reading `sector_for_symbol` see more names.
+- **H0a:** sectors are filled for about 300 S&P names that read `Unknown` today (and the NDX-only names), so
+  `sector_for_symbol`'s callers see them: the stock scan's sector context (`stock_scan._sector_context`) and the
+  tuner's strata (H8). The sector heatmap (`routers/sectors.py`) and the `SECTOR:` universe presets
+  (`universe_presets._load_sp500_by_sector`) read `sp500.csv` directly and are **unchanged** (T1-H0A-SOURCES-2026-10-09,
+  logged against main).
 - **H2: time exit.** Every daily-bar backtest closes a trade still open `hold_max_days` calendar days after entry, at
   the next bar's open. Step-6 win rates and expectancies move, **and so do `passes_gate` and the scan's
   backtest-gate keep/drop verdicts** — the candidate list changes. Intraday horizon and intraday strategies get no
@@ -177,21 +183,37 @@ NDX-only names have no sector anywhere.
 
 **Semantics.**
 
+Sources and parser per decision **T1-H0A-SOURCES-2026-10-09** (Kenneth, after the H0a implementer found that
+`pandas.read_html` needs `lxml`/`html5lib`, which `backend/requirements.txt` does not carry, and that the Wikipedia
+"Nasdaq-100" page has no constituents table with GICS sectors):
+
+- **Universe** = the S&P 500 rows of `sp500.csv` ∪ the app's own `universe_presets.NDX100` list (the list scans and
+  the tuner use), not a live Nasdaq-100 page.
 - New committed file `backend/app/data/sector_overrides.csv` (`symbol,sector,source,as_of`), canonical sector names
-  (`sector_names.NORMALIZE`). New script `backend/scripts/fill_sectors.py` builds it from the public GICS tables of
-  the Wikipedia pages "List of S&P 500 companies" and "Nasdaq-100" (`pandas.read_html`; GICS sector column), for every
-  S&P 500 ∪ NDX 100 symbol, mapping each GICS name through `NORMALIZE`. A name that maps to nothing canonical is an
-  error naming it (no silent `Unknown`). Ticker spellings (`BRK.B` vs `BRK-B`) are normalised the way
-  `update_sp500_liquidity._yf_key` / the CSV already do; unmatched symbols are listed in the script output.
+  (`sector_names.NORMALIZE`). New script `backend/scripts/fill_sectors.py` builds it:
+  - **S&P 500 names:** the GICS Sector column of the Wikipedia page "List of S&P 500 companies" (table
+    `id="constituents"`), parsed with **BeautifulSoup and the standard `html.parser`** (`beautifulsoup4` is already
+    installed; no new dependency, not `pandas.read_html`). `source` = `wikipedia-gics`. "Information Technology" maps
+    to the canonical `Technology` (add it to `NORMALIZE`).
+  - **NDX-only names** (in `NDX100`, not in the S&P table): the yfinance `.info` `sector`, the source
+    `update_sp500_liquidity.py` already uses, mapped through `NORMALIZE`. `source` = `yfinance`.
+  - A sector name that maps to nothing canonical is an error naming it (no silent `Unknown`). Ticker spellings
+    (`BRK.B` vs `BRK-B`) are normalised the way `update_sp500_liquidity._yf_key` / the CSV already do. A symbol
+    neither source can resolve is listed in the script output as unmatched, never written as `Unknown`.
 - `sector_for_symbol`: the `sp500.csv` sector when it is not `Unknown`, else `sector_overrides.csv`, else
-  `(None, None)`. The daily updater keeps writing `sp500.csv` as today; nothing it writes can erase an override.
-- The coordinator runs the script once (needs internet; either PC — no bar data involved), reviews the diff, commits
-  the CSV. Re-running later is a manual refresh.
+  `(None, None)`. The overrides are read inside the existing cached `_symbol_to_raw_sector` (no second `lru_cache`:
+  `tests/test_docc4_config_health.py` allowlists exactly that one). The daily updater keeps writing `sp500.csv` as
+  today; nothing it writes can erase an override. The only caller, `stock_scan._sector_context`, already shows a
+  `None` name as "Unknown".
+- The implementer runs the script once (needs internet; either PC — no bar data involved) and commits the CSV; the
+  coordinator reviews its diff. Re-running later is a manual refresh. The heatmap and the `SECTOR:` presets are not
+  changed (logged against main).
 
 **Test first.** `sector_for_symbol` prefers a known `sp500.csv` sector, falls back to the override, returns `None`
-for neither. The script's parser on a saved HTML fixture (a few rows incl. a `BRK.B`-style ticker and an unknown
-GICS name → error). After the real run: a test asserts `Unknown` covers 0 of the current S&P 500 ∪ NDX 100 symbols
-(minus any the script listed as unmatched, which the ticket report names).
+for neither. The script's Wikipedia parser on a saved HTML fixture (a few rows incl. a `BRK.B`-style ticker and an
+unknown GICS name → error); the NDX-only path with yfinance mocked (a mapped sector; a failure → unmatched). After the
+real run: a test asserts `Unknown` covers 0 of the S&P 500 rows of `sp500.csv` ∪ `universe_presets.NDX100` (minus
+any the script listed as unmatched, which the ticket report names).
 
 **Commit:** `feat(data): fill missing sectors from the public GICS lists (STOCKS-HORIZON-T1)`
 
