@@ -151,6 +151,83 @@ describe('TradeCard', () => {
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
   });
 
+  it('places the expanded score group directly between identity and Fundamental Health', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+    const group = toggle.closest('section')!;
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(group.previousElementSibling).toContainElement(screen.getByTestId('symbol-header'));
+    expect(group.nextElementSibling).toHaveTextContent('Fundamental Health');
+    expect(within(group).getAllByTestId('score-panel')).toHaveLength(2);
+    expect(screen.getAllByTestId('score-panel')).toHaveLength(2);
+    const panels = within(group).getAllByTestId('score-panel');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(panels[0]).not.toBeVisible();
+    expect(panels[1]).not.toBeVisible();
+    expect(localStorage.getItem('bamendjou:tradecard-scores-collapsed')).toBe('1');
+    fireEvent.click(toggle);
+    expect(within(group).getAllByTestId('score-panel')[0]).toBe(panels[0]);
+  });
+
+  it('keeps real stock and contract evidence independent and mounted across outer toggles', async () => {
+    const panelMock = ScoreCardPanel as jest.Mock;
+    const original = panelMock.getMockImplementation();
+    panelMock.mockImplementation(jest.requireActual('@/components/molecules/ScoreCardPanel').ScoreCardPanel);
+    const captured: TradeCardData = {
+      ...mockTradeCard,
+      stockExplanation: {
+        version: 1, symbol: 'AAPL', direction: 'Bullish', horizon: 'Swing',
+        scoring_mode: 'options', iv_basis: 'rank', evaluated_at: '2026-10-04T00:00:00Z',
+        score: 82, status: 'PASS', raw_status: 'PASS', unrounded_score: 82,
+        rounding: 'python_round_ties_to_even', pass_threshold: 70, caution_threshold: 50,
+        weights: {}, caps: [], gate_config: {}, components: {},
+      },
+    };
+    const before = JSON.stringify(captured);
+    const estimateCalls = (api.getFirstPassageEstimate as jest.Mock).mock.calls.length;
+    const planCalls = (api.getExitPlan as jest.Mock).mock.calls.length;
+    const view = render(<TradeCard data={captured} />);
+    try {
+      await act(async () => { await Promise.resolve(); });
+      const outer = screen.getByRole('button', { name: /Stock & contract scores/ });
+      const group = outer.closest('section')!;
+      const stock = within(group).getByRole('button', { name: /Captured stock scoring evidence/ });
+      const contract = within(group).getByRole('button', { name: /Captured contract scoring evidence/ });
+      expect(outer).toHaveAttribute('aria-expanded', 'true');
+      expect(stock).toHaveAttribute('aria-expanded', 'false');
+      expect(contract).toHaveAttribute('aria-expanded', 'false');
+      const evidence = within(group).getByText(/Captured AAPL evidence/);
+      expect(evidence).not.toBeVisible();
+      fireEvent.click(stock);
+      expect(evidence).toBeVisible();
+      expect(contract).toHaveAttribute('aria-expanded', 'false');
+      const summary = within(group).getByText('Effective gate configuration and weights');
+      fireEvent.click(summary);
+      const details = summary.closest('details')!;
+      expect(details.open).toBe(true);
+      fireEvent.click(outer);
+      expect(evidence).not.toBeVisible();
+      fireEvent.click(outer);
+      expect(within(group).getByText(/Captured AAPL evidence/)).toBe(evidence);
+      expect(stock).toHaveAttribute('aria-expanded', 'true');
+      expect(details.open).toBe(true);
+      fireEvent.click(contract);
+      fireEvent.click(stock);
+      expect(contract).toHaveAttribute('aria-expanded', 'true');
+      expect(stock).toHaveAttribute('aria-expanded', 'false');
+      expect(localStorage.getItem('bamendjou:tradecard:stock:scoring-evidence:collapsed')).toBe('1');
+      expect(localStorage.getItem('bamendjou:tradecard:contract:scoring-evidence:collapsed')).toBe('0');
+      expect(within(group).getAllByRole('progressbar')).toHaveLength(10);
+      expect(JSON.stringify(captured)).toBe(before);
+      expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(estimateCalls);
+      expect(api.getExitPlan).toHaveBeenCalledTimes(planCalls);
+    } finally {
+      view.unmount();
+      panelMock.mockImplementation(original);
+    }
+  });
+
   it('renders contract details when provided', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Contract Details')).toBeInTheDocument();
@@ -1884,7 +1961,7 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
     expect(await screen.findByText(/Risk-derived size: 25 contracts/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: '$' }));
     const input = screen.getByLabelText('Max loss override value');
     fireEvent.change(input, { target: { value: '1500' } });
@@ -1910,7 +1987,7 @@ describe('TradeCard', () => {
       <TradeCard data={mockTradeCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: '$' }));
     fireEvent.change(screen.getByLabelText('Max loss override value'), { target: { value: '9999' } });
     // Deliberately do NOT click Apply — switch candidates mid-edit instead.
@@ -1919,13 +1996,13 @@ describe('TradeCard', () => {
     rerender(<TradeCard data={nextCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />);
 
     // The editor remounted for the new candidate — back to the closed
-    // "Set override" state, not still showing the $9999 draft mid-edit.
-    expect(screen.getByRole('button', { name: /set override/i })).toBeInTheDocument();
+    // "Set trade loss budget" state, not still showing the $9999 draft mid-edit.
+    expect(screen.getByRole('button', { name: /set trade loss budget/i })).toBeInTheDocument();
     expect(screen.queryByLabelText('Max loss override value')).not.toBeInTheDocument();
 
     // Opening and applying fresh on the new candidate must not reuse 9999 —
     // a fresh editor's default draft (0, percent mode) applies instead.
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply max loss override' }));
     expect(onMaxLossOverrideChange).toHaveBeenLastCalledWith({ mode: 'percent', value: 0 });
   });

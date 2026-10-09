@@ -396,10 +396,187 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     anchor.remove();
   });
 
-  it('leaves lastRunMethod’s display fallback alone (§9.4)', () => {
+  it('shows the selected ladder without claiming a default fallback', () => {
     // G adds a pick ON TOP OF the fallback; it does not delete it. The fallback
     // is what a trader sees before they have picked, and it must keep working.
     render(<TradeCard data={card} initialMethodPick={pick()} />);
-    expect(screen.getByText(/No method explicitly run — showing Fixed % Ladder Plan/)).toBeInTheDocument();
+    expect(screen.getByText('Selected method: Fixed % Ladder Plan')).toBeInTheDocument();
+  });
+});
+
+
+// Scope assertions to the recommendation so calculator cards cannot mask
+// unrelated/stale targets in the selected-method summary.
+const recommendation = () => within(screen.getByRole('region', { name: 'Final Recommendation' }).lastElementChild as HTMLElement);
+const arithmeticPlan: NonNullable<TradeCardData['exit']['exitPlan']> = {
+  stop: { price: 178, source: 'atr_widened', contractPrice: 1.2, rrModel: 'Heston repriced',
+    structuralSource: null, structuralConfidence: null, structuralPrice: null,
+    atrFloorPrice: 178, distanceDollar: null },
+  targets: [{ rrRatio: 2, arithmeticPrice: 210.5, price: 210.5, tpSource: 'arithmetic',
+    structuralPrice: null, contractPrice: 5, rrModel: 'Heston repriced', probability: 0.4,
+    expectedDays: 9, qualityGood: true, qualityReasons: [], distanceDollar: null, toleranceDollar: 1 }],
+  atr: 4, computedAt: '2026-01-01T00:00:00.000Z',
+};
+const estimate = {
+  targets: [{ pct: 0.2, stockPrice: 197.5, optionPrice: 6.24, probability: 0.4, expectedDays: 9 }],
+  invalidation: { probability: 0.3, expectedDays: 5 },
+  race: {
+    premiumStopPrice: 1.5, stockStopPrice: 179.64, nPaths: 2000,
+    premiumStopPct: 0.4, premiumUsed: 2.5, ivSolved: true,
+    outcomes: [{ targetPct: 0.2, targetOptionPrice: 7.25, pTargetFirst: 0.25,
+      pStockStopFirst: 0.3, pPremiumStopFirst: 0.2, pNeither: 0.25,
+      daysTarget: 9, daysStockStop: 12, daysPremiumStop: 8,
+      daysAnyPathReachedStop: 5, weightTargetFirst: 0.25, weightStockStopFirst: 0.3,
+      weightPremiumStopFirst: 0.2, weightNeither: 0.25, terminalMean: 2.5,
+      rewardDollar: 4.75, repriceDaysStockStop: 5, stopRepricedValue: 1.2,
+      riskStockStop: 1.3, riskPremiumStop: 1, rrPremiumStop: 0.5,
+      edgePerContract: 120, rrStockStop: 1.8 }],
+  },
+};
+const runEstimate = async (race = true) => {
+  (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue({ ...estimate, race: race ? estimate.race : null });
+  fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+  await waitFor(() => expect(radio('Monte Carlo')).toBeEnabled());
+};
+
+describe('TC-UI-02 selected recommendation', () => {
+  it('keeps the selector alongside the heading and shows initial ladder defaults with no pick', () => {
+    render(<TradeCard data={card} />);
+    const heading = screen.getByText('Final Recommendation');
+    expect(within(heading.parentElement!).getByRole('radio', { name: 'Ladder' })).toBeVisible();
+    expect(recommendation().getByText(/No method explicitly run/)).toBeVisible();
+    expect(recommendation().getByText('$200.02')).toBeVisible();
+  });
+
+  it.each(['arithmetic', 'monte_carlo'] as const)('selected ladder overrides latest %s without computing or editing', (latest) => {
+    const data = { ...card, exit: { ...card.exit,
+      ...(latest === 'arithmetic' ? { exitPlan: arithmeticPlan } : {
+        firstPassage: { ...estimate, computedAt: '2026-02-01T00:00:00.000Z' },
+      }),
+    } };
+    const onEditsChange = jest.fn();
+    const onMethodPickChange = jest.fn();
+    render(<TradeCard data={data} onEditsChange={onEditsChange} onMethodPickChange={onMethodPickChange} />);
+    fireEvent.click(radio('Ladder'));
+    expect(recommendation().getByText('$200.02')).toBeVisible();
+    expect(recommendation().queryByText(/computed via:/)).not.toBeInTheDocument();
+    expect(onMethodPickChange).toHaveBeenCalledWith(expect.objectContaining({ method: 'ladder' }));
+    expect(api.getExitPlan).not.toHaveBeenCalled();
+    expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
+    expect(onEditsChange).not.toHaveBeenCalled();
+  });
+
+  it('selected arithmetic overrides latest fresh MC; choosing does not compute or edit', async () => {
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={{ ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } }} onEditsChange={onEditsChange} />);
+    await runEstimate();
+    expect(recommendation().getByText(/computed via: Monte Carlo/)).toBeVisible();
+    onEditsChange.mockClear();
+    fireEvent.click(radio('Arithmetic'));
+    expect(recommendation().getByText(/computed via: Arithmetic/)).toBeVisible();
+    expect(recommendation().getByText('$210.50 (40%)')).toBeVisible();
+    expect(recommendation().queryByText(/Armed stop/)).not.toBeInTheDocument();
+    expect(recommendation().queryByText(/T20%/)).not.toBeInTheDocument();
+    expect(api.getExitPlan).not.toHaveBeenCalled();
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(1);
+    expect(onEditsChange).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])('selected MC shows independent targets only (race present: %s)', async (race) => {
+    render(<TradeCard data={card} />);
+    await runEstimate(race);
+    fireEvent.click(radio('Monte Carlo'));
+    expect(recommendation().getByText('$6.24 (40%)')).toBeVisible();
+    expect(recommendation().queryByText(/Armed stop|edge|target first/)).not.toBeInTheDocument();
+    expect(recommendation().queryByText(/7.25/)).not.toBeInTheDocument();
+  });
+
+  it('selected race shows its own premiums, exclusive probability, armed stop and edge only', async () => {
+    render(<TradeCard data={card} />);
+    await runEstimate();
+    fireEvent.click(radio('Barrier Race'));
+    expect(recommendation().getByText(/computed via: Barrier Race/)).toBeVisible();
+    expect(recommendation().getByText(/\$7.25 option \(25% target first\)/)).toBeVisible();
+    expect(recommendation().getByText(/\$1.50 option \/ \$179.64 stock/)).toBeVisible();
+    expect(recommendation().queryByText(/6.24|40%|computed via: Monte Carlo/)).not.toBeInTheDocument();
+  });
+
+  it.each(['arithmetic', 'monte_carlo', 'barrier_race'] as const)('missing selected %s clears persistence and retains a prompt instead of unrelated defaults', async (method) => {
+    const onMethodPickChange = jest.fn();
+    const data = method === 'arithmetic' ? card : { ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } };
+    render(<TradeCard data={data} initialMethodPick={pick({ method })} onMethodPickChange={onMethodPickChange} />);
+    await waitFor(() => expect(onMethodPickChange).toHaveBeenCalledWith(null));
+    expect(recommendation().getByText(/Selected method results unavailable/)).toBeVisible();
+    expect(recommendation().queryByText(/computed via:|No method explicitly run/)).not.toBeInTheDocument();
+    fireEvent.click(radio('Ladder'));
+    expect(recommendation().getByText('$200.02')).toBeVisible();
+  });
+
+  it.each(['monte_carlo', 'barrier_race'] as const)('cached stale %s pick shows a prompt even after rerun until deliberate selection', async (method) => {
+    const data = { ...card, exit: { ...card.exit, exitPlan: arithmeticPlan,
+      firstPassage: { ...estimate, computedAt: '2026-02-01T00:00:00.000Z' } } };
+    render(<TradeCard data={data} initialMethodPick={pick({ method })} />);
+    expect(recommendation().getByText(/Selected method results unavailable/)).toBeVisible();
+    await runEstimate();
+    expect(recommendation().getByText(/Selected method results unavailable/)).toBeVisible();
+    expect(recommendation().queryByText(/computed via:/)).not.toBeInTheDocument();
+    fireEvent.click(radio(method === 'monte_carlo' ? 'Monte Carlo' : 'Barrier Race'));
+    expect(recommendation().queryByText(/Selected method results unavailable/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['monte_carlo', 'Premium stop', '0.90'],
+    ['barrier_race', 'Premium stop', '0.90'],
+    ['monte_carlo', 'Stock stop', '170'],
+    ['barrier_race', 'Stock stop', '170'],
+  ] as const)('moving %s’s %s preserves MC targets but invalidates a selected race', async (method, field, value) => {
+    const onMethodPickChange = jest.fn();
+    render(<TradeCard data={card} onMethodPickChange={onMethodPickChange} />);
+    await runEstimate();
+    fireEvent.click(radio(method === 'monte_carlo' ? 'Monte Carlo' : 'Barrier Race'));
+    fireEvent.click(radio('Premium stop'));
+    onMethodPickChange.mockClear();
+    if (field === 'Stock stop') {
+      // The race used the structural stop, so move that actual barrier.
+      // Editing the separate invalidation field must not replace its basis.
+      (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+        available: true, price: Number(value), source: 'swing_low', confidence: 60, distancePct: 8.6,
+      });
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+      await waitFor(() => expect(screen.getByText(/Barriers changed/)).toBeVisible());
+    } else {
+      fireEvent.click(screen.getByLabelText(`Edit ${field}`));
+      const input = screen.getByLabelText(`Edit ${field}`);
+      fireEvent.change(input, { target: { value } });
+      fireEvent.blur(input);
+    }
+    if (method === 'barrier_race') {
+      await waitFor(() => expect(onMethodPickChange).toHaveBeenCalledWith(null));
+      expect(recommendation().getByText(/Selected method results unavailable/)).toBeVisible();
+      expect(recommendation().queryByText(/7.25|Armed stop|6.24/)).not.toBeInTheDocument();
+    } else {
+      expect(onMethodPickChange).not.toHaveBeenCalledWith(null);
+      expect(recommendation().getByText('$6.24 (40%)')).toBeVisible();
+      expect(radio('Premium stop')).toHaveAttribute('aria-checked', 'true');
+    }
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(1);
+  });
+
+  it('no selection preserves the latest arithmetic then MC with accompanying race fallback', async () => {
+    render(<TradeCard data={{ ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } }} />);
+    expect(recommendation().getByText(/computed via: Arithmetic/)).toBeVisible();
+    await runEstimate();
+    expect(recommendation().getByText(/computed via: Monte Carlo/)).toBeVisible();
+    expect(recommendation().getByText('$6.24 (40%)')).toBeVisible();
+    expect(recommendation().getByText('Armed stop (whichever fires first)')).toBeVisible();
+  });
+
+  it('candidate and scan resets discard invalidation memory and restore that card’s no-pick fallback', () => {
+    const { rerender } = render(<TradeCard data={card} initialMethodPick={pick({ method: 'arithmetic' })} />);
+    expect(recommendation().getByText(/Selected method results unavailable/)).toBeVisible();
+    rerender(<TradeCard data={card} resetKey={1} />);
+    expect(recommendation().getByText(/No method explicitly run/)).toBeVisible();
+    rerender(<TradeCard data={{ ...card, contract: 'AAPL 195C 05/15', exit: { ...card.exit, exitPlan: arithmeticPlan } }} />);
+    expect(recommendation().getByText(/computed via: Arithmetic/)).toBeVisible();
   });
 });

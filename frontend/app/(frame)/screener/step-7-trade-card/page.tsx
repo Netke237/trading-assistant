@@ -220,9 +220,9 @@ interface ToastState {
 }
 
 export default function Step7Page() {
-  // The controlled method selector is portalled here; AutoTradeArm retains its
+  // The controlled method selector renders inline in TradeCard's Final
+  // Recommendation (no decisionTarget is passed); AutoTradeArm retains its
   // original page ownership/predicate even while an override plan is pending.
-  const [decisionTarget, setDecisionTarget] = useState<HTMLDivElement | null>(null);
   const [cards, setCards]         = useState<TradeCardData[]>([]);
   const [active, setActive]       = useState<string>('');
   const [basket, setBasket]       = useState<string[]>([]);
@@ -1511,7 +1511,6 @@ export default function Step7Page() {
           ) : (
             <TradeCard
               showMarketSentiment={false}
-              decisionTarget={decisionTarget}
               onRrStaleChange={onRrStaleChange}
               data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}
@@ -1588,7 +1587,6 @@ export default function Step7Page() {
       {effectiveCard && (
         <div className={paperStyles.paperSection}>
           <Text size={14} weight={600}>Decision and execution</Text>
-          <div ref={setDecisionTarget} className={paperStyles.decisionAnchor} />
           <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
           {selectedBroker && (
             <>

@@ -23,6 +23,8 @@ interface CollapsibleSectionProps {
   /** Colon-form localStorage key, e.g. 'bamendjou:tradecard-ladder-collapsed'. */
   storageKey: string;
   defaultCollapsed?: boolean;
+  /** Keep child state alive in hidden DOM while collapsed; legacy callers unmount. */
+  keepMounted?: boolean;
   className?: string;
   children: React.ReactNode;
 }
@@ -31,6 +33,7 @@ export function CollapsibleSection({
   title,
   storageKey,
   defaultCollapsed = false,
+  keepMounted = false,
   className,
   children,
 }: CollapsibleSectionProps) {
@@ -75,7 +78,9 @@ export function CollapsibleSection({
         <Text size={14} weight={600}>{title}</Text>
         <Text size={12} tone="dim">{collapsed ? '▸' : '▾'}</Text>
       </button>
-      {!collapsed && <div className={styles.body}>{children}</div>}
+      {keepMounted
+        ? <div hidden={collapsed}><div className={styles.body}>{children}</div></div>
+        : !collapsed && <div className={styles.body}>{children}</div>}
     </section>
   );
 }
