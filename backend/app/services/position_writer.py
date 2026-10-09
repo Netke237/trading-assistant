@@ -731,6 +731,8 @@ async def create_position(
             picked_row_option_price=body.pickedRowOptionPrice,
             picked_stop_basis=body.pickedStopBasis,
             picked_at=body.pickedAt,
+            # STOCKS-HORIZON-T1 H6 -- the scan's hold; NULL = no time stop.
+            hold_max_days=body.holdMaxDays,
             active_tp_method=active_tp_method,
             resolved_tp_price=resolved_tp_price,
             # Stamped ONLY when a price was actually seeded. The drawer's writer

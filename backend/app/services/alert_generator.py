@@ -401,6 +401,44 @@ async def generate_alerts(
                     direction=pos.direction,
                     contract=pos.contract,
                 ))
+        elif getattr(pos, "hold_max_days", None) is not None:
+            # STOCKS-HORIZON-T1 H6 -- a stock position held for its scan's hold.
+            # End-of-day rule, the same one the backtest's time exit uses: days
+            # held >= hold_max_days. Both dates are the server's local date, as
+            # days_to_expiry above uses date.today(). No automatic close.
+            try:
+                entered = date.fromisoformat(str(pos.entry_date)[:10])
+            except (TypeError, ValueError):
+                entered = None
+            if entered is not None:
+                days_held = (date.today() - entered).days
+                hold = pos.hold_max_days
+                if days_held >= hold and not _muted("TIME_STOP"):
+                    counter += 1
+                    log_event("alert_fired", pos.rec_id, {
+                        "symbol": symbol,
+                        "alertType": "TIME_STOP",
+                        "daysHeld": days_held,
+                        "holdMaxDays": hold,
+                        "direction": pos.direction,
+                    })
+                    await log_position_alert(
+                        db, rec_id=pos.rec_id, symbol=symbol, alert_type="TIME_STOP",
+                        source="backend", reference_value=days_held,
+                        reference_kind="days", direction=pos.direction, contract=pos.contract,
+                    )
+                    alerts.append(AlertItem(
+                        id=f"a{counter}",
+                        kind="Action",
+                        symbol=symbol,
+                        reason=f"Time stop — {symbol} held {days_held}d (hold {hold}d)",
+                        timestamp=now_iso,
+                        recId=pos.rec_id,
+                        alertType="TIME_STOP",
+                        referenceValue=float(days_held),
+                        direction=pos.direction,
+                        contract=pos.contract,
+                    ))
 
         pos.alert_state = alert_state
 
