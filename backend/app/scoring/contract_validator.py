@@ -45,6 +45,12 @@ class ContractScoreCard:
     )
     detail: dict = field(default_factory=dict)
     explanation: dict | None = None
+    # NO-LIVE-QUOTE (plan 3b): set when the graded row's quote was not live
+    # (contract["quoteLive"] is False), with the row's quoteState
+    # ('one_sided' | 'session_closed' | 'stale'). A row with no quoteLive key
+    # (fixtures, hand-built dicts) reads as live and leaves both at default.
+    no_live_quote: bool = False
+    quote_state: str | None = None
 
 
 @lru_cache(maxsize=1)
@@ -476,6 +482,8 @@ def validate_contract(
     contract: dict,
     stock_score: int,
     overrides: dict | None = None,
+    *,
+    quote_mode: Literal["reject", "label"] = "reject",
 ) -> ContractScoreCard:
     """
     Validate and score an option contract.
@@ -487,6 +495,18 @@ def validate_contract(
                      (matches the stock `pass` bar in scoring_rules.yaml).
         overrides:   Optional dict of hard-reject and soft-rank overrides; the
                      keys read are _CONTRACT_OVERRIDES' (others are ignored).
+        quote_mode:  What a row whose quote is not live does (NO-LIVE-QUOTE,
+                     plan 3b). The rule fires only when contract["quoteLive"]
+                     is False; a missing key reads as live.
+                     "reject" (the default, so a new caller is safe): the row
+                     is REJECT with reject_reasons exactly ["no_live_quote"];
+                     no other hard rule is evaluated for it. The soft scores
+                     are still computed so the breakdown renders.
+                     "label" (Step 6 / the Watchlist refresh): the row is
+                     graded exactly as a live one, then capped at CAUTION and
+                     flagged ("no_live_quote" soft flag, card.no_live_quote,
+                     card.quote_state). A one_sided row still hard-rejects as
+                     spread_too_wide there, from its own numbers.
 
     Returns:
         ContractScoreCard with score, status, hard-reject reasons, soft flags,
@@ -497,9 +517,21 @@ def validate_contract(
         cfg[_CONTRACT_OVERRIDES[key][0]][key] = val
     contract_id = _contract_id(contract)
 
-    reject_reasons = _hard_reject_reasons(contract, cfg)
-    if stock_score < cfg["hard_reject"]["min_stock_score"]:
-        reject_reasons.append("stock_score_below_threshold")
+    if quote_mode not in ("reject", "label"):
+        raise ValueError(f"quote_mode must be 'reject' or 'label', not {quote_mode!r}")
+    # NO-LIVE-QUOTE: `is False`, not falsiness -- an absent key is live.
+    no_live_quote = contract.get("quoteLive") is False
+    quote_state = contract.get("quoteState") if no_live_quote else None
+    quote_rejected = no_live_quote and quote_mode == "reject"
+
+    if quote_rejected:
+        # Short-circuit: the row's numbers are not a live market, so no other
+        # hard rule is judged on them (and none accumulates beside this one).
+        reject_reasons = ["no_live_quote"]
+    else:
+        reject_reasons = _hard_reject_reasons(contract, cfg)
+        if stock_score < cfg["hard_reject"]["min_stock_score"]:
+            reject_reasons.append("stock_score_below_threshold")
 
     liq_score, oi_score_val, liq_flags = _score_liquidity(contract, cfg)
     spread_score, spread_pct, spread_flags = _score_spread(contract, cfg)
@@ -547,8 +579,13 @@ def validate_contract(
     soft_flags = liq_flags + spread_flags + delta_flags + dte_flags + iv_flags
     soft_fail_count = len(soft_flags)
 
-    if soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
+    if not quote_rejected and soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
         reject_reasons.append("too_many_soft_failures")
+
+    if no_live_quote and quote_mode == "label":
+        # Added AFTER soft_fail_count: the label grades the row exactly as a
+        # live one, so it must not count toward too_many_soft_failures.
+        soft_flags = soft_flags + ["no_live_quote"]
 
     hr = cfg["hard_reject"]
     volume = contract.get("volume") or 0
@@ -564,7 +601,16 @@ def validate_contract(
 
     blockers = []
     for r in reject_reasons:
-        if r == "volume_too_low":
+        if r == "no_live_quote":
+            blockers.append({
+                "code": "no_live_quote",
+                "label": "No live quote",
+                "metric": "quote_state",
+                "observed": quote_state,
+                "threshold": "live",
+                "operator": "!=",
+            })
+        elif r == "volume_too_low":
             blockers.append({
                 "code": "volume_too_low",
                 "label": "Volume too low",
@@ -791,6 +837,10 @@ def validate_contract(
             final_status = "CAUTION"
         else:
             final_status = "REJECT"
+        # NO-LIVE-QUOTE label mode: a row priced off a quote that is not live
+        # never reads PASS. The score is left as graded.
+        if no_live_quote and final_status == "PASS":
+            final_status = "CAUTION"
 
     explanation = {
         "version": 1,
@@ -847,6 +897,8 @@ def validate_contract(
             ),
             detail=detail,
             explanation=explanation,
+            no_live_quote=no_live_quote,
+            quote_state=quote_state,
         )
 
     return ContractScoreCard(
@@ -869,4 +921,6 @@ def validate_contract(
         ),
         detail=detail,
         explanation=explanation,
+        no_live_quote=no_live_quote,
+        quote_state=quote_state,
     )

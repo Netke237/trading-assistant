@@ -56,6 +56,12 @@ class ContractQuoteResponse(BaseModel):
     iv: Optional[float] = None
     spread: float
     volume: int
+    # NO-LIVE-QUOTE (plan 3c), from the chain row: quoteLive True only for a
+    # two-sided quote, in session, no older than quote_liveness.max_age_minutes;
+    # quoteState 'live' | 'one_sided' | 'session_closed' | 'stale'. None means
+    # the row carried no state, which only a fixture produces.
+    quoteLive: Optional[bool] = None
+    quoteState: Optional[str] = None
 
 
 class StockQuoteResponse(BaseModel):
@@ -296,8 +302,12 @@ async def get_contracts(
             if ask > max_price:
                 continue
 
-        # 5. Score the contract
-        score_card = validate_contract(augmented, stock_score, overrides=contract_overrides)
+        # 5. Score the contract. Label mode (NO-LIVE-QUOTE plan 3c): a row
+        # whose quote is not live is graded as a live one, capped at CAUTION
+        # and flagged, so an off-hours Step 6 / Watchlist still lists it.
+        score_card = validate_contract(
+            augmented, stock_score, overrides=contract_overrides, quote_mode="label",
+        )
 
         # 6. Build OptionContract response, merging scored fields
         results.append(OptionContract(
@@ -340,6 +350,8 @@ async def get_contracts(
                 spreadDetail=   _safe_detail(SpreadDetail,    score_card.detail.get("spread")),
             ),
             explanation=ContractExplanation.model_validate(score_card.explanation) if score_card.explanation else None,
+            noLiveQuote=score_card.no_live_quote,
+            quoteState=score_card.quote_state,
         ))
 
     # 7. Sort by score descending (stable — preserves input order for ties)
@@ -387,6 +399,8 @@ async def get_option_quote(
         iv=opt_float(quote.get("iv")),
         spread=float(quote["spread"]),
         volume=int(quote["volume"]),
+        quoteLive=quote.get("quoteLive"),
+        quoteState=quote.get("quoteState"),
     )
 
 
@@ -436,6 +450,10 @@ class RecomputePlanRequest(BaseModel):
     # body for why this is echoed rather than re-derived. None = the card has
     # none, and the flat percentage applies.
     final_stop: FinalStopOut | None = None
+    # NO-LIVE-QUOTE (plan 3e): False when the premium/spread above did not come
+    # from a live quote (the entry plan then reads CAUTION, "no live quote --
+    # entry priced off the last close"). None = not stated: today's behaviour.
+    quote_live: bool | None = None
 
 
 class RecomputePlanResponse(BaseModel):
@@ -551,6 +569,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         target_price=_target,
         target_source=_source or "arithmetic",
         stop_cost_fraction=_cost_fraction,
+        quote_live=req.quote_live,
     )
 
     return RecomputePlanResponse(

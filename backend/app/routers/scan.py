@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import concurrent.futures
 from datetime import datetime, timezone
 
@@ -213,6 +214,14 @@ _SHORTLIST_STATUS_ORDER: dict[str, int] = {"PASS": 0, "CAUTION": 1}
 # Reason prefix for candidates trimmed by the shortlist cap. The funnel's
 # `_is_shortlist` bucket and the frontend's scanLogTotals both match on it.
 _SHORTLIST_REASON_PREFIX = "Shortlist cap:"
+# NO-LIVE-QUOTE (plan 3f): the per-name reason _process_symbol writes when
+# EVERY contract of the name was rejected for no_live_quote and for nothing
+# else -- the "all contracts rejected" counter below names one reason with its
+# count and no "; best contract score" tail (that tail needs a contract with no
+# reject reason). validate_contract's reject mode short-circuits a non-live row
+# to exactly ["no_live_quote"], so a mixed chain never matches. Counted into
+# ScanResult.noLiveQuoteNames, which the scheduled-scan notice reads.
+_NO_LIVE_QUOTE_ONLY_REASON = re.compile(r"contracts rejected: no_live_quote\(\d+\)")
 
 
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
@@ -2137,6 +2146,11 @@ async def _execute_scan_core(
         failed_shortlist=original_count - len(candidates),
         candidates=len(candidates),
     )
+    # NO-LIVE-QUOTE (plan 3f): names whose every contract had no live quote.
+    # Not a funnel bucket -- those names stay under failed_contracts.
+    _no_live_quote_names = sum(
+        1 for r in rejected if _NO_LIVE_QUOTE_ONLY_REASON.fullmatch(r.reason)
+    )
     _log.info(
         "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d direction_unmeasured=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
         scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
@@ -2201,6 +2215,7 @@ async def _execute_scan_core(
         contract_rules=_contract_rules,
         rr_overrides=_rr_overrides,
         request_context=_request_context,
+        noLiveQuoteNames=_no_live_quote_names,
     )
     return result
 

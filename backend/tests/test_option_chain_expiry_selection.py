@@ -217,20 +217,26 @@ def test_effective_dte_limits_are_the_overrides_else_the_yaml():
 class _FakeTradier:
     """Answers the expirations and chains calls; records the chain expiry asked for."""
 
-    def __init__(self, dates):
+    def __init__(self, dates, quote_stamp_ms=None):
         self.dates = dates
         self.chain_expiries = []
+        # NO-LIVE-QUOTE: bid_date/ask_date for the row, so a test that grades
+        # it can make the quote live (no stamps reads `stale`).
+        self.quote_stamp_ms = quote_stamp_ms
 
     def get(self, url, headers=None, params=None, **_):
         if url.endswith("/expirations"):
             body = {"expirations": {"date": self.dates}}
         else:
             self.chain_expiries.append(params["expiration"])
-            body = {"options": {"option": [{
+            row = {
                 "symbol": "XOM", "option_type": "call", "strike": 110.0,
                 "bid": 2.0, "ask": 2.2, "last": 2.1, "volume": 500, "open_interest": 900,
                 "greeks": {"delta": 0.45, "theta": -0.04, "mid_iv": 0.3},
-            }]}}
+            }
+            if self.quote_stamp_ms is not None:
+                row["bid_date"] = row["ask_date"] = self.quote_stamp_ms
+            body = {"options": {"option": [row]}}
 
         class _R:
             def raise_for_status(self):
@@ -252,11 +258,20 @@ def _patch_tradier(monkeypatch):
 
 
 def test_async_fetch_with_a_45_day_min_dte_returns_contracts_the_validator_accepts(monkeypatch):
+    import app.services.market_session as _session
+
     today = date.today()
     dates = _dates(today, 24, 52, 80)
     _patch_tradier(monkeypatch)
     monkeypatch.setitem(market._expirations_cache, "XOM", (dates, today.isoformat()))
-    fake = _AsyncFakeTradier(dates)
+    # NO-LIVE-QUOTE NLQ-2: the validator now rejects a row whose quote is not
+    # live WITHOUT judging its DTE, which would make the DTE assertion below
+    # pass vacuously. So the row is made live (in session, a 5-second-old
+    # two-sided quote) and the test asserts it is.
+    _now_s = 1_791_216_001.0
+    monkeypatch.setattr(_session, "_market_session_open", lambda *a, **k: True)
+    monkeypatch.setattr(market, "_now", lambda: _now_s)
+    fake = _AsyncFakeTradier(dates, quote_stamp_ms=int((_now_s - 5) * 1000))
 
     rules = {"min_dte": 45}
     chain = asyncio.run(fetch_option_chain_async(
@@ -264,7 +279,9 @@ def test_async_fetch_with_a_45_day_min_dte_returns_contracts_the_validator_accep
 
     assert fake.chain_expiries == [_dates(today, 52)[0]]
     assert chain, "the fetch returned no contracts"
+    assert chain[0]["quoteLive"] is True, chain[0]
     card = validate_contract({**chain[0], "symbol": "XOM"}, 80, overrides=rules)
+    assert "no_live_quote" not in card.reject_reasons
     assert not {"dte_too_short", "dte_too_long"} & set(card.reject_reasons), card.reject_reasons
 
 
