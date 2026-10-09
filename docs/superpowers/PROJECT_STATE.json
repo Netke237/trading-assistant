@@ -2032,6 +2032,24 @@
       "tracking_issue": 92
     },
     {
+      "id": "STOCKS-T1-FOLLOWUPS",
+      "name": "T1 follow-ups: #129 test isolation (green main CI) and time exits shown on Step 6",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "STOCKS-HORIZON-T1"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-10-stocks-t1-followups-plan.md",
+      "verify": {
+        "kind": "absent",
+        "path": "backend/app/schemas/stock_scan.py",
+        "pattern": "n_time_exits",
+        "note": "F2 adds n_time_exits to BacktestOut. PRESENCE ONLY; behaviour is pinned by the plan's tests."
+      },
+      "note": "2026-10-10 opened at Kenneth's request after T1 shipped (PR #138): fix #129 (red main CI) and show time exits on Step 6. Plan written; plan round 1 running."
+    },
+    {
       "id": "STATE-BUILT-UNMERGED",
       "name": "State checker: built code recorded separately from merged work",
       "status": "built",
