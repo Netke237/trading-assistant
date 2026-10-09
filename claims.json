@@ -4,17 +4,9 @@
       "agent": "claude",
       "branch": "claude/stocks-horizon-t1",
       "claimed_at": "2026-10-09T03:36:35Z",
-      "expires_at": "2026-10-09T12:02:51Z",
+      "expires_at": "2026-10-09T12:54:35Z",
       "note": "T1 plan audit round 3 + tickets (taken over from main-PC session, Kenneth reassigned)",
       "task": "STOCKS-HORIZON-T1"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/state-per-stage-cap",
-      "claimed_at": "2026-10-09T05:39:31Z",
-      "expires_at": "2026-10-09T09:52:29Z",
-      "note": "state.py hard cap counts per stage: plan_stage field on phase records",
-      "task": "STATE-PER-STAGE-CAP"
     },
     {
       "agent": "claude",
