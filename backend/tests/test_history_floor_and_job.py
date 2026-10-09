@@ -140,7 +140,7 @@ async def test_tiingo_adjusted_mismatch_tries_yfinance_and_accepts_deliberate_fa
     overlap_end = date.fromisoformat(current[4]["time"])
     calls = []
 
-    def tiingo(symbol, start, end, *, strict_adjustments):
+    async def tiingo(symbol, start, end, *, strict_adjustments):
         calls.append(("tiingo", symbol, start, end, strict_adjustments))
         return _bars(start, end, factor=0.9)
 

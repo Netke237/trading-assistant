@@ -368,7 +368,7 @@ async def _fetch_chain(
 
     # 2. Tiingo fallback
     try:
-        new_bars = await asyncio.to_thread(fetch_historical_candles, symbol, start, end)
+        new_bars = await fetch_historical_candles(symbol, start, end)
         if await _ok("Tiingo", new_bars):
             return new_bars
     except Exception as exc:

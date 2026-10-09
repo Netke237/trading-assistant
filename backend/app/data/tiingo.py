@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import math
-from datetime import date
+from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
+
+from app.data.governor import get_governor, RateLimited, ProviderUnavailable
 
 TIINGO_BASE_URL = "https://api.tiingo.com"
 TIINGO_TOKEN = os.getenv("TIINGO_API_TOKEN", "")
@@ -17,7 +21,23 @@ def _headers() -> dict:
     }
 
 
-def fetch_historical_candles(
+def _retry_after(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            when = parsedate_to_datetime(value)
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            seconds = (when - datetime.now(timezone.utc)).total_seconds()
+        except (ValueError, TypeError, OverflowError):
+            return None
+    return max(0.0, seconds) if math.isfinite(seconds) else None
+
+
+async def fetch_historical_candles(
     symbol: str,
     start: date,
     end: date,
@@ -32,24 +52,31 @@ def fetch_historical_candles(
     adj_factor = adjClose / close -- multiply raw_close x adj_factor to get
     the fully-adjusted close price.
 
-    Returns [] on any error (network, auth, symbol not found).
+    Returns [] on invalid data or non-rate-limit HTTP errors. Governor pacing,
+    symbol-budget refusals and exhausted HTTP 429 retries remain observable.
     Strict mode also rejects the whole reply if any row lacks finite positive
     raw and adjusted closes; missing adjusted prices are never synthesized.
     """
-    try:
-        resp = httpx.get(
+    symbol = symbol.strip().upper()
+
+    async def request():
+        resp = await asyncio.to_thread(
+            httpx.get,
             f"{TIINGO_BASE_URL}/tiingo/daily/{symbol}/prices",
             headers=_headers(),
-            params={
-                "startDate": start.isoformat(),
-                "endDate": end.isoformat(),
-                "resampleFreq": "daily",
-            },
+            params={"startDate": start.isoformat(), "endDate": end.isoformat(),
+                    "resampleFreq": "daily"},
             timeout=15,
         )
+        if resp.status_code == 429:
+            raise RateLimited("429 from Tiingo", _retry_after(resp.headers.get("Retry-After")))
         resp.raise_for_status()
+        return resp.json()
+
+    try:
+        payload = await get_governor().call("tiingo", request, symbol=symbol)
         rows = []
-        for bar in resp.json():
+        for bar in payload:
             raw_close = float(bar.get("close", 0) or 0)
             if strict_adjustments:
                 adj_close = float(bar.get("adjClose"))
@@ -76,5 +103,7 @@ def fetch_historical_candles(
                 "source":       "tiingo",
             })
         return rows
+    except (RateLimited, ProviderUnavailable):
+        raise
     except Exception:
         return []
