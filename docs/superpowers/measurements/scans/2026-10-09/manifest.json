@@ -1,0 +1,441 @@
+{
+  "protocol": "docs/superpowers/measurements/PROTOCOL.md",
+  "base_url": "http://127.0.0.1:8000",
+  "git_head": "61a03e49975a9384f72597a9148848d979769548",
+  "freeze": {
+    "tag": "meas-freeze-1",
+    "commit": "61a03e49975a9384f72597a9148848d979769548"
+  },
+  "started_at": {
+    "utc": "2026-10-09T17:00:43.825462+00:00",
+    "et": "2026-10-09 13:00:43 ET"
+  },
+  "config_start": {
+    "sha256": {
+      "contract_rules.yaml": "27f5dac43eeda4e161efade7752cf605127ef89568007ed33e77c74500da8278",
+      "risk_rules.yaml": "3036590da346f0752124a21ae60e32ee1a480092d59e1c1366aa8147b1f9ef8d",
+      "scoring_rules.yaml": "6cb7f0bd81fb8ebbb00caa23f99e0dfc8d5b2ab4da16624b6cb125d088e6b14c",
+      "settings.example.yaml": "f374a5284e7a787198580711f304902ac11ae5fe1b806163eb3666da66b71eee",
+      "settings.yaml": "c1b51e8e5ff2ebd23ef3518e0d91f311eb85359fad7288e085f0a6aa7066ccdb",
+      "strategy_params.yaml": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+      "strategy_watches.yaml": "aeb394f1f283b7ee63b60bd1f346494687386cb2badff1d3baf76825315dafee"
+    }
+  },
+  "strategy_params_sha256": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+  "universe_sha256_core_start": "6d7eae00fc236f25a8a97e30cbd72fbdc62a9a4152750d91ec7d28847ebb60e3",
+  "config_health_core_start": {
+    "at": {
+      "utc": "2026-10-09T17:00:31.244906+00:00",
+      "et": "2026-10-09 13:00:31 ET"
+    },
+    "ok": true,
+    "pid": 7248,
+    "stale": []
+  },
+  "scan_schedule": {
+    "entries": 0,
+    "enabled": []
+  },
+  "regime_urls": {
+    "position": "/api/regime?horizon=position&lookback=20&threshold=0.02&smoothing=0"
+  },
+  "scans": [
+    {
+      "id": "O1",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": null,
+      "request_file": "O1-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:00:47.583032+00:00",
+        "et": "2026-10-09 13:00:47 ET"
+      },
+      "start_utc_s": 1791565247.583032,
+      "flags": [],
+      "result_file": "O1-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:07:20.274897+00:00",
+        "et": "2026-10-09 13:07:20 ET"
+      },
+      "end_utc_s": 1791565640.274897,
+      "scan_id": "REC-20261009-77E6CAA4",
+      "candidates": 1,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 1
+      },
+      "envelope_file": "O1-options-position-bearish.envelope.json"
+    },
+    {
+      "id": "C1",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": {
+        "confidence_reject_below": 30
+      },
+      "request_file": "C1-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:07:20.314645+00:00",
+        "et": "2026-10-09 13:07:20 ET"
+      },
+      "start_utc_s": 1791565640.314645,
+      "flags": [],
+      "result_file": "C1-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:13:45.094245+00:00",
+        "et": "2026-10-09 13:13:45 ET"
+      },
+      "end_utc_s": 1791566025.094245,
+      "scan_id": "REC-20261009-D5778E63",
+      "candidates": 3,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 3
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "C5",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": {
+        "overrides": {
+          "min_stock_score": 35
+        }
+      },
+      "request_file": "C5-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:13:45.112334+00:00",
+        "et": "2026-10-09 13:13:45 ET"
+      },
+      "start_utc_s": 1791566025.112334,
+      "flags": [],
+      "result_file": "C5-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:20:16.214394+00:00",
+        "et": "2026-10-09 13:20:16 ET"
+      },
+      "end_utc_s": 1791566416.214394,
+      "scan_id": "REC-20261009-A0B6D9B3",
+      "candidates": 6,
+      "truncated": false,
+      "contract_rules": {
+        "min_stock_score": 35.0
+      },
+      "iv_basis_counts": {
+        "rank": 6
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "C6",
+      "endpoint": "/api/scan",
+      "base": "options-position-bearish",
+      "change": {
+        "overrides": {
+          "min_volume": 0,
+          "min_open_interest": 0,
+          "preferred_volume_min": 0,
+          "preferred_oi_min": 0
+        }
+      },
+      "request_file": "C6-options-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:20:16.223250+00:00",
+        "et": "2026-10-09 13:20:16 ET"
+      },
+      "start_utc_s": 1791566416.22325,
+      "flags": [],
+      "result_file": "C6-options-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:26:38.410006+00:00",
+        "et": "2026-10-09 13:26:38 ET"
+      },
+      "end_utc_s": 1791566798.410006,
+      "scan_id": "REC-20261009-B75B6C91",
+      "candidates": 3,
+      "truncated": false,
+      "contract_rules": {
+        "min_volume": 0.0,
+        "min_open_interest": 0.0,
+        "preferred_volume_min": 0.0,
+        "preferred_oi_min": 0.0
+      },
+      "iv_basis_counts": {
+        "rank": 3
+      },
+      "no_liquidity_detail": 0,
+      "pair_excluded": []
+    },
+    {
+      "id": "O2",
+      "endpoint": "/api/scan",
+      "base": "options-position-bullish",
+      "change": null,
+      "request_file": "O2-options-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:26:38.433820+00:00",
+        "et": "2026-10-09 13:26:38 ET"
+      },
+      "start_utc_s": 1791566798.43382,
+      "flags": [],
+      "result_file": "O2-options-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:30:44.997014+00:00",
+        "et": "2026-10-09 13:30:44 ET"
+      },
+      "end_utc_s": 1791567044.997014,
+      "scan_id": "REC-20261009-A88C95F7",
+      "candidates": 4,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 4
+      },
+      "envelope_file": "O2-options-position-bullish.envelope.json"
+    },
+    {
+      "id": "C1b",
+      "endpoint": "/api/scan",
+      "base": "options-position-bullish",
+      "change": {
+        "confidence_reject_below": 30
+      },
+      "request_file": "C1b-options-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:30:45.029654+00:00",
+        "et": "2026-10-09 13:30:45 ET"
+      },
+      "start_utc_s": 1791567045.029654,
+      "flags": [],
+      "result_file": "C1b-options-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:35:03.434899+00:00",
+        "et": "2026-10-09 13:35:03 ET"
+      },
+      "end_utc_s": 1791567303.434899,
+      "scan_id": "REC-20261009-F0E056E6",
+      "candidates": 4,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 4
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "C5b",
+      "endpoint": "/api/scan",
+      "base": "options-position-bullish",
+      "change": {
+        "overrides": {
+          "min_stock_score": 35
+        }
+      },
+      "request_file": "C5b-options-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:35:03.447164+00:00",
+        "et": "2026-10-09 13:35:03 ET"
+      },
+      "start_utc_s": 1791567303.447164,
+      "flags": [],
+      "result_file": "C5b-options-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:39:12.466096+00:00",
+        "et": "2026-10-09 13:39:12 ET"
+      },
+      "end_utc_s": 1791567552.466096,
+      "scan_id": "REC-20261009-57EF7986",
+      "candidates": 16,
+      "truncated": false,
+      "contract_rules": {
+        "min_stock_score": 35.0
+      },
+      "iv_basis_counts": {
+        "rank": 16
+      },
+      "pair_excluded": []
+    },
+    {
+      "id": "O3",
+      "endpoint": "/api/scan",
+      "base": "options-swing-bearish",
+      "change": null,
+      "request_file": "O3-options-swing-bearish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:39:12.501675+00:00",
+        "et": "2026-10-09 13:39:12 ET"
+      },
+      "start_utc_s": 1791567552.501675,
+      "flags": [],
+      "result_file": "O3-options-swing-bearish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:42:33.231691+00:00",
+        "et": "2026-10-09 13:42:33 ET"
+      },
+      "end_utc_s": 1791567753.231691,
+      "scan_id": "REC-20261009-46F6FF78",
+      "candidates": 0,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {},
+      "envelope_file": "O3-options-swing-bearish.envelope.json"
+    },
+    {
+      "id": "O4",
+      "endpoint": "/api/scan",
+      "base": "options-swing-bullish",
+      "change": null,
+      "request_file": "O4-options-swing-bullish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:42:33.270816+00:00",
+        "et": "2026-10-09 13:42:33 ET"
+      },
+      "start_utc_s": 1791567753.270816,
+      "flags": [],
+      "result_file": "O4-options-swing-bullish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:45:29.961332+00:00",
+        "et": "2026-10-09 13:45:29 ET"
+      },
+      "end_utc_s": 1791567929.961332,
+      "scan_id": "REC-20261009-B050A355",
+      "candidates": 3,
+      "truncated": false,
+      "contract_rules": {},
+      "iv_basis_counts": {
+        "rank": 3
+      },
+      "envelope_file": "O4-options-swing-bullish.envelope.json"
+    },
+    {
+      "id": "S1",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-swing-bearish",
+      "change": null,
+      "request_file": "S1-stocks-swing-bearish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:45:30.004270+00:00",
+        "et": "2026-10-09 13:45:30 ET"
+      },
+      "start_utc_s": 1791567930.00427,
+      "flags": [],
+      "result_file": "S1-stocks-swing-bearish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:50:47.633753+00:00",
+        "et": "2026-10-09 13:50:47 ET"
+      },
+      "end_utc_s": 1791568247.633753,
+      "scan_id": "REC-20261009-038C1B45",
+      "candidates": 0,
+      "truncated": false
+    },
+    {
+      "id": "S2",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-swing-bullish",
+      "change": null,
+      "request_file": "S2-stocks-swing-bullish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:50:47.651837+00:00",
+        "et": "2026-10-09 13:50:47 ET"
+      },
+      "start_utc_s": 1791568247.651837,
+      "flags": [],
+      "result_file": "S2-stocks-swing-bullish.result.json",
+      "end": {
+        "utc": "2026-10-09T17:57:10.047386+00:00",
+        "et": "2026-10-09 13:57:10 ET"
+      },
+      "end_utc_s": 1791568630.048983,
+      "scan_id": "REC-20261009-C92CEB24",
+      "candidates": 13,
+      "truncated": false
+    },
+    {
+      "id": "S3",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-position-bearish",
+      "change": null,
+      "request_file": "S3-stocks-position-bearish.request.json",
+      "start": {
+        "utc": "2026-10-09T17:57:10.079732+00:00",
+        "et": "2026-10-09 13:57:10 ET"
+      },
+      "start_utc_s": 1791568630.081696,
+      "flags": [],
+      "result_file": "S3-stocks-position-bearish.result.json",
+      "end": {
+        "utc": "2026-10-09T18:02:34.194369+00:00",
+        "et": "2026-10-09 14:02:34 ET"
+      },
+      "end_utc_s": 1791568954.194369,
+      "scan_id": "REC-20261009-1BB571A6",
+      "candidates": 2,
+      "truncated": false
+    },
+    {
+      "id": "S4",
+      "endpoint": "/api/stock-scan",
+      "base": "stocks-position-bullish",
+      "change": null,
+      "request_file": "S4-stocks-position-bullish.request.json",
+      "start": {
+        "utc": "2026-10-09T18:02:34.214165+00:00",
+        "et": "2026-10-09 14:02:34 ET"
+      },
+      "start_utc_s": 1791568954.214165,
+      "flags": [],
+      "result_file": "S4-stocks-position-bullish.result.json",
+      "end": {
+        "utc": "2026-10-09T18:09:53.371193+00:00",
+        "et": "2026-10-09 14:09:53 ET"
+      },
+      "end_utc_s": 1791569393.371193,
+      "scan_id": "REC-20261009-AC491D41",
+      "candidates": 21,
+      "truncated": false
+    }
+  ],
+  "flags": [],
+  "status": "core_complete",
+  "core_status": "core_complete",
+  "config_copied": [
+    "contract_rules.yaml",
+    "risk_rules.yaml",
+    "scoring_rules.yaml",
+    "settings.example.yaml",
+    "strategy_params.yaml",
+    "strategy_watches.yaml"
+  ],
+  "config_core_end": {
+    "sha256": {
+      "contract_rules.yaml": "27f5dac43eeda4e161efade7752cf605127ef89568007ed33e77c74500da8278",
+      "risk_rules.yaml": "3036590da346f0752124a21ae60e32ee1a480092d59e1c1366aa8147b1f9ef8d",
+      "scoring_rules.yaml": "6cb7f0bd81fb8ebbb00caa23f99e0dfc8d5b2ab4da16624b6cb125d088e6b14c",
+      "settings.example.yaml": "f374a5284e7a787198580711f304902ac11ae5fe1b806163eb3666da66b71eee",
+      "settings.yaml": "c1b51e8e5ff2ebd23ef3518e0d91f311eb85359fad7288e085f0a6aa7066ccdb",
+      "strategy_params.yaml": "6e60d95a8c19294828754154b2c478740877cdb89f51369cd3e950b64ff2a764",
+      "strategy_watches.yaml": "aeb394f1f283b7ee63b60bd1f346494687386cb2badff1d3baf76825315dafee"
+    }
+  },
+  "config_changed": {
+    "core_end": []
+  },
+  "universe_sha256_core_end": "6d7eae00fc236f25a8a97e30cbd72fbdc62a9a4152750d91ec7d28847ebb60e3",
+  "config_health_core_end": {
+    "at": {
+      "utc": "2026-10-09T18:09:53.405107+00:00",
+      "et": "2026-10-09 14:09:53 ET"
+    },
+    "ok": true,
+    "pid": 7248,
+    "stale": []
+  },
+  "core_end_at": {
+    "utc": "2026-10-09T18:10:08.679229+00:00",
+    "et": "2026-10-09 14:10:08 ET"
+  }
+}
