@@ -57,7 +57,11 @@ function scan(candidates: TradeCardData[], horizon = 'Swing (5-15d)') {
 
 /** Render, and let the mount fetches settle. */
 async function mount() {
-  await act(async () => { render(<Step5Page />); });
+  await act(async () => {
+    render(<Step5Page />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 /** A promise that never settles: the fetch stays in flight. */

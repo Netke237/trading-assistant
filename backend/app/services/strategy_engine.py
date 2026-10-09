@@ -304,6 +304,11 @@ def _build_target_ladder(
         if min_rung_r > 0 and sign * (value - floor) < 0:
             return None
         rounded = round(value, 2)
+        # Positivity is re-tested AFTER rounding: a bearish rung in (0, 0.005)
+        # rounds to 0.0, and as targets[0] that is a short with no take-profit
+        # (backtesting.py skips a falsy tp) -- open question #49.
+        if rounded <= 0:
+            return None
         # A rung that rounds onto (or behind) entry is dropped rather than
         # nudged: _entry_side needs a strict inequality, and a one-cent target
         # would be worse than letting the next rung or the fallback take over.
@@ -407,6 +412,7 @@ def pullback_ema_signal(
     tolerance: float = 0.04,
     ma_type: str = "EMA",
     require_reversal: bool = False,
+    min_signal_rr: float = 0.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
     """Pullback to ema_period-MA in the direction of the trend.
@@ -502,6 +508,15 @@ def pullback_ema_signal(
     if not targets:
         return None
     target = targets[0]
+
+    # Fix #6 / D7: SKIP, never clamp. A first target nearer than min_signal_rr R
+    # needs a >90% win rate to pay costs; clamping would invent a target the
+    # strategy never claimed (Chair, TRADING_REVIEW.md). D7 AMENDED 2026-10-03
+    # (Kenneth): the mechanism ships DISABLED -- strategy_params.yaml sets
+    # min_signal_rr 0.0 until the Phase B re-tune -- so by default this skips
+    # nothing and fix #6 is mechanism-only.
+    if min_signal_rr > 0 and abs(target - current) < min_signal_rr * risk:
+        return None
 
     ma_label = ma_type.upper()
     return StrategySignal(

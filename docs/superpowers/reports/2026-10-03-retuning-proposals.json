@@ -1,0 +1,1014 @@
+{
+  "proposals": {
+    "pullback_ema": {
+      "strategy": "pullback_ema",
+      "direction": "Bullish",
+      "proposed": {
+        "ema_period": 50,
+        "trend_ema": 150,
+        "atr_stop_mult": 2.0,
+        "exit_swing_lookback": 20,
+        "tolerance": 0.04
+      },
+      "consistency": 0.4286,
+      "eligible": false,
+      "oos_metrics": {
+        "sharpe": 0.3853,
+        "expectancy": 0.3348,
+        "win_rate": 0.6544,
+        "total_return": 0.3659076097183518,
+        "max_drawdown": -20.8259,
+        "n_trades": 9
+      },
+      "fold_winners": [
+        {
+          "ema_period": 50,
+          "trend_ema": 200,
+          "atr_stop_mult": 2.0,
+          "exit_swing_lookback": 20,
+          "tolerance": 0.02
+        },
+        {
+          "ema_period": 35,
+          "trend_ema": 200,
+          "atr_stop_mult": 1.5,
+          "exit_swing_lookback": 20,
+          "tolerance": 0.02
+        },
+        {
+          "ema_period": 35,
+          "trend_ema": 150,
+          "atr_stop_mult": 1.5,
+          "exit_swing_lookback": 20,
+          "tolerance": 0.06
+        },
+        {
+          "ema_period": 50,
+          "trend_ema": 200,
+          "atr_stop_mult": 2.0,
+          "exit_swing_lookback": 20,
+          "tolerance": 0.06
+        },
+        {
+          "ema_period": 50,
+          "trend_ema": 150,
+          "atr_stop_mult": 2.0,
+          "exit_swing_lookback": 10,
+          "tolerance": 0.04
+        },
+        {
+          "ema_period": 35,
+          "trend_ema": 100,
+          "atr_stop_mult": 2.0,
+          "exit_swing_lookback": 20,
+          "tolerance": 0.04
+        },
+        {
+          "ema_period": 50,
+          "trend_ema": 150,
+          "atr_stop_mult": 2.0,
+          "exit_swing_lookback": 20,
+          "tolerance": 0.06
+        }
+      ],
+      "verdict": {
+        "in_sample_return": 4.993498849886149,
+        "walk_forward_return": 0.3659076097183518,
+        "degradation_pct": 0.9267
+      },
+      "recommendation": "Edge looks fake \u2014 consider dropping."
+    },
+    "breakout_base": {
+      "strategy": "breakout_base",
+      "direction": "Bullish",
+      "proposed": {
+        "base_lookback": 15,
+        "atr_tight_max": 4.0,
+        "volume_mult": 1.3,
+        "measured_move_mult": 1.25
+      },
+      "consistency": 0.1429,
+      "eligible": false,
+      "oos_metrics": {
+        "sharpe": -0.3478,
+        "expectancy": -0.069,
+        "win_rate": 0.3357,
+        "total_return": -1.440427511230993,
+        "max_drawdown": -18.8056,
+        "n_trades": 4
+      },
+      "fold_winners": [
+        {
+          "base_lookback": 30,
+          "atr_tight_max": 3.0,
+          "volume_mult": 1.3,
+          "measured_move_mult": 1.5
+        },
+        {
+          "base_lookback": 15,
+          "atr_tight_max": 4.5,
+          "volume_mult": 1.1,
+          "measured_move_mult": 0.75
+        },
+        {
+          "base_lookback": 30,
+          "atr_tight_max": 3.5,
+          "volume_mult": 1.3,
+          "measured_move_mult": 1.5
+        },
+        {
+          "base_lookback": 30,
+          "atr_tight_max": 3.5,
+          "volume_mult": 1.5,
+          "measured_move_mult": 1.5
+        },
+        {
+          "base_lookback": 15,
+          "atr_tight_max": 4.5,
+          "volume_mult": 1.3,
+          "measured_move_mult": 1.25
+        },
+        {
+          "base_lookback": 15,
+          "atr_tight_max": 4.0,
+          "volume_mult": 1.3,
+          "measured_move_mult": 1.25
+        },
+        {
+          "base_lookback": 15,
+          "atr_tight_max": 4.0,
+          "volume_mult": 1.3,
+          "measured_move_mult": 1.25
+        }
+      ],
+      "verdict": {
+        "in_sample_return": 3.954493750013584,
+        "walk_forward_return": -1.440427511230993,
+        "degradation_pct": 1.3643
+      },
+      "recommendation": "Edge looks fake \u2014 consider dropping."
+    },
+    "ma_crossover": {
+      "strategy": "ma_crossover",
+      "direction": "Bullish",
+      "proposed": {
+        "fast": 20,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 4.0
+      },
+      "consistency": 0.7143,
+      "eligible": false,
+      "oos_metrics": {
+        "sharpe": 0.4363,
+        "expectancy": 2.0161,
+        "win_rate": 0.4873,
+        "total_return": 1.8687138421754939,
+        "max_drawdown": -34.2366,
+        "n_trades": 7
+      },
+      "fold_winners": [
+        {
+          "fast": 10,
+          "slow": 50,
+          "lookback": 10,
+          "atr_target_mult": 4.0
+        },
+        {
+          "fast": 10,
+          "slow": 50,
+          "lookback": 10,
+          "atr_target_mult": 4.0
+        },
+        {
+          "fast": 10,
+          "slow": 50,
+          "lookback": 10,
+          "atr_target_mult": 4.0
+        },
+        {
+          "fast": 20,
+          "slow": 50,
+          "lookback": 10,
+          "atr_target_mult": 2.0
+        },
+        {
+          "fast": 20,
+          "slow": 50,
+          "lookback": 10,
+          "atr_target_mult": 2.0
+        },
+        {
+          "fast": 20,
+          "slow": 50,
+          "lookback": 10,
+          "atr_target_mult": 2.0
+        },
+        {
+          "fast": 20,
+          "slow": 50,
+          "lookback": 10,
+          "atr_target_mult": 4.0
+        }
+      ],
+      "verdict": {
+        "in_sample_return": 6.080586225244633,
+        "walk_forward_return": 1.8687138421754939,
+        "degradation_pct": 0.6927
+      },
+      "recommendation": "Edge looks fake \u2014 consider dropping."
+    },
+    "mean_reversion_rsi": {
+      "strategy": "mean_reversion_rsi",
+      "direction": "Bullish",
+      "proposed": {
+        "rsi_period": 7,
+        "rsi_oversold": 30,
+        "trend_sma": 200,
+        "exit_sma_period": 10
+      },
+      "consistency": 0.7143,
+      "eligible": false,
+      "oos_metrics": {
+        "sharpe": 0.2822,
+        "expectancy": 0.8503,
+        "win_rate": 0.4509,
+        "total_return": 0.412292505814536,
+        "max_drawdown": -9.9118,
+        "n_trades": 2
+      },
+      "fold_winners": [
+        {
+          "rsi_period": 7,
+          "rsi_oversold": 25,
+          "trend_sma": 200,
+          "exit_sma_period": 10
+        },
+        {
+          "rsi_period": 14,
+          "rsi_oversold": 35,
+          "trend_sma": 100,
+          "exit_sma_period": 20
+        },
+        {
+          "rsi_period": 14,
+          "rsi_oversold": 35,
+          "trend_sma": 100,
+          "exit_sma_period": 20
+        },
+        {
+          "rsi_period": 7,
+          "rsi_oversold": 30,
+          "trend_sma": 200,
+          "exit_sma_period": 10
+        },
+        {
+          "rsi_period": 7,
+          "rsi_oversold": 30,
+          "trend_sma": 100,
+          "exit_sma_period": 10
+        },
+        {
+          "rsi_period": 7,
+          "rsi_oversold": 30,
+          "trend_sma": 200,
+          "exit_sma_period": 10
+        },
+        {
+          "rsi_period": 14,
+          "rsi_oversold": 25,
+          "trend_sma": 200,
+          "exit_sma_period": 20
+        }
+      ],
+      "verdict": {
+        "in_sample_return": 2.707697311998406,
+        "walk_forward_return": 0.412292505814536,
+        "degradation_pct": 0.8477
+      },
+      "recommendation": "Edge looks fake \u2014 consider dropping."
+    },
+    "mean_reversion_bb": {
+      "strategy": "mean_reversion_bb",
+      "direction": "Bullish",
+      "proposed": {
+        "bb_period": 25,
+        "bb_std": 2.5,
+        "trend_sma": 100,
+        "stop_atr_mult": 0.5
+      },
+      "consistency": 0.7143,
+      "eligible": false,
+      "oos_metrics": {
+        "sharpe": 0.3633,
+        "expectancy": 0.5267,
+        "win_rate": 0.5373,
+        "total_return": 0.35672641476275696,
+        "max_drawdown": -14.7166,
+        "n_trades": 4
+      },
+      "fold_winners": [
+        {
+          "bb_period": 25,
+          "bb_std": 2.5,
+          "trend_sma": 200,
+          "stop_atr_mult": 0.5
+        },
+        {
+          "bb_period": 25,
+          "bb_std": 2.5,
+          "trend_sma": 100,
+          "stop_atr_mult": 1.0
+        },
+        {
+          "bb_period": 25,
+          "bb_std": 2.5,
+          "trend_sma": 100,
+          "stop_atr_mult": 0.5
+        },
+        {
+          "bb_period": 25,
+          "bb_std": 2.5,
+          "trend_sma": 100,
+          "stop_atr_mult": 0.5
+        },
+        {
+          "bb_period": 25,
+          "bb_std": 2.0,
+          "trend_sma": 100,
+          "stop_atr_mult": 0.5
+        },
+        {
+          "bb_period": 25,
+          "bb_std": 2.0,
+          "trend_sma": 200,
+          "stop_atr_mult": 1.0
+        },
+        {
+          "bb_period": 15,
+          "bb_std": 2.0,
+          "trend_sma": 100,
+          "stop_atr_mult": 1.0
+        }
+      ],
+      "verdict": {
+        "in_sample_return": 1.9562268694614728,
+        "walk_forward_return": 0.35672641476275696,
+        "degradation_pct": 0.8176
+      },
+      "recommendation": "Edge looks fake \u2014 consider dropping."
+    }
+  },
+  "skipped": {
+    "mean_reversion_vwap": "unsupported empty search grid",
+    "mean_reversion_vwap_daily": "unsupported empty search grid",
+    "breakout_setup": "unsupported empty search grid"
+  },
+  "identity_hash": "75d6b33219e65ff3ed67e7b6584d49e955c7caeffc52c21608c01ea0d9c673e8",
+  "training_diagnostics": {
+    "counts": {
+      "warnings": 357718,
+      "errors": 0
+    },
+    "examples": {
+      "warnings": [
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: (2024-05-16 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: (2024-08-01 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: (2024-08-30 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: (2024-05-30 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: (2024-07-09 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats."
+      ],
+      "errors": []
+    }
+  },
+  "oos_diagnostics": {
+    "counts": {
+      "warnings": 566,
+      "errors": 0
+    },
+    "examples": {
+      "warnings": [
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: (2024-12-02 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: (2024-12-18 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: (2024-10-09 00:00:00) A contingent SL/TP order would execute in the same bar its parent stop/limit order was turned into a trade. Since we can't assert the precise intra-candle price movement, the affected SL/TP order will instead be executed on the next (matching) price/bar, making the result (of this trade) somewhat dubious. See https://github.com/kernc/backtesting.py/issues/119",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats.",
+        "UserWarning: Some trades remain open at the end of backtest. Use `Backtest(..., finalize_trades=True)` to close them and include them in stats."
+      ],
+      "errors": []
+    }
+  },
+  "fold_records": [
+    {
+      "key": "fff528df0905405bbfebf319bd9334d7e570d9d0c0bf6c9b4938f094d253d1dd",
+      "strategy": "pullback_ema",
+      "fold": {
+        "train_start": "2023-10-03",
+        "train_end": "2024-10-03",
+        "test_start": "2024-10-03",
+        "test_end": "2025-01-03"
+      },
+      "winner": {
+        "ema_period": 50,
+        "trend_ema": 200,
+        "atr_stop_mult": 2.0,
+        "exit_swing_lookback": 20,
+        "tolerance": 0.02
+      },
+      "resumed": false
+    },
+    {
+      "key": "023ddd28c9573e353b54f331faffad7d3ea1b8778d25b0301ad4c713fadc265f",
+      "strategy": "pullback_ema",
+      "fold": {
+        "train_start": "2024-01-03",
+        "train_end": "2025-01-03",
+        "test_start": "2025-01-03",
+        "test_end": "2025-04-03"
+      },
+      "winner": {
+        "ema_period": 35,
+        "trend_ema": 200,
+        "atr_stop_mult": 1.5,
+        "exit_swing_lookback": 20,
+        "tolerance": 0.02
+      },
+      "resumed": false
+    },
+    {
+      "key": "8cee5c7baf3849aabc38ae23c8fd20b8e68759d4ddb978b46b72cadcb203bf31",
+      "strategy": "pullback_ema",
+      "fold": {
+        "train_start": "2024-04-03",
+        "train_end": "2025-04-03",
+        "test_start": "2025-04-03",
+        "test_end": "2025-07-03"
+      },
+      "winner": {
+        "ema_period": 35,
+        "trend_ema": 150,
+        "atr_stop_mult": 1.5,
+        "exit_swing_lookback": 20,
+        "tolerance": 0.06
+      },
+      "resumed": false
+    },
+    {
+      "key": "8c8a12372f8c366e2b2e88cc17ef96652cc5af71dafb49daad6d57de307a4789",
+      "strategy": "pullback_ema",
+      "fold": {
+        "train_start": "2024-07-03",
+        "train_end": "2025-07-03",
+        "test_start": "2025-07-03",
+        "test_end": "2025-10-03"
+      },
+      "winner": {
+        "ema_period": 50,
+        "trend_ema": 200,
+        "atr_stop_mult": 2.0,
+        "exit_swing_lookback": 20,
+        "tolerance": 0.06
+      },
+      "resumed": false
+    },
+    {
+      "key": "32465829c6e2d72747add5da9fe33a759bd3383afc2e21485b445585ebed1926",
+      "strategy": "pullback_ema",
+      "fold": {
+        "train_start": "2024-10-03",
+        "train_end": "2025-10-03",
+        "test_start": "2025-10-03",
+        "test_end": "2026-01-03"
+      },
+      "winner": {
+        "ema_period": 50,
+        "trend_ema": 150,
+        "atr_stop_mult": 2.0,
+        "exit_swing_lookback": 10,
+        "tolerance": 0.04
+      },
+      "resumed": false
+    },
+    {
+      "key": "ad753634baea0f7be6598528892c2cf2da3136db7fc647ca3cf5ca0bc0b103a0",
+      "strategy": "pullback_ema",
+      "fold": {
+        "train_start": "2025-01-03",
+        "train_end": "2026-01-03",
+        "test_start": "2026-01-03",
+        "test_end": "2026-04-03"
+      },
+      "winner": {
+        "ema_period": 35,
+        "trend_ema": 100,
+        "atr_stop_mult": 2.0,
+        "exit_swing_lookback": 20,
+        "tolerance": 0.04
+      },
+      "resumed": false
+    },
+    {
+      "key": "44c2ec0d85f352f6caee36cf4db03229789bc412416c37f34523c2e05041a9a2",
+      "strategy": "pullback_ema",
+      "fold": {
+        "train_start": "2025-04-03",
+        "train_end": "2026-04-03",
+        "test_start": "2026-04-03",
+        "test_end": "2026-07-03"
+      },
+      "winner": {
+        "ema_period": 50,
+        "trend_ema": 150,
+        "atr_stop_mult": 2.0,
+        "exit_swing_lookback": 20,
+        "tolerance": 0.06
+      },
+      "resumed": false
+    },
+    {
+      "key": "6f6760561ac3e5324a86253d8926dfd02a34d5b65af4ec24f0d9b210a2c6abae",
+      "strategy": "breakout_base",
+      "fold": {
+        "train_start": "2023-10-03",
+        "train_end": "2024-10-03",
+        "test_start": "2024-10-03",
+        "test_end": "2025-01-03"
+      },
+      "winner": {
+        "base_lookback": 30,
+        "atr_tight_max": 3.0,
+        "volume_mult": 1.3,
+        "measured_move_mult": 1.5
+      },
+      "resumed": false
+    },
+    {
+      "key": "6f96641f75357540e37caf47da800561da8779ed0ded7faca772f5d73b250469",
+      "strategy": "breakout_base",
+      "fold": {
+        "train_start": "2024-01-03",
+        "train_end": "2025-01-03",
+        "test_start": "2025-01-03",
+        "test_end": "2025-04-03"
+      },
+      "winner": {
+        "base_lookback": 15,
+        "atr_tight_max": 4.5,
+        "volume_mult": 1.1,
+        "measured_move_mult": 0.75
+      },
+      "resumed": false
+    },
+    {
+      "key": "d3c3a590ed44f1e8573b26bc21a8deaa715aa35bcb2cd242316336bc259613a9",
+      "strategy": "breakout_base",
+      "fold": {
+        "train_start": "2024-04-03",
+        "train_end": "2025-04-03",
+        "test_start": "2025-04-03",
+        "test_end": "2025-07-03"
+      },
+      "winner": {
+        "base_lookback": 30,
+        "atr_tight_max": 3.5,
+        "volume_mult": 1.3,
+        "measured_move_mult": 1.5
+      },
+      "resumed": false
+    },
+    {
+      "key": "5a4d0d1d5dd76c2ef3d6a35b630e05770b79e92c7832dccb754511246b41dee6",
+      "strategy": "breakout_base",
+      "fold": {
+        "train_start": "2024-07-03",
+        "train_end": "2025-07-03",
+        "test_start": "2025-07-03",
+        "test_end": "2025-10-03"
+      },
+      "winner": {
+        "base_lookback": 30,
+        "atr_tight_max": 3.5,
+        "volume_mult": 1.5,
+        "measured_move_mult": 1.5
+      },
+      "resumed": false
+    },
+    {
+      "key": "ad289f78dd7415ce62e59949be83577992745cefeacb7f1970d68a07663be826",
+      "strategy": "breakout_base",
+      "fold": {
+        "train_start": "2024-10-03",
+        "train_end": "2025-10-03",
+        "test_start": "2025-10-03",
+        "test_end": "2026-01-03"
+      },
+      "winner": {
+        "base_lookback": 15,
+        "atr_tight_max": 4.5,
+        "volume_mult": 1.3,
+        "measured_move_mult": 1.25
+      },
+      "resumed": false
+    },
+    {
+      "key": "aa84b9c939d17f3c75ae5e2acdca5ada21b39025fd66924385730fa065fcd310",
+      "strategy": "breakout_base",
+      "fold": {
+        "train_start": "2025-01-03",
+        "train_end": "2026-01-03",
+        "test_start": "2026-01-03",
+        "test_end": "2026-04-03"
+      },
+      "winner": {
+        "base_lookback": 15,
+        "atr_tight_max": 4.0,
+        "volume_mult": 1.3,
+        "measured_move_mult": 1.25
+      },
+      "resumed": false
+    },
+    {
+      "key": "aa4802300e30c08c2a342aeb5d62cc7d53259ff997202c2ebc4adff5e8c2afc0",
+      "strategy": "breakout_base",
+      "fold": {
+        "train_start": "2025-04-03",
+        "train_end": "2026-04-03",
+        "test_start": "2026-04-03",
+        "test_end": "2026-07-03"
+      },
+      "winner": {
+        "base_lookback": 15,
+        "atr_tight_max": 4.0,
+        "volume_mult": 1.3,
+        "measured_move_mult": 1.25
+      },
+      "resumed": false
+    },
+    {
+      "key": "5b44c1f7ec2c468ef8109d81b5e2e9d91ed71276e70c636e8c985ac14e522509",
+      "strategy": "ma_crossover",
+      "fold": {
+        "train_start": "2023-10-03",
+        "train_end": "2024-10-03",
+        "test_start": "2024-10-03",
+        "test_end": "2025-01-03"
+      },
+      "winner": {
+        "fast": 10,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 4.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "25f35b9a678af8118a641f63ee9488e25b8d578fa1a8cfcd44daa02dec4671de",
+      "strategy": "ma_crossover",
+      "fold": {
+        "train_start": "2024-01-03",
+        "train_end": "2025-01-03",
+        "test_start": "2025-01-03",
+        "test_end": "2025-04-03"
+      },
+      "winner": {
+        "fast": 10,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 4.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "275f11fe6c131812e550bd8b215ae8c76074802fd5beb770f5d7c3612fc109ba",
+      "strategy": "ma_crossover",
+      "fold": {
+        "train_start": "2024-04-03",
+        "train_end": "2025-04-03",
+        "test_start": "2025-04-03",
+        "test_end": "2025-07-03"
+      },
+      "winner": {
+        "fast": 10,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 4.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "e3b062fb12191ea8b5c82a4f201ac338e5966222d4805b72465bde9460b71408",
+      "strategy": "ma_crossover",
+      "fold": {
+        "train_start": "2024-07-03",
+        "train_end": "2025-07-03",
+        "test_start": "2025-07-03",
+        "test_end": "2025-10-03"
+      },
+      "winner": {
+        "fast": 20,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 2.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "a1449ab006f7f3b2ba029fc48c0860dcdce1ba59e84680255c6443be439206b3",
+      "strategy": "ma_crossover",
+      "fold": {
+        "train_start": "2024-10-03",
+        "train_end": "2025-10-03",
+        "test_start": "2025-10-03",
+        "test_end": "2026-01-03"
+      },
+      "winner": {
+        "fast": 20,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 2.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "ebc9905678a26b21cd5a6641c19e63f29fefdd9ff90179a0461bc1098c4ace41",
+      "strategy": "ma_crossover",
+      "fold": {
+        "train_start": "2025-01-03",
+        "train_end": "2026-01-03",
+        "test_start": "2026-01-03",
+        "test_end": "2026-04-03"
+      },
+      "winner": {
+        "fast": 20,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 2.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "983c161230e0cebfb623b67cd89e5340e63d3a1271b592f77ccb008b970e1134",
+      "strategy": "ma_crossover",
+      "fold": {
+        "train_start": "2025-04-03",
+        "train_end": "2026-04-03",
+        "test_start": "2026-04-03",
+        "test_end": "2026-07-03"
+      },
+      "winner": {
+        "fast": 20,
+        "slow": 50,
+        "lookback": 10,
+        "atr_target_mult": 4.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "deeeeb166e94f75950f338fca8df0397e9025c49eb2bf30518e790e252ec3b40",
+      "strategy": "mean_reversion_rsi",
+      "fold": {
+        "train_start": "2023-10-03",
+        "train_end": "2024-10-03",
+        "test_start": "2024-10-03",
+        "test_end": "2025-01-03"
+      },
+      "winner": {
+        "rsi_period": 7,
+        "rsi_oversold": 25,
+        "trend_sma": 200,
+        "exit_sma_period": 10
+      },
+      "resumed": false
+    },
+    {
+      "key": "6380c1d56b5804ecf240262f0f0d90a487bb175df871dee40a69d530a7a49879",
+      "strategy": "mean_reversion_rsi",
+      "fold": {
+        "train_start": "2024-01-03",
+        "train_end": "2025-01-03",
+        "test_start": "2025-01-03",
+        "test_end": "2025-04-03"
+      },
+      "winner": {
+        "rsi_period": 14,
+        "rsi_oversold": 35,
+        "trend_sma": 100,
+        "exit_sma_period": 20
+      },
+      "resumed": false
+    },
+    {
+      "key": "a86a1880cf789974deebd169143caf7aad66ae00371730d3d60885d93515540b",
+      "strategy": "mean_reversion_rsi",
+      "fold": {
+        "train_start": "2024-04-03",
+        "train_end": "2025-04-03",
+        "test_start": "2025-04-03",
+        "test_end": "2025-07-03"
+      },
+      "winner": {
+        "rsi_period": 14,
+        "rsi_oversold": 35,
+        "trend_sma": 100,
+        "exit_sma_period": 20
+      },
+      "resumed": false
+    },
+    {
+      "key": "9c3521e22a5cf3d255628155f29ec3572826e317beb8bd0fa15c90139cfbb891",
+      "strategy": "mean_reversion_rsi",
+      "fold": {
+        "train_start": "2024-07-03",
+        "train_end": "2025-07-03",
+        "test_start": "2025-07-03",
+        "test_end": "2025-10-03"
+      },
+      "winner": {
+        "rsi_period": 7,
+        "rsi_oversold": 30,
+        "trend_sma": 200,
+        "exit_sma_period": 10
+      },
+      "resumed": false
+    },
+    {
+      "key": "2f0ebe61d3f050f701b50a8c9548d54ec338132759ee268f0dd9d2ff7af82594",
+      "strategy": "mean_reversion_rsi",
+      "fold": {
+        "train_start": "2024-10-03",
+        "train_end": "2025-10-03",
+        "test_start": "2025-10-03",
+        "test_end": "2026-01-03"
+      },
+      "winner": {
+        "rsi_period": 7,
+        "rsi_oversold": 30,
+        "trend_sma": 100,
+        "exit_sma_period": 10
+      },
+      "resumed": false
+    },
+    {
+      "key": "d29eeb6e5d52d936214a4c6c5eebb85f3367c6dac4764f541601f0d3e2da10f2",
+      "strategy": "mean_reversion_rsi",
+      "fold": {
+        "train_start": "2025-01-03",
+        "train_end": "2026-01-03",
+        "test_start": "2026-01-03",
+        "test_end": "2026-04-03"
+      },
+      "winner": {
+        "rsi_period": 7,
+        "rsi_oversold": 30,
+        "trend_sma": 200,
+        "exit_sma_period": 10
+      },
+      "resumed": false
+    },
+    {
+      "key": "adea42b00637f97194ce643e6d943fc5fbdda1956562dfe7c1534fe8d6abce75",
+      "strategy": "mean_reversion_rsi",
+      "fold": {
+        "train_start": "2025-04-03",
+        "train_end": "2026-04-03",
+        "test_start": "2026-04-03",
+        "test_end": "2026-07-03"
+      },
+      "winner": {
+        "rsi_period": 14,
+        "rsi_oversold": 25,
+        "trend_sma": 200,
+        "exit_sma_period": 20
+      },
+      "resumed": false
+    },
+    {
+      "key": "75cc227d04f75bcdd0a2f228faa85acc84f3ccb0051f0e1172ac5873423ca9cb",
+      "strategy": "mean_reversion_bb",
+      "fold": {
+        "train_start": "2023-10-03",
+        "train_end": "2024-10-03",
+        "test_start": "2024-10-03",
+        "test_end": "2025-01-03"
+      },
+      "winner": {
+        "bb_period": 25,
+        "bb_std": 2.5,
+        "trend_sma": 200,
+        "stop_atr_mult": 0.5
+      },
+      "resumed": false
+    },
+    {
+      "key": "d89616995e5cf6fb0844274810689c7879264a21b9475f99351e8d154cfcb511",
+      "strategy": "mean_reversion_bb",
+      "fold": {
+        "train_start": "2024-01-03",
+        "train_end": "2025-01-03",
+        "test_start": "2025-01-03",
+        "test_end": "2025-04-03"
+      },
+      "winner": {
+        "bb_period": 25,
+        "bb_std": 2.5,
+        "trend_sma": 100,
+        "stop_atr_mult": 1.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "81d3509c57d15d4846e21cae9c2d40608650c110a5ce2c92b7aac9558a16e2a9",
+      "strategy": "mean_reversion_bb",
+      "fold": {
+        "train_start": "2024-04-03",
+        "train_end": "2025-04-03",
+        "test_start": "2025-04-03",
+        "test_end": "2025-07-03"
+      },
+      "winner": {
+        "bb_period": 25,
+        "bb_std": 2.5,
+        "trend_sma": 100,
+        "stop_atr_mult": 0.5
+      },
+      "resumed": false
+    },
+    {
+      "key": "74ab1b565c61c62f7e04035411e276e7cf44d492cfc0ced5cc9cd12d3a459d3c",
+      "strategy": "mean_reversion_bb",
+      "fold": {
+        "train_start": "2024-07-03",
+        "train_end": "2025-07-03",
+        "test_start": "2025-07-03",
+        "test_end": "2025-10-03"
+      },
+      "winner": {
+        "bb_period": 25,
+        "bb_std": 2.5,
+        "trend_sma": 100,
+        "stop_atr_mult": 0.5
+      },
+      "resumed": false
+    },
+    {
+      "key": "6c44e3526e61f82fe7169d9194590514da477940a378d3db782a9e70f3199728",
+      "strategy": "mean_reversion_bb",
+      "fold": {
+        "train_start": "2024-10-03",
+        "train_end": "2025-10-03",
+        "test_start": "2025-10-03",
+        "test_end": "2026-01-03"
+      },
+      "winner": {
+        "bb_period": 25,
+        "bb_std": 2.0,
+        "trend_sma": 100,
+        "stop_atr_mult": 0.5
+      },
+      "resumed": false
+    },
+    {
+      "key": "9cbde56ce91c56ebbf78a9014da7ae2f46618cd110c6a57c62d793628eea2a56",
+      "strategy": "mean_reversion_bb",
+      "fold": {
+        "train_start": "2025-01-03",
+        "train_end": "2026-01-03",
+        "test_start": "2026-01-03",
+        "test_end": "2026-04-03"
+      },
+      "winner": {
+        "bb_period": 25,
+        "bb_std": 2.0,
+        "trend_sma": 200,
+        "stop_atr_mult": 1.0
+      },
+      "resumed": false
+    },
+    {
+      "key": "d5b369ce26c692e8ab8fdc127f109b9e149264e469839c7c5ca8a91d3358014b",
+      "strategy": "mean_reversion_bb",
+      "fold": {
+        "train_start": "2025-04-03",
+        "train_end": "2026-04-03",
+        "test_start": "2026-04-03",
+        "test_end": "2026-07-03"
+      },
+      "winner": {
+        "bb_period": 15,
+        "bb_std": 2.0,
+        "trend_sma": 100,
+        "stop_atr_mult": 1.0
+      },
+      "resumed": false
+    }
+  ]
+}

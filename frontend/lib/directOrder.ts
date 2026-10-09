@@ -13,6 +13,7 @@
 
 import { contractLabel, type TradeCardData } from '@/types/domain';
 import type { DirectSendNote } from '@/lib/directSendNotesStore';
+import { parseApiError } from '@/lib/apiError';
 
 /** Why a direct send is refused before anything is saved, or null. */
 export function directOrderBlock(orderType: 'LMT' | 'MKT', broker: string | null): string | null {
@@ -42,15 +43,6 @@ export function contractLabelFor(card: TradeCardData): string {
     return contractLabel({ symbol: card.symbol, strike: cd.strike, right: cd.right, expiry: cd.expiry });
   }
   return card.contract;
-}
-
-/** `api.ts`'s `apiError` throws `API ${path} → ${status}: ${detail}`. */
-function parseApiError(e: unknown): { status: number | null; detail: string | null; text: string } {
-  const text = String(e);
-  const msg = e instanceof Error ? e.message : text;
-  const m = /→ (\d{3})(?:: ([\s\S]*))?$/.exec(msg);
-  if (!m) return { status: null, detail: null, text };
-  return { status: Number(m[1]), detail: m[2] ?? null, text };
 }
 
 /** The reason text for a thrown error: the detail after `→ NNN: ` when there is

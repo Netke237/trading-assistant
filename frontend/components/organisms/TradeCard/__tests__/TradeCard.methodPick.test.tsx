@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
@@ -341,6 +341,59 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     expect(onMethodPickChange).toHaveBeenLastCalledWith(expect.objectContaining({
       method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 6.24,
     }));
+  });
+
+  it('race shortcut selects the authoritative row, preserves premium basis and clears on contract switch', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue({
+      targets: [{ pct: 0.2, stockPrice: 197.5, optionPrice: 6.24, probability: 0.4, expectedDays: 9 }],
+      invalidation: { probability: 0.3, expectedDays: 5 },
+      race: {
+        premiumStopPrice: 1.5, stockStopPrice: 179.64, nPaths: 2000,
+        outcomes: [{
+          targetPct: 0.2, targetOptionPrice: 6.24,
+          pTargetFirst: 0.4, pStockStopFirst: 0.3, pPremiumStopFirst: 0.2, pNeither: 0.1,
+          daysTarget: 9, daysStockStop: 12, daysPremiumStop: 8,
+          edgePerContract: 120, rrStockStop: 1.8,
+        }],
+      },
+    });
+    const onMethodPickChange = jest.fn();
+    const { rerender } = render(<TradeCard data={card} initialMethodPick={pick({ stopBasis: 'premium' })} onMethodPickChange={onMethodPickChange} />);
+    expect(screen.queryByRole('button', { name: 'Use Barrier Race T20%' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    const shortcut = await screen.findByRole('button', { name: 'Use Barrier Race T20%' });
+    fireEvent.click(shortcut);
+    expect(onMethodPickChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 6.24, stopBasis: 'premium',
+    }));
+    expect(radio('Barrier Race')).toHaveAttribute('aria-checked', 'true');
+    expect(radio('T20%')).toHaveAttribute('aria-checked', 'true');
+    expect(shortcut).toHaveAttribute('aria-pressed', 'true');
+    expect(Number.isFinite(Date.parse(onMethodPickChange.mock.calls.at(-1)[0].pickedAt))).toBe(true);
+    rerender(<TradeCard data={{ ...card, contract: 'AAPL 195C 05/15' }} onMethodPickChange={onMethodPickChange} />);
+    expect(screen.queryByRole('button', { name: 'Use Barrier Race T20%' })).not.toBeInTheDocument();
+  });
+
+  it('renders one controlled selector in the execution anchor and retains its decision when the anchor settles', () => {
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    const onMethodPickChange = jest.fn();
+    const { container, rerender, unmount } = render(<TradeCard data={card} decisionTarget={anchor} onMethodPickChange={onMethodPickChange} />);
+    expect(within(container).queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
+    fireEvent.click(within(anchor).getByRole('radio', { name: 'Ladder' }));
+    fireEvent.click(within(anchor).getByRole('radio', { name: 'TP1' }));
+    fireEvent.click(within(anchor).getByRole('radio', { name: 'Premium stop' }));
+    expect(onMethodPickChange).toHaveBeenLastCalledWith(expect.objectContaining({ method: 'ladder', rowStockPrice: 200.02, rowOptionPrice: null, stopBasis: 'premium' }));
+    rerender(<TradeCard data={card} decisionTarget={null} onMethodPickChange={onMethodPickChange} />);
+    expect(screen.queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
+    rerender(<TradeCard data={card} decisionTarget={anchor} onMethodPickChange={onMethodPickChange} />);
+    expect(within(anchor).getByRole('radio', { name: 'TP1' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(anchor).getByRole('radio', { name: 'Premium stop' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
+    unmount();
+    expect(anchor).toBeEmptyDOMElement();
+    anchor.remove();
   });
 
   it('leaves lastRunMethod’s display fallback alone (§9.4)', () => {

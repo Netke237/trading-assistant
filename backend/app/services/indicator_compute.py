@@ -1,9 +1,10 @@
 # backend/app/services/indicator_compute.py
-"""Compute indicator values from OHLCV candles — server-side equivalent of frontend getIndicatorPoints()."""
+"""Compute indicator values from OHLCV candles — server-side equivalent of frontend computeAlertIndicatorPoints()."""
 from __future__ import annotations
 
 import logging
 import math
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -33,59 +34,88 @@ def compute_indicators_for_conditions(candles: list[dict], conditions: list) -> 
     result: dict[str, list[dict]] = {}
 
     for indicator_name in needed:
-        lower = indicator_name.lower()
-        if lower in ('ema', 'ema20', 'ema(20)'):
-            result[indicator_name] = _calc_ema(closes, times, 20)
-        elif lower in ('ema9', 'ema(9)'):
-            result[indicator_name] = _calc_ema(closes, times, 9)
-        elif lower in ('ema50', 'ema(50)'):
-            result[indicator_name] = _calc_ema(closes, times, 50)
-        elif lower in ('sma', 'sma20', 'sma(20)'):
-            result[indicator_name] = _calc_sma(closes, times, 20)
-        elif lower in ('sma50', 'sma(50)'):
-            result[indicator_name] = _calc_sma(closes, times, 50)
-        elif lower in ('rsi', 'rsi(14)'):
-            result[indicator_name] = _calc_rsi(closes, times, 14)
-        elif lower in ('macd', 'macd_line'):
-            macd_data = _calc_macd(closes, times, 12, 26, 9)
-            result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(macd_data['times'], macd_data['macd'])]
-        elif lower in ('macd_signal'):
-            macd_data = _calc_macd(closes, times, 12, 26, 9)
-            result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(macd_data['times'], macd_data['signal'])]
-        elif lower in ('atr', 'atr(14)'):
-            result[indicator_name] = _calc_atr(highs, lows, closes, times, 14)
-        elif lower in ('bb_upper', 'bollinger_upper'):
-            bb = _calc_bb(closes, times, 20, 2)
-            result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(bb['times'], bb['upper'])]
-        elif lower in ('bb_lower', 'bollinger_lower'):
-            bb = _calc_bb(closes, times, 20, 2)
-            result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(bb['times'], bb['lower'])]
-        elif lower in ('bb_mid', 'bollinger_mid'):
-            bb = _calc_bb(closes, times, 20, 2)
-            result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(bb['times'], bb['mid'])]
-        elif lower == 'vwap':
-            result[indicator_name] = _calc_vwap(highs, lows, closes, volumes, times)
-        elif lower == 'volume':
-            result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(times, volumes)]
-        elif lower == 'close':
-            result[indicator_name] = [{'time': t, 'value': v} for t, v in zip(times, closes)]
+        spec = parse_indicator_reference(indicator_name)
+        if spec is None:
+            continue  # Opaque chart instance ids never imply default parameters.
+        kind, params = spec
+        if kind == 'ema':
+            series = _calc_ema(closes, times, params[0])
+        elif kind == 'sma':
+            series = _calc_sma(closes, times, params[0])
+        elif kind == 'rsi':
+            series = _calc_rsi(closes, times, params[0])
+        elif kind == 'atr':
+            series = _calc_atr(highs, lows, closes, times, params[0])
+        elif kind in ('macd', 'macd_signal'):
+            data = _calc_macd(closes, times, *params)
+            values = data['macd' if kind == 'macd' else 'signal']
+            series = [{'time': t, 'value': v} for t, v in zip(times, values)]
+        elif kind in ('bb', 'bb_upper', 'bb_lower', 'bb_mid'):
+            data = _calc_bb(closes, times, *params)
+            values = data[{'bb': 'mid', 'bb_mid': 'mid', 'bb_upper': 'upper', 'bb_lower': 'lower'}[kind]]
+            series = [{'time': t, 'value': v} for t, v in zip(times, values)]
+        elif kind == 'vwap':
+            series = _calc_vwap(highs, lows, closes, volumes, times)
+        else:
+            series = [{'time': t, 'value': v} for t, v in zip(times, volumes if kind == 'volume' else closes)]
+        result[indicator_name] = series
 
     return result
+
+
+def parse_indicator_reference(reference: object) -> tuple[str, tuple] | None:
+    """Resolve stable parameterized names and known legacy aliases, never opaque ids."""
+    if not isinstance(reference, str):
+        return None
+    name = reference.lower()
+    aliases = {'macd_line': 'macd', 'vol': 'volume', 'vol(default)': 'volume',
+               'vwap(default)': 'vwap', 'bollinger_upper': 'bb_upper',
+               'bollinger_lower': 'bb_lower', 'bollinger_mid': 'bb_mid'}
+    name = aliases.get(name, name)
+    defaults = {'ema': (20,), 'sma': (20,), 'rsi': (14,), 'atr': (14,),
+                'macd': (12, 26, 9), 'macd_signal': (12, 26, 9),
+                'bb': (20, 2.0), 'bb_upper': (20, 2.0),
+                'bb_lower': (20, 2.0), 'bb_mid': (20, 2.0),
+                'vwap': (), 'volume': (), 'close': ()}
+    if name in defaults:
+        return name, defaults[name]
+    old = re.fullmatch(r'(ema|sma)(9|20|50)', name)
+    if old:
+        return old[1], (int(old[2]),)
+    match = re.fullmatch(r'(ema|sma|rsi|atr|macd|macd_signal|bb|bb_upper|bb_lower|bb_mid)\(([^()]*)\)', name)
+    if not match:
+        return None
+    kind, raw = match.groups()
+    parts = raw.split(',')
+    if len(parts) != len(defaults[kind]):
+        return None
+    params = []
+    for i, part in enumerate(parts):
+        if kind.startswith('bb') and i == 1:
+            if not re.fullmatch(r'(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?', part):
+                return None
+            try:
+                value = float(part)
+            except ValueError:
+                return None
+            if not math.isfinite(value) or not 0 < value <= 10000:
+                return None
+        else:
+            if len(part) > 5 or not re.fullmatch(r'[1-9][0-9]*', part):
+                return None
+            value = int(part)
+            if value > 10000:
+                return None
+        params.append(value)
+    if kind in ('macd', 'macd_signal') and params[0] >= params[1]:
+        return None
+    return kind, tuple(params)
 
 
 def _calc_ema(values: list[float], times: list[str], period: int) -> list[dict]:
-    result = []
-    if len(values) < period:
-        return result
-    multiplier = 2 / (period + 1)
-    ema = sum(values[:period]) / period
-    for i, t in enumerate(times):
-        if i < period:
-            result.append({'time': t, 'value': None})
-        else:
-            ema = (values[i] - ema) * multiplier + ema
-            result.append({'time': t, 'value': round(ema, 4)})
-    return result
+    # Include the seed bar, matching frontend calcEMA at the end of warm-up.
+    return [{'time': t, 'value': None if v is None else round(v, 4)}
+            for t, v in zip(times, _ema_seeded(values, period))]
 
 
 def _calc_sma(values: list[float], times: list[str], period: int) -> list[dict]:
@@ -128,24 +158,21 @@ def _calc_rsi(closes: list[float], times: list[str], period: int = 14) -> list[d
 
 
 def _calc_macd(closes: list[float], times: list[str], fast: int, slow: int, signal: int) -> dict:
-    ema_fast = _ema_values(closes, fast)
-    ema_slow = _ema_values(closes, slow)
-    macd_line = [f - s for f, s in zip(ema_fast, ema_slow)]
-    signal_line = _ema_values(macd_line, signal)
-    histogram = [m - s for m, s in zip(macd_line, signal_line)]
+    """MACD on the textbook EMA (_ema_seeded), as the frontend calcMACD draws it:
+    None until both EMAs are seeded (index slow-1), the signal line None until
+    `signal` MACD values exist. MACD-EMA-LAG: this used the lagged, zero-padded
+    _ema_values, so the line equalled the price during warm-up and every value
+    trailed the bar it was stamped on by one bar."""
+    n = len(closes)
+    ema_fast = _ema_seeded(closes, fast)
+    ema_slow = _ema_seeded(closes, slow)
+    macd_line: list[float | None] = [
+        None if f is None or s is None else f - s for f, s in zip(ema_fast, ema_slow)
+    ]
+    start = next((i for i, m in enumerate(macd_line) if m is not None), n)
+    signal_line: list[float | None] = [None] * start + _ema_seeded(macd_line[start:], signal)
+    histogram = [None if m is None or s is None else m - s for m, s in zip(macd_line, signal_line)]
     return {'times': times, 'macd': macd_line, 'signal': signal_line, 'histogram': histogram}
-
-
-def _ema_values(values: list[float], period: int) -> list[float]:
-    result = [0.0] * len(values)
-    if len(values) < period:
-        return result
-    multiplier = 2 / (period + 1)
-    ema = sum(values[:period]) / period
-    for i in range(period, len(values)):
-        result[i] = ema
-        ema = (values[i] - ema) * multiplier + ema
-    return result
 
 
 def _calc_atr(highs: list[float], lows: list[float], closes: list[float], times: list[str], period: int = 14) -> list[dict]:
@@ -227,9 +254,9 @@ def _calc_vwap(highs: list[float], lows: list[float], closes: list[float], volum
 
 # ── COMPOSITE-MOMENTUM-CONFIRMATIONS-BUILD: composite 'momentum' confirmations ──
 # Plan: docs/superpowers/plans/2026-09-29-composite-momentum-confirmations-plan.md
-# (Q1-Q3, Q6, Q11). Additions only: _calc_rsi / _calc_macd / _ema_values and
-# compute_indicators_for_conditions stay byte-for-byte unchanged (standard
-# rules keep their behaviour; the lagged _ema_values is logged separately, Q9).
+# (Q1-Q3, Q6, Q11). Additions only: _calc_rsi is unchanged by this build. The
+# lagged _ema_values logged at Q9 is gone: MACD-EMA-LAG moved _calc_macd onto
+# _ema_seeded and made the 'macd_signal' dispatch an exact match.
 # momentum_match judges the LAST bar of what it is given, on both the rule and
 # the watch path, so the two cannot disagree on the same bars.
 _momentum_logger = logging.getLogger(__name__)

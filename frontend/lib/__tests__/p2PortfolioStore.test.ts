@@ -208,3 +208,90 @@ describe('P2-01 -- closing at $0 posts exitPrice 0, not null', () => {
     expect(close.exitPrice).toBe(0);
   });
 });
+
+// ── STOP-SEMANTICS-2026-10-02 -- every create signal names WHY a stop dropped ─
+describe('STOP-SEMANTICS -- the drop reason on all three signals', () => {
+  const addAndGet = async (p: PortfolioPosition, response: Record<string, unknown>) => {
+    global.fetch = jest.fn().mockResolvedValue(json(response));
+    let res!: Awaited<ReturnType<ReturnType<typeof usePortfolioStore.getState>['addPosition']>>;
+    await act(async () => { res = await usePortfolioStore.getState().addPosition(p); });
+    return res;
+  };
+
+  it('addPosition: below_one_cent, total_loss and unknown', async () => {
+    let r = await addAndGet(pos({ premiumStopDollar: 0.02 }), { premiumStopPct: null, entryPrice: 0.03 });
+    expect([r.premiumStopDropped, r.premiumStopDropReason]).toEqual([0.02, 'below_one_cent']);
+    r = await addAndGet(pos({ premiumStopDollar: 4.5 }), { premiumStopPct: null, entryPrice: 4.2 });
+    expect([r.premiumStopDropped, r.premiumStopDropReason]).toEqual([4.5, 'total_loss']);
+    r = await addAndGet(pos({ premiumStopDollar: 2 }), { premiumStopPct: null });
+    expect([r.premiumStopDropped, r.premiumStopDropReason]).toEqual([2, 'unknown']);
+  });
+
+  it('addPosition: a fraction-only create counts too (S3), with no dollar', async () => {
+    const r = await addAndGet(pos({ premiumStopPct: 0.9 }), { premiumStopPct: null, entryPrice: 0.05 });
+    expect(r.premiumStopDropped).toBeUndefined();
+    expect(r.premiumStopDropReason).toBe('below_one_cent');
+  });
+
+  // PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03 -- was "is not a drop".
+  // The dollar was still not applied, so the notice names the kept fraction.
+  it('addPosition: the server keeping the CLIENT fraction (S2 fallback) says which stop applies', async () => {
+    let r = await addAndGet(pos({ premiumStopDollar: 0.02, premiumStopPct: 0.5 }),
+      { premiumStopPct: 0.5, entryPrice: 0.03 });
+    expect([r.premiumStopDropped, r.premiumStopDropReason, r.premiumStopKeptPct])
+      .toEqual([0.02, 'below_one_cent', 0.5]);
+    // $4.50 typed on a $5.20 mid (86.5%), filled at $4.20: a total loss there.
+    r = await addAndGet(pos({ premiumStopDollar: 4.5, premiumStopPct: 4.5 / 5.2 }),
+      { premiumStopPct: 4.5 / 5.2, entryPrice: 4.2 });
+    expect([r.premiumStopDropped, r.premiumStopDropReason, r.premiumStopKeptPct])
+      .toEqual([4.5, 'total_loss', 4.5 / 5.2]);
+    // The dollar applied: the stored fraction is its own ratio -- no notice.
+    r = await addAndGet(pos({ premiumStopDollar: 2, premiumStopPct: 2 / 5.2 }),
+      { premiumStopPct: 2 / 4.2, entryPrice: 4.2 });
+    expect([r.premiumStopDropReason, r.premiumStopKeptPct]).toEqual([undefined, undefined]);
+  });
+
+  it('applyPersistedPosition: a kept fraction reaches the callback', () => {
+    const cb = jest.fn();
+    applyPersistedPosition({ ok: true, premiumStopPct: 0.865, entryPrice: 4.2 },
+      pos({ premiumStopDollar: 4.5, premiumStopPct: 0.865 }), jest.fn(), undefined, cb);
+    expect(cb).toHaveBeenCalledWith(4.5, 'total_loss', 0.865);
+  });
+
+  it('the offline-retry queue carries a kept fraction to the banner', async () => {
+    act(() => usePortfolioStore.setState({
+      positions: [pos({ contract: 'K|1|2026-06-19|C', symbol: 'KKK', syncStatus: 'pending',
+        premiumStopDollar: 4.5, premiumStopPct: 0.865 })],
+    }));
+    global.fetch = jest.fn((_url: string, init?: RequestInit) => (init?.method === 'POST'
+      ? Promise.resolve(json({ premiumStopPct: 0.865, entryPrice: 4.2 }))
+      : Promise.resolve(json([], 200)))) as unknown as typeof fetch;
+    await act(async () => { await usePortfolioStore.getState().syncFromBackend(true); });
+    const notice = usePortfolioStore.getState().lastPremiumStopDropped!;
+    expect([notice.symbol, notice.requestedDollar, notice.reason, notice.keptPct])
+      .toEqual(['KKK', 4.5, 'total_loss', 0.865]);
+  });
+
+  it('applyPersistedPosition: the callback gets the dollar (or null) and the reason', () => {
+    const cb = jest.fn();
+    applyPersistedPosition({ ok: true, premiumStopPct: null, entryPrice: 0.03 },
+      pos({ premiumStopDollar: 0.02 }), jest.fn(), undefined, cb);
+    applyPersistedPosition({ ok: true, premiumStopPct: null, entryPrice: 0.05 },
+      pos({ premiumStopPct: 0.9 }), jest.fn(), undefined, cb);
+    applyPersistedPosition({ ok: true, premiumStopPct: 0.4, entryPrice: 5 },
+      pos({ premiumStopDollar: 2 }), jest.fn(), undefined, cb);
+    expect(cb.mock.calls).toEqual([[0.02, 'below_one_cent'], [null, 'below_one_cent']]);
+  });
+
+  it('the offline-retry queue carries the reason', async () => {
+    act(() => usePortfolioStore.setState({
+      positions: [pos({ contract: 'Z|1|2026-06-19|C', symbol: 'ZZZ', syncStatus: 'pending', premiumStopDollar: 0.02 })],
+    }));
+    global.fetch = jest.fn((_url: string, init?: RequestInit) => (init?.method === 'POST'
+      ? Promise.resolve(json({ premiumStopPct: null, entryPrice: 0.03 }))
+      : Promise.resolve(json([], 200)))) as unknown as typeof fetch;
+    await act(async () => { await usePortfolioStore.getState().syncFromBackend(true); });
+    const notice = usePortfolioStore.getState().lastPremiumStopDropped!;
+    expect([notice.symbol, notice.requestedDollar, notice.reason]).toEqual(['ZZZ', 0.02, 'below_one_cent']);
+  });
+});

@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useChartStore, type IndicatorConfig, type Interval, type ChartType } from '@/lib/chartStore';
 import { ChartWSClient, type WSMessage, type ConnectionState } from '@/lib/chartWS';
+import { computeAlertIndicatorPoints } from '@/lib/alertIndicators';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle, type Point } from '@/lib/indicators';
 import { calcAnchoredVWAP, calcKeyLevels, calcCrossSignals, calcSignalMarkers, calcVolumeProfile, resample } from '@/lib/chart/overlays';
 import { VolumeProfilePrimitive } from '@/lib/chartPrimitives/VolumeProfilePrimitive';
@@ -132,21 +133,6 @@ function buildSubSeries(candles: Candle[], ind: IndicatorConfig): SeriesConfig[]
   return [];
 }
 
-
-function getIndicatorPoints(candles: Candle[], indicators: IndicatorConfig[]): Record<string, Point[]> {
-  const result: Record<string, Point[]> = {};
-  for (const ind of indicators) {
-    if (ind.type === 'EMA')  result[ind.id] = calcEMA(candles, ind.params.period ?? 20).map(p => ({ time: p.time, value: p.value }));
-    if (ind.type === 'SMA')  result[ind.id] = calcSMA(candles, ind.params.period ?? 20).map(p => ({ time: p.time, value: p.value }));
-    if (ind.type === 'RSI')  result[ind.id] = calcRSI(candles, ind.params.period ?? 14).map(p => ({ time: p.time, value: p.value }));
-    if (ind.type === 'ATR')  result[ind.id] = calcATR(candles, ind.params.period ?? 14).map(p => ({ time: p.time, value: p.value }));
-    if (ind.type === 'MACD') {
-      const m = calcMACD(candles, ind.params.fast ?? 12, ind.params.slow ?? 26, ind.params.signal ?? 9);
-      result[ind.id] = m.macd.map(p => ({ time: p.time, value: p.value }));
-    }
-  }
-  return result;
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -406,7 +392,7 @@ export default function ChartWorkspace() {
         r => r.symbol === symbol && r.interval === interval
       );
       if (alertRules.length > 0) {
-        const indicatorPoints = getIndicatorPoints(candles, activeIndicators);
+        const indicatorPoints = computeAlertIndicatorPoints(candles, alertRules.flatMap(r => r.group.conditions));
         const regimeEntry = regimeDataRef.current.find(
           (d) => d.time === String(closedCandle.time),
         );

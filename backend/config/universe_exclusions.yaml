@@ -1,0 +1,45 @@
+# One shared list of symbols that scans, the evidence harness and tuning skip.
+# scope: scan     -> skipped by every scan (options, stocks, pre-breakout, fib), the evidence harness and tuning
+# scope: evidence -> skipped by the evidence harness and tuning only; still scanned live
+# Edit by hand; read fresh on every scan (no restart needed). Decision STOCKS-PARAMS-PER-HORIZON-2026-10-05.
+# Evidence: docs/superpowers/measurements/2026-10-05-phase-c-evidence/bar_basis.md (the 29 symbols
+# stale_reasons flags) plus each symbol's last stored bar in ohlcv_daily, read 2026-10-05 (data end 2026-10-02).
+# Quote any ticker YAML would read as a boolean (ON, NO, Y, ...).
+version: 1
+symbols:
+  # scope: scan — corporate action not adjusted
+  CTVA: {scope: scan, reason: "2026-10-01 corporate action not adjusted by any provider (77.67 -> 12.57)", added: 2026-10-05}
+  AVB:  {scope: scan, reason: "price feed ended 2026-08-17; 2.793 split not adjusted", added: 2026-10-05}
+
+  # scope: scan — price feed ended (no bars in the 30+ days before 2026-10-02); likely delisted
+  PXD:  {scope: scan, reason: "price feed ended 2024-05-03 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  SWN:  {scope: scan, reason: "price feed ended 2024-10-01 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  MRO:  {scope: scan, reason: "price feed ended 2024-11-22 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  CTLT: {scope: scan, reason: "price feed ended 2024-12-18 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  PTVE: {scope: scan, reason: "price feed ended 2025-04-01 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  JNPR: {scope: scan, reason: "price feed ended 2025-07-02 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  HES:  {scope: scan, reason: "price feed ended 2025-07-18 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  WBA:  {scope: scan, reason: "price feed ended 2025-08-28 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  K:    {scope: scan, reason: "price feed ended 2025-12-11 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  HOLX: {scope: scan, reason: "price feed ended 2026-04-07 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  CTRA: {scope: scan, reason: "price feed ended 2026-05-06 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  EA:   {scope: scan, reason: "price feed ended 2026-08-10 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+  EQR:  {scope: scan, reason: "price feed ended 2026-08-21 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
+
+  # scope: scan — acquired; stored bars after the acquisition are another company
+  ANSS: {scope: scan, reason: "acquired (ANSS by SNPS 2025-07); stored bars after that date are not this company (mixed basis)", added: 2026-10-05}
+  SGEN: {scope: scan, reason: "acquired (SGEN by PFE 2023-12); stored bars after that date are not this company (mixed basis)", added: 2026-10-05}
+
+  # scope: evidence — excluded from the evidence harness and tuning, still scanned live
+  BIIB: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  CNC:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  DOC:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  DXCM: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  EPAM: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  FI:   {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  FMC:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  LCID: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  MRNA: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  NWL:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  PDD:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  SIRI: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}

@@ -7,6 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
+from tests.watch_notify_helpers import configured_channels_no_real_sends  # noqa: F401
 
 
 @pytest.fixture
@@ -173,7 +174,7 @@ async def test_evaluate_now_with_enabled_composite_watch_is_200(app):
                new_callable=AsyncMock, return_value=bars), \
          patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
                return_value=False), \
-         patch("app.services.strategy_watch_evaluator.notify_enabled_channels",
+         patch("app.services.strategy_watch_evaluator.notify_channels",
                new_callable=AsyncMock) as notify:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             r = await ac.post("/api/strategy-watch/evaluate")

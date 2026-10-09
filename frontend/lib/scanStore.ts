@@ -1,3 +1,4 @@
+import { defaultStockOverlay, stockExecutionIdentity, type StockExecutionRecord, type StockScanFeedback } from './stockExecutionSession';
 // Scan & regime state — Zustand.
 // Drives the TopBar content (scan context string, scan state pill, regime dot).
 
@@ -120,13 +121,32 @@ export interface ScanResult {
   /** The earnings/dividend window the scan's event rule applied (horizon
    *  default, replaced by any Step-3 override). Absent on results from before
    *  2026-09-29. Step 5 gates on it. */
-  event_window?: { reject_days: number; caution_days: number };
+  event_window?: { reject_days: number; caution_days: number; veto_days?: number | null };
   /** The contract-rule overrides the scan graded contracts with (Step-3
    *  liquidity, spread, delta, IV and min-stock-score rules; `{}` when it
    *  overrode none). Absent, or null from the backend, on results from before
    *  2026-09-29 or when the scan could not record them. Step 6 sends it to
    *  /api/contracts so its table grades with the trade cards' rules. */
   contract_rules?: Record<string, number> | null;
+  /** The Reward/Risk overrides (rr_* keys) the scan priced its plans with;
+   *  `{}` when it overrode none. Absent, or null, on results from before
+   *  2026-10-02. Step 7's recompute-plan sends these, not live scanOverrides
+   *  (STEP3-PARAM-REACH) -- see rrOverridesForPlan. */
+  rr_overrides?: Record<string, number> | null;
+  /** The request fields the result was produced from. Absent, or null, on
+   *  results from before 2026-10-02. A result restored into an empty browser
+   *  rebuilds its ScanContext from this (contextFromScanRequest). */
+  request_context?: ScanRequestContext | null;
+}
+
+/** ScanResult.request_context -- the backend's ScanRequestContext. */
+export interface ScanRequestContext {
+  universe:       string[];
+  direction:      string;
+  horizon:        string;
+  horizon_preset?: string | null;
+  hold_min_days?:  number | null;
+  hold_max_days?:  number | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -191,6 +211,16 @@ function stripLegacyStopFromScanResult(value: unknown): unknown {
       return { ...candidate, exit };
     }),
   };
+}
+
+/** scanStore v18 (TRADING-REVIEW-PHASE-C-RR): an options result is kept only
+ *  when EVERY candidate's R/R was computed on the full-premium basis. */
+function discardPreFullPremiumScanResult(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
+  const allFullPremium = value.candidates.every(
+    (candidate) => isRecord(candidate) && isRecord(candidate.exit) && candidate.exit.rrRiskBasis === 'full_premium',
+  );
+  return allFullPremium ? value : null;
 }
 
 function stripLegacyIvDetailsFromScanResult(value: unknown): unknown {
@@ -301,6 +331,19 @@ export interface ScanSessionStatus {
 }
 
 interface ScanStoreState {
+  stockExecutionGeneration: number;
+  stockManualRunToken: number;
+  stockExecution: Record<string, StockExecutionRecord>;
+  stockBasketSources: Record<string, string | null>;
+  stockAfterScanIntent: Record<string, boolean>;
+  stockScanFeedback: StockScanFeedback;
+  stockAfterScanOutcomes: Record<string, { token: number; symbol: string; status: 'saving' | 'ok' | 'pending' | 'rejected'; detail?: string; adjustedQty?: number }>;
+  recordStockAfterScanOutcome: (key: string, outcome: ScanStoreState['stockAfterScanOutcomes'][string]) => void;
+  beginStockManualRun: () => number;
+  isStockExecutionCurrent: (identity: string) => boolean;
+  patchStockExecution: (identity: string, patch: Partial<StockExecutionRecord>) => void;
+  setStockAfterScanIntent: (symbol: string, enabled: boolean) => void;
+  setStockScanFeedback: (token: number, feedback: StockScanFeedback) => void;
   scanState:  ScanState;
   /** ISO-ish local timestamp, e.g. "2026-04-21T09:42:00" (no TZ suffix). */
   scanAt:          string | null;
@@ -544,6 +587,60 @@ export const useScanStore = create<ScanStoreState>()(
       stockScanAt:              null,
       optionsScanAt:            null,
       stockBasket:           [],
+      stockExecutionGeneration: 0,
+      stockManualRunToken: 0,
+      stockExecution: {},
+      stockBasketSources: {},
+      stockAfterScanIntent: {},
+      stockScanFeedback: { error: null, notice: null },
+      stockAfterScanOutcomes: {},
+      recordStockAfterScanOutcome: (key, outcome) => set(state => ({ stockAfterScanOutcomes: { ...state.stockAfterScanOutcomes, [key]: outcome } })),
+      beginStockManualRun: () => {
+        const token = get().stockManualRunToken + 1;
+        set({ stockManualRunToken: token, stockScanFeedback: { error: null, notice: null } });
+        return token;
+      },
+      isStockExecutionCurrent: (identity) => {
+        const state = get();
+        try {
+          const [, , symbol] = JSON.parse(identity);
+          return typeof symbol === 'string' && stockExecutionIdentity(state, symbol) === identity;
+        } catch { return false; }
+      },
+      patchStockExecution: (identity, patch) => {
+        const state = get();
+        // Retired numeric evidence cannot be resurrected by late analytics.
+        // Started mutations retain their originating record for bookkeeping.
+        const mutationKeys = ['placingType', 'orderId', 'orderMsg', 'adding', 'added', 'queued', 'err', 'warning'];
+        if (!state.isStockExecutionCurrent(identity) && !Object.keys(patch).every(k => mutationKeys.includes(k))) return;
+        const previous = state.stockExecution[identity] ?? {};
+        let invalidated: Partial<StockExecutionRecord> = {};
+        if (patch.overlay) {
+          const symbol = JSON.parse(identity)[2];
+          const candidate = state.stockScanResult?.candidates?.find(c => c.symbol === symbol);
+          const old = previous.overlay ?? (candidate ? defaultStockOverlay(candidate) : undefined);
+          const entryChanged = !old || old.entry !== patch.overlay.entry;
+          const estimateChanged = entryChanged || !old || ['stop', 't1', 't2', 't3'].some(k =>
+            old[k as keyof typeof old] !== patch.overlay![k as keyof typeof old]);
+          if (estimateChanged) invalidated = {
+            estimate: null, estimateErr: null, estimating: false,
+            estimateRevision: (previous.estimateRevision ?? 0) + 1,
+          };
+          if (entryChanged) invalidated = { ...invalidated,
+            plan: null, planErr: null, planning: false,
+            structural: null, structuralErr: null, checkingStructure: false,
+            entryRevision: (previous.entryRevision ?? 0) + 1,
+            structuralRevision: (previous.structuralRevision ?? 0) + 1,
+          };
+        }
+        set({ stockExecution: { ...state.stockExecution, [identity]: { ...previous, ...invalidated, ...patch } } });
+      },
+      setStockAfterScanIntent: (symbol, enabled) => set(state => ({
+        stockAfterScanIntent: { ...state.stockAfterScanIntent, [symbol]: enabled },
+      })),
+      setStockScanFeedback: (token, feedback) => {
+        if (get().stockManualRunToken === token) set({ stockScanFeedback: feedback });
+      },
       activeStrategy:           null,
       lastOptionsScanStatus:    null,
       lastOptionsScanUpdatedAt: null,
@@ -552,19 +649,55 @@ export const useScanStore = create<ScanStoreState>()(
       lastStockScanStrategy:    null,
       setScreenerMode:     (m) => set({ screenerMode: m }),
       setOptionsScanAt:    (at) => set({ optionsScanAt: at }),
-      setStockScanResult:  (r, request) => set((state) => ({
-        stockScanResult: r,
-        stockScanRequest: r !== null ? (request ?? null) : null,
-        previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
-        stockScanAt: r !== null ? toLocalWallClock() : state.stockScanAt,
-      })),
+      setStockScanResult: (r, request) => set(state => {
+        const replacement = r !== state.stockScanResult;
+        // Keep mutation ownership across scans; retire overlays/evidence and
+        // picks even for equal-price/equal-id replacement result objects.
+        const retained: Record<string, StockExecutionRecord> = {};
+        if (replacement) for (const [identity, record] of Object.entries(state.stockExecution)) {
+          if (record.placingType || record.orderId || record.adding || record.queued || record.added) {
+            retained[identity] = {
+              placingType: record.placingType, orderId: record.orderId, orderMsg: record.orderMsg,
+              adding: record.adding, added: record.added, queued: record.queued,
+              err: record.err, warning: record.warning,
+            };
+          }
+        }
+        if (replacement && r) {
+          const generation = state.stockExecutionGeneration + 1;
+          for (const candidate of r.candidates ?? []) {
+            const identity = stockExecutionIdentity({ stockScanResult: r, stockExecutionGeneration: generation }, candidate.symbol);
+            if (identity) retained[identity] = {
+              validationAvailability: 'unavailable',
+              provenance: { identity, symbol: candidate.symbol, strategy: candidate.strategy.strategy, direction: candidate.direction, request: request ?? null },
+            };
+          }
+        }
+        return {
+          stockScanResult: r,
+          stockScanRequest: r !== null ? (request === undefined && !replacement ? state.stockScanRequest : request ?? null) : null,
+          previousStockScanResult: r !== null && replacement ? state.stockScanResult : state.previousStockScanResult,
+          stockScanAt: r !== null ? toLocalWallClock() : state.stockScanAt,
+          ...(replacement ? {
+            stockExecutionGeneration: state.stockExecutionGeneration + 1,
+            stockExecution: retained,
+            stocksCardEdits: { ...state.stocksCardEdits, picks: {} },
+          } : request !== undefined ? {
+            stockExecution: Object.fromEntries(Object.entries(state.stockExecution).map(([identity, record]) => [identity,
+              record.provenance && state.isStockExecutionCurrent(identity) ? { ...record, provenance: { ...record.provenance, request: request ?? null } } : record,
+            ])),
+          } : {}),
+        };
+      }),
       addToStockBasket:      (card) => set((s) => ({
         stockBasket: [...s.stockBasket.filter((c) => c.symbol !== card.symbol), card],
+        stockBasketSources: { ...s.stockBasketSources, [card.symbol]: s.stockScanResult?.candidates?.includes(card) ? stockExecutionIdentity(s, card.symbol) : null },
       })),
       removeFromStockBasket: (symbol) => set((s) => ({
         stockBasket: s.stockBasket.filter((c) => c.symbol !== symbol),
+        stockBasketSources: Object.fromEntries(Object.entries(s.stockBasketSources).filter(([key]) => key !== symbol)),
       })),
-      clearStockBasket:      () => set({ stockBasket: [] }),
+      clearStockBasket:      () => set({ stockBasket: [], stockBasketSources: {} }),
       setStockScanError:   (message) => set({ stockScanError: message }),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
       setLastOptionsScanMeta: (status, updatedAt) => set({
@@ -581,7 +714,7 @@ export const useScanStore = create<ScanStoreState>()(
         return quotaSafeLocalStorage();
       }),
       skipHydration: true,
-       version: 17,
+       version: 18,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -632,7 +765,7 @@ export const useScanStore = create<ScanStoreState>()(
           };
         }
         if (version < 13) {
-          // Phase A split `ivRank` (a true percentile) from `iv` (the absolute
+          // Phase A split `ivRank` (an IV rank) from `iv` (the absolute
           // level). A blob stored before that carries one number of unknown
           // basis under the percentile's name, and rehydrating it prints
           // "IV rank 45" for a 45% absolute IV on the card the user acts from
@@ -723,6 +856,27 @@ export const useScanStore = create<ScanStoreState>()(
           // then attach the backend's record when its scan_id matches.
           s = { ...s, stockScanRequest: null };
         }
+        if (version < 18) {
+          // TRADING-REVIEW-PHASE-C-RR (review M7, D5). Options R/R now risks
+          // the FULL premium: no protective stop order is ever placed. Every
+          // `rrRatio` / `rrContribution` stored before that divided reward by
+          // the premium stop (premium x 0.60) or the captured stock-stop loss,
+          // under the same field names -- the v13-v15 shape, a stored value
+          // that became a wrong number under a new reading. The header, the
+          // rail and AlternativeContractRow would print it at least 1/0.6 too
+          // high. Discarded rather than recomputed, as v13-v15 delete rather
+          // than guess: the whole options result goes when any
+          // candidate's `exit.rrRiskBasis` is not 'full_premium'; the user
+          // re-runs the scan. previousRun goes by the same rule, and the
+          // one-time loss of Δrank against it is accepted. The backend refuses
+          // the same blobs (SCAN_RESULT_SCHEMA_VERSION 3), so StoreHydration
+          // cannot refill them from /scan/last. stockScanResult is untouched.
+          s = {
+            ...s,
+            scanResult: discardPreFullPremiumScanResult(s.scanResult),
+            previousRun: discardPreFullPremiumScanResult(s.previousRun),
+          };
+        }
         return s;
       },
       partialize: (state) => ({
@@ -792,6 +946,14 @@ export const useScanStore = create<ScanStoreState>()(
           ...current,
           ...p,
           scanState: restoredState,
+          // Same-version forged persisted fields are ignored too.
+          stockExecutionGeneration: current.stockExecutionGeneration + 1,
+          stockManualRunToken: current.stockManualRunToken + 1,
+          stockExecution: {},
+          stockBasketSources: {},
+          stockAfterScanIntent: {},
+          stockScanFeedback: { error: null, notice: null },
+          stockAfterScanOutcomes: {},
           optionsCardEdits: normalizeCardEdits(p.optionsCardEdits),
           stocksCardEdits:  normalizeCardEdits(p.stocksCardEdits),
         };

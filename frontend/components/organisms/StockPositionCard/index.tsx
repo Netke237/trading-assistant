@@ -12,11 +12,15 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { stockEarningsGate, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 import { api } from '@/lib/api';
+import { useStockExecutionField, useStockExecutionIdentity } from '@/lib/useStockExecutionField';
+import { defaultStockOverlay as defaultOverlay, patchStockOverlay, stockExecutionBlock, useStockOrderOwnershipStore, type StockEditOverlay } from '@/lib/stockExecutionSession';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { winRateTooltip } from '@/lib/statusTooltips';
-import type { PositionCardData, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+import type { PositionCardData } from '@/types/stockDomain';
 // The SAME prose the options card's Arithmetic Profit Target section uses.
 // The stocks plan is built from the same compute_final_stop /
 // compute_target_row and reports the same fields under the same names, so
@@ -29,18 +33,6 @@ import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthC
 import styles from './StockPositionCard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface StockEditOverlay {
-  entry: number;
-  stop: number;
-  shares: number;
-  t1: number;
-  t2: number;
-  t3: number;
-  sharesT1: number;
-  sharesT2: number;
-  sharesT3: number;
-}
 
 /** The single-position concentration check that stands beside the recommended
  *  share count — Kenneth's decision SHARE-SIZING-CONCENTRATION-FLAG-2026-09-09.
@@ -101,47 +93,7 @@ interface StockPositionCardProps {
 type ExecMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper' | 'tastytrade_paper';
 
 /** The subset of `/api/contracts/structural-stop`'s response this card keeps. */
-interface StructuralStopResult {
-  price: number;
-  source: 'order_block' | 'swing_low' | 'swing_high' | null;
-  confidence: number | null;
-  distancePct: number | null;
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function defaultOverlay(card: PositionCardData): StockEditOverlay {
-  const entry = card.strategy.entry_price;
-  const stop  = card.strategy.stop_price;
-  const risk  = Math.abs(entry - stop);
-  const dir   = card.direction;
-  const sign  = dir === 'Bullish' ? 1 : -1;
-  // T2/T3 used to be invented here as a flat 2R/3R — not strategy-derived, not
-  // validated by any backtest, and invisible to the WFO tuner. They now come
-  // from the backend ladder, which is built from each strategy's own exit
-  // thesis. The R-step fill survives only as the fallback for a scan result
-  // rehydrated from localStorage before `targets` existed (`?.length`, not
-  // `??`: an empty array must fall back too).
-  const round2 = (v: number) => Math.round(v * 100) / 100;
-  const ladder = card.strategy.targets?.length
-    ? card.strategy.targets
-    : [card.strategy.target_price];
-  // Missing rungs are filled by stepping ONE MORE R past the previous rung, not
-  // by measuring 2R/3R from entry. Measuring from entry can place T2 nearer than
-  // a strategy-derived T1 (a prior swing high 4R away leaves T2 = 2R behind it),
-  // and stockPositionLevels() sorts the ladder nearest-first on the way into the
-  // portfolio — so the persisted targets[0], which is the ONLY rung TP_HIT
-  // fires on, would not be the rung the card showed as T1.
-  // ladder is guaranteed non-empty by construction above, so ladder[0] is
-  // never undefined — no `?? target_price` fallback needed here.
-  const t1    = round2(ladder[0]);
-  const t2    = round2(ladder[1] ?? t1 + sign * risk);
-  const t3    = round2(ladder[2] ?? t2 + sign * risk);
-  const s     = card.shares;
-  const s1    = Math.floor(s / 3);
-  const s2    = Math.floor(s / 3);
-  return { entry, stop, shares: s, t1, t2, t3, sharesT1: s1, sharesT2: s2, sharesT3: s - s1 - s2 };
-}
 
 // ─── EditableField ────────────────────────────────────────────────────────────
 
@@ -228,88 +180,31 @@ export function StockPositionCard({
   afterScanArmed,
   onAfterScanToggle,
 }: StockPositionCardProps) {
-  const [overlay, setOverlay] = useState<StockEditOverlay>(() => defaultOverlay(card));
+  const executionIdentity = useStockExecutionIdentity(card.symbol);
+  const sessionAfterScanArmed = useScanStore(s => !!s.stockAfterScanIntent[card.symbol]);
+  const toggleAfterScanIntent = useScanStore(s => s.setStockAfterScanIntent);
+  const orderOwnership = useStockOrderOwnershipStore(s => s.bySymbol[card.symbol]);
+  const [overlayValue, setOverlay] = useStockExecutionField(executionIdentity, 'overlay', defaultOverlay(card));
+  const overlay = overlayValue!;
+  const [spotPrice, setSpotPrice] = useState<number | null>(null);
+  const [fetchingSpot, setFetchingSpot] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setSpotPrice(null);
+    setFetchingSpot(true);
+    Promise.resolve().then(() => api.getStockQuote(card.symbol)).then(q => {
+      if (!cancelled) setSpotPrice(q.price);
+    }).catch(() => {}).finally(() => { if (!cancelled) setFetchingSpot(false); });
+    return () => { cancelled = true; };
+  }, [executionIdentity, card.symbol]);
   // The concentration flag beside the recommended share count reads the SAME
   // portfolio value and single-position cap the risk checks use, so editing
   // either in Settings moves this warning with them.
   const riskLimits = useRiskStore((s) => s.limits);
 
-  // Reset overlay and per-symbol outcome state when the selected symbol changes.
-  // The two on-demand results (estimate, structural stop) are per-SYMBOL and
-  // per-overlay, so showing AAPL's numbers under MSFT's header would be worse
-  // than showing none. Their in-flight requests are aborted for the same reason:
-  // a slow response for the previous symbol must never land on the new one.
-  useEffect(() => {
-    setOverlay(defaultOverlay(card));
-    setAdded(false);
-    setErr(null);
-    setWarning(null);
-    setQueued(false);
-    setAdding(false);
-    setOrderId(null);
-    setOrderMsg(null);
-    estimateReq.current?.abort();
-    estimateReq.current = null;
-    structuralReq.current?.abort();
-    structuralReq.current = null;
-    planReq.current?.abort();
-    planReq.current = null;
-    setPlan(null);
-    setPlanErr(null);
-    setPlanning(false);
-    setEstimate(null);
-    setEstimateErr(null);
-    setEstimating(false);
-    setStructural(null);
-    setStructuralErr(null);
-    setCheckingStructure(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card.symbol]);
-
   const patch = useCallback((partial: Partial<StockEditOverlay>) => {
     setOverlay((prev) => {
-      const next = { ...prev, ...partial };
-      // Each rung's share count is edited independently (one EditableField per
-      // T1/T2/T3 row), so nothing stops sharesT1+T2+T3 from exceeding the
-      // position's total shares — which would tell the sell-to-close plan
-      // (buildPaperStockPosition's contractsToSell) to sell more shares than
-      // the position holds.
-      const allocated = next.sharesT1 + next.sharesT2 + next.sharesT3;
-      if (allocated > next.shares) {
-        const shareKeys = ['sharesT1', 'sharesT2', 'sharesT3'] as const;
-        const editedShareKeys = shareKeys.filter((k) => k in partial);
-        if (editedShareKeys.length > 0) {
-          // The rung the user just edited pushed the total over — clamp THAT
-          // rung down to what's left after the others, rather than silently
-          // shrinking a different rung they didn't touch.
-          const othersSum = shareKeys
-            .filter((k) => !editedShareKeys.includes(k))
-            .reduce((sum, k) => sum + next[k], 0);
-          for (const k of editedShareKeys) next[k] = Math.max(0, next.shares - othersSum);
-        } else if (allocated > 0) {
-          // Total `shares` shrank below the existing allocation — scale every
-          // rung down proportionally rather than favoring one arbitrarily.
-          const scale = next.shares / allocated;
-          next.sharesT1 = Math.floor(next.sharesT1 * scale);
-          next.sharesT2 = Math.floor(next.sharesT2 * scale);
-          next.sharesT3 = Math.max(0, next.shares - next.sharesT1 - next.sharesT2);
-        }
-      } else if ('shares' in partial && allocated > 0 && allocated < next.shares) {
-        // A fifth independent audit round found the mirror gap: growing total
-        // SHARES was never topped up to the sell-to-close plan, silently
-        // leaving the added shares with no planned exit rung at all (e.g.
-        // 100 shares allocated 33/33/34, SHARES edited up to 250, rungs stay
-        // at 33/33/34 — 150 shares reach Add to Portfolio uncovered). Scale
-        // every rung UP proportionally, the mirror of the shrink branch
-        // above. `allocated > 0` is a pure division-by-zero guard, not a
-        // reachable UI state — EditableField.save() requires `p > 0`, so a
-        // rung's share count can never actually be edited down to 0.
-        const scale = next.shares / allocated;
-        next.sharesT1 = Math.floor(next.sharesT1 * scale);
-        next.sharesT2 = Math.floor(next.sharesT2 * scale);
-        next.sharesT3 = Math.max(0, next.shares - next.sharesT1 - next.sharesT2);
-      }
-      return next;
+      return patchStockOverlay(prev, partial);
     });
     // A displayed estimate/structural-stop result is a snapshot computed
     // against the overlay values AT THE MOMENT the user clicked Estimate /
@@ -342,7 +237,7 @@ export function StockPositionCard({
       setPlan(null);
       setPlanErr(null);
     }
-  }, []);
+  }, [executionIdentity]);
 
   // Derived values
   const riskPerShare = Math.abs(overlay.entry - overlay.stop);
@@ -354,6 +249,11 @@ export function StockPositionCard({
   // Store selectors
   // Display label like "Swing (5–15d)"; _horizonEnum maps it to the backend enum.
   const scanHorizonLabel = useScanStore((s) => s.context?.horizon ?? null);
+  // STOCKS-HORIZON-P0B B7: earnings inside the scan's veto window
+  // max(reject_days, hold), aged by the scan's age. Unknown never blocks.
+  const scanTimestamp = useScanStore((s) => s.stockScanResult?.timestamp);
+  const scanVetoDays  = useScanStore((s) => s.stockScanResult?.veto_days);
+  const earningsVeto  = stockEarningsGate(card, scanTimestamp, scanVetoDays).veto;
   const stockBasket  = useScanStore((s) => s.stockBasket);
   const addToBasket  = useScanStore((s) => s.addToStockBasket);
   const removeBasket = useScanStore((s) => s.removeFromStockBasket);
@@ -361,33 +261,53 @@ export function StockPositionCard({
   const ibkrPaper    = useSettingsStore((s) => s.ibkrPaper);
   const tradierPaper = useSettingsStore((s) => s.tradierPaper);
 
-  const [execMode, setExecMode]         = useState<ExecMode>('recommendation');
-  const [placingType, setPlacingType]   = useState<'LMT' | 'MKT' | null>(null);
-  const [orderId, setOrderId]           = useState<string | null>(null);
+  const [execMode, setExecMode] = useStockExecutionField(executionIdentity, 'execMode', 'recommendation');
+  const [placingType, setPlacingType] = useStockExecutionField(executionIdentity, 'placingType', null);
+  const [orderId, setOrderId] = useStockExecutionField(executionIdentity, 'orderId', null);
   // STOCK-SENDS: what to say about `orderId`'s order -- placed (with any
   // resize, R1-2) or status unknown.
-  const [orderMsg, setOrderMsg]         = useState<{ text: string; tone: 'pass' | 'caution' } | null>(null);
-  const [err, setErr]                   = useState<string | null>(null);
-  const [warning, setWarning]           = useState<string | null>(null);
-  const [added, setAdded]               = useState(false);
-  const [queued, setQueued]             = useState(false);
-  const [adding, setAdding]             = useState(false);
+  const [orderMsg, setOrderMsg]         = useStockExecutionField(executionIdentity, 'orderMsg', null);
+  const [err, setErr] = useStockExecutionField(executionIdentity, 'err', null);
+  const [warning, setWarning] = useStockExecutionField(executionIdentity, 'warning', null);
+  const [added, setAdded] = useStockExecutionField(executionIdentity, 'added', false);
+  const [queued, setQueued] = useStockExecutionField(executionIdentity, 'queued', false);
+  const [adding, setAdding] = useStockExecutionField(executionIdentity, 'adding', false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
   const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
 
   // ── On-demand analytics (Approach B) ──────────────────────────────────────
-  const [estimate, setEstimate]             = useState<StockFirstPassageEstimate | null>(null);
-  const [estimating, setEstimating]         = useState(false);
-  const [estimateErr, setEstimateErr]       = useState<string | null>(null);
-  const [structural, setStructural]         = useState<StructuralStopResult | null>(null);
-  const [checkingStructure, setCheckingStructure] = useState(false);
-  const [structuralErr, setStructuralErr]   = useState<string | null>(null);
-  const [plan, setPlan]                     = useState<StockExitPlan | null>(null);
-  const [planning, setPlanning]             = useState(false);
-  const [planErr, setPlanErr]               = useState<string | null>(null);
+  const [estimate, setEstimate] = useStockExecutionField(executionIdentity, 'estimate', null);
+  const [estimating, setEstimating] = useStockExecutionField(executionIdentity, 'estimating', false);
+  const [estimateErr, setEstimateErr] = useStockExecutionField(executionIdentity, 'estimateErr', null);
+  const [structural, setStructural] = useStockExecutionField(executionIdentity, 'structural', null);
+  const [checkingStructure, setCheckingStructure] = useStockExecutionField(executionIdentity, 'checkingStructure', false);
+  const [structuralErr, setStructuralErr] = useStockExecutionField(executionIdentity, 'structuralErr', null);
+  const [plan, setPlan] = useStockExecutionField(executionIdentity, 'plan', null);
+  const [planning, setPlanning] = useStockExecutionField(executionIdentity, 'planning', false);
+  const [planErr, setPlanErr] = useStockExecutionField(executionIdentity, 'planErr', null);
+  const estimateInputKey = JSON.stringify([card.symbol, card.direction, _horizonEnum(scanHorizonLabel ?? undefined), card.strategy.strategy, card.stock_score, overlay.entry, overlay.stop, overlay.t1, overlay.t2, overlay.t3]);
+  const planInputKey = JSON.stringify([card.symbol, card.direction, _horizonEnum(scanHorizonLabel ?? undefined), card.strategy.strategy, card.stock_score, overlay.entry]);
+  const structuralInputKey = JSON.stringify([card.symbol, card.direction, overlay.entry]);
+  useEffect(() => {
+    if (!executionIdentity) return;
+    const state = useScanStore.getState();
+    const previous = state.stockExecution[executionIdentity] ?? {};
+    const patch: import('@/lib/stockExecutionSession').StockExecutionRecord = {};
+    if (previous.estimateInputKey !== estimateInputKey) Object.assign(patch, { estimateInputKey, estimate: null, estimateErr: null, estimating: false, estimateRevision: (previous.estimateRevision ?? 0) + 1 });
+    if (previous.planInputKey !== planInputKey) Object.assign(patch, { planInputKey, plan: null, planErr: null, planning: false, entryRevision: (previous.entryRevision ?? 0) + 1 });
+    if (previous.structuralInputKey !== structuralInputKey) Object.assign(patch, { structuralInputKey, structural: null, structuralErr: null, checkingStructure: false, structuralRevision: (previous.structuralRevision ?? 0) + 1 });
+    if (Object.keys(patch).length) state.patchStockExecution(executionIdentity, patch);
+  }, [executionIdentity, estimateInputKey, planInputKey, structuralInputKey]);
   const estimateReq   = useRef<AbortController | null>(null);
   const structuralReq = useRef<AbortController | null>(null);
   const planReq       = useRef<AbortController | null>(null);
+  const estimateToken = useRef<number | null>(null);
+  const planToken = useRef<number | null>(null);
+  const structuralToken = useRef<number | null>(null);
+
+  useEffect(() => { estimateReq.current?.abort(); }, [executionIdentity, estimateInputKey]);
+  useEffect(() => { planReq.current?.abort(); }, [executionIdentity, planInputKey]);
+  useEffect(() => { structuralReq.current?.abort(); }, [executionIdentity, structuralInputKey]);
 
   // ─── Phase G piece 5 (D4/D5) — the per-trade method pick ───────────────────
   //
@@ -409,7 +329,7 @@ export function StockPositionCard({
   // Phase G piece 5, build step 4 (§7.2, S1/S2). Stocks mode had no pre-send
   // refusal of any kind before this — this is that gate's own local reading,
   // same shape as step 7's `pickMissing`.
-  const pickMissing   = !checkMethodPick(methodPick);
+
   // READ FROM THE STORE, NOT MIRRORED INTO LOCAL STATE, and that buys a
   // property the typed-price fields do not have. `lib/stockScan.ts` sets
   // `stockScanResult` to null for the DURATION of every stock scan, so a click
@@ -465,7 +385,7 @@ export function StockPositionCard({
     },
     {
       // `estimate` is cleared by `patch` on any edit to entry/stop/T1/T2/T3 and
-      // by the symbol reset, so "present" already means "computed against the
+      // by dependency/replacement invalidation, so "present" means "computed against the
       // numbers on screen". That is this card's equivalent of TradeCard's
       // `estimateIsFresh`, and it is enforced by the clearing rather than by a
       // flag.
@@ -482,57 +402,29 @@ export function StockPositionCard({
     },
   ], [overlay.t1, overlay.t2, overlay.t3, plan, estimate]);
 
-  /** §6.1's clear rule, in the same shape TradeCard states it — read that
-   *  file's note for the argument, including why `??` cannot be used to fold
-   *  "no such option" together with "available".
-   *
-   *  THE SETTLING HAZARD IS REAL HERE AND IS STILL NOT GUARDED, which needs
-   *  saying because it is the opposite call from the one the shape suggests.
-   *  Unlike TradeCard, this card reads `methodPick` straight out of the store,
-   *  so on the commit that switches symbols the pick is ALREADY the new
-   *  symbol's while `plan`/`estimate` still hold the old symbol's — the two
-   *  halves of this decision genuinely come from different commits.
-   *
-   *  It cannot produce a wrong clear today, and the proof is short enough to
-   *  keep: a clear is only WRONG if the method would have been available once
-   *  the reset settled. The symbol-change effect above sets `plan` and
-   *  `estimate` to null unconditionally and this card caches neither, so after
-   *  any switch Arithmetic and Monte Carlo are both unavailable and a pick
-   *  naming either is cleared regardless of what the transition commit decided.
-   *  Ladder is the only method left, and it is available in EVERY commit. So
-   *  the two paths agree on every input, and a settle guard written here (the
-   *  shape of TradeCard's since-removed `pickSettled`, 42e6c6c3) survived every
-   *  mutation — by this codebase's standard, not a guard.
-   *
-   *  WHAT WOULD BRING IT BACK: caching `plan` or `estimate` per symbol, the way
-   *  TradeCard's parent caches `exitPlanByContract`. The moment a restored plan
-   *  can be present after a switch, the transition commit can say "unavailable"
-   *  about a method that is about to be available, and the clear becomes a
-   *  wrong one. Re-read this note before adding that cache. */
+  // Evidence and overlay are selected synchronously by execution identity,
+  // so a candidate switch cannot mix the old analytics with the new pick.
+  // A selected row must match its displayed price; a method-only choice
+  // remains valid under the established explicit-pick contract.
   const pickedOption = methodPick
     ? methodPickOptions.find((o) => o.method === methodPick.method) ?? null
     : null;
   const pickedMethodGone = methodPick != null
-    && (pickedOption == null || pickedOption.unavailable != null);
+    && (pickedOption == null || pickedOption.unavailable != null
+      || ((methodPick.rowStockPrice != null || methodPick.rowOptionPrice != null)
+        && !pickedOption.rows.some(row => row.rowStockPrice === methodPick.rowStockPrice
+          && row.rowOptionPrice === methodPick.rowOptionPrice)));
+  const pickMissing = !checkMethodPick(methodPick) || pickedMethodGone;
 
   const applyMethodPickRef = useRef(applyMethodPick);
   useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
-  /** P6 (G4-1; decision P6-SCOPE-2026-09-30: a message, NOT a plan/estimate
-   *  cache). Which method the clear below just removed, so the refusal can say
-   *  "your pick was cleared" instead of the generic "choose a method".
-   *
-   *  The ordinary way here is collapse-and-reopen on Step 4: the row unmounts
-   *  this card, the remounted card starts with `plan`/`estimate` null while the
-   *  store still holds the pick, and the clear fires IN THE REMOUNTED INSTANCE
-   *  -- so local state records it in the card the user is looking at. The
-   *  clear rule itself is untouched, so the note above about adding a cache
-   *  still holds. */
-  const [clearedPickMethod, setClearedPickMethod] = useState<PickedMethod | null>(null);
+  // Keep the unavailable-method explanation with this execution identity.
+  const [clearedPickMethod, setClearedPickMethod] = useStockExecutionField(executionIdentity, 'clearedPickMethod', null);
   // The note is about THIS symbol's pick. Step 4 remounts per symbol, but a
   // caller that switches `card` on one instance must not carry it across.
   // Declared BEFORE the clear effect so that, when a switch lands on a symbol
   // whose own pick is cleared in the same commit, the reset runs first.
-  useEffect(() => { setClearedPickMethod(null); }, [card.symbol]);
+
   const methodPickRef = useRef(methodPick);
   useEffect(() => { methodPickRef.current = methodPick; }, [methodPick]);
   useEffect(() => {
@@ -548,13 +440,34 @@ export function StockPositionCard({
     if (methodPick != null && !pickedMethodGone) setClearedPickMethod(null);
   }, [methodPick, pickedMethodGone]);
 
-  // Abort anything still in flight when the card unmounts, so a late resolve
-  // cannot setState on an unmounted component.
+  useEffect(() => {
+    if (executionIdentity) return;
+    // A read-only card without a result stamp has no shared session. Changing
+    // its symbol must still not carry the preceding symbol's local evidence.
+    setOverlay(defaultOverlay(card));
+    setEstimate(null); setPlan(null); setStructural(null);
+    setEstimateErr(null); setPlanErr(null); setStructuralErr(null);
+    setEstimating(false); setPlanning(false); setCheckingStructure(false);
+    setErr(null); setWarning(null); setClearedPickMethod(null);
+    setAdded(false); setQueued(false); setAdding(false);
+  }, [executionIdentity, card.symbol]);
+
+  // Navigation aborts analytics owned by this mounted card, never mutations.
   useEffect(() => () => {
-    estimateReq.current?.abort();
-    structuralReq.current?.abort();
-    planReq.current?.abort();
-  }, []);
+    const record = executionIdentity ? useScanStore.getState().stockExecution[executionIdentity] : null;
+    if (estimateReq.current) {
+      estimateReq.current.abort();
+      if (!record || record.estimateRequestToken === estimateToken.current) setEstimating(false);
+    }
+    if (structuralReq.current) {
+      structuralReq.current.abort();
+      if (!record || record.structuralRequestToken === structuralToken.current) setCheckingStructure(false);
+    }
+    if (planReq.current) {
+      planReq.current.abort();
+      if (!record || record.planRequestToken === planToken.current) setPlanning(false);
+    }
+  }, [executionIdentity]);
 
   const pinned            = stockBasket.some((c) => c.symbol === card.symbol);
   const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
@@ -570,7 +483,11 @@ export function StockPositionCard({
   }, []);
 
   async function submit(orderType: 'LMT' | 'MKT') {
-    if (execMode === 'recommendation' || orderId !== null) return;
+    if (execMode === 'recommendation' || orderId != null || placingType != null || orderOwnership) return;
+    if (isBearishUnvalidated(card.direction)) { setErr(BEARISH_UNVALIDATED_MESSAGE); return; }
+    if (earningsVeto) { setErr(EARNINGS_VETO_MESSAGE); return; }
+    const validationBlock = stockExecutionBlock();
+    if (validationBlock) { setErr(validationBlock); return; }
     // Phase G piece 5, build step 4 (§7.2, S1) — belt-and-braces beside the
     // button's own `disabled`, on the same reading `pickMissing` was derived
     // from. Same shape as step 7's direct-send handlers.
@@ -610,6 +527,7 @@ export function StockPositionCard({
         limitPrice: orderType === 'LMT' ? overlay.entry : null,
         action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
         addPosition,
+        earningsVeto,
       });
       // A placed order, or one whose status is unknown after a confirmed save,
       // disables the buttons: a second click could duplicate a live order.
@@ -633,8 +551,13 @@ export function StockPositionCard({
   }
 
   async function onEstimate() {
-    if (estimating) return;
+    if (estimating || (executionIdentity && useScanStore.getState().stockExecution[executionIdentity]?.estimating)) return;
     estimateReq.current?.abort();
+    const requestToken = executionIdentity ? (useScanStore.getState().stockExecution[executionIdentity]?.estimateRequestToken ?? 0) + 1 : 0;
+    estimateToken.current = requestToken;
+    if (executionIdentity) useScanStore.getState().patchStockExecution(executionIdentity, { estimateRequestToken: requestToken });
+    const revision = executionIdentity ? useScanStore.getState().stockExecution[executionIdentity]?.estimateRevision ?? 0 : 0;
+    const dependencyCurrent = () => !executionIdentity || (useScanStore.getState().isStockExecutionCurrent(executionIdentity) && (useScanStore.getState().stockExecution[executionIdentity]?.estimateRevision ?? 0) === revision && useScanStore.getState().stockExecution[executionIdentity]?.estimateRequestToken === requestToken);
     const ctrl = new AbortController();
     estimateReq.current = ctrl;
     setEstimating(true);
@@ -658,22 +581,27 @@ export function StockPositionCard({
         // composite conviction is a defensible proxy. It is still a proxy.
         trend_score: card.stock_score,
       }, ctrl.signal);
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setEstimate(res);
     } catch (e) {
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setEstimateErr(String(e));
     } finally {
       if (estimateReq.current === ctrl) {
         estimateReq.current = null;
-        setEstimating(false);
+        if (dependencyCurrent()) setEstimating(false);
       }
     }
   }
 
   async function onArithmeticPlan() {
-    if (planning) return;
+    if (planning || (executionIdentity && useScanStore.getState().stockExecution[executionIdentity]?.planning)) return;
     planReq.current?.abort();
+    const requestToken = executionIdentity ? (useScanStore.getState().stockExecution[executionIdentity]?.planRequestToken ?? 0) + 1 : 0;
+    planToken.current = requestToken;
+    if (executionIdentity) useScanStore.getState().patchStockExecution(executionIdentity, { planRequestToken: requestToken });
+    const revision = executionIdentity ? useScanStore.getState().stockExecution[executionIdentity]?.entryRevision ?? 0 : 0;
+    const dependencyCurrent = () => !executionIdentity || (useScanStore.getState().isStockExecutionCurrent(executionIdentity) && (useScanStore.getState().stockExecution[executionIdentity]?.entryRevision ?? 0) === revision && useScanStore.getState().stockExecution[executionIdentity]?.planRequestToken === requestToken);
     const ctrl = new AbortController();
     planReq.current = ctrl;
     setPlanning(true);
@@ -694,22 +622,27 @@ export function StockPositionCard({
         // solely as a drift scale.
         trend_score: card.stock_score,
       }, ctrl.signal);
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setPlan(res);
     } catch (e) {
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setPlanErr(String(e));
     } finally {
       if (planReq.current === ctrl) {
         planReq.current = null;
-        setPlanning(false);
+        if (dependencyCurrent()) setPlanning(false);
       }
     }
   }
 
   async function onCheckStructure() {
-    if (checkingStructure) return;
+    if (checkingStructure || (executionIdentity && useScanStore.getState().stockExecution[executionIdentity]?.checkingStructure)) return;
     structuralReq.current?.abort();
+    const requestToken = executionIdentity ? (useScanStore.getState().stockExecution[executionIdentity]?.structuralRequestToken ?? 0) + 1 : 0;
+    structuralToken.current = requestToken;
+    if (executionIdentity) useScanStore.getState().patchStockExecution(executionIdentity, { structuralRequestToken: requestToken });
+    const revision = executionIdentity ? useScanStore.getState().stockExecution[executionIdentity]?.structuralRevision ?? 0 : 0;
+    const dependencyCurrent = () => !executionIdentity || (useScanStore.getState().isStockExecutionCurrent(executionIdentity) && (useScanStore.getState().stockExecution[executionIdentity]?.structuralRevision ?? 0) === revision && useScanStore.getState().stockExecution[executionIdentity]?.structuralRequestToken === requestToken);
     const ctrl = new AbortController();
     structuralReq.current = ctrl;
     setCheckingStructure(true);
@@ -723,7 +656,7 @@ export function StockPositionCard({
         direction: card.direction as Direction,
         stock_price: overlay.entry,
       }, ctrl.signal);
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setStructural(
         res.available && res.price != null && res.price > 0
           ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
@@ -733,18 +666,18 @@ export function StockPositionCard({
         setStructuralErr('No structural level found on recent candles.');
       }
     } catch (e) {
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setStructuralErr(String(e));
     } finally {
       if (structuralReq.current === ctrl) {
         structuralReq.current = null;
-        setCheckingStructure(false);
+        if (dependencyCurrent()) setCheckingStructure(false);
       }
     }
   }
 
   async function onAddToPortfolio() {
-    if (adding || added || queued) return; // guards against a double-click firing two adds
+    if (adding || added || queued || useStockOrderOwnershipStore.getState().bySymbol[card.symbol]) return; // guards against a double-click firing two adds
     // Phase G piece 5, build step 4 (§7.2, S2) — same gate `submit()` above
     // carries, belt-and-braces beside this button's own `disabled`.
     if (pickMissing) return;
@@ -774,7 +707,7 @@ export function StockPositionCard({
       // fire on. The pristine signal rides along inside the snapshot for the audit
       // trail. stockPositionLevels() drops anything non-positive or on the wrong
       // side of entry, so a half-edited overlay can never send a 0 stop.
-      const res = await addPosition({
+      const position = {
         ...buildPaperStockPosition(
           card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
           stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
@@ -799,7 +732,22 @@ export function StockPositionCard({
         ),
         // Phase G (piece 5) — same confirmed send-path gap as submit() above.
         ...pickedFieldsFrom(methodPick),
-      });
+      };
+      const ownership = useStockOrderOwnershipStore.getState();
+      if (!ownership.claim(card.symbol, { identity: executionIdentity, recId: position.recId, status: 'in-flight' })) return;
+      let res;
+      try { res = await addPosition(position); }
+      catch (error) {
+        const message = `Save status unknown — ${String(error)}`;
+        ownership.finish(card.symbol, position.recId, 'unknown', message);
+        setWarning(message); setQueued(true); return;
+      }
+      ownership.finish(card.symbol, position.recId,
+        res.status === 'rejected' ? null : res.status === 'pending' ? 'unknown' : 'placed',
+        res.status === 'pending' ? 'Queued — will sync automatically.'
+          : res.status === 'rejected' ? res.detail ?? 'Portfolio rejected this position.'
+          : res.adjustedQty != null && res.adjustedQty !== overlay.shares
+            ? `Portfolio sized it to ${res.adjustedQty} shares (exposure limit).` : 'Added to research portfolio.');
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');
         return;
@@ -827,10 +775,15 @@ export function StockPositionCard({
   const rrT3 = rrAt(overlay.t3);
 
   const winTone = card.backtest.win_rate >= 0.5 ? 'pass' : 'caution';
+  const bearishUnvalidated = isBearishUnvalidated(card.direction);
 
   return (
-    <div className={styles.wrap}>
+    <div className={styles.wrap} key={executionIdentity ?? card.symbol}>
+      <Text size={12} tone="caution">{bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : stockExecutionBlock()}</Text>
+      {earningsVeto && <Text size={12} tone="reject">{EARNINGS_VETO_MESSAGE}</Text>}
+      <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
 
+      {orderOwnership && !added && !queued && !warning && <Text size={12} tone="caution">{orderOwnership.message ?? `${card.symbol}: stock send in flight — do not resend.`}</Text>}
       {/* Section 1 — Sizing grid, Row 1 */}
       <div className={styles.grid4}>
         <EditableField label="ENTRY"    value={overlay.entry} onChange={(v) => patch({ entry: v })} />
@@ -1292,7 +1245,7 @@ export function StockPositionCard({
           type="button"
           className={styles.actionBtn}
           onClick={onAddToPortfolio}
-          disabled={added || adding || queued || pickMissing}
+          disabled={added || adding || queued || !!orderOwnership || pickMissing}
           title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
         >
           <Text size={12}>
@@ -1335,8 +1288,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('LMT')}
-            disabled={placingType !== null || orderId !== null || pickMissing}
-            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
+            disabled={placingType !== null || orderId !== null || pickMissing || bearishUnvalidated || earningsVeto}
+            title={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsVeto ? EARNINGS_VETO_MESSAGE : pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}</Text>
           </button>
@@ -1344,8 +1297,8 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('MKT')}
-            disabled={placingType !== null || orderId !== null || pickMissing}
-            title={pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
+            disabled={placingType !== null || orderId !== null || pickMissing || bearishUnvalidated || earningsVeto}
+            title={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsVeto ? EARNINGS_VETO_MESSAGE : pickMissing ? MISSING_METHOD_PICK_TITLE : undefined}
           >
             <Text size={12}>{placingType === 'MKT' ? 'Placing…' : 'Market Order'}</Text>
           </button>
@@ -1363,8 +1316,8 @@ export function StockPositionCard({
         symbol={card.symbol}
         strategyKey={strategyKey}
         direction={card.direction === 'Bullish' ? 'Bullish' : 'Bearish'}
-        afterScanArmed={afterScanArmed ?? false}
-        onAfterScanToggle={onAfterScanToggle ?? (() => {})}
+        afterScanArmed={afterScanArmed ?? sessionAfterScanArmed}
+        onAfterScanToggle={onAfterScanToggle ?? toggleAfterScanIntent}
       />
 
     </div>

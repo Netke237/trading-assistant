@@ -2,12 +2,14 @@
  * Pure helpers for Step 7's contract-override + recompute-plan machinery.
  * Extracted out of the page component so the exact logic that determines
  * "which contract/plan does this order actually carry" is unit-testable —
- * this is what silently broke for the basket "Send to broker" flow (the
- * override reached the single-card buttons but not the basket path, since
- * the basket cards were built straight from the raw scan candidates).
+ * this is what silently broke for the basket flow (the override reached the
+ * single-card buttons but not the basket path, since the basket cards were
+ * built straight from the raw scan candidates). Since fix #5 (D6) the basket
+ * TRACKS positions in Portfolio and places no broker order.
  */
 import type {
   TradeCardData, OptionContract, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan,
+  StockExplanation, ContractExplanation,
 } from '@/types/domain';
 
 export type OverriddenCard = TradeCardData & { _userOverride?: boolean };
@@ -18,6 +20,30 @@ export type RecomputedPlanShape = {
   rrModel: TradeCardData['rrModel'];
 };
 export type PlanEntry = { key: string; plan: RecomputedPlanShape };
+
+export type ScoreEvidence<T> =
+  | { state: 'captured'; explanation: T }
+  | { state: 'not_captured'; message: 'Not captured — re-run scan' };
+
+/** Read evidence only when it belongs to this authoritative result. Repricing
+ *  a plan does not score a contract; mergePlan must retain the picked row's
+ *  evidence. Legacy absence is explicit and never filled from live settings. */
+export function scoreEvidenceFor(card: TradeCardData): {
+  stock: ScoreEvidence<StockExplanation>;
+  contract: ScoreEvidence<ContractExplanation>;
+} {
+  const absent = { state: 'not_captured', message: 'Not captured — re-run scan' } as const;
+  const stock = card.stockExplanation;
+  const contract = card.contractExplanation;
+  return {
+    stock: stock && stock.symbol === card.symbol && stock.direction === card.direction
+      && stock.score === card.stockScore && stock.status === card.stockConfidence
+      ? { state: 'captured', explanation: stock } : absent,
+    contract: contract && contract.contract_id === card.contract
+      && contract.score === card.contractScore && contract.status === card.contractConfidence
+      ? { state: 'captured', explanation: contract } : absent,
+  };
+}
 
 /** Swap the auto-picked contract's details for a user-selected one from the
  *  Step 6 chain. Only the Contract Details block changes here — Entry/Exit/RR
@@ -43,6 +69,9 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
     // backend already computes this per contract and simply was not returning
     // it.
     contractBreakdown: picked.breakdown ?? card.contractBreakdown,
+    // Set from picked row ONLY; legacy/missing picked explanation clears it rather
+    // than borrowing the auto-picked card's explanation.
+    contractExplanation: picked.explanation,
     contractDetails: {
       strike:       picked.strike,
       expiry:       picked.expiry,
@@ -97,14 +126,16 @@ export function mergePlan(card: OverriddenCard, plan: RecomputedPlanShape): Over
  * Resolve every basket symbol to its (possibly overridden, possibly
  * plan-merged) card. Any overridden symbol whose plan isn't cached yet for its
  * CURRENT contract key is excluded from the returned list and flips
- * `pending` — this is the gate that must block "Send to broker" so an order
- * can never go out carrying an overridden contract whose Entry/Exit/RR still
- * describe the auto-pick.
+ * `pending` — this is the gate that must block the basket's "Track basket"
+ * submit, so a tracked row can never be booked carrying an overridden contract
+ * whose Entry/Exit/RR still describe the auto-pick. (The basket places no
+ * broker order since fix #5 / D6; it books Portfolio rows that reserve the
+ * contract and symbol.)
  *
  * Also splices in each card's cached "Compute Exit Plan" result (keyed by
  * contract, same cache `withCachedEstimate` reads for the single active
  * TradeCard) — without this, `checkTradeRisk`'s max-loss-per-trade gate
- * silently never fires for the basket "Send to broker" path: a raw scan
+ * silently never fires for the basket "Track basket" path: a raw scan
  * candidate never carries `exit.exitPlan` on its own, only a user's
  * "Compute Exit Plan" click populates it, and that click's result was never
  * otherwise reaching the cards this function returns.
@@ -150,11 +181,11 @@ export function resolveBasketCards(
 }
 
 const RR_OVERRIDE_KEYS = [
-  'rr_bullish_target_pct', 'rr_bearish_target_pct',
+  'rr_target_r_multiple',
   'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct',
 ] as const;
 
-/** Pull just the four Reward/Risk override keys out of scanOverrides, dropping
+/** Pull just the Reward/Risk override keys out of scanOverrides, dropping
  *  any that aren't set (so recomputePlan's optional fields stay optional). */
 export function rrOverridesFrom(
   scanOverrides: Record<string, number | boolean | string>,
@@ -165,6 +196,20 @@ export function rrOverridesFrom(
     if (typeof v === 'number') out[key] = v;
   }
   return out;
+}
+
+/** The Reward/Risk overrides Step 7's recompute-plan sends: the ones the scan
+ *  priced its plans with (ScanResult.rr_overrides), so a Step-3 value edited
+ *  after the scan cannot reprice the card's plan on different targets from
+ *  the card the scan built (STEP3-PARAM-REACH). A result from before the scan
+ *  recorded them (absent or null) falls back to live scanOverrides, which is
+ *  what every recompute sent before. */
+export function rrOverridesForPlan(
+  scanResult: { rr_overrides?: Record<string, number> | null } | null | undefined,
+  scanOverrides: Record<string, number | boolean | string>,
+): Partial<Record<typeof RR_OVERRIDE_KEYS[number], number>> {
+  const recorded = scanResult?.rr_overrides;
+  return rrOverridesFrom(recorded != null ? recorded : scanOverrides);
 }
 
 /** The repricing-horizon fields every trade-card backend call must carry.

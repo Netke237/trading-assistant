@@ -1,0 +1,104 @@
+{
+  "Layout": {
+    "total_ms": 188.241,
+    "max_ms": 186.376,
+    "args_of_longest": {
+      "beginData": {
+        "dirtyObjects": 42908,
+        "frame": "9A6136BE39DBF8F3CBE6EA9BDCE6E3C1",
+        "partialLayout": false,
+        "totalObjects": 54726
+      },
+      "endData": {
+        "layoutRoots": [
+          {
+            "depth": 1,
+            "nodeId": 2,
+            "nodeName": "#document",
+            "quads": [
+              [
+                0,
+                0,
+                1440,
+                0,
+                1440,
+                1000,
+                0,
+                1000
+              ]
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "UpdateLayoutTree": {
+    "total_ms": 72.981,
+    "max_ms": 71.863,
+    "args_of_longest": {
+      "beginData": {
+        "frame": "9A6136BE39DBF8F3CBE6EA9BDCE6E3C1"
+      },
+      "elementCount": 23600
+    }
+  },
+  "PrePaint": {
+    "total_ms": 103.607,
+    "max_ms": 60.021,
+    "args_of_longest": {
+      "data": {
+        "frame": "9A6136BE39DBF8F3CBE6EA9BDCE6E3C1",
+        "isMainFrame": true,
+        "isOutermostMainFrame": true,
+        "page": "9A6136BE39DBF8F3CBE6EA9BDCE6E3C1"
+      }
+    }
+  },
+  "FunctionCall": {
+    "total_ms": 141.696,
+    "max_ms": 78.06,
+    "args_of_longest": {
+      "data": {
+        "columnNumber": 130872,
+        "frame": "9A6136BE39DBF8F3CBE6EA9BDCE6E3C1",
+        "functionName": "",
+        "isolate": "17454446544974161426",
+        "lineNumber": 1,
+        "sampleTraceId": 5367444580025866,
+        "scriptId": "22",
+        "url": "http://localhost:3103/_next/static/chunks/561a5163-9e85a8a36f3c5e10.js"
+      }
+    }
+  },
+  "EventDispatch": {
+    "total_ms": 105.307,
+    "max_ms": 103.079,
+    "args_of_longest": {
+      "data": {
+        "type": "change"
+      }
+    }
+  },
+  "Paint": {
+    "total_ms": 33.69,
+    "max_ms": 5.26,
+    "args_of_longest": {
+      "data": {
+        "clip": [
+          0,
+          0,
+          1440,
+          0,
+          1440,
+          1000,
+          0,
+          1000
+        ],
+        "frame": "9A6136BE39DBF8F3CBE6EA9BDCE6E3C1",
+        "layerId": 0,
+        "nodeId": 2,
+        "nodeName": "#document"
+      }
+    }
+  }
+}

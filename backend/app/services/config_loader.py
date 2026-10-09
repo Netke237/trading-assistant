@@ -32,7 +32,7 @@ config_health.watch(
 
 @lru_cache(maxsize=1)
 def load_reward_risk_cfg() -> dict:
-    """Return risk_rules.yaml's reward_risk block (bullish/bearish target %,
+    """Return risk_rules.yaml's reward_risk block (invalidation percentages,
     premium_stop_pct, target_t1/t2/t3_pct). Shared by the scan pipeline and the
     per-contract recompute endpoint — both must build a trade plan off the
     same numbers."""
@@ -429,21 +429,34 @@ def direction_conviction_value_errors(cfg: dict) -> list[tuple[str, str]]:
 # Maps the Step 3 "Reward/Risk" panel's override keys (frontend/lib/
 # executionParamDefaults.ts) onto risk_rules.yaml's reward_risk block keys.
 _RR_OVERRIDE_KEY_MAP = {
-    "rr_bullish_target_pct":       "bullish_target_pct",
-    "rr_bearish_target_pct":       "bearish_target_pct",
     "rr_bullish_invalidation_pct": "bullish_invalidation_pct",
     "rr_bearish_invalidation_pct": "bearish_invalidation_pct",
 }
 
 # Upper bound for each override key, mirroring the Step 3 UI's own `max` for
-# these fields (frontend/app/(frame)/screener/step-3-direction/page.tsx). All
-# four must additionally be > 0 (and finite) — see merge_reward_risk_overrides.
+# these fields (frontend/app/(frame)/screener/step-3-direction/page.tsx). Both
+# invalidation overrides must additionally be > 0 (and finite) — see merge_reward_risk_overrides.
 _RR_OVERRIDE_CAPS = {
-    "rr_bullish_target_pct":       2.0,
-    "rr_bearish_target_pct":       2.0,
     "rr_bullish_invalidation_pct": 1.0,
     "rr_bearish_invalidation_pct": 1.0,
 }
+
+
+def effective_rr_overrides(overrides: dict | None) -> dict[str, float]:
+    """The rr_* keys of `overrides` that merge_reward_risk_overrides applies,
+    as floats, keyed by their override names (invalidation percentages and optional target multiple).
+
+    Same validation as merge_reward_risk_overrides (None skipped, invalid
+    raises ValueError), so what a scan records is exactly what it priced with.
+    """
+    out: dict[str, float] = {}
+    merged = merge_reward_risk_overrides(overrides)
+    for override_key, cfg_key in _RR_OVERRIDE_KEY_MAP.items():
+        if overrides and overrides.get(override_key) is not None:
+            out[override_key] = float(merged[cfg_key])
+    if overrides and overrides.get("rr_target_r_multiple") is not None:
+        out["rr_target_r_multiple"] = resolve_target_r_multiple(overrides)
+    return out
 
 
 def merge_reward_risk_overrides(overrides: dict | None) -> dict:
@@ -482,3 +495,17 @@ def merge_reward_risk_overrides(overrides: dict | None) -> dict:
             )
         merged[cfg_key] = val
     return merged
+
+
+def resolve_target_r_multiple(overrides: dict | None) -> float:
+    """One target multiple for option reward/risk and exit-plan rows."""
+    value = (overrides or {}).get("rr_target_r_multiple")
+    if value is None:
+        value = load_exit_plan_cfg()["target"]["rr_ratios"][0]
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("rr_target_r_multiple must be finite and in (0, 10]")
+    if not math.isfinite(value) or not 0 < value <= 10:
+        raise ValueError("rr_target_r_multiple must be finite and in (0, 10]")
+    return value

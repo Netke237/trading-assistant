@@ -56,6 +56,36 @@ export const MOCK_OPTION_CHAIN = [
     volume: 1250,
     score: 78,
     contractConfidence: 'PASS',
+    explanation: {
+      contract_id: 'AAPL|185|2025-05-16|C',
+      version: 1,
+      evaluated_at: '2026-10-03T12:00:00Z',
+      outcome: 'aggregate',
+      score: 78,
+      status: 'PASS',
+      weights: { liquidity: 0.25, spread: 0.25, delta: 0.2, dte: 0.15, iv_rank: 0.15 },
+      pass_threshold: 65,
+      caution_threshold: 45,
+      unrounded_score: 78.2,
+      rounded_score: 78,
+      components: {
+        liquidity: { name: 'liquidity', wire_name: 'liquidity', raw_score: 85, weight: 0.25, contribution: 21.25, lost_points: 3.75, flags: [] },
+        spread: { name: 'spread', wire_name: 'spread', raw_score: 90, weight: 0.25, contribution: 22.5, lost_points: 2.5, flags: [] },
+        delta: { name: 'delta', wire_name: 'delta', raw_score: 75, weight: 0.2, contribution: 15, lost_points: 5, flags: [] },
+        dte: { name: 'dte', wire_name: 'dte', raw_score: 70, weight: 0.15, contribution: 10.5, lost_points: 4.5, flags: [] },
+        iv_rank: { name: 'iv_rank', wire_name: 'iv', raw_score: 60, weight: 0.15, contribution: 9, lost_points: 6, flags: [] },
+      },
+      largest_losses: [
+        { name: 'iv_rank', wire_name: 'iv', raw_score: 60, weight: 0.15, contribution: 9, lost_points: 6, flags: [] },
+        { name: 'delta', wire_name: 'delta', raw_score: 75, weight: 0.2, contribution: 15, lost_points: 5, flags: [] },
+      ],
+      blockers: [],
+      reject_reasons: [],
+      reasons: [],
+      soft_flags: [],
+      soft_fail_count: 0,
+      max_soft_fail_count: 3,
+    },
   },
   {
     id: 'AAPL|190|2025-05-16|C',
@@ -148,6 +178,9 @@ export const MOCK_SCAN_CANDIDATE = {
   exit: {
     invalidation: 180,
     premiumStop: 1.0,
+    // TRADING-REVIEW-PHASE-C-RR: the backend's current R/R basis. scanStore v18
+    // discards a seeded options result whose candidates are on any other basis.
+    rrRiskBasis: 'full_premium',
     timeStopDays: 30,
     targets: [
       { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },

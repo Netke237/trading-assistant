@@ -7,8 +7,10 @@ exactly how a previous session came to believe pieces were unbuilt that were,
 and built that were not.
 
 So every phase in PROJECT_STATE.json carries a `verify` probe: a pattern whose
-presence or absence in the real code proves the declared status. This script
-runs all of them and exits non-zero when a claim and the codebase disagree.
+presence or absence in the real code checks the code-existence part of the
+declared status. This script runs all of them and exits non-zero when that
+claim and the codebase disagree. `built` records code that exists but is
+unmerged; `shipped` records merged work. Probes do not establish merge status.
 
 One field pair is checked differently, because no code symbol could ever prove
 it: `audit_rounds` / `audit_clean`. See `audit_bookkeeping_drift`, which reads
@@ -62,7 +64,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "docs" / "superpowers" / "PROJECT_STATE.json"
 
 # Statuses that mean "the code for this exists".
-SHIPPED = {"shipped", "shipped_unaudited"}
+BUILT_STATUSES = {"built", "shipped", "shipped_unaudited"}
 
 # Rounds running on this branch with NOTHING in the state file counting them
 # warn below this number and are drift at or above it. It is audit_rule's HARD
@@ -76,6 +78,7 @@ BOLD, DIM, RED, GREEN, YELLOW, RESET = (
 )
 
 STATUS_STYLE = {
+    "built":              (YELLOW, "BUILT"),
     "shipped":            (GREEN,  "SHIPPED"),
     "shipped_unaudited":  (YELLOW, "SHIPPED*"),
     "not_started":        (DIM,    "not started"),
@@ -85,7 +88,7 @@ STATUS_STYLE = {
 
 
 def probe(v: dict) -> tuple[bool, str]:
-    """Run one verify probe. Returns (code_says_shipped, detail)."""
+    """Run one verify probe. Returns (code_exists, detail), not proof of merge or audit."""
     path = ROOT / v["path"]
     if not path.exists():
         return False, f"{v['path']} does not exist"
@@ -136,8 +139,69 @@ def _git(*args: str) -> str | None:
 _GIT_FAILED = object()
 
 
+# A round number as this repo's subjects actually write it (STATE-PROBE-FIXES,
+# G1): "round 3", "Round-3", "rounds 6-7", "r3", "r1..r4", "r2+r3". `\bround\s+`
+# alone missed every form but the first -- 57 of 300 subjects -- and an entry
+# under-counted against "X r1..r4" rendered "No drift". Every number in a range
+# counts, so the highest is the range's end. `rN` is lower-case only: upper-case
+# R1-R9 is how plans number requirements. A false match is a false ALARM, the
+# direction this probe accepts; a missed one is silence. Round 3 finding F2
+# added the count written BEFORE the word -- "clean after 7 rounds", the Phase
+# A/B/C/E merge subjects -- plus "rounds 1, 2 and 3", "round #3" and "audit_r3".
+# Plural only there: "step 3 round 2" names round 2, not 3.
+_ROUND_RE = re.compile(
+    r"(?:\b(?i:rounds?)[\s#-]*|(?<![A-Za-z0-9])r)\d+"
+    r"(?:\s*(?:-|–|\.\.|\+|/|&|,|\band\b|\bto\b)\s*(?:r|(?i:round)[\s#-]*)?\d+)*"
+    r"(?![\w])"
+    r"|\b\d+\s+(?i:rounds)\b"
+)
+
+
+# Only this canonical prefix assigns a subject to a phase; shorthand and
+# arbitrary mentions remain unowned evidence.
+_ROUND_OWNER_RE = re.compile(
+    r"^docs\(state\): (?P<owner>\S+) (?:(?:plan|code) )?round \d+(?![\w])"
+)
+
+
+# The stage word written straight before a round: "plan round 3", "code r2".
+_STAGE_TAG_RE = re.compile(r"\b(?i:(plan|code))[\s-]+$")
+
+
+def _round_hits(line: str) -> list[tuple[int, str | None]]:
+    """Every round number one subject names, each with the stage word written
+    before it ("plan" / "code", lower-cased) or None when there is none.
+
+    Only the per-stage cap reads the tag, through `_staged_hits`, which also
+    gives untagged rounds a stage; everything else reads the numbers alone. Every number in a range carries
+    its range's tag: "code rounds 1-2" is code rounds 1 and 2.
+    """
+    hits: list[tuple[int, str | None]] = []
+    for match in _ROUND_RE.finditer(line):
+        text = match.group(0)
+        tag = _STAGE_TAG_RE.search(line[:match.start()])
+        stage = tag.group(1).lower() if tag else None
+        numbers = list(re.finditer(r"\d+", text))
+        implicit = [
+            number for number in numbers[1:]
+            if not re.search(r"(?:r|(?i:round)[\s#-]*)$", text[:number.start()])
+        ]
+        # Only a sole comma-introduced implicit K in "round N, K findings"
+        # is a finding count. Explicit rounds and ambiguous lists stay evidence.
+        finding_count = None
+        if re.match(r"(?i:round)\b", text) and len(implicit) == 1:
+            number = implicit[0]
+            if (re.search(r",\s*$", text[:number.start()])
+                    and re.match(r"\s+(?i:findings?)\b", line[match.start() + number.end():])):
+                finding_count = number
+        hits.extend((int(number.group(0)), stage) for number in numbers
+                    if number is not finding_count)
+    return hits
+
+
 def _round_numbers_in_branch_subjects(
-    base_ref: str | None, merged_ref: str | None = None,
+    base_ref: str | None, merged_ref: str | None = None, *,
+    active_phase: str | None = None, known_phase_ids: set[str] | None = None,
 ) -> "tuple[int, list[str]] | None | object":
     """Highest `round N` mentioned in this branch's commit SUBJECTS.
 
@@ -170,9 +234,9 @@ def _round_numbers_in_branch_subjects(
       - LOUD: this branch's own merge commit is not on main, so a subject like
         "Merge origin/main (A5c round 4 clean) into ..." still counts. Name
         rounds in merge subjects only for this branch's own piece.
-      - LOUD: a sibling branch's rounds for ANOTHER piece that have not
-        reached main still count against this one when that sibling is merged
-        in. They are not on main, so nothing marks them as someone else's.
+      - LOUD: rounds for ANOTHER piece that have not reached main still
+        count unless their subjects explicitly assign them to a different
+        known phase below. Unowned and shorthand records still cause alarms.
       - PRE-EXISTING, unchanged: a sibling cut from this branch AFTER the
         entry's introducing commit that reaches main first puts that commit on
         main, so no narrowing happens and its rounds are out of range.
@@ -184,6 +248,21 @@ def _round_numbers_in_branch_subjects(
     Degrading to None is deliberate: this probe runs on every SessionStart, and
     a check that cries drift whenever git is unavailable would train the reader
     to scroll past a red banner.
+
+    With a resolved active phase and known phase IDs, a canonical subject
+    beginning `docs(state): FULL-PHASE-ID round N` (or `plan round N` / `code
+    round N` after the ID) belongs to that known phase, case-sensitively. Skip
+    it only when it belongs to a DIFFERENT phase and the active ID is absent
+    as a whole token from the rest of the subject. Mixed subjects stay evidence.
+    Unknown owners, shorthand and other prefixes stay evidence too. With no
+    resolved active phase, or for callers omitting these keywords, keep all
+    evidence as before. IDs use word characters and hyphens for token boundaries.
+
+    For singular `round N, K findings`, a sole comma-introduced implicit K is
+    a finding count, not a round. Primary and explicitly marked round/r numbers,
+    plural round lists, other delimiters and ambiguous multiple implicit numbers
+    stay evidence.
+    This parsing rule applies even when ownership filtering is not enabled.
 
     SUBJECTS ONLY, never bodies. Commit bodies here are full of legitimate
     backward references ("round 12's follow-ups", "round 7 rejected finding 8")
@@ -208,10 +287,19 @@ def _round_numbers_in_branch_subjects(
     if proc.returncode != 0:
         return _GIT_FAILED
 
+    active_token = (
+        re.compile(r"(?<![\w-])" + re.escape(active_phase) + r"(?![\w-])")
+        if active_phase and known_phase_ids and active_phase in known_phase_ids else None
+    )
     best = 0
     subjects: list[str] = []
     for line in proc.stdout.splitlines():
-        hits = [int(m.group(1)) for m in re.finditer(r"\bround\s+(\d+)", line, re.I)]
+        owner = _ROUND_OWNER_RE.match(line) if active_token else None
+        if (owner and owner["owner"] in known_phase_ids
+                and owner["owner"] != active_phase
+                and not active_token.search(line[owner.end("owner"):])):
+            continue
+        hits = [n for n, _ in _round_hits(line)]
         if not hits:
             continue
         subjects.append(line.strip())
@@ -455,48 +543,105 @@ def _target_scoped_base(base_ref: str, state: dict) -> str:
         # fall back to the full range rather than guess a boundary.
         return base_ref
 
-    out = _git("log", "--format=%H", f"{base_ref}..HEAD", "--", rel)
-    if out is None:
+    # `None` when even the newest COMMITTED state file lacks this entry -- the
+    # piece exists only in the working tree. There is then no history to scope
+    # by, so refuse to narrow rather than answer for the commits that happen to
+    # follow the newest state-file commit: invent an entry, point at it, declare
+    # 0, and the window would empty.
+    boundary = _introducing_commit(base_ref, identity, rel)
+    if boundary is None:
         return base_ref
+    return boundary
 
-    shas = out.split()          # newest first
-    truncated = len(shas) > _POINTER_SCAN_LIMIT
-    boundary: str | None = None
 
-    for sha in shas[:_POINTER_SCAN_LIMIT]:
-        blob = _git("show", f"{sha}:{rel}")
-        if blob is None:
+def _blob_ids(specs: list[str]) -> dict[str, str | None] | None:
+    """`<commit>:<path>` -> blob id, or None where that commit has no such
+    file. One `git cat-file --batch-check` for all of them. None on failure."""
+    try:
+        proc = subprocess.run(
+            ["git", "cat-file", "--batch-check"], cwd=ROOT, capture_output=True,
+            text=True, timeout=10, input="".join(f"{s}\n" for s in specs),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = proc.stdout.splitlines()
+    if proc.returncode != 0 or len(lines) != len(specs):
+        return None
+    return {
+        spec: (line.split()[0] if line.split()[1:2] == ["blob"] else None)
+        for spec, line in zip(specs, lines)
+    }
+
+
+def _introducing_commit(base_ref: str, identity: tuple[str, str], rel: str) -> str | None:
+    """The commit in `base_ref..HEAD` that INTRODUCED this entry: it carries
+    the entry and none of its parents do. None when no commit in range does
+    (the entry predates the branch, or exists only in the working tree).
+
+    BY ANCESTRY, NOT DATE (STATE-PROBE-FIXES, G2). It used to walk `git log`'s
+    date order and stop at the first commit lacking the entry, taking the one
+    walked just before it. Merging a sibling branch whose later-dated
+    state-file commit lacked the entry put that commit first in the walk, so
+    the MERGE became the boundary and the window emptied: four rounds against
+    one declared, silent. A parent is a fact of the graph, so asking each
+    commit's own parents cannot be reordered by a merge.
+
+    Newest first in topological order, so a dropped-and-restored entry still
+    resets to the restoring commit -- the accepted hole the round record names.
+    Past `_POINTER_SCAN_LIMIT` commits, falls back to the oldest commit walked
+    that CONFIRMED carries the entry rather than widening to the full range.
+    """
+    out = _git("log", "--topo-order", "--format=%H %P", f"{base_ref}..HEAD", "--", rel)
+    if out is None:
+        return None
+    rows = [line.split() for line in out.splitlines() if line.strip()]
+    truncated = len(rows) > _POINTER_SCAN_LIMIT
+    rows = rows[:_POINTER_SCAN_LIMIT]
+    specs = sorted({f"{sha}:{rel}" for row in rows for sha in row})
+    oids = _blob_ids(specs)
+    if oids is None:
+        return None
+    parsed: dict[str, object] = {}
+
+    def rounds_at(sha: str):
+        oid = oids.get(f"{sha}:{rel}")
+        if oid is None:
+            return _TARGET_ABSENT       # no state file at all in that commit
+        if oid not in parsed:
+            blob = _git("cat-file", "-p", oid)
+            parsed[oid] = (_TARGET_UNREADABLE if blob is None
+                           else _declared_rounds_at(blob, identity))
+        return parsed[oid]
+
+    oldest_carrier: str | None = None
+    for sha, *parents in rows:
+        here = rounds_at(sha)
+        if here is _TARGET_ABSENT or here is _TARGET_UNREADABLE:
             continue
-        rounds = _declared_rounds_at(blob, identity)
-        if rounds is _TARGET_UNREADABLE:
-            continue            # not a boundary to trust
-        if rounds is _TARGET_ABSENT:
-            # The piece does not exist yet here, so the boundary is the commit
-            # that INTRODUCED it -- `boundary`, the oldest one walked that
-            # still carries it -- and not this one. Round 2 finding 1 again in
-            # a new key: opening a piece while recording the PREVIOUS piece's
-            # last round is one commit in this repo's style ("Record round 2
-            # clean; open piece two"), so including it would hand a brand-new
-            # piece the round number of the piece before it.
-            #
-            # `boundary` is None when even the newest COMMITTED state file
-            # lacks this entry -- the piece exists only in the working tree.
-            # There is then no history to scope by, so refuse to narrow rather
-            # than answer for the commits that happen to follow the newest
-            # state-file commit. Narrowing there would be a fresh escape of
-            # exactly the family this rework closed: invent an entry, point at
-            # it, declare 0, and the window empties.
-            return boundary if boundary is not None else base_ref
-        boundary = sha          # confirmed to carry this entry
+        oldest_carrier = sha
+        # An unreadable parent is not proof of absence, so it is not a
+        # boundary to trust: the walk goes on and the window stays wider.
+        if all(rounds_at(p) is _TARGET_ABSENT for p in parents):
+            return sha
+    return oldest_carrier if truncated else None
 
-    if truncated and boundary is not None:
-        # The window ran out before the count was seen to be lower, so the
-        # boundary may lie beyond it. Fall back to the oldest commit CONFIRMED
-        # to carry the declared count rather than widening to the full range,
-        # which would be the pre-fix false positive rather than a safe
-        # degradation.
-        return boundary
-    return base_ref
+
+def _whole_number(raw) -> int | None:
+    """`audit_rounds` read as a whole number in any spelling JSON allows (3,
+    3.0, "3"); None when it is not one. A missing count is 0."""
+    if raw is None:
+        return 0
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float) and raw.is_integer():
+        return int(raw)
+    # isdecimal, not isdigit: '²' passes isdigit and int('²') raises, a
+    # traceback in the SessionStart hook (open question P6 UNIT D round 7).
+    if isinstance(raw, str) and raw.strip().isdecimal():
+        return int(raw.strip())
+    return None
 
 def _pointer_target(state: dict) -> tuple[dict | None, str]:
     """Resolve `active_phase` against BOTH pools that carry audit counts.
@@ -530,6 +675,197 @@ def _pointer_target(state: dict) -> tuple[dict | None, str]:
     return None, (
         f"active_phase names '{active}', which is in neither phases nor already_shipped"
     )
+
+
+_CODE_WORD_RE = re.compile(r"\b(?i:code)\b")
+_PLAN_WORD_RE = re.compile(r"\b(?i:plan)\b")
+# Any word that can turn "clean" into its opposite, anywhere in the subject.
+_NEGATION_RE = re.compile(r"\b(?i:not|no|never|none|without|yet|unclean)\b|(?i:n't)\b")
+
+
+def _clean_plan_round_re(n: int) -> re.Pattern:
+    """A subject saying plan round `n` came back clean, in the canonical shape
+    only: "clean" straight after the round's own number ("plan round 3 CLEAN",
+    "plan r3: clean"), never "clean up". Round 2 finding G1: "clean" anywhere
+    in the subject let "plan round 3 did not come back clean" and "4 gate
+    findings, tests clean" prove a clean close. The caller also refuses any
+    subject carrying `_NEGATION_RE`, so "plan round 3 clean? no" is not proof.
+    """
+    return re.compile(
+        r"\b(?i:plan)[\s-]+(?:(?i:round)[\s#-]*|r)" + str(n)
+        + r"(?!\d)\s*[:(\-–—]*\s*(?i:clean)\b(?!\s*-?\s*(?i:up)\b)"
+    )
+
+
+# One round written with both its numbers side by side: "round 4 (code round
+# 1)" (m1, k1) or "code round 2 = round 5" (k2, m2). Only spaces, "(", "[" and
+# "=" may sit between them -- not ";", ",", a dash or a word, which is how a
+# subject moves on to a DIFFERENT round ("code round 2 fixed; round 3").
+_ROUND_WORD = r"(?:(?i:round)[\s#-]*|(?<![A-Za-z0-9])r)"
+_PAIR_RE = re.compile(
+    _ROUND_WORD + r"(?P<m1>\d+)[\s(\[=]*\b(?i:code)[\s-]+" + _ROUND_WORD + r"(?P<k1>\d+)(?!\d)"
+    r"|\b(?i:code)[\s-]+" + _ROUND_WORD + r"(?P<k2>\d+)[\s(\[=]*" + _ROUND_WORD + r"(?P<m2>\d+)(?!\d)"
+)
+
+
+def _staged_hits(subject: str, plan_rounds: int) -> list[tuple[int, str | None]]:
+    """`_round_hits`, with a stage given to the rounds that carry no stage word
+    of their own -- read only once a `plan_stage` holds, at `plan_rounds`.
+
+    Round 1 finding F1 of STATE-PER-STAGE-CAP: this repo spells code rounds
+    more ways than "code round N" -- "A5 round 3 (code): not clean -- hard cap
+    reached", "ALERT-INDICATOR-ID-MAP code audit r3", "Code audit round 2" --
+    and reading those as continuous numbering put a code stage at its cap
+    under "No drift". So an untagged round M is:
+
+      - CONTINUOUS (None) only when it is written SIDE BY SIDE with a tagged
+        "code round K" as one round -- separated by nothing but spaces, "(",
+        "[" or "=" (`_PAIR_RE`) -- and M - plan_rounds == K: the record's form,
+        "round 4 (code round 1)", or "code round 2 = round 5";
+      - otherwise a CODE round M when "code" appears anywhere in the subject,
+        tagged code round beside it or not (round 2 finding G2, and round 3
+        finding H1: "code round 2 fixed; round 3 NOT CLEAN" is code round 3
+        whatever the plan stage's length -- pairing on the arithmetic alone
+        read it as code round 2 whenever the plan stage closed at round 1);
+      - otherwise a PLAN round M when "plan" does ("docs(plan): X round 4");
+      - otherwise CONTINUOUS.
+
+    WHICH WAY EACH RULE ERRS. The code-word rules read M at face value, so a
+    stray "code" ("round 4 records the code fixes") is a false alarm. The
+    pairing rule reads lower only when the subject writes both numbers of one
+    round side by side. The plan-word rule and the last rule read lower, and
+    silence a code round M numbered from 1 in a subject naming no "code" --
+    the accepted cost `_stage_round_max` states.
+    """
+    hits = _round_hits(subject)
+    paired = set()
+    for pair in _PAIR_RE.finditer(subject):
+        if pair["m1"]:
+            m, k = int(pair["m1"]), int(pair["k1"])
+        else:
+            m, k = int(pair["m2"]), int(pair["k2"])
+        if m - plan_rounds == k:
+            paired.add(m)
+    if _CODE_WORD_RE.search(subject):
+        inferred = "code"
+    elif _PLAN_WORD_RE.search(subject):
+        inferred = "plan"
+    else:
+        inferred = None
+    return [
+        (n, stage) if stage
+        else (n, None) if n in paired
+        else (n, inferred)
+        for n, stage in hits
+    ]
+
+
+def _plan_stage(
+    target: dict, key, declared: int | None, state: dict, subjects: list[str],
+) -> tuple[int | None, str | None]:
+    """Where this target's PLAN stage ended, read off its optional
+    `plan_stage: {"rounds": N, "closed_by": "<decision id>" | "clean"}`.
+
+    audit_rule's HARD CAP is counted PER STAGE (AUDIT-CAP-PER-STAGE-2026-09-25)
+    while records and subjects number rounds continuously, so a plan stage that
+    closed at round 3 left every round after it reading as past the cap: the
+    whole build stage under a red banner it could not clear. The field moves
+    where the cap starts counting, and nothing else.
+
+    IT IS NOT AN ACKNOWLEDGEMENT FLAG, and every bound below is what keeps it
+    from becoming one. It can move the threshold by at most the cap itself; it
+    cannot claim more rounds than the target declares it ran; a decision it
+    cites must exist and name this target; "clean" must be backed by a subject
+    on this branch saying plan round N was clean, in `_clean_plan_round_re`'s
+    canonical shape and with no negation word anywhere in it (round 1 finding
+    F2: unchecked, one word silenced a plan stage at 3 rounds NOT clean); and a
+    plan round
+    above N on this branch, as `_staged_hits` reads them, contradicts it
+    outright. Any of those, and the field is ignored -- the cap counts from
+    round 1, exactly as if it were absent -- and the reason is returned so the
+    caller can say so. What the code stage then trips on is `_stage_round_max`.
+
+    Returns (N, None) when it holds, (None, None) when it is absent, and
+    (None, reason) when it is present but refused.
+    """
+    raw = target.get("plan_stage")
+    if raw is None:
+        return None, None
+
+    def refused(why: str) -> tuple[None, str]:
+        return None, (
+            f"plan_stage={raw!r} is IGNORED ({why}), so the hard cap counts this "
+            f"target's rounds from round 1."
+        )
+
+    if not isinstance(raw, dict):
+        return refused("it is not an object")
+    rounds = raw.get("rounds")
+    if (not isinstance(rounds, int) or isinstance(rounds, bool)
+            or not 1 <= rounds <= UNPHASED_FAIL_ROUND):
+        return refused(
+            f"rounds must be a whole number from 1 to {UNPHASED_FAIL_ROUND}, the "
+            f"most a plan stage can run under the cap"
+        )
+    if declared is None:
+        return refused("audit_rounds is not a whole number to check it against")
+    if rounds > declared:
+        return refused(f"rounds is more than the {declared} audit_rounds the target declares")
+    staged = [(subject, _staged_hits(subject, rounds)) for subject in subjects]
+    closed_by = raw.get("closed_by")
+    if closed_by == "clean":
+        clean_round = _clean_plan_round_re(rounds)
+        if not any(
+            clean_round.search(subject) and not _NEGATION_RE.search(subject)
+            for subject in subjects
+        ):
+            return refused(
+                f'closed_by is "clean" but no subject on this branch says plan '
+                f"round {rounds} was clean"
+            )
+    else:
+        # Round 1 finding F3: both are hand-edited, and a traceback here is a
+        # crash in the SessionStart hook.
+        decisions = state.get("decisions")
+        if not isinstance(key, str) or not key.split() or not isinstance(decisions, list):
+            return refused("there is no target id or decisions[] list to check closed_by against")
+        name = key.split()[0]
+        decision = next(
+            (d for d in decisions
+             if isinstance(d, dict) and isinstance(closed_by, str) and d.get("id") == closed_by),
+            None,
+        )
+        if decision is None:
+            return refused('closed_by must be "clean" or the id of an entry in decisions[]')
+        token = re.compile(r"(?<![\w-])" + re.escape(name) + r"(?![\w-])")
+        if not token.search(json.dumps(decision, ensure_ascii=False)):
+            return refused(f"decision {closed_by} does not name {name}")
+    later = [n for _, hits in staged for n, stage in hits if stage == "plan" and n > rounds]
+    if later:
+        return refused(f"this branch's subjects name plan round {max(later)}, after it closed")
+    return rounds, None
+
+
+def _stage_round_max(subjects: list[str], plan_rounds: int) -> int:
+    """The highest CODE-stage round these subjects reach, once the plan stage
+    closed at `plan_rounds`, with stages as `_staged_hits` reads them: a code
+    round is its own number; a continuous one ("round 4" in "round 4 (code
+    round 1)", or a subject naming no stage) is N - plan_rounds; a plan round
+    is not a code round at all.
+
+    THE ACCEPTED COST: a subject with no "code" in it that numbers a code
+    round from 1 ("H round 3 not clean", or "H round 3 -- off the plan",
+    meaning code round 3) reads `plan_rounds` too low, or not at all. Name the stage in subjects -- the canonical
+    `docs(state): <ID> code round N` does.
+    """
+    best = 0
+    for subject in subjects:
+        for n, stage in _staged_hits(subject, plan_rounds):
+            if stage == "code":
+                best = max(best, n)
+            elif stage is None:
+                best = max(best, n - plan_rounds)
+    return best
 
 
 def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
@@ -576,8 +912,15 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"this run. That is an UNCHECKED bill, not a clean one."
         )
 
+    identity = _target_identity(state)
+    active_phase = identity[1] if identity and identity[0] == "phase" else None
+    known_phase_ids = {
+        phase["id"] for phase in state.get("phases", [])
+        if isinstance(phase, dict) and isinstance(phase.get("id"), str)
+    }
     evidence = _round_numbers_in_branch_subjects(
         _target_scoped_base(base_ref, state), base_ref,
+        active_phase=active_phase, known_phase_ids=known_phase_ids,
     )
     if evidence is _GIT_FAILED:
         # P6 D1. The base ref resolved, then `git log` over it failed (e.g. the
@@ -592,6 +935,7 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
         return None
     git_max, subjects = evidence
     shown = "; ".join(subjects[:3])
+
 
     target, label = _pointer_target(state)
 
@@ -634,19 +978,7 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     # a non-numeric count get its warning. Deliberately ONE cap check, not a
     # copy here: STATE-PROBE-TARGET-SCOPING's verify pattern anchors on it.
     raw = target.get("audit_rounds")
-    declared: int | None
-    if raw is None:
-        declared = 0
-    elif isinstance(raw, bool):
-        declared = None
-    elif isinstance(raw, int):
-        declared = raw
-    elif isinstance(raw, float) and raw.is_integer():
-        declared = int(raw)
-    elif isinstance(raw, str) and raw.strip().isdigit():
-        declared = int(raw.strip())
-    else:
-        declared = None
+    declared = _whole_number(raw)
     if declared is not None and git_max > declared:
         return "drift", (
             f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
@@ -683,15 +1015,33 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     # Acknowledging it is deliberately NOT a third route -- an acknowledgement
     # flag would be one more editable field that switches the check off, which
     # is the exact shape of the three findings the scoping rework just closed.
-    if git_max >= UNPHASED_FAIL_ROUND and not target.get("audit_clean"):
+    #
+    # `is not True`, not `not ...` (STATE-PROBE-FIXES, G4): the string "false"
+    # is truthy, so a hand-typed quote switched the cap off.
+    #
+    # COUNTED PER STAGE (STATE-PER-STAGE-CAP): once a target's `plan_stage`
+    # holds, `stage_max` is its code stage's round, not the continuous one --
+    # see `_plan_stage` for why that field cannot switch the cap off.
+    plan_rounds, plan_note = _plan_stage(
+        target, _target_identity(state)[1], declared, state, subjects,
+    )
+    stage = "" if plan_rounds is None else (
+        f" -- code round {_stage_round_max(subjects, plan_rounds)}, its plan stage "
+        f"having closed at round {plan_rounds} ({target['plan_stage']['closed_by']})"
+    )
+    stage_max = git_max if plan_rounds is None else _stage_round_max(subjects, plan_rounds)
+    if stage_max >= UNPHASED_FAIL_ROUND and target.get("audit_clean") is not True:
         return "drift", (
             f"Audit bookkeeping: {label} -- the active target -- declares {declared} "
             f"round(s), NONE of them clean, and this branch still carries round "
-            f"{git_max}. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND}: STOP AUDITING "
-            f"AND TELL KENNETH -- that is evidence the batch is too big to audit, not "
-            f"that it needs another round. Clears by going clean, by merging, or by "
-            f"moving active_phase if it is pointing at finished work. Subjects: {shown}"
+            f"{git_max}{stage}. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND} per stage: "
+            f"STOP AUDITING AND TELL KENNETH -- that is evidence the batch is too big to "
+            f"audit, not that it needs another round. Clears by going clean, by merging, "
+            f"or by moving active_phase if it is pointing at finished work."
+            f"{' ' + plan_note if plan_note else ''} Subjects: {shown}"
         )
+    if plan_note:
+        return "warn", f"Audit bookkeeping: {label}'s {plan_note}"
 
     if declared is None:
         return "warn", (
@@ -715,22 +1065,23 @@ def main() -> int:
         print(f"  {BOLD}{'':<2} {'PHASE':<42} {'STATUS':<13} {'AUDIT':<22}{RESET}")
 
     for ph in state["phases"]:
-        declared_shipped = ph["status"] in SHIPPED
-        code_shipped, detail = probe(ph["verify"])
+        declared_built = ph["status"] in BUILT_STATUSES
+        code_built, detail = probe(ph["verify"])
 
-        # `probe` already returns "does the code say this shipped?" for every
+        # `probe` already returns "does the code for this exist?" for every
         # kind, "absent" and "defect_marker" included. There is nothing left to
         # branch on here.
-        actual_shipped = code_shipped
+        actual_built = code_built
 
-        if declared_shipped != actual_shipped:
+        if declared_built != actual_built:
             drift.append(
                 f"Phase {ph['id']} ({ph['name']}): declared '{ph['status']}' but the code says "
-                f"{'BUILT' if actual_shipped else 'NOT BUILT'} — {detail}"
+                f"{'BUILT' if actual_built else 'NOT BUILT'} — {detail}"
             )
 
-        rounds, clean = ph["audit_rounds"], ph["audit_clean"]
-        if declared_shipped and not clean:
+        # `is True` (G4): the string "false" is truthy and rendered "clean after N".
+        rounds, clean = ph["audit_rounds"], ph["audit_clean"] is True
+        if declared_built and not clean:
             unaudited.append(f"Phase {ph['id']} ({ph['name']}) — {rounds} round(s) run, none clean")
 
         if not quiet:
@@ -739,7 +1090,7 @@ def main() -> int:
                 audit = f"{GREEN}clean after {rounds}{RESET}"
             elif rounds:
                 audit = f"{RED}{rounds} run, NOT clean{RESET}"
-            elif declared_shipped:
+            elif declared_built:
                 audit = f"{RED}NEVER AUDITED{RESET}"
             else:
                 audit = f"{DIM}—{RESET}"
@@ -757,7 +1108,7 @@ def main() -> int:
     # and the next session planned an audit around a list that was missing it.
     shipped_items = state.get("already_shipped", [])
     for item in shipped_items:
-        if not item.get("audit_clean"):
+        if item.get("audit_clean") is not True:
             rounds = item.get("audit_rounds", 0)
             unaudited.append(
                 f"Shipped: {item['name']} — {rounds} round(s) run, none clean"
@@ -768,8 +1119,8 @@ def main() -> int:
         # a claim about the code, wherever in the file the claim is written.
         v = item.get("verify")
         if v:
-            code_shipped, detail = probe(v)
-            if not code_shipped:
+            code_built, detail = probe(v)
+            if not code_built:
                 drift.append(
                     f"Shipped item '{item['name']}': declared shipped but the code "
                     f"says NOT BUILT — {detail}"
@@ -786,11 +1137,12 @@ def main() -> int:
         (drift if severity == "drift" else unaudited).append(message)
 
     if not quiet:
-        print(f"\n  {DIM}SHIPPED* = code exists but has never survived an adversarial round.{RESET}")
+        print(f"\n  {DIM}BUILT = code exists, unmerged; audit status is shown separately.{RESET}")
+        print(f"  {DIM}SHIPPED* = legacy code-exists status without a clean adversarial round.{RESET}")
         if shipped_items:
             print(f"\n  {BOLD}{'':<2} {'ALREADY SHIPPED':<42} {'STATUS':<13} {'AUDIT':<22}{RESET}")
             for item in shipped_items:
-                clean = item.get("audit_clean")
+                clean = item.get("audit_clean") is True
                 rounds = item.get("audit_rounds", 0)
                 if clean:
                     audit = f"{GREEN}clean{RESET}"

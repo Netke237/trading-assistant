@@ -66,7 +66,7 @@ async def client_with_session():
 
 
 async def _add(client, contract="AAPL|185|2026-09-18|C", qty=5, entry=1.00, rec="REC-1"):
-    # Avoid the risk-engine 422 by using a large portfolio value.
+    # Legacy portfolioValue is accepted; the server account sets the cap.
     body = {"recId": rec, "symbol": "AAPL", "contract": contract, "direction": "Bullish",
             "entryPrice": entry, "qty": qty, "entryDate": "2026-05-01",
             "stop": None, "targets": [], "dteTotal": 140, "portfolioValue": 1_000_000}
@@ -85,11 +85,16 @@ async def _add(client, contract="AAPL|185|2026-09-18|C", qty=5, entry=1.00, rec=
 # needs its own direct coverage rather than always mocking the live fetch away.
 
 @pytest.mark.asyncio
-async def test_add_position_risk_check_rejects_based_on_live_price(client):
+async def test_add_position_risk_check_rejects_based_on_live_price(client, monkeypatch):
     """A submitted entryPrice that alone would pass the exposure gate must
     still be rejected if the LIVE quote pushes capital-at-risk over the limit —
     proving the risk check evaluates the price that actually gets persisted,
     not the frontend-supplied one."""
+    from copy import deepcopy
+    from app.services import portfolio_risk
+    config = deepcopy(portfolio_risk._load_config())
+    config.setdefault("portfolio", {})["portfolio_value"] = 10_000.0
+    monkeypatch.setattr(portfolio_risk, "_load_config", lambda: config)
     body = {
         "recId": "REC-RISK-LIVE-1", "symbol": "AAPL", "contract": "AAPL|185|2026-09-18|C",
         "direction": "Bullish", "entryPrice": 1.00, "qty": 1, "entryDate": "2026-05-01",

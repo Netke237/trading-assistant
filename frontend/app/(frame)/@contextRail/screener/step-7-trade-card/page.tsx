@@ -22,6 +22,8 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
 import { statusForScore } from '@/lib/status';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { earningsGateFor, scanVetoDays } from '@/lib/earningsGate';
 import {
   useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
   type HorizonIvThresholds,
@@ -49,8 +51,18 @@ function buildChecklist(
   ivThresholds: Record<ThresholdHorizon, HorizonIvThresholds> | null,
   rrPending: boolean,
   ivOverride: { value: number; yaml: number } | null = null,
+  eventWindow: { reject_days: number; caution_days: number } | undefined = undefined,
+  /** Audit round 1, F4 — the scan's timestamp, to age `earningsDays` by. */
+  scanTimestamp: string | undefined = undefined,
+  rrStale: boolean = false,
+  /** STOCKS-HORIZON-P0B B7 — the scan's veto window, max(reject_days, hold)
+   *  (`scanVetoDays`), the same one Step 7's buttons read. */
+  vetoDays: number | undefined = eventWindow?.reject_days,
 ): Gate[] {
   const gates: Gate[] = [];
+  if (isBearishUnvalidated(candidate.direction)) {
+    gates.push({ label: 'Direction', status: 'REJECT', detail: BEARISH_UNVALIDATED_MESSAGE });
+  }
 
   // Regime — PENDING/NO_DATA means scan not run yet, show CAUTION not REJECT
   if (regime !== 'PENDING' && regime !== 'NO_DATA') {
@@ -115,14 +127,61 @@ function buildChecklist(
     });
   }
 
-  // Earnings > 7d away
-  const days = wlRow?.nextEventDays;
-  if (days != null) {
+  // Fix #3: the scan's own event window (echoed on the scan result), never a
+  // fixed 7/3d. With no window in hand the gate is CAUTION, not PASS -- an
+  // unknown window is not a clean read (same rule as the IV gate above).
+  //
+  // D4 amended 2026-10-03 (Kenneth): an unknown earnings date caps a SINGLE
+  // STOCK's card at CAUTION and blocks its auto-fire (backend). An ETF has no
+  // earnings, so it passes. A card without `isEtf` (pre-deploy scan) reads as
+  // a stock -- the same safe direction the backend takes.
+  //
+  // Audit round 1, F4: graded AS OF TODAY through lib/earningsGate.ts -- the
+  // helper Step 7's buttons read -- so a persisted scan reopened days later is
+  // judged on today's distance, and a print that may have passed since the
+  // scan is an unknown date.
+  const eg = earningsGateFor(candidate, scanTimestamp, vetoDays);
+  if (eg.passedSinceScan && !candidate.isEtf) {
     gates.push({
-      label: 'Earnings > 7d away',
-      status: days > 7 ? 'PASS' : days >= 3 ? 'CAUTION' : 'REJECT',
-      detail: `Next event in ${days}d — pass >7d, caution 3-7d, reject <3d.`,
+      label: 'Earnings date',
+      status: 'CAUTION',
+      detail: `Earnings were ${eg.daysAtScan}d out at the scan, ${eg.ageDays}d ago — the print may already have passed and the next date is unknown. Re-run the scan; auto-trade will not fire a single stock.`,
     });
+  } else if (eg.unknown) {
+    gates.push(candidate.isEtf
+      ? {
+          label: 'Earnings date',
+          status: 'PASS',
+          detail: 'ETF — no earnings date to check.',
+        }
+      : {
+          label: 'Earnings date',
+          status: 'CAUTION',
+          detail: 'No earnings date on file — the card is capped at CAUTION and auto-trade will not fire a single stock. Check the calendar before sending.',
+        });
+  }
+  // Graded on EARNINGS distance only. nextEventDays is the nearer of earnings
+  // and dividend, and only earnings veto (D3): a dividend inside the window
+  // must not read as an "Earnings" REJECT. Unknown earnings is the CAUTION
+  // gate above.
+  const days = eg.daysNow;
+  if (days != null) {
+    const aged = eg.ageDays > 0 ? ` (${eg.daysAtScan}d at the scan, ${eg.ageDays}d ago)` : '';
+    // P0B B7: REJECT inside the veto window (never narrower than reject_days).
+    const veto = Math.max(eventWindow?.reject_days ?? 0, vetoDays ?? 0);
+    gates.push(eventWindow
+      ? {
+          label: 'Earnings outside reject window',
+          status: days < veto ? 'REJECT' : days < eventWindow.caution_days ? 'CAUTION' : 'PASS',
+          detail: veto > eventWindow.reject_days
+            ? `Earnings in ${days}d${aged} — veto <${veto}d (reject ${eventWindow.reject_days}d widened to the scan's hold), caution <${eventWindow.caution_days}d (this scan's window).`
+            : `Earnings in ${days}d${aged} — reject <${eventWindow.reject_days}d, caution <${eventWindow.caution_days}d (this scan's window).`,
+        }
+      : {
+          label: 'Earnings outside reject window',
+          status: 'CAUTION',
+          detail: `Earnings in ${days}d${aged} — this scan carried no event window; re-run the scan.`,
+        });
   }
 
   // Score ≥ 55 (both stock and contract) — thresholds from statusForScore()
@@ -133,6 +192,7 @@ function buildChecklist(
     detail: `Lower of stock score (${candidate.stockScore}) and contract score (${candidate.contractScore}) = ${minScore}.`,
   });
 
+  // Thresholds remain UNMEASURED pending AREA3-OPTIONS-MEASUREMENT.
   // R:R ≥ 2.0. While the picked contract's plan is loading (or failed) the
   // card's rrRatio is still the auto-pick's -- CAUTION, never that figure.
   if (rrPending) {
@@ -141,10 +201,23 @@ function buildChecklist(
       status: 'CAUTION',
       detail: 'R:R not yet recomputed for the contract picked in Step 6.',
     });
-  } else gates.push({
+  } else if (rrStale) gates.push({
+    label: 'R:R ≥ 2.0', status: 'CAUTION',
+    detail: 'Stock stop moved since R/R was measured. Recompute the plan before using its ratio.',
+  });
+  // TRADING-REVIEW-PHASE-C-RR (review M7, D5): R/R now risks the full premium.
+  // A ratio measured on any other basis (or none recorded) overstates reward
+  // per unit of real risk, so it is never graded against the thresholds.
+  // Defence in depth: the scanStore v18 migration and the backend schema v3
+  // refusal should already have discarded every such card.
+  else if (candidate.exit.rrRiskBasis !== 'full_premium') gates.push({
+    label: 'R:R ≥ 2.0', status: 'CAUTION',
+    detail: 'R/R computed on an older basis: re-run the scan',
+  });
+  else gates.push({
     label: 'R:R ≥ 2.0',
     status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',
-    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}× — pass ≥2.0×, caution 1.5-2.0×.`,
+    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}× to the target, risking the full premium (no protective stop order) — pass ≥2.0×, caution 1.5-2.0×.`,
   });
 
   // Spread score ≥ 70 (higher = tighter spread)
@@ -162,6 +235,12 @@ export default function TradeCardContextRail() {
   const published           = useTradeCardUiStore((s) => s.activeCard);
   const regime              = useScanStore((s) => s.combinedRegime);
   const horizon             = useScanStore((s) => s.context?.horizon);
+  // Fix #3: the scan's own earnings window, echoed on its result.
+  const eventWindow         = useScanStore((s) => s.scanResult?.event_window);
+  // Audit round 1, F4: the earnings distance is aged by the scan's age.
+  const scanTimestamp       = useScanStore((s) => s.scanResult?.timestamp);
+  // P0B B7: the scan's hold, for the veto-window fallback (scanVetoDays).
+  const scanContext         = useScanStore((s) => s.context);
   // Two selectors (Zustand v5: never one returning a fresh object).
   const ivFetched           = useIvThresholdsStore((s) => s.thresholds);
   const ivOverrides         = useIvThresholdsStore((s) => s.overrides);
@@ -198,6 +277,10 @@ export default function TradeCardContextRail() {
   const gates = candidate ? buildChecklist(
     candidate, wlRow, regime, horizonKey, ivThresholds, published?.rrPending ?? false,
     ivOverrideFor(horizonKey, ivFetched, ivOverrides),
+    eventWindow,
+    scanTimestamp,
+    published?.rrStale ?? false,
+    scanVetoDays(eventWindow, scanContext),
   ) : [];
 
   return (

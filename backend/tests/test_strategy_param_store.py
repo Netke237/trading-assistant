@@ -120,14 +120,14 @@ def test_adopt_handles_missing_file_gracefully(tmp_path, monkeypatch):
 
 
 def test_get_direction_default(strategy_cfg):
-    assert get_direction() == "bullish"
+    assert get_direction() == "Bullish"
 
 
 def test_get_direction_custom(tmp_path, monkeypatch):
     import app.services.strategy_param_store as store
     monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
     (tmp_path / "strategy_params.yaml").write_text("direction: bearish\n", encoding="utf-8")
-    assert store.get_direction() == "bearish"
+    assert store.get_direction() == "Bearish"
 
 
 def test_get_job_retention_default(strategy_cfg):

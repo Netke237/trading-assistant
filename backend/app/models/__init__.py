@@ -8,3 +8,4 @@ from app.models.alert import AlertRuleModel, AlertHistoryModel  # noqa: F401
 from app.models.closed_position import ClosedPositionModel, EquitySnapshotModel  # noqa: F401
 from app.models.fundamentals import FundamentalsModel  # noqa: F401
 from app.models.scheduled_scan_run import ScheduledScanRunModel  # noqa: F401
+from app.models.daily_risk import DailyRiskBudget, DailyRiskAttempt, DailyRiskLoss  # noqa: F401

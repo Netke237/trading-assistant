@@ -49,7 +49,7 @@ function legacyBlob() {
 
 describe('searchProfilesStore v1 → v3 (PHASE-A-SPREAD-BASIS-2026-09-06)', () => {
   it('is registered at the version the migration branch expects', () => {
-    expect(version).toBe(3);
+    expect(version).toBe(4);
   });
 
   it("seeds a profile's absolute threshold from THAT profile's own pre-split knob", () => {

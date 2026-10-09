@@ -36,3 +36,29 @@
   color: var(--text-dim);
   font-size: 11px;
 }
+
+.compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 8px 12px;
+  min-width: 0;
+}
+
+.compact > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.compact .head,
+.compact .row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px 10px;
+}
+
+.compact > span {
+  flex: 1 1 240px;
+}

@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
+import { formatRaceRR, formatRaceEdge } from '@/lib/barrierRace';
 
 // Genuine `estimate_first_passage` output for the reference contract (185/190C,
 // 30 DTE, $5.20 premium, stop $176, 60% premium stop, seed 42) — not a
@@ -433,5 +434,174 @@ describe('stopCostShown — never name a readout that is not on screen', () => {
   it('defaults to saying nothing, since the caller opts in', () => {
     renderCard();
     expect(screen.queryByText(CROSS_REF)).not.toBeInTheDocument();
+  });
+});
+
+// ── TRADE-CARD-BARRIER-PRESENTATION: one comparison row per target ──────────
+
+describe('the comparison row', () => {
+  // The rows of the outcome table, in target order. The barriers table is the
+  // first table on the card; the outcome table is the second.
+  const outcomeRows = () => {
+    const tables = screen.getAllByRole('table');
+    return within(tables[1]).getAllByRole('row').slice(1);   // drop the header row
+  };
+
+  it('puts the four shares, the target median, the stock R:R and the edge in the same row', () => {
+    renderCard();
+    const rows = outcomeRows();
+    expect(rows).toHaveLength(3);
+    const cells = within(rows[0]).getAllByRole('cell').map((c) => c.textContent);
+    expect(cells).toEqual([
+      '20%$6.24', '', '27%', '0%', '69%', '4%', '~7d', '0.20x', '-$193.00',
+    ]);
+    // The bar is in the second cell, and it is still the raw-share bar.
+    expect(within(rows[0]).getByRole('img')).toBeInTheDocument();
+    expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent).slice(2))
+      .toEqual(['14%', '0%', '78%', '8%', '~12d', '0.35x', '-$228.00']);
+    expect(within(rows[2]).getAllByRole('cell').map((c) => c.textContent).slice(2))
+      .toEqual(['8%', '0%', '81%', '11%', '~16d', '0.50x', '-$243.00']);
+  });
+
+  it('names its columns', () => {
+    renderCard();
+    const headers = within(screen.getAllByRole('table')[1])
+      .getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual([
+      'Target / option', 'Split', 'Target first', 'Stock stop', 'Premium stop', 'Neither',
+      'Median to target', 'R:R vs stock stop', 'Edge / contract',
+    ]);
+  });
+
+  it('keeps the row R:R and edge equal to the tails of the full chains, in every branch', () => {
+    // The row cells are cut from the formatters' own strings. Pin that against
+    // each branch the formatters have, so the row can never print a number
+    // beside a chain that ends in an em dash, or the reverse.
+    const cases: Array<[string, Partial<BarrierRaceOutcome>, string, string]> = [
+      ['measured', {}, '0.20x', '-$193.00'],
+      ['stop could not be repriced', { stopRepricedValue: null, riskStockStop: null }, '—', '—'],
+      ['no risk at the stop', { riskStockStop: 0, rrStockStop: null }, '—', '-$193.00'],
+      ['negative risk leg', { riskStockStop: -1.5, rrStockStop: null }, '—', '-$193.00'],
+      ['no edge', { edgePerContract: null }, '0.20x', '—'],
+      ['positive edge', { edgePerContract: 298 }, '0.20x', '$298.00'],
+    ];
+    for (const [name, over, rr, edge] of cases) {
+      const o = outcome(over);
+      const { unmount } = render(
+        <BarrierRaceCard
+          race={{ ...RACE, outcomes: [o] }}
+          premiumStopFromField
+          premiumStopField={PREMIUM_STOP_FIELD}
+          isFresh
+        />,
+      );
+      const cells = within(outcomeRows()[0]).getAllByRole('cell').map((c) => c.textContent);
+      expect([name, cells[7], cells[8]]).toEqual([name, rr, edge]);
+      // And the full chain the disclosure prints ends in exactly those values.
+      const rrChain = formatRaceRR(o);
+      expect([name, rr === '—' ? rrChain.endsWith('= —') : rrChain.endsWith(`= ${rr}`)])
+        .toEqual([name, true]);
+      const edgeChain = formatRaceEdge(o, RACE.premiumUsed);
+      expect([name, edge === '—' ? edgeChain === '—' : edgeChain.endsWith(`${edge} per contract`)])
+        .toEqual([name, true]);
+      expect(screen.getByText(rrChain)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('does not colour the edge: the card adds no gate', () => {
+    renderCard({ race: { ...RACE, outcomes: [outcome({ edgePerContract: 298 })] } });
+    const edgeCell = within(outcomeRows()[0]).getAllByRole('cell')[8];
+    expect(edgeCell.innerHTML).not.toMatch(/tone(Pass|Reject|Caution)/);
+  });
+});
+
+describe('the inline disclosure', () => {
+  const details = (container: HTMLElement) => container.querySelector('details') as HTMLElement;
+
+  it('is closed by default and holds the stop medians, the full chains and the prose', () => {
+    const { container } = renderCard({ stopCostShown: true });
+    const d = details(container);
+    expect(d).not.toBeNull();
+    expect(d).not.toHaveAttribute('open');
+    const inside = within(d);
+    // The two stop medians, per target.
+    expect(inside.getAllByText('Median to stock stop')).toHaveLength(3);
+    expect(inside.getAllByText('Median to premium stop')).toHaveLength(3);
+    expect(inside.getByText('~20d')).toBeInTheDocument();
+    expect(inside.getAllByText('~21d')).toHaveLength(2);
+    // Every chain, still printed in full by the original formatters.
+    expect(inside.getAllByText(/= \$5\.17$/)).toHaveLength(3);
+    expect(inside.getByText('$1.04 / $5.17 = 0.20x')).toBeInTheDocument();
+    expect(inside.getByText(/0\.33x, the same on every contract/)).toBeInTheDocument();
+    expect(inside.getAllByText(/per contract$/)).toHaveLength(3);
+    // The explanations.
+    expect(inside.getByText(/counted once, for whichever barrier it reached first/)).toBeInTheDocument();
+    expect(inside.getByText(/median over the paths that got there first/)).toBeInTheDocument();
+    expect(inside.getByText(/see “Max loss if the stop is hit”/)).toBeInTheDocument();
+    expect(inside.getByText(/Only the first ratio is a measurement/)).toBeInTheDocument();
+    expect(inside.getByText(/It is signed, not a loss/)).toBeInTheDocument();
+    expect(inside.getByText(/a real fear bid would leave more premium than shown/)).toBeInTheDocument();
+  });
+
+  it('never holds a warning: both stay visible outside it', () => {
+    const { container } = renderCard({ race: { ...RACE, ivSolved: false } });
+    const d = details(container);
+    const iv = screen.getByText(/implied volatility could not be backed out of its quote/);
+    const weak = screen.getByText(/describes an outcome the simulation almost never reached/);
+    expect(d.contains(iv)).toBe(false);
+    expect(d.contains(weak)).toBe(false);
+  });
+
+  it('keeps the barriers and the standalone stock-stop touch outside it', () => {
+    const { container } = renderCard({ invalidation: { probability: 0.81, expectedDays: 14 } });
+    const d = details(container);
+    expect(d.contains(screen.getByText('$176.00 stock'))).toBe(false);
+    expect(d.contains(screen.getByText('$2.08 option'))).toBe(false);
+    const standalone = screen.getByText(/81% of paths touch the/);
+    expect(standalone).toHaveTextContent('(median ~14d)');
+    expect(d.contains(standalone)).toBe(false);
+  });
+
+  it('shows the assumptions strip outside it', () => {
+    const { container } = renderCard();
+    const strip = screen.getByText('2,000 paths · each row sums to 100%');
+    expect(details(container).contains(strip)).toBe(false);
+    expect(screen.getByText('Edge before commissions')).toBeInTheDocument();
+  });
+
+  it('is absent from the changed-barrier and refusal branches', () => {
+    const changed = renderCard({ barriersChanged: true });
+    expect(changed.container.querySelector('details')).toBeNull();
+    expect(changed.container.querySelector('table')).toBeNull();
+    changed.unmount();
+    const refused = render(
+      <BarrierRaceCard race={null} premiumStopFromField premiumStopField={PREMIUM_STOP_FIELD} isFresh />,
+    );
+    expect(refused.container.querySelector('details')).toBeNull();
+  });
+});
+
+
+describe('controlled race shortcut', () => {
+  it('has no action for shared callers unless explicitly supplied', () => {
+    renderCard();
+    expect(screen.queryByRole('button', { name: /Use Barrier Race/ })).not.toBeInTheDocument();
+  });
+
+  it('emits only the target identity and renders the controlled selection', () => {
+    const onSelectTarget = jest.fn();
+    renderCard({ onSelectTarget, selectedTargetPct: 0.35 });
+    expect(screen.getByRole('button', { name: 'Use Barrier Race T35%' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Use Barrier Race T20%' }));
+    expect(onSelectTarget).toHaveBeenCalledWith(0.2);
+  });
+
+  it.each([
+    { race: null }, { race: undefined }, { isFresh: false },
+    { barriersChanged: true }, { barriersChanged: true, stockStopMoved: true },
+  ])('retains refusal/freshness early returns with a callback: %p', (props) => {
+    renderCard({ ...props, onSelectTarget: jest.fn() });
+    expect(screen.queryByRole('button', { name: /Use Barrier Race/ })).not.toBeInTheDocument();
   });
 });

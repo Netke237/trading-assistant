@@ -96,6 +96,19 @@ os.environ.setdefault("BAMENDJOU_SCAN_SCHEDULE_PATH", _TEST_SCAN_SCHEDULE_PATH)
 _TEST_STRATEGY_WATCHES_PATH = Path(_TEST_DB_DIR, "test_strategy_watches.yaml").as_posix()
 os.environ.setdefault("BAMENDJOU_STRATEGY_WATCHES_PATH", _TEST_STRATEGY_WATCHES_PATH)
 
+# ── confidence_cache safety pin (MUST run before any app import) ──────────────
+# Same class again (TRADING-REVIEW-PHASE-C-HYGIENE T1): confidence_cache.py sets
+# _DB_PATH at import to the REAL backend/data/confidence_cache.db and runs
+# _warm_load() at import, which deletes that file's expired rows. Tests that call
+# clear_cache()/set_cached() without monkeypatching _DB_PATH wiped every real
+# cached confidence and left a test row behind (MSFT|bullish|swing|default:default
+# |options|b2, confidence 50) that the backend then served after a restart --
+# confirmed in the real file on 2026-10-05. The module reads this variable before
+# _warm_load(). Per-test monkeypatches of _DB_PATH (test_adjustment_refresh.py)
+# still win; setdefault lets an explicit override still win too.
+_TEST_CONFIDENCE_CACHE_PATH = Path(_TEST_DB_DIR, "test_confidence_cache.db").as_posix()
+os.environ.setdefault("BAMENDJOU_CONFIDENCE_CACHE_DB", _TEST_CONFIDENCE_CACHE_PATH)
+
 import asyncio
 from typing import AsyncGenerator
 from unittest.mock import patch, AsyncMock
@@ -268,11 +281,40 @@ def _reset_market_data_caches():
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
+    # R2-F4's yfinance failure backoff: one test's simulated failure must not
+    # make the next test's lookup of the same symbol skip its stub.
+    mkt._yf_cal_fail_until.clear()
     yield
     mkt._candles_cache.clear()
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
+    mkt._yf_cal_fail_until.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_network_earnings_lookup_at_fire(monkeypatch):
+    """`AutoTradeService.fire()` looks up the symbol's next earnings date (fix #3
+    part 2, the fire-time event veto) through `auto_trader._fetch_earnings_date`,
+    which calls the network-backed `market.tradier_next_earnings_date` and
+    `market.yfinance_next_earnings_date` (Tradier fundamentals, then yfinance;
+    audit round 1, F3; each under its own deadline, round 2, R2-F3).
+
+    Default it to a date a year out for every test, so no test that reaches
+    `fire()` touches the network or becomes order- and date-dependent. A year
+    out is beyond every horizon's reject window, so the default vetoes nothing.
+    NOT None: since D4 was amended (2026-10-03, Kenneth) an UNKNOWN date refuses
+    a single stock, which would refuse every stock fire in the suite. A test
+    that wants a date (or None) calls `monkeypatch.setattr(at, "_fetch_earnings_date",
+    ...)` itself; that is the SAME function-scoped `monkeypatch` object this
+    fixture uses, so the later setattr simply replaces this one and wins for the
+    rest of the test, and both are undone together at teardown.
+    """
+    import app.services.auto_trader as at
+    from datetime import date, timedelta
+    far = date.today() + timedelta(days=365)
+    monkeypatch.setattr(at, "_fetch_earnings_date", lambda symbol: far)
+    yield
 
 
 @pytest.fixture(autouse=True)
@@ -530,3 +572,52 @@ def shipped_scoring_doc(drop: tuple = (), **overrides) -> dict:
         doc.pop(name, None)
     doc.update(copy.deepcopy(overrides))
     return doc
+
+@pytest.fixture(autouse=True)
+def _explicit_legacy_daily_risk_hooks(request, monkeypatch):
+    """Existing isolated order tests inject a fake durable service explicitly.
+
+    Ledger integration tests exercise the real database/bridge and opt out.
+    Legacy auto numeric fixtures retain their separately tested historical gate
+    amount; these tests do not claim to validate durable budget calculations.
+    """
+    if 'daily_risk' in request.node.path.name:
+        return
+    import threading
+    from types import SimpleNamespace
+    from app.services import auto_trader as at
+    from app.services import daily_risk_hooks, daily_risk
+    local = threading.local()
+    class LegacyHooks:
+        def reserve(self, attempt_id, **kwargs):
+            cents = round(getattr(local, 'risk', (kwargs.get('limit_price') or 1) * kwargs['quantity'] * kwargs['multiplier']) * 100)
+            return SimpleNamespace(reserved_cents=cents)
+        def resolve(self, *args, **kwargs):
+            pass
+    hooks = LegacyHooks()
+    original_check = at.AutoTradeService._check_daily_loss
+    def check(*args, **kwargs):
+        risk = original_check(*args, **kwargs)
+        local.risk = risk
+        return risk
+    monkeypatch.setattr(at.AutoTradeService, '_check_daily_loss', staticmethod(check))
+    original_init = at.AutoTradeService.__init__
+    def init(self):
+        original_init(self)
+        self._daily_risk_hooks = hooks
+    monkeypatch.setattr(at.AutoTradeService, '__init__', init)
+    monkeypatch.setattr(at.auto_trader, '_daily_risk_hooks', hooks)
+    monkeypatch.setattr(daily_risk_hooks, 'capture_daily_risk_hooks', lambda: hooks)
+    # Legacy tests mock BrokerRouter.execute; preserve that explicit fake seam
+    # while production dispatch uses resolve-before-reserve/place_order.
+    from unittest.mock import Mock
+    from app.routers import broker
+    selected = broker._selected_adapter
+    def legacy_adapter(router, key):
+        if isinstance(router, Mock):
+            return SimpleNamespace(place_order=lambda order: router.execute(key, order))
+        return selected(router, key)
+    monkeypatch.setattr(broker, '_selected_adapter', legacy_adapter)
+    async def record_loss(*args, **kwargs):
+        pass
+    monkeypatch.setattr(daily_risk, 'record_realized_loss', record_loss)

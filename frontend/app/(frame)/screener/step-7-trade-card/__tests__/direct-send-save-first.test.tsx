@@ -157,8 +157,8 @@ async function goPrev() {
 
 async function sendBasket() {
   fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-  fireEvent.click(await screen.findByRole('button', { name: /send basket/i }));
-  const submit = await screen.findByRole('button', { name: /^(Submit \d orders?|Override & Submit)$/ });
+  fireEvent.click(await screen.findByRole('button', { name: /track basket/i }));
+  const submit = await screen.findByRole('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
   await waitFor(() => expect(submit).toBeEnabled());
   fireEvent.click(submit);
 }
@@ -676,5 +676,34 @@ describe('P1b-i — Remove (P1B1-MINIMAL-REMOVE-2026-09-25)', () => {
     expect(api.deletePortfolioPosition).toHaveBeenCalledWith(recId);
     expect(notes()).toHaveLength(0);
     expect(positions()).toHaveLength(0);
+  });
+});
+
+/* Audit round 1, F1 — the D5 premium cap is judged by the SERVER at the
+ * price the order can fill at. The page's job is to tell it which order the
+ * save precedes: an edited limit above the mid must reach the server, or it
+ * judges 12 x $3.00 while the broker gets 12 @ $3.60. */
+describe('audit round 1 F1 — the save carries the order it precedes', () => {
+  it('Place Limit sends orderType LMT and the EDITED limit, not the mid', async () => {
+    act(() => {
+      useScanStore.setState((s: any) => ({
+        optionsCardEdits: { ...s.optionsCardEdits, entryLimit: { [AAA_CONTRACT]: 3.1 } },
+      }));
+    });
+    await renderPage();
+    await sendAndSettle('LMT');
+    const body = persistBodies()[0]!;
+    expect(body.orderType).toBe('LMT');
+    expect(body.orderLimitPrice).toBe(3.1);
+    // The entry stays the mid: the limit judges the cap, it is not the fill.
+    expect(body.entryPrice).toBe(CARD_LIMIT);
+  });
+
+  it('Right Now — Market sends orderType MKT and no limit', async () => {
+    await renderPage();
+    await sendAndSettle('MKT');
+    const body = persistBodies()[0]!;
+    expect(body.orderType).toBe('MKT');
+    expect(body.orderLimitPrice).toBeNull();
   });
 });

@@ -4,7 +4,7 @@
  * `ivRank` and `iv` are two different quantities and usually only one of them
  * is present (PHASE-A-NULL-IVRANK-2026-09-06):
  *
- *   ivRank  a TRUE PERCENTILE — where today's implied volatility sits inside
+ *   ivRank  an IV RANK — where today's implied volatility sits inside
  *           this name's own 52-week range. Supplied only when IBKR or
  *           tastytrade answered, so it is `null` on most chains.
  *   iv      ABSOLUTE implied volatility, 0–100, for the contract itself.
@@ -12,7 +12,7 @@
  *           Black-Scholes inversion.
  *
  * Until 2026-09-06 the absolute figure was written into `ivRank`, so a name at
- * 45% IV was displayed and scored as though it sat at its own 45th percentile.
+ * 45% IV was displayed and scored as though it sat at its own rank 45.
  * Every consumer must therefore resolve the two through THIS module and label
  * whichever one it ends up showing — the resolution is deliberately not
  * duplicated per call site, because two editors each computing the same
@@ -56,7 +56,7 @@ export function resolveIv(src: IvSource | null | undefined): ResolvedIv {
  *  It was left in place on three of four tables when `ivColumnLabel` landed,
  *  which had step 5 heading the column "IV / IV RANK" and step 6 heading the
  *  same quantity "IV", one Next click apart. Heading a column `IV` while some of its cells hold a
- *  percentile is the ambiguity Phase A exists to remove, and it put the table
+ *  rank is the ambiguity Phase A exists to remove, and it put the table
  *  at odds with prose that DID name the basis: Step 5's own banner says
  *  "IV rank ≤ 34 → PASS" over a column headed "IV", which reads as two
  *  different quantities to anyone who has not read ivBasis.ts. */
@@ -102,9 +102,9 @@ export function ivColumnLabel(bases: readonly IvBasis[]): string {
 
 /** How a single resolved figure reads in a cell.
  *
- *  A percentile and an absolute level are told apart by the `%`: `45%` is
- *  forty-five volatility points, `45` with the `rank` suffix is the 45th
- *  percentile of this name's own range. `title` spells that out on hover so
+ *  A rank and an absolute level are told apart by the `%`: `45%` is
+ *  forty-five volatility points, `45` with the `rank` suffix is IV rank 45
+ *  within this name's own range. `title` spells that out on hover so
  *  the distinction never rests on the suffix alone.
  */
 export function formatIv(r: ResolvedIv, symbol?: string): {
@@ -124,7 +124,7 @@ export function formatIv(r: ResolvedIv, symbol?: string): {
     return {
       text: `${(r.value as number).toFixed(1)}%`,
       suffix: '',
-      title: `Implied volatility ${(r.value as number).toFixed(1)}% — an absolute level, not a percentile. No IV rank source (IBKR or tastytrade) answered for ${who === "this name's" ? 'this name' : symbol}, so there is nothing to say whether that is high or low for it.`,
+      title: `Implied volatility ${(r.value as number).toFixed(1)}% — an absolute level, not a rank. No IV rank source (IBKR or tastytrade) answered for ${who === "this name's" ? 'this name' : symbol}, so there is nothing to say whether that is high or low for it.`,
     };
   }
   return { text: '—', suffix: '', title: 'No implied-volatility data for this contract.' };
@@ -138,12 +138,12 @@ export function ivSortValue(src: IvSource | null | undefined): number | null {
 
 /* ── Legacy-localStorage repair (PHASE-A-NULL-IVRANK-2026-09-06) ────────────
  *
- * Before the split, `ivRank` held EITHER a true percentile (when IBKR or
+ * Before the split, `ivRank` held EITHER an IV rank (when IBKR or
  * tastytrade answered for the symbol) OR raw implied volatility × 100 (every
  * other chain), with nothing on the record saying which. That conflation IS
  * the defect Phase A removes — and a blob written to localStorage before the
  * split still carries it. Rehydrating one hands `resolveIv` a number of
- * UNKNOWN basis, and `resolveIv` reads any non-null `ivRank` as a percentile,
+ * UNKNOWN basis, and `resolveIv` reads any non-null `ivRank` as a rank,
  * so the trade card prints "IV rank 45" for what is most likely a 45%
  * absolute IV: the exact defect, reintroduced on the card the user acts from.
  *
@@ -185,7 +185,7 @@ export function ivSortValue(src: IvSource | null | undefined): number | null {
  * 'absolute' and appends '%'. A pre-split candidate whose Black-Scholes
  * inversion failed stored `iv_rank: 0.0`, which then renders as "IV 0% ·
  * compressed_vol" — an impossible implied volatility asserted as measured — and
- * a pre-split IBKR/tastytrade row whose figure genuinely WAS a 62nd percentile
+ * a pre-split IBKR/tastytrade row whose figure genuinely WAS a rank 62
  * renders as "IV 62%".
  *
  * Same remedy as everywhere else in this split: the basis is not recoverable,
@@ -206,9 +206,9 @@ export function stripLegacyIvDetail(record: unknown, inferred?: IvBasis): unknow
   //
   // This is what makes the function safe to run at any version and twice: a
   // v13 blob can hold EITHER pre-split details migrated by round-1 code or a
-  // genuine post-split percentile written by a later build, and a
-  // version-gated strip could not tell them apart. Stripping a real 62nd
-  // percentile is the same class of harm as printing an unattributable one.
+  // genuine post-split rank written by a later build, and a
+  // version-gated strip could not tell them apart. Stripping a real IV
+  // rank 62 is the same class of harm as printing an unattributable one.
   if (r.iv_basis !== undefined) return record;
   // ROUND 6 finding 2. `iv_basis` absence is a PRE-ROUND-3 marker, not a
   // pre-split one, and the comment above overstated it. VolDetail did not gain

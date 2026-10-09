@@ -143,16 +143,19 @@ function evaluateCondition(
     const idx = series.findIndex((p) => p.time === candleTime);
     if (idx === -1) return { met: false, triggerValues };
     const currentValue = series[idx].value;
+    if (!Number.isFinite(currentValue)) return { met: false, triggerValues };
     triggerValues[condition.indicator] = currentValue;
 
     if (condition.operator === 'crosses_above') {
       if (idx <= 0) return { met: false, triggerValues };
       const prevValue = series[idx - 1].value;
+      if (!Number.isFinite(prevValue)) return { met: false, triggerValues };
       return { met: currentValue > condition.value && prevValue <= condition.value, triggerValues };
     }
     if (condition.operator === 'crosses_below') {
       if (idx <= 0) return { met: false, triggerValues };
       const prevValue = series[idx - 1].value;
+      if (!Number.isFinite(prevValue)) return { met: false, triggerValues };
       return { met: currentValue < condition.value && prevValue >= condition.value, triggerValues };
     }
     return { met: comparePrice(condition.operator, currentValue, condition.value), triggerValues };

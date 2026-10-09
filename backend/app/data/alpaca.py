@@ -7,6 +7,7 @@ All calls pass through the Governor so the 200 req/min bucket is enforced.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date
 
 import httpx
@@ -93,20 +94,40 @@ async def get_alpaca_client() -> AlpacaClient | None:
 def _normalize_bars(
     raw_bars_by_symbol: dict[str, list[dict]],
     adj_bars_by_symbol: dict[str, list[dict]],
+    *,
+    strict_adjustments: bool = False,
 ) -> dict[str, list[dict]]:
     """Merge raw + adjusted bar lists into the multi-basis format.
 
-    Returns symbol -> list of bars with raw prices + adj_factor.
+    Returns symbol -> list of bars with raw prices + adj_factor. Strict mode
+    omits a whole symbol when any raw bar lacks valid adjustment evidence.
     """
     result: dict[str, list[dict]] = {}
     for sym, raw_list in raw_bars_by_symbol.items():
-        adj_map = {b["t"]: float(b.get("c", 0) or 0) for b in adj_bars_by_symbol.get(sym, [])}
+        if strict_adjustments:
+            adj_map = {b["t"]: b.get("c") for b in adj_bars_by_symbol.get(sym, [])}
+        else:
+            adj_map = {b["t"]: float(b.get("c", 0) or 0) for b in adj_bars_by_symbol.get(sym, [])}
         bars: list[dict] = []
         for rb in raw_list:
             ts = rb["t"]
-            raw_close = float(rb.get("c", 0) or 0)
-            adj_close = adj_map.get(ts, raw_close)
+            if strict_adjustments:
+                try:
+                    raw_close = float(rb.get("c"))
+                    adj_close = float(adj_map.get(ts))
+                except (TypeError, ValueError, OverflowError):
+                    break
+                if not (
+                    math.isfinite(raw_close) and raw_close > 0
+                    and math.isfinite(adj_close) and adj_close > 0
+                ):
+                    break
+            else:
+                raw_close = float(rb.get("c", 0) or 0)
+                adj_close = adj_map.get(ts, raw_close)
             adj_factor = round(adj_close / raw_close, 8) if raw_close != 0 else 1.0
+            if strict_adjustments and (not math.isfinite(adj_factor) or adj_factor <= 0):
+                break
             bars.append({
                 "time":         ts[:10],
                 "open":         round(float(rb.get("o", 0) or 0), 4),
@@ -119,7 +140,8 @@ def _normalize_bars(
                 "div_cash":     0.0,
                 "source":       "alpaca",
             })
-        result[sym] = bars
+        else:
+            result[sym] = bars
     return result
 
 
@@ -128,11 +150,14 @@ async def fetch_daily_bars_batch(
     start: date,
     end: date,
     client: AlpacaClient | None = None,
+    *,
+    strict_adjustments: bool = False,
 ) -> dict[str, list[dict]]:
     """Fetch daily bars for multiple symbols from Alpaca.
 
     Returns symbol -> list of multi-basis bars. Symbols not returned by Alpaca
-    are absent from the result dict.
+    are absent from the result dict. Strict mode also omits symbols with
+    incomplete or invalid adjustment data.
     """
     if client is None:
         client = await get_alpaca_client()
@@ -141,7 +166,7 @@ async def fetch_daily_bars_batch(
     try:
         raw_bars = await client.fetch_raw(symbols, start, end)
         adj_bars = await client.fetch_adj(symbols, start, end)
-        return _normalize_bars(raw_bars, adj_bars)
+        return _normalize_bars(raw_bars, adj_bars, strict_adjustments=strict_adjustments)
     except Exception as exc:
         logger.warning("Alpaca batch fetch failed: %s", exc)
         return {}
@@ -152,7 +177,11 @@ async def fetch_daily_bars_single(
     start: date,
     end: date,
     client: AlpacaClient | None = None,
+    *,
+    strict_adjustments: bool = False,
 ) -> list[dict]:
     """Fetch daily bars for a single symbol from Alpaca."""
-    result = await fetch_daily_bars_batch([symbol], start, end, client=client)
+    result = await fetch_daily_bars_batch(
+        [symbol], start, end, client=client, strict_adjustments=strict_adjustments
+    )
     return result.get(symbol, [])

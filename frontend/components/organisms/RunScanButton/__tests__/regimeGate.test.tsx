@@ -10,7 +10,16 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
-jest.mock('@/lib/stockScan', () => ({ runStockScan: jest.fn().mockResolvedValue(null) }));
+jest.mock('@/lib/stockScan', () => ({
+  runStockScanWithContinuation: async (...args: unknown[]) => {
+    const scan = await jest.requireMock('@/lib/stockScan').runStockScan(...args);
+    const store = jest.requireActual('@/lib/scanStore').useScanStore.getState();
+    const reason = store.stockScanError ?? 'unknown error';
+    store.setStockScanFeedback(store.stockManualRunToken, { error: scan ? null : `Scan failed — ${reason}`, notice: null });
+    return scan ? { kind: 'success', token: store.stockManualRunToken, result: scan } : { kind: 'failure', token: store.stockManualRunToken, reason };
+  },
+  isStockManualScanCurrent: (outcome: { kind: string; token: number }) => outcome.kind !== 'obsolete' && outcome.token === jest.requireActual('@/lib/scanStore').useScanStore.getState().stockManualRunToken,
+runStockScan: jest.fn().mockResolvedValue(null) }));
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 

@@ -1,3 +1,7 @@
+import { stockExecutionBlock, stockExecutionIdentity, useStockOrderOwnershipStore } from './stockExecutionSession';
+import { useScanStore } from './scanStore';
+import { BEARISH_UNVALIDATED_MESSAGE } from './unvalidated';
+import { EARNINGS_VETO_MESSAGE } from './earningsGate';
 /*
  * STOCK-SENDS (phase STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES, Part A) — the ONE
  * way a Stocks-mode path sends a broker order: SAVE the position first, then send
@@ -32,7 +36,8 @@ export type StockSendOutcome =
   | { kind: 'placed'; orderId: string; qty: number; resizedFrom: number | null; message: string }
   /** Nothing saved, no order. Safe to retry. */
   | { kind: 'refused'; message: string }
-  /** Saved, the broker provably never received the order, the row was removed
+  /** Opening refusal saves nothing. After a save, the broker provably never
+   *  received the order, and the row was removed
    *  (or a NOT-REMOVED note says it could not be). No order exists. */
   | { kind: 'not-placed'; message: string }
   /** A note was pushed. `qty` is the quantity SENT (null when the save was
@@ -92,7 +97,7 @@ export async function removeNoteRow(note: DirectSendNote, confirm: (text: string
   }
 }
 
-export async function sendStockSaveFirst(args: {
+type StockSendArgs = {
   /** Built by `buildPaperStockPosition`: contract `SYM|STOCK`, `recId` set,
    *  `contracts` = the shares asked for. */
   pos: PortfolioPosition;
@@ -101,7 +106,39 @@ export async function sendStockSaveFirst(args: {
   limitPrice: number | null;
   action: 'BUY' | 'SELL';
   addPosition: AddPosition;
-}): Promise<StockSendOutcome> {
+  /** STOCKS-HORIZON-P0B B7 — the caller's `stockEarningsGate(...).veto` for
+   *  this card: earnings inside the scan's veto window max(reject_days, hold).
+   *  Required, so no caller can forget it; refuses the ORDER even if a
+   *  disabled button is bypassed (Step 7's belt-and-braces early return). */
+  earningsVeto: boolean;
+};
+
+export async function sendStockSaveFirst(args: StockSendArgs): Promise<StockSendOutcome> {
+  if (args.action === 'SELL') return { kind: 'not-placed', message: BEARISH_UNVALIDATED_MESSAGE };
+  // Nothing saved, nothing claimed, no broker request.
+  if (args.earningsVeto) return { kind: 'refused', message: EARNINGS_VETO_MESSAGE };
+  const validationBlock = stockExecutionBlock();
+  if (validationBlock) return { kind: 'refused', message: validationBlock };
+  const ownership = useStockOrderOwnershipStore.getState();
+  const identity = stockExecutionIdentity(useScanStore.getState(), args.pos.symbol);
+  if (!ownership.claim(args.pos.symbol, {
+    identity,
+    recId: args.pos.recId, status: 'in-flight',
+  })) return { kind: 'refused', message: `${args.pos.symbol}: a previous stock send is in flight, placed or unresolved. Reconcile that order before sending again.` };
+  try {
+    const outcome = await performStockSaveFirst(args, identity);
+    const hasNote = useDirectSendNotesStore.getState().notes.some(n => n.recId === args.pos.recId);
+    ownership.finish(args.pos.symbol, args.pos.recId,
+      outcome.kind === 'placed' ? 'placed' : outcome.kind === 'unknown' || hasNote ? 'unknown' : null,
+      outcome.message);
+    return outcome;
+  } catch (error) {
+    ownership.finish(args.pos.symbol, args.pos.recId, null, String(error));
+    throw error;
+  }
+}
+
+async function performStockSaveFirst(args: StockSendArgs, identity: string | null): Promise<StockSendOutcome> {
   const { pos, broker, orderType, limitPrice, action, addPosition } = args;
   // Always set by buildPaperStockPosition; the type is optional.
   const asked = pos.contracts ?? 1;
@@ -168,6 +205,16 @@ export async function sendStockSaveFirst(args: {
   try {
     let outcome: DirectOutcome;
     try {
+      // Recheck after asynchronous save; permission may have changed while
+      // saving. No new broker request follows an unavailable authority.
+      const validationBlock = stockExecutionBlock()
+        ?? (identity !== null && stockExecutionIdentity(useScanStore.getState(), pos.symbol) !== identity
+          ? 'The scan changed while saving. No broker order was sent; review the current candidate.' : null);
+      if (validationBlock) {
+        try { await removeTrackedRow(recId, true); }
+        catch { addNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null }); }
+        return { kind: 'not-placed', message: validationBlock };
+      }
       const res = await api.postStockOrder({
         broker,
         symbol: pos.symbol,

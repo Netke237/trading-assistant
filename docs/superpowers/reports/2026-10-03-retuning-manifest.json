@@ -1,0 +1,991 @@
+{
+  "identity": {
+    "config_sha256": "3e70c704a4e7c54999ad4b8c6f8201f1cad0f4e28258650486d617db1b629a24",
+    "assets": {
+      "AAPL": {
+        "sha256": "152ab4618ba7df33834a785494debc8c7b0f6d3cbd003a061d055aed91b7dafe",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "AAPL"
+      },
+      "ABBV": {
+        "sha256": "0be4da93c7b686a370d2e23add368c03efc6d03639b1fcef2e758db3c7e8c780",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "ABBV"
+      },
+      "AEP": {
+        "sha256": "c23152babdc06ef3f404b41951ee514a0571361eb5f1b252ce779cc09c46881a",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "AEP"
+      },
+      "AMD": {
+        "sha256": "15580ad85d7097a062e713c26c4434f17b7c4d7590fe23c58829fa52e5d71571",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "AMD"
+      },
+      "AMT": {
+        "sha256": "c789ce2b7d5e0e3a9f5b7d9fbebbadc6dc65d869ed8f8421a7e8422d0e8ef701",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "AMT"
+      },
+      "AMZN": {
+        "sha256": "76ed5e848756478b309cd0cf848bc82aaf02bca1ebd89568a63509a03142ee3f",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "AMZN"
+      },
+      "AZO": {
+        "sha256": "db23f90dc433dc706681e0d87ab4a423c214ac062b0821b5a0d91e8a77bcaa98",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "AZO"
+      },
+      "BA": {
+        "sha256": "dfead762290868d149037698f6bb6f3358110e3677db2e862b5b167eee855916",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "BA"
+      },
+      "BAC": {
+        "sha256": "635810e42fad0095356ce3fa15d0814496288a7d85ee0607117e1e0f4c0083d2",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "BAC"
+      },
+      "BKNG": {
+        "sha256": "bf24e1702fe3dd04a7e4ed003d7e63caf5dc9e5b55eaeefea1810130d71aeb56",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "BKNG"
+      },
+      "BRK.B": {
+        "sha256": "9ae60ba56bf85b269b315037a4bcebb1b1fb512242cd253699b410d0e2e6b0fe",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "BRK-B"
+      },
+      "CAT": {
+        "sha256": "8cbfcf46d5123319f8f24fbb903e988ab0c42611aeafe926d895e9c447856df0",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "CAT"
+      },
+      "COP": {
+        "sha256": "039786a20cda1629bb79c330971fd95fb856c3ecbb531e9c0ef3779f57868dc5",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "COP"
+      },
+      "COST": {
+        "sha256": "3c5f2c5aacddb205c23d950fe51444fbac0ef5c0c24e694df703e0baa9e6cd30",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "COST"
+      },
+      "CSCO": {
+        "sha256": "a14acc89e914dd1d4266ab7f3f502a92e73e2658f2591b0d4cbfec0683f466ff",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "CSCO"
+      },
+      "CVX": {
+        "sha256": "4019dfaceec498d89089648ed71cb56cd0dbff880ae8976e360de42bca973c2b",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "CVX"
+      },
+      "DELL": {
+        "sha256": "7d299da89fbd0aa7e9b17ce904e0c7192fa157dad70abfcc81f2df480bdbcec3",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "DELL"
+      },
+      "DLR": {
+        "sha256": "a0bdb6a1c138661f0436ddb31e08d8ef071583f860f4c0959f4516989d5dd27b",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "DLR"
+      },
+      "DUK": {
+        "sha256": "9649826b4dc2e02c7490f2d283fbfd590d0b00314da879fd13f821c6116a4a61",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "DUK"
+      },
+      "ECL": {
+        "sha256": "1c724b0b41b80118cf1cedd3085fd996696ec2e039d0178f50d17a62b68da376",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "ECL"
+      },
+      "EQIX": {
+        "sha256": "c5ca1360e333d0e405b6128e433168a188f6d0991b8c12d4c9aac80218b05cf8",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "EQIX"
+      },
+      "FCX": {
+        "sha256": "d25819e00cfd3b60c7f0ec399a067fab21c718145bb33ffd6946304a0381a7ba",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "FCX"
+      },
+      "GE": {
+        "sha256": "18eeb3cf9f03336c9362977deba806cbce10fb89840064f9cd01c2585f33589d",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "GE"
+      },
+      "GOOG": {
+        "sha256": "601c1bbb8b903d14a6d3a4477a0531bf540ed70ca4b16c2f62f841d6fcba6bdb",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "GOOG"
+      },
+      "GOOGL": {
+        "sha256": "ad625a84b806f15446146cce81fab4db79baf187f0faccb74dd777d7e045a179",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "GOOGL"
+      },
+      "GS": {
+        "sha256": "fb225143e681ff4879d3563de8105ef4095e8a214b5c37cfba696c728dec2413",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "GS"
+      },
+      "HD": {
+        "sha256": "c971748120a717a5a60fe9df2204b299167b260e096210ac17ee10ad9698a822",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "HD"
+      },
+      "HON": {
+        "sha256": "73333cd9496b0995e75d24cc078cf7f2376fad5918d0fbb4e217e3759752d498",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "HON"
+      },
+      "IBM": {
+        "sha256": "a5e0f8b339a33231f28fb19706b32a9c916e7f770cfe745eccb833d972510288",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "IBM"
+      },
+      "JNJ": {
+        "sha256": "4f227c800b5e881e142fe364bd30ebacfdd7bd5dccb98b63f51da1a0a2d1e087",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "JNJ"
+      },
+      "JPM": {
+        "sha256": "b8384b3e9c2ad238ef71bef7a803ab91b93d6844bfa60af55ebbeb5aea3331fa",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "JPM"
+      },
+      "KO": {
+        "sha256": "31c91b538cb97992cb04d7d8b1e7aaacad545ea0ee8ddde3359279374089af57",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "KO"
+      },
+      "LIN": {
+        "sha256": "7be2558681120b9f5b275bab12e9fd604e9288feec891ff0d6540557a4be4338",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "LIN"
+      },
+      "LLY": {
+        "sha256": "d16bc050578f9096913141467ce7355b91cc8ceda9183221e6c988b835ecf816",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "LLY"
+      },
+      "META": {
+        "sha256": "295e1b8fc2dd3fa06d7d9320bb88ebb7a469318e61aacb7d185d5b54fdeeca96",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "META"
+      },
+      "MRK": {
+        "sha256": "3033656fe1a04233cbe651c0862c3db35336c79dd0c63c301a34b11026e77788",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "MRK"
+      },
+      "MSFT": {
+        "sha256": "2a2751b6616d6b2059b0bbbf6366745a6fd18ea6b30044773e1558e046a0cc3f",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "MSFT"
+      },
+      "MU": {
+        "sha256": "b35bcec1f9eefda5008d9e27a2d882d8e25c410479410f1502bb54d4843f59fc",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "MU"
+      },
+      "NEE": {
+        "sha256": "6efd520887c4ff116f99e562ab6adc6b93ee8e0805568ac897971aef2044e7e0",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "NEE"
+      },
+      "NEM": {
+        "sha256": "6fb1824e270dd65430dc680fc7d87b906bea88d1161a1a64c1cd5576f1103d0c",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "NEM"
+      },
+      "NFLX": {
+        "sha256": "2dff686c0de12c3e28433db1cd1be4612ffb654145c1241858343ed800111172",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "NFLX"
+      },
+      "NVDA": {
+        "sha256": "0c04038066d98dfbd4a94298c6a8bf545d6dd4f623354f1ab164bc0e43725bea",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "NVDA"
+      },
+      "PEP": {
+        "sha256": "5f8523ebd4abcc44dc96c2798d9959c3b9238a8ca18b502a949a3eeb9da60199",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "PEP"
+      },
+      "PG": {
+        "sha256": "22307c16c47460ebb5548f7af22f2cb7e5c25d29df52c239fb5e99c542bdecf3",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "PG"
+      },
+      "PLD": {
+        "sha256": "ad307420082d9367ed4f2f3bba67926b14eb1baa832aa828db0b485e47f9a7db",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "PLD"
+      },
+      "RTX": {
+        "sha256": "f547c3919d11ee24bbb9a11d53e32b04f74bcfe501745ea1367b05a7c21c1d72",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "RTX"
+      },
+      "SHW": {
+        "sha256": "095d92b0f195a938e7a5e2ea0a276294e63a7642aa6c72d09bc8a855588aef4c",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "SHW"
+      },
+      "SLB": {
+        "sha256": "2432cb39194c0e5f619f2a1f40102b461c6c9fa3c6563a120a53f870ced0b762",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "SLB"
+      },
+      "SO": {
+        "sha256": "e046ed81b316d9a7da8969eef974336880c82a0c556637b0b5f2211f5d82f9e3",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "SO"
+      },
+      "STX": {
+        "sha256": "ee9367116517a3e30ffb655ec072244cc3bb39e6d669330a5cd9bbca77ad013e",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "STX"
+      },
+      "T": {
+        "sha256": "71e80e1037ead692f4fb98254ce847ef35cf0b012ef9fab8667de7d035baf14d",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "T"
+      },
+      "TSLA": {
+        "sha256": "52d84757c1998b61eb6cfe39690c060986e349c278cbb699ef1358d4334eec35",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "TSLA"
+      },
+      "UNH": {
+        "sha256": "88439d99a818daed7e590382943aee7a9a7d28210a7a23369567070158575eeb",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "UNH"
+      },
+      "V": {
+        "sha256": "149d53b22f64d5d3875457cee683e185af68897d64a22aa295101b59f7e7807d",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "V"
+      },
+      "VLO": {
+        "sha256": "330dd4b4fbf4742c4102e7c85cab33d0421b3a3b7c2b0e0929375b8feba21651",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "VLO"
+      },
+      "WDC": {
+        "sha256": "561a0f75bd07e862472ba51c66065e3e32b01bd0ba977419fb650ab83db407dc",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "WDC"
+      },
+      "WELL": {
+        "sha256": "cbe2e10c28f3af5c321bc040aeda81d5a67c2024965380424149098eeef89b59",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "WELL"
+      },
+      "WMT": {
+        "sha256": "1eb68382b225ba6e41fb9a20937d11c851cd20d256af4ecb44072ef32ac16a68",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "WMT"
+      },
+      "XEL": {
+        "sha256": "f036d087c8594fe8930916c0983aaf4967465058a72ffce0888e4ec4308f0f2f",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "XEL"
+      },
+      "XOM": {
+        "sha256": "f570f2551e732ba3623d1c73ca44c3e311a08b22f35be2bc3ee5815ddd724dd6",
+        "rows": 753,
+        "first": "2023-10-03",
+        "last": "2026-10-02",
+        "provider_alias": "XOM"
+      }
+    },
+    "sources": {
+      "backend/app/__init__.py": "507cf241a15ebb4062aa9e3d90896c02ae86186d9decf9f953ce4c6762484593",
+      "backend/app/config.py": "7057e7096042a730b8ae044709f412d5ea3bbb0ac3daa2cf8f7cbfe8d01c8ed5",
+      "backend/app/data/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "backend/app/data/alpaca.py": "19090d651ec0e2c2ea8ca1da210900b1798834bcacbf2d3fdd74fa7fe7d9a950",
+      "backend/app/data/alpaca_paper_execution.py": "25dcfa546f9e8ca65b52dcfad562ef3e98886d1af1858a2961cece1bc2a55e90",
+      "backend/app/data/augment.py": "d36873d00bfc9546d60df7a67c67467394c8906e1dec0327b4a2a952cbcfeea9",
+      "backend/app/data/chart_cache.py": "5bfbc8abbfed31198765f8644e32f74c34b1b97c02d98dcdd53dd3422abdec76",
+      "backend/app/data/company_names.py": "adc3126209ef351b49644b53cc3db4c516c924eb4a92dc8708f1a93b85eb0c3c",
+      "backend/app/data/confidence_cache.py": "1a12905b1bcd79db283df815f860683b3cc65e2b7177b8f3d239b81ed8b49568",
+      "backend/app/data/edgar.py": "98b12afbed6eec18ebc0574c03ca34af59507738eab1ce4c7d228faab47a3c1b",
+      "backend/app/data/etfs.py": "58a1e4fc360b1cfd12eff9b25ba9d0627a56fe5e4196ea057cd6fef72b4ddea1",
+      "backend/app/data/governor.py": "dac3c3938b7e3eab84d898e7152c3131b9f93213552904ed94305116d7ca6014",
+      "backend/app/data/ibkr.py": "a8a06e19e48880a3974f7a1e8e1cf086df72ed68835bb1cd4e3ee90f3abc78a8",
+      "backend/app/data/ibkr_paper.py": "5a99c1218fe530f91f9e04d744009a08820d60ecc7910e9e2b32300d97518b45",
+      "backend/app/data/market.py": "bdf1ce4cb1b53d4f7615935de93484dedb2ec2109bdca5a22811f5ff82ca01bd",
+      "backend/app/data/option_symbol.py": "f8dbce2b9d3c47c8ccfddef83508111a1144eb42d0d8d74144e3e2a4c38f78a4",
+      "backend/app/data/sector_map.py": "e95b3c22142cd3e8034326102acf3f9fa212809f33b4e152ec61a83867402f44",
+      "backend/app/data/sector_names.py": "caba02c36ae976dfba8266b09fc3623f1eaa77994504fc30024a384e8ebebd2e",
+      "backend/app/data/tastytrade_bridge.py": "5e239fcf938ad3de438c0f4ea0f1e358b623fef21a9ee584893485fa7ce29886",
+      "backend/app/data/tastytrade_iv.py": "2e5a0ed34efea7e18c0e15c255ff9bb0ea68c4e8d378d93bbcc7577e58e2d6b3",
+      "backend/app/data/tastytrade_paper.py": "1029db16b75ac628856564c0f2fe0dc92ed8684d27391ef66a22356802c8489a",
+      "backend/app/data/tastytrade_session.py": "743e0b910e085bc128e1df9ee3e40a74daeabde14c54f1125b0ec16a8f158e11",
+      "backend/app/data/tiingo.py": "35027f65b9f7b783924976b2a711956b3c2343e64c13ddb76766b85bd1d65c55",
+      "backend/app/data/tradier_paper.py": "54b89f3d5cfc5551afb62c3c989f1aec0efa5202b2f3ccf440ce47411b37ea70",
+      "backend/app/data/tradier_stream.py": "c21fed36ac0d55e23b8c80715dfb8a5e2ad559357a71ce03d44b18e12fd277e3",
+      "backend/app/data/universe_presets.py": "21c7d8ceba70e01b29214be71b770bcd2e5bb840037e35239841cd7e168b7583",
+      "backend/app/database.py": "2a7e191bec285ecfa97fd580fb22989794f0c38217dc0b6784cb1726ca0b6936",
+      "backend/app/fixtures/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "backend/app/fixtures/alerts.py": "d74013c72b44ecd4a7bdd9ae2a844f99c9b5913bc2a06c992c806de8bae2e063",
+      "backend/app/fixtures/candles.py": "1c50ece78b69226241451f3c5b9fdaae8a59525311c43df450e94f17db1f9b76",
+      "backend/app/fixtures/contracts.py": "6fa62829a4e33b48f2e09ef4c43430ba7f0eff7c3506c9b91e15ce502415177d",
+      "backend/app/fixtures/events.py": "b14ff0c91965eaa21473897f2e24cb6d855b2951e0d5e8307dfa04ef2d9677ab",
+      "backend/app/fixtures/portfolio.py": "4e036eadc50c5e3919ee0bd2d87f4936dd1000555f6c9657ba3f3bbdc2b425cf",
+      "backend/app/fixtures/regime.py": "b23f77accbd581dbeec1841af99c10574d36355fe735b7077efb45307a1758a8",
+      "backend/app/fixtures/sectors.py": "6fb4fc8021b9aaac2d2c5f45d529116d034befef3ba7621554912924b610735f",
+      "backend/app/fixtures/tradecards.py": "d531f57be4eee3ea1a2faccd4d499af93a5f54c1f614d02504972268192bf764",
+      "backend/app/fixtures/watchlist.py": "51ed7c6bd57e176591750534261cd5ef63961e4d5144c7f753e37261ef566a04",
+      "backend/app/main.py": "f0ae223309919d6e0463ec7e0892e17c3edd884ba7094ebbd3bcc4e5f462fc74",
+      "backend/app/models/__init__.py": "b780cd215e20ad24021797c684b78f95ad8b2f42d88534e0ea351c14520223b8",
+      "backend/app/models/alert.py": "f55eabbdb8b43038504dce866e687d7dd52967061e3977b8d4c7b68205459c1d",
+      "backend/app/models/audit_event.py": "e8daca85d1eedcecbefa9b9172f1649d07a92728912fcbd50b987d5935bd253f",
+      "backend/app/models/base.py": "4828c07808d8f1c645126f734a9a9ecb60305341f87bbe520c11fdfe82cce8ee",
+      "backend/app/models/black_scholes.py": "ae7d82b33b1cd67a599f8721bd2e35630e5041856dc9704ce8e2a9248e01a95f",
+      "backend/app/models/closed_position.py": "3e6ace66836a4416584cea812c5e8f69fcc3efcbeec0e099e004b35c8f8ea707",
+      "backend/app/models/daily_risk.py": "47ea10a5233748521113bae616ec00fec56f2fce78b5fb742a99628a34e2a8b2",
+      "backend/app/models/drawing.py": "5a828640137f6c963b8bf8299cc12098d1ddfc5177d71c82f57c37ad28ee1ad9",
+      "backend/app/models/fundamentals.py": "f9041070622ecafe992d52520a4e2f3c413870b0bbcadec016fa42c5a34e3e4c",
+      "backend/app/models/heston.py": "3884978087109cab2d4d4ab81edb90f7b4d2c0d946f15a3ee96dd7d6e85ebd01",
+      "backend/app/models/heston_cache.py": "7bd50f03e849705ca220b624ffc7bd405afd4943ce687a8f2660187445de3c21",
+      "backend/app/models/journal.py": "dbe1cb810bc8d522ab5388948a0030656a0bc24d0cb6a6a3fd001bb8a35ea8b8",
+      "backend/app/models/ohlcv_daily.py": "95c28c72b33be92b863eaa303870746fdbd76e6eea42921ed09b3d9c304a0d37",
+      "backend/app/models/portfolio.py": "c3a23ff492e9176b61d581d8da5399bc8e794eff56dc007c2fad53711a178165",
+      "backend/app/models/position_alert.py": "e3a9cabc01f094b3decee9b477a5898aeed89ed11f12412583f968ac377b46c5",
+      "backend/app/models/scan_session.py": "e532ca319b3b4d732507040e6d6c357b4fbbfe5486e34e9011299e9cafb32cd2",
+      "backend/app/models/scheduled_scan_run.py": "2847bae13d46a4eef237374a687baf9e4616764828fec473c6d9cb3df6fd1d04",
+      "backend/app/models/symbol_note.py": "5a8f87eb14c384559b2d6fe08e9da67837279c6913aa4ca59233498739b89411",
+      "backend/app/models/watched_contracts.py": "c9f010592b53951a0012f033db578eb26218ef025b650392b0ffb9681673317b",
+      "backend/app/models/watchlist.py": "5ad117906641f74b06cb79027799c4602c55b7f6846f966e15bca97209b5fd37",
+      "backend/app/routers/__init__.py": "841119e7d5bc10f9d71f6577d1c8fe0bf99b0a6617575258204f3f3ef4814046",
+      "backend/app/routers/alerts.py": "8fed83dfa742b85a5a0d2ceedbb072c89e57ad14156d96536ab2e51f2402e610",
+      "backend/app/routers/auto_trade.py": "6046238a73a0b7510525157f769c28e42e9a6c7b6e1ad55268f3799a78a6809b",
+      "backend/app/routers/broker.py": "a9847e7d5ed1c6911564238f90fd4b278eefd18da1086177fa8bea0a0e8f6eeb",
+      "backend/app/routers/candles.py": "fd00a7f599a49bf32eb140b55d21c14fc4d3a7bfe4eb473b40291b77016de9a8",
+      "backend/app/routers/chart.py": "2662b87f45e94f250cf28802eeccf91b44633b61ef8ffd602c8148bf35c39c27",
+      "backend/app/routers/chart_alerts.py": "f3ef18324511e357760473dabffb649c15b5ebe3cf1863e88b2108408f0e5c54",
+      "backend/app/routers/chart_drawings.py": "cde634b7e9d3ef7959d92c203d0148a92f48ebab8932e5511de995e4c612f6fd",
+      "backend/app/routers/composite_watch.py": "c341e4eea7473b6a979ab66cd7c6cc107f279dc36b8e65eb3fd8f3c35aea03e7",
+      "backend/app/routers/config.py": "be9e4174d145bdcc190e968b8c9263bb294445daf226043415aeec4ba7db6c2f",
+      "backend/app/routers/contracts.py": "ac3690fafd349e7fe31ccad759507dfbc512e5ef94dd25c30590b63a85aba050",
+      "backend/app/routers/credentials.py": "f71c3ba7cbf8f8ee40373af9297fd6a1e0ae5364121b9e71e3d1747ee6715a2f",
+      "backend/app/routers/data_sources.py": "b70d656941b309ae5e5a7faf23f480d2a927867373e47152b11bde4cdf1b64dc",
+      "backend/app/routers/events.py": "c6b9b2ecc4cc8fb4d877aeb80a2751e7e6d45db9cb9d592eca6cd89f5183b59a",
+      "backend/app/routers/health.py": "b2952fd8459ead6dda24ef93ca157f315080b14e5e41a131ab1604a53872042c",
+      "backend/app/routers/historical_data.py": "666a8181aa5c287faec830180e8b2e8b07c06d8b6151650d29acc4aae9e098ac",
+      "backend/app/routers/ingestion.py": "cf1b5370092e5af1aef8e1afac09d18cd56159cabdc203b98afffd37a43eb0c0",
+      "backend/app/routers/journal.py": "1a21ca07a006d5b4d7ecb7cad02381ced3d158b9055fb1fa50500d99e0dd63f2",
+      "backend/app/routers/news.py": "1a4f69e56be716fa6ee2181d248d283c347c55a97918c870f9df46bd58023877",
+      "backend/app/routers/notification_settings.py": "28708082c5de1e42f8d315d2e2b64648d41acc64072439d453d5ef8755082244",
+      "backend/app/routers/portfolio.py": "d61389063b0e94596851bf2d97a2e4c07b879f4017846d53b7f2259fe57e68d2",
+      "backend/app/routers/regime.py": "46e3902cee07c9d9df85469c7e0c33c485fd2c55c7026bdf22ac81a345d1460c",
+      "backend/app/routers/risk_settings.py": "23bcd899265a3b080bef76ee4afe5b28c7e7c1826a2c6eb052295509263709b7",
+      "backend/app/routers/scan.py": "40e05e0f2cdee7a656531d66ead10e3dbdd84793ebf635891a325f10e9ca0a41",
+      "backend/app/routers/scan_schedule.py": "79b380e935d692e7ff3a88d74b00c7f88db9b7f5c914ba6deec4a29b4110f0ba",
+      "backend/app/routers/sectors.py": "c66607132afada8d9265aeb76cd28fbc795610e73f7bbc0f78b1ee396b7e7d9c",
+      "backend/app/routers/stock_scan.py": "0afcfd600b3c5133b897850f9c9fac8a3fc9a86e7dc98e68eda660975e80f88f",
+      "backend/app/routers/strategy_tuning.py": "1edde21f8c1b4e246494b3c96257ea118e7bdcef7fb4b915e9d3b9b9896c4620",
+      "backend/app/routers/strategy_watch.py": "6e584bc58584f852c391c33cdbbab7750a4f0efad97caaa1cbb71734977a5895",
+      "backend/app/routers/symbol_notes.py": "eed3a9d5b13d7b2d4da32bc7aaeefbd1df0db2e0c05b93267f4599abce89e953",
+      "backend/app/routers/symbols.py": "eba3f7034847fc1e20ea338ab37e6611595d5d3b0196238c4b4b375b38f080aa",
+      "backend/app/routers/tradecards.py": "8199a099da26c935ecea63a4c0effa7e9e82fb4119de2063e744db64315ce4a9",
+      "backend/app/routers/watched_contracts.py": "f2a344b6fefcf22563805e65c92e53d586d9bd7d0c11459ce2479a1c125ca431",
+      "backend/app/routers/watchlist.py": "20e692f4dbb1a4f8cac79f1f96d01a26134b3e536f19d9e72f747cdb37999c21",
+      "backend/app/routers/ws_alerts.py": "b075a6f1fe16565331253ebdd1e8251a353cac16b91b97dd1793a96a6356284f",
+      "backend/app/schemas/__init__.py": "f827ac640d000f2643a4cf63062e689546b7876245e7e2a089c7ca5bb988d573",
+      "backend/app/schemas/composite_trigger.py": "57097399fedc74e2f775ba6f9a59700fef73b239e3267a414a000d9b63b85b90",
+      "backend/app/schemas/scan.py": "60289b8b682799a18885c778098431ac830bdf1cdcd14414bdcd83c0b3e9b3aa",
+      "backend/app/schemas/scan_schedule.py": "ffae7fcf90eaaca03f4c7750a41470d9566205422e92dfdb05556166a8088623",
+      "backend/app/schemas/schedule.py": "9e3152e070763bffe671459dcba1924425137f5baf5109a6730038193de0c8a3",
+      "backend/app/schemas/stock_scan.py": "d8cc0e5775dc2cc5e108633322b88cb7dea31e88794f61aefb452c359a40c0b0",
+      "backend/app/scoring/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "backend/app/scoring/contract_validator.py": "c499df08e005eb5ce69d26f7c46d832d88436ea2859f11e1748b3f5d6b53bf15",
+      "backend/app/scoring/conviction_sizing.py": "f5a5df2f622b9fa85cbb9e129bb51b714aa7e4a3fdbb268bbff56544ce21e9b0",
+      "backend/app/scoring/dte_window.py": "f0773cc3d66282b83644f2acdf4d04890ac738145b522e96b599273694a48913",
+      "backend/app/scoring/entry_quality.py": "446f10bf89c6fda38fcf5ef65b5b45094a4ddc64e410f5394f27329058623cb5",
+      "backend/app/scoring/exit_plan.py": "32e32033b13311feb45db9db0421b8a73ab0ad4d5c50942fca82380965666104",
+      "backend/app/scoring/first_passage.py": "176ba2316f7625d9e6161f9788744e42e92f70b196d2f0ee17903cffbc9e91a8",
+      "backend/app/scoring/fundamentals_scorer.py": "803b070e56a42c318dc4896dc6dad4f963c21ccc2c816b48d7e78818f3d2493f",
+      "backend/app/scoring/reprice_horizon.py": "9161b12db789664aa55fee5571ed51697af5a893a447865c8510c15ad04cd48b",
+      "backend/app/scoring/reward_risk.py": "52bbeb7bfe701e90f2fda49dc427f05a8d28245393f7907eff36b0e7973eea3b",
+      "backend/app/scoring/signal_confidence.py": "90755d15749751b2d0761983d7e9839192d85a672e7cdd1abeeac23936e6a247",
+      "backend/app/scoring/spread_builder.py": "3c8cca7aeccd87114abbbfe29d7f70a7940ea8599081e05fc1023439702c001e",
+      "backend/app/scoring/stock_scorer.py": "8b294625d4724bf269037df9345defa4cc819232693d064cf153163d7da9135d",
+      "backend/app/scoring/stop_cost.py": "b81bed51bbc7986c3cf5ad453527506939725ce18d408531b11138daa11db6a3",
+      "backend/app/scoring/structural_stop.py": "cb863530d5eda670211e356614edef9e87299d2f01e79ae0576c1679350d9b31",
+      "backend/app/scoring/trade_plan.py": "e7ff1992a42d39bb71b698e8e61943daceae55d3509cafecdbeda4ec0bb94dc4",
+      "backend/app/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "backend/app/services/alert_evaluator.py": "3878a985c20992c234360e9f95c46b095f64cfe6d0d714f00d0837a6da726ee0",
+      "backend/app/services/alert_generator.py": "ef87910d9ec2314322518ae209821be7c9da01ead74fd77e245c3a78141d7460",
+      "backend/app/services/alert_service.py": "e3517f9bf81e6716e7c60a6181290bc82b1123d943316b51ba000dbf40f5b13d",
+      "backend/app/services/atomic_yaml.py": "37c42cb28a8b3d31784310a968faf3708a1697ac36aa449e54e82240a7e1579a",
+      "backend/app/services/audit.py": "c45c9695e28ffd1e663facf884b481f3f9a0bcbb06dcf29622f33a9c316394c7",
+      "backend/app/services/auto_trade_booking.py": "2a9f4ddf821acac8acbba4da3acdd70c2af0d5cb1df53648e462ed1ea2407120",
+      "backend/app/services/auto_trader.py": "2a01f449fa11068b8cb3d79d85aac9f43a91d56c87a601ee66bdcfa7a3c5c121",
+      "backend/app/services/broker_router.py": "2b246572178c458cbf92679496a1e3122accb93fcdec23db74375559efd8b901",
+      "backend/app/services/chart_alert_scheduler.py": "dbab4d8f949249db11343a25a323d990027058a49a178410cf5c658a8ea51b1e",
+      "backend/app/services/composite_trigger_evaluator.py": "9b2c6c989ca4adfb2cb8339e7237ff10b42a5f1d104c3c3185e289401cc0550f",
+      "backend/app/services/config_health.py": "fc819232277f488f1a8eea35a77576825825998f82bf882580eab343f4f7af0f",
+      "backend/app/services/config_loader.py": "7613e611aa5258ea479383f78d7ede335ca12c717943d90ec14cd0792bf981cc",
+      "backend/app/services/credential_store.py": "3ca6b7b362d064ee5f21d9879d8f642ff04d21292702b235d8010c83b6c8018b",
+      "backend/app/services/daily_risk.py": "54c311048a48aed8fcbc20fcf2925745dae180e2c8dfbc34402bc41e92a268e1",
+      "backend/app/services/daily_risk_hooks.py": "633ccbb22f027f6e954a6d3c6a774def265495dd14a88a3f6c0bc9315f1cee97",
+      "backend/app/services/edgar_schedule_store.py": "d7b8280038dfba126242f99ac4f02501d69da281c548e00bb26d814867a528c5",
+      "backend/app/services/edgar_scheduler.py": "4bafc14fb745c073fab0bf900490b278ebaf06b38412ab111a3cb07dafe4d04a",
+      "backend/app/services/fundamentals_gate.py": "2d614c7d588281155ce5e9a21603312b896aa6223eeb3d25d6fca0214792cf89",
+      "backend/app/services/fundamentals_store.py": "ee59e2103e80aec1fedfc3dfec4325e4acc09a69f98ecb5f385d8571f071c179",
+      "backend/app/services/historical_store.py": "51c539a47f00cabe9c00a5f88d0f2510cd5c547eee23fb7badf6750a1e4539c3",
+      "backend/app/services/history_cleanup.py": "63e54c07d6ba712261fae53e4416c32f2bce1a311e4dcee17700c184d589efe5",
+      "backend/app/services/ibkr_keepalive_scheduler.py": "1049685288ce8ca9a11b233f6f8dc590b3d93fccda6a0908f224cf903fa6543f",
+      "backend/app/services/indicator_compute.py": "837e190297fa856dbfda0d817cf9eade889898dbeeddcc45cb87b69a50919470",
+      "backend/app/services/ingestion_job.py": "3f8f501b2046e10961c0b3da2e2683c773982bb63cd7a0baa1ba3c98fef2038e",
+      "backend/app/services/ingestion_schedule_store.py": "fbdce5bcffbbedaf95d50f91e4f0d280e959c9181551a5c8aa42989e8ed52e8b",
+      "backend/app/services/ingestion_scheduler.py": "75cfcf16b623971d5ad1e42681aa60153cb53259de048513fe3a13531a153981",
+      "backend/app/services/market_session.py": "92a0ca3ca57c49f815c006c863587e7f7155404ac04887a2874ec234658a7836",
+      "backend/app/services/market_structure.py": "c576ebbeadea90897aa283323b95acbc509603694ce7378d26012981e0587fc3",
+      "backend/app/services/money_config.py": "0298d8cbc4ad1b56e667466107131acf6c3ec2351aff0cc731919a21bea60311",
+      "backend/app/services/notifications/__init__.py": "bacc67167d691071f62d08c822cf8ef499582d7dfaa68d2e6903af0028764531",
+      "backend/app/services/notifications/alert_notifier.py": "e8b3ab22a9bc86f1457d6a7571026ebb057302d611dd1668e94049722884f481",
+      "backend/app/services/notifications/dispatch.py": "6117322c0d8659232986043cd690cd2d7a8922e3ea5d1a01ca92948ca452fc60",
+      "backend/app/services/notifications/gmail.py": "8b37ddf4b4a090d019230d785e7f8c595da6cae196fe571d6800e89f64e40da7",
+      "backend/app/services/notifications/sent_log.py": "8acd30d6e13fd7fec30c40d6e6220fdf38ba8d926f58451c8c913df723017414",
+      "backend/app/services/notifications/telegram.py": "3c35f9af3437d71ac5ed221dae4f7988e79f1c532a75d26e98fb93f56fa986af",
+      "backend/app/services/picked_method.py": "a969444d74fd4d1f7c445a4f3ea80f9636d9eaf41ba7cc74a32fe6c93eb95326",
+      "backend/app/services/portfolio_alert_monitor.py": "a91a68b5bd84e23de165be714e4d3b3cf716e0c9a3105c4a8aeb8611b82333c4",
+      "backend/app/services/portfolio_performance.py": "9d041ee80038400cec45607c4a4e76c4af049f5f675185a7312c602016063417",
+      "backend/app/services/portfolio_risk.py": "ae12ec5ed112d19435aabe549ce771edd0c8d0bb1b08b9101b603a8073c49770",
+      "backend/app/services/position_alert_log.py": "d9de77b8d592b7a0542e7329eff00faea7815e03f61a9c68e5b53b6ccc53cc60",
+      "backend/app/services/position_writer.py": "92c53c4adc46b5c2e5dc285870460325bfbed61f69e6ce4829d5216c076a584c",
+      "backend/app/services/premium_stop.py": "1ac2bbfdec42383db4fb6fa06542a5864eeec8e40f42a9bd5151eecb6f0323f7",
+      "backend/app/services/regime_gate.py": "563cfc6bbcb8c120dad48a91a2394157fd36a610ffe81cdc72b553e4cc1485cf",
+      "backend/app/services/regime_hmm.py": "eb83eb5e517f06af9556dec6c2dddf753f54ce9bf6c875f4a269418fbfd6e830",
+      "backend/app/services/regime_hmm_daily.py": "5b4d342b6b60a802736238e2e61233c00b9dd4e79dfa55ad6493c0db6ee9f49d",
+      "backend/app/services/regime_monitor.py": "db3274e8dc3d665efcf4f489b9757ca12d225b9f01e6564ee8b8911d00c9b40f",
+      "backend/app/services/regime_omm.py": "52ea35ea18e54ebffd255e2d75d6e4bcebb14fd21f41dacb5107a758d66f07a6",
+      "backend/app/services/scan_schedule_scheduler.py": "54cbc51e9ed5b45a86d68fe4483a944b3bfad2fbdeb1084fad57c8486c7ff7b2",
+      "backend/app/services/scan_schedule_store.py": "71f9d6275450f2ce7bea937e76ebc1edba08271f9352d48a4213107a043fbbe2",
+      "backend/app/services/scan_window.py": "91b118bf962beab5e6aa252d9db7005edfcfcef0980de205ce5bbbd5e186c690",
+      "backend/app/services/scheduling_tz.py": "d035b0a58da60468a7a4e5c4ddb4283d68cd4f1b8a9690405be82f1d8ec66a3c",
+      "backend/app/services/settings_migrations.py": "d4fc5bad8f539eff2d21ff55a415bd069b9c5e0f44c52936d49ee01a303f0992",
+      "backend/app/services/sp500_schedule_store.py": "78890518dc408f1f2ca3d16fa9a7b8e96bd9a71cd2601b870d1bfd539d3ed561",
+      "backend/app/services/sp500_scheduler.py": "c8a23bc0b730e14d963db0d07b77a099a49d6305c40fadee34c131aa8e645d65",
+      "backend/app/services/sp500_update_service.py": "d7aa6c97cda3b95d6ec6c41aa0651c17d1e82b9106833843e913974dc7282ab8",
+      "backend/app/services/strategy_backtest.py": "930fab244ae4cd6c1f18c6deed4a2be8b35aab7f1bed29ec8a7d22149e299068",
+      "backend/app/services/strategy_basket.py": "2aa108999dcd9215a72bb01675a8cba1a5fbb3c950c0fae9a2a243c389f20de6",
+      "backend/app/services/strategy_engine.py": "3d873f471ba9d5acd3b2d6de0f4c2f0833f2e97ef132843fd22d0d3def58bfac",
+      "backend/app/services/strategy_param_optimizer.py": "2b9ab822b3ac7cc4a092d30cb230cb1fd0c783b32990f29fd206bd69a95f0ee3",
+      "backend/app/services/strategy_param_store.py": "c99d27338f490a5e70e6def011f281bdc473daa5c6d86781e5186bd4dcbd87c0",
+      "backend/app/services/strategy_watch_evaluator.py": "24889a2bff6aaad4d419b4315a36e98f12c958a5b35c55d32cc986cff62d3632",
+      "backend/app/services/strategy_watch_scheduler.py": "ac4ce41cfe9f6556e3e90e7a45fcd6e3a6a34141010831f103fee942fc8c670d",
+      "backend/app/services/strategy_watch_store.py": "11ab1131163732231ed9f9ec331124f94afc17f2fd637f3cdd0a56b8733bb3ed",
+      "backend/app/services/tuning_schedule_store.py": "56242db9424e72af1876e20c9e02eeea3f91a8ba4e8b4f661e50074efeb34a0f",
+      "backend/app/services/tuning_scheduler.py": "5863031a70f8c1740a392ab4362973ad3d0225c1f22d0bdf020325dc49c57757",
+      "backend/app/services/walk_forward.py": "ce6e6281718c47e3cb05537d96684176e819f9d0a16c3e1e71bd40fca1702bec",
+      "scripts/retune_archived_basket.py": "c0796e79ec36972e1ec171e63a3bf39dd259e837a063ca7681c5ca91c3ab16c8"
+    },
+    "packages": {
+      "numpy": "2.4.6",
+      "pandas": "3.0.6",
+      "backtesting": "0.6.6",
+      "scipy": "1.17.1"
+    },
+    "runtime": "3.11.16 (main, Sep 24 2026, 17:56:40) [Clang 22.1.3 ]",
+    "selected_symbols": [
+      "AAPL",
+      "ABBV",
+      "AEP",
+      "AMD",
+      "AMT",
+      "AMZN",
+      "AZO",
+      "BA",
+      "BAC",
+      "BKNG",
+      "BRK.B",
+      "CAT",
+      "COP",
+      "COST",
+      "CSCO",
+      "CVX",
+      "DELL",
+      "DLR",
+      "DUK",
+      "ECL",
+      "EQIX",
+      "FCX",
+      "GE",
+      "GOOG",
+      "GOOGL",
+      "GS",
+      "HD",
+      "HON",
+      "IBM",
+      "JNJ",
+      "JPM",
+      "KO",
+      "LIN",
+      "LLY",
+      "META",
+      "MRK",
+      "MSFT",
+      "MU",
+      "NEE",
+      "NEM",
+      "NFLX",
+      "NVDA",
+      "PEP",
+      "PG",
+      "PLD",
+      "RTX",
+      "SHW",
+      "SLB",
+      "SO",
+      "STX",
+      "T",
+      "TSLA",
+      "UNH",
+      "V",
+      "VLO",
+      "WDC",
+      "WELL",
+      "WMT",
+      "XEL",
+      "XOM"
+    ],
+    "direction": "Bullish"
+  },
+  "configured_symbols": [
+    "AAPL",
+    "ABBV",
+    "AEP",
+    "AMD",
+    "AMT",
+    "AMZN",
+    "AZO",
+    "BA",
+    "BAC",
+    "BKNG",
+    "BRK.B",
+    "CAT",
+    "COP",
+    "COST",
+    "CSCO",
+    "CVX",
+    "DELL",
+    "DLR",
+    "DUK",
+    "ECL",
+    "EQIX",
+    "FCX",
+    "GE",
+    "GOOG",
+    "GOOGL",
+    "GS",
+    "HD",
+    "HON",
+    "IBM",
+    "JNJ",
+    "JPM",
+    "KO",
+    "LIN",
+    "LLY",
+    "META",
+    "MRK",
+    "MSFT",
+    "MU",
+    "NEE",
+    "NEM",
+    "NFLX",
+    "NVDA",
+    "PEP",
+    "PG",
+    "PLD",
+    "RTX",
+    "SHW",
+    "SLB",
+    "SO",
+    "STX",
+    "T",
+    "TSLA",
+    "UNH",
+    "V",
+    "VLO",
+    "WDC",
+    "WELL",
+    "WMT",
+    "XEL",
+    "XOM"
+  ],
+  "selected_symbols": [
+    "AAPL",
+    "ABBV",
+    "AEP",
+    "AMD",
+    "AMT",
+    "AMZN",
+    "AZO",
+    "BA",
+    "BAC",
+    "BKNG",
+    "BRK.B",
+    "CAT",
+    "COP",
+    "COST",
+    "CSCO",
+    "CVX",
+    "DELL",
+    "DLR",
+    "DUK",
+    "ECL",
+    "EQIX",
+    "FCX",
+    "GE",
+    "GOOG",
+    "GOOGL",
+    "GS",
+    "HD",
+    "HON",
+    "IBM",
+    "JNJ",
+    "JPM",
+    "KO",
+    "LIN",
+    "LLY",
+    "META",
+    "MRK",
+    "MSFT",
+    "MU",
+    "NEE",
+    "NEM",
+    "NFLX",
+    "NVDA",
+    "PEP",
+    "PG",
+    "PLD",
+    "RTX",
+    "SHW",
+    "SLB",
+    "SO",
+    "STX",
+    "T",
+    "TSLA",
+    "UNH",
+    "V",
+    "VLO",
+    "WDC",
+    "WELL",
+    "WMT",
+    "XEL",
+    "XOM"
+  ],
+  "symbols_manifest_sha256": "4d5e7cdce61f4ee346f85dd29bd2661d91d1f49e0e88e13d7747fe3036efaa0f",
+  "grids": {
+    "pullback_ema": {
+      "ema_period": [
+        20,
+        35,
+        50
+      ],
+      "trend_ema": [
+        100,
+        150,
+        200
+      ],
+      "atr_stop_mult": [
+        1.0,
+        1.5,
+        2.0
+      ],
+      "exit_swing_lookback": [
+        10,
+        20,
+        30
+      ],
+      "tolerance": [
+        0.02,
+        0.04,
+        0.06,
+        0.08
+      ]
+    },
+    "breakout_base": {
+      "base_lookback": [
+        15,
+        20,
+        30
+      ],
+      "atr_tight_max": [
+        3.0,
+        3.5,
+        4.0,
+        4.5
+      ],
+      "volume_mult": [
+        1.1,
+        1.3,
+        1.5
+      ],
+      "measured_move_mult": [
+        0.75,
+        1.0,
+        1.25,
+        1.5
+      ]
+    },
+    "ma_crossover": {
+      "fast": [
+        10,
+        20
+      ],
+      "slow": [
+        50,
+        100
+      ],
+      "lookback": [
+        5,
+        10
+      ],
+      "atr_target_mult": [
+        2.0,
+        3.0,
+        4.0
+      ]
+    },
+    "mean_reversion_rsi": {
+      "rsi_period": [
+        7,
+        14
+      ],
+      "rsi_oversold": [
+        25,
+        30,
+        35
+      ],
+      "trend_sma": [
+        100,
+        200
+      ],
+      "exit_sma_period": [
+        10,
+        20
+      ]
+    },
+    "mean_reversion_bb": {
+      "bb_period": [
+        15,
+        20,
+        25
+      ],
+      "bb_std": [
+        1.5,
+        2.0,
+        2.5
+      ],
+      "trend_sma": [
+        100,
+        200
+      ],
+      "stop_atr_mult": [
+        0.2,
+        0.5,
+        1.0
+      ]
+    },
+    "mean_reversion_vwap": {},
+    "mean_reversion_vwap_daily": {},
+    "breakout_setup": {}
+  },
+  "grid_combinations": {
+    "pullback_ema": 324,
+    "breakout_base": 144,
+    "ma_crossover": 24,
+    "mean_reversion_rsi": 24,
+    "mean_reversion_bb": 54,
+    "mean_reversion_vwap": 0,
+    "mean_reversion_vwap_daily": 0,
+    "breakout_setup": 0
+  },
+  "folds": [
+    {
+      "train_start": "2023-10-03",
+      "train_end": "2024-10-03",
+      "test_start": "2024-10-03",
+      "test_end": "2025-01-03"
+    },
+    {
+      "train_start": "2024-01-03",
+      "train_end": "2025-01-03",
+      "test_start": "2025-01-03",
+      "test_end": "2025-04-03"
+    },
+    {
+      "train_start": "2024-04-03",
+      "train_end": "2025-04-03",
+      "test_start": "2025-04-03",
+      "test_end": "2025-07-03"
+    },
+    {
+      "train_start": "2024-07-03",
+      "train_end": "2025-07-03",
+      "test_start": "2025-07-03",
+      "test_end": "2025-10-03"
+    },
+    {
+      "train_start": "2024-10-03",
+      "train_end": "2025-10-03",
+      "test_start": "2025-10-03",
+      "test_end": "2026-01-03"
+    },
+    {
+      "train_start": "2025-01-03",
+      "train_end": "2026-01-03",
+      "test_start": "2026-01-03",
+      "test_end": "2026-04-03"
+    },
+    {
+      "train_start": "2025-04-03",
+      "train_end": "2026-04-03",
+      "test_start": "2026-04-03",
+      "test_end": "2026-07-03"
+    }
+  ],
+  "costs": {
+    "fee_pct": 0.001,
+    "slippage_pct": 0.001
+  },
+  "windows": {
+    "type": "rolling",
+    "train_months": 12,
+    "test_months": 3
+  },
+  "workers": 5,
+  "metrics": {
+    "expectancy_sharpe": "production gross, before configured costs",
+    "returns_consistency": "production per-symbol/window return adjustment; not per-trade execution costs"
+  }
+}

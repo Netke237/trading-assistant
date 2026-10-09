@@ -30,7 +30,9 @@ from app.services.strategy_engine import (
 )
 from app.services.strategy_watch_store import strategy_watch_store
 from app.services.strategy_param_store import get_active, get_exit
-from app.services.notifications.dispatch import notify_enabled_channels, read_notification_config
+from app.services.notifications.dispatch import (
+    _CHANNELS, notify_channels, read_notification_config, ready_channels,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +106,29 @@ class _Transition:
 # (the newest pending event's new_state), so a newer event queues behind it
 # (decision WATCH-RESEND-QUEUE-2026-09-27). Disabled watches keep theirs.
 _QUEUE_CAP = 20
+
+# ── Skip on proof (WATCH-RESEND-HEAD-OF-LINE piece 1) ─────────────────────────
+# A queued head that keeps failing would block every later alert of its watch.
+# Each failed run as the head is counted on the head entry ("failures",
+# "last_failure_at"), at most once per _FAILURE_SPACING. Once it has failed
+# _UNDELIVERABLE_AFTER counted runs, the next alert of the watch is sent as a
+# probe; if that is delivered the head is dropped at once (ERROR) -- never
+# retried, never delivered out of order. A failed probe is an outage and drops
+# nothing (decisions WATCH-RESEND-HEAD-OF-LINE-2026-10-01, WATCH-RESEND-SPLIT-2026-10-02).
+_FAILURE_SPACING = timedelta(hours=1)
+_UNDELIVERABLE_AFTER = 3
+_DROP_LOG = ("strategy-watch: undeliverable alert dropped for %s after %d failed runs on %s; "
+             "a later alert was delivered there: %s")
+
+# ── Per channel (WATCH-RESEND-PER-CHANNEL piece 3) ───────────────────────────
+# Delivery is tracked per channel on each pending entry: "channel_done"
+# ({channel: "delivered" | "dropped"}), "channel_failures" and
+# "channel_last_failure_at" ({channel: ...}). Piece 1's scalar "failures" /
+# "last_failure_at" are read as the fallback for a channel with no value of its
+# own (under piece 1 a counted failure meant every channel failed). Each channel
+# gets the queue in order; skip on proof runs per channel. An entry is finished
+# when every channel of the run is done with it, and only then popped.
+_DONE_VALUES = ("delivered", "dropped")
 _PRICE_KEYS = ("entry_price", "stop_price", "target_price")
 _EVENT_FLOATS = ("entry", "stop", "target", "rr_ratio", "close")
 
@@ -123,6 +148,51 @@ def _split_state(last_state: dict) -> tuple[dict, list]:
     pending = last_state.get("pending_events")
     committed = {k: v for k, v in last_state.items() if k != "pending_events"}
     return committed, (list(pending) if isinstance(pending, list) else [])
+
+
+_REENABLE_MAX_AGE = timedelta(days=5)
+
+
+async def set_enabled_and_expire(watch_id: str, enabled: bool, *, store=None) -> int | None:
+    """Re-enable under the evaluation lock, committing the expired queue prefix.
+
+    Both PATCH routes pass their imported store, including in reload-based
+    fixtures. Failed persistence propagates without reporting an expiration.
+    """
+    store = strategy_watch_store if store is None else store
+    async with _run_lock():
+        dropped = []
+        cutoff = _utcnow() - _REENABLE_MAX_AGE
+
+        def expire(state: dict) -> dict:
+            committed, pending = _split_state(state)
+            for entry in pending:
+                parsed = _parse_entry(entry)
+                fired_at = entry.get("fired_at") if isinstance(entry, dict) else None
+                at = None
+                if isinstance(fired_at, str):
+                    try:
+                        at = datetime.fromisoformat(fired_at)
+                        if at.tzinfo is None:
+                            at = at.replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        pass
+                if parsed is not None and at is not None and at >= cutoff:
+                    break
+                dropped.append(fired_at)
+                if parsed is not None:
+                    committed = dict(parsed[1])
+            if not dropped:
+                return state
+            rest = pending[len(dropped):]
+            return {**committed, "pending_events": rest} if rest else committed
+
+        if not store.set_enabled(watch_id, enabled, on_reenable=expire):
+            return None
+        for fired_at in dropped:
+            logger.warning("strategy-watch: expired queued alert on re-enable for %s (fired_at=%r)",
+                           watch_id, fired_at)
+        return len(dropped)
 
 
 def _effective_view(w: dict) -> dict:
@@ -192,18 +262,105 @@ def _parse_entry(entry: object) -> tuple[WatchEvent, dict, str] | None:
         return None
 
 
-def _queue(t: "_Transition") -> None:
-    """Store t's event behind the watch's pending ones (oldest first, capped)."""
-    committed, pending = dict(t.committed), t.pending + [_pending_entry(t)]
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _count(v: object) -> int | None:
+    """A stored failure count: a non-negative int (bool excluded), else None."""
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+
+
+def _done(entry: object) -> dict[str, str]:
+    """The channels finished with this entry; malformed values read as absent."""
+    d = entry.get("channel_done") if isinstance(entry, dict) else None
+    if not isinstance(d, dict):
+        return {}
+    return {c: v for c, v in d.items() if c in _CHANNELS and v in _DONE_VALUES}
+
+
+def _failure_map(entry: dict) -> dict[str, int]:
+    by = entry.get("channel_failures")
+    if not isinstance(by, dict):
+        return {}
+    return {c: v for c, v in by.items() if c in _CHANNELS and _count(v) is not None}
+
+
+def _last_failure_map(entry: dict) -> dict[str, str]:
+    by = entry.get("channel_last_failure_at")
+    if not isinstance(by, dict):
+        return {}
+    return {c: v for c, v in by.items() if c in _CHANNELS and isinstance(v, str)}
+
+
+def _failures(entry: dict, channel: str) -> int:
+    """Counted failed runs of the entry as the head on `channel`; falls back to
+    piece 1's scalar; anything but a non-negative int reads as 0."""
+    n = _failure_map(entry).get(channel)
+    if n is not None:
+        return n
+    return _count(entry.get("failures")) or 0
+
+
+def _last_failure(entry: dict, channel: str) -> str | None:
+    """The raw stored time of the last counted failure on `channel` (piece 1's
+    scalar as the fallback), or None."""
+    last = _last_failure_map(entry).get(channel)
+    if last is not None:
+        return last
+    last = entry.get("last_failure_at")
+    return last if isinstance(last, str) else None
+
+
+def _failure_counts(entry: dict, channel: str, now: datetime) -> bool:
+    """True when a failure now on `channel` is _FAILURE_SPACING after the last
+    counted one. Absent, unparseable or future (clock jump): counts; naive = UTC."""
+    last = _last_failure(entry, channel)
+    if last is None:
+        return True
+    try:
+        at = datetime.fromisoformat(last)
+    except ValueError:
+        return True
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    if at > now:
+        return True
+    return now - at >= _FAILURE_SPACING
+
+
+def _complete(entry: object, channels: tuple[str, ...]) -> bool:
+    """Parseable and done on every channel of the run. A malformed entry never is."""
+    return _parse_entry(entry) is not None and all(c in _done(entry) for c in channels)
+
+
+def _pop_complete(committed: dict, pending: list,
+                  channels: tuple[str, ...]) -> tuple[dict, list]:
+    """Pop the finished prefix of a queue, committing each popped new_state."""
+    while pending and _complete(pending[0], channels):
+        committed = dict(pending[0]["new_state"])
+        pending = pending[1:]
+    return committed, pending
+
+
+def _store_queue(watch_id: str, committed: dict, pending: list) -> None:
+    """Write a queue, oldest first, capped at _QUEUE_CAP (the oldest dropped)."""
+    committed, pending = dict(committed), list(pending)
     while len(pending) > _QUEUE_CAP:
         dropped = pending.pop(0)
         ns = dropped.get("new_state") if isinstance(dropped, dict) else None
         if isinstance(ns, dict):
             committed = ns
-        logger.error("strategy-watch: undelivered alert dropped for %s, queue full (%d): %s",
-                     t.watch_id, _QUEUE_CAP,
-                     (dropped.get("event") or {}).get("reason") if isinstance(dropped, dict) else dropped)
-    _write(t.watch_id, {**committed, "pending_events": pending})
+        logger.error("strategy-watch: undelivered alert dropped for %s, queue full (%d): %s (finished on: %s)",
+                     watch_id, _QUEUE_CAP,
+                     (dropped.get("event") or {}).get("reason") if isinstance(dropped, dict) else dropped,
+                     _done(dropped) or "none")
+    _write(watch_id, {**committed, "pending_events": pending} if pending else committed)
+
+
+def _queue(t: "_Transition") -> None:
+    """Store t's event behind the watch's pending ones (oldest first, capped)."""
+    _store_queue(t.watch_id, t.committed, t.pending + [_pending_entry(t)])
 
 
 async def _eval_strategy_watch(
@@ -603,11 +760,12 @@ async def evaluate_all(sustain_minutes: int = 0, now_ts: float | None = None) ->
     schedule-level setting (not per-watch) — contrast with the standard
     chart-alert rule builder's per-condition sustain_minutes.
     """
-    await _resend_pending(any_channel=False)      # no notify path: commit the queue
-    transitions = await _collect(sustain_minutes, now_ts)
-    for t in transitions:
-        _commit(t)
-    return [t.event for t in transitions]
+    async with _run_lock():
+        await _resend_pending(_Run("commit"))         # no notify path: commit the queue
+        transitions = await _collect(sustain_minutes, now_ts)
+        for t in transitions:
+            _commit(t)
+        return [t.event for t in transitions]
 
 
 _SUBJECT_PREFIX = {
@@ -670,35 +828,73 @@ def _format_event(ev: WatchEvent, delayed_since: str | None = None) -> tuple[str
 
 
 def _any_channel_enabled() -> bool:
-    """True when at least one notification channel is enabled (D3).
+    """True when at least one notification channel is enabled (D3). See
+    _channel_status, which holds the rule; kept for its callers' and tests'
+    bool contract (evaluate_and_notify reads _run_context)."""
+    return _channel_status()[0]
 
-    Same file notify_enabled_channels reads. A null or non-dict block counts as
-    disabled. AN UNREADABLE settings.yaml COUNTS AS ENABLED (P6, decision
-    P4B-FOLLOWUPS-2026-09-26 item 7): the watch then gates its state on
-    delivery, notify_enabled_channels reports nothing delivered, and the event
-    is kept and resent next run -- never committed silently. It used to read as
-    "no channel", so a corrupt file quietly committed every transition. An
-    exception escaping the reader is treated the same way (P4b code round 1,
-    finding 5)."""
+
+def _read_channels() -> tuple[dict, list[str]] | None:
+    """(cfg, enabled channels) from ONE config read; None when the reader reports
+    the file unreadable or raises. A null or non-dict block counts as disabled."""
     try:
         cfg, readable = read_notification_config()
-        if not readable:
-            logger.error("strategy-watch: settings.yaml unreadable; gating state on delivery")
-            return True
-        if not isinstance(cfg, dict):
-            return False
-
-        def _enabled(block: object) -> bool:
-            return isinstance(block, dict) and bool(block.get("enabled"))
-
-        return _enabled(cfg.get("gmail")) or _enabled(cfg.get("telegram"))
     except Exception:
         logger.error("strategy-watch: notification config unreadable; gating state on delivery", exc_info=True)
-        return True
+        return None
+    if not readable:
+        logger.error("strategy-watch: settings.yaml unreadable; gating state on delivery")
+        return None
+    if not isinstance(cfg, dict):
+        return {}, []
+    return cfg, [c for c in _CHANNELS if isinstance(cfg.get(c), dict) and bool(cfg[c].get("enabled"))]
 
 
-# One evaluate_and_notify at a time: the scheduler tick and a manual /evaluate
-# (run_now) could otherwise both see a watch idle and both send its entry.
+def _channel_status() -> tuple[bool, bool]:
+    """(any channel enabled, config readable) from ONE config read.
+
+    AN UNREADABLE settings.yaml COUNTS AS ENABLED (P6, decision
+    P4B-FOLLOWUPS-2026-09-26 item 7): the watch then gates its state on
+    delivery and the event is kept and resent -- never committed silently. An
+    exception escaping the reader is treated the same way (P4b code round 1,
+    finding 5). "Enabled" here is not "ready" (see _run_context)."""
+    rc = _read_channels()
+    return (True, False) if rc is None else (bool(rc[1]), True)
+
+
+@dataclass(frozen=True)
+class _Run:
+    """One run's delivery context (WATCH-RESEND-PER-CHANNEL), from one config read.
+
+    send:   deliver per channel to `channels` (the ready ones, in send order);
+    hold:   config unreadable, or channels enabled but none configured -- send
+            nothing, count nothing, commit nothing, queue fresh events;
+    commit: no channel enabled (D3) -- commit everything unsent."""
+    mode: str
+    cfg: dict = field(default_factory=dict)
+    channels: tuple[str, ...] = ()
+
+
+def _run_context() -> _Run:
+    rc = _read_channels()
+    if rc is None:
+        return _Run("hold")
+    cfg, enabled = rc
+    if not enabled:
+        return _Run("commit")
+    ready = [c for c in ready_channels(cfg) if c in enabled]
+    missing = [c for c in enabled if c not in ready]
+    if not ready:
+        logger.warning("strategy-watch: notification channel(s) enabled but not configured: %s; alerts kept",
+                       ", ".join(missing))
+        return _Run("hold")
+    for c in missing:
+        logger.warning("strategy-watch: %s enabled but not configured; not a delivery target", c)
+    return _Run("send", cfg, tuple(ready))
+
+
+# Serialize evaluation and enable/expiry: no run sees an enabled watch until
+# its expired queue prefix is committed, and no two runs send the same entry.
 # Created lazily per running loop -- an asyncio.Lock that once waited is bound
 # to its loop, and pytest runs each test on a fresh one.
 _lock: asyncio.Lock | None = None
@@ -714,68 +910,198 @@ def _run_lock() -> asyncio.Lock:
     return _lock
 
 
-async def _send(ev: WatchEvent, delayed_since: str | None = None) -> bool:
-    """One notification; an exception counts as not delivered."""
+async def _send(ev: WatchEvent, run: _Run, channels, delayed_since: str | None = None) -> dict[str, bool]:
+    """One notification to `channels`: {channel: delivered}. A raise, a non-dict
+    result or a channel missing from it counts as not delivered."""
+    channels = list(channels)
     try:
         subject, plain, html = _format_event(ev, delayed_since)
-        return bool(await notify_enabled_channels(subject, plain, html))
+        res = await notify_channels(run.cfg, subject, plain, html, channels)
     except Exception:
         logger.error("strategy-watch: notify failed for %s", ev.symbol, exc_info=True)
-        return False
+        res = {}
+    if not isinstance(res, dict):
+        res = {}
+    out = {c: res.get(c) is True for c in channels}
+    failed = [c for c in channels if not out[c]]
+    if failed:
+        logger.warning("strategy-watch: %s %s for %s not delivered on %s (see the dispatch log for why)",
+                       ev.strategy_key, ev.event_type, ev.symbol, ", ".join(failed))
+    return out
 
 
-async def _resend_watch(w: dict, any_channel: bool) -> None:
+def _reason(entry: dict) -> object:
+    return (entry.get("event") or {}).get("reason")
+
+
+async def _resend_watch(w: dict, run: _Run) -> dict[str, int] | None:
+    """Re-send one watch's queue oldest first, per channel. A failed head on a
+    channel is counted there and, once eligible, the next entry still remaining
+    on that channel is its probe (skip on proof, per channel). Returns
+    {channel: head failures} for the channels the watch is PROBE-READY on -- an
+    eligible head failed there with nothing valid behind it, so this run's fresh
+    event can be the probe; else None."""
     committed, rest = _split_state(dict(w.get("last_state") or {}))
-    if not rest or not w.get("enabled"):
-        return                     # a disabled watch keeps its events (decision (b))
-    while rest:
-        parsed = _parse_entry(rest[0])
-        if parsed is None:
-            logger.error("strategy-watch: malformed pending event dropped for %s: %r", w["id"], rest[0])
-        else:
-            ev, new_state, fired_at = parsed
-            if any_channel:
-                if not await _send(ev, delayed_since=fired_at):
-                    logger.warning("strategy-watch: delayed %s for %s still not delivered; kept",
-                                   ev.event_type, ev.symbol)
-                    return
+    if not rest or not w.get("enabled") or run.mode == "hold":
+        return None                # a disabled watch keeps its events (decision (b))
+
+    if run.mode == "commit":       # nothing enabled: commit every entry unsent (D3)
+        while rest:
+            parsed = _parse_entry(rest[0])
+            if parsed is None:
+                logger.error("strategy-watch: malformed pending event dropped for %s: %r", w["id"], rest[0])
             else:
+                ev, new_state, _fired = parsed
                 logger.warning("strategy-watch: undelivered %s for %s dropped (no channel enabled)",
                                ev.event_type, ev.symbol)
-            committed = new_state
-        rest = rest[1:]
-        # A write after EVERY entry: at most one event is sent-but-unwritten.
-        _write(w["id"], {**committed, "pending_events": rest} if rest else committed)
+                committed = new_state
+            rest = rest[1:]
+            _write(w["id"], {**committed, "pending_events": rest} if rest else committed)
+        return None
+
+    channels = run.channels
+    # Copies: list_watches is shallow, so an in-place change would change the
+    # store's memory without a write.
+    queue = [dict(e) if isinstance(e, dict) else e for e in rest]
+    blocked: set[str] = set()
+    stuck: dict[str, tuple[dict, int]] = {}     # channel -> (eligible head there, its failures)
+
+    def settle() -> int:
+        """Pop the finished prefix and write (before the next send: at most one
+        entry sent-but-unwritten). Returns how many entries were popped."""
+        nonlocal committed, queue
+        before = len(queue)
+        committed, queue = _pop_complete(committed, queue, channels)
+        _write(w["id"], {**committed, "pending_events": queue} if queue else committed)
+        return before - len(queue)
+
+    i = 0
+    while i < len(queue) and not all(c in blocked for c in channels):
+        e = queue[i]
+        parsed = _parse_entry(e)
+        if parsed is None:
+            logger.error("strategy-watch: malformed pending event dropped for %s: %r", w["id"], e)
+            queue.pop(i)
+            i = max(i - settle(), 0)
+            continue
+        ev, _new_state, fired_at = parsed
+        targets = [c for c in channels if c not in _done(e) and c not in blocked]
+        if not targets:
+            i += 1                 # it waits only on blocked channels
+            continue
+        res = await _send(ev, run, targets, delayed_since=fired_at)
+        now, changed = _utcnow(), False
+        for c in targets:
+            if res[c]:
+                e["channel_done"] = {**_done(e), c: "delivered"}
+                changed = True
+                if c in stuck:
+                    h, n = stuck.pop(c)
+                    h["channel_done"] = {**_done(h), c: "dropped"}
+                    logger.error(_DROP_LOG, w["id"], n, c, _reason(h))
+            elif c in stuck:
+                # The probe on c failed: an outage (or a second stuck alert); nothing dropped.
+                stuck.pop(c)
+                blocked.add(c)
+                logger.warning("strategy-watch: probe %s for %s not delivered on %s either; queue kept",
+                               ev.event_type, ev.symbol, c)
+            else:
+                # e is the head on c: every earlier entry is delivered or dropped there.
+                if _failure_counts(e, c, now):
+                    n = _failures(e, c) + 1
+                    e["channel_failures"] = {**_failure_map(e), c: n}
+                    e["channel_last_failure_at"] = {**_last_failure_map(e), c: now.isoformat()}
+                    changed = True
+                n = _failures(e, c)
+                if n >= _UNDELIVERABLE_AFTER:
+                    stuck[c] = (e, n)
+                else:
+                    blocked.add(c)
+                    logger.warning("strategy-watch: delayed %s for %s still not delivered on %s; kept",
+                                   ev.event_type, ev.symbol, c)
+        if changed:
+            i = max(i - settle(), -1) + 1
+        else:
+            i += 1
+
+    # Always: an entry finished only because a channel left the run (disabled,
+    # credentials removed) is popped even though nothing was sent or changed.
+    before = len(queue)
+    committed, queue = _pop_complete(committed, queue, channels)
+    if len(queue) != before:
+        _write(w["id"], {**committed, "pending_events": queue} if queue else committed)
+    return {c: n for c, (_h, n) in stuck.items()} or None
 
 
-async def _resend_pending(any_channel: bool) -> None:
-    """Re-send every enabled watch's undelivered events, oldest first, stopping
-    a watch at its first failed send. No channel enabled: nothing can ever
-    deliver, so the queue's states are committed unsent (D3). Each watch is
-    isolated (Q17)."""
+async def _resend_pending(run: _Run) -> dict[str, dict[str, int]]:
+    """Re-send every enabled watch's undelivered events (see _resend_watch). No
+    channel enabled: the queues' states are committed unsent (D3). Each watch is
+    isolated (Q17). Returns {watch_id: {channel: head failures}} of the
+    probe-ready watches."""
+    ready: dict[str, dict[str, int]] = {}
     for w in strategy_watch_store.list_watches():
         try:
-            await _resend_watch(w, any_channel)
+            r = await _resend_watch(w, run)
         except Exception:
             logger.error("strategy-watch: resend for %s failed, skipped this run", w.get("id"), exc_info=True)
+            continue
+        if r:
+            ready[w["id"]] = r
+    return ready
 
 
-async def _deliver_or_queue(t: _Transition, any_channel: bool) -> None:
+async def _deliver_or_queue(t: _Transition, run: _Run,
+                            probe_ready: dict[str, dict[str, int]] | None = None) -> None:
     ev = t.event
-    if t.pending:
-        # Older events are still undelivered: keep the order, do not send this one.
+    if run.mode == "hold":
+        _queue(t)
+        logger.warning("strategy-watch: %s %s for %s not sent (no readable, configured channel); stored",
+                       ev.strategy_key, ev.event_type, ev.symbol)
+        return
+    if run.mode == "commit":
+        if t.pending:
+            _queue(t)
+            logger.warning("strategy-watch: %s %s for %s queued behind %d undelivered",
+                           ev.strategy_key, ev.event_type, ev.symbol, len(t.pending))
+        else:
+            _commit(t)
+        return
+
+    channels = run.channels
+    # Openness comes from the STORED queue (_collect re-read it after the pass),
+    # never from the pass's return value.
+    pend = [dict(e) if isinstance(e, dict) else e for e in t.pending]
+    ready = (probe_ready or {}).get(t.watch_id) or {}
+    targets: list[str] = []
+    probes: dict[str, dict] = {}
+    for c in channels:
+        outstanding = [e for e in pend if _parse_entry(e) is None or c not in _done(e)]
+        if not outstanding:
+            targets.append(c)
+        elif c in ready and len(outstanding) == 1:
+            # The only entry still on c is an eligible head that failed there this
+            # run: this fresh event is its probe (sent now, not labelled Delayed).
+            targets.append(c)
+            probes[c] = outstanding[0]
+    if not targets:
         _queue(t)
         logger.warning("strategy-watch: %s %s for %s queued behind %d undelivered",
                        ev.strategy_key, ev.event_type, ev.symbol, len(t.pending))
         return
-    if await _send(ev) or not any_channel:
-        _commit(t)
-        return
-    _queue(t)
-    logger.warning(
-        "strategy-watch: %s %s for %s not delivered; stored, re-sent next run",
-        ev.strategy_key, ev.event_type, ev.symbol,
-    )
+    res = await _send(ev, run, targets)
+    for c, h in probes.items():
+        if res[c]:
+            h["channel_done"] = {**_done(h), c: "dropped"}
+            logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))
+    entry = _pending_entry(t)
+    done = {c: "delivered" for c in targets if res[c]}
+    if done:
+        entry["channel_done"] = done
+    committed, rest = _pop_complete(dict(t.committed), pend + [entry], channels)
+    if rest:
+        _store_queue(t.watch_id, committed, rest)
+    else:
+        _write(t.watch_id, committed)
 
 
 async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = None) -> list[WatchEvent]:
@@ -786,12 +1112,23 @@ async def evaluate_and_notify(sustain_minutes: int = 0, now_ts: float | None = N
     Undelivered with a channel enabled: the event is stored with the watch and
     re-sent, labelled delayed, on the next run -- even if its condition no
     longer holds. No channel enabled at all: nothing could ever deliver, so the
-    state is committed as before. Returns every event fired THIS run,
-    delivered or not (re-sent delayed events are not included)."""
+    state is committed as before. Skip on proof: a queued head that has failed
+    _UNDELIVERABLE_AFTER spaced runs is dropped (ERROR) as soon as the next alert
+    of its watch is delivered -- an older queued one, or this run's fresh event.
+    All of it per channel (WATCH-RESEND-PER-CHANNEL): an event is finished only
+    when every ready channel delivered (or dropped) it, each channel gets the
+    queue in order, and a channel with nothing outstanding gets a fresh event at
+    once. The config is read once per run (_run_context).
+    Returns every event fired THIS run, delivered or not (re-sent delayed
+    events are not included)."""
     async with _run_lock():
-        any_channel = _any_channel_enabled()
-        await _resend_pending(any_channel)
+        run = _run_context()
+        probe_ready = await _resend_pending(run)
         transitions = await _collect(sustain_minutes, now_ts)
         for t in transitions:
-            await _deliver_or_queue(t, any_channel)
+            try:
+                await _deliver_or_queue(t, run, probe_ready)
+            except Exception:
+                logger.error("strategy-watch: delivery for %s failed, skipped this run",
+                             t.watch_id, exc_info=True)
         return [t.event for t in transitions]

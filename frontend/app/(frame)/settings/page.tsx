@@ -24,7 +24,7 @@ import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { resolveProfileToScanRequest, scheduleRiskIgnored } from '@/lib/scanScheduleResolve';
 import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal, type ScanScheduleEntry, type ScanScheduleRun } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
-import { PREMIUM_STOP_MAX_PCT, premiumStopPctLabel } from '@/lib/premiumStop';
+import { PREMIUM_STOP_MAX_PCT, premiumStopMinWholeCentEntry, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
 
@@ -98,19 +98,23 @@ export default function SettingsPage() {
  *    $0.00, which neither alert engine fires on.
  *  - Above 99% but below 100%: it DOES fire (at entry x (1 - pct)), so no
  *    never-fires claim -- only that saving applies the 99% maximum.
- *  - Below 100%: the entry price under which the threshold is below $0.01,
- *    computed from the RAW value (both engines use it until Settings is
- *    saved), rounded UP to the cent in integer cents. */
+ *  - Below 100%: the smallest whole-cent entry at which the stop is NOT
+ *    sub-cent, computed from the RAW value (both engines use it until
+ *    Settings is saved) THROUGH the sub-cent predicate (STOP-SEMANTICS R2-2):
+ *    the old closed form named a limit that was itself sub-cent at 80%, 90%
+ *    and 98.75%.
+ *  - Shorts are excluded throughout: a short stock's stop fires on a RISE, so
+ *    neither the never-fires note nor the sub-cent hint applies to it. */
 function PremiumStopSettingNotes({ pct }: { pct: number }) {
   if (!Number.isFinite(pct)) return null;
   if (pct >= 1) {
     return (
       <Text size={11} tone="caution">
-        Stored 100% can never fire, in this browser or on the server. Save to apply 99%.
+        Stored 100% can never fire for long positions and options, in this browser or on the server. Save to apply 99%.
       </Text>
     );
   }
-  const limitCents = Math.ceil((0.01 / (1 - pct)) * 100 - 1e-9);
+  const limit = premiumStopMinWholeCentEntry(pct);
   return (
     <>
       {pct > PREMIUM_STOP_MAX_PCT && (
@@ -119,8 +123,11 @@ function PremiumStopSettingNotes({ pct }: { pct: number }) {
         </Text>
       )}
       <Text size={11} tone="dim">
-        {`At ${premiumStopPctLabel(pct)}, an entry below $${(limitCents / 100).toFixed(2)} puts the stop `
-          + 'threshold below $0.01 — fires only on a sub-penny quote.'}
+        {`At ${premiumStopPctLabel(pct)}, for long positions and options an entry below $${limit.toFixed(2)} `
+          + 'puts the stop threshold below $0.01 — it can never fire.'}
+      </Text>
+      <Text size={11} tone="dim">
+        For short stock positions this is how far the price may RISE above entry.
       </Text>
     </>
   );
@@ -1297,7 +1304,7 @@ function RiskForm() {
       </Row>
       <Row
         label="Max loss per trade"
-        hint="Warning-only — checked against the exit-plan pipeline's final stop, repriced to a contract price. Overridable per-position in the Portfolio editor."
+        hint="Caps the premium of one OPTION trade (a long option with no protective order can lose all of it), so the effective option cap is the smaller of this and Max single trade exposure. Also checked against the exit-plan pipeline's final stop, repriced to a contract price; that stop check can be overridden per-position in the Portfolio editor."
         defaultValue="3.75%"
       >
         <input
@@ -2549,9 +2556,9 @@ function StrategyTuningForm() {
     return () => clearInterval(interval);
   }, [polling, jobId]);
 
-  const handleAdopt = async (strategy: string, params: Record<string, number | string>) => {
+  const handleAdopt = async (strategy: string, params: Record<string, number | string>, direction: 'Bullish' | 'Bearish') => {
     try {
-      await adoptStrategyParams(strategy, params);
+      await adoptStrategyParams(strategy, params, direction);
       setAdoptedStrategies(prev => {
         const next = new Set(prev).add(strategy);
         sessionStorage.setItem(SESSION_ADOPTED_KEY, JSON.stringify([...next]));
@@ -2648,7 +2655,7 @@ function StrategyTuningForm() {
               strategy={strategy}
               proposal={prop}
               adopted={adoptedStrategies.has(strategy)}
-              onAdopt={() => handleAdopt(strategy, prop.proposed)}
+              onAdopt={() => handleAdopt(strategy, prop.proposed, prop.direction)}
             />
           ))}
         </div>
@@ -2740,6 +2747,7 @@ function ProposalCard({ strategy, proposal, adopted, onAdopt }: ProposalCardProp
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>OOS trades</div>
           <div style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
             {proposal.oos_metrics.n_trades}
+            {typeof proposal.oos_metrics.n_symbols === 'number' && ` · ${proposal.oos_metrics.n_symbols} symbols`}
           </div>
         </div>
       </div>

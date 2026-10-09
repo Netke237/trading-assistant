@@ -133,7 +133,11 @@ describe('AlertRuleBuilder condition row keys', () => {
   it('gives every new condition a stable, generated id (not array index)', () => {
     render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
     fireEvent.click(screen.getByText('+ Price'));
+    useChartStore.setState({ activeIndicators: [{ id: 'ema-custom', type: 'EMA',
+      params: { period: 7 }, pane: 'main', color: '#fff' }] });
     fireEvent.click(screen.getByText('+ Indicator'));
+    const indicatorOption = screen.getByRole('option', { name: 'EMA(7)' });
+    fireEvent.change(indicatorOption.parentElement!, { target: { value: 'EMA(7)' } });
 
     const addRuleSpy = jest.fn().mockReturnValue(true);
     useChartAlertStore.setState({ addRule: addRuleSpy } as any);
@@ -262,4 +266,40 @@ describe('regime dropdown fireability', () => {
     ]));
     expect(REGIME_STATES_ANY).toEqual(union);
   });
+});
+
+describe('stable indicator references', () => {
+  it('saves parameters in semantic order rather than a chart id', () => {
+    const addRule = jest.fn().mockReturnValue(true);
+    useChartAlertStore.setState({ addRule } as any);
+    useChartStore.setState({ activeIndicators: [{ id: 'macd-12345', type: 'MACD',
+      params: { signal: 4, slow: 12, fast: 5 }, pane: 'sub', color: '#fff' }] });
+    render(<AlertRuleBuilder onClose={() => {}} duplicateFrom={{ ...AAPL_RULE,
+      group: { logic: 'AND', conditions: [{ kind: 'indicator', indicator: '', operator: '>', value: 0 }] } }} />);
+    const option = screen.getByRole('option', { name: 'MACD(5,12,4)' });
+    fireEvent.change(option.parentElement!, { target: { value: 'MACD(5,12,4)' } });
+    fireEvent.click(screen.getByText('Create Alert'));
+    expect(addRule.mock.calls[0][0].group.conditions[0].indicator).toBe('MACD(5,12,4)');
+  });
+
+  it('keeps saved parameters selectable after the chart indicator is removed', () => {
+    const updateRule = jest.fn();
+    useChartAlertStore.setState({ updateRule } as any);
+    render(<AlertRuleBuilder onClose={() => {}} editRule={{ ...AAPL_RULE,
+      group: { logic: 'AND', conditions: [{ kind: 'indicator', indicator: 'EMA(7)', operator: '>', value: 0 }] } }} />);
+    expect(screen.getByRole('option', { name: 'EMA(7)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Save'));
+    expect(updateRule.mock.calls[0][1].group.conditions[0].indicator).toBe('EMA(7)');
+  });
+});
+
+
+test('empty indicator selections cannot create an inert rule', () => {
+  const addRule = jest.fn().mockReturnValue(true);
+  useChartAlertStore.setState({ addRule } as any);
+  render(<AlertRuleBuilder onClose={() => {}} duplicateFrom={{ ...AAPL_RULE,
+    group: { logic: 'AND', conditions: [{ kind: 'indicator', indicator: '', operator: '>', value: 0 }] } }} />);
+  fireEvent.click(screen.getByText('Create Alert'));
+  expect(addRule).not.toHaveBeenCalled();
+  expect(screen.getByText('Select a supported indicator for every indicator condition')).toBeInTheDocument();
 });

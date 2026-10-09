@@ -27,22 +27,23 @@ describe('HORIZON_PRESETS', () => {
 
 describe('previewDteWindow', () => {
   it.each([
-    ['Intraday',   0,   2,   1,   4],
-    ['Swing',      5,   15,  10,  30],
-    ['Position',   15,  45,  30,  90],
-    ['Quarterly',  45,  60,  90,  120],
-    ['SemiAnnual', 90,  105, 180, 210],
+    ['Intraday',   0,   2,   23,  58],
+    ['Swing',      5,   15,  36,  71],
+    ['Position',   15,  45,  66,  101],
+    ['Quarterly',  45,  60,  90,  125],
+    ['SemiAnnual', 90,  105, 180, 215],
     ['Annual',     165, 200, 330, 400],
+    ['Custom',     15, 200, 221, 400],
   ])('%s: hold %i-%i -> dte %i-%i', (_label, hMin, hMax, dMin, dMax) => {
     expect(previewDteWindow(hMin as number, hMax as number)).toEqual([dMin, dMax]);
   });
 
   it('doubles a custom range', () => {
-    expect(previewDteWindow(60, 185)).toEqual([120, 370]);
+    expect(previewDteWindow(60, 185)).toEqual([206, 370]);
   });
 
   it('clamps a zero minimum up to 1', () => {
-    expect(previewDteWindow(0, 0)).toEqual([1, 1]);
+    expect(previewDteWindow(0, 0)).toEqual([21, 56]);
   });
 });
 

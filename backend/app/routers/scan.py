@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import os
 import concurrent.futures
 from datetime import datetime, timezone
@@ -25,7 +24,9 @@ import json as _json
 # target %, etc.). Shared with app.routers.contracts's recompute endpoint so
 # both build a trade plan off the same numbers.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
+from app.services.config_loader import resolve_target_r_multiple
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
+from app.services.config_loader import effective_rr_overrides
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 from app.services.config_loader import load_direction_conviction_min_trend
 
@@ -37,7 +38,7 @@ from app.schemas import (
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     SentimentData, FundamentalsOut, SCAN_RESULT_SCHEMA_VERSION,
-    RegimeGateSnapshot,
+    RegimeGateSnapshot, ScanRequestContext,
 )
 from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
@@ -59,18 +60,20 @@ from app.data.market import (
     get_tradier_creds,
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
+from app.data.etfs import is_etf
 from app.data.augment import _augment, opt_float, opt_int
-from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_event_window
+from app.scoring.stock_scorer import score_stock, StockScoreCard, Horizon, effective_event_window, effective_veto_days
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
+from app.data.universe_exclusions import ExclusionListError, filter_symbols
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
-from app.scoring.contract_validator import effective_contract_overrides
+from app.scoring.contract_validator import contract_caution_threshold, effective_contract_overrides, effective_dte_limits, is_finite_rule_value
 from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte, widened_min_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
-from app.scoring.exit_plan import resolve_stock_stop, final_stop_out
+from app.scoring.exit_plan import resolve_stock_stop, final_stop_out, resolve_t1_target
 from app.scoring.stock_scorer import _atr
 from app.scoring.stop_cost import compute_stop_cost
 from app.services.config_loader import load_exit_plan_cfg
@@ -81,6 +84,7 @@ from types import SimpleNamespace
 from app.routers.stock_scan import (
     _regime_data_drop, _direction_conviction_drop, _rs_benchmark_candles, _aligned_benchmark,
 )
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.audit import new_rec_id, log_event
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
@@ -140,8 +144,52 @@ def _rule_score(card: StockScoreCard, name: str) -> int:
     return 50
 
 
-def _final_status(s1: str, s2: str, s3: str) -> str:
-    return min([s1, s2, s3], key=lambda s: _ORDER.get(s, 1))
+def _final_status(*statuses: str) -> str:
+    return min(statuses, key=lambda s: _ORDER.get(s, 1))
+
+
+def _earnings_veto(card, veto_days: int) -> bool:
+    """Earnings inside max(reject, hold) vetoes options; dividends remain a score penalty."""
+    r = next((r for r in card.rules if r.name == "event"), None)
+    if r is None:
+        return False
+    days = r.detail.get("earnings_days")
+    return days is not None and 0 <= days < veto_days
+
+
+def _resolve_earnings_veto_days(horizon, overrides, hold_max_days, reject_days) -> int:
+    """Keep a veto window if request resolution fails, using the event echo first."""
+    try:
+        return effective_veto_days(horizon, overrides, hold_max_days)
+    except Exception as exc:
+        _log.warning("earnings veto window unavailable: %s", exc)
+        if reject_days is not None:
+            return reject_days
+        from typing import get_args
+        return max(effective_veto_days(h, None, None) for h in get_args(Horizon))
+
+
+def _earnings_unknown_caps(card, symbol: str) -> bool:
+    """D4 as amended 2026-10-03 (Kenneth): a SINGLE STOCK whose next earnings
+    date is unknown (none on file, or only a past one) is capped at CAUTION.
+    The score is unchanged.
+
+    THE CAP IS DISPLAY AND RANKING ONLY; IT DOES NOT STOP AN AUTO-FIRE (audit
+    round 1, F7). Nothing on the fire path reads this card: neither
+    `/auto-trade/arm` nor `maybe_fire_on_scan` checks `finalStatus`, so an
+    armed trade fires whatever the next scan grades it. What actually protects
+    auto-fire is the fire path's OWN lookup in `auto_trader._apply_event_veto`,
+    which refuses a single stock whose date it cannot establish. These are not
+    two independent guards -- there is one, at fire time.
+
+    An ETF (`app.data.etfs.is_etf`) has no earnings and is never capped. A
+    symbol missing from that curated set counts as a stock: the safe direction.
+    No event rule at all means nothing says when earnings are -- unknown.
+    """
+    if is_etf(symbol):
+        return False
+    r = next((r for r in card.rules if r.name == "event"), None)
+    return r is None or r.detail.get("earnings_days") is None
 
 
 def _resolve_gate(req: ScanRequest) -> dict:
@@ -388,6 +436,7 @@ async def _build_spreads(
     *,
     dte_bounds: tuple[int, int] | None = None,
     min_dte_floor: int | None = None,
+    dte_limits: tuple[int, int, int, int] | None = None,
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
@@ -417,9 +466,11 @@ async def _build_spreads(
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
                 fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="P",
-                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor,
+                                         dte_limits=dte_limits),
                 fetch_option_chain_async(client, symbol, expiry=_leg_expiry, option_type="C",
-                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor),
+                                         dte_bounds=dte_bounds, min_dte_floor=min_dte_floor,
+                                         dte_limits=dte_limits),
             )
     except Exception as exc:
         _log.debug("Spread: chain fetch failed for %s: %s", symbol, exc)
@@ -505,6 +556,7 @@ async def _process_symbol(
     dte_bounds: tuple[int, int] | None = None,
     hold_min_days: int | None = None,
     hold_max_days: int | None = None,
+    veto_days: int | None = None,
     # The HOLDING preset key ("Swing", "Annual", "Custom", ...), NOT `horizon`
     # above — that one is the collapsed scoring horizon and cannot express
     # Quarterly/SemiAnnual/Annual/Custom. Only the repricing horizon reads it.
@@ -534,6 +586,10 @@ async def _process_symbol(
     direction_min_trend: float | None = None,
     rs_benchmark: list[dict] | None = None,
     rs_misaligned: list[str] | None = None,
+    # confidence_cache.generation() captured by the caller before `bars_map` was
+    # read; set_cached drops a confidence computed from bars read before this
+    # symbol's last invalidation (audit R2-F1). None = unconditional write.
+    bars_generation: int | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -745,11 +801,14 @@ async def _process_symbol(
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
     # The fetch must only consider expiries the validator will accept, so it
-    # gets the same floor the contract hard-reject uses (widen_contract_overrides_for_dte).
+    # gets the same floor the contract hard-reject uses (widen_contract_overrides_for_dte);
+    # with no hold window, the validator's min_dte/max_dte and preferred DTE band.
     _dte_floor = widened_min_dte(dte_bounds[0], hold_max_days) if dte_bounds is not None else None
+    _dte_limits = effective_dte_limits(overrides) if dte_bounds is None else None
     async with sem:
         chain = await fetch_option_chain_async(client, symbol, option_type=option_type,
-                                               dte_bounds=dte_bounds, min_dte_floor=_dte_floor)
+                                               dte_bounds=dte_bounds, min_dte_floor=_dte_floor,
+                                               dte_limits=_dte_limits)
 
     if not chain:
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
@@ -758,13 +817,13 @@ async def _process_symbol(
     # ── Final score with the volatility figure from the chain ────────────────
     # TWO DIFFERENT QUANTITIES, and which one we have decides which thresholds
     # judge it (PHASE-A-NULL-IVRANK-2026-09-06):
-    #   ivRank -- a TRUE PERCENTILE, present only when IBKR or tastytrade
-    #             answered. Judged against the percentile thresholds.
+    #   ivRank -- an IV RANK, present only when IBKR or tastytrade
+    #             answered. Judged against the rank thresholds.
     #   iv     -- ABSOLUTE implied volatility, 0-100, from Tradier per strike
     #             (or the Black-Scholes inversion below). Judged against the
     #             absolute thresholds, which is what the 34/55/70 numbers have
     #             actually been judging all along.
-    # Prefer the rank: a percentile says where this vol sits for THIS name,
+    # Prefer the rank: a rank says where this vol sits for THIS name,
     # which an absolute level cannot.
     atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
     c0 = atm[0] if atm else None
@@ -776,7 +835,7 @@ async def _process_symbol(
         iv_rank, iv_basis = float(c0["iv"]), "absolute"
 
     # No vendor IV at all — invert Black-Scholes for the ATM contract. This
-    # yields an ABSOLUTE volatility, never a percentile, so it can only ever
+    # yields an ABSOLUTE volatility, never a rank, so it can only ever
     # feed the absolute path.
     if iv_rank is None and c0 is not None:
         iv_bs = _compute_iv_bs(
@@ -812,7 +871,7 @@ async def _process_symbol(
                 atr_mult_target=atr_mult_target, atr_mult_stop=atr_mult_stop,
             )
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-            await confidence_cache.set_cached(_ck, _cached)
+            await confidence_cache.set_cached(_ck, _cached, bars_generation=bars_generation)
         _conf = _cached["confidence"]
         _conf_n = _cached["sample_size"]
 
@@ -855,13 +914,29 @@ async def _process_symbol(
     valid_scores = [(s, c) for s, c in scored if s.status != "REJECT"]
     if not valid_scores:
         reason_counts: dict[str, int] = {}
+        best_low_score: int | None = None
         for s, _ in scored:
             for r in s.reject_reasons:
                 reason_counts[r] = reason_counts.get(r, 0) + 1
+            # A contract that clears every hard rule but scores below the
+            # caution band is REJECT with no reason of its own; unnamed, a
+            # chain of them read as a bare "all contracts rejected". Found
+            # while checking open question #8 (Step 3's liquidity floors at 0):
+            # the floors do reach validate_contract on main as of 2026-10-02,
+            # but the soft Preferred floors can still sink a thin contract's
+            # score. #8's original report (hard-reason counts unchanged with
+            # both floors at 0) did not reproduce and stays unexplained.
+            if not s.reject_reasons:
+                reason_counts["contract_score_below_caution"] = (
+                    reason_counts.get("contract_score_below_caution", 0) + 1
+                )
+                best_low_score = s.score if best_low_score is None else max(best_low_score, s.score)
         if reason_counts:
             detail = ", ".join(
                 f"{r}({n})" for r, n in sorted(reason_counts.items(), key=lambda x: -x[1])
             )
+            if best_low_score is not None:
+                detail += f"; best contract score {best_low_score} < caution {contract_caution_threshold()}"
             reject_reason = f"contracts rejected: {detail}"
         else:
             reject_reason = "all contracts rejected"
@@ -1006,33 +1081,6 @@ async def _process_symbol(
             else price * (1 + _flat_fallback_pct)
         )
 
-    _plan = build_trade_plan(
-        direction=direction,
-        stock_price=price,
-        strike=strike,
-        dte=int(contract.get("dte", 30)),
-        premium=premium,
-        entry_bid=float(contract.get("bid", 0)),
-        entry_ask=float(contract.get("ask", 0)),
-        entry_mid=float(contract.get("price", 0)),
-        rr_cfg=_rr,
-        heston_params=heston_params,
-        horizon_preset=horizon_preset,
-        hold_min=hold_min_days,
-        hold_max=hold_max_days,
-        final_stop_price=_stock_stop_price,
-    )
-    entry = _plan.entry
-    target_price = _plan.target_price
-    invalidation_price = _plan.invalidation_price
-    rr = SimpleNamespace(rr_ratio=_plan.rr_ratio, model_used=_plan.rr_model)
-    targets = _plan.targets
-    # Unrounded target/invalidation for the runner-up alternatives' estimate_rr
-    # (see below) — feeding the rounded values would drift their R/R vs the
-    # pre-refactor behaviour.
-    _target_raw = _plan.target_price_raw
-    _invalidation_raw = _plan.invalidation_price_raw
-
     # ── Stop-vs-premium gate, priced at scan time (Phase B3) ──────────────────
     # Spec §2.3, decision B3-SCOPED-STOP-2026-09-08. The ranking table is the
     # last surface with no gate on it; this computes the verdict here, where
@@ -1050,6 +1098,7 @@ async def _process_symbol(
     # resolved stop, so this block reads `_stock_stop` above rather than
     # computing a second one. The badge and the card's Invalidation field
     # therefore grade the same level by construction.
+    _stop_cost_fraction = None
     stop_cost_pct: float | None = None
     stop_cost_status: str | None = None
     try:
@@ -1068,7 +1117,7 @@ async def _process_symbol(
                 stock_price=price,
                 strike=strike,
                 dte=int(contract.get("dte", 30)),
-                premium=premium,
+                premium=round(premium, 2),
                 is_call=(direction == "Bullish"),
                 # ALWAYS None -- invert this contract's OWN mid with the
                 # bracketed solver, which is compute_stop_cost's normal basis.
@@ -1089,13 +1138,14 @@ async def _process_symbol(
                 # names the hazard: "a caller-supplied iv_pct need not
                 # reproduce the contract's own mid".
                 #
-                # Never `iv_rank` either: it holds a PERCENTILE whenever
-                # iv_basis == "rank", and feeding a percentile to a function
+                # Never `iv_rank` either: it holds an IV RANK whenever
+                # iv_basis == "rank", and feeding a rank to a function
                 # taking absolute volatility is the conflation Phase A ended.
                 iv_pct=None,
                 horizon_preset=horizon_preset,
             )
             if _scan_cost is not None:
+                _stop_cost_fraction = _scan_cost.fraction
                 stop_cost_pct = round(_scan_cost.fraction * 100, 1)
                 stop_cost_status = _scan_cost.status
     except Exception as exc:
@@ -1104,6 +1154,48 @@ async def _process_symbol(
         # Heston, confidence) degrades the same way, and this one carries less:
         # the row simply reads "not computed".
         _log.warning("Scan-time stop cost failed for %s: %s", symbol, exc)
+
+    _r_multiple = resolve_target_r_multiple(overrides)
+    try:
+        _t1_price, _t1_source = await asyncio.to_thread(
+            resolve_t1_target, candles, direction, price, _stock_stop,
+            _stock_stop_price, _r_multiple,
+            load_exit_plan_cfg()["target"]["structural_snap"]["atr_multiplier"],
+        )
+    except Exception as exc:
+        _log.warning("Scan target resolution failed for %s: %s", symbol, exc)
+        _t1_price = price + (1 if direction == "Bullish" else -1) * _r_multiple * abs(price - _stock_stop_price)
+        _t1_source = "flat_fallback"
+
+    _plan = build_trade_plan(
+        direction=direction,
+        stock_price=price,
+        strike=strike,
+        dte=int(contract.get("dte", 30)),
+        premium=premium,
+        entry_bid=float(contract.get("bid", 0)),
+        entry_ask=float(contract.get("ask", 0)),
+        entry_mid=float(contract.get("price", 0)),
+        rr_cfg=_rr,
+        heston_params=heston_params,
+        horizon_preset=horizon_preset,
+        hold_min=hold_min_days,
+        hold_max=hold_max_days,
+        final_stop_price=_stock_stop_price,
+        target_price=_t1_price,
+        target_source=_t1_source,
+        stop_cost_fraction=_stop_cost_fraction,
+    )
+    entry = _plan.entry
+    target_price = _plan.target_price
+    invalidation_price = _plan.invalidation_price
+    rr = SimpleNamespace(rr_ratio=_plan.rr_ratio, model_used=_plan.rr_model)
+    targets = _plan.targets
+    # Unrounded target/invalidation for the runner-up alternatives' estimate_rr
+    # (see below) — feeding the rounded values would drift their R/R vs the
+    # pre-refactor behaviour.
+    _target_raw = _plan.target_price_raw
+    _invalidation_raw = _plan.invalidation_price_raw
 
     # ── Build TradeCardData ────────────────────────────────────────────────────
     from datetime import date as _date
@@ -1131,14 +1223,22 @@ async def _process_symbol(
         _stock_stop, datetime.now(timezone.utc).isoformat(),
     )
 
+    # Production scans pass one precomputed window. Preserve direct callers by
+    # resolving from their own horizon/hold, with the same event-rule fallback.
+    if veto_days is None:
+        veto_days = _resolve_earnings_veto_days(
+            horizon, overrides, hold_max_days, rule_detail.get("event", {}).get("reject_days"),
+        )
+
     trade_card = TradeCardData(
         symbol=symbol,
         company=company,
         price=price,
         direction=direction,
-        status=card.status,
+        status=_final_status(card.status, "CAUTION" if direction == "Bearish" else "PASS"),
         stockScore=card.score,
         stockConfidence=card.status,
+        stockExplanation=card.explanation,
         stockBreakdown=ScoreBreakdown(
             trend=_rule_score(card, "trend"),
             pullback=_rule_score(card, "pullback"),
@@ -1156,6 +1256,7 @@ async def _process_symbol(
         contract=f"{symbol}|{int(strike)}|{contract.get('expiry','TBD')}|{'C' if direction=='Bullish' else 'P'}",
         contractScore=contract_card.score,
         contractConfidence=contract_card.status,
+        contractExplanation=contract_card.explanation,
         contractBreakdown=ContractScoreBreakdown(
             dteFit=contract_card.breakdown.dte_score,
             delta=contract_card.breakdown.delta_score,
@@ -1192,10 +1293,25 @@ async def _process_symbol(
             target=target_price,
             targets=targets,
             finalStop=_final_stop_block,
+            stockStopLoss=_plan.stock_stop_loss,
+            stockStopLossAt=_plan.stock_stop_loss_at,
+            rrRiskBasis=_plan.rr_risk_basis,
+            targetSource=_plan.target_source,
         ),
         rrRatio=rr.rr_ratio,
         rrModel=rr.model_used,
-        finalStatus=_final_status(card.status, contract_card.status, entry.quality_status),
+        finalStatus=_final_status(
+            card.status, contract_card.status, entry.quality_status,
+            "REJECT" if _earnings_veto(card, veto_days) else "PASS",
+            # D4 amended 2026-10-03: unknown earnings caps a single stock.
+            "CAUTION" if _earnings_unknown_caps(card, symbol) else "PASS",
+            "CAUTION" if direction == "Bearish" else "PASS",
+        ),
+        unvalidatedReason=BEARISH_UNVALIDATED_MESSAGE if direction == "Bearish" else None,
+        earningsVeto=_earnings_veto(card, veto_days),
+        earningsUnknown=bool(rule_detail.get("event", {}).get("earnings_unknown", False)),
+        isEtf=is_etf(symbol),
+        earningsDays=rule_detail.get("event", {}).get("earnings_days"),
         confidence=(_conf_rule.detail.get("confidence") if (_conf_rule := next((r for r in card.rules if r.name == "confidence"), None)) else None),
         confidenceText=(_conf_rule.detail.get("interpretation") if _conf_rule else None),
         sentiment=SentimentData(**_regime_signal) if _regime_signal else None,
@@ -1223,6 +1339,7 @@ async def _process_symbol(
         symbol, direction, contract, iv_rank, client, sem,
         dte_bounds=dte_bounds,
         min_dte_floor=_dte_floor,
+        dte_limits=_dte_limits,
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,
@@ -1264,6 +1381,18 @@ async def _process_symbol(
         alt_strike = float(alt_c.get("strike", price))
         alt_expiry_years = alt_c.get("dte", 30) / 365.0
         alt_premium = float(alt_c.get("price", 0.10))
+        alt_stop_fraction = None
+        if _stock_stop is not None and _stock_stop.source == "final_stop":
+            try:
+                alt_cost = compute_stop_cost(
+                    stop_price=round(_stock_stop.price, 2), stock_price=price,
+                    strike=alt_strike, dte=int(alt_c["dte"]), premium=round(alt_premium, 2),
+                    is_call=direction == "Bullish", iv_pct=None, horizon_preset=horizon_preset,
+                )
+                if alt_cost is not None:
+                    alt_stop_fraction = alt_cost.fraction
+            except Exception as exc:
+                _log.warning("Alternative stop cost failed for %s: %s", symbol, exc)
         alt_rr = estimate_rr(
             stock_price=price,
             target_price=_target_raw,
@@ -1274,6 +1403,7 @@ async def _process_symbol(
             is_call=(direction == "Bullish"),
             heston_params=heston_params,
             premium_stop_pct=_rr["premium_stop_pct"],
+            risk_fraction=alt_stop_fraction,
         )
         alts.append(AlternativeContract(
             symbol=symbol,
@@ -1288,6 +1418,7 @@ async def _process_symbol(
             iv=opt_float(alt_c.get("iv")),
             score=alt_card.score,
             contractConfidence=alt_card.status,
+            contractExplanation=alt_card.explanation,
             contractBreakdown=ContractScoreBreakdown(
                 dteFit=alt_card.breakdown.dte_score,
                 delta=alt_card.breakdown.delta_score,
@@ -1420,7 +1551,7 @@ async def restore_from_db() -> str | None:
             # A result stored under an older schema carries at least one field
             # whose name no longer describes what it holds, with nothing on the
             # record saying so -- v0's `ivRank` held raw implied volatility
-            # under a percentile's name; v1's `exit.invalidation` held a flat
+            # under a rank's name; v1's `exit.invalidation` held a flat
             # percentage move under the resolved structural+2xATR stop's name.
             # Serving either puts a wrong number on the card the user acts
             # from, and the frontend cannot repair it: its own migrations only
@@ -1542,6 +1673,17 @@ async def _execute_scan_core(
     except PresetUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # STOCKS-HORIZON-P0A A2: drop `scope: scan` symbols from the FINAL list
+    # (presets expanded, typed tickers included) before any per-symbol work.
+    # Each one is reported in `rejected` below and counted in `scanned` and
+    # `failed_data`. A broken list is a named 500: it must not silently scan
+    # everything.
+    try:
+        symbols, _excluded = filter_symbols(symbols, purpose="scan")
+    except ExclusionListError as e:
+        _log.error("SCAN %s aborted: universe exclusion list unusable: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
     # Validate rr_* overrides ONCE upfront, before dispatching any per-symbol
     # work. Without this, a malformed override (e.g. a negative target %)
     # only surfaced inside _process_symbol -- AFTER that symbol's full
@@ -1554,6 +1696,7 @@ async def _execute_scan_core(
     # dict is validated here first).
     try:
         _merge_rr_cfg(req.overrides)
+        resolve_target_r_multiple(req.overrides)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -1620,7 +1763,13 @@ async def _execute_scan_core(
         _atr_target = _atr_stop = None
 
     candidates: list[TradeCardData] = []
-    rejected: list[RejectedCandidate] = []
+    rejected: list[RejectedCandidate] = [
+        RejectedCandidate(symbol=_x.symbol, reason=f"Excluded (data): {_x.reason}")
+        for _x in _excluded
+    ]
+    # Excluded symbols were scanned and dropped, so the funnel's `scanned` (and
+    # the direction banner's "of N") count them: scanned == sum of buckets.
+    _scanned = len(symbols) + len(_excluded)
     has_exception = False
 
     # Pre-fetch all prices in one Tradier batch call (removes N individual HTTP requests)
@@ -1635,6 +1784,10 @@ async def _execute_scan_core(
     from datetime import date as _date, timedelta as _td
     _bar_end = _date.today()
     _bar_start = _bar_end - _td(days=int(1.75 * 252))  # 441 calendar days ≈ 316 weekdays ≈ ~306 trading days, NOT 252
+    # Captured before any bar is read (this gather, and the per-symbol fallback
+    # fetch later): a refresh evicting a symbol after it makes set_cached drop the
+    # confidence computed from these bars (audit R2-F1).
+    _bars_generation = confidence_cache.generation()
     _bars_results = await asyncio.gather(
         *[_get_bars(sym, _bar_start, _bar_end) for sym in symbols],
         return_exceptions=True,
@@ -1709,6 +1862,13 @@ async def _execute_scan_core(
     except Exception as exc:
         _log.warning("SCAN %s event_window unavailable: %s", scan_id, exc)
 
+    veto_days = _resolve_earnings_veto_days(
+        req.horizon, req.overrides, req.hold_max_days,
+        _event_win.reject_days if _event_win is not None else None,
+    )
+    if _event_win is not None:
+        _event_win.veto_days = veto_days
+
     # The contract rules every symbol below is graded with (before the hold-days
     # DTE widening, which /api/contracts re-derives from the same hold days),
     # echoed on the result so Step 6's table grades with them too. Never
@@ -1719,16 +1879,37 @@ async def _execute_scan_core(
         # A non-finite value ("inf", "nan" -- float() takes both) cannot be sent
         # back: it serialises as null and /api/contracts refuses it. Record
         # nothing instead, so Step 6 says the rules are unknown.
-        try:
-            _finite = all(math.isfinite(v) for v in _rules.values())
-        except OverflowError:  # an int too large for a float
-            _finite = False
-        if _finite:
+        if all(is_finite_rule_value(v) for v in _rules.values()):
             _contract_rules = _rules
         else:
             _log.warning("SCAN %s contract_rules not recorded: non-finite value in %s", scan_id, _rules)
     except Exception as exc:
         _log.warning("SCAN %s contract_rules unavailable: %s", scan_id, exc)
+
+    # The Reward/Risk overrides every plan below is priced with, echoed so
+    # Step 7's recompute-plan reprices with the scan's values rather than live
+    # scanOverrides (STEP3-PARAM-REACH). Validated above (422 on a bad value);
+    # never allowed to fail the scan: None makes Step 7 fall back to live.
+    _rr_overrides = None
+    try:
+        _rr_overrides = effective_rr_overrides(req.overrides)
+    except Exception as exc:
+        _log.warning("SCAN %s rr_overrides unavailable: %s", scan_id, exc)
+
+    # The request fields Steps 5-7 read back as their scan context, echoed so a
+    # result restored into an empty browser does not default to Bullish/Swing.
+    _request_context = None
+    try:
+        _request_context = ScanRequestContext(
+            universe=list(req.universe),
+            direction=req.direction,
+            horizon=req.horizon,
+            horizon_preset=req.horizon_preset,
+            hold_min_days=req.hold_min_days,
+            hold_max_days=req.hold_max_days,
+        )
+    except Exception as exc:
+        _log.warning("SCAN %s request_context unavailable: %s", scan_id, exc)
 
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
@@ -1751,6 +1932,7 @@ async def _execute_scan_core(
                 dte_bounds=_dte_bounds,
                 hold_min_days=req.hold_min_days,
                 hold_max_days=req.hold_max_days,
+                veto_days=veto_days,
                 horizon_preset=req.horizon_preset,
                 gate=gate,
                 atr_mult_target=_atr_target,
@@ -1770,6 +1952,7 @@ async def _execute_scan_core(
                 direction_min_trend=_direction_min_trend,
                 rs_benchmark=_rs_bench,
                 rs_misaligned=_rs_misaligned,
+                bars_generation=_bars_generation,
             )
             for symbol in symbols
         ]
@@ -1854,11 +2037,11 @@ async def _execute_scan_core(
     _direction_banner: str | None = None
     if not candidates and _dir_removed > 0:
         _floor = f" (trend below {_min_trend:g})" if _min_trend is not None else ""
-        _rest = ("" if _dir_removed >= len(symbols)
+        _rest = ("" if _dir_removed >= _scanned
                  else "; the rest were removed by other gates — see the pipeline")
         _direction_banner = (
             f"No {req.direction.lower()} candidates survived. The direction-conviction gate "
-            f"removed {_dir_removed} of {len(symbols)}{_floor}{_rest}."
+            f"removed {_dir_removed} of {_scanned}{_floor}{_rest}."
         )
     elif candidates and all(c.status == "CAUTION" for c in candidates):
         _direction_banner = (
@@ -1927,8 +2110,11 @@ async def _execute_scan_core(
     _data_kw = ("no market data", "price filter", "cap filter")
     # "regime data unavailable:" (P3c item 1) is a data drop, as the stock scan
     # counts it under failed_history (no 15-min regime bars is like no price).
+    # "Excluded (data):" (STOCKS-HORIZON-P0A A2) is a `scope: scan` symbol from
+    # universe_exclusions.yaml, dropped before any per-symbol work.
     def _is_data(r):       return (any(k in r.reason for k in _data_kw)
-                                   or r.reason.startswith("regime data unavailable:"))
+                                   or r.reason.startswith("regime data unavailable:")
+                                   or r.reason.startswith("Excluded (data):"))
     def _is_pre_screen(r): return r.reason.startswith("Pre-screen:")
     def _is_no_chain(r):   return r.reason == "no option chain"
     def _is_score(r):      return r.reason.startswith("Score gate:")
@@ -1938,7 +2124,7 @@ async def _execute_scan_core(
                 _is_score, _is_contracts, _is_direction, _is_shortlist)
 
     _pipeline = OptionsPipeline(
-        scanned=len(symbols),
+        scanned=_scanned,
         failed_data=sum(1 for r in rejected if _is_data(r)),
         failed_pre_screen=sum(1 for r in rejected if _is_pre_screen(r)),
         no_chain=sum(1 for r in rejected if _is_no_chain(r)),
@@ -2013,6 +2199,8 @@ async def _execute_scan_core(
         dte_window=_dte_win,
         event_window=_event_win,
         contract_rules=_contract_rules,
+        rr_overrides=_rr_overrides,
+        request_context=_request_context,
     )
     return result
 
@@ -2050,10 +2238,17 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             _qr = await db.execute(select(PortfolioPositionModel))
             _orm_pos = _qr.scalars().all()
             _portfolio_snapshot = orm_positions_to_risk(_orm_pos)
+            # Scan persistence occurs in _upsert_session below. This read-only
+            # transaction can release its connection while the worker reserves
+            # durable budget in a fresh transaction on the originating loop.
+            await db.rollback()
+            from app.services.daily_risk_hooks import capture_daily_risk_hooks
+            hooks = capture_daily_risk_hooks()
             fired = await asyncio.to_thread(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
-                None,  # fire() reads portfolio_value from strategy under lock
+                None,  # fire() resolves the server account configuration at dispatch
+                daily_risk_hooks=hooks,
             )
             # O4 step 5: book the fired order, back ON the event loop with this
             # request's session (it never enters the worker thread). None on

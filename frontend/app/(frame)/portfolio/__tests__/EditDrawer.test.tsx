@@ -1879,3 +1879,21 @@ describe('EditDrawer picked-method record (Phase G)', () => {
     }
   });
 });
+
+it('AREA3 recompute retains the stored multiple and re-stamps its selected row', async () => {
+  const row = { rrRatio: 2.5, arithmeticPrice: 230, price: 230, tpSource: 'arithmetic' as const,
+    structuralPrice: null, contractPrice: 7.2, rrModel: 'BS repriced (IV-derived)' as const,
+    probability: 0.55, expectedDays: 6, qualityGood: true, qualityReasons: [], distanceDollar: null, toleranceDollar: 1 };
+  const plan = { computedAt: '2026-10-04T00:00:00Z', atr: 3.1,
+    stop: { price: 180, source: 'structural' as const, contractPrice: 2.5,
+      rrModel: 'BS repriced (IV-derived)' as const, structuralSource: 'swing_low' as const,
+      structuralConfidence: 0.8, structuralPrice: 180, atrFloorPrice: 175, distanceDollar: 5 },
+    targets: [row, { ...row, rrRatio: 3.5, price: 240 }] };
+  (api.getExitPlan as jest.Mock).mockReset().mockResolvedValueOnce({ ...plan, targets: [{ ...row, price: 232 }, { ...row, rrRatio: 3.5, price: 242 }] });
+  const position = makeOptionPosition({ contract: 'AAPL|220|2026-09-16|C', exitPlan: plan, activeTpMethod: 'exit_plan_2r', resolvedTpPrice: 230 });
+  const onChange = jest.fn();
+  render(<EditDrawer position={position} onClose={() => {}} onChange={onChange} onRemove={() => {}} />);
+  fireEvent.click(screen.getByText('Compute Exit Plan'));
+  await waitFor(() => expect(api.getExitPlan).toHaveBeenCalledWith(expect.objectContaining({ target_r_multiple: 2.5 })));
+  await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ resolvedTpPrice: 232, exitPlan: expect.objectContaining({ targets: expect.arrayContaining([expect.objectContaining({ rrRatio: 2.5 })]) }) })));
+});

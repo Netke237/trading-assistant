@@ -19,7 +19,7 @@ from app.schemas import (
     ClosePositionRequest, ClosedPositionSchema,
     PerformanceResponse, PerformancePoint,
 )
-from app.services.portfolio_risk import check_position_risk, orm_positions_to_risk, PortfolioPosition as RiskPosition
+from app.services.portfolio_risk import account_value, AccountValueError, check_position_risk, orm_positions_to_risk, PortfolioPosition as RiskPosition
 from app.services.portfolio_performance import (
     realized_pnl, bucket_realized_by_calendar, cumulative_curve, _contract_multiplier,
 )
@@ -27,7 +27,8 @@ from app.data.market import fetch_contract_quote_async
 from app.services.audit import log_approval
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
-from app.services.position_writer import create_position
+from app.services.position_writer import create_position, _rescale_rung_shares
+from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
 from app.models.audit_event import AuditEventModel
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -174,6 +175,24 @@ async def add_position(
     return resp
 
 
+def _cap_rungs_to_qty(targets, qty: int):
+    """Scale rungs down by the overflow only: rungs whose integer
+    `contractsToSell` sum fits `qty` are returned as sent; above it, they are
+    scaled proportionally to sum exactly `qty` (position_writer's rounding
+    rule, asked = the rung sum). Non-list targets and non-integer counts are
+    left as they are, as _rescale_rung_shares does."""
+    if not isinstance(targets, list):
+        return targets
+    total = sum(
+        t["contractsToSell"] for t in targets
+        if isinstance(t, dict) and isinstance(t.get("contractsToSell"), int)
+        and not isinstance(t.get("contractsToSell"), bool) and t["contractsToSell"] > 0
+    )
+    if total <= qty:
+        return targets
+    return _rescale_rung_shares(targets, total, qty)
+
+
 @router.patch('/portfolio/{rec_id}', response_model=PortfolioPositionSchema)
 async def update_position(
     rec_id: str,
@@ -236,8 +255,10 @@ async def update_position(
             # exposure gate POST /api/portfolio enforces at creation. A decrease
             # only ever reduces exposure, so it skips this gate entirely and
             # doesn't need portfolioValue at all.
-            if body.portfolioValue is None:
-                qty_error = "portfolioValue is required to increase qty."
+            try:
+                server_value = account_value()
+            except AccountValueError as exc:
+                qty_error = str(exc)
             else:
                 others = (await db.execute(
                     select(PortfolioPositionModel).where(PortfolioPositionModel.id != position.id)
@@ -249,7 +270,7 @@ async def update_position(
                     entry_premium=position.entry_price,
                     current_price=position.entry_price,
                     portfolio=orm_positions_to_risk(others),
-                    portfolio_value=body.portfolioValue,
+                    portfolio_value=server_value,
                 )
                 if not risk.approved:
                     qty_error = " ".join(risk.reasons)
@@ -278,6 +299,11 @@ async def update_position(
         position.structural_stop = _floor_stop(updates["structuralStop"])
     if "targets" in updates:
         position.targets = updates["targets"]
+    if "targets" in updates or "qty" in updates:
+        # Open question 54: the stored rungs must never plan to sell more than
+        # the row holds -- after a raise the gate booked smaller, a decrease,
+        # or a rung edit sent separately from the size it was typed against.
+        position.targets = _cap_rungs_to_qty(position.targets, position.qty)
     # Exit-plan pipeline scaffolding (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
     # — later phases compute these values; this endpoint just persists
     # whatever they send, same exclude_unset/explicit-null-clears pattern as
@@ -308,14 +334,37 @@ async def update_position(
     # explicit-null-clears contract as stop/structuralStop above. Not floored:
     # the schema's (0, 1) bound already rejects every meaningless value, and a
     # floor here would silently rewrite one rather than reject it.
+    #
+    # STOP-SEMANTICS-2026-10-02 (b): a stop whose threshold is below $0.01 at
+    # this position's entry can never fire, so it is refused -- late, like
+    # qty, so the fields sent alongside it in the same debounced PATCH still
+    # save. An explicit null (clear -> inherit) is never refused.
+    premium_stop_refused = False
     if "premiumStopPct" in updates:
-        position.premium_stop_pct = updates["premiumStopPct"]
+        requested_pct = updates["premiumStopPct"]
+        if requested_pct is not None and premium_stop_is_sub_cent(
+            position.entry_price, requested_pct,
+            is_short_stock_position(position.contract, position.direction),
+        ):
+            premium_stop_refused = True
+        else:
+            position.premium_stop_pct = requested_pct
 
     await db.commit()
     await db.refresh(position)
 
-    if qty_error is not None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=qty_error)
+    # The 422 detail is ` | `-joined segments: qty_error verbatim (risk codes OR
+    # free text), then the premium code, then the trimmed qty that WAS saved
+    # (which the 422 would otherwise lose). A single segment is exactly the
+    # pre-STOP-SEMANTICS detail. `frontend/lib/portfolioRejection.ts` maps it.
+    if qty_error is not None or premium_stop_refused:
+        segments = [qty_error] if qty_error is not None else []
+        if premium_stop_refused:
+            segments.append("premium_stop_below_one_cent")
+            if adjusted_qty is not None:
+                segments.append(f"qty_saved_as_{adjusted_qty}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail=" | ".join(segments))
 
     resp = PortfolioPositionSchema.from_orm_model(position)
     if adjusted_qty is not None:
@@ -388,6 +437,8 @@ async def close_position(
 
     exit_date = body.exitDate or date.today().isoformat()
     dollar, pct = realized_pnl(position.entry_price, float(exit_price), qty_to_close, position.contract)
+    if is_short_stock_position(position.contract, position.direction):
+        dollar, pct = -dollar, -pct
 
     closed = ClosedPositionModel(
         id=uuid.uuid4().hex,
@@ -405,6 +456,9 @@ async def close_position(
         source=getattr(position, "source", None),
     )
     db.add(closed)
+    await db.flush()
+    from app.services.daily_risk import record_realized_loss
+    await record_realized_loss(db, closed)
 
     # Reduce or remove the open position
     if qty_to_close >= position.qty:

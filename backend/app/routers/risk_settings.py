@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from app.services import portfolio_risk, alert_generator
@@ -40,7 +40,10 @@ RISK_RULES_HEADER = (
 )
 
 
-def _load_risk() -> dict:
+def _load_risk(*, strict: bool = False) -> dict:
+    if strict:
+        with open(_RISK_PATH) as f:
+            return yaml.safe_load(f)
     if _RISK_PATH.exists():
         with open(_RISK_PATH) as f:
             return yaml.safe_load(f) or {}
@@ -69,7 +72,8 @@ class RiskConfig(BaseModel):
     )
     portfolioValue: Optional[float] = Field(
         default=None,
-        ge=1.0,
+        gt=0.0,
+        allow_inf_nan=False,
         description='Total account value used as exposure denominator ($)',
     )
     maxSinglePositionPct: Optional[float] = Field(
@@ -82,7 +86,7 @@ class RiskConfig(BaseModel):
         default=None,
         ge=0.0,
         le=1.0,
-        description='Max acceptable loss at the exit-plan final stop, as a fraction of portfolio value (warning-only)',
+        description='Max acceptable loss at the exit-plan final stop, as a fraction of portfolio value. Also caps option premium per trade (min with maxSinglePositionPct)',
     )
     maxTotalExposurePct: Optional[float] = Field(
         default=None,
@@ -145,12 +149,18 @@ class RiskConfig(BaseModel):
 
 @router.get('/risk')
 async def get_risk_settings() -> dict:
-    cfg = _load_risk()
+    try:
+        cfg = _load_risk(strict=True)
+        if not isinstance(cfg, dict):
+            raise portfolio_risk.AccountValueError("Invalid server account value: risk config must be a mapping")
+        server_value = portfolio_risk.account_value(cfg)
+    except (portfolio_risk.AccountValueError, OSError, yaml.YAMLError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     rr = cfg.get('reward_risk', {})
     portfolio = cfg.get('portfolio', {})
     return {
         'premiumStopPct': float(rr.get('premium_stop_pct', 0.60)),
-        'portfolioValue': float(portfolio.get('portfolio_value', 50000.0)),
+        'portfolioValue': server_value,
         'maxSinglePositionPct': float(portfolio.get('max_single_position_pct', 0.05)),
         'maxLossPerTradePct': float(portfolio.get('max_loss_per_trade_pct', 0.0375)),
         'maxTotalExposurePct': float(portfolio.get('max_total_exposure_pct', 0.25)),
@@ -221,12 +231,14 @@ class SchedulingConfig(BaseModel):
     strategy-watch EOD trigger) — those stay pinned to America/New_York
     regardless of this setting; see app/services/scheduling_tz.py."""
     timezone: str = Field(default="Europe/Berlin", description="IANA timezone name, e.g. 'Europe/Berlin'")
+    history_years: int | None = Field(default=None, ge=1, le=20)
 
 
 @router.get('/scheduling', response_model=SchedulingConfig)
 def get_scheduling() -> SchedulingConfig:
     from app.services.scheduling_tz import operator_timezone_name
-    return SchedulingConfig(timezone=operator_timezone_name())
+    from app.services.history_retention import history_years
+    return SchedulingConfig(timezone=operator_timezone_name(), history_years=history_years())
 
 
 @router.put('/scheduling', response_model=SchedulingConfig)
@@ -239,5 +251,8 @@ def put_scheduling(cfg: SchedulingConfig) -> SchedulingConfig:
         raise HTTPException(status_code=422, detail=f"unknown timezone {cfg.timezone!r}")
     data = _load_settings()
     data.setdefault('scheduling', {})['timezone'] = cfg.timezone
+    if cfg.history_years is not None:
+        data['scheduling']['history_years'] = cfg.history_years
     _save_settings(data)
-    return cfg
+    from app.services.history_retention import history_years
+    return SchedulingConfig(timezone=cfg.timezone, history_years=history_years(data))

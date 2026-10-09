@@ -97,7 +97,7 @@ const TYPED_STOP = 138;
  * never pass — it would report the gate as always-on. */
 const REFUSAL = 'Invalidation stop required — define an invalidation level before submitting.';
 
-function makeCard(invalidation: number | null): TradeCardData {
+function makeCard(invalidation: number | null, extra: Partial<TradeCardData> = {}): TradeCardData {
   return {
     symbol: 'AAA',
     company: 'AAA Inc.',
@@ -117,16 +117,20 @@ function makeCard(invalidation: number | null): TradeCardData {
     rrRatio: 2.0,
     rrModel: 'Heston repriced',
     finalStatus: 'PASS',
+    ...extra,
   };
 }
 
 const originalFetch = global.fetch;
 
-function mount(invalidation: number | null, { withPick = true }: { withPick?: boolean } = {}) {
+function mount(
+  invalidation: number | null,
+  { withPick = true, extra = {} }: { withPick?: boolean; extra?: Partial<TradeCardData> } = {},
+) {
   localStorage.clear();
   act(() => {
     useScanStore.setState({
-      scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard(invalidation)] } as any,
+      scanResult: { scan_id: 'test-scan', timestamp: '2026-09-14T10:00:00', candidates: [makeCard(invalidation, extra)] } as any,
       // Phase G piece 5: the three edit caches this file exercises now live in
       // a SCAN-STAMPED slice on scanStore (lib/cardEdits.ts), so the fixture
       // has to carry the `scan_id` the real type has always declared required
@@ -181,6 +185,27 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
   });
   afterEach(() => {
     global.fetch = originalFetch;
+  });
+
+
+  it('B4 refuses Bearish direct sends and arm before saving anything', async () => {
+    mount(140, { extra: { direction: 'Bearish', isEtf: true, regimeGate: { headwindCautionPct: -15, headwindRejectPct: -40 } } });
+    await selectBroker();
+    for (const name of [/place limit/i, /right now — market/i]) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('title', BEARISH_REASON);
+      fireEvent.click(button);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Armed — fire on next qualifying condition' }));
+    expect(screen.getByRole('button', { name: /^Arm —/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Arm —/ })).toHaveAttribute('title', BEARISH_REASON);
+    expect(screen.getAllByText(BEARISH_REASON).length).toBeGreaterThan(0);
+    await act(async () => {});
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+    expect((global.fetch as jest.Mock).mock.calls.filter(([url, init]) => String(url).endsWith('/api/portfolio') && init?.method === 'POST')).toHaveLength(0);
+    expect(usePortfolioStore.getState().positions).toEqual([]);
   });
 
   it('disables Place Limit and Right Now — Market, and places NO order, when the stop is null', async () => {
@@ -331,3 +356,268 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     expect(created.pickedAt).toBe('2026-09-14T10:00:00.000Z');
   });
 });
+
+/* Fix #3 (review, High). Earnings inside the scan's reject window veto the
+ * trade: the backend sets `earningsVeto` and forces finalStatus REJECT, and
+ * Step 7 must then refuse the send -- both direct buttons and the pin -- and
+ * SAY why, rather than leave a greyed button with no reason beside it. Same
+ * shape as the stop and method-pick suites above: the refusal is asserted on
+ * the ORDER (`postOptionOrder` never called, no position stored), and an
+ * ordinary card is the control. */
+describe('step-7-trade-card — earnings veto blocks the send', () => {
+  const VETO_REASON = 'Earnings inside the reject window — no send';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+    global.fetch = echoFetch();
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('disables Place Limit, Right Now — Market and Pin to basket, places NO order, and says why', async () => {
+    // A real stop and a real pick: the veto is the ONLY reason for the refusal.
+    mount(140, { extra: { earningsVeto: true, finalStatus: 'REJECT' } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    const limitBtn  = screen.getByRole('button', { name: /place limit/i });
+    const marketBtn = screen.getByRole('button', { name: /right now — market/i });
+    expect(limitBtn).toBeDisabled();
+    expect(marketBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeDisabled();
+    expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
+    // The stop and pick gates are satisfied, so theirs are not the reasons shown.
+    expect(screen.queryByText(REFUSAL)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
+
+    // Disabled is not the claim -- not ordering is.
+    fireEvent.click(limitBtn);
+    fireEvent.click(marketBtn);
+    await Promise.resolve();
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+  });
+
+  it('keeps Disarm reachable for a strategy already armed on the vetoed card, and refuses Arm-side fires', async () => {
+    // Task 10c (Kenneth, 2026-10-03): the vetoed card used to hide the whole
+    // auto-trade control, Disarm included.
+    // The backend says AAA is armed; the component's status read switches the
+    // panel to armed mode on its own (mount() resets the store to manual).
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAA', direction: 'Bullish' });
+    mount(140, { extra: { earningsVeto: true, finalStatus: 'REJECT' } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    expect(disarm).toBeEnabled();
+    const fire = screen.getByRole('button', { name: 'Fire now' });
+    expect(fire).toBeDisabled();
+    expect(fire).toHaveAttribute('title', VETO_REASON);
+
+    fireEvent.click(disarm);
+    await waitFor(() => expect(api.disarmAutoTrade).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows Arm disabled with the veto reason when nothing is armed', async () => {
+    mount(140, { extra: { earningsVeto: true, finalStatus: 'REJECT' } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    // mount() resets the store to manual mode; Arm shows in armed mode only.
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
+
+    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeDisabled();
+    expect(arm).toHaveAttribute('title', VETO_REASON);
+    fireEvent.click(arm);
+    await Promise.resolve();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('leaves an ordinary card alone when earningsVeto is false', async () => {
+    mount(140, { extra: { earningsVeto: false } });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    expect(screen.getByRole('button', { name: /right now — market/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeEnabled();
+  });
+
+  it('leaves an ordinary card alone when earningsVeto is absent, and still sends', async () => {
+    mount(140);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeEnabled();
+
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+  });
+});
+
+/* Audit round 1, F4 (Kenneth: age it client-side) — the veto is a scan-time
+ * snapshot, and the scan result is persisted. The auditor's example: a Swing
+ * scan on Monday sees earnings 23 days out against the 21-day window (no
+ * veto); reopened on Thursday the print is 20 days out. Step 7 ages
+ * `earningsDays` by the scan's age in calendar days and judges that.
+ *
+ * F8 — a single stock with UNKNOWN earnings: every fire would be refused, so
+ * the Arm is refused up front. A manual send stays allowed (D4: CAUTION). */
+describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () => {
+  const VETO_REASON = 'Earnings inside the reject window — no send';
+  const UNKNOWN_ARM = /Earnings date unknown — auto-trade will not fire a single stock/;
+
+  /** Local wall-clock timestamp `days` calendar days before today. */
+  function daysAgo(days: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    d.setHours(10, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00:00`;
+  }
+
+  function mountScannedAgo(ago: number, extra: Partial<TradeCardData>) {
+    const view = mount(140, { extra });
+    act(() => {
+      useScanStore.setState((s: any) => ({
+        scanResult: { ...s.scanResult, timestamp: daysAgo(ago), event_window: { reject_days: 21, caution_days: 45 } },
+      }));
+    });
+    return view;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+    global.fetch = echoFetch();
+  });
+  afterEach(() => { global.fetch = originalFetch; });
+
+  it('Thursday: a Monday card at 23d has aged to 20d — both direct buttons and the pin are refused', async () => {
+    mountScannedAgo(3, { earningsDays: 23, earningsVeto: false, isEtf: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    expect(limitBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: /right now — market/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /pin to basket/i })).toBeDisabled();
+    expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
+  });
+
+  it('Monday (same day): the same card at 23d still sends', async () => {
+    mountScannedAgo(0, { earningsDays: 23, earningsVeto: false, isEtf: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit/i })).toBeEnabled());
+  });
+
+  it('F8: a single stock with unknown earnings cannot be armed, but can still be sent manually', async () => {
+    mountScannedAgo(0, { earningsDays: null, earningsUnknown: true, isEtf: false, finalStatus: 'CAUTION' });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
+    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeDisabled();
+    expect(arm.getAttribute('title')).toMatch(UNKNOWN_ARM);
+    expect(screen.getByText(UNKNOWN_ARM)).toBeInTheDocument();
+    fireEvent.click(arm);
+    await Promise.resolve();
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+  });
+
+  it('F8: Disarm stays reachable on that card', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAA', direction: 'Bullish' });
+    mountScannedAgo(0, { earningsDays: null, earningsUnknown: true, isEtf: false, finalStatus: 'CAUTION' });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    expect(disarm).toBeEnabled();
+    fireEvent.click(disarm);
+    await waitFor(() => expect(api.disarmAutoTrade).toHaveBeenCalledTimes(1));
+  });
+
+  it('F8 control: an ETF with unknown earnings can be armed', async () => {
+    mountScannedAgo(0, { earningsDays: null, earningsUnknown: true, isEtf: true });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
+    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    expect(arm.getAttribute('title') ?? '').not.toMatch(UNKNOWN_ARM);
+  });
+
+  /* STOCKS-HORIZON-P0B B7 — the veto window covers the hold. Step 7 judges
+   * against `event_window.veto_days`; a result persisted before B5 has none,
+   * so it falls back to max(reject_days, the scan's hold) from ScanContext. */
+  function mountWithWindow(
+    eventWindow: { reject_days: number; caution_days: number; veto_days?: number | null },
+    context: { horizonPreset: string; holdMin: number; holdMax: number } | null,
+    extra: Partial<TradeCardData>,
+  ) {
+    const view = mount(140, { extra });
+    act(() => {
+      useScanStore.setState((s: any) => ({
+        scanResult: { ...s.scanResult, timestamp: daysAgo(0), event_window: eventWindow },
+        context: context ? { universe: 'SP500', direction: 'Bullish', horizon: 'Position (60–185d)', ...context } : null,
+      }) as any);
+    });
+    return view;
+  }
+
+  async function expectVetoed() {
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    expect(limitBtn).toBeDisabled();
+    expect(limitBtn).toHaveAttribute('title', VETO_REASON);
+    expect(screen.getByRole('button', { name: /right now — market/i })).toBeDisabled();
+    expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
+    fireEvent.click(limitBtn);
+    await act(async () => {});
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(usePortfolioStore.getState().positions).toEqual([]);
+  }
+
+  it('B7: passes event_window.veto_days -- earnings 40d against reject 30 / veto 60 is refused', async () => {
+    mountWithWindow({ reject_days: 30, caution_days: 60, veto_days: 60 }, null,
+      { earningsDays: 40, earningsVeto: false, isEtf: false });
+    await expectVetoed();
+  });
+
+  it('B7: without veto_days it falls back to max(reject_days, the scan hold) -- Custom 60-185 -> 185', async () => {
+    mountWithWindow({ reject_days: 30, caution_days: 60 },
+      { horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+      { earningsDays: 120, earningsVeto: false, isEtf: false });
+    await expectVetoed();
+  });
+
+  it('B7 control: earnings beyond the Custom 60-185 hold still sends', async () => {
+    mountWithWindow({ reject_days: 30, caution_days: 60 },
+      { horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+      { earningsDays: 190, earningsVeto: false, isEtf: false });
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await selectBroker();
+    expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit/i })).toBeEnabled());
+  });
+});
+
+const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';

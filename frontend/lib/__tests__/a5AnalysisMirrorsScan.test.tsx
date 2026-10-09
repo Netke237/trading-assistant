@@ -14,7 +14,7 @@ import { api } from '@/lib/api';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-  usePathname: () => '/screener/step-5-strategy',
+  usePathname: () => '/screener/step-4-stocks',
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -30,6 +30,14 @@ jest.mock('@/lib/api', () => ({
   getLastDataRefresh: jest.fn(() => Promise.resolve({ last_refresh: null })),
   API_BASE_URL: 'http://localhost:8000',
 }));
+
+// Step 4 Stocks page's heavy children, mocked as its own __tests__ do (the
+// page writer below renders Step 4 since Step 5 was merged into it).
+jest.mock('@/components/organisms/StockPositionCard', () => ({ StockPositionCard: () => null }));
+jest.mock('@/components/organisms/StockSendDialog', () => ({ StockSendDialog: () => null }));
+jest.mock('@/components/organisms/ScanFunnel', () => ({ ScanFunnel: () => null }));
+jest.mock('@/components/atoms/WatchStar', () => ({ WatchStar: () => null }));
+jest.mock('../../app/(frame)/screener/step-4-stocks/HistoryPrefetchRow', () => ({ HistoryPrefetchRow: () => null }));
 
 const m = (f: unknown) => f as jest.Mock;
 const RESULT = (id: string) => ({ scan_id: id, timestamp: '2026-09-24T10:00:00+00:00', rejected: [], candidates: [] });
@@ -152,7 +160,9 @@ describe('T-F3 — persist migration v16 → v17', () => {
   it('persists the request next to its result', () => {
     act(() => useScanStore.getState().setStockScanResult(RESULT('P') as never, { strategy: 'z' } as never));
     const stored = JSON.parse(localStorage.getItem('bamendjou-scan-store') ?? '{}');
-    expect(stored.version).toBe(17);
+    // Re-pinned by TRADING-REVIEW-PHASE-C-RR: scanStore v18 (full-premium R/R)
+    // moved the configured version; this test needs only "at or past v17".
+    expect(stored.version).toBeGreaterThanOrEqual(17);
     expect(stored.state.stockScanRequest).toEqual({ strategy: 'z' });
     localStorage.clear();
   });
@@ -212,15 +222,17 @@ describe('T-F4 — StoreHydration attaches the backend record only on scan_id ma
   });
 });
 
-describe('Step 5 writer', () => {
+// Was 'Step 5 writer'; retargeted to Step 4 when Step 5 was merged into it
+// (STOCKS-STEP-MERGE-S1). Selecting a card no longer scans, so Run is clicked.
+describe('Step 4 writer', () => {
   it('stores the exact body it posted with its result', async () => {
-    const Step5 = (await import('../../app/(frame)/screener/step-5-strategy/page')).default;
-    m(api.postStockScan).mockResolvedValue(RESULT('S5'));
-    render(<Step5 />);
-    const btn = screen.getAllByText(/Breakout from tight base/i)
-      .map((el) => el.closest('button')).find((b) => b !== null)!;
-    fireEvent.click(btn);
-    await waitFor(() => expect(useScanStore.getState().stockScanResult?.scan_id).toBe('S5'));
+    const Step4 = (await import('../../app/(frame)/screener/step-4-stocks/page')).default;
+    m(api.postStockScan).mockResolvedValue(RESULT('S4'));
+    render(<Step4 />);
+    // Bearish context: Step 4 labels breakout_base by direction.
+    fireEvent.click(screen.getByText(/^Breakdown from tight base$/).closest('button')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Stock Scan' }));
+    await waitFor(() => expect(useScanStore.getState().stockScanResult?.scan_id).toBe('S4'));
     const body = m(api.postStockScan).mock.calls[0][0];
     expect(useScanStore.getState().stockScanRequest).toEqual(body);
     expect(body.strategy).toBe('breakout_base');
@@ -249,3 +261,29 @@ const FULL = {
   next_event_label: null, rules: [], gate_flags: [], ema_trend: null, iv_rank: null,
   regime_by_horizon: {}, sector: null, sector_rs: null, market_backdrop: null,
 };
+
+describe('B6 (STOCKS-HORIZON-P0B) — Analysis sends the scan\'s hold', () => {
+  it('current-settings: a Custom 60-185 context sends hold_max_days 185', () => {
+    act(() => useScanStore.setState({
+      context: { universe: 'SP500', direction: 'Bullish', horizon: 'Position (60–185d)',
+        horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+    } as never));
+    const { req, basis } = analysisRequestFor('MSFT');
+    expect(basis).toBe('current-settings');
+    expect(req.horizon).toBe('Position');
+    expect(req.hold_max_days).toBe(185);
+  });
+
+  it('last-scan: replays the scan body\'s hold_max_days', async () => {
+    act(() => useScanStore.setState({
+      context: { universe: 'SP500', direction: 'Bullish', horizon: 'Position (60–185d)',
+        horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+    } as never));
+    m(api.postStockScan).mockResolvedValue(RESULT('S-B6'));
+    await runStockScan('ma_crossover');
+    expect(m(api.postStockScan).mock.calls[0][0].hold_max_days).toBe(185);
+    const { req, basis } = analysisRequestFor('AAPL');
+    expect(basis).toBe('last-scan');
+    expect(req.hold_max_days).toBe(185);
+  });
+});

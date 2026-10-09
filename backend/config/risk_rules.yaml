@@ -17,9 +17,13 @@ portfolio:
   max_single_stock_position_pct: 0.20
   max_total_stock_exposure_pct: 1.00
   # Feature C (exit-plan pipeline plan, docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
-  # — warning-only, never auto-clamps contract count. Loss basis is whatever
-  # the exit-plan pipeline resolves as the final stop, repriced to a contract
+  # — the stop-based check is warning-only. Loss basis is whatever the
+  # exit-plan pipeline resolves as the final stop, repriced to a contract
   # value; overridable per-trade via PortfolioPosition.maxLossOverride.
+  # ALSO (review fix #4, D5) this caps OPTION premium: no protective order is
+  # placed, so check_position_risk shrinks an option to
+  # min(max_single_position_pct, max_loss_per_trade_pct) and refuses one
+  # contract that does not fit. Stocks are unchanged.
   max_loss_per_trade_pct: 0.0375
 
 sizing:
@@ -27,8 +31,6 @@ sizing:
 
 # Reward-risk calculation defaults (FR-45)
 reward_risk:
-  bullish_target_pct: 0.08      # +8% stock move for T1 target
-  bearish_target_pct: 0.08      # 8% move down for bearish T1
   bullish_invalidation_pct: 0.03   # -3% stock = invalidation
   bearish_invalidation_pct: 0.03   # +3% stock = bearish invalidation
   premium_stop_pct: 0.60        # stop out if option loses 60% of premium
