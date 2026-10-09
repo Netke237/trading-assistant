@@ -385,6 +385,16 @@ Before you start a task, claim it; the `claims` branch is the shared ledger
 - Push your branch often, and `python3 scripts/claim.py renew` every ~2h (claims expire after 3h).
 - `python3 scripts/claim.py release <TASK-ID>` when done or giving up.
 - `take --force` only when Kenneth reassigns a task; then `git fetch origin <old-branch>` and continue its work.
+
+### Working the Markdown backlog in parallel
+
+The backlog lives in `.scratch/project-ticket-reconciliation-20261009/` (`map.md` is the index; one file per ticket under `issues/`). Several agents may work it at once. Kenneth's standing rule (2026-10-09): **always pick tickets by dependency order and never conflict with another agent.**
+
+- Take only tickets whose status says Kenneth approved them for agent work (approved 2026-10-09: 19, 20, 24, 26, 30, 33). A ticket still marked plain `draft` needs his approval first. Human-operation and decision tickets stay with Kenneth.
+- A ticket is startable only when every `Blocked by` item is actually done (merged/verified), not merely in progress.
+- Claim with ID `TICKET-<NN>-<SLUG>` (e.g. `TICKET-30-TRADE-CARD-RELEASE`) before writing anything. If the claim fails, pick another ticket.
+- Avoid file conflicts too: skip a ticket whose likely files overlap an active claim's area (e.g. broker paths while AUTOTRADE-FIRE-HYGIENE is claimed, exact-strike/watchlist while EXACT-STRIKE is active, Tradier quotes while NO-LIVE-QUOTE is active), even if the ticket itself is unclaimed.
+- One branch per ticket; push often; record the outcome in the ticket file's `Status` line; release the claim when done. The audit workflow above still applies to any code change.
 <!-- task-claims:end -->
 
 ## Agent skills
