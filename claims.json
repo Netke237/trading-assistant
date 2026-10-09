@@ -23,14 +23,6 @@
       "expires_at": "2026-10-09T16:16:39Z",
       "note": "state.py _NEGATION_RE reads 'NO' in target ids like NO-LIVE-QUOTE as negation (false alarm); fix + real-git test",
       "task": "STATE-NEGATION-ID"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/tradier-quote-evidence-20261008",
-      "claimed_at": "2026-10-09T13:23:43Z",
-      "expires_at": "2026-10-09T16:23:43Z",
-      "note": "Commit verified raw quote archive",
-      "task": "TRADIER-QUOTE-EVIDENCE-20261008"
     }
   ]
 }
