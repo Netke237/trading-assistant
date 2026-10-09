@@ -1781,10 +1781,13 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     §9.1 is "refuse to fire AND alert". The manual trigger needs no help — the
     refusal is the 400 body of POST /auto-trade/fire (a prefixed 500 for the
     two config faults), with a human reading it.
-    The scan trigger has no reader at all: POST /scan calls it through
-    `asyncio.to_thread` and discards the outcome, so without this the refusal
-    is a log line on a box nobody is watching while an armed order silently
-    does not happen.
+    The scan trigger has no reader at all: POST /scan runs
+    `maybe_fire_on_scan` on `routers/scan._SCAN_FIRE_EXECUTOR`'s worker thread
+    and acts only on a returned `FiredOrder`, which it books back on the event
+    loop through `book_fired_order`. A refusal is caught inside
+    `maybe_fire_on_scan` and comes back as None, which POST /scan reports to
+    no one, so without this the refusal is a log line on a box nobody is
+    watching while an armed order silently does not happen.
 
     SHARED BY EVERY REFUSAL KIND SINCE TARGET 2a ROUND 1, which found the
     headwind refusal — the one that is EXPECTED to happen in normal operation,
@@ -1793,17 +1796,26 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     ValueError)`. `what` and `reason` are the caller's words; everything below
     is the same for all of them.
 
-    WHY asyncio.run IS CORRECT HERE: this runs in the worker thread
-    `asyncio.to_thread` created, which has no event loop of its own, so a
-    fresh loop is the only way to await an async notifier. Keeping it at the
-    scan-trigger boundary rather than inside fire() is what makes that true —
-    fire() is also reachable from the event-loop thread, via the /fire
-    endpoint, where asyncio.run raises.
+    WHY asyncio.run IS CORRECT HERE: this runs in a worker thread with no
+    event loop of its own — `routers/scan._SCAN_FIRE_EXECUTOR`'s worker for
+    the scan trigger's refusals, an `asyncio.to_thread` worker for the booking
+    alerts below — so a fresh loop is the only way to await an async notifier.
+    Booking itself (`book_fired_order`) never moves into such a thread: it
+    stays on the originating request's event loop with that request's session.
+    The thread, not the call site inside or outside fire(), is what makes
+    asyncio.run safe: since P3c item 7 no production caller runs fire() on
+    the event loop either — POST /auto-trade/fire calls it from
+    `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, and the scan trigger
+    reaches it inside `maybe_fire_on_scan` on `_SCAN_FIRE_EXECUTOR`'s. What
+    keeping these alerts at the scan-trigger boundary rather than inside
+    fire() still decides is WHO is alerted: a manual refusal already reaches
+    a human as the /fire response body (above), so only the scan trigger needs
+    a channel; inside fire() every manual refusal would page as well.
 
     THE RUNNING-LOOP GUARD IS UNREACHABLE TODAY and round 1 was right to say
     so: every caller reaches this from a thread with no loop. The refusal
     helpers are called from maybe_fire_on_scan, whose only caller is POST
-    /scan through asyncio.to_thread; the two booking alerts (O4 steps 4+5,
+    /scan on `_SCAN_FIRE_EXECUTOR`'s worker thread; the two booking alerts (O4 steps 4+5,
     `services/auto_trade_booking.py`) run ON the event loop and so call this
     through `await asyncio.to_thread(...)` -- called directly there, this guard
     would drop every one of them. It stays because the cost of being wrong
@@ -2374,8 +2386,9 @@ def _alert_stale_arm(symbol: str, age_minutes: float, max_age: int) -> None:
     above the three `d8a8e2c1` fixed. The staleness guard consumes the armed
     order and returns BEFORE `maybe_fire_on_scan`'s try, so none of the routing
     added by round 1 could ever see it: no history row, no alert, one
-    `logger.warning` on a box nobody watches, which POST /scan discards along
-    with the rest of the trigger's outcome. Against `max_arm_age_minutes: 30`
+    `logger.warning` on a box nobody watches, and the trigger's only result for
+    this exit is None, which POST /scan surfaces to no one (it acts only on a
+    returned `FiredOrder`, which it books). Against `max_arm_age_minutes: 30`
     (risk_rules.yaml) and a scan cadence in minutes, this is plausibly THE MOST
     FREQUENT way an armed trade dies — the common case was the unreported one.
 
@@ -2588,8 +2601,10 @@ class AutoTradeService:
         Passed by callers that read the armed slot, decided something about
         what they read, and only then called — `maybe_fire_on_scan` checks the
         staleness of the order it read. Without it, a disarm-and-re-arm inside
-        the window (a manual POST /auto-trade/fire on the event loop while the
-        scan runs in a worker thread) had this attempt fire AAPL on the
+        the window (a manual POST /auto-trade/fire, whose fire() runs on
+        `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, while the scan
+        trigger runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s — two executors,
+        so neither serialises the other) had this attempt fire AAPL on the
         strength of MSFT's age check and then alert about MSFT for a row that
         says AAPL — F1's third interleaving. Identity, not equality: a re-arm
         with an equal-valued strategy is still a different decision. Mismatch
@@ -3112,7 +3127,10 @@ class AutoTradeService:
         """Trigger #2: called after each scan completes. Fires if armed and fresh.
 
         Returns the `FiredOrder` on a fire, for POST /scan to book on the event
-        loop (O4 step 5). Every other exit -- not armed, stale, and every
+        loop (O4 step 5). Runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s worker
+        thread; if the request is cancelled before booking starts, the scan
+        router logs this return value instead of booking it
+        (`_log_scan_fire_outcome`). Every other exit -- not armed, stale, and every
         refusal handler below -- returns None, unchanged.
         """
         with self._lock:
@@ -3145,7 +3163,7 @@ class AutoTradeService:
         # `self.disarm()`, a `logger.warning` and a `return` — placed ABOVE the
         # try, so every routing branch below was structurally blind to it. The
         # armed order was consumed and the only trace was a log line inside a
-        # worker thread whose return value POST /scan throws away. It is also
+        # worker thread whose None return POST /scan surfaces to no one. It is also
         # the refusal most likely to actually happen, which is the wrong one to
         # have made invisible.
         max_age = self._max_arm_age_minutes()
