@@ -157,8 +157,16 @@ _ROUND_RE = re.compile(
 )
 
 
+# Only this canonical prefix assigns a subject to a phase; shorthand and
+# arbitrary mentions remain unowned evidence.
+_ROUND_OWNER_RE = re.compile(
+    r"^docs\(state\): (?P<owner>\S+) (?:(?:plan|code) )?round \d+(?![\w])"
+)
+
+
 def _round_numbers_in_branch_subjects(
-    base_ref: str | None, merged_ref: str | None = None,
+    base_ref: str | None, merged_ref: str | None = None, *,
+    active_phase: str | None = None, known_phase_ids: set[str] | None = None,
 ) -> "tuple[int, list[str]] | None | object":
     """Highest `round N` mentioned in this branch's commit SUBJECTS.
 
@@ -191,9 +199,9 @@ def _round_numbers_in_branch_subjects(
       - LOUD: this branch's own merge commit is not on main, so a subject like
         "Merge origin/main (A5c round 4 clean) into ..." still counts. Name
         rounds in merge subjects only for this branch's own piece.
-      - LOUD: a sibling branch's rounds for ANOTHER piece that have not
-        reached main still count against this one when that sibling is merged
-        in. They are not on main, so nothing marks them as someone else's.
+      - LOUD: rounds for ANOTHER piece that have not reached main still
+        count unless their subjects explicitly assign them to a different
+        known phase below. Unowned and shorthand records still cause alarms.
       - PRE-EXISTING, unchanged: a sibling cut from this branch AFTER the
         entry's introducing commit that reaches main first puts that commit on
         main, so no narrowing happens and its rounds are out of range.
@@ -205,6 +213,21 @@ def _round_numbers_in_branch_subjects(
     Degrading to None is deliberate: this probe runs on every SessionStart, and
     a check that cries drift whenever git is unavailable would train the reader
     to scroll past a red banner.
+
+    With a resolved active phase and known phase IDs, a canonical subject
+    beginning `docs(state): FULL-PHASE-ID round N` (or `plan round N` / `code
+    round N` after the ID) belongs to that known phase, case-sensitively. Skip
+    it only when it belongs to a DIFFERENT phase and the active ID is absent
+    as a whole token from the rest of the subject. Mixed subjects stay evidence.
+    Unknown owners, shorthand and other prefixes stay evidence too. With no
+    resolved active phase, or for callers omitting these keywords, keep all
+    evidence as before. IDs use word characters and hyphens for token boundaries.
+
+    For singular `round N, K findings`, a sole comma-introduced implicit K is
+    a finding count, not a round. Primary and explicitly marked round/r numbers,
+    plural round lists, other delimiters and ambiguous multiple implicit numbers
+    stay evidence.
+    This parsing rule applies even when ownership filtering is not enabled.
 
     SUBJECTS ONLY, never bodies. Commit bodies here are full of legitimate
     backward references ("round 12's follow-ups", "round 7 rejected finding 8")
@@ -229,11 +252,36 @@ def _round_numbers_in_branch_subjects(
     if proc.returncode != 0:
         return _GIT_FAILED
 
+    active_token = (
+        re.compile(r"(?<![\w-])" + re.escape(active_phase) + r"(?![\w-])")
+        if active_phase and known_phase_ids and active_phase in known_phase_ids else None
+    )
     best = 0
     subjects: list[str] = []
     for line in proc.stdout.splitlines():
-        hits = [int(n) for m in _ROUND_RE.finditer(line)
-                for n in re.findall(r"\d+", m.group(0))]
+        owner = _ROUND_OWNER_RE.match(line) if active_token else None
+        if (owner and owner["owner"] in known_phase_ids
+                and owner["owner"] != active_phase
+                and not active_token.search(line[owner.end("owner"):])):
+            continue
+        hits = []
+        for match in _ROUND_RE.finditer(line):
+            text = match.group(0)
+            numbers = list(re.finditer(r"\d+", text))
+            implicit = [
+                number for number in numbers[1:]
+                if not re.search(r"(?:r|(?i:round)[\s#-]*)$", text[:number.start()])
+            ]
+            # Only a sole comma-introduced implicit K in "round N, K findings"
+            # is a finding count. Explicit rounds and ambiguous lists stay evidence.
+            finding_count = None
+            if re.match(r"(?i:round)\b", text) and len(implicit) == 1:
+                number = implicit[0]
+                if (re.search(r",\s*$", text[:number.start()])
+                        and re.match(r"\s+(?i:findings?)\b", line[match.start() + number.end():])):
+                    finding_count = number
+            hits.extend(int(number.group(0)) for number in numbers
+                        if number is not finding_count)
         if not hits:
             continue
         subjects.append(line.strip())
@@ -655,8 +703,15 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"this run. That is an UNCHECKED bill, not a clean one."
         )
 
+    identity = _target_identity(state)
+    active_phase = identity[1] if identity and identity[0] == "phase" else None
+    known_phase_ids = {
+        phase["id"] for phase in state.get("phases", [])
+        if isinstance(phase, dict) and isinstance(phase.get("id"), str)
+    }
     evidence = _round_numbers_in_branch_subjects(
         _target_scoped_base(base_ref, state), base_ref,
+        active_phase=active_phase, known_phase_ids=known_phase_ids,
     )
     if evidence is _GIT_FAILED:
         # P6 D1. The base ref resolved, then `git log` over it failed (e.g. the
