@@ -1897,3 +1897,69 @@ it('AREA3 recompute retains the stored multiple and re-stamps its selected row',
   await waitFor(() => expect(api.getExitPlan).toHaveBeenCalledWith(expect.objectContaining({ target_r_multiple: 2.5 })));
   await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ resolvedTpPrice: 232, exitPlan: expect.objectContaining({ targets: expect.arrayContaining([expect.objectContaining({ rrRatio: 2.5 })]) }) })));
 });
+
+// NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no quote for
+// carries a 0 currentPrice that is not a price. The drawer's Current price
+// shows it as unknown, the way the table shows "—", and an empty commit writes
+// nothing.
+describe('Current price on a position without a quote', () => {
+  const noop = () => {};
+
+  function LiveDrawer({ initial, onPatch }: {
+    initial: PortfolioPosition;
+    onPatch: (p: Partial<PortfolioPosition>) => void;
+  }) {
+    const [pos, setPos] = useState(initial);
+    return (
+      <EditDrawer
+        position={pos}
+        onClose={noop}
+        onRemove={noop}
+        onChange={(patch) => { onPatch(patch); setPos((c) => ({ ...c, ...patch })); }}
+      />
+    );
+  }
+
+  const flagged = () => makeOptionPosition({ currentPrice: 0, pnlDollar: 0, pnlPct: 0, quoteUnavailable: true });
+
+  it('shows an empty field with a placeholder and "Quote unavailable", never 0', () => {
+    render(<LiveDrawer initial={flagged()} onPatch={jest.fn()} />);
+    const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
+    expect(price.value).toBe('');
+    expect(price.placeholder).toBe('— (no quote)');
+    expect(screen.getByText('Quote unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(/Manual override/)).not.toBeInTheDocument();
+  });
+
+  it('an empty commit writes nothing and stays empty, with no message', () => {
+    const onPatch = jest.fn();
+    render(<LiveDrawer initial={flagged()} onPatch={onPatch} />);
+    const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
+    fireEvent.blur(price);                                    // click in and out
+    fireEvent.change(price, { target: { value: '3' } });
+    fireEvent.change(price, { target: { value: '' } });       // typed, then cleared
+    fireEvent.blur(price);
+    fireEvent.keyDown(price, { key: 'Enter' });
+    expect(onPatch).not.toHaveBeenCalled();
+    expect(price.value).toBe('');
+    expect(screen.queryByText(/kept the previous/i)).not.toBeInTheDocument();
+  });
+
+  it('a typed price is a manual mark and clears the flag', () => {
+    const onPatch = jest.fn();
+    render(<LiveDrawer initial={flagged()} onPatch={onPatch} />);
+    const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
+    fireEvent.change(price, { target: { value: '4.8' } });
+    fireEvent.blur(price);
+    expect(onPatch).toHaveBeenCalledWith(expect.objectContaining({ currentPrice: 4.8, quoteUnavailable: false }));
+    expect(price.value).toBe('4.8');
+  });
+
+  it('a quoted row is unchanged', () => {
+    render(<LiveDrawer initial={makeOptionPosition()} onPatch={jest.fn()} />);
+    const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
+    expect(price.value).toBe('4.5');
+    expect(screen.getByText(/Manual override/)).toBeInTheDocument();
+    expect(screen.queryByText('Quote unavailable')).not.toBeInTheDocument();
+  });
+});
