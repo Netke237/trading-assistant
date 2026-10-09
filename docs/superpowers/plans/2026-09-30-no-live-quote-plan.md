@@ -1,4 +1,4 @@
-# NO-LIVE-QUOTE — plan r3 (PLAN STAGE CLEAN 2026-10-05: round 3 returned 0 gate findings; awaiting Kenneth's Q-A to Q-D, then build)
+# NO-LIVE-QUOTE — plan r3 (PLAN STAGE CLEAN 2026-10-05: round 3 returned 0 gate findings; Kenneth answered Q-A to Q-D on 2026-10-09, all as recommended; build in progress)
 
 - **Phase:** `NO-LIVE-QUOTE` (PROJECT_STATE.json). Status `not_started`: nothing built.
 - **Origin:** split out of `CONTRACT-LIQUIDITY-DTE` on 2026-09-30 (decision `CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30`).
@@ -6,7 +6,7 @@
 - **Kenneth's standing decision** (`CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30`, Q3): a chain row with no live
   two-sided quote is hard-rejected in the scan and in auto-trade; Step 6 and the Watchlist only label it.
   The reason key is `no_live_quote`.
-- **Merge hold:** `CONTRACT-LIQUIDITY-DTE` is built and audited but held from main until this phase lands
+- **Merge hold:** `CONTRACT-LIQUIDITY-DTE` has a closed plan (no code yet) and is held from main until this phase lands
   (`CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30`). §1 changes the premise of that hold; see Q-D in §5.
 - **r0 → r1:** r0 was a draft written before Step 0 and was never audited. r1 replaces sections 3a–3g
   against the measurements in §1 and disposes of r0's 19 open round-2 findings in §4.
@@ -468,6 +468,8 @@ premise: volume resets to 0 at 08:00 ET, before any trade.
   a broker order". That shape never occurred in five samples. The real after-close shape is a stale but
   plausible spread, and main grades that as live today, with or without CONTRACT-LIQUIDITY-DTE. Lifting the
   hold early would not make main worse than it is; keeping it costs only time. **Your call; no recommendation.**
+
+**Answered by Kenneth, 2026-10-09 (decision `NO-LIVE-QUOTE-QA-QD-ANSWERS-2026-10-09`):** Q-A 30 minutes; Q-B (a) warning + confirm tick, decided on the send-time fresh quote; Q-C drop rows with no ask; Q-D keep the hold (this phase merges first).
 
 ## 6. Out of scope, logged
 
