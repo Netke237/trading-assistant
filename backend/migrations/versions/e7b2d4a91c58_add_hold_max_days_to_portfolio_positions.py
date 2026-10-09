@@ -8,11 +8,11 @@ rows, rows opened before H6, paths with no scan) and never fires.
 Needed against an existing database because app/database.py's create_all()
 creates missing tables only, never missing columns.
 
-down_revision is f62a9e1b4c70, the single head per `alembic heads` on
-2026-10-09.
+down_revision is c15d709a26b1 (STOCKS-HORIZON-HISTORY), the single head on main
+after HISTORY merged (2026-10-09); first written against f62a9e1b4c70.
 
 Revision ID: e7b2d4a91c58
-Revises: f62a9e1b4c70
+Revises: c15d709a26b1
 Create Date: 2026-10-09 00:00:00.000000
 
 """
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'e7b2d4a91c58'
-down_revision = 'f62a9e1b4c70'
+down_revision = 'c15d709a26b1'
 branch_labels = None
 depends_on = None
 
