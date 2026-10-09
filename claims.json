@@ -39,6 +39,14 @@
       "expires_at": "2026-10-10T02:24:32Z",
       "note": "Backlog ticket 26: reproduce/isolate flaky tests on current main (evidence; fixes only if evidence supports)",
       "task": "TICKET-26-FLAKY-TESTS"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/stocks-t1-followups",
+      "claimed_at": "2026-10-09T23:30:16Z",
+      "expires_at": "2026-10-10T02:30:16Z",
+      "note": "Fix #129 test isolation + show time exits on Step 6",
+      "task": "STOCKS-T1-FOLLOWUPS"
     }
   ]
 }
