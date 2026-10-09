@@ -2,26 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/intelligent-merkle-ba9f03",
-      "claimed_at": "2026-10-09T14:22:31Z",
-      "expires_at": "2026-10-09T21:47:13Z",
-      "note": "Plan exact-strike representation end to end (chain rows, contract ids, quote matching, persisted-id migration check)",
-      "task": "EXACT-STRIKE"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/hopeful-rubin-64bowt",
-      "claimed_at": "2026-10-09T16:34:03Z",
-      "expires_at": "2026-10-09T21:32:11Z",
-      "note": "Publish fire-hygiene tickets, implement H1-H3, integrated code audit",
-      "task": "AUTOTRADE-FIRE-HYGIENE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/priceless-jennings-995ab7",
       "claimed_at": "2026-10-09T20:12:30Z",
-      "expires_at": "2026-10-09T23:12:30Z",
-      "note": "Resume authorized NLQ split: per-ticket audits then integration checks",
+      "expires_at": "2026-10-10T01:10:36Z",
+      "note": "Continue authorized NLQ scoped audits and integration",
       "task": "NO-LIVE-QUOTE"
     }
   ]
