@@ -164,6 +164,41 @@ _ROUND_OWNER_RE = re.compile(
 )
 
 
+# The stage word written straight before a round: "plan round 3", "code r2".
+_STAGE_TAG_RE = re.compile(r"\b(?i:(plan|code))[\s-]+$")
+
+
+def _round_hits(line: str) -> list[tuple[int, str | None]]:
+    """Every round number one subject names, each with the stage word written
+    before it ("plan" / "code", lower-cased) or None when there is none.
+
+    Only the per-stage cap (`_plan_stage`, `_stage_round_max`) reads the tag;
+    everything else reads the numbers alone. Every number in a range carries
+    its range's tag: "code rounds 1-2" is code rounds 1 and 2.
+    """
+    hits: list[tuple[int, str | None]] = []
+    for match in _ROUND_RE.finditer(line):
+        text = match.group(0)
+        tag = _STAGE_TAG_RE.search(line[:match.start()])
+        stage = tag.group(1).lower() if tag else None
+        numbers = list(re.finditer(r"\d+", text))
+        implicit = [
+            number for number in numbers[1:]
+            if not re.search(r"(?:r|(?i:round)[\s#-]*)$", text[:number.start()])
+        ]
+        # Only a sole comma-introduced implicit K in "round N, K findings"
+        # is a finding count. Explicit rounds and ambiguous lists stay evidence.
+        finding_count = None
+        if re.match(r"(?i:round)\b", text) and len(implicit) == 1:
+            number = implicit[0]
+            if (re.search(r",\s*$", text[:number.start()])
+                    and re.match(r"\s+(?i:findings?)\b", line[match.start() + number.end():])):
+                finding_count = number
+        hits.extend((int(number.group(0)), stage) for number in numbers
+                    if number is not finding_count)
+    return hits
+
+
 def _round_numbers_in_branch_subjects(
     base_ref: str | None, merged_ref: str | None = None, *,
     active_phase: str | None = None, known_phase_ids: set[str] | None = None,
@@ -264,24 +299,7 @@ def _round_numbers_in_branch_subjects(
                 and owner["owner"] != active_phase
                 and not active_token.search(line[owner.end("owner"):])):
             continue
-        hits = []
-        for match in _ROUND_RE.finditer(line):
-            text = match.group(0)
-            numbers = list(re.finditer(r"\d+", text))
-            implicit = [
-                number for number in numbers[1:]
-                if not re.search(r"(?:r|(?i:round)[\s#-]*)$", text[:number.start()])
-            ]
-            # Only a sole comma-introduced implicit K in "round N, K findings"
-            # is a finding count. Explicit rounds and ambiguous lists stay evidence.
-            finding_count = None
-            if re.match(r"(?i:round)\b", text) and len(implicit) == 1:
-                number = implicit[0]
-                if (re.search(r",\s*$", text[:number.start()])
-                        and re.match(r"\s+(?i:findings?)\b", line[match.start() + number.end():])):
-                    finding_count = number
-            hits.extend(int(number.group(0)) for number in numbers
-                        if number is not finding_count)
+        hits = [n for n, _ in _round_hits(line)]
         if not hits:
             continue
         subjects.append(line.strip())
@@ -659,6 +677,92 @@ def _pointer_target(state: dict) -> tuple[dict | None, str]:
     )
 
 
+def _plan_stage(
+    target: dict, key: str, declared: int | None, state: dict, subjects: list[str],
+) -> tuple[int | None, str | None]:
+    """Where this target's PLAN stage ended, read off its optional
+    `plan_stage: {"rounds": N, "closed_by": "<decision id>" | "clean"}`.
+
+    audit_rule's HARD CAP is counted PER STAGE (AUDIT-CAP-PER-STAGE-2026-09-25)
+    while records and subjects number rounds continuously, so a plan stage that
+    closed at round 3 left every round after it reading as past the cap: the
+    whole build stage under a red banner it could not clear. The field moves
+    where the cap starts counting, and nothing else.
+
+    IT IS NOT AN ACKNOWLEDGEMENT FLAG, and every bound below is what keeps it
+    from becoming one. It can move the threshold by at most the cap itself, so
+    the code stage still trips at its own third round; it cannot claim more
+    rounds than the target declares it ran; the decision it cites must exist
+    and name this target; and a `plan round M` subject above N on this branch
+    contradicts it outright. Any of those, and the field is ignored -- the cap
+    counts from round 1, exactly as if it were absent -- and the reason is
+    returned so the caller can say so.
+
+    Returns (N, None) when it holds, (None, None) when it is absent, and
+    (None, reason) when it is present but refused.
+    """
+    raw = target.get("plan_stage")
+    if raw is None:
+        return None, None
+
+    def refused(why: str) -> tuple[None, str]:
+        return None, (
+            f"plan_stage={raw!r} is IGNORED ({why}), so the hard cap counts this "
+            f"target's rounds from round 1."
+        )
+
+    if not isinstance(raw, dict):
+        return refused("it is not an object")
+    rounds = raw.get("rounds")
+    if (not isinstance(rounds, int) or isinstance(rounds, bool)
+            or not 1 <= rounds <= UNPHASED_FAIL_ROUND):
+        return refused(
+            f"rounds must be a whole number from 1 to {UNPHASED_FAIL_ROUND}, the "
+            f"most a plan stage can run under the cap"
+        )
+    if declared is None:
+        return refused("audit_rounds is not a whole number to check it against")
+    if rounds > declared:
+        return refused(f"rounds is more than the {declared} audit_rounds the target declares")
+    closed_by = raw.get("closed_by")
+    if closed_by != "clean":
+        token = re.compile(r"(?<![\w-])" + re.escape(key.split()[0]) + r"(?![\w-])")
+        decision = next(
+            (d for d in state.get("decisions", [])
+             if isinstance(d, dict) and d.get("id") == closed_by and isinstance(closed_by, str)),
+            None,
+        )
+        if decision is None:
+            return refused('closed_by must be "clean" or the id of an entry in decisions[]')
+        if not token.search(json.dumps(decision, ensure_ascii=False)):
+            return refused(f"decision {closed_by} does not name {key.split()[0]}")
+    later = [n for subject in subjects for n, stage in _round_hits(subject)
+             if stage == "plan" and n > rounds]
+    if later:
+        return refused(f"this branch's subjects name plan round {max(later)}, after it closed")
+    return rounds, None
+
+
+def _stage_round_max(subjects: list[str], plan_rounds: int) -> int:
+    """The highest CODE-stage round these subjects reach, once the plan stage
+    closed at `plan_rounds`. "code round N" is code round N; an untagged round
+    is numbered continuously, as records number them ("round 4 (code round 1)"),
+    so it is round N - plan_rounds; "plan round N" is not a code round at all.
+
+    THE ACCEPTED COST: an untagged subject that numbers a code round from 1
+    reads `plan_rounds` too low. Tag code rounds in subjects -- the canonical
+    `docs(state): <ID> code round N` already does.
+    """
+    best = 0
+    for subject in subjects:
+        for n, stage in _round_hits(subject):
+            if stage == "code":
+                best = max(best, n)
+            elif stage is None:
+                best = max(best, n - plan_rounds)
+    return best
+
+
 def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     """Check the ONE pair of fields no verify probe covers.
 
@@ -809,15 +913,30 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
     #
     # `is not True`, not `not ...` (STATE-PROBE-FIXES, G4): the string "false"
     # is truthy, so a hand-typed quote switched the cap off.
-    if git_max >= UNPHASED_FAIL_ROUND and target.get("audit_clean") is not True:
+    #
+    # COUNTED PER STAGE (STATE-PER-STAGE-CAP): once a target's `plan_stage`
+    # holds, `stage_max` is its code stage's round, not the continuous one --
+    # see `_plan_stage` for why that field cannot switch the cap off.
+    plan_rounds, plan_note = _plan_stage(
+        target, _target_identity(state)[1], declared, state, subjects,
+    )
+    stage = "" if plan_rounds is None else (
+        f" -- code round {_stage_round_max(subjects, plan_rounds)}, its plan stage "
+        f"having closed at round {plan_rounds} ({target['plan_stage']['closed_by']})"
+    )
+    stage_max = git_max if plan_rounds is None else _stage_round_max(subjects, plan_rounds)
+    if stage_max >= UNPHASED_FAIL_ROUND and target.get("audit_clean") is not True:
         return "drift", (
             f"Audit bookkeeping: {label} -- the active target -- declares {declared} "
             f"round(s), NONE of them clean, and this branch still carries round "
-            f"{git_max}. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND}: STOP AUDITING "
-            f"AND TELL KENNETH -- that is evidence the batch is too big to audit, not "
-            f"that it needs another round. Clears by going clean, by merging, or by "
-            f"moving active_phase if it is pointing at finished work. Subjects: {shown}"
+            f"{git_max}{stage}. audit_rule's HARD CAP is {UNPHASED_FAIL_ROUND} per stage: "
+            f"STOP AUDITING AND TELL KENNETH -- that is evidence the batch is too big to "
+            f"audit, not that it needs another round. Clears by going clean, by merging, "
+            f"or by moving active_phase if it is pointing at finished work."
+            f"{' ' + plan_note if plan_note else ''} Subjects: {shown}"
         )
+    if plan_note:
+        return "warn", f"Audit bookkeeping: {label}'s {plan_note}"
 
     if declared is None:
         return "warn", (

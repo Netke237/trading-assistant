@@ -929,7 +929,7 @@ def test_the_target_scoping_entrys_probe_tracks_BOTH_halves(repo):
 
     # Revert 2: the resolved-path cap stops firing.
     no_cap = src.replace(
-        'if git_max >= UNPHASED_FAIL_ROUND and target.get("audit_clean") is not True:',
+        'if stage_max >= UNPHASED_FAIL_ROUND and target.get("audit_clean") is not True:',
         "if False:"
     )
     assert no_cap != src
@@ -1377,3 +1377,173 @@ def test_f1_plan_rounds_under_a_stale_pointer_are_clearable_on_the_new_piece(rep
                                 {"name": "B", "audit_rounds": 3, "audit_clean": True}])
     repo.write_state(honest, "register B")
     assert _mod.audit_bookkeeping_drift(honest) is None
+
+
+# --- STATE-PER-STAGE-CAP: the hard cap counts per stage ---------------------
+#
+# audit_rule counts the cap PER STAGE (AUDIT-CAP-PER-STAGE-2026-09-25) while
+# subjects and records number rounds continuously. Without `plan_stage`, a plan
+# stage that closed at 3 kept the whole build stage at drift. The real case:
+# STOCKS-HORIZON-T1, 3 plan rounds none clean, closed by T1-CAP-SPLIT-H0B.
+
+_SPLIT = {"id": "SPLIT-H", "q": "Phase H's plan stage hit the cap. How to continue?",
+          "a": "Split it."}
+_OTHER = {"id": "OTHER", "q": "Something about Phase Q.", "a": "Unrelated."}
+
+
+def _staged(declared, clean=False, plan_stage=None, decisions=(_SPLIT, _OTHER)) -> dict:
+    phase = {"id": "H", "name": "Phase H", "audit_rounds": declared, "audit_clean": clean}
+    if plan_stage is not None:
+        phase["plan_stage"] = plan_stage
+    return dict(_state(active="H", phases=[phase]), decisions=list(decisions))
+
+
+def _three_plan_rounds(repo):
+    for n in (1, 2, 3):
+        repo.commit(f"docs(state): H plan round {n} not clean")
+
+
+def test_per_stage_a_closed_plan_stage_no_longer_holds_the_build_at_drift(repo):
+    _three_plan_rounds(repo)
+    severity, message = _mod.audit_bookkeeping_drift(_staged(3))
+    assert severity == "drift" and "HARD CAP" in message, "control: absent field, old behaviour"
+    closed = _staged(3, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"})
+    assert _mod.audit_bookkeeping_drift(closed) is None
+
+
+def test_per_stage_the_code_stage_still_trips_at_its_own_third_round(repo):
+    _three_plan_rounds(repo)
+    stage = {"rounds": 3, "closed_by": "SPLIT-H"}
+    repo.commit("docs(state): H round 4 (code round 1)")
+    repo.commit("docs(state): H round 5 (code round 2)")
+    assert _mod.audit_bookkeeping_drift(_staged(5, plan_stage=stage)) is None
+    repo.commit("docs(state): H round 6 (code round 3)")
+    severity, message = _mod.audit_bookkeeping_drift(_staged(6, plan_stage=stage))
+    assert severity == "drift" and "HARD CAP" in message
+    assert "code round 3" in message and "SPLIT-H" in message
+    assert _mod.audit_bookkeeping_drift(_staged(6, clean=True, plan_stage=stage)) is None
+
+
+@pytest.mark.parametrize("subject", [
+    "docs(state): H code round 3 not clean",      # numbered from the stage
+    "docs(state): H round 6 not clean",           # numbered continuously
+    "H code rounds 1-3",
+    "H code r3",
+])
+def test_per_stage_code_rounds_are_read_in_either_numbering(repo, subject):
+    _three_plan_rounds(repo)
+    repo.commit(subject)
+    severity, _ = _mod.audit_bookkeeping_drift(
+        _staged(6, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"}))
+    assert severity == "drift"
+
+
+def test_per_stage_a_clean_plan_stage_closes_with_clean(repo):
+    """The common shape: plan clean at round 2, code rounds 3-4 not yet clean.
+    Before the field this was drift at round 3 -- code round 1."""
+    repo.commit("docs(state): H plan round 1")
+    repo.commit("docs(state): H plan round 2 clean")
+    repo.commit("docs(state): H round 3 (code round 1)")
+    repo.commit("docs(state): H round 4 (code round 2)")
+    assert _mod.audit_bookkeeping_drift(_staged(4)) is not None
+    stage = {"rounds": 2, "closed_by": "clean"}
+    assert _mod.audit_bookkeeping_drift(_staged(4, plan_stage=stage)) is None
+    repo.commit("docs(state): H round 5 (code round 3)")
+    assert _mod.audit_bookkeeping_drift(_staged(5, plan_stage=stage))[0] == "drift"
+
+
+def test_per_stage_the_field_does_not_touch_the_undercount(repo):
+    _three_plan_rounds(repo)
+    repo.commit("docs(state): H round 5 (code round 2)")
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(3, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"}))
+    assert severity == "drift" and "declares 3" in message
+
+
+@pytest.mark.parametrize("plan_stage, why", [
+    ({"rounds": 4, "closed_by": "SPLIT-H"}, "from 1 to 3"),     # more than the cap
+    ({"rounds": 0, "closed_by": "SPLIT-H"}, "from 1 to 3"),
+    ({"rounds": "3", "closed_by": "SPLIT-H"}, "from 1 to 3"),
+    ({"rounds": True, "closed_by": "SPLIT-H"}, "from 1 to 3"),
+    ({"rounds": 3.0, "closed_by": "SPLIT-H"}, "from 1 to 3"),
+    ({"closed_by": "SPLIT-H"}, "from 1 to 3"),
+    ({"rounds": 3, "closed_by": "NO-SUCH-DECISION"}, "decisions[]"),
+    ({"rounds": 3}, "decisions[]"),
+    ({"rounds": 3, "closed_by": "OTHER"}, "does not name H"),  # cites someone else's
+    ({"rounds": 3, "closed_by": "yes"}, "decisions[]"),
+    (3, "not an object"),
+    ("clean", "not an object"),
+])
+def test_per_stage_a_refused_field_is_ignored_and_said_so(repo, plan_stage, why):
+    _three_plan_rounds(repo)
+    severity, message = _mod.audit_bookkeeping_drift(_staged(3, plan_stage=plan_stage))
+    assert severity == "drift" and "HARD CAP" in message
+    assert "IGNORED" in message and why in message
+
+
+def test_per_stage_it_cannot_claim_more_rounds_than_the_target_declares(repo):
+    repo.commit("docs(state): H plan round 1")
+    repo.commit("docs(state): H plan round 2")
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(2, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"}))
+    assert severity == "warn"
+    assert "IGNORED" in message and "more than the 2 audit_rounds" in message
+
+
+def test_per_stage_a_plan_round_after_the_close_refuses_the_field(repo):
+    """A 'plan round 4' says the plan stage did not close at 3."""
+    _three_plan_rounds(repo)
+    repo.commit("docs(state): H plan round 4")
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(4, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"}))
+    assert severity == "drift"
+    assert "IGNORED" in message and "plan round 4" in message
+
+
+def test_per_stage_a_refused_field_below_the_cap_still_warns(repo):
+    repo.commit("docs(state): H plan round 1")
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(1, plan_stage={"rounds": 1, "closed_by": "NO-SUCH-DECISION"}))
+    assert severity == "warn" and "IGNORED" in message and "Phase H" in message
+
+
+def test_per_stage_works_on_an_already_shipped_target(repo):
+    """Shipped entries carry the pair too; the decision must name the entry's
+    leading token."""
+    for n in (1, 2, 3):
+        repo.commit(f"piece-x plan round {n}")
+    shipped = [{"name": "PIECE-X -- the piece", "audit_rounds": 3, "audit_clean": False,
+                "plan_stage": {"rounds": 3, "closed_by": "SPLIT-X"}}]
+    state = dict(_state(active="PIECE-X -- the piece", shipped=shipped),
+                 decisions=[{"id": "SPLIT-X", "a": "PIECE-X's plan stage closes."}])
+    assert _mod.audit_bookkeeping_drift(state) is None
+
+
+@pytest.mark.parametrize("subject, expected", [
+    ("H plan round 3", [(3, "plan")]),
+    ("H Code Round 2", [(2, "code")]),
+    ("H round 4 (code round 1)", [(4, None), (1, "code")]),
+    ("H code rounds 1-2", [(1, "code"), (2, "code")]),
+    ("H plan-round 2 / code round 1", [(2, "plan"), (1, "code")]),
+    ("H replan round 2", [(2, None)]),
+    ("H round 2, 3 findings", [(2, None)]),
+])
+def test_per_stage_round_hits_reads_the_stage_word(subject, expected):
+    assert _mod._round_hits(subject) == expected
+
+
+def test_per_stage_the_entrys_verify_probe_tracks_the_stage_count(repo):
+    real_root = Path(__file__).parent.parent.parent
+    state = json.loads((real_root / STATE_REL).read_text(encoding="utf-8"))
+    entry = next(p for p in state["phases"] if p["id"] == "STATE-PER-STAGE-CAP")
+    pattern = entry["verify"]["pattern"]
+    src = (real_root / entry["verify"]["path"]).read_text(encoding="utf-8")
+    assert re.search(pattern, src, re.M), "the entry's probe does not match the real file"
+    reverted = src.replace(
+        "stage_max = git_max if plan_rounds is None else _stage_round_max(subjects, plan_rounds)",
+        "stage_max = git_max",
+    )
+    assert reverted != src
+    assert not re.search(pattern, reverted, re.M), (
+        "the probe still certifies this shipped with the stage count reverted"
+    )

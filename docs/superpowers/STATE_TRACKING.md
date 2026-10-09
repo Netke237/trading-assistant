@@ -105,6 +105,19 @@ a green "No drift".
     clean): **drift** — *stop auditing and tell Kenneth*. It counts
     rounds continuously across a phase's stages and units, so a multi-unit
     package keeps `audit_clean` true while its latest round was clean.
+  - **Per stage, once the plan stage is closed** (audit_rule counts the cap
+    per stage, `AUDIT-CAP-PER-STAGE-2026-09-25`). Add to the target's record
+    `"plan_stage": {"rounds": N, "closed_by": "<decision id>"}` (or
+    `"closed_by": "clean"` when a clean plan round closed it). The cap then
+    reads the **code** stage's round — `code round K` as written, an untagged
+    `round M` as `M - N`, `plan round …` not at all — and still fires at code
+    round 3 not clean. The field is **ignored** (cap counts from round 1, and
+    the output says why) unless `N` is a whole number 1–3, `N` ≤
+    `audit_rounds`, `closed_by` is `"clean"` or an id in `decisions[]` whose
+    text names the target, and no `plan round M` with `M > N` is on the branch.
+    Tag code-round subjects (`docs(state): <ID> code round K`): an untagged
+    subject numbering a code round from 1 reads too low. The undercount check
+    is unchanged.
   - It **clears** by going clean or by merging, never by an acknowledgement
     flag.
 - **When it cannot look, it says so.** No resolvable base, no git, or a
