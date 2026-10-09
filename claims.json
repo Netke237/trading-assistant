@@ -23,6 +23,14 @@
       "expires_at": "2026-10-09T16:16:39Z",
       "note": "state.py _NEGATION_RE reads 'NO' in target ids like NO-LIVE-QUOTE as negation (false alarm); fix + real-git test",
       "task": "STATE-NEGATION-ID"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/tiingo-governor",
+      "claimed_at": "2026-10-09T13:30:07Z",
+      "expires_at": "2026-10-09T16:30:07Z",
+      "note": "Route all Tiingo history requests through shared pacing and symbol budget",
+      "task": "TIINGO-GOVERNOR"
     }
   ]
 }
