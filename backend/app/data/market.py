@@ -1776,13 +1776,22 @@ async def fetch_contract_quote_async(
     Stock format:  SYMBOL|STOCK               (e.g. BA|STOCK)
     Returns a dict with: price, delta, theta, ivRank — or None on failure.
 
-    An option quote is the chain row for exactly this STRIKE and EXPIRY, or
-    None. The chain fetch falls back to ANOTHER expiry when the requested one
-    is not listed (an expired or mistyped contract); that row is not this
-    contract's quote, so it is refused here, once, for every caller (it used to
-    be returned, and only get_option_quote checked). A contract whose ask is 0
-    has no row (the chain builder drops it), so it is None too -- every caller
-    already treats None as "quote unavailable".
+    How an option row is matched:
+      - EXPIRY exactly. The chain fetch falls back to ANOTHER expiry when the
+        requested one is not listed (an expired or mistyped contract); that
+        row is not this contract's quote, so it is refused here, once, for
+        every caller (it used to be returned, and only get_option_quote
+        checked).
+      - STRIKE after integer truncation on BOTH sides (`int(float(strike))`
+        here, `int(strike)` in the chain rows). A known, pre-existing limit: a
+        fractional strike such as 22.5 gets the 22 row's price. Callers must
+        not use this helper to authorize money on a fractional strike --
+        daily_risk_hooks.opening_price quotes the exact OSI symbol instead for
+        that reason.
+    A contract whose ask is 0 has no row (the chain builder drops it), so it
+    is None too. What None means is up to each caller: most treat it as
+    "quote unavailable", and GET /api/portfolio marks the row
+    `quoteUnavailable` and skips that request's equity snapshot.
     """
     try:
         parts = contract_id.split("|")

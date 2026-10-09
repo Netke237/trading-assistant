@@ -143,11 +143,15 @@ export default function PortfolioPage() {
     return () => setSelectedSymbol(null);
   }, [setSelectedSymbol]);
 
-  const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
-  const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
+  // A row with no quote carries 0 defaults, not a price: the totals leave it
+  // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
+  const quoted   = positions.filter((p) => !p.quoteUnavailable);
+  const unquoted = positions.length - quoted.length;
+  const deployed = quoted.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
+  const openPnL  = quoted.reduce((s, p) => s + p.pnlDollar, 0);
   const openPnLPct = deployed > 0 ? (openPnL / deployed) * 100 : 0;
-  const winners = positions.filter((p) => p.pnlDollar > 0).length;
-  const losers  = positions.filter((p) => p.pnlDollar < 0).length;
+  const winners = quoted.filter((p) => p.pnlDollar > 0).length;
+  const losers  = quoted.filter((p) => p.pnlDollar < 0).length;
 
   const now = new Date();
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -359,16 +363,27 @@ export default function PortfolioPage() {
                   <div className={styles.priceCell}>
                     <Data size={12}>${p.entryPrice.toFixed(2)}</Data>
                     <Text size={11} tone="dim">→</Text>
-                    <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
+                    {p.quoteUnavailable ? (
+                      <Data size={12} weight={500} title="Quote unavailable">—</Data>
+                    ) : (
+                      <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
+                    )}
                   </div>
-                  <div className={styles.pnlCell}>
-                    <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                      {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
-                    </Data>
-                    <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                      {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
-                    </Data>
-                  </div>
+                  {p.quoteUnavailable ? (
+                    <div className={styles.pnlCell} title="Quote unavailable">
+                      <Data size={13} weight={500}>—</Data>
+                      <Data size={11}>—</Data>
+                    </div>
+                  ) : (
+                    <div className={styles.pnlCell}>
+                      <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                        {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                      </Data>
+                      <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                        {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
+                      </Data>
+                    </div>
+                  )}
                   <IvPositionCell position={p} />
                   <Data size={12} className={styles.right}>
                     {p.delta !== undefined ? p.delta.toFixed(2) : '—'}
@@ -431,6 +446,13 @@ export default function PortfolioPage() {
                 <span className={styles.loss}>{losers}</span>
               </Data>
             </div>
+            {unquoted > 0 && (
+              <div className={styles.footerGroup}>
+                <Text size={11} tone="caution">
+                  {`Excludes ${unquoted} position${unquoted === 1 ? '' : 's'} without a quote`}
+                </Text>
+              </div>
+            )}
           </div>
         </div>
       )}

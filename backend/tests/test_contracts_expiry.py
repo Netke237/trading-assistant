@@ -328,7 +328,8 @@ async def test_position_writer_keeps_the_sent_entry_when_the_quote_is_another_ex
 @pytest.mark.asyncio
 async def test_portfolio_positions_show_no_quote_when_the_quote_is_another_expirys(Session, _risk_ok):
     """GET /api/portfolio enriches each row with fetch_contract_quote_async; a
-    None quote leaves the row exactly as the no-quote path leaves it."""
+    None quote leaves the row exactly as the no-quote path leaves it, flagged
+    quoteUnavailable (round-1 F2)."""
     from app.routers.portfolio import router as portfolio_router
 
     with patch("app.services.position_writer.fetch_contract_quote_async", AsyncMock(return_value=None)):
@@ -362,3 +363,4 @@ async def test_portfolio_positions_show_no_quote_when_the_quote_is_another_expir
     (row,) = fell_back
     assert row["currentPrice"] != 55.0
     assert row["delta"] is None
+    assert row["quoteUnavailable"] is True

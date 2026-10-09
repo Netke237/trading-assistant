@@ -1362,6 +1362,10 @@ class PortfolioPositionSchema(BaseModel):
     currentStockPrice: Optional[float] = None   # live underlying price (options only; equals currentPrice for stock legs)
     pnlDollar: float = 0.0
     pnlPct: float = 0.0
+    # True when GET /portfolio got no quote for this position (NO-LIVE-QUOTE
+    # NLQ-1 round-1 F2). currentPrice / pnlDollar / pnlPct then hold their 0.0
+    # defaults, which are NOT a price: the table renders "—" instead.
+    quoteUnavailable: bool = False
     dteRemaining: int = 0
     delta: Optional[float] = None
     theta: Optional[float] = None
