@@ -1,6 +1,6 @@
 # Stocks horizon HISTORY: safe daily backfill and retention
 
-> D1 plan draft. Independent plan round 1 has not run. No application code is built.
+> D1 plan round 1: two gate findings, fixes written; independent fix-only round 2 next. No application code is built.
 > Target STOCKS-HORIZON-HISTORY; roadmap D1 #112, D2 #113, mini PC D3 #114.
 
 ## Goal and boundaries
@@ -73,7 +73,17 @@ and get_bars writes to prevent competing writes changing the staged basis.
 
 For nonempty Alpaca data, choose its earliest settled date as the seam. When there
 are existing older rows or a missing prefix beyond a seven-calendar-day tolerance:
-1. Query Tiingo then yfinance explicitly, skipping Alpaca. Request the desired old
+1. Use strict adjustment-completeness mode for every HISTORY provider request.
+   Add optional strict_adjustments flags to the internal Alpaca batch/single
+   normalization and Tiingo fetch functions; legacy callers retain their current
+   default. In strict mode reject the whole symbol reply when any retained raw
+   Alpaca timestamp lacks an actual finite positive adjusted counterpart, or any
+   Tiingo row lacks a finite positive adjClose. Check all rows, including dates
+   outside the seam overlap; never infer adjustment completeness from factor 1.
+   An invalid Alpaca reply proceeds to the full-window non-Alpaca fallback; an
+   invalid Tiingo reply proceeds to yfinance. Its deliberate factor 1 is valid
+   because its OHLC has already been adjusted.
+   Query Tiingo then yfinance explicitly, skipping Alpaca. Request the desired old
    start through at least the first five settled Alpaca dates (with one extra end
    day to cover provider inclusivity), then filter to the requested dates.
 2. Refetch the entire older retained segment every ingestion, even when no stale
@@ -90,7 +100,16 @@ are existing older rows or a missing prefix beyond a seven-calendar-day toleranc
    preserve the previous bars and seam metadata, and report seam_mismatch or failed.
 6. In one per-symbol transaction, upsert both segments, record the exact validated
    seam signature/source, and update successful floor observations. After commit,
-   invalidate confidence; refresh also calls its existing backtest eviction callback.
+   invalidate confidence and evict the symbol's stock backtest entries for every
+   successful ingestion/backfill as well as refresh. Use a small service-owned
+   bars-changed notification registry: stock_scan registers its existing backtest
+   eviction function when the module is imported; the history writer notifies
+   registered consumers after commit without importing a router. A warmed cache
+   therefore receives the event regardless of whether ingestion came from an API,
+   scheduler or direct service call. Keep the existing confidence generation guard
+   for both caches' computations in flight. Failed writes send no notification.
+   Keep refresh's existing optional callback compatible; duplicate eviction is
+   harmless, but tests must preserve its once-per-refreshed-symbol contract.
    If the DB write fails between segments, roll back the whole symbol.
 
 If no Alpaca bars exist, request the whole window directly from the non-Alpaca
@@ -177,6 +196,15 @@ clean; do not start a blocked frontier. Keep checkpoint/state/audit records curr
   adjusted seam remains continuous. Old-provider failure/missing dates/insufficient
   overlap preserves old and current rows and previous proof. Injected failure after
   the first upsert rolls back bars and metadata together.
+- Missing Alpaca adjusted timestamps or missing/null/nonpositive Tiingo adjClose
+  outside the overlap are rejected under strict mode; whole-symbol fallback occurs
+  instead of persisting invented factor 1. Legacy non-strict API behavior stays
+  compatible, and deliberate adjusted yfinance factor 1 remains valid.
+- Warm a stock backtest cache whose key hashes unchanged latest 20 closes; older
+  prefix addition/correction through ingestion must evict it and the next scan or
+  Analysis recomputes. A computation in flight across the event cannot refill the
+  old result. Verify the registry is active after importing the cache-owning module
+  and for scheduler/direct/API ingestion, with no router import in the writer.
 - Successful observed floor avoids a second unnecessary missing-prefix request;
   empty/error replies do not suppress retries; wider/forced/expired requests re-probe.
   Existing old segments are refreshed even with a floor present.
@@ -201,3 +229,12 @@ whole stored span, preserving all symbols in that read-only report. Present flag
 and seam-mismatch symbols for user exclusion decisions; update exclusions only from
 those decisions. Any live Alpaca/Tiingo smoke test belongs here. D1/D2 never claim
 that this operational work ran, nor tune on these bars from the development host.
+
+## Independent plan audit record
+
+Round 1 reviewer: history_plan_audit_r1, fresh independent subagent applying both
+required audit skills and the repo numeric/persistence gate. Reviewed whole plan
+plus local spec/map/six tickets against aaa7102c (no application changes). Two
+findings: F1 ingestion omitted stock-backtest eviction after older-bar changes;
+F2 provider normalization hid missing adjusted data. Both fixed in R3 and the
+acceptance tests above. No findings deferred. Round 2 is fixes-only and pending.
